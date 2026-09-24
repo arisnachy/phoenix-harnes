@@ -172,13 +172,15 @@ export function CodexQuotaRemaining({
         }
         const accountEntries = (response.result.value.entries as AuthorizationEntry[])
           .filter(isOpenAIAccount)
-        const hasAccount = accountEntries.length > 0
-        setAccountPresent(hasAccount)
-        if (!hasAccount) {
-          quotaCache.delete(cacheKey)
-          clearPersistedQuota()
-          setQuota(undefined)
+        if (accountEntries.length === 0) {
+          // Authorization registration is asynchronous during page/Host startup.
+          // An empty catalog is therefore not proof of logout: preserve the last
+          // trusted 5h/7d snapshot and retry instead of making the counter blink
+          // away while Codex finishes registering its account bridge.
+          schedule(QUOTA_STARTUP_RETRY_MS)
+          return
         }
+        setAccountPresent(true)
         const telemetry = accountEntries
           .map(entry => entry.telemetry)
           .find((candidate): candidate is AccountTelemetry => candidate !== undefined
