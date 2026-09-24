@@ -1130,6 +1130,11 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   if (descriptor?.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
     try {
       const resident = await runResidentComputerAction(args, descriptor, signal)
+      if (args.action === 'windows' && resident.trim() === '<no visible top-level windows>') {
+        const fallback = await executeComputerInvocation(windowsComputerInvocation(args), signal)
+        if (fallback.trim().length > 0 && fallback.trim() !== '<no visible top-level windows>') return fallback
+        return resident
+      }
       if (args.action !== 'screenshot' || resident.length > 0) return resident
     } catch (error) {
       // Observation calls are safe to retry through the fixed PowerShell driver.
