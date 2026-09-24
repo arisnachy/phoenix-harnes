@@ -342,13 +342,14 @@ async function openConnection(
   signal: AbortSignal,
   experimentalApi = false,
 ): Promise<CodexAccountConnection> {
+  const env = codexAccountEnvironment(config.env)
   const child = ctx.subprocess.spawn({
-    argv: codexMetadataAppServerArgv(),
+    argv: codexMetadataAppServerArgv(env.CODEX_HOME),
     cwd: process.cwd(),
     stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'inherit' },
     graceMs: config.disposeGraceMs,
     signal,
-    env: codexAccountEnvironment(config.env),
+    env,
   })
   const connection = new CodexAccountConnection(child, config.disposeGraceMs)
   try {
