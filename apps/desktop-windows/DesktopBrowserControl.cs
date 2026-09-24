@@ -132,9 +132,11 @@ internal sealed class DesktopBrowserControlServer : IDisposable
                         continue;
                     }
 
-                    // Schema 1 is limited to non-sensitive window/navigation commands. Automation
-                    // with form data or credentials must use the validated schema-2 protocol.
-                    if (BrowserCommand.TryParse(line, out var command))
+                    // Accept the credential-free schema-1 automation vocabulary only on this
+                    // authenticated current-user pipe so adjacent runtime/desktop versions can
+                    // survive a rolling update. BrowserCommand still rejects inline credentials;
+                    // schema 2 remains the preferred resident protocol.
+                    if (BrowserCommand.TryParse(line, out var command, allowAutomation: true))
                     {
                         await HandleLegacyBrowserRequestAsync(writer, command);
                         continue;
