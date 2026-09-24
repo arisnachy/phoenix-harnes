@@ -455,8 +455,12 @@ export function apply(ctx: Context, config: Config): void {
               text: '<goal_judge_result>\n'
                 + `Verdict: ${judge.verdict}\n`
                 + `Summary: ${judge.summary}\n`
+                + `Findings: ${JSON.stringify(judge.findings)}\n`
                 + `Required changes: ${JSON.stringify(judge.requiredChanges)}\n`
-                + 'Keep the goal active, address these changes with a materially different or improved strategy, '
+                + `Verification incidents: ${JSON.stringify(judge.verificationIncidents ?? [])}\n`
+                + 'Keep the goal active. A judge/verifier infrastructure failure is an attempt-level failure, not a human pause: '
+                + 'retry automatically with a fresh verifier after other pending work settles. '
+                + 'Do not ask for a magic resume phrase. For needs_changes, address the concrete findings with a materially different or improved strategy '
                 + 'and request another independent review only after verifying the result.\n'
                 + '</goal_judge_result>',
             }],
