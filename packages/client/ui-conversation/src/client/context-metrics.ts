@@ -1,6 +1,10 @@
 import type { ContextPressureProjection } from '@phoenix-ai/dsh-token-meter/client'
 
-/** Compact token count: 517 / 12.2K / 517K / 1.2M. */
+/**
+ * Compact token count: 517 / 12.2K / 517K / 1.2M.
+ * @param n - Token count.
+ * @returns Compact display string.
+ */
 export function formatTokens(n: number): string {
   const scaled = (v: number): string =>
     v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10)
