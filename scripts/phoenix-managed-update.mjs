@@ -79,7 +79,7 @@ function node(root, args, options = {}) {
 function projectPnpmSpecifier(root) {
   const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
   const configured = typeof manifest.packageManager === 'string' ? manifest.packageManager.trim() : ''
-  if (!/^pnpm@[^\\s]+$/u.test(configured)) {
+  if (!/^pnpm@[^\s]+$/u.test(configured)) {
     throw new Error(`package.json must pin packageManager to pnpm@<version>; got ${JSON.stringify(manifest.packageManager)}`)
   }
   return configured
