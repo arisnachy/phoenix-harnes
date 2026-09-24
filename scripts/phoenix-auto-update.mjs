@@ -81,12 +81,24 @@ function git(root, args, options = {}) {
   return command('git', args, { cwd: root, ...options })
 }
 
+function projectPnpmSpecifier(root) {
+  const manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
+  const configured = typeof manifest.packageManager === 'string' ? manifest.packageManager.trim() : ''
+  if (!/^pnpm@[^\\s]+$/u.test(configured)) {
+    throw new Error(`package.json must pin packageManager to pnpm@<version>; got ${JSON.stringify(manifest.packageManager)}`)
+  }
+  return configured
+}
+
 function corepack(root, args, options = {}) {
+  const resolvedArgs = args[0] === 'pnpm'
+    ? [projectPnpmSpecifier(root), ...args.slice(1)]
+    : [...args]
   if (process.platform === 'win32') {
     const commandProcessor = process.env.ComSpec ?? 'cmd.exe'
-    return command(commandProcessor, ['/d', '/s', '/c', 'corepack.cmd', ...args], { cwd: root, ...options })
+    return command(commandProcessor, ['/d', '/s', '/c', 'corepack.cmd', ...resolvedArgs], { cwd: root, ...options })
   }
-  return command('corepack', args, { cwd: root, ...options })
+  return command('corepack', resolvedArgs, { cwd: root, ...options })
 }
 
 function node(root, args, options = {}) {
