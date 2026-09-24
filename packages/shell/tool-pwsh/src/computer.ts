@@ -13,6 +13,7 @@
  */
 
 import { execFile } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createConnection } from 'node:net'
 import { join } from 'node:path'
@@ -115,11 +116,12 @@ function attachmentWriter(ctx: Context): AttachmentWriter | undefined {
 
 /** Current desktop-control discovery document written by Phoenix.exe. */
 export interface DesktopBrowserControlDescriptor {
-  schema: 1
+  schema: 1 | 2
   pipeName: string
 }
 
-const DESKTOP_CONTROL_SCHEMA = 1
+const LEGACY_DESKTOP_CONTROL_SCHEMA = 1
+const RESIDENT_DESKTOP_CONTROL_SCHEMA = 2
 const DESKTOP_CONTROL_PIPE_PREFIX = 'PhoenixDesktop.Browser.'
 const DESKTOP_CONTROL_DESCRIPTOR_ENV = 'PHOENIX_DESKTOP_CONTROL_DESCRIPTOR'
 const DESKTOP_CONTROL_TIMEOUT_MS = 3_000
@@ -164,7 +166,7 @@ function isEmbeddedBrowserAction(action: ComputerAction): action is EmbeddedBrow
 /**
  * Parse and validate the current-user desktop-control descriptor before connecting.
  * @param raw - JSON descriptor written by Phoenix Desktop.
- * @returns Validated schema-1 desktop-control descriptor.
+ * @returns Validated schema-1 or schema-2 desktop-control descriptor.
  */
 export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowserControlDescriptor {
   let value: unknown
@@ -177,8 +179,9 @@ export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowse
     throw new Error('Phoenix Desktop control descriptor must be an object')
   }
   const candidate = value as Record<string, unknown>
-  if (candidate.schema !== DESKTOP_CONTROL_SCHEMA) {
-    throw new Error(`Phoenix Desktop control descriptor has unsupported schema ${String(candidate.schema)}`)
+  const schema = candidate.schema
+  if (schema !== LEGACY_DESKTOP_CONTROL_SCHEMA && schema !== RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    throw new Error(`Phoenix Desktop control descriptor has unsupported schema ${String(schema)}`)
   }
   const pipeName = candidate.pipeName
   if (typeof pipeName !== 'string'
@@ -188,7 +191,7 @@ export function parseDesktopBrowserControlDescriptor(raw: string): DesktopBrowse
     || !/^[A-Za-z0-9._-]+$/u.test(pipeName)) {
     throw new Error('Phoenix Desktop control descriptor contains an invalid pipe name')
   }
-  return { schema: 1, pipeName }
+  return { schema, pipeName }
 }
 
 /**
@@ -300,6 +303,20 @@ function requestNamedPipeLine(pipePath: string, line: string, signal?: AbortSign
   })
 }
 
+function residentBrowserRequestForAction(args: ComputerToolArgs, requestId = randomUUID()): Record<string, unknown> {
+  validateComputerArgs(args)
+  return {
+    schema: RESIDENT_DESKTOP_CONTROL_SCHEMA,
+    requestId,
+    type: args.action,
+    ...(args.url === undefined ? {} : { url: args.url }),
+    ...(args.origin === undefined ? {} : { origin: normalizeCredentialOrigin(args.origin) }),
+    ...(args.fields === undefined ? {} : { fields: args.fields }),
+    ...(args.text === undefined ? {} : { text: args.text }),
+    ...(args.submit === undefined ? {} : { submit: args.submit }),
+  }
+}
+
 async function runEmbeddedBrowserAction(
   args: ComputerToolArgs,
   signal?: AbortSignal,
@@ -307,9 +324,35 @@ async function runEmbeddedBrowserAction(
 ): Promise<string> {
   const rawDescriptor = await readFile(desktopControlDescriptorPath(), 'utf8')
   const descriptor = parseDesktopBrowserControlDescriptor(rawDescriptor)
+  const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
+
+  if (descriptor.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    const request = residentBrowserRequestForAction(args)
+    const requestId = request.requestId as string
+    const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(request), signal)
+    let reply: unknown
+    try {
+      reply = JSON.parse(rawReply)
+    } catch {
+      throw new Error('Phoenix Desktop resident browser control returned invalid JSON')
+    }
+    if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
+      throw new Error('Phoenix Desktop resident browser control returned an invalid reply')
+    }
+    const response = reply as Record<string, unknown>
+    if (response.schema !== RESIDENT_DESKTOP_CONTROL_SCHEMA || response.requestId !== requestId) {
+      throw new Error('Phoenix Desktop resident browser control returned an incompatible or uncorrelated reply')
+    }
+    if (response.ok !== true) {
+      throw new Error(`Phoenix Desktop resident browser control rejected the command: ${String(response.error ?? 'unknown error')}`)
+    }
+    return typeof response.details === 'string'
+      ? response.details
+      : `resident embedded browser command accepted: ${args.action}`
+  }
+
   const baseCommand = browserCommandForAction(args)
   const command: DesktopBrowserCommand = login === undefined ? baseCommand : { ...baseCommand, ...login }
-  const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
   const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(command), signal)
 
   let reply: unknown
@@ -1086,6 +1129,15 @@ async function runOriginBoundBrowserLogin(
   args: ComputerToolArgs,
   signal?: AbortSignal,
 ): Promise<string> {
+  const descriptor = parseDesktopBrowserControlDescriptor(
+    await readFile(desktopControlDescriptorPath(), 'utf8'),
+  )
+  if (descriptor.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
+    // Schema 2 owns credential prompting/fill in the native host. Do not resolve
+    // or put account/secret values on the general Computer pipe.
+    return await runEmbeddedBrowserAction(args, signal)
+  }
+
   const origin = requiredCredentialOrigin(args.origin, args.action)
   const credentials = ctx.get('credentials')
   if (credentials === undefined) {
