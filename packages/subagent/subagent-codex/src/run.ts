@@ -206,7 +206,10 @@ export function codexAccountEnvironment(
   explicit: Readonly<Record<string, string>>,
 ): Record<string, string> & { CODEX_HOME: string; CODEX_SQLITE_HOME: string } {
   const home = resolvedCodexHome(explicit)
-  const env: Record<string, string> = {
+  const env: Record<string, string> & {
+    CODEX_HOME: string
+    CODEX_SQLITE_HOME: string
+  } = {
     ...explicit,
     CODEX_HOME: home,
     CODEX_SQLITE_HOME: home,
