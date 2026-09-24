@@ -2708,6 +2708,11 @@ Requires: `tools` · `shell` · `systemPrompt` · `shellEnv`
 export interface Config {
   /** Expose `run_in_background` (default true); disabled calls are also rejected. */
   enableRunInBackground?: boolean
+  /**
+   * Expose the experimental Windows Desktop `computer` tool. Disabled by
+   * default so normal browser work stays on the isolated Chrome/Edge connector.
+   */
+  enableComputerUse?: boolean
 }
 ```
 
