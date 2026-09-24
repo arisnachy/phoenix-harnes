@@ -7,6 +7,7 @@ import { MemoryCredentials } from './memory.ts'
 const originalFetch = internals.fetch
 const originalNow = internals.now
 const originalOpenLoopback = internals.openLoopback
+const originalOpenBrowser = internals.openBrowser
 
 const SCOPES = [
   'openid',
@@ -25,9 +26,11 @@ afterEach(() => {
   internals.fetch = originalFetch
   internals.now = originalNow
   internals.openLoopback = originalOpenLoopback
+  internals.openBrowser = originalOpenBrowser
 })
 
 async function authorizedGoogle(grantedScopes: readonly string[]): Promise<Context> {
+  internals.openBrowser = async () => {}
   const ctx = new Context()
   await ctx.plugin(MemoryCredentials)
   await ctx.plugin(AuthorizationService)

@@ -7,6 +7,11 @@ import GoogleApiBroker, {
 } from '@phoenix-ai/dsh-authorization/google'
 import { MemoryCredentials } from './memory.ts'
 
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  return { ...actual, homedir: () => '/__phoenix_test_home_without_google_oauth__' }
+})
+
 const originalFetch = internals.fetch
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
@@ -68,9 +73,10 @@ describe('Google Workspace runtime guards', () => {
     internals.fetch = fetchSpy as typeof fetch
 
     await expect(googleApi(ctx).request({ service: 'drive', path: 'files' }))
-      .rejects.toMatchObject({ code: 'GOOGLE_REAUTH_REQUIRED' })
+      .rejects.toMatchObject({ code: 'GOOGLE_CLIENT_UNCONFIGURED' })
 
     expect(fetchSpy).not.toHaveBeenCalled()
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
   })
 
   it('purges a secret-bearing durable grant left by the superseded Google broker', async () => {
