@@ -11,7 +11,7 @@ import { CodeBlock } from '@phoenix-ai/dsh-client-ui-primitives'
 import { shallowEqual } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSnapshot, RunningToolCall, ToolCallBlock, ToolResultNode } from '@phoenix-ai/dsh-client-runtime/client'
 import type { DetailsSlotProps } from '../contract/slots.ts'
-import { findToolCall } from '../chat/tool-node-reader.ts'
+import { findToolCall } from '../tool-node-reader.ts'
 import css from './DetailsPanel.module.css'
 
 /** Full props composed by reference from the contract (automatic shares & injected share). */
