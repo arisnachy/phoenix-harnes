@@ -5,6 +5,7 @@ import {
   computerActionNeedsApproval,
   computerModeForSandbox,
   parseDesktopBrowserControlDescriptor,
+  residentComputerRequestForAction,
   runWindowsComputerAction,
   shouldCaptureAfterAction,
   validateComputerArgs,
@@ -157,13 +158,49 @@ describe('Computer Use argument contract', () => {
       .toThrow(/desktop control channel/i)
   })
 
-  it('validates the current-user desktop control descriptor before connecting', () => {
+  it('accepts schema 1 and schema 2 desktop control descriptors during rolling upgrades', () => {
     expect(parseDesktopBrowserControlDescriptor('{"schema":1,"pipeName":"PhoenixDesktop.Browser.abc-123"}'))
       .toEqual({ schema: 1, pipeName: 'PhoenixDesktop.Browser.abc-123' })
-    expect(() => parseDesktopBrowserControlDescriptor('{"schema":2,"pipeName":"PhoenixDesktop.Browser.abc"}'))
+    expect(parseDesktopBrowserControlDescriptor('{"schema":2,"pipeName":"PhoenixDesktop.Browser.abc"}'))
+      .toEqual({ schema: 2, pipeName: 'PhoenixDesktop.Browser.abc' })
+    expect(() => parseDesktopBrowserControlDescriptor('{"schema":3,"pipeName":"PhoenixDesktop.Browser.abc"}'))
       .toThrow(/schema/i)
     expect(() => parseDesktopBrowserControlDescriptor('{"schema":1,"pipeName":"..\\\\evil"}'))
       .toThrow(/pipe/i)
+  })
+
+  it('builds schema 2 resident requests for the full Computer action vocabulary', () => {
+    expect(residentComputerRequestForAction(
+      { action: 'click', target: 'Phoenix', x: 100, y: 200, button: 'right' },
+      '00000000-0000-4000-8000-000000000001',
+    )).toEqual({
+      schema: 2,
+      requestId: '00000000-0000-4000-8000-000000000001',
+      type: 'click',
+      target: 'Phoenix',
+      x: 100,
+      y: 200,
+      button: 'right',
+    })
+    expect(residentComputerRequestForAction(
+      { action: 'browser_inspect' },
+      '00000000-0000-4000-8000-000000000002',
+    )).toEqual({
+      schema: 2,
+      requestId: '00000000-0000-4000-8000-000000000002',
+      type: 'browser_inspect',
+    })
+    const login = residentComputerRequestForAction(
+      { action: 'browser_login', origin: 'https://Example.com/sign-in' },
+      '00000000-0000-4000-8000-000000000003',
+    )
+    expect(login).toEqual({
+      schema: 2,
+      requestId: '00000000-0000-4000-8000-000000000003',
+      type: 'browser_login',
+      origin: 'https://example.com',
+    })
+    expect(JSON.stringify(login)).not.toMatch(/account|secret|password/i)
   })
 
   it('rejects key strings outside the closed combo grammar', () => {
