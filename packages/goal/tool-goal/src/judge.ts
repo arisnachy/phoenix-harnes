@@ -431,22 +431,24 @@ export async function judgeGoalCompletion(input: {
   const timeout = AbortSignal.timeout(FINAL_JUDGE_TIMEOUT_MS)
   const signal = AbortSignal.any([input.signal, timeout])
   let run
+  let startPromise: ReturnType<GoalJudgeRuntime['start']> | undefined
   let judged: GoalJudgeResult = unavailable()
   const judgeIncidents: string[] = []
-  const startPromise = subagents.start(provider, {
+  try {
+    const agentOptions = await awaitAbortable(resolveGoalJudgeAgentOptions({
+      parent: input.parent,
+      ...input.llm === undefined ? {} : { llm: input.llm },
+      signal,
+    }), signal)
+    startPromise = subagents.start(provider, {
       label: 'goal-completion-judge',
       prompt,
       parent: input.parent,
       signal,
-      agentOptions: await resolveGoalJudgeAgentOptions({
-        parent: input.parent,
-        ...input.llm === undefined ? {} : { llm: input.llm },
-        signal,
-      }),
+      agentOptions,
       outputSchema: GOAL_JUDGE_OUTPUT_SCHEMA,
       toolFilter: { allow: [...READ_ONLY_TOOLS] },
     })
-  try {
     run = await awaitAbortable(startPromise, signal)
     const result = await awaitAbortable(run.result, signal)
     if (result.stopReason === 'completed') {
@@ -461,7 +463,7 @@ export async function judgeGoalCompletion(input: {
     }
   } catch (error) {
     const phase = run === undefined ? 'start' : 'result'
-    if (run === undefined && signal.aborted) {
+    if (run === undefined && signal.aborted && startPromise !== undefined) {
       void startPromise.then(
         lateRun => lateRun.dispose().catch(() => undefined),
         () => undefined,
