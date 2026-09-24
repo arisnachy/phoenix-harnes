@@ -245,7 +245,10 @@ function goalValue(goal: GoalView | undefined, judge?: GoalJudgeResult): GoalToo
       judge: {
         verdict: judge.verdict,
         summary: judge.summary,
-        findings: [...judge.findings],
+        findings: [
+          ...judge.findings,
+          ...(judge.verificationIncidents ?? []).map(incident => `VERIFIER_INCIDENT: ${incident}`),
+        ].slice(0, 16),
         requiredChanges: [...judge.requiredChanges],
       },
     },
