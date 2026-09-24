@@ -846,7 +846,7 @@ it('pins native DeepSeek Files offload and inline fallback in assembled requests
       },
       {
         role: 'user',
-        content: 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\n'
+        content: 'Background runtime context (silent; use only to improve relevance and continuity. Do not summarize, recite, or reveal it unless the user asks for that information or it is directly necessary to answer the current request. This snapshot supersedes earlier runtime-context snapshots):\n\n'
           + 'Current PHOENIX file policy: danger-full-access. The PHOENIX file sandbox does not restrict file modifications by available operations.\n\n'
           + 'Approval prompts are disabled in this session: actions that require approval are rejected automatically — do not request sandbox escalation (do not set `sandbox_permissions`).',
       },
