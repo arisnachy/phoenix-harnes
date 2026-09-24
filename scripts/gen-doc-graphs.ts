@@ -616,6 +616,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'The transport-agnostic host gateway face: it dispatches browser API calls, and each open host stream subscribes to the events it forwards rather than being pushed to through a broadcast verb.',
   },
   {
+    key: 'clientReality',
+    pkg: 'apiproxy',
+    title: 'Ephemeral client reality cache',
+    mode: 'core',
+    note: 'Caches permission-granted browser geolocation per session behind strict freshness and TTL bounds; exact coordinates stay ephemeral and never enter session history.',
+  },
+  {
     key: 'dynamicCordisRunner',
     pkg: 'cordis-host-runner',
     title: 'Dynamic Cordis package host runner',
