@@ -616,6 +616,7 @@
     # access, or can be enabled explicitly with PHOENIX_BROWSER_ALLOW_ACTIONS.
     - id: phoenix-browser
       name: '@phoenix-ai/dsh-mcp-client'
+      disabled: !!js "['0', 'false', 'off'].includes((process.env.PHOENIX_BROWSER_CONNECTOR ?? '').trim().toLowerCase())"
       config:
         serverName: phoenix_browser
         transport: stdio
