@@ -3,14 +3,11 @@ name: PHOENIX snapshot repair and replay
 on:
   push:
     branches:
-      - 'repair/benchmark-green-20260923'
+      - 'repair/snapshot-green-final-20260923'
 
 permissions:
   contents: write
 
-concurrency:
-  group: phoenix-benchmark-green-${{ github.ref }}
-  cancel-in-progress: true
 
 env:
   CI: '1'
@@ -32,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: repair/benchmark-green-20260923
+          ref: repair/snapshot-green-final-20260923
           fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
@@ -55,7 +52,7 @@ jobs:
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add -A
             git commit -m "test(snapshot): refresh reviewed Phoenix replay baseline"
-            git push origin HEAD:repair/benchmark-green-20260923
+            git push origin HEAD:repair/snapshot-green-final-20260923
           fi
 
       - name: Verify complete replay
