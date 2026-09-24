@@ -59,6 +59,8 @@ type CompletionRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
 
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 32
+const VERIFIER_DESIGN_TIMEOUT_MS = 5 * 60_000
+const VERIFIER_EXECUTION_TIMEOUT_MS = 40 * 60_000
 const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep'] as const
 const EVIDENCE_STATUSES = ['pending', 'implemented', 'tested', 'verified', 'failed', 'blocked_external'] as const
 const EXPECTED_SOURCES = ['specification', 'reference_oracle', 'standard', 'mathematical_invariant', 'metamorphic_property', 'fixture_or_external_evidence', 'implementation_observed', 'unknown'] as const
@@ -440,24 +442,67 @@ interface StructuredRunOutcome {
   readonly incident?: string
 }
 
+async function awaitAbortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  signal.throwIfAborted()
+  let onAbort: (() => void) | undefined
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(signal.reason ?? new Error('operation aborted'))
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([operation, aborted])
+  } finally {
+    if (onAbort !== undefined) signal.removeEventListener('abort', onAbort)
+  }
+}
+
 async function runStructured(
   runtime: CompletionRuntime,
   provider: string,
   request: Parameters<CompletionRuntime['start']>[1],
 ): Promise<StructuredRunOutcome> {
+  const label = typeof request.label === 'string' && request.label.length > 0
+    ? request.label
+    : 'completion-verifier'
+  const timeoutMs = label === 'goal-adversarial-test-design'
+    ? VERIFIER_DESIGN_TIMEOUT_MS
+    : VERIFIER_EXECUTION_TIMEOUT_MS
+  const timeout = AbortSignal.timeout(timeoutMs)
+  const signal = AbortSignal.any([request.signal, timeout])
   let run
+  let startPromise: ReturnType<CompletionRuntime['start']> | undefined
+  let outcome: StructuredRunOutcome = {}
   try {
-    run = await runtime.start(provider, request)
-    const result = await run.result
-    return result.stopReason === 'completed'
+    startPromise = runtime.start(provider, { ...request, signal })
+    run = await awaitAbortable(startPromise, signal)
+    const result = await awaitAbortable(run.result, signal)
+    outcome = result.stopReason === 'completed'
       ? { structured: result.structured }
-      : { incident: 'tester-stop:' + result.stopReason }
+      : { incident: `${label}:stop-${result.stopReason}` }
   } catch (error) {
-    const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
-    return { incident: 'tester-error:' + kind }
+    const phase = run === undefined ? 'start' : 'result'
+    if (run === undefined && signal.aborted && startPromise !== undefined) {
+      void startPromise.then(lateRun => lateRun.dispose().catch(() => undefined), () => undefined)
+    }
+    const kind = timeout.aborted && !request.signal.aborted
+      ? 'timeout'
+      : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+    outcome = { incident: `${label}:${phase}-${kind}` }
   } finally {
-    if (run !== undefined) await run.dispose()
+    if (run !== undefined) {
+      try {
+        await run.dispose()
+      } catch (error) {
+        const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+        const disposal = `${label}:dispose-${kind}`
+        outcome = {
+          ...outcome,
+          incident: outcome.incident === undefined ? disposal : `${outcome.incident};${disposal}`,
+        }
+      }
+    }
   }
+  return outcome
 }
 
 /**
@@ -485,11 +530,21 @@ export async function runAdversarialCompletionGate(input: {
       : 'No independent tester provider is available for the active non-Codex model; Luna fallback is forbidden.')
   }
   const contract = buildVerificationContract(input.objective)
-  const agentOptions = await resolveGoalJudgeAgentOptions({
-    parent: input.parent,
-    ...input.llm === undefined ? {} : { llm: input.llm },
-    signal: input.signal,
-  })
+  const routeTimeout = AbortSignal.timeout(60_000)
+  const routeSignal = AbortSignal.any([input.signal, routeTimeout])
+  let agentOptions
+  try {
+    agentOptions = await awaitAbortable(resolveGoalJudgeAgentOptions({
+      parent: input.parent,
+      ...input.llm === undefined ? {} : { llm: input.llm },
+      signal: routeSignal,
+    }), routeSignal)
+  } catch (error) {
+    const kind = routeTimeout.aborted && !input.signal.aborted
+      ? 'timeout'
+      : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+    return unavailable(`Independent verifier route resolution failed. Incident: goal-verifier-route:${kind}.`)
+  }
   const designPrompt: ContentBlock[] = [{
     type: 'text',
     text: '<adversarial_test_design>\n'
@@ -558,7 +613,19 @@ export async function runAdversarialCompletionGate(input: {
     toolFilter: { allow: [...EXECUTION_TOOLS] },
   })
   const executed = readExecution(executionRun.structured, contract)
-  if (executed !== undefined) return executed
+  if (executed !== undefined) {
+    const incidents = [designRun.incident, executionRun.incident]
+      .filter((incident): incident is string => incident !== undefined)
+    return incidents.length === 0
+      ? executed
+      : {
+        ...executed,
+        verificationIncidents: [
+          ...(executed.verificationIncidents ?? []),
+          ...incidents,
+        ].slice(0, MAX_ITEMS),
+      }
+  }
   const incident = executionRun.incident === undefined ? '' : ' Incident: ' + executionRun.incident + '.'
   return unavailable('Independent adversarial execution did not return valid clean-room evidence.' + incident)
 }
