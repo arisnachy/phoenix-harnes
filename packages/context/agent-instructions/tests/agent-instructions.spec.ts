@@ -1015,6 +1015,44 @@ describe('workspace context request injection', () => {
     }
   })
 
+  it('defers workspace instruction refresh on fast conversation and restores it on the next normal step', async () => {
+    const root = await tempRepo()
+    const home = await tempRepo()
+    try {
+      await mkdir(join(root, '.git'), { recursive: true })
+      await write(join(root, 'AGENTS.md'), 'repo rule')
+      const ctx = new Context()
+      await mountWorkspaceContext(ctx, { dshHome: home, maxBytes: 65536 })
+      const agent = stubAgent(root)
+      const prompt = createUserMessage({
+        content: [{ type: 'text', text: 'hola' }],
+        source: { kind: 'user' },
+      })
+      const signal = AbortSignal.timeout(1000)
+
+      const fast = await agentEvents(ctx, agent).waterfall(
+        'agent/pre-step',
+        { messages: [prompt], turn: 1, step: 1, signal, fastConversation: true },
+        () => Promise.resolve({ kind: 'enter' as const, messages: [prompt] }),
+      )
+      expect(fast).toEqual({ kind: 'enter', messages: [prompt] })
+      expect(agent.inbox.nextStep.filter(message => message.source.kind === 'agent-instructions')).toEqual([])
+
+      const normal = await agentEvents(ctx, agent).waterfall(
+        'agent/pre-step',
+        { messages: [prompt], turn: 2, step: 1, signal: new AbortController().signal },
+        () => Promise.resolve({ kind: 'enter' as const, messages: [prompt] }),
+      )
+      expect(normal.kind).toBe('enter')
+      if (normal.kind === 'reject') throw new Error('expected normal workspace-context step')
+      expect(normal.messages.some(message => message.source.kind === 'agent-instructions')).toBe(true)
+      expect(JSON.stringify(normal.messages)).toContain('repo rule')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
   it('contributes baseline instructions through durable injected history', async () => {
     const root = await tempRepo()
     const home = await tempRepo()
