@@ -375,6 +375,15 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       successText: 'published headless profile reached the mock',
     })
     const home = mkdtempSync(join(tmpdir(), 'dsh-built-headless-'))
+    // This acceptance test owns a DeepSeek mock. The product default is allowed
+    // to evolve independently (currently OpenRouter), so pin the fixture's
+    // user-layer selection instead of making the test depend on that default.
+    writeFileSync(join(home, 'settings.yaml'), [
+      'agent-default-model:',
+      '  provider: deepseek-official',
+      '  model: deepseek-flash',
+      '',
+    ].join('\n'))
     try {
       const result = await runBuiltBin(['--profile', 'headless', 'answer', 'from', 'the', 'published', 'entry'], {
         DSH_HOME: home,
