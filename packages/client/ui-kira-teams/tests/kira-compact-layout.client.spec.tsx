@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ModelActivityAvatar, portraitSrcForKind } from '../src/client/ModelActivityAvatar.tsx'
 
-const dockCss = readFileSync(new URL('../src/client/KiraTeamsDock.module.css', import.meta.url), 'utf8')
-const avatarCss = readFileSync(new URL('../src/client/ModelActivityAvatar.module.css', import.meta.url), 'utf8')
+const dockCss = readFileSync(resolve(import.meta.dirname, '../src/client/KiraTeamsDock.module.css'), 'utf8')
+const avatarCss = readFileSync(resolve(import.meta.dirname, '../src/client/ModelActivityAvatar.module.css'), 'utf8')
 
 describe('KIRA compact live-agent layout regression', () => {
   it('stays a small floating window and stacks only live agent rows', () => {

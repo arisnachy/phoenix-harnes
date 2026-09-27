@@ -1545,6 +1545,9 @@ importers:
       '@phoenix-ai/dsh-message-feedback':
         specifier: workspace:^
         version: link:../../feedback/message-feedback
+      '@phoenix-ai/dsh-mcp-client':
+        specifier: workspace:^
+        version: link:../../mcp/mcp-client
       '@phoenix-ai/dsh-session-log-export':
         specifier: workspace:^
         version: link:../../session-query/session-log-export
@@ -2033,6 +2036,9 @@ importers:
       '@phoenix-ai/dsh-plan-mode':
         specifier: workspace:^
         version: link:../../plan/plan-mode
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
       '@phoenix-ai/dsh-session-projection':
         specifier: workspace:^
         version: link:../../session/session-projection
@@ -2051,6 +2057,9 @@ importers:
       '@phoenix-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools
+      '@phoenix-ai/dsh-user-approval':
+        specifier: workspace:^
+        version: link:../../interaction/user-approval
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -9304,6 +9313,18 @@ importers:
 
   python/sdk-runtime:
     dependencies:
+      '@phoenix-ai/dsh-session-learning':
+        specifier: workspace:^
+        version: link:../../packages/session/session-learning
+      '@phoenix-ai/dsh-host-apiproxy':
+        specifier: workspace:^
+        version: link:../../packages/host/apiproxy
+      '@phoenix-ai/dsh-hardness':
+        specifier: workspace:^
+        version: link:../../packages/hardness/hardness
+      '@phoenix-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../../packages/client/connection
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../vendor/cordis
@@ -9409,6 +9430,9 @@ importers:
       '@phoenix-ai/dsh-goal-round-driver':
         specifier: workspace:^
         version: link:../../packages/goal/goal-round-driver
+      '@phoenix-ai/dsh-hardness-adapters':
+        specifier: workspace:^
+        version: link:../../packages/hardness/adapters
       '@phoenix-ai/dsh-home-paths':
         specifier: workspace:^
         version: link:../../packages/util/home-paths
@@ -9604,6 +9628,9 @@ importers:
       '@phoenix-ai/dsh-tool-ralph':
         specifier: workspace:^
         version: link:../../packages/workflow/tool-ralph
+      '@phoenix-ai/dsh-tool-session-learning':
+        specifier: workspace:^
+        version: link:../../packages/session-learning/tool-session-learning
       '@phoenix-ai/dsh-tool-skill':
         specifier: workspace:^
         version: link:../../packages/skill/tool-skill
