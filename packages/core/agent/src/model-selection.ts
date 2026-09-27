@@ -152,14 +152,14 @@ function isToolAcquisitionRequest(text: string): boolean {
   return TOOL_ACTION.test(text) && TOOL_ARTIFACT.test(text)
 }
 
-const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\\s+d[ií]as|buenas\\s+tardes|buenas\\s+noches|qu[eé]\\s+tal|c[oó]mo\\s+est[aá]s|c[oó]mo\\s+te\\s+va|c[oó]mo\\s+va\\s+todo|qu[eé]\\s+cuentas|qu[eé]\\s+se\\s+cuenta|how\\s+are\\s+you|how(?:'|’)s\\s+it\\s+going|what(?:'|’)s\\s+up|gracias|thanks|thank\\s+you)`
+const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
-const FAST_SOCIAL_OPEN = /^(?:qu[eé]\\s+quieres\\s+que\\s+hagamos|qu[eé]\\s+te\\s+gustar[ií]a\\s+que\\s+hagamos|de\\s+qu[eé]\\s+hablamos|cu[eé]ntame\\s+algo(?:\\s+bueno)?|dime\\s+algo\\s+bueno|sorpr[eé]ndeme|what\\s+do\\s+you\\s+want\\s+to\\s+do|what\\s+should\\s+we\\s+talk\\s+about|tell\\s+me\\s+something(?:\\s+good)?)$/iu
+const FAST_SOCIAL_OPEN = /^(?:qu[eé]\s+quieres\s+que\s+hagamos|qu[eé]\s+te\s+gustar[ií]a\s+que\s+hagamos|de\s+qu[eé]\s+hablamos|cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|what\s+do\s+you\s+want\s+to\s+do|what\s+should\s+we\s+talk\s+about|tell\s+me\s+something(?:\s+good)?)$/iu
 
 function normalizedFastSocialText(value: string): string {
   return value
     .replace(/[¡!¿?.,;:]+/gu, ' ')
-    .replace(/\\s+/gu, ' ')
+    .replace(/\s+/gu, ' ')
     .trim()
 }
 
