@@ -1,0 +1,68 @@
+/**
+ * Deterministic one-shot repair for repository publication/runtime metadata.
+ * Safe to rerun: it only normalizes contracts that repository gates already enforce.
+ */
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+const root = new URL('..', import.meta.url).pathname.replace(/^\/(?:[A-Za-z]:)/, match => match.slice(1))
+
+function readJson(path) {
+  return JSON.parse(readFileSync(path, 'utf8'))
+}
+function writeJson(path, value) {
+  writeFileSync(path, JSON.stringify(value, null, 2) + '\n')
+}
+
+let manifestChanges = 0
+const packagesRoot = join(root, 'packages')
+for (const group of readdirSync(packagesRoot, { withFileTypes: true })) {
+  if (!group.isDirectory()) continue
+  const groupDir = join(packagesRoot, group.name)
+  for (const pkg of readdirSync(groupDir, { withFileTypes: true })) {
+    if (!pkg.isDirectory()) continue
+    const path = join(groupDir, pkg.name, 'package.json')
+    let manifest
+    try { manifest = readJson(path) } catch { continue }
+    if (typeof manifest.name !== 'string' || !manifest.name.startsWith('@phoenix-ai/dsh-')) continue
+    if (manifest.exports && Object.hasOwn(manifest.exports, './src/*')) {
+      delete manifest.exports['./src/*']
+      writeJson(path, manifest)
+      manifestChanges += 1
+    }
+  }
+}
+
+const runtimePath = join(root, 'python', 'sdk-runtime', 'package.json')
+const runtime = readJson(runtimePath)
+runtime.dependencies ??= {}
+const requiredRuntimeClosure = [
+  '@phoenix-ai/dsh-agent-presets',
+  '@phoenix-ai/dsh-api-gateway',
+  '@phoenix-ai/dsh-api-remotes',
+  '@phoenix-ai/dsh-file-reference',
+  '@phoenix-ai/dsh-host-plugin-inventory',
+  '@phoenix-ai/dsh-host-webserver',
+  '@phoenix-ai/dsh-message-feedback',
+  '@phoenix-ai/dsh-storage',
+  '@phoenix-ai/dsh-storage-domain',
+  '@phoenix-ai/dsh-typert-registry',
+  '@phoenix-ai/dsh-voice',
+]
+for (const name of requiredRuntimeClosure) runtime.dependencies[name] = 'workspace:^'
+runtime.dependencies = Object.fromEntries(Object.entries(runtime.dependencies).sort(([a], [b]) => a.localeCompare(b)))
+writeJson(runtimePath, runtime)
+
+const knipPath = join(root, 'knip.json')
+const knip = readJson(knipPath)
+for (const key of ['examples', 'packages/bundle/base']) {
+  const workspace = knip.workspaces?.[key]
+  if (!workspace || !Array.isArray(workspace.ignoreDependencies)) continue
+  workspace.ignoreDependencies = [...new Set(workspace.ignoreDependencies)]
+    .filter(value => value !== '@phoenix-ai/.+')
+  if (workspace.ignoreDependencies.length === 0) delete workspace.ignoreDependencies
+}
+knip.workspaces['packages/core/living'] = { project: ['src/**/*.ts'] }
+writeJson(knipPath, knip)
+
+console.log(`repair-static-baseline: normalized ${manifestChanges} DSH manifest source export(s), runtime closure, and Knip hints.`)

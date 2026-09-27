@@ -22,7 +22,6 @@
       "types": "./lib/types/invariant.d.ts",
       "default": "./lib/invariant.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./api": {
       "types": "./lib/types/api/index.d.ts",
@@ -89,7 +88,6 @@
     "@phoenix-ai/dsh-storage": "workspace:^",
     "@phoenix-ai/dsh-storage-domain": "workspace:^",
     "@phoenix-ai/dsh-typert-protocol": "workspace:^",
-    "@phoenix-ai/dsh-typert-registry": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/dsh-typert-registry": "workspace:^"
   }
 }

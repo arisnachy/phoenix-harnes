@@ -77,7 +77,7 @@ describe('headless-agent keyless smoke', () => {
         "connectorCalls": [
           "connector_list",
         ],
-        "output": "CONNECTOR_INVENTORY_OK:{"kind":"connector_list","connectors":[{"kind":"mcp","id":"mcp:fixture","label":"MCP fixture","methods":[],"status":"ready","in_flight":false,"services":[],"transport":"stdio","tools":["search"]}]}",
+        "output": "CONNECTOR_INVENTORY_OK:{"kind":"connector_list","connectors":[{"kind":"mcp","id":"mcp:fixture","label":"MCP fixture","methods":[],"status":"ready","recommended_action":"use","in_flight":false,"services":[],"transport":"stdio","tools":["search"]}]}",
       }
     `)
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)

@@ -34,7 +34,6 @@
       "types": "./lib/types/message.d.ts",
       "default": "./lib/types/message.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [

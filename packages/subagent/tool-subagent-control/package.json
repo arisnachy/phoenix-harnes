@@ -26,7 +26,6 @@
       "types": "./lib/types/list-agents.d.ts",
       "default": "./lib/types/list-agents.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [
