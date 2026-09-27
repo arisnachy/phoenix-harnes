@@ -67,14 +67,14 @@ describe('tool-call-model', () => {
     // title here would be a second answer to what the card already renders.
     const model = toolRowModel('cordis_define', running({ name: 'cordis_define', argsRaw: '{"name":"clock"}' }))
     expect(model.variant).toBe('others')
-    expect(model.title).toBe('Tool call')
+    expect(model.title).toBe('cordis_define')
   })
 
   it('has dropped the v2 mount verbs that no longer exist', () => {
     // Keeping them would be a mapping for a tool nothing can call.
     expect(classifyTool('cordis_mount')).toBe('others')
-    expect(toolRowModel('cordis_mount', running({ name: 'cordis_mount', argsRaw: '{}' })).title).toBe('Tool call')
-    expect(toolRowModel('cordis_unmount', running({ name: 'cordis_unmount', argsRaw: '{}' })).title).toBe('Tool call')
+    expect(toolRowModel('cordis_mount', running({ name: 'cordis_mount', argsRaw: '{}' })).title).toBe('cordis_mount')
+    expect(toolRowModel('cordis_unmount', running({ name: 'cordis_unmount', argsRaw: '{}' })).title).toBe('cordis_unmount')
   })
 
   it('gives the pwsh shell row the bash family treatment with its own title', () => {
@@ -92,7 +92,7 @@ describe('tool-call-model', () => {
 
   it('derives the bash summary from description over command', () => {
     const m = toolRowModel('bash', running())
-    expect(m.title).toBe('Bash')
+    expect(m.title).toBe('Running')
     expect(m.summary).toBe('List files')
     expect(toolRowModel('bash', running({ argsRaw: '{"command":"pwd"}' })).summary).toBe('pwd')
   })
@@ -104,9 +104,9 @@ describe('tool-call-model', () => {
     expect(toolRowModel('edit', running({ name: 'edit', argsRaw: '{"file_path":"src/x.ts"}' })).summary).toBe('src/x.ts')
     // Other rows prefix the real tool name into the summary slot (figma
     // flows: static "Tool call" title, the name rides the mutable summary).
-    expect(toolRowModel('x', running({ argsRaw: '{"n":1}' })).summary).toBe('x · {"n":1}')
-    expect(toolRowModel('x', running({ argsRaw: 'not json' })).summary).toBe('x · not json')
-    expect(toolRowModel('x', running({ argsRaw: '' })).summary).toBe('x · c1')
+    expect(toolRowModel('x', running({ argsRaw: '{"n":1}' })).summary).toBe('{"n":1}')
+    expect(toolRowModel('x', running({ argsRaw: 'not json' })).summary).toBe('not json')
+    expect(toolRowModel('x', running({ argsRaw: '' })).summary).toBe('c1')
     expect(toolRowModel('', running({ argsRaw: '' })).summary).toBe('c1')
   })
 
@@ -234,7 +234,7 @@ describe('ToolRow', () => {
   it('renders leading icon, title and summary while collapsed', () => {
     const view = render(<ToolRow {...rowProps} />)
     expect(view.queryByTestId('tool-icon')).not.toBeNull()
-    expect(view.getByText('Bash')).toBeTruthy()
+    expect(view.getByText('Ran')).toBeTruthy()
     expect(view.getByText('List files')).toBeTruthy()
     expect(view.container.querySelector('[aria-expanded]')?.getAttribute('aria-expanded')).toBe('false')
   })
@@ -365,7 +365,7 @@ describe('ToolRow', () => {
     const view = render(<ToolRow {...rowProps} inspect={inspect} />)
     // Collapsed: no pill.
     expect(view.queryByText('Inspect')).toBeNull()
-    fireEvent.click(view.getByRole('button', { name: /Bash/ }))
+    fireEvent.click(view.getByRole('button', { name: /Ran/ }))
     const pill = view.getByText('Inspect')
     fireEvent.click(pill)
     expect(inspect).toHaveBeenCalledTimes(1)
@@ -415,7 +415,7 @@ describe('GenericToolCard', () => {
     const view = render(
       <GenericToolCard {...props('todo_write', running({ name: 'todo_write', argsRaw: '{"note":"x"}' }))} />,
     )
-    expect(view.getByText('Tool call')).toBeTruthy()
+    expect(view.getByText('todo_write')).toBeTruthy()
     expect(view.container.querySelector('[data-variant="others"]')).not.toBeNull()
     expect(view.container.querySelector('[data-state="running"]')).not.toBeNull()
   })
@@ -427,7 +427,7 @@ describe('GenericToolCard', () => {
         argsRaw: '{"file_path":"src/x.ts","old_string":"before","new_string":"after"}',
       }))} />,
     )
-    expect(view.getByText('Edit')).toBeTruthy()
+    expect(view.getByText('Editing')).toBeTruthy()
     expect(view.getByText('src/x.ts')).toBeTruthy()
     expect(view.container.querySelector('[data-variant="edit"]')).not.toBeNull()
     expect(view.container.querySelector('svg')).not.toBeNull()
