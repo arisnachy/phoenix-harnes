@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime, { userAgent } from '@phoenix-ai/dsh-llm'
 import * as LlmPiAi from '@phoenix-ai/dsh-llm-pi-ai'
-import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { discoverModels } from '../src/discovery.ts'
 import { catalogModels } from '../src/catalog.ts'
 
