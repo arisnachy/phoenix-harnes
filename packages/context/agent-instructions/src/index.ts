@@ -320,10 +320,15 @@ export function apply(ctx: Context, config: Config): void {
   })
 
   ctx.on('agent/pre-step', async (
-    { agent, messages, step, signal },
+    { agent, messages, step, signal, fastConversation },
     next,
   ): Promise<PreStepDecision> => {
     const decision = await next()
+    // The conversational fast path deliberately sends only a short human/model
+    // text tail, so freshly composed workspace-instruction messages would be
+    // discarded before the request anyway. Leave pending refresh work intact;
+    // the next substantive step consumes it normally.
+    if (fastConversation === true) return decision
     await waitForProjections(agent)
     const pending = agent.inbox.nextStep.filter(isWorkspaceContext)
     const desired = await compose(agent, signal, messages, pending)
