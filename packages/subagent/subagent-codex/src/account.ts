@@ -34,10 +34,10 @@ const ACCOUNT_INSPECTION_TTL_MS = 60_000
 const ACCOUNT_FAILURE_COOLDOWN_MS = 120_000
 /** Shared probe must outlive Codex's own 30 s state-db startup/backfill window. */
 const ACCOUNT_PROBE_TIMEOUT_MS = 45_000
-/** Minimum time allowed for asynchronous Windows taskkill /T /F cleanup. */
-const ACCOUNT_CLOSE_MIN_TIMEOUT_MS = 10_000
-/** Extra teardown headroom beyond the configured subprocess grace. */
-const ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS = 5_000
+/** Minimum bounded wait for asynchronous Windows taskkill /T /F cleanup. */
+const ACCOUNT_CLOSE_MIN_TIMEOUT_MS = 4_000
+/** Small teardown headroom beyond the configured subprocess grace. */
+const ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS = 1_000
 
 /** Runtime configuration required to open and dispose the native Codex account bridge. */
 export interface CodexAccountBridgeConfig {
