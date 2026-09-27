@@ -421,7 +421,7 @@ Source: [`packages/feedback/command-feedback/src/index.ts:62`](../packages/feedb
 'goal/change': GoalChangeMeta
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:216`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:221`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalcompletion-gate--log-only"></a>
 
@@ -432,7 +432,7 @@ Source: [`packages/goal/goal/src/domain.ts:216`](../packages/goal/goal/src/domai
 'goal/completion-gate': GoalCompletionGateAuditEntry
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:220`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:225`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalcontinuation--log-only"></a>
 
@@ -443,7 +443,7 @@ Source: [`packages/goal/goal/src/domain.ts:220`](../packages/goal/goal/src/domai
 'goal/continuation': GoalContinuationWindow
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:228`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:233`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalfalse-pass--log-only"></a>
 
@@ -454,7 +454,7 @@ Source: [`packages/goal/goal/src/domain.ts:228`](../packages/goal/goal/src/domai
 'goal/false-pass': GoalFalsePassAuditEntry
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:222`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:227`](../packages/goal/goal/src/domain.ts)
 
 <a id="goaljudge--log-only"></a>
 
@@ -465,7 +465,7 @@ Source: [`packages/goal/goal/src/domain.ts:222`](../packages/goal/goal/src/domai
 'goal/judge': GoalJudgeAuditEntry
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:218`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:223`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalstrategy--log-only"></a>
 
@@ -476,7 +476,7 @@ Source: [`packages/goal/goal/src/domain.ts:218`](../packages/goal/goal/src/domai
 'goal/strategy': GoalStrategySelection
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:226`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:231`](../packages/goal/goal/src/domain.ts)
 
 <a id="goalsupervisor--log-only"></a>
 
@@ -487,7 +487,7 @@ Source: [`packages/goal/goal/src/domain.ts:226`](../packages/goal/goal/src/domai
 'goal/supervisor': GoalSupervisorCheckpoint
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:224`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:229`](../packages/goal/goal/src/domain.ts)
 
 ### `hardness/*`
 
@@ -511,7 +511,7 @@ Source: [`packages/hardness/adapters/src/artifact-runtime.ts:19`](../packages/ha
 'hardness/kernel': MissionKernelEvent
 ```
 
-Source: [`packages/hardness/adapters/src/mission-kernel.ts:201`](../packages/hardness/adapters/src/mission-kernel.ts)
+Source: [`packages/hardness/adapters/src/mission-kernel.ts:239`](../packages/hardness/adapters/src/mission-kernel.ts)
 
 <a id="hardnessmission--log-only"></a>
 
@@ -791,7 +791,7 @@ Source: [`packages/session/session-title-llm/src/index.ts:43`](../packages/sessi
 'specialist/change': SpecialistChange
 ```
 
-Source: [`packages/goal/goal/src/domain.ts:230`](../packages/goal/goal/src/domain.ts)
+Source: [`packages/goal/goal/src/domain.ts:235`](../packages/goal/goal/src/domain.ts)
 
 ### `step/*`
 

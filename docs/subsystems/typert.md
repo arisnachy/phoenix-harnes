@@ -250,6 +250,32 @@ respond(message: ClientResponse): Promise<RpcReceipt>
 
 Source: [`packages/host/apiproxy/src/api/index.ts`](../../packages/host/apiproxy/src/api/index.ts)
 
+<a id="ctxclientreality--clientrealityservice"></a>
+
+### `ctx.clientReality` — `ClientRealityService`
+
+Ephemeral browser reality cache. It deliberately stores no history and unregisters with the owning ApiProxy fiber.
+
+```ts cordis-catalog
+/**
+ * Record a browser position only when its observation time is plausibly current.
+ * @param sessionId - Session whose browser supplied the observation.
+ * @param location - Browser geolocation sample to validate and cache.
+ */
+observeLocation(sessionId: SessionId, location: ClientLocation): void
+
+/**
+ * Read the current non-expired position for one live/persisted session id.
+ * @param sessionId - Session whose current browser location is requested.
+ * @returns A defensive copy of the live observation, or undefined when absent or expired.
+ */
+locationFor(sessionId: SessionId): ObservedClientLocation | undefined
+```
+
+Types: [SessionId](core.md)
+
+Source: [`packages/host/apiproxy/src/client-reality.ts`](../../packages/host/apiproxy/src/client-reality.ts)
+
 <a id="ctxtypert--typertregistry"></a>
 
 ### `ctx.typert` — `TypertRegistry`
