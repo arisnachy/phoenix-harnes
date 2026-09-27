@@ -53,7 +53,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 
 /** Services required by the conversation plugin. */
 export const inject = [
-  'slots', 'layout', 'sessions', 'workspaces', 'locale', 'connection', 'remote', 'remote.voice', 'settingsScope',
+  'slots', 'layout', 'sessions', 'workspaces', 'locale', 'connection', 'remote', 'settingsScope',
   'conversationEvents', 'conversationViews',
 ]
 
@@ -122,11 +122,12 @@ export function apply(ctx: Context): void {
   const layout = ctx.layout
   const slots = ctx.slots
 
-  const disposeVoiceRemote = configureVoiceAssistantRemote(
-    ctx.remote.voice as unknown as VoiceAssistantRemote,
-  )
-  ctx.effect(() => disposeVoiceRemote, 'ui-conversation: host voice remote')
-  ctx.on('connection/reset', () => { void refreshVoiceAssistantRemote() })
+  const voiceRemote = (ctx.remote as unknown as { voice?: VoiceAssistantRemote }).voice
+  if (voiceRemote !== undefined) {
+    const disposeVoiceRemote = configureVoiceAssistantRemote(voiceRemote)
+    ctx.effect(() => disposeVoiceRemote, 'ui-conversation: host voice remote')
+    ctx.on('connection/reset', () => { void refreshVoiceAssistantRemote() })
+  }
 
   registerConversationNodes(ctx)
   registerChatNodeRenderers(ctx)

@@ -56,13 +56,12 @@ async function boot(
 }
 
 describe('login flows in a real composition', () => {
-  it('offers a sign-in for a provider no route names, once the seam is mounted', async () => {
+  it('leaves native Codex session authentication out of the generic pi-ai login seam', async () => {
     const ctx = await boot(await home(), {}, { authorization: true })
 
-    // Zero routes configured: signing in is what makes a route worth adding,
-    // so the offer cannot wait for a profile to name the provider.
-    const codex = ctx.authorization.describe(LlmPiAi.recordKeyFor('openai-codex'))
-    expect(codex?.methods.map(method => method.id)).toEqual(['oauth'])
+    // Codex owns authentication through its native product session. Registering
+    // a second generic pi-ai OAuth flow would create two competing authorities.
+    expect(ctx.authorization.describe(LlmPiAi.recordKeyFor('openai-codex'))).toBeUndefined()
   })
 
   it('mounts without the seam, and simply offers no sign-in', async () => {
@@ -88,7 +87,7 @@ describe('request-level dynamic profiles', () => {
     // The exact product posture: `- id: llm-pi-ai` with no config at all.
     const ctx = await boot(dir, {})
 
-    expect(ctx.llm.listProviders()).toEqual([])
+    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['phoenix-local', 'opencode-free'])
     // Dormant ≠ invisible: every installed catalog provider is configurable
     // before any route exists, each addressed inside the providers dict.
     const directory = ctx.llm.listConfigurableProviders()
@@ -103,7 +102,7 @@ describe('request-level dynamic profiles', () => {
     await ctx.settings.update(NS, {
       providers: { deepseek: { apiKeyEnv: 'PI_DYNAMIC_KEY', baseURL: server.url } },
     })
-    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['deepseek'])
+    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['deepseek', 'phoenix-local', 'opencode-free'])
     await expect(ctx.llm.listModels('deepseek')).resolves.not.toHaveLength(0)
 
     const result = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-v4-flash', messages: [] })
@@ -112,7 +111,7 @@ describe('request-level dynamic profiles', () => {
 
     // Emptying the user layer returns the adapter to its dormant state.
     await ctx.settings.replace(NS, {})
-    expect(ctx.llm.listProviders()).toEqual([])
+    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['phoenix-local', 'opencode-free'])
   })
 
   it('adds a provider route from settings and drops it when the user layer resets', async () => {
@@ -127,11 +126,11 @@ describe('request-level dynamic profiles', () => {
       providers: { openai: { apiKeyEnv: 'PI_DYNAMIC_KEY', baseURL: 'http://127.0.0.1:1/v1' } },
     })
 
-    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai'])
+    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai', 'phoenix-local', 'opencode-free'])
     await ctx.settings.update(NS, {
       providers: { deepseek: { apiKeyEnv: 'PI_LIVE_KEY', baseURL: server.url } },
     })
-    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai', 'deepseek'])
+    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai', 'deepseek', 'phoenix-local', 'opencode-free'])
 
     const result = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-v4-flash', messages: [] })
     expect(result.message.content).toEqual([{ type: 'text', text: 'hello' }])
@@ -140,7 +139,7 @@ describe('request-level dynamic profiles', () => {
     // Reset the user layer: the settings-born route unregisters, the
     // composition route stays.
     await ctx.settings.replace(NS, {})
-    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai'])
+    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai', 'phoenix-local', 'opencode-free'])
     const removed = await assemble(ctx, { provider: 'deepseek', model: 'deepseek-v4-flash', messages: [] })
     expect(removed.finish).toMatchObject({ kind: 'error', failure: { code: 'NO_ADAPTER' } })
   })
@@ -179,7 +178,7 @@ describe('request-level dynamic profiles', () => {
       maxDelayMs: 100,
       jitterRatio: 0.2,
     })
-    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai'])
+    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai', 'phoenix-local', 'opencode-free'])
   })
 
   it('refuses a settings write this adapter could not serve, leaving its routes alone', async () => {
@@ -192,7 +191,7 @@ describe('request-level dynamic profiles', () => {
     // and then quietly disabling every route in the namespace.
     await expect(ctx.settings.update(NS, { providers: { 'not-a-real-provider': {} } }))
       .rejects.toThrow(/resolves no models/)
-    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai'])
+    expect(ctx.llm.listProviders().map(provider => provider.id)).toEqual(['openai', 'phoenix-local', 'opencode-free'])
   })
 
   it('keeps serving its routes when a settings-born route collides with another adapter', async () => {
@@ -217,7 +216,7 @@ describe('request-level dynamic profiles', () => {
     // The conflicting swap was refused whole: the previous route set still
     // owns openai (an eager dispose would have dropped it), and anthropic
     // still belongs to its original adapter.
-    expect(ctx.llm.listProviders().map(provider => provider.id).sort()).toEqual(['anthropic', 'openai'])
+    expect(ctx.llm.listProviders().map(provider => provider.id).sort()).toEqual(['anthropic', 'opencode-free', 'openai', 'phoenix-local'])
     const result = await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
     expect(result.finish.kind).toBe('error')
     expect(server.paths).toEqual(['/v1/responses'])
@@ -225,7 +224,7 @@ describe('request-level dynamic profiles', () => {
     // Reverting to the working configuration re-applies, even though its
     // facts equal the ones the registry already holds.
     await ctx.settings.replace(NS, {})
-    expect(ctx.llm.listProviders().map(provider => provider.id).sort()).toEqual(['anthropic', 'openai'])
+    expect(ctx.llm.listProviders().map(provider => provider.id).sort()).toEqual(['anthropic', 'opencode-free', 'openai', 'phoenix-local'])
     await assemble(ctx, { provider: 'openai', model: 'gpt-4.1', messages: [] })
     expect(server.paths).toEqual(['/v1/responses', '/v1/responses'])
   })

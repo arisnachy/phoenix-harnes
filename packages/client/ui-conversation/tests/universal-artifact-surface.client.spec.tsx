@@ -70,7 +70,8 @@ describe('universal artifact surface', () => {
     const frame = screen.getByTitle('Mini app')
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
     expect(frame.getAttribute('srcdoc')).toContain('connect-src \'none\'')
-    fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
-    expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy()
+    // HTML is already an adaptive executable surface, so preview chrome
+    // (including Expand/Collapse) stays intentionally absent.
+    expect(screen.queryByRole('button', { name: /Expand|Collapse/ })).toBeNull()
   })
 })

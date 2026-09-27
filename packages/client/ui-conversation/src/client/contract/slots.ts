@@ -13,10 +13,10 @@ import type {
 import type { MarkdownFileMentions } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { MessageId } from '@phoenix-ai/dsh-client-connection/client'
 import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
-import type { ComposerBlock } from '../input/blocks.ts'
+import type { ComposerBlock } from './input.ts'
 import type {
   ComposerKeyboard, DraftAttachmentId, EditSelection, InputActions, InputNotice, InputState,
-} from '../input/contract.ts'
+} from './input.ts'
 import type { createChatStore } from '../stores.ts'
 import type { ComposerSubmitGesture, InputSubmitMode } from './composer-submission.ts'
 import type { ChatNode, ChatNodeKind } from './chat-nodes.ts'

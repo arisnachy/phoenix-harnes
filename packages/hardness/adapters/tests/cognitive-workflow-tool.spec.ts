@@ -47,7 +47,8 @@ describe('hardness_workflow tool adapter', () => {
 
     expect(tool.name).toBe('hardness_workflow')
     expect(tool.description).toContain('deterministic HARDNESS cognitive workflow')
-    expect(tool.description).toContain('before execution planning')
+    expect(tool.description).toContain('inspectable serialized plan')
+    expect(tool.description).toContain('Ordinary routing is applied directly')
     expect(tool.parameters).toEqual(expect.objectContaining({
       type: 'object',
       required: ['profile'],

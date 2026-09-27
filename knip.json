@@ -78,7 +78,6 @@
         "**/*.ts"
       ],
       "ignoreDependencies": [
-        "@phoenix-ai/.+",
         "@phoenix-ai/.+"
       ]
     },
@@ -661,7 +660,6 @@
     },
     "packages/bundle/base": {
       "ignoreDependencies": [
-        "@phoenix-ai/.+",
         "@phoenix-ai/.+"
       ]
     },
@@ -673,6 +671,11 @@
     "packages/bundle/web-app": {
       "ignoreDependencies": [
         "@phoenix-ai/.+"
+      ]
+    },
+    "packages/core/living": {
+      "project": [
+        "src/**/*.ts"
       ]
     }
   }

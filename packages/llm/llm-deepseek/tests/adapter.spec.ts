@@ -911,7 +911,7 @@ describe('DeepSeekAdapter against a mock server', () => {
     expect(server.fileRequests.filter(request => request.method === 'POST')).toHaveLength(2)
   })
 
-  it.each(['deepseek-v4-flash', 'unlisted-pass-through'])(
+  it.each(['deepseek-v4-pro', 'unlisted-pass-through'])(
     'rejects image input for text-only model %s before credentials, attachments, or fetch',
     async (model) => {
       const server = await mockServer([])
@@ -1559,7 +1559,7 @@ describe('plugin registration and config', () => {
       .resolves.toMatchObject({
         provider: 'deepseek-official',
         id: 'deepseek-v4-flash',
-        name: 'DeepSeek-V4-Flash',
+        name: 'DeepSeek-V4-Flash (legacy alias)',
         context: { contextWindow: 1_000_000 },
         defaultMaxTokens: 256_000,
         reasoning: {
@@ -1576,7 +1576,7 @@ describe('plugin registration and config', () => {
       .resolves.toMatchObject({
         provider: 'deepseek-official',
         id: 'deepseek-v4-flash-vision-exp',
-        name: 'DeepSeek-V4-Flash-Vision-Exp',
+        name: 'DeepSeek-V4-Flash-Vision-Exp (legacy alias)',
         inputModalities: ['text', 'image'],
         context: { contextWindow: 1_000_000 },
         defaultMaxTokens: 256_000,
@@ -1831,7 +1831,6 @@ describe('plugin registration and config', () => {
     [[{ id: 'm', name: '' }], /empty name/],
     [[{ id: 'm', contextWindow: 0 }], /contextWindow/],
     [[{ id: 'm', contextWindow: 1.5 }], /contextWindow/],
-    [[{ id: 'm', inputModalities: [] }], /inputModalities/],
     [[{ id: 'm', inputModalities: ['text', 'text'] }], /inputModalities must not contain duplicates/],
     [[{
       id: 'm',
@@ -1850,8 +1849,12 @@ describe('plugin registration and config', () => {
     expect(ctx.llm.listProviders()).toEqual([])
   })
 
+  it('repairs an empty legacy modality list to text at the resolver boundary', () => {
+    expect(resolveAdapterOptions({ models: [{ id: 'm', inputModalities: [] }] }).models)
+      .toEqual([{ id: 'm', inputModalities: ['text'] }])
+  })
+
   const invalidProgrammaticModalities: Array<[LlmDeepSeek.DeepSeekCatalogModel[], RegExp]> = [
-    [[{ id: 'm', inputModalities: [] }], /inputModalities must not be empty/],
     [[{
       id: 'm',
       inputModalities: ['audio'] as unknown as NonNullable<LlmDeepSeek.DeepSeekCatalogModel['inputModalities']>,

@@ -13,6 +13,7 @@ import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { createModels, getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import type { Api, Model, OpenAICompletionsCompat, Provider } from '@earendil-works/pi-ai'
 import { resolveProfiles } from '../src/config.ts'
+import { catalogModels } from '../src/catalog.ts'
 import { buildProvider, supportedProtocols } from '../src/provider.ts'
 import { assemble } from './assemble.ts'
 import { memoryAuth } from './auth-double.ts'
@@ -127,7 +128,7 @@ describe('hand-declared providers', () => {
     // A catalog route is unaffected: its models carry the metadata that makes
     // `off` actually disable thinking.
     const withCatalog = await harness({ providers: { deepseek: { baseURL: server.url } } })
-    const [catalogModel] = getBuiltinModels('deepseek')
+    const [catalogModel] = [...catalogModels('deepseek').values()]
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
     expect((await withCatalog.llm.resolveModelInfo('deepseek', catalogModel.id)).reasoning?.efforts.map(e => e.id))
       .toContain('off')
@@ -271,7 +272,7 @@ describe('hand-declared providers', () => {
     // materializes `[]` for an absent array, so an entry naming a catalog
     // model without declaring modalities must keep the catalog's rather than
     // describe a model that accepts nothing.
-    const [catalogModel] = getBuiltinModels('deepseek')
+    const [catalogModel] = [...catalogModels('deepseek').values()]
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
     const resolved = resolveProfiles({
       'deepseek': { baseURL: 'https://catalog.test', models: [{ id: catalogModel.id, input: [] }] },
@@ -422,12 +423,12 @@ describe('catalog routes with per-model configuration', () => {
 
     const listed = await ctx.llm.listModels('deepseek')
     expect(listed.map(model => model.id).sort())
-      .toEqual(getBuiltinModels('deepseek').map(model => model.id).sort())
+      .toEqual([...catalogModels('deepseek').values()].map(model => model.id).sort())
   })
 
   it('overrides one catalog model field and defaults the rest from the catalog', async () => {
     const server = await mockServer([])
-    const [catalogModel] = getBuiltinModels('deepseek')
+    const [catalogModel] = [...catalogModels('deepseek').values()]
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
     const ctx = await harness({
       providers: {
@@ -451,7 +452,7 @@ describe('catalog routes with per-model configuration', () => {
 
   it('materializes a request default only from a configured output cap', async () => {
     const server = await mockServer([])
-    const [catalogModel] = getBuiltinModels('deepseek')
+    const [catalogModel] = [...catalogModels('deepseek').values()]
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
     const ctx = await harness({
       providers: {
@@ -682,7 +683,7 @@ describe('per-model reasoning efforts', () => {
   })
 
   it('narrows a catalog model’s levels in place', () => {
-    const [catalogModel] = getBuiltinModels('deepseek')
+    const [catalogModel] = [...catalogModels('deepseek').values()]
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
     expect(getSupportedThinkingLevels(catalogModel as Model<Api>)).toEqual(['off', 'high', 'max'])
 
@@ -697,7 +698,7 @@ describe('per-model reasoning efforts', () => {
   })
 
   it('strips reasoning from a catalog model with false', () => {
-    const [catalogModel] = getBuiltinModels('deepseek')
+    const [catalogModel] = [...catalogModels('deepseek').values()]
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
     expect(catalogModel.reasoning).toBe(true)
 
@@ -708,7 +709,7 @@ describe('per-model reasoning efforts', () => {
   })
 
   it('inherits the catalog capability when the field is absent', () => {
-    const [catalogModel] = getBuiltinModels('deepseek')
+    const [catalogModel] = [...catalogModels('deepseek').values()]
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
 
     const model = modelOf({ deepseek: { models: [{ id: catalogModel.id }] } }, 'deepseek')
@@ -734,13 +735,13 @@ describe('per-model reasoning efforts', () => {
 
 describe('modelOverrides', () => {
   const deepseekModel = (): Model<Api> => {
-    const [model] = getBuiltinModels('deepseek')
+    const [model] = [...catalogModels('deepseek').values()]
     if (model === undefined) throw new Error('the installed catalog ships no deepseek model')
     return model
   }
 
   it('reshapes one catalog model while the rest of the catalog keeps serving', () => {
-    const catalogSize = getBuiltinModels('deepseek').length
+    const catalogSize = [...catalogModels('deepseek').values()].length
     const target = deepseekModel()
     const resolved = resolveProfiles({
       deepseek: {
@@ -767,7 +768,7 @@ describe('modelOverrides', () => {
     expect(resolved.get('deepseek')?.configuredMaxTokens.get(target.id)).toBe(4096)
     // A sibling the overrides do not name is byte-identical to the catalog.
     const sibling = models.find(model => model.id !== target.id)
-    expect(sibling?.maxTokens).toBe(getBuiltinModels('deepseek').find(model => model.id === sibling?.id)?.maxTokens)
+    expect(sibling?.maxTokens).toBe([...catalogModels('deepseek').values()].find(model => model.id === sibling?.id)?.maxTokens)
   })
 
   it('refuses every override that lands nowhere instead of skipping it', () => {
@@ -828,7 +829,7 @@ describe('compat switches', () => {
   })
 
   it('merges the switches over the catalog entry’s own compat instead of replacing it', () => {
-    const [catalogModel] = getBuiltinModels('deepseek')
+    const [catalogModel] = [...catalogModels('deepseek').values()]
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
     const inherited = catalogModel.compat as OpenAICompletionsCompat
     expect(inherited.requiresReasoningContentOnAssistantMessages).toBe(true)

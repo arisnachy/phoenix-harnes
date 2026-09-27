@@ -1,5 +1,7 @@
 # Image Generation Chat Delivery Implementation Plan
 
+English | [中文](2026-09-13-image-generation-chat-delivery.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ensure a successful Codex image generation request reaches PHOENIX chat as a durable visible image attachment instead of a text-only claim.

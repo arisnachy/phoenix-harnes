@@ -1013,7 +1013,7 @@ describe('useCalendarDay boundary refresh', () => {
 })
 
 describe('small branch tails', () => {
-  it('AssistantMarkdown hides single-line internal reasoning behind localized status', () => {
+  it('AssistantMarkdown omits single-line internal reasoning from the transcript surface', () => {
     const view = render(
       <AssistantMarkdown
         t={t}
@@ -1022,8 +1022,9 @@ describe('small branch tails', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
-    expect(view.getByText(zh['reasoning.hidden'])).toBeTruthy()
+    expect(view.container.firstChild).toBeNull()
     expect(view.queryByText('one-liner')).toBeNull()
+    expect(view.queryByText(zh['reasoning.hidden'])).toBeNull()
   })
 
   it('StatsLine omits the cache-hit segment when no input accounting exists at all', () => {
