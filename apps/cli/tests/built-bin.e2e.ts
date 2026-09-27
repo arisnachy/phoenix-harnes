@@ -20,8 +20,16 @@ async function runBuiltBin(
   cwd?: string,
 ): Promise<{ stdout: string; code: number; stderr: string }> {
   const childEnv = Object.fromEntries(
-    Object.entries({ ...process.env, ...env })
-      .filter((entry): entry is [string, string] => entry[1] !== undefined),
+    Object.entries({
+      ...process.env,
+      // CLI acceptance tests share one repository checkout and do not exercise
+      // the updater. Letting each child spawn update watchers races on the
+      // common Git worktree metadata (notably staging index.lock) and can turn
+      // unrelated argument/profile assertions into EBUSY noise or timeouts.
+      PHOENIX_AUTO_UPDATE: '0',
+      PHOENIX_UPSTREAM_UPDATE_MODE: 'off',
+      ...env,
+    }).filter((entry): entry is [string, string] => entry[1] !== undefined),
   )
   const result = await execa(process.execPath, [dshBin, ...args], {
     input: '',
