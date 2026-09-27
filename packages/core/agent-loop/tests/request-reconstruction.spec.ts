@@ -135,6 +135,33 @@ describe('request stability across the loop', () => {
     expect(adapter.requests[0]?.tools).toBeUndefined()
   })
 
+  it.each([
+    'como te va que se cuenta',
+    'que quieres que hagamos',
+  ])('skips tool-schema assembly for natural small talk: %s', async (prompt) => {
+    const adapter = new MockAdapter([textResponse('respuesta rápida')])
+    const ctx = await harness(adapter)
+    let providerCalls = 0
+    ctx.systemPrompt.tools(() => {
+      providerCalls += 1
+      return {
+        schemas: [{
+          name: 'expensive-social-noop',
+          description: 'must not be assembled for natural small talk',
+          parameters: { type: 'object', properties: {} },
+        }],
+      }
+    })
+    const agent = ctx.agentLoop.create(SessionId(`fast-natural-social-${prompt.length}`), { provider: 'mock', model: 'mock' })
+
+    send(agent, prompt)
+    await waitForIdle(ctx, agent)
+
+    expect(providerCalls).toBe(0)
+    expect(adapter.requests).toHaveLength(1)
+    expect(adapter.requests[0]?.tools).toBeUndefined()
+  })
+
   it('keeps contextual acknowledgements on the full-history, tool-capable path', async () => {
     const adapter = new MockAdapter([
       textResponse('Puedo mostrarte el adelanto ahora. ¿Quieres que lo haga?'),
