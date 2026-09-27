@@ -24,6 +24,13 @@ describe('native Codex managed-account boundary', () => {
     expect(accountSource).toContain('inFlightSnapshot')
   })
 
+  it('keeps slow app-server teardown from becoming a Host-fatal account probe failure', () => {
+    expect(accountSource).toContain('ACCOUNT_CLOSE_MIN_TIMEOUT_MS')
+    expect(accountSource).toContain('ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS')
+    expect(accountSource).toContain('continuing without failing the Host')
+    expect(accountSource).not.toContain("if (!exited) throw new Error('subagent-codex account: app-server process tree did not terminate')")
+  })
+
   it('uses Codex Apps RPCs only as an optional connector catalog', () => {
     expect(accountSource).toContain('app/list')
     expect(accountSource).toContain('app/installed')
