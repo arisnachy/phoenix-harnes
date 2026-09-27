@@ -13,15 +13,15 @@ import type { DetailsSlotProps, DetailsToolOwnerProps, SelectionTarget } from '@
 import { makeTranslate } from '@phoenix-ai/dsh-client-test-runtime'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
 import { createChatStore } from '../src/client/stores.ts'
-import { AssistantMarkdown, type AssistantMarkdownProps } from '../src/client/chat/AssistantMarkdown.tsx'
+import { ReasoningRow } from '../src/client/chat/ReasoningRow.tsx'
+import type { ChatViewSlotProps } from '../src/client/contract/slots.ts'
 import { StatsLine } from '../src/client/chat/StatsLine.tsx'
 import { DetailsPanel } from '../src/client/skeleton/DetailsPanel.tsx'
 import { zh } from '../src/client/locales.ts'
 import { chatSnapshotFixture } from './chat-snapshot-fixture.client.ts'
 
 // Mirrors the real lookup chain (conversation namespace, then common).
-const t: AssistantMarkdownProps['t'] = makeTranslate(zh, commonZh)
-const renderMessageImages: AssistantMarkdownProps['renderMessageImages'] = () => null
+const t: ChatViewSlotProps['t'] = makeTranslate(zh, commonZh)
 
 /** jsdom has no ResizeObserver; StatsLine watches its row for ellipsis truncation through one. */
 class ResizeObserverStub {
@@ -59,16 +59,8 @@ function snapshotBase(): ConversationSnapshot {
 }
 
 describe('render branch tails', () => {
-  it('AssistantMarkdown reasoning row is ok-state when not the streaming tail', () => {
-    const view = render(
-      <AssistantMarkdown
-        t={t}
-        blocks={[{ kind: 'reasoning', text: 'done thinking' }, { kind: 'text', text: 'answer' }]}
-        streaming
-        renderMessageImages={renderMessageImages}
-      />,
-    )
-    // reasoning at index 0 with a later block: running is false → ok state.
+  it('ReasoningRow is ok-state when its reasoning block is settled', () => {
+    const view = render(<ReasoningRow t={t} text="done thinking" running={false} />)
     expect(view.container.querySelector('[data-state="ok"]')).not.toBeNull()
   })
 
@@ -100,15 +92,8 @@ describe('render branch tails', () => {
     expect(view.container.textContent).toBe('2 轮 · 3 步')
   })
 
-  it('AssistantMarkdown reasoning as the streaming tail renders the running ring', () => {
-    const view = render(
-      <AssistantMarkdown
-        t={t}
-        blocks={[{ kind: 'reasoning', text: 'still thinking' }]}
-        streaming
-        renderMessageImages={renderMessageImages}
-      />,
-    )
+  it('ReasoningRow renders running state for the streaming reasoning tail', () => {
+    const view = render(<ReasoningRow t={t} text="still thinking" running />)
     expect(view.container.querySelector('[data-state="running"]')).not.toBeNull()
   })
 
