@@ -17,6 +17,8 @@ concurrency:
 jobs:
   node-24:
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     name: node 24 / static
     env:
@@ -25,7 +27,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
       - uses: pnpm/action-setup@v4
         with:
           dest: ${{ runner.temp }}/setup-pnpm
@@ -66,6 +68,26 @@ jobs:
             docs/module-graph.zh.md
             apps/cli/composition.md
             packages/extensions/tool-cordis/src/api-catalog.ts
+      - name: Commit generated repair outputs back to the repair branch
+        if: github.head_ref == 'repair/static-gates-and-vitest-20260924'
+        run: |
+          git config user.name "phoenix-ci-repair"
+          git config user.email "phoenix-ci-repair@users.noreply.github.com"
+          git add \
+            docs/config-catalog.md docs/config-catalog.zh.md docs/config-catalog.i18n.yaml \
+            docs/cordis-catalog docs/subsystems \
+            docs/capability-seams.md docs/capability-seams.zh.md \
+            docs/event-producer-consumer.md docs/event-producer-consumer.zh.md \
+            docs/tool-catalog.md docs/tool-catalog.zh.md \
+            docs/persistence-catalog.md docs/persistence-catalog.zh.md \
+            docs/module-graph.md docs/module-graph.zh.md \
+            apps/cli/composition.md packages/extensions/tool-cordis/src/api-catalog.ts
+          if git diff --cached --quiet; then
+            echo "Generated repair outputs are already current."
+          else
+            git commit -m "docs: regenerate repair catalogs [skip ci]"
+            git push origin "HEAD:${{ github.head_ref }}"
+          fi
       - name: Run static gates
         env:
           DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
