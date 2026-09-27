@@ -40,6 +40,11 @@ describe('installModelSelection()', () => {
 
   it('classifies narrow social, runtime-meta, and casual-reaction turns for the low-latency path', () => {
     expect(isConversationalFastPathText('hola')).toBe(true)
+    expect(isConversationalFastPathText('como te va que se cuenta')).toBe(true)
+    expect(isConversationalFastPathText('¿cómo te va, qué se cuenta?')).toBe(true)
+    expect(isConversationalFastPathText('hola, cómo te va, qué se cuenta')).toBe(true)
+    expect(isConversationalFastPathText('que quieres que hagamos')).toBe(true)
+    expect(isConversationalFastPathText('cuéntame algo bueno')).toBe(true)
     expect(isConversationalFastPathText('¿estás usando Jev?')).toBe(true)
     expect(isConversationalFastPathText('gracias')).toBe(true)
     expect(isConversationalFastPathText('eso parece un pollo pavo bien feo jajja')).toBe(true)
@@ -63,6 +68,9 @@ describe('installModelSelection()', () => {
       expect(isConversationalFastPathText(continuation)).toBe(false)
     }
     expect(isConversationalFastPathText('revisa el repo y arregla el error')).toBe(false)
+    expect(isConversationalFastPathText('qué se cuenta de OpenAI hoy')).toBe(false)
+    expect(isConversationalFastPathText('qué quieres que hagamos con Phoenix')).toBe(false)
+    expect(isConversationalFastPathText('cómo te va el build de Phoenix')).toBe(false)
     expect(isConversationalFastPathText('¿esto parece un error de memoria?')).toBe(false)
     expect(isConversationalFastPathText('qué tiempo hace hoy')).toBe(false)
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
