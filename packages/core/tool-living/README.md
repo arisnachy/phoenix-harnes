@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Model-facing consumer for Universal Living Creations. It installs one domain-neutral policy and tools for registering, provisioning connectors, inspecting, listing, reading, acting on, verifying, and explicitly forgetting creations through `ctx.living`.
+Model-facing consumer for Universal Living Creations. It installs one domain-neutral, fail-soft policy and tools for registering, provisioning connectors, inspecting, listing, reading, acting on, verifying, and explicitly forgetting creations through `ctx.living`.
 
 ## Model Experience
 
@@ -10,7 +10,7 @@ Model-facing consumer for Universal Living Creations. It installs one domain-neu
 
 #### What the model sees
 
-Whenever Phoenix creates or materially modifies a user-facing artifact or runnable system, the model must register it before delivery regardless of domain or format. Every Phoenix-created output receives a connector contract; mutable creations target live control rather than silently downgrading to a static artifact. Background workers are optional and require explicit user consent.
+The requested deliverable remains the mission. Phoenix connectivity is an optional enhancement unless the user explicitly requested it, previously opted in for that creation, or the connector is required for the requested functionality. The model must not register or install a connector merely because an artifact was created; when connectivity is useful and preference is unknown, it asks once. Connector setup is bounded to two connect/repair attempts and roughly ten seconds of foreground work, then fails soft: preserve any offline manifest, report degradation, and continue independent task work. A user request to skip or finish without the connector stops connector work for that turn.
 
 #### Token effect
 
@@ -24,7 +24,7 @@ The policy text is prefix-stable while the plugin version and registration scope
 
 #### What the model sees
 
-The model receives schemas for registering, inspecting, listing, reading, acting on, verifying, obtaining connector kits, and explicitly forgetting creations. `living_register_creation` accepts arbitrary `kind` text and self-described capabilities, provisions a per-creation control identity, and keeps telemetry/error surfaces tied to that durable identity. `living_verify_creation` refuses completion while the achieved integration remains below the declared target.
+The model receives schemas for registering, inspecting, listing, reading, acting on, verifying, obtaining connector kits, and explicitly forgetting creations. `living_verify_creation` is used only when Phoenix connectivity is an explicit acceptance criterion, not as a universal completion gate. When a connector is used, the model exposes only the smallest meaningful state/actions/events, keeps telemetry bounded, retains enough manifest resources to reconnect later, and never exposes or commits the bearer token. Background agents remain optional and require user approval; connectivity never implies background workers.
 
 #### Token effect
 
