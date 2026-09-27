@@ -34,6 +34,10 @@ const ACCOUNT_INSPECTION_TTL_MS = 60_000
 const ACCOUNT_FAILURE_COOLDOWN_MS = 120_000
 /** Shared probe must outlive Codex's own 30 s state-db startup/backfill window. */
 const ACCOUNT_PROBE_TIMEOUT_MS = 45_000
+/** Minimum time allowed for asynchronous Windows taskkill /T /F cleanup. */
+const ACCOUNT_CLOSE_MIN_TIMEOUT_MS = 10_000
+/** Extra teardown headroom beyond the configured subprocess grace. */
+const ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS = 5_000
 
 /** Runtime configuration required to open and dispose the native Codex account bridge. */
 export interface CodexAccountBridgeConfig {
@@ -247,6 +251,7 @@ class CodexAccountConnection {
   constructor(
     private readonly child: SubprocessHandle,
     private readonly disposeGraceMs: number,
+    private readonly warn: (message: string) => void,
   ) {
     if (child.stdout === undefined || child.stdin === undefined) {
       throw new Error('subagent-codex account: app-server did not expose protocol pipes')
@@ -330,8 +335,22 @@ class CodexAccountConnection {
       // A concurrently closed protocol pipe does not change tree ownership.
     }
     this.child.terminate()
-    const exited = await this.child.waitForExit(AbortSignal.timeout(Math.ceil(this.disposeGraceMs + 1_000)))
-    if (!exited) throw new Error('subagent-codex account: app-server process tree did not terminate')
+
+    // Windows tree teardown is intentionally asynchronous in dsh-subprocess-local
+    // so taskkill /T /F cannot freeze the Host event loop. Give that OS cleanup
+    // enough room to finish, but never let a slow disposer replace a successful
+    // account RPC result or turn Settings/quota inspection into a Host-fatal load.
+    const closeTimeoutMs = Math.max(
+      ACCOUNT_CLOSE_MIN_TIMEOUT_MS,
+      Math.ceil(this.disposeGraceMs + ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS),
+    )
+    const exited = await this.child.waitForExit(AbortSignal.timeout(closeTimeoutMs))
+    if (!exited) {
+      this.warn(
+        `subagent-codex account: app-server process tree is still terminating after ${closeTimeoutMs}ms; continuing without failing the Host`,
+      )
+      return
+    }
     await this.child.done.catch(() => {})
   }
 }
@@ -351,7 +370,11 @@ async function openConnection(
     signal,
     env,
   })
-  const connection = new CodexAccountConnection(child, config.disposeGraceMs)
+  const connection = new CodexAccountConnection(
+    child,
+    config.disposeGraceMs,
+    message => { ctx.logger.warn(message) },
+  )
   try {
     await Promise.race([connection.initialize(signal, experimentalApi), connection.processEnded()])
     return connection
