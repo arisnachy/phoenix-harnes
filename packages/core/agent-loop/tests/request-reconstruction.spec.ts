@@ -141,9 +141,10 @@ describe('request stability across the loop', () => {
   ])('skips tool-schema assembly for natural small talk: %s', async (prompt) => {
     const adapter = new MockAdapter([textResponse('respuesta rápida')])
     const ctx = await harness(adapter)
-    let providerCalls = 0
+    let toolProviderCalls = 0
+    let contextProviderCalls = 0
     ctx.systemPrompt.tools(() => {
-      providerCalls += 1
+      toolProviderCalls += 1
       return {
         schemas: [{
           name: 'expensive-social-noop',
@@ -152,12 +153,18 @@ describe('request stability across the loop', () => {
         }],
       }
     })
+    ctx.systemPrompt.context({
+      name: 'expensive-social-context',
+      order: 0,
+      text: () => `runtime-context-${++contextProviderCalls}`,
+    })
     const agent = ctx.agentLoop.create(SessionId(`fast-natural-social-${prompt.length}`), { provider: 'mock', model: 'mock' })
 
     send(agent, prompt)
     await waitForIdle(ctx, agent)
 
-    expect(providerCalls).toBe(0)
+    expect(toolProviderCalls).toBe(0)
+    expect(contextProviderCalls).toBe(0)
     expect(adapter.requests).toHaveLength(1)
     expect(adapter.requests[0]?.tools).toBeUndefined()
   })
