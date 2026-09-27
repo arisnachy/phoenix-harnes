@@ -34,6 +34,10 @@ const ACCOUNT_INSPECTION_TTL_MS = 60_000
 const ACCOUNT_FAILURE_COOLDOWN_MS = 120_000
 /** Shared probe must outlive Codex's own 30 s state-db startup/backfill window. */
 const ACCOUNT_PROBE_TIMEOUT_MS = 45_000
+/** Optional quota metadata may be slower than account/read but must not stall Host boot. */
+const ACCOUNT_RATE_LIMIT_TIMEOUT_MS = 12_000
+/** Token-usage profile is non-critical and gets the tightest latency budget. */
+const ACCOUNT_USAGE_TIMEOUT_MS = 5_000
 /** Minimum bounded wait for asynchronous Windows taskkill /T /F cleanup. */
 const ACCOUNT_CLOSE_MIN_TIMEOUT_MS = 4_000
 /** Small teardown headroom beyond the configured subprocess grace. */
@@ -404,14 +408,18 @@ async function readOptionalCodexTelemetry(
   signal: AbortSignal,
   warn: (message: string) => void,
 ): Promise<unknown | undefined> {
+  const timeoutMs = method === 'account/usage/read'
+    ? ACCOUNT_USAGE_TIMEOUT_MS
+    : ACCOUNT_RATE_LIMIT_TIMEOUT_MS
+  const boundedSignal = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)])
   try {
     return await Promise.race([
-      connection.request(method, {}, signal),
+      connection.request(method, {}, boundedSignal),
       connection.processEnded(),
     ])
   } catch (error: unknown) {
     if (!signal.aborted) {
-      warn(`subagent-codex account: optional ${method} unavailable; continuing with partial telemetry: ${error instanceof Error ? error.message : String(error)}`)
+      warn(`subagent-codex account: optional ${method} unavailable after <=${timeoutMs}ms; continuing with partial telemetry: ${error instanceof Error ? error.message : String(error)}`)
     }
     return undefined
   }
