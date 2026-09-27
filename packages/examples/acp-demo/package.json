@@ -29,6 +29,7 @@
       "types": "./lib/types/bin.d.ts",
       "default": "./lib/bin.js"
     },
+    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [

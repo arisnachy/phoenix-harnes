@@ -7,7 +7,7 @@
  * ([rationale](../../.agents/notes/implemented/process/2026-08-10-npm-release-sequences.md)).
  */
 
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { releaseFamily, tarballName, type ReleaseFamily, type ReleaseMember } from './families.ts'
@@ -18,6 +18,36 @@ import { PUBLISH_ORDER_FILE, tarballFiles } from './tarball.ts'
 const DEFAULT_OUTPUT = 'dist/npm'
 
 /**
+ * Run one pack operation with the consumer-facing manifest. DSH packages keep
+ * `./src/*` only for source-workspace development; published tarballs omit
+ * that export together with the source tree it would otherwise reference.
+ * @param member - release member whose package.json is temporarily projected.
+ * @param operation - synchronous pnpm-pack operation.
+ */
+function withPublicationManifest(member: ReleaseMember, operation: () => void): void {
+  const manifestPath = join(member.directory, 'package.json')
+  const original = readFileSync(manifestPath, 'utf8')
+  const manifest = JSON.parse(original) as {
+    name?: string
+    exports?: Record<string, unknown>
+  }
+  if (!manifest.name?.startsWith('@phoenix-ai/dsh-')
+    || manifest.exports === undefined
+    || !Object.hasOwn(manifest.exports, './src/*')) {
+    operation()
+    return
+  }
+
+  delete manifest.exports['./src/*']
+  writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+  try {
+    operation()
+  } finally {
+    writeFileSync(manifestPath, original)
+  }
+}
+
+/**
  * Pack one member and check what its tarball carries.
  * @param family - the release family being packed.
  * @param member - the member to pack.
@@ -25,7 +55,9 @@ const DEFAULT_OUTPUT = 'dist/npm'
  * @returns The tarball filename.
  */
 function packMember(family: ReleaseFamily, member: ReleaseMember, destination: string): string {
-  run('pnpm', ['--dir', member.directory, 'pack', '--pack-destination', destination])
+  withPublicationManifest(member, () => {
+    run('pnpm', ['--dir', member.directory, 'pack', '--pack-destination', destination])
+  })
 
   const filename = tarballName(member)
   const tarball = join(destination, filename)

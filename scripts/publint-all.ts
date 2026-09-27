@@ -30,6 +30,22 @@ interface PackageTarget {
 interface PackageManifest {
   name?: string
   files?: unknown
+  exports?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+/**
+ * Return the manifest npm consumers will actually receive. DSH source
+ * subpaths exist only so monorepo tests and source builds can deep-import
+ * implementation helpers; source files are intentionally absent from the
+ * publication payload.
+ */
+function publicationManifest(manifest: PackageManifest): PackageManifest {
+  const published = structuredClone(manifest)
+  if (published.name?.startsWith('@phoenix-ai/dsh-') && published.exports !== undefined) {
+    delete published.exports['./src/*']
+  }
+  return published
 }
 
 type PublintResult =
@@ -97,10 +113,15 @@ function publicationFiles(target: PackageTarget): PackFile[] {
 
   return [...paths]
     .sort()
-    .map(path => ({
-      name: `package/${relative(target.directory, path).split(sep).join('/')}`,
-      data: readFileSync(path),
-    }))
+    .map((path) => {
+      const relativePath = relative(target.directory, path).split(sep).join('/')
+      return {
+        name: `package/${relativePath}`,
+        data: relativePath === 'package.json'
+          ? Buffer.from(`${JSON.stringify(publicationManifest(target.manifest), null, 2)}\n`)
+          : readFileSync(path),
+      }
+    })
 }
 
 function addPath(path: string, paths: Set<string>): void {

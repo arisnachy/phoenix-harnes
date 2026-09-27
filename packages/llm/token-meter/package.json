@@ -26,6 +26,7 @@
       "types": "./lib/types/client.d.ts",
       "default": "./lib/types/client.js"
     },
+    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [

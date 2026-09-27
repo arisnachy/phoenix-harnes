@@ -30,6 +30,7 @@
       "types": "./lib/types/presentation.d.ts",
       "default": "./lib/types/presentation.js"
     },
+    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [

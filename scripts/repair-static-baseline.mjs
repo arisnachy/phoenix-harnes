@@ -25,8 +25,11 @@ for (const group of readdirSync(packagesRoot, { withFileTypes: true })) {
     let manifest
     try { manifest = readJson(path) } catch { continue }
     if (typeof manifest.name !== 'string' || !manifest.name.startsWith('@phoenix-ai/dsh-')) continue
-    if (manifest.exports && Object.hasOwn(manifest.exports, './src/*')) {
-      delete manifest.exports['./src/*']
+    if (manifest.exports && !Object.hasOwn(manifest.exports, './src/*')) {
+      // Source deep-imports are a workspace-only development surface. The
+      // release packer strips this export from the tarball manifest so npm
+      // never advertises source files that the publication payload omits.
+      manifest.exports['./src/*'] = './src/*'
       writeJson(path, manifest)
       manifestChanges += 1
     }
@@ -65,4 +68,4 @@ for (const key of ['examples', 'packages/bundle/base']) {
 knip.workspaces['packages/core/living'] = { project: ['src/**/*.ts'] }
 writeJson(knipPath, knip)
 
-console.log(`repair-static-baseline: normalized ${manifestChanges} DSH manifest source export(s), runtime closure, and Knip hints.`)
+console.log(`repair-static-baseline: normalized ${manifestChanges} DSH workspace source export(s), runtime closure, and Knip hints.`)
