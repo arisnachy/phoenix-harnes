@@ -1599,6 +1599,7 @@ export interface StreamableHttpConfig {
   reconnect?: ReconnectConfig
 }
 
+/** Host platform identifiers supported by Phoenix stdio MCP policy. */
 export type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number]
 
 /** Automatic reconnect policy for one MCP server connection. */
