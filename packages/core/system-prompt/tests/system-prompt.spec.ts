@@ -140,6 +140,26 @@ describe('SystemPrompt', () => {
     expect(normal.tools.map(tool => tool.name)).toEqual(['expensive'])
   })
 
+  it('can omit runtime context without evaluating providers, then restore it normally', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt, { persona: 'You are PHOENIX.' })
+    let providerCalls = 0
+    ctx.systemPrompt.context({
+      name: 'expensive-runtime-context',
+      order: 0,
+      text: () => `runtime ${++providerCalls}`,
+    })
+
+    const fast = await ctx.systemPrompt.assemble({ omitRuntimeContext: true })
+    expect(providerCalls).toBe(0)
+    expect(fast.contexts).toEqual([])
+    expect(renderPrompt(fast)).toContain('You are PHOENIX.')
+
+    const normal = await ctx.systemPrompt.assemble()
+    expect(providerCalls).toBe(1)
+    expect(normal.contexts).toEqual([{ name: 'expensive-runtime-context', text: 'runtime 1' }])
+  })
+
   it('resolves section text providers against the assemble context, at each assemble call', async () => {
     // The context is HOW per-agent sections work (the loop passes { agent });
     // this spec stays agent-agnostic and smuggles a marker through a plain field.
