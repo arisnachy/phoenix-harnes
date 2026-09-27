@@ -20,8 +20,16 @@ async function runBuiltBin(
   cwd?: string,
 ): Promise<{ stdout: string; code: number; stderr: string }> {
   const childEnv = Object.fromEntries(
-    Object.entries({ ...process.env, ...env })
-      .filter((entry): entry is [string, string] => entry[1] !== undefined),
+    Object.entries({
+      ...process.env,
+      // CLI acceptance tests share one repository checkout and do not exercise
+      // the updater. Letting each child spawn update watchers races on the
+      // common Git worktree metadata (notably staging index.lock) and can turn
+      // unrelated argument/profile assertions into EBUSY noise or timeouts.
+      PHOENIX_AUTO_UPDATE: '0',
+      PHOENIX_UPSTREAM_UPDATE_MODE: 'off',
+      ...env,
+    }).filter((entry): entry is [string, string] => entry[1] !== undefined),
   )
   const result = await execa(process.execPath, [dshBin, ...args], {
     input: '',
@@ -375,6 +383,15 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
       successText: 'published headless profile reached the mock',
     })
     const home = mkdtempSync(join(tmpdir(), 'dsh-built-headless-'))
+    // This acceptance test owns a DeepSeek mock. The product default is allowed
+    // to evolve independently (currently OpenRouter), so pin the fixture's
+    // user-layer selection instead of making the test depend on that default.
+    writeFileSync(join(home, 'settings.yaml'), [
+      'agent-default-model:',
+      '  provider: deepseek-official',
+      '  model: deepseek-flash',
+      '',
+    ].join('\n'))
     try {
       const result = await runBuiltBin(['--profile', 'headless', 'answer', 'from', 'the', 'published', 'entry'], {
         DSH_HOME: home,

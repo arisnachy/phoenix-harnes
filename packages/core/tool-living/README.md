@@ -6,12 +6,34 @@ Model-facing consumer for Universal Living Creations. It installs one domain-neu
 
 ## Model Experience
 
-Every model sees the same rule: whenever Phoenix creates or materially modifies a user-facing artifact or runnable system, it registers that creation before delivery regardless of domain or format. Mutable applications, sites, services, simulations, and operational dashboards normally target `controllable`; genuinely non-live artifacts can remain `static`.
+### Universal creation policy
 
-`living_register_creation` accepts arbitrary `kind` text and self-described capabilities. For every non-static target it automatically provisions one per-creation control link while preserving that identity across later updates. `living_get_connector_kit` returns secret-safe JavaScript/Node and Python sidecar modules plus the runtime descriptor; generated source reads the bearer from environment rather than embedding it.
+#### What the model sees
 
-`living_inspect_creation` exposes target versus achieved integration. `living_read_state` and `living_act` operate only through a connected provider. `living_verify_creation` fails while the achieved level remains below the declared target, so Phoenix cannot claim a live app is finished merely because its files or preview exist. `living_forget_creation` is deliberately destructive: runtime loss leaves the durable manifest offline, while the forget tool removes it only when the user explicitly wants Phoenix to stop remembering the creation or the creation has been permanently deleted with no reconnection intended.
+Whenever Phoenix creates or materially modifies a user-facing artifact or runnable system, the model must register it before delivery regardless of domain or format. Every Phoenix-created output receives a connector contract; mutable creations target live control rather than silently downgrading to a static artifact. Background workers are optional and require explicit user consent.
+
+#### Token effect
+
+One bounded domain-neutral policy replaces domain-specific creation instructions. Its cost is fixed while the plugin is active and does not grow with the number of remembered creations.
+
+#### KV Cache effect
+
+The policy text is prefix-stable while the plugin version and registration scope are unchanged. Creation-specific state is queried through tools instead of being appended to every request.
+
+### Living tools
+
+#### What the model sees
+
+The model receives schemas for registering, inspecting, listing, reading, acting on, verifying, obtaining connector kits, and explicitly forgetting creations. `living_register_creation` accepts arbitrary `kind` text and self-described capabilities, provisions a per-creation control identity, and keeps telemetry/error surfaces tied to that durable identity. `living_verify_creation` refuses completion while the achieved integration remains below the declared target.
+
+#### Token effect
+
+Tool schema cost is fixed per visible tool set. Creation manifests, telemetry, and errors enter context only when the model invokes the corresponding inspection/read/verification tools.
+
+#### KV Cache effect
+
+Schemas remain cache-stable while visibility and definitions are unchanged. Per-creation updates affect tool results at the history tail rather than rewriting the reusable prompt prefix.
 
 ## Known Limitations and Deferred Work
 
-The generated connector kit is intentionally transport-light and owner-local. Public browser bundles must not contain the bearer token; browser-facing products should keep the Phoenix connector in a server-side process/sidecar or use another secure provider implementation.
+- The generated connector kit is intentionally transport-light and owner-local. Public browser bundles must not contain the bearer token; browser-facing products should keep the Phoenix connector in a server-side process/sidecar or use another secure provider implementation.

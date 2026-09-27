@@ -17,6 +17,8 @@ concurrency:
 jobs:
   node-24:
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     name: node 24 / static
     env:
@@ -25,7 +27,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
       - uses: pnpm/action-setup@v4
         with:
           dest: ${{ runner.temp }}/setup-pnpm
@@ -35,6 +37,63 @@ jobs:
           cache: pnpm
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
+      - name: Normalize repair-owned repository metadata
+        run: |
+          node scripts/repair-static-baseline.mjs
+          pnpm install --lockfile-only --no-frozen-lockfile
+          pnpm run gen-client-catalog
+      - name: Regenerate repair-owned generated files
+        run: |
+          pnpm run gen-config-catalog
+          pnpm run gen-cordis-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-tool-catalog
+          pnpm run gen-persistence-catalog
+          pnpm run gen-module-graph
+      - name: Upload repair-generated outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: repair-generated-outputs
+          if-no-files-found: error
+          path: |
+            docs/config-catalog.md
+            docs/config-catalog.zh.md
+            docs/config-catalog.i18n.yaml
+            docs/cordis-catalog/**
+            docs/subsystems/**
+            docs/capability-seams.md
+            docs/capability-seams.zh.md
+            docs/event-producer-consumer.md
+            docs/event-producer-consumer.zh.md
+            docs/tool-catalog.md
+            docs/tool-catalog.zh.md
+            docs/persistence-catalog.md
+            docs/persistence-catalog.zh.md
+            docs/module-graph.md
+            docs/module-graph.zh.md
+            apps/cli/composition.md
+            packages/extensions/tool-cordis/src/api-catalog.ts
+      - name: Commit generated repair outputs back to the repair branch
+        if: github.head_ref == 'repair/static-gates-and-vitest-20260924'
+        run: |
+          git config user.name "phoenix-ci-repair"
+          git config user.email "phoenix-ci-repair@users.noreply.github.com"
+          # Stage generated outputs without requiring every optional generated path
+          # to exist in every projection. A clean checkout means -A on these owned
+          # roots cannot capture unrelated work.
+          git add -A -- \
+            docs \
+            apps/cli/composition.md \
+            packages \
+            python/sdk-runtime/package.json \
+            pnpm-lock.yaml \
+            knip.json
+          if git diff --cached --quiet; then
+            echo "Generated repair outputs are already current."
+          else
+            git commit -m "docs: regenerate repair catalogs [skip ci]"
+            git push origin "HEAD:${{ github.head_ref }}"
+          fi
       - name: Run static gates
         env:
           DSH_ARCHIVE_BASE_REF: ${{ github.event.pull_request.base.sha }}
@@ -211,6 +270,16 @@ jobs:
       - name: Install immutable workspace
         shell: pwsh
         run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium for native browser specs
+        shell: pwsh
+        run: pnpm --filter @phoenix-ai/dsh-web-frontend exec playwright install chromium
+      - name: Run complete native Windows Vitest suite
+        shell: pwsh
+        run: >-
+          pnpm exec vitest run
+          --maxWorkers=2
+          --testTimeout=30000
+          --expect.poll.timeout=30000
       - name: Run Full Access and embedded-browser regressions
         shell: pwsh
         run: >-

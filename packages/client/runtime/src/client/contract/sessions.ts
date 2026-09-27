@@ -9,18 +9,86 @@
  */
 import type { Context } from '@phoenix-ai/cordis'
 import type {
-  RpcResult, SessionId, SubagentAddress,
+  JobView, RpcError, RpcResult, SessionId, SubagentAddress, SubagentCatalog,
 } from '@phoenix-ai/dsh-api-remotes/client'
-import type { HostObservable, SessionMaybeProvideInfo } from '@phoenix-ai/dsh-client-ui-slots'
-import type { AgentContext } from '../agents/scope.ts'
-import type { SessionSearchResultItem } from '../sessions/manager.ts'
 import type {
-  SessionBinding, SessionListState, SessionProvideDescriptor,
-} from '../sessions/service.ts'
+  HostObservable, SessionMaybeProvideInfo,
+} from '@phoenix-ai/dsh-client-ui-slots'
+import type { SessionProjectionMap } from '@phoenix-ai/dsh-session-projection/types'
+import type { TypertClientRemote, TypertRemoteScopeApi } from '@phoenix-ai/dsh-typert-protocol'
 import type { SessionFace } from './session.ts'
 import type { ObservableSnapshot } from './store.ts'
 
-export type { AgentContext } from '../agents/scope.ts'
+/** Client Cordis Context carrying one Agent identity and its scoped Remote namespaces. */
+export type AgentContext = Omit<Context, 'remote'> & {
+  readonly remote: TypertClientRemote & TypertRemoteScopeApi<'agent'>
+}
+
+/** Request-local content hit returned to sidebar search consumers. */
+export interface SessionSearchResultItem {
+  sessionId: SessionId
+  snippet: string
+}
+
+/** Session-list arrival lifecycle exposed to client consumers. */
+export type SessionListPhase = 'pending' | 'ready'
+
+/** One parent-addressed durable catalog projected through the sessions snapshot. */
+export interface SubagentCatalogSnapshot extends SubagentCatalog {
+  state: 'loading' | 'ready' | 'error'
+  error: RpcError | null
+}
+
+/** User interaction currently blocking a session. */
+export type PendingInteractionStatus = 'approval' | 'plan-review' | 'question'
+
+/** Session list row projected from the host list RPC plus live stream increments. */
+export interface SessionSummary {
+  id: SessionId
+  title?: string
+  displayTitle: string
+  cwd?: string
+  agentPreset?: string
+  parentId?: SessionId
+  origin?: 'subagent'
+  running: boolean
+  pendingInteraction?: PendingInteractionStatus
+  completed?: boolean
+  blank: boolean
+  updatedAt: number
+  projectionValues?: Readonly<Partial<SessionProjectionMap>>
+}
+
+/** Shared outward session-list snapshot shape. */
+export interface SessionListState {
+  ids: SessionId[]
+  byId: Record<SessionId, SessionSummary>
+  current: SessionId | undefined
+  phase: SessionListPhase
+  subagentsByParent: Readonly<Record<SessionId, SubagentCatalogSnapshot>>
+  jobsBySession: Readonly<Record<SessionId, readonly JobView[]>>
+  currentAddress: SubagentAddress | undefined
+}
+
+/** Session assembly handle exposed to renderer/injection factories. */
+export interface SessionBinding {
+  readonly sessionId: SessionId
+  readonly session: SessionFace
+  readonly ctx: AgentContext
+}
+
+/** One plugin's per-session standard-props contribution. */
+export interface SessionProvideContribution {
+  hooks?: Record<string, HostObservable<unknown>>
+  props?: Record<string, unknown>
+}
+
+/** Static declaration plus per-session resolver for one standard-kit contribution. */
+export interface SessionProvideDescriptor {
+  hooks?: readonly string[]
+  props?: readonly string[]
+  resolve(binding: SessionBinding): SessionProvideContribution
+}
 
 /** The sessions-service face injected as `ctx.sessions`. */
 export interface ISessions {
