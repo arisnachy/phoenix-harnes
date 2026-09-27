@@ -230,11 +230,11 @@ export function apply(ctx: Context, config: Config = {}): void {
   // scope, so a plugin mounted inside an agent preset registers for that agent
   // alone and an unscoped lookup correctly finds nothing.
   ctx.on('agent/pre-step', async (
-    { agent, signal },
+    { agent, signal, fastConversation },
     next,
   ): Promise<PreStepDecision> => {
     const decision = await next()
-    if (decision.kind === 'reject') return decision
+    if (decision.kind === 'reject' || fastConversation === true) return decision
     signal.throwIfAborted()
     const toolVisible = ctx.tools.get(skillTool.name, agent) === skillTool
     const snapshot = toolVisible
