@@ -60,10 +60,11 @@ const knipPath = join(root, 'knip.json')
 const knip = readJson(knipPath)
 for (const key of ['examples', 'packages/bundle/base']) {
   const workspace = knip.workspaces?.[key]
-  if (!workspace || !Array.isArray(workspace.ignoreDependencies)) continue
-  workspace.ignoreDependencies = [...new Set(workspace.ignoreDependencies)]
-    .filter(value => value !== '@phoenix-ai/.+')
-  if (workspace.ignoreDependencies.length === 0) delete workspace.ignoreDependencies
+  if (!workspace) continue
+  // Loader consumes these workspace plugins through declarative Cordis
+  // composition rather than TypeScript imports. Keep one broad family entry;
+  // the historical duplicate was the Knip configuration hint.
+  workspace.ignoreDependencies = ['@phoenix-ai/.+']
 }
 knip.workspaces['packages/core/living'] = { project: ['src/**/*.ts'] }
 writeJson(knipPath, knip)
