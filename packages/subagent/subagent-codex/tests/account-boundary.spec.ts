@@ -24,6 +24,19 @@ describe('native Codex managed-account boundary', () => {
     expect(accountSource).toContain('inFlightSnapshot')
   })
 
+  it('treats quota and token-usage RPCs as optional telemetry instead of Host-fatal dependencies', () => {
+    expect(accountSource).toContain('readOptionalCodexTelemetry')
+    expect(accountSource).toContain("readOptionalCodexTelemetry(connection, 'account/rateLimits/read'")
+    expect(accountSource).toContain("readOptionalCodexTelemetry(connection, 'account/usage/read'")
+    expect(accountSource).toContain('continuing with partial telemetry')
+    expect(accountSource).toContain('inspection unavailable; keeping Host alive')
+  })
+
+  it('owns background refresh rejection when stale telemetry is served immediately', () => {
+    expect(accountSource).toContain('void tracked.catch(() => {})')
+    expect(accountSource).toContain('unhandled-rejection / Host-fatal process error')
+  })
+
   it('keeps slow app-server teardown from becoming a Host-fatal account probe failure', () => {
     expect(accountSource).toContain('ACCOUNT_CLOSE_MIN_TIMEOUT_MS')
     expect(accountSource).toContain('ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS')
@@ -114,6 +127,32 @@ describe('native Codex managed-account boundary', () => {
     })
     expect(JSON.stringify(telemetry)).not.toContain('must-not-cross')
     expect(JSON.stringify(telemetry)).not.toContain('drop-me')
+  })
+
+  it('still projects account and quota when optional token-usage telemetry is absent', () => {
+    const telemetry = codexAccountTelemetry({
+      account: {
+        type: 'chatgpt',
+        email: 'person@example.test',
+        planType: 'plus',
+      },
+      requiresOpenaiAuth: true,
+      rateLimits: {
+        rateLimitsByLimitId: {
+          codex: {
+            primary: { usedPercent: 25, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+          },
+        },
+      },
+    })
+
+    expect(telemetry).toMatchObject({
+      kind: 'account',
+      provider: 'Codex',
+      email: 'person@example.test',
+      primaryLimit: { usedPercent: 25, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+    })
+    expect(telemetry).not.toHaveProperty('usage')
   })
 
   it('prefers the modern Codex rateLimitsByLimitId bucket over an empty legacy snapshot', () => {
