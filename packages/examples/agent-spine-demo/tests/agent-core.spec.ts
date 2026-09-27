@@ -4,7 +4,7 @@ import { join, sep } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Context } from '@phoenix-ai/cordis'
 import Loader from '@phoenix-ai/cordis-plugin-loader'
-import { renderPrompt, TOOL_ORDER_REST } from '@phoenix-ai/dsh-system-prompt'
+import { HARNESS_IDENTITY, renderPrompt, TOOL_ORDER_REST } from '@phoenix-ai/dsh-system-prompt'
 import * as agentCore from '../src/index.ts'
 import { agentEvents, type Agent } from '@phoenix-ai/dsh-agent'
 import { SessionId } from '@phoenix-ai/dsh-session'
@@ -375,7 +375,7 @@ describe('dsh-agent-spine-demo bundle', () => {
       const firstRequestText = adapter.requests[0]?.messages.map(messageText).join('\n')
       expect(firstRequestText).toContain('hi')
       expect(firstRequestText).toContain('bundled project rule')
-      expect(adapter.requests[0]?.system).toContain('You are an AI agent powered by PHOENIX. Respond in the language of the user\'s latest message, including any reasoning text that is shown to the user. For multi-step or tool-heavy work, keep the user visibly informed: before substantial tool work, briefly say what you are doing; then provide concise progress updates after roughly 2-3 tool calls, whenever a material finding changes the plan, or when a blocker appears. If you have been using tools without recent user-visible text, give a progress update before continuing with more tools. Never expose hidden chain-of-thought or private reasoning; progress updates summarize only actions taken, concrete findings, and next steps. Do not spam progress updates for simple work. Preserve code, commands, paths, identifiers, and quoted text when translating them would change their meaning.')
+      expect(adapter.requests[0]?.system).toContain(HARNESS_IDENTITY)
       expect(adapter.requests[0]?.system).not.toContain('bundled project rule')
       await handle.dispose()
       await ctx.fiber.dispose()
