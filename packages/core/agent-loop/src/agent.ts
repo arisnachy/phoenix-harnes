@@ -310,7 +310,7 @@ export class ReactLoopAgent implements Agent {
     // before throwing those schemas away.
     const assembled = await this.loopCtx.systemPrompt.assemble({
       ...assembleContextFor(this, signal),
-      ...fastConversation ? { omitTools: true } : {},
+      ...fastConversation ? { omitTools: true, omitRuntimeContext: true } : {},
     })
     signal.throwIfAborted()
     // A waterfall listener may deliberately add a schema even when providers
@@ -319,7 +319,12 @@ export class ReactLoopAgent implements Agent {
       ? { ...assembled, tools: [] }
       : assembled
     const sections = renderContextSections(assembly)
-    const context = this.runtimeContext.project(joinContextSections(sections), sections)
+    // Fast conversation never sends plugin/runtime-context messages in its
+    // bounded history, so do not manufacture a transient "cleared" snapshot
+    // or mutate the durable projection merely because this request omitted it.
+    const context = fastConversation
+      ? undefined
+      : this.runtimeContext.project(joinContextSections(sections), sections)
     const decision = await this.dispatch.waterfall(
       'agent/pre-step', { messages: claimed, ...position, signal, ...fastConversation ? { fastConversation: true } : {} },
       (): Promise<PreStepDecision> => Promise.resolve<PreStepDecision>({
