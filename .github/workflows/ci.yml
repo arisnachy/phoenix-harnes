@@ -242,6 +242,9 @@ jobs:
       - name: Install immutable workspace
         shell: pwsh
         run: pnpm install --frozen-lockfile
+      - name: Install Playwright Chromium for native browser specs
+        shell: pwsh
+        run: pnpm --filter @phoenix-ai/dsh-web-frontend exec playwright install chromium
       - name: Run complete native Windows Vitest suite
         shell: pwsh
         run: >-
