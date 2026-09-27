@@ -37,6 +37,11 @@ jobs:
           cache: pnpm
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
+      - name: Normalize repair-owned repository metadata
+        run: |
+          node scripts/repair-static-baseline.mjs
+          pnpm install --lockfile-only --no-frozen-lockfile
+          pnpm run gen-client-catalog
       - name: Regenerate repair-owned generated files
         run: |
           pnpm run gen-config-catalog
@@ -79,7 +84,10 @@ jobs:
           git add -A -- \
             docs \
             apps/cli/composition.md \
-            packages/extensions/tool-cordis/src/api-catalog.ts
+            packages \
+            python/sdk-runtime/package.json \
+            pnpm-lock.yaml \
+            knip.json
           if git diff --cached --quiet; then
             echo "Generated repair outputs are already current."
           else
