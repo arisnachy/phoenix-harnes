@@ -100,11 +100,12 @@ async function proposeStep(
   ctx: Context,
   agent: Agent,
   messages: UserMessage[],
+  fastConversation = false,
 ): Promise<PreStepDecision> {
   const signal = new AbortController().signal
   return await agentEvents(ctx, agent).waterfall(
     'agent/pre-step',
-    { messages, turn: 1, step: 1, signal },
+    { messages, turn: 1, step: 1, signal, ...fastConversation ? { fastConversation: true } : {} },
     () => Promise.resolve({ kind: 'enter' as const, messages }),
   )
 }
@@ -182,6 +183,31 @@ describe('dsh-tool-skill', () => {
 
     toolSkill.apply(ctx)
     expect(ctx.tools.schemas().map(tool => tool.name)).toEqual(['skill'])
+  })
+
+  it('defers catalog discovery on fast conversation and restores it on the next normal step', async () => {
+    const home = await tempDir('tool-fast-catalog')
+    const ctx = await setup(home)
+    ctx.skills.register({
+      name: 'available-skill',
+      description: 'Available skill',
+      source: 'runtime',
+      content: 'Body.',
+    })
+    const session = Session.create(SessionId('fast-catalog'))
+    const agent = sessionAgent(session)
+    const prompt = createUserMessage({
+      content: [{ type: 'text', text: 'hola' }],
+      source: { kind: 'user' },
+    })
+
+    const fast = await proposeStep(ctx, agent, [prompt], true)
+    expect(fast).toEqual({ kind: 'enter', messages: [prompt] })
+
+    const normal = await proposeStep(ctx, agent, [prompt])
+    expect(normal.kind).toBe('enter')
+    if (normal.kind === 'reject') throw new Error('expected normal catalog step')
+    expect(normal.messages.some(message => message.source.kind === 'skill-catalog')).toBe(true)
   })
 
   it('forwards the step abort signal to skill discovery', async () => {
