@@ -152,7 +152,17 @@ function isToolAcquisitionRequest(text: string): boolean {
   return TOOL_ACTION.test(text) && TOOL_ARTIFACT.test(text)
 }
 
-const FAST_SOCIAL_TURN = /^(?:[¡!¿?.,;:\s]*(?:(?:(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches)(?:(?:[¡!¿?.,;:\s]+(?:y\s+)?)(?:qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up))*)|(?:(?:qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up)(?:(?:[¡!¿?.,;:\s]+(?:y\s+)?)(?:qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up))*)|qu[eé]\s+quieres\s+que\s+hagamos|qu[eé]\s+te\s+gustar[ií]a\s+que\s+hagamos|de\s+qu[eé]\s+hablamos|cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|what\s+do\s+you\s+want\s+to\s+do|what\s+should\s+we\s+talk\s+about|tell\s+me\s+something(?:\s+good)?|gracias|thanks|thank\s+you))[¡!¿?.,;:\s]*)$/iu
+const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\\s+d[ií]as|buenas\\s+tardes|buenas\\s+noches|qu[eé]\\s+tal|c[oó]mo\\s+est[aá]s|c[oó]mo\\s+te\\s+va|c[oó]mo\\s+va\\s+todo|qu[eé]\\s+cuentas|qu[eé]\\s+se\\s+cuenta|how\\s+are\\s+you|how(?:'|’)s\\s+it\\s+going|what(?:'|’)s\\s+up|gracias|thanks|thank\\s+you)`
+const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
+const FAST_SOCIAL_OPEN = /^(?:qu[eé]\\s+quieres\\s+que\\s+hagamos|qu[eé]\\s+te\\s+gustar[ií]a\\s+que\\s+hagamos|de\\s+qu[eé]\\s+hablamos|cu[eé]ntame\\s+algo(?:\\s+bueno)?|dime\\s+algo\\s+bueno|sorpr[eé]ndeme|what\\s+do\\s+you\\s+want\\s+to\\s+do|what\\s+should\\s+we\\s+talk\\s+about|tell\\s+me\\s+something(?:\\s+good)?)$/iu
+
+function normalizedFastSocialText(value: string): string {
+  return value
+    .replace(/[¡!¿?.,;:]+/gu, ' ')
+    .replace(/\\s+/gu, ' ')
+    .trim()
+}
+
 /** Short first-person/social state replies that are clearly small talk, not action approvals. */
 const FAST_SOCIAL_REPLY = /^(?:[¡!¿?.,\s]*(?:(?:a\s+m[ií]|yo)\s+(?:estoy\s+)?(?:s[uú]per|muy\s+bien|bien|genial|excelente|fenomenal|tranquil[oa]|mal|regular)|(?:estoy|ando|me\s+siento)\s+(?:s[uú]per|muy\s+bien|bien|genial|excelente|fenomenal|tranquil[oa]|mal|regular)|todo\s+(?:bien|genial|excelente))[¡!¿?.,\s]*)$/iu
 /**
@@ -185,7 +195,11 @@ export function isConversationalFastPathText(text: string): boolean {
   // A one-word approval is a continuation command, not chit-chat. Keep normal
   // history, tool schemas, and the user's selected reasoning route.
   if (CONTEXTUAL_CONTINUATION.test(candidate)) return false
-  if (FAST_SOCIAL_TURN.test(candidate) || FAST_SOCIAL_REPLY.test(candidate) || FAST_RUNTIME_META.test(candidate)) return true
+  const socialCandidate = normalizedFastSocialText(candidate)
+  if (FAST_SOCIAL_SEQUENCE.test(socialCandidate)
+    || FAST_SOCIAL_OPEN.test(socialCandidate)
+    || FAST_SOCIAL_REPLY.test(candidate)
+    || FAST_RUNTIME_META.test(candidate)) return true
   // Feedback such as "eso parece un pollo ... jaja" should not reload hundreds
   // of tools or a multi-megabyte work transcript. Keep questions on the normal
   // path: even a short "¿eso parece X?" can be a real factual request.
