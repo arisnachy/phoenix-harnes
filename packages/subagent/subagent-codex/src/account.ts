@@ -398,6 +398,25 @@ async function readAccount(
   }
 }
 
+async function readOptionalCodexTelemetry(
+  connection: CodexAccountConnection,
+  method: 'account/rateLimits/read' | 'account/usage/read',
+  signal: AbortSignal,
+  warn: (message: string) => void,
+): Promise<unknown | undefined> {
+  try {
+    return await Promise.race([
+      connection.request(method, {}, signal),
+      connection.processEnded(),
+    ])
+  } catch (error: unknown) {
+    if (!signal.aborted) {
+      warn(`subagent-codex account: optional ${method} unavailable; continuing with partial telemetry: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    return undefined
+  }
+}
+
 async function readOptionalCodexApps(
   connection: CodexAccountConnection,
   signal: AbortSignal,
@@ -455,18 +474,18 @@ export async function readCodexAccountSnapshot(
     const accountObject = object(account.account, 'account')
     if (accountObject.type !== 'chatgpt') return account
 
+    const warn = (message: string): void => { ctx.logger.warn(message) }
     const [rateLimits, usage, apps] = await Promise.all([
-      Promise.race([
-        connection.request('account/rateLimits/read', {}, signal),
-        connection.processEnded(),
-      ]),
-      Promise.race([
-        connection.request('account/usage/read', {}, signal),
-        connection.processEnded(),
-      ]),
+      readOptionalCodexTelemetry(connection, 'account/rateLimits/read', signal, warn),
+      readOptionalCodexTelemetry(connection, 'account/usage/read', signal, warn),
       readOptionalCodexApps(connection, signal),
     ])
-    return { ...account, rateLimits, usage, ...apps }
+    return {
+      ...account,
+      ...rateLimits === undefined ? {} : { rateLimits },
+      ...usage === undefined ? {} : { usage },
+      ...apps,
+    }
   } finally {
     await connection.close()
   }
@@ -615,6 +634,10 @@ export function registerCodexAccountFlow(
         if (inFlightSnapshot === tracked) inFlightSnapshot = undefined
       })
       inFlightSnapshot = tracked
+      // A cached caller may intentionally return immediately while this refresh
+      // continues. Own the rejection so a transient native telemetry failure
+      // can never become an unhandled-rejection / Host-fatal process error.
+      void tracked.catch(() => {})
     }
 
     // Once Phoenix has one good account snapshot, never make UI telemetry wait
@@ -638,7 +661,16 @@ export function registerCodexAccountFlow(
     label: 'ChatGPT / Codex',
     methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
     async inspect(signal) {
-      return codexAccountTelemetry(await inspectSnapshot(signal ?? new AbortController().signal))
+      try {
+        return codexAccountTelemetry(await inspectSnapshot(signal ?? new AbortController().signal))
+      } catch (error: unknown) {
+        // Account/quota inspection powers UI telemetry only. A transient Codex
+        // app-server/RPC timeout must never fail PHOENIX boot or tear down Host.
+        ctx.logger.warn(
+          `subagent-codex account: inspection unavailable; keeping Host alive and retrying after cooldown: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        return undefined
+      }
     },
     async disconnect(signal) {
       await logoutManagedChatGpt(ctx, config, signal ?? new AbortController().signal)
