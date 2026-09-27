@@ -73,15 +73,13 @@ jobs:
         run: |
           git config user.name "phoenix-ci-repair"
           git config user.email "phoenix-ci-repair@users.noreply.github.com"
-          git add \
-            docs/config-catalog.md docs/config-catalog.zh.md docs/config-catalog.i18n.yaml \
-            docs/cordis-catalog docs/subsystems \
-            docs/capability-seams.md docs/capability-seams.zh.md \
-            docs/event-producer-consumer.md docs/event-producer-consumer.zh.md \
-            docs/tool-catalog.md docs/tool-catalog.zh.md \
-            docs/persistence-catalog.md docs/persistence-catalog.zh.md \
-            docs/module-graph.md docs/module-graph.zh.md \
-            apps/cli/composition.md packages/extensions/tool-cordis/src/api-catalog.ts
+          # Stage generated outputs without requiring every optional generated path
+          # to exist in every projection. A clean checkout means -A on these owned
+          # roots cannot capture unrelated work.
+          git add -A -- \
+            docs \
+            apps/cli/composition.md \
+            packages/extensions/tool-cordis/src/api-catalog.ts
           if git diff --cached --quiet; then
             echo "Generated repair outputs are already current."
           else
