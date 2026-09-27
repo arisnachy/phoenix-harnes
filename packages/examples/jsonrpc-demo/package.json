@@ -33,7 +33,6 @@
       "types": "./lib/types/packaged-bin.d.ts",
       "default": "./lib/packaged-bin.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [

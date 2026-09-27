@@ -26,7 +26,6 @@
       "types": "./lib/types/ledger.d.ts",
       "default": "./lib/ledger.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [

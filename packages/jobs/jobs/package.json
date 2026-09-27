@@ -26,7 +26,6 @@
       "types": "./lib/types/brand.d.ts",
       "default": "./lib/types/brand.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [

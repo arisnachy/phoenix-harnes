@@ -26,7 +26,6 @@
       "types": "./lib/types/win32-dialog-worker.d.ts",
       "default": "./lib/worker.cjs"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
   "files": [

@@ -26,7 +26,6 @@
       "types": "./lib/types/types.d.ts",
       "default": "./lib/types/types.js"
     },
-    "./src/*": "./src/*",
     "./package.json": "./package.json",
     "./surface": {
       "types": "./lib/types/surface.d.ts",
