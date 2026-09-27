@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-Universal Living Creations 的模型侧 consumer。它安装一条与领域无关的策略，并通过 `ctx.living` 提供注册、连接器生成、检查、列出、读取、操作、验证以及显式遗忘创建物的工具。
+Universal Living Creations 的模型侧 consumer。它安装一条与领域无关、fail-soft 的策略，并通过 `ctx.living` 提供注册、连接器生成、检查、列出、读取、操作、验证以及显式遗忘创建物的工具。
 
 ## Model Experience
 
@@ -10,7 +10,7 @@ Universal Living Creations 的模型侧 consumer。它安装一条与领域无�
 
 #### What the model sees
 
-只要 Phoenix 创建或实质修改面向用户的制品或可运行系统，模型就必须在交付前注册，不受领域或格式限制。每个 Phoenix 创建的输出都获得连接器契约；可变创建物以实时控制为目标，而不是静默降级为静态制品。后台 worker 是可选的，并且需要用户明确同意。
+用户要求的交付物始终是主要 mission。Phoenix connectivity 只有在用户明确要求、已对该创建物选择加入，或连接器本身是所请求功能所必需时才启用。模型不能仅因为创建了制品就注册或安装 connector；当连接有价值而偏好未知时，只询问一次。connector setup 最多进行两次有界 connect/repair 尝试，并占用大约十秒前台时间，随后 fail-soft：保留任何离线 manifest、报告降级，并继续所有独立任务。用户要求跳过或在没有 connector 的情况下完成时，本轮立即停止 connector 工作。
 
 #### Token effect
 
@@ -24,7 +24,7 @@ Universal Living Creations 的模型侧 consumer。它安装一条与领域无�
 
 #### What the model sees
 
-模型获得用于注册、检查、列出、读取、操作、验证、获取 connector kit 和显式遗忘创建物的 schema。`living_register_creation` 接受任意 `kind` 与自描述能力，配置每个创建物独立的控制身份，并让 telemetry/error surface 与该持久身份绑定。`living_verify_creation` 在实际集成级别低于声明目标时拒绝完成。
+模型获得用于注册、检查、列出、读取、操作、验证、获取 connector kit 和显式遗忘创建物的 schema。`living_verify_creation` 只在 Phoenix connectivity 是明确验收条件时使用，而不是通用完成 gate。使用 connector 时，只暴露最小有意义的 state/actions/events，保持 telemetry 有界，并保留足够 manifest resources 以便之后重连，同时绝不暴露或提交 bearer token。后台 agent 始终是可选的，并需要用户批准；connectivity 本身绝不意味着后台 worker。
 
 #### Token effect
 
