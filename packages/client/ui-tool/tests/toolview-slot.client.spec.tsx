@@ -57,6 +57,12 @@ const LAYOUT_CHILDREN = {
   'details': { kind: 'single', scope: 'session' },
 } as const
 
+function openTechnicalHistory(container: HTMLElement): void {
+  const toggle = container.querySelector('[data-tool-activity-group] > button') as HTMLButtonElement | null
+  if (toggle === null) throw new Error('expected collapsed Tools activity group')
+  if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click()
+}
+
 /**
  * Real-stack bench: SlotTestRuntime with the session/layout doubles at the
  * service boundaries only, the package apply on its own
@@ -99,6 +105,7 @@ describe('keyed toolview hole through the real machinery', () => {
       toolResult(4, 'c2', 'mystery', '{"n":1}'),
     ])
     const view = b.runtime.renderRoot()
+    openTechnicalHistory(view.container)
     // bash: the sample plugin's keyed registration took the row (root
     // session → global arm, decided inside the component off useSessions).
     expect(view.container.querySelector('[data-sample="bash"]')).not.toBeNull()
@@ -117,6 +124,7 @@ describe('keyed toolview hole through the real machinery', () => {
       toolResult(6, 'cordis-4', 'cordis_undefine', '{"id":"dyn-2"}'),
     ])
     const view = b.runtime.renderRoot()
+    openTechnicalHistory(view.container)
 
     // Every one of these rows is user-visible on each model define/run, so each
     // names its act and carries the package id rather than falling back to the
@@ -135,6 +143,7 @@ describe('keyed toolview hole through the real machinery', () => {
   it('file-path clicks travel owner openFile → chat inject → workspaces.openPath', async () => {
     const b = await bench([toolResult(3, 'c1', 'read', '{"path":"src/a.ts"}')])
     const view = b.runtime.renderRoot()
+    openTechnicalHistory(view.container)
     view.getByText('src/a.ts').click()
     expect(b.layout.openDetails).not.toHaveBeenCalled()
     await vi.waitFor(() => {
@@ -146,6 +155,7 @@ describe('keyed toolview hole through the real machinery', () => {
   it('bash summary clicks do not open details or host paths', async () => {
     const b = await bench([toolResult(3, 'c1', 'bash')])
     const view = b.runtime.renderRoot()
+    openTechnicalHistory(view.container)
     view.getByText('Build').click()
     expect(b.layout.openDetails).not.toHaveBeenCalled()
     expect(b.runtime.workspaces.calls.some(c => c.method === 'openPath')).toBe(false)
@@ -155,6 +165,7 @@ describe('keyed toolview hole through the real machinery', () => {
   it('a live keyed registration takes over its tool row and unload reverts to the fallback', async () => {
     const b = await bench([toolResult(3, 'c2', 'mystery', '{"n":1}')])
     const view = b.runtime.renderRoot()
+    openTechnicalHistory(view.container)
     expect(view.getByText('Tool call')).toBeTruthy()
     let dispose = (): void => {}
     dispose = b.slots.register(
@@ -196,6 +207,7 @@ describe('keyed toolview hole through the real machinery', () => {
       <button data-testid="probe-row" onClick={poke}>{mark}</button>
     ))
     const view = b.runtime.renderRoot()
+    openTechnicalHistory(view.container)
     const row = view.getByTestId('probe-row')
     expect(row.textContent).toBe(`for:${SID}`)
     row.click()
