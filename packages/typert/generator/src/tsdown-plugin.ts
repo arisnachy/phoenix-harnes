@@ -81,6 +81,10 @@ function decoratorTransformHook(): DecoratorTransformHook {
   }
 }
 
+/**
+ * Create the lightweight build plugin that lowers decorator syntax only.
+ * @returns rolldown-compatible decorator-lowering plugin for ordinary workspace builds.
+ */
 export function decoratorLoweringPlugin(): DecoratorLoweringPlugin {
   return {
     name: 'dsh-decorator-lowering',
