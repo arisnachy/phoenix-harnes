@@ -159,7 +159,7 @@ function renderChat(
     useSessions: emptySessions(),
     useWorkspaces: emptyWorkspaces(),
     useProjection: (() => undefined),
-    useInput: (() => { throw new Error('unused') }),
+    useInput: (() => undefined),
     inputActions: { setDraft: () => {}, addImages: () => true, removeImage: () => {}, pruneImages: () => {}, submit: () => {} },
     useStore: bindSnapshotSelector(chat),
     actions: chat.actions,
