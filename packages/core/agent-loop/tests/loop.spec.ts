@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime, { createUserMessage, CallId, LlmError, StreamChunk  } from '@phoenix-ai/dsh-llm'
 import SessionStore, { SessionId, TurnEndReason } from '@phoenix-ai/dsh-session'
-import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
+import SystemPrompt, { HARNESS_IDENTITY } from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture } from '@phoenix-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@phoenix-ai/dsh-agent'
 
