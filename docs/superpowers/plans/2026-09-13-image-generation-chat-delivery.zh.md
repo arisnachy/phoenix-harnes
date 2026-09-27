@@ -1,6 +1,6 @@
 # Image Generation Chat Delivery Implementation Plan
 
-English | [中文](2026-09-13-image-generation-chat-delivery.zh.md)
+[English](2026-09-13-image-generation-chat-delivery.md) | 中文
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

@@ -1,6 +1,6 @@
 # PHOENIX Harness Audit and Repair Execution Plan
 
-English | [中文](2026-03-10-phoenix-harness-audit-repair-execution.zh.md)
+[English](2026-03-10-phoenix-harness-audit-repair-execution.md) | 中文
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` for implementation tasks when delegation is used. Steps use checkbox (`- [ ]`) syntax for tracking.
 
