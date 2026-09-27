@@ -54,6 +54,12 @@ export interface AssembleContext {
    * boundary should also clear any tools a listener deliberately adds.
    */
   omitTools?: boolean
+  /**
+   * Skip dynamic runtime-context provider evaluation for a request that will
+   * not send runtime snapshots to the model. This is request-scoped and does
+   * not clear or mutate the retained runtime-context projection.
+   */
+  omitRuntimeContext?: boolean
 }
 
 /** One contributed section of the system prompt (registry input). */
@@ -483,7 +489,8 @@ export class SystemPrompt extends Service {
   async assemble(context: AssembleContext = {}): Promise<PromptAssembly> {
     const scope = context.scope
     const scopeLayers = this.layers.chainLayers(scope)
-    const runtimeContextSuppressed = !this.layers.global.runtimeContextSuppressors.isEmpty()
+    const runtimeContextSuppressed = context.omitRuntimeContext === true
+      || !this.layers.global.runtimeContextSuppressors.isEmpty()
       || scopeLayers.some(layer => !layer.runtimeContextSuppressors.isEmpty())
     // Scoped variables shadow globals.
     const variables: Record<string, string | undefined> = {}
