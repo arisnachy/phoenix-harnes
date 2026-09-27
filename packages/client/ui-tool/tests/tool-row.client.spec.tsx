@@ -234,7 +234,7 @@ describe('ToolRow', () => {
   it('renders leading icon, title and summary while collapsed', () => {
     const view = render(<ToolRow {...rowProps} />)
     expect(view.queryByTestId('tool-icon')).not.toBeNull()
-    expect(view.getByText('Ran')).toBeTruthy()
+    expect(view.getByText('Bash')).toBeTruthy()
     expect(view.getByText('List files')).toBeTruthy()
     expect(view.container.querySelector('[aria-expanded]')?.getAttribute('aria-expanded')).toBe('false')
   })
@@ -365,7 +365,7 @@ describe('ToolRow', () => {
     const view = render(<ToolRow {...rowProps} inspect={inspect} />)
     // Collapsed: no pill.
     expect(view.queryByText('Inspect')).toBeNull()
-    fireEvent.click(view.getByRole('button', { name: /Ran/ }))
+    fireEvent.click(view.getByRole('button', { name: /Bash/ }))
     const pill = view.getByText('Inspect')
     fireEvent.click(pill)
     expect(inspect).toHaveBeenCalledTimes(1)
@@ -406,7 +406,7 @@ describe('GenericToolCard', () => {
 
   it('renders the classified variant row from the frozen slice', () => {
     const view = render(<GenericToolCard {...props('bash', result())} />)
-    expect(view.getByText('Bash')).toBeTruthy()
+    expect(view.getByText('Ran')).toBeTruthy()
     expect(view.getByText('List files')).toBeTruthy()
     expect(view.container.querySelector('[data-variant="bash"]')).not.toBeNull()
   })
@@ -449,7 +449,7 @@ describe('GenericToolCard', () => {
   it('passes the owner inspect callback through to the expanded row pill', () => {
     const inspect = vi.fn()
     const view = render(<GenericToolCard {...props('bash', result())} inspect={inspect} />)
-    fireEvent.click(view.getByRole('button', { name: /Bash/ }))
+    fireEvent.click(view.getByRole('button', { name: /Ran/ }))
     fireEvent.click(view.getByText('Inspect'))
     expect(inspect).toHaveBeenCalledTimes(1)
   })
