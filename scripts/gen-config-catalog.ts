@@ -868,6 +868,18 @@ function main(): void {
       process.exit(0)
     }
     console.error(`gen-config-catalog: ${OUT} is stale. Run \`pnpm run gen-config-catalog\` and commit ${OUT}.`)
+    if (committed !== null) {
+      const committedLines = committed.split('\n')
+      const generatedLines = content.split('\n')
+      const count = Math.max(committedLines.length, generatedLines.length)
+      for (let index = 0; index < count; index += 1) {
+        if (committedLines[index] === generatedLines[index]) continue
+        console.error(`gen-config-catalog: first difference at line ${index + 1}`)
+        console.error(`  committed: ${JSON.stringify(committedLines[index] ?? '<EOF>')}`)
+        console.error(`  generated: ${JSON.stringify(generatedLines[index] ?? '<EOF>')}`)
+        break
+      }
+    }
     process.exit(1)
   }
   writeFileSync(resolve(root, OUT), content)

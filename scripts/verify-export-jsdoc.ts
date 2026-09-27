@@ -518,9 +518,15 @@ function restrictedPublicNames(
     const manifestPath = resolve(scanRoot, packageDir, 'package.json')
     if (!existsSync(manifestPath)) continue
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { exports?: Record<string, unknown> }
-    if (!manifest.exports || manifest.exports['./src/*'] !== undefined) continue
+    if (!manifest.exports) continue
+    // ./src/* is a workspace-only deep-import surface stripped by the release
+    // packer. JSDoc completeness follows the consumer-facing package API, not
+    // every implementation symbol reachable only inside this monorepo.
     restrictedPackages.add(packageDir)
-    const entries = new Set(Object.values(manifest.exports).flatMap(exportedTargets).flatMap((target) => {
+    const publicExports = Object.entries(manifest.exports)
+      .filter(([key]) => key !== './src/*')
+      .map(([, value]) => value)
+    const entries = new Set(publicExports.flatMap(exportedTargets).flatMap((target) => {
       const entry = sourceEntry(target)
       return entry ? [`${packageDir}/${entry}`] : []
     }))
