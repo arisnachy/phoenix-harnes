@@ -1617,7 +1617,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:139`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:138`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 

@@ -457,6 +457,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     ownerPropsReferences: [
       'ConversationSnapshot',
+      'InputState',
     ],
     standardProps: [
       'useSessions: SnapshotSelectorHook<SessionListState>',
@@ -628,6 +629,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     ownerPropsReferences: [
       'ComposerAttachment',
+      'DraftAttachmentId',
       'FileAttachmentLimits',
     ],
     standardProps: [
@@ -681,6 +683,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     ownerPropsReferences: [
       'ConversationSnapshot',
+      'InputState',
     ],
     standardProps: [
       'useSessions: SnapshotSelectorHook<SessionListState>',
@@ -735,6 +738,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     ownerPropsReferences: [
       'ConversationSnapshot',
+      'InputState',
     ],
     standardProps: [
       'useSessions: SnapshotSelectorHook<SessionListState>',
@@ -896,6 +900,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
     ],
     ownerPropsReferences: [
       'ConversationSnapshot',
+      'InputState',
     ],
     standardProps: [
       'useSessions: SnapshotSelectorHook<SessionListState>',
