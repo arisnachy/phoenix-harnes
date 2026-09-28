@@ -231,11 +231,17 @@ interface AgentPresetComposer {
 function persistedAgentPreset(agentCtx: Context): string | undefined {
   const session = agentCtx.agent?.session
   if (session === undefined) return undefined
-  for (let index = session.events.length - 1; index >= 0; index -= 1) {
-    const event = session.events[index]
+  const events = session.events as readonly {
+    readonly type?: unknown
+    readonly data?: unknown
+  }[]
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
     if (event?.type !== 'agent-preset/selected') continue
-    const data = event.data as { agentPreset?: unknown }
-    if (typeof data.agentPreset === 'string' && data.agentPreset.length > 0) return data.agentPreset
+    const data = event.data
+    if (data === null || typeof data !== 'object' || Array.isArray(data)) continue
+    const agentPreset = (data as { readonly agentPreset?: unknown }).agentPreset
+    if (typeof agentPreset === 'string' && agentPreset.length > 0) return agentPreset
   }
   return session.header.agentPreset
 }
