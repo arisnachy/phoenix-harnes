@@ -103,5 +103,7 @@ describe('game development connector pack', () => {
     expect(source).toContain('licenses.json')
     expect(source).toContain('85/100')
     expect(source).toContain('no gana por defecto por haber sido generado')
+    expect(source).toContain('pasa primero por el router `asset-first`')
+    expect(source).not.toContain('Para arte 2D/raster, intenta primero')
   })
 })
