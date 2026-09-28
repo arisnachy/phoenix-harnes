@@ -27,7 +27,7 @@ export { renderGenerativeUi, validateUiSchema } from './generative-ui.ts'
 export type { GenerativeUiRenderModel, UiNode, UiSchema } from './generative-ui.ts'
 export { CordisVisualWorkspaceController } from './CordisVisualWorkspace.tsx'
 export type { CordisVisualContent, ICordisVisualWorkspace } from './CordisVisualWorkspace.tsx'
-import { en, zh, type WorkspaceKey } from './locales.ts'
+import { en, es, zh, type WorkspaceKey } from './locales.ts'
 
 export type {
   DirectoryFlowOwnerProps, DirectoryFlowSlotName, DirectoryPickingHooks, DirectoryPickingInjected,
@@ -59,7 +59,7 @@ export const inject = ['slots', 'sessions', 'workspaces', 'locale', 'connection'
 export function apply(ctx: ClientContext): void {
   const connection = ctx.get('connection') as ConnectionHandle
   const hostDescription = connection.hostDescription
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-workspace: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-workspace: dictionaries')
 
   const visualWorkspace = new CordisVisualWorkspaceController(ctx.layout)
   ctx.effect(() => {
