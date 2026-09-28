@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
-  AssistantMessageNode, ConversationNode, ConversationSnapshot, RunningToolCall, SessionId, SessionListState,
+  ConversationNode, ConversationSnapshot, RunningToolCall, SessionId, SessionListState,
   ToolResultNode, WorkspaceListState,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { AttachmentId } from '@phoenix-ai/dsh-attachment'
