@@ -432,13 +432,14 @@ export class WakeEngine {
           const current = snapshot.triggers.find(candidate => candidate.id === trigger.id)
           if (current === undefined) return
           if (current.history.some(row => row.eventId === event.id && row.status === 'completed')) return
-          const history: WakeTriggerHistoryEntry[] = [...current.history, {
+          const entry: WakeTriggerHistoryEntry = {
             eventId: event.id,
             occurredAt: event.occurredAt,
             firedAt,
             status: 'completed',
             ...(result.summary === undefined ? {} : { summary: nonEmpty(result.summary, 'wake result summary', 2_000) }),
-          }].slice(-this.historyLimit)
+          }
+          const history = [...current.history, entry].slice(-this.historyLimit)
           const next: WakeTrigger = {
             ...current,
             status: current.once ? 'completed' : current.status,
@@ -457,13 +458,14 @@ export class WakeEngine {
           const snapshot = await this.snapshot()
           const current = snapshot.triggers.find(candidate => candidate.id === trigger.id)
           if (current === undefined) return
-          const history: WakeTriggerHistoryEntry[] = [...current.history, {
+          const entry: WakeTriggerHistoryEntry = {
             eventId: event.id,
             occurredAt: event.occurredAt,
             firedAt,
             status: 'failed',
             error: nonEmpty(message, 'wake error', 2_000),
-          }].slice(-this.historyLimit)
+          }
+          const history = [...current.history, entry].slice(-this.historyLimit)
           const next: WakeTrigger = { ...current, updatedAt: firedAt, history }
           await this.commit(snapshot.triggers.map(candidate => candidate.id === current.id ? next : candidate))
         })
