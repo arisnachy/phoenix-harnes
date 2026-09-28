@@ -1,0 +1,47 @@
+name: Phoenix lint autofix
+on:
+  push:
+    branches: [repair-lint-fix-20260928]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-lint-fix-20260928
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply safe lint fixes
+        shell: bash
+        run: |
+          set +e
+          pnpm run lint:fix
+          echo "lint_fix_status=$?" >> "$GITHUB_ENV"
+          exit 0
+      - name: Commit autofixes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No autofix changes."
+            exit 0
+          fi
+          git config user.name "Phoenix Repair Bot"
+          git config user.email "phoenix-repair-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "style: apply repository lint autofixes"
+          git push origin HEAD:repair-lint-fix-20260928
+      - name: Measure residual lint
+        shell: bash
+        run: |
+          set +e
+          pnpm run lint:contracts-ready
+          echo "residual_lint_status=$?"
+          exit 0
