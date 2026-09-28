@@ -100,9 +100,13 @@ describe('ordinary completion judge', () => {
     expect(isGameAssetProduction('image_generation', { prompt: 'top-down hero sprite sheet' })).toBe(true)
     expect(isGameAssetProduction('write', { path: 'assets/sprites/hero.png' })).toBe(true)
     expect(isGameAssetProduction('write', { path: 'src/player.ts' })).toBe(false)
+    expect(isGameAssetProduction('pwsh', { command: 'Get-Item assets/sprites/hero.png' })).toBe(false)
+    expect(isGameAssetProduction('pwsh', { command: 'Copy-Item hero.png assets/sprites/hero.png' })).toBe(true)
     expect(isGameAssetProduction('mcp__blender__create_material', { object: 'Hero' })).toBe(true)
 
     expect(isGameAssetProvenanceMutation('write', { path: 'asset-sourcing.json' })).toBe(true)
+    expect(isGameAssetProvenanceMutation('pwsh', { command: 'Get-Content asset-sourcing.json' })).toBe(false)
+    expect(isGameAssetProvenanceMutation('pwsh', { command: 'Set-Content asset-sourcing.json "{}"' })).toBe(true)
     expect(isGameAssetProvenanceMutation('write', { path: 'src/game.ts' })).toBe(false)
   })
 
