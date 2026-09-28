@@ -95,6 +95,52 @@ describe('HARDNESS mission judges', () => {
     expect(dispose).toHaveBeenCalledOnce()
   })
 
+  it('adds a game-specific audiovisual and gameplay audit to the independent judge', async () => {
+    const dispose = vi.fn(async () => {})
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'game-judge-run' as never,
+      localAgent: undefined,
+      result: Promise.resolve({
+        stopReason: 'completed' as const,
+        output: [],
+        structured: {
+          verdict: 'pass',
+          summary: 'game evidence verified',
+          evidence: ['evidence:forecast'],
+          required_changes: [],
+          criteria: [{ id: 'artifact', verdict: 'pass', evidence: ['evidence:forecast'], findings: [] }],
+          quality: { verdict: 'pass', summary: 'premium evidence present', evidence: ['evidence:forecast'], findings: [] },
+        },
+      }),
+      dispose,
+    }))
+    const judge = createSubagentMissionJudge({
+      subagents: {
+        getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never,
+        start,
+      },
+      provider: 'spawn',
+    })
+    const candidate = input()
+    candidate.need = {
+      kind: 'game',
+      inputs: ['brief'],
+      outputs: ['playable-build'],
+      description: 'Create a premium Unreal game with original characters, environments, animation and sound',
+    } as never
+
+    await judge(candidate)
+    const options = start.mock.calls[0]?.[1]
+    const prompt = options?.prompt?.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') ?? ''
+    expect(prompt).toMatch(/game-development work/i)
+    expect(prompt).toMatch(/graphics\/art direction/i)
+    expect(prompt).toMatch(/characters, environments, animation\/VFX/i)
+    expect(prompt).toMatch(/sound\/music\/ambience/i)
+    expect(prompt).toMatch(/gameplay feel/i)
+    expect(prompt).toMatch(/executed build or emulator/i)
+    expect(prompt).toMatch(/meet or exceed strong current category references/i)
+  })
+
   it('fails closed for unavailable or invalid judge output', async () => {
     const judge = createSubagentMissionJudge({
       subagents: { getProvider: () => undefined, start: vi.fn() },
