@@ -43,6 +43,10 @@ export const JEV_MCP_SERVER_NAME = 'jev'
 export const JEV_MCP_URL = 'https://www.jevai.org/api/mcp'
 /** Phoenix credential reference that holds the Jev API key outside loader config. */
 export const JEV_API_KEY_REF = 'JEV_API_KEY'
+/** Stable local MCP namespace for the official Binance Agent OS connector. */
+export const BINANCE_AGENT_OS_SERVER_NAME = 'binance-agent-os'
+/** Official Binance Agent OS Streamable HTTP MCP endpoint. */
+export const BINANCE_AGENT_OS_URL = 'https://agent.binance.com/mcp/agentic'
 
 interface ManagedMcpRow {
   id: string
@@ -162,6 +166,10 @@ function isRetiredJevCandidate(candidate: McpRegistryCandidate): boolean {
   return name === 'jev' || name.endsWith('/jev') || title === 'jev'
 }
 
+function isBinanceAgentOsManagedRow(row: ManagedMcpRow): boolean {
+  return row.config.serverName === BINANCE_AGENT_OS_SERVER_NAME || row.config.url === BINANCE_AGENT_OS_URL
+}
+
 function serverNameFor(candidate: McpRegistryCandidate): string {
   const tail = candidate.name.slice(candidate.name.lastIndexOf('/') + 1)
   const base = tail.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'mcp'
@@ -257,6 +265,69 @@ export class ManagedMcpController {
    */
   async configureJev(): Promise<McpRegistryInstallReceipt> {
     throw new Error('Jev integration is retired because new Jev accounts are unavailable; PHOENIX uses native routing instead')
+  }
+
+  /**
+   * Install the pinned official Binance Agent OS MCP. The endpoint and OAuth
+   * policy are compiled into PHOENIX; callers cannot substitute another URL.
+   * @returns Idempotent managed connector installation receipt.
+   */
+  async installBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    return withFileLock(this.path, async () => {
+      const rows = await readManagedRows(this.path)
+      const existing = rows.find(isBinanceAgentOsManagedRow)
+      if (existing !== undefined) {
+        return { status: 'already-installed', connector: connectorOf(existing) }
+      }
+      const config: ManagedMcpConfig = {
+        transport: 'streamable-http',
+        serverName: BINANCE_AGENT_OS_SERVER_NAME,
+        url: BINANCE_AGENT_OS_URL,
+        headers: {},
+        oauth: true,
+      }
+      const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
+      const row: ManagedMcpRow = { id: entryId, name: MCP_CLIENT_PACKAGE, config }
+      try {
+        await writeManagedRows(this.path, [...rows, row])
+      } catch (error) {
+        try {
+          await this.loader.remove(entryId)
+        } catch (rollbackError) {
+          throw new AggregateError([error, rollbackError], 'failed to persist Binance Agent OS MCP and roll back live activation')
+        }
+        throw error
+      }
+      return { status: 'installed', connector: connectorOf(row) }
+    }, { waitMs: 15_000 })
+  }
+
+  /**
+   * Remove only the PHOENIX-managed Binance Agent OS MCP. Paper trading uses
+   * public market data and remains available after this connector is removed.
+   * @returns true when one or more Binance Agent OS rows were removed.
+   */
+  async removeBinanceAgentOs(): Promise<boolean> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    return withFileLock(this.path, async () => {
+      const rows = await readManagedRows(this.path)
+      const removed = rows.filter(isBinanceAgentOsManagedRow)
+      if (removed.length === 0) return false
+      await writeManagedRows(this.path, rows.filter(row => !isBinanceAgentOsManagedRow(row)))
+      const failures: unknown[] = []
+      for (const row of removed) {
+        try {
+          await this.loader.remove(row.id)
+        } catch (error: unknown) {
+          failures.push(error)
+        }
+      }
+      if (failures.length > 0) {
+        throw new AggregateError(failures, 'Binance Agent OS was removed from persistent MCP config but one or more live entries could not be unloaded')
+      }
+      return true
+    }, { waitMs: 15_000 })
   }
 
   /**
