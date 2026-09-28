@@ -255,7 +255,7 @@ describe('headless stream-json snapshots', () => {
       env: {
         DSH_PERMISSION_MODE: 'danger-full-access',
         DSH_TELEMETRY_DISABLED: '1',
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: prepareCliMockFixture,
       inspect: async (cwd) => {
@@ -289,7 +289,7 @@ describe('headless stream-json snapshots', () => {
       env: {
         DSH_CLI_MOCK_FAILURE: '1',
         DSH_TELEMETRY_DISABLED: '1',
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: prepareCliMockFixture,
     })
@@ -327,7 +327,7 @@ describe('headless stream-json snapshots', () => {
       tsconfigPath,
       env: {
         DSH_SNAPSHOT: 'replay',
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: (cwd) => { runCwd = cwd },
       inspect: async (cwd) => {
@@ -369,7 +369,7 @@ describe('headless stream-json snapshots', () => {
       env: {
         DSH_SNAPSHOT: 'replay',
         DSH_SNAPSHOT_FILE: compactionSessionFixture,
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: (cwd) => { runCwd = cwd },
       inspect: async (cwd) => {
@@ -439,7 +439,7 @@ describe('headless stream-json snapshots', () => {
         // First-run posture: no key in the environment, none under ./.dsh.
         DEEPSEEK_API_KEY: '',
         DEEPSEEK_BASE_URL: '',
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: (cwd) => { runCwd = cwd },
     })
@@ -479,7 +479,7 @@ describe('headless stream-json snapshots', () => {
         // the header and the turn ends on a retried ByteString TypeError.
         DEEPSEEK_API_KEY: 'sk-\u{1F600}pasted-from-a-chat-window',
         DEEPSEEK_BASE_URL: '',
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: (cwd) => { runCwd = cwd },
     })
@@ -559,7 +559,7 @@ describe('headless stream-json snapshots', () => {
           // launching environment, which is the whole credential plane here.
           DEEPSEEK_API_KEY: 'snapshot-key',
           DSH_SNAPSHOT_BASE_URL: server.url,
-          NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+          NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
         },
       })
 
@@ -617,7 +617,7 @@ describe('headless stream-json snapshots', () => {
           join(advancedScenarioDir, 'session.1.jsonl'),
           join(advancedScenarioDir, 'session.2.jsonl'),
         ].join(delimiter),
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: (cwd) => { runCwd = cwd },
       inspect: async (cwd) => {
@@ -686,7 +686,7 @@ describe('headless stream-json snapshots', () => {
       processTimeoutMs: 60_000,
       env: {
         DSH_SNAPSHOT: 'team',
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       inspect: async (cwd) => {
         const logs = await persistedLogs(cwd)
@@ -765,7 +765,7 @@ describe('headless stream-json snapshots', () => {
         DSH_SNAPSHOT: 'replay',
         DSH_SNAPSHOT_FILE: join(goalScenarioDir, 'session.jsonl'),
         DSH_SNAPSHOT_OVERRIDE: join(goalScenarioDir, 'replay.override.json'),
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: (cwd) => { runCwd = cwd },
       inspect: async (cwd) => {
@@ -826,7 +826,7 @@ describe('headless stream-json snapshots', () => {
           join(ralphScenarioDir, 'session.1.jsonl'),
           join(ralphScenarioDir, 'session.2.jsonl'),
         ].join(delimiter),
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: (cwd) => { runCwd = cwd },
       inspect: async (cwd) => {
@@ -906,7 +906,7 @@ describe('headless stream-json snapshots', () => {
         DSH_SNAPSHOT_FILE: parentReplay,
         DSH_SNAPSHOT_OVERRIDE: parentOverride,
         DSH_SNAPSHOT_CHILD_FILES: childReplay,
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: (cwd) => { runCwd = cwd },
       inspect: async (cwd) => {
@@ -974,7 +974,7 @@ describe('headless stream-json snapshots', () => {
       env: {
         DSH_SNAPSHOT: 'replay',
         DSH_SNAPSHOT_FILE: ptySessionFixture,
-        NODE_OPTIONS: [process.env.NODE_OPTIONS, '--disable-warning=ExperimentalWarning'].filter(Boolean).join(' '),
+        NODE_OPTIONS: '--disable-warning=ExperimentalWarning',
       },
       prepare: (cwd) => { runCwd = cwd },
       inspect: async (cwd) => {
