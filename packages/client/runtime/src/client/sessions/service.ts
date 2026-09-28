@@ -16,7 +16,7 @@
  */
 import type { Context, Fiber } from '@phoenix-ai/cordis'
 import type {
-  IApiClient, RpcError, RpcResult, SessionId, SubagentAddress, JobView, WorkspaceId,
+  IApiClient, RpcError, RpcResult, SessionId, SubagentAddress, WorkspaceId,
 } from '@phoenix-ai/dsh-api-remotes/client'
 // Value import from the inline-safe wire layer (not the connection plugin):
 // plugin-to-plugin value imports are a bundle purity error.
