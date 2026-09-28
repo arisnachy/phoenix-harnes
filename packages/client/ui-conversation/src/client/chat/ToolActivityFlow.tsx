@@ -398,11 +398,11 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
       )}
       {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
         <TurnStatus
-              startTime={turnStatus.startTime}
-              progress={turnStatus.progress}
-              expiresAfterMs={turnStatus.expiresAfterMs}
-              t={seatProps.t}
-            />
+          startTime={turnStatus.startTime}
+          progress={turnStatus.progress}
+          expiresAfterMs={turnStatus.expiresAfterMs}
+          t={seatProps.t}
+        />
       )}
     </>
   )
