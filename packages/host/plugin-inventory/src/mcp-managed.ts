@@ -115,46 +115,50 @@ function isEmptyRecord(value: unknown): value is Record<string, never> {
   return isRecord(value) && Object.keys(value).length === 0
 }
 
-function exactStringRecord(value: unknown, expected: Readonly<Record<string, string>>): boolean {
-  if (!isRecord(value)) return false
-  const entries = Object.entries(expected)
-  return Object.keys(value).length === entries.length
-    && entries.every(([key, item]) => value[key] === item)
+function xDocsMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    transport: 'streamable-http',
+    serverName: X_DOCS_MCP_SERVER_NAME,
+    url: X_DOCS_MCP_URL,
+    headers: {},
+    oauth: false,
+  }
 }
 
-function exactStringArray(value: unknown, expected: readonly string[]): boolean {
-  return Array.isArray(value)
-    && value.length === expected.length
-    && expected.every((item, index) => value[index] === item)
+function xApiMcpConfig(): ManagedStdioMcpConfig {
+  return {
+    transport: 'stdio',
+    serverName: X_API_MCP_SERVER_NAME,
+    command: 'npx',
+    args: ['-y', '@xdevplatform/xurl', 'mcp', X_API_MCP_URL],
+    env: {},
+    envCredentialRefs: {
+      CLIENT_ID: X_CLIENT_ID_REF,
+      CLIENT_SECRET: X_CLIENT_SECRET_REF,
+    },
+    cwd: '',
+    toolCallTimeoutMs: X_API_TOOL_TIMEOUT_MS,
+    startupTimeoutMs: X_API_STARTUP_TIMEOUT_MS,
+    failOnStartupError: false,
+    reconnect: {
+      enabled: true,
+      initialDelayMs: 1000,
+      maxDelayMs: 30_000,
+      maxAttempts: 10,
+    },
+  }
 }
 
-function exactReconnect(value: unknown, maxAttempts: number): boolean {
-  return isRecord(value)
-    && Object.keys(value).length === 4
-    && value.enabled === true
-    && value.initialDelayMs === 1000
-    && value.maxDelayMs === 30_000
-    && value.maxAttempts === maxAttempts
+function exactJson(value: unknown, expected: ManagedMcpConfig): boolean {
+  return JSON.stringify(value) === JSON.stringify(expected)
 }
 
 function validXApiConfig(value: Record<string, unknown>): boolean {
-  return value.transport === 'stdio'
-    && value.serverName === X_API_MCP_SERVER_NAME
-    && value.command === 'npx'
-    && exactStringArray(value.args, ['-y', '@xdevplatform/xurl', 'mcp', X_API_MCP_URL])
-    && isEmptyRecord(value.env)
-    && exactStringRecord(value.envCredentialRefs, {
-      CLIENT_ID: X_CLIENT_ID_REF,
-      CLIENT_SECRET: X_CLIENT_SECRET_REF,
-    })
-    && value.cwd === ''
-    && value.toolCallTimeoutMs === X_API_TOOL_TIMEOUT_MS
-    && value.startupTimeoutMs === X_API_STARTUP_TIMEOUT_MS
-    && value.failOnStartupError === false
-    && exactReconnect(value.reconnect, 10)
+  return exactJson(value, xApiMcpConfig())
 }
 
 function validHttpConfig(value: Record<string, unknown>): boolean {
+  if (exactJson(value, xDocsMcpConfig())) return true
   if (typeof value.serverName !== 'string' || typeof value.url !== 'string'
     || typeof value.oauth !== 'boolean' || !isEmptyRecord(value.headers)) return false
   try {
@@ -165,11 +169,6 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
 
   // Registry-managed remotes and Binance remain OAuth-only and may not smuggle a secret ref.
   if (value.oauth) return value.bearerTokenRef === undefined
-
-  // X Docs is the only active pinned keyless HTTP remote admitted outside the registry.
-  if (value.serverName === X_DOCS_MCP_SERVER_NAME && value.url === X_DOCS_MCP_URL) {
-    return value.bearerTokenRef === undefined
-  }
 
   // Keep accepting the exact retired Jev form only so older owner overlays can be parsed and removed.
   if (value.serverName !== JEV_MCP_SERVER_NAME
@@ -234,11 +233,10 @@ function connectorOf(row: ManagedMcpRow): ManagedMcpConnector {
   }
 }
 
-function sameManagedIdentity(row: ManagedMcpRow, config: ManagedMcpConfig): boolean {
-  if (row.config.serverName === config.serverName) return true
-  return row.config.transport === 'streamable-http'
-    && config.transport === 'streamable-http'
-    && row.config.url === config.url
+function managedIdentity(config: ManagedMcpConfig): string {
+  return config.transport === 'streamable-http'
+    ? `http:${config.url}`
+    : `stdio:${config.serverName}`
 }
 
 function isRetiredJevManagedRow(row: ManagedMcpRow): boolean {
@@ -258,10 +256,10 @@ function isBinanceAgentOsManagedRow(row: ManagedMcpRow): boolean {
     || (row.config.transport === 'streamable-http' && row.config.url === BINANCE_AGENT_OS_URL)
 }
 
+const X_MCP_SERVER_NAMES = new Set([X_API_MCP_SERVER_NAME, X_DOCS_MCP_SERVER_NAME])
+
 function isXMcpManagedRow(row: ManagedMcpRow): boolean {
-  return row.config.serverName === X_API_MCP_SERVER_NAME
-    || row.config.serverName === X_DOCS_MCP_SERVER_NAME
-    || (row.config.transport === 'streamable-http' && row.config.url === X_DOCS_MCP_URL)
+  return X_MCP_SERVER_NAMES.has(row.config.serverName)
 }
 
 function serverNameFor(candidate: McpRegistryCandidate): string {
@@ -318,7 +316,7 @@ export class ManagedMcpController {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
       const rows = await readManagedRows(this.path)
-      const existing = rows.find(row => sameManagedIdentity(row, config))
+      const existing = rows.find(row => managedIdentity(row.config) === managedIdentity(config))
       if (existing !== undefined) {
         return { status: 'already-installed', connector: connectorOf(existing) }
       }
@@ -430,34 +428,8 @@ export class ManagedMcpController {
     api: McpRegistryInstallReceipt
     docs: McpRegistryInstallReceipt
   }> {
-    const docs = await this.installManagedConfig({
-      transport: 'streamable-http',
-      serverName: X_DOCS_MCP_SERVER_NAME,
-      url: X_DOCS_MCP_URL,
-      headers: {},
-      oauth: false,
-    }, 'X Docs')
-    const api = await this.installManagedConfig({
-      transport: 'stdio',
-      serverName: X_API_MCP_SERVER_NAME,
-      command: 'npx',
-      args: ['-y', '@xdevplatform/xurl', 'mcp', X_API_MCP_URL],
-      env: {},
-      envCredentialRefs: {
-        CLIENT_ID: X_CLIENT_ID_REF,
-        CLIENT_SECRET: X_CLIENT_SECRET_REF,
-      },
-      cwd: '',
-      toolCallTimeoutMs: X_API_TOOL_TIMEOUT_MS,
-      startupTimeoutMs: X_API_STARTUP_TIMEOUT_MS,
-      failOnStartupError: false,
-      reconnect: {
-        enabled: true,
-        initialDelayMs: 1000,
-        maxDelayMs: 30_000,
-        maxAttempts: 10,
-      },
-    }, 'X API')
+    const docs = await this.installManagedConfig(xDocsMcpConfig(), 'X Docs')
+    const api = await this.installManagedConfig(xApiMcpConfig(), 'X API')
     return { api, docs }
   }
 
