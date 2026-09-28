@@ -24,3 +24,13 @@ export const en = {
   'loading': 'Loading…',
   'suggestions.aria': 'Trigger suggestions',
 } satisfies Record<MenuKey, string>
+
+
+/** Spanish dictionary. */
+export const es = {
+  'command': 'Comandos',
+  'skill': 'Skills',
+  'subagent': 'Subagentes',
+  'loading': 'Cargando…',
+  'suggestions.aria': 'Sugerencias de activación',
+} satisfies Record<MenuKey, string>
