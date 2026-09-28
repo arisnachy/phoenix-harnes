@@ -16,8 +16,8 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
     transport: stdio
     command: npx
     args: ['-y', '@modelcontextprotocol/server-github']
-    env:
-      GITHUB_TOKEN: !!js process.env.GITHUB_TOKEN
+    envCredentialRefs:
+      GITHUB_TOKEN: GITHUB_TOKEN
 
 - id: mcp-web
   name: '@phoenix-ai/dsh-mcp-client'
@@ -36,6 +36,7 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
 - 远程 `streamable-http` 端点必须使用 `https:`，URL 中不得嵌入凭据。
 - 明文 `http:` 只接受明确的 loopback fixture（`localhost`、`127.0.0.1` 或 `::1`）。
 - stdio 服务器仍为 opt-in，应使用固定版本的命令、参数、工作目录和最小权限环境。
+- stdio 的秘密环境变量应使用 `envCredentialRefs`。Phoenix 会在每一代连接建立时解析引用，并仅把秘密值传给该子进程；Loader 配置中只保留引用名称。
 
 ## 配置
 
@@ -45,7 +46,8 @@ MCP 客户端桥接插件：连接外部 [Model Context Protocol](https://modelc
 | `serverName` | 两者 | 是 | 该服务器面向模型工具名称的 namespace；`[A-Za-z0-9_-]{1,32}`，在存活实例中唯一 |
 | `command` | stdio | 是 | 要 spawn 的可执行文件 |
 | `args` | stdio | 否 | 传给命令的参数 |
-| `env` | stdio | 否 | 合并到已清理环境中的额外环境变量 |
+| `env` | stdio | 否 | 合并到已清理环境中的额外非秘密环境变量 |
+| `envCredentialRefs` | stdio | 否 | 子进程环境变量名 → Phoenix 凭据引用；秘密值按连接世代解析，不存入 Loader 配置 |
 | `cwd` | stdio | 否 | 子进程工作目录 |
 | `url` | http | 是 | MCP 服务器 URL |
 | `headers` | http | 否 | 额外标头（例如认证 token） |
