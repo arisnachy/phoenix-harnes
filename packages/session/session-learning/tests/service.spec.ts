@@ -61,6 +61,39 @@ describe('LearningMemoryService', () => {
     expect((await ctx.learningMemory.search('sandbox timed out'))[0]?.kind).toBe('error')
   })
 
+  it('does not relearn derived runtime-context snapshots as new memory', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-derived-context-'))
+    roots.push(root)
+    const ctx = new Context()
+    await ctx.plugin(SessionStore)
+    await ctx.plugin(LearningMemoryService, { path: join(root, 'memory.jsonl') })
+    const session = ctx.sessions.create(SessionId('derived-context-session'), { meta: {} })
+
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'The CI guard is still pending.' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    session.append('user/message', createUserMessage({
+      content: [{
+        type: 'text',
+        text: 'Background runtime context: <phoenix_initiative_context> pending CI guard pending CI guard </phoenix_initiative_context>',
+      }],
+      source: {
+        kind: 'plugin',
+        plugin: '@phoenix-ai/dsh-system-prompt',
+        form: 'snapshot',
+        sections: [{ name: 'hardness:initiative-context', text: 'pending CI guard' }],
+      },
+    }), { surfaceOp: 'append' })
+
+    await ctx.learningMemory.ready()
+    const matching = ctx.learningMemory.allCognitiveRecords()
+      .filter(record => record.sessionId === String(session.id) && record.content.includes('CI guard'))
+
+    expect(matching).toHaveLength(1)
+    expect(matching[0]?.content).toBe('The CI guard is still pending.')
+  })
+
   it('accepts explicit lessons and removes credentials before persistence', async () => {
     const root = await mkdtemp(join(tmpdir(), 'phoenix-learning-explicit-'))
     roots.push(root)
