@@ -93,8 +93,14 @@ export function turnProgress(
   timeline: ConversationTimelineSnapshot,
   nodes: readonly ChatConversationViewNode[],
 ): TurnProgress | null {
-  const turn = [...timeline.turns.values()].find(candidate => candidate.status === 'open')
-  if (turn === undefined) return null
+  // Only the newest timeline turn may own the global activity indicator.
+  // Older turns can remain transiently marked open while their close event is
+  // settling; treating any open entry as current resurrects a false
+  // "preparing/thinking" animation after the visible answer is already done.
+  const latestTurnId = timeline.turnOrder.at(-1)
+  if (latestTurnId === undefined) return null
+  const turn = timeline.turns.get(latestTurnId)
+  if (turn?.status !== 'open') return null
 
   const turnNodes = nodes.filter(node => nodeTurn(node) === turn.turn)
   const tools = turnNodes.filter(node => node.kind === 'tool-call')
