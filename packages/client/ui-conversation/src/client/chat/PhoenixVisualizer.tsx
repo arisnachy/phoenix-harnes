@@ -322,16 +322,16 @@ function CandlestickChart({ chart }: { readonly chart: ParsedCandlestick }) {
         })}
         {chart.data.map((candle, index) => index % labelEvery === 0 || index === chart.data.length - 1
           ? (
-              <text
-                key={index}
-                className={css.axisLabel}
-                x={left + slot * index + slot / 2}
-                y={height - 24}
-                textAnchor="middle"
-              >
-                {candle.label.slice(0, 18)}
-              </text>
-            )
+            <text
+              key={index}
+              className={css.axisLabel}
+              x={left + slot * index + slot / 2}
+              y={height - 24}
+              textAnchor="middle"
+            >
+              {candle.label.slice(0, 18)}
+            </text>
+          )
           : null)}
       </svg>
     </div>
@@ -971,12 +971,12 @@ export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
   const active = runtime.signature === signature
     ? runtime
     : {
-        signature,
-        spec: prepared.spec,
-        attempts: prepared.attempts,
-        preflight: prepared.preflight,
-        verdict: prepared.preflight.valid ? 'checking' as const : 'fail' as const,
-      }
+      signature,
+      spec: prepared.spec,
+      attempts: prepared.attempts,
+      preflight: prepared.preflight,
+      verdict: prepared.preflight.valid ? 'checking' as const : 'fail' as const,
+    }
   const rootRef = useRef<HTMLDivElement>(null)
 
   useLayoutEffect(() => {
