@@ -638,7 +638,7 @@
 
     - id: mcp-unity-game-dev
       name: '@phoenix-ai/dsh-mcp-client'
-      disabled: !!js !process.env.PHOENIX_UNITY_MCP_COMMAND
+      disabled: !!js Boolean(process.env.PHOENIX_UNITY_MCP_COMMAND) === false
       config:
         transport: stdio
         serverName: unity
@@ -657,7 +657,7 @@
 
     - id: mcp-unreal-game-dev
       name: '@phoenix-ai/dsh-mcp-client'
-      disabled: !!js !process.env.PHOENIX_UNREAL_MCP_COMMAND
+      disabled: !!js Boolean(process.env.PHOENIX_UNREAL_MCP_COMMAND) === false
       config:
         transport: stdio
         serverName: unreal
@@ -676,7 +676,7 @@
 
     - id: mcp-godot-game-dev
       name: '@phoenix-ai/dsh-mcp-client'
-      disabled: !!js !process.env.PHOENIX_GODOT_MCP_COMMAND
+      disabled: !!js Boolean(process.env.PHOENIX_GODOT_MCP_COMMAND) === false
       config:
         transport: stdio
         serverName: godot
@@ -695,7 +695,7 @@
 
     - id: mcp-gameplay-game-dev
       name: '@phoenix-ai/dsh-mcp-client'
-      disabled: !!js !process.env.PHOENIX_GAMEPLAY_MCP_COMMAND
+      disabled: !!js Boolean(process.env.PHOENIX_GAMEPLAY_MCP_COMMAND) === false
       config:
         transport: stdio
         serverName: gameplay
