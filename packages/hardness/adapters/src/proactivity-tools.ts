@@ -67,9 +67,11 @@ function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone
   if (everyMs !== undefined && everyYears !== undefined) {
     throw new ToolArgsError(['everyMinutes and everyYears are mutually exclusive'])
   }
-  if (args.timezone !== undefined && everyYears === undefined) {
-    throw new ToolArgsError(['timezone is only valid with everyYears'])
-  }
+  // One-shot and interval tasks are anchored by runAt itself. If runAt already
+  // carries an explicit UTC offset, a supplied timezone is harmless context
+  // and must not make an otherwise valid task fail. Calendar timezone semantics
+  // are only persisted for yearly recurrence, where local wall-clock time must
+  // survive DST/rule changes.
   if (everyMs !== undefined) return { kind: 'interval', everyMs }
   if (everyYears !== undefined) {
     return { kind: 'yearly', everyYears, ...(args.timezone === undefined ? {} : { timezone: args.timezone }) }
@@ -93,7 +95,7 @@ export function createProactivityCreateTool(engine: ProactivityEngine): ToolDefi
       requestedByUser: { type: 'boolean', description: 'True when the user explicitly requested this task; false/omitted for Phoenix-initiated work.' },
       everyMinutes: { type: 'number', description: 'Optional anchored recurrence interval in minutes, for example 1440 for daily or 21600 for every 15 days.' },
       everyYears: { type: 'number', description: 'Optional calendar recurrence in years. Use 1 for birthdays and anniversaries. Mutually exclusive with everyMinutes.' },
-      timezone: { type: 'string', description: 'IANA timezone, for example America/Santo_Domingo. Use with everyYears to preserve local calendar time.' },
+      timezone: { type: 'string', description: 'Optional IANA timezone, for example America/Santo_Domingo. Persisted for everyYears calendar recurrence; accepted but not required for one-shot/interval tasks because runAt defines the exact instant.' },
       catchUp: { type: 'string', enum: ['latest', 'all', 'skip'] },
       visibility: { type: 'string', enum: ['visible', 'surprise'] },
       revealAt: { type: 'string', description: 'Optional ISO-8601 time before which an unrevealed surprise is omitted from ordinary task listings. For recurring surprises, omit this to hide each occurrence until its own delivery time.' },
