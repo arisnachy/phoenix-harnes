@@ -86,7 +86,7 @@ describe('PhoenixLocalPanel', () => {
     await screen.findByText(localEn.title)
 
     fireEvent.change(screen.getByLabelText(localEn.mode), { target: { value: 'always-on' } })
-    await waitFor(() => expect(local.calls.setMode).toHaveBeenCalledWith('always-on'))
+    await waitFor(() =>{  expect(local.calls.setMode).toHaveBeenCalledWith('always-on') })
   })
 
   it('installs, starts, stops, and requires confirmation before uninstalling', async () => {
@@ -95,20 +95,20 @@ describe('PhoenixLocalPanel', () => {
     await screen.findByText(localEn.title)
 
     fireEvent.click(screen.getByRole('button', { name: localEn.install }))
-    await waitFor(() => expect(local.calls.install).toHaveBeenCalledWith('gemma-4-e2b-it-q4-0'))
+    await waitFor(() =>{  expect(local.calls.install).toHaveBeenCalledWith('gemma-4-e2b-it-q4-0') })
     expect(await screen.findByRole('button', { name: localEn.start })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: localEn.start }))
-    await waitFor(() => expect(local.calls.start).toHaveBeenCalledTimes(1))
+    await waitFor(() =>{  expect(local.calls.start).toHaveBeenCalledTimes(1) })
     expect(await screen.findByRole('button', { name: localEn.stop })).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: localEn.stop }))
-    await waitFor(() => expect(local.calls.stop).toHaveBeenCalledTimes(1))
+    await waitFor(() =>{  expect(local.calls.stop).toHaveBeenCalledTimes(1) })
 
     fireEvent.click(await screen.findByRole('button', { name: localEn.uninstall }))
     expect(local.calls.uninstall).not.toHaveBeenCalled()
     expect(screen.getByText(localEn.uninstallQuestion)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: localEn.uninstallConfirm }))
-    await waitFor(() => expect(local.calls.uninstall).toHaveBeenCalledWith('gemma-4-e2b-it-q4-0'))
+    await waitFor(() =>{  expect(local.calls.uninstall).toHaveBeenCalledWith('gemma-4-e2b-it-q4-0') })
   })
 })

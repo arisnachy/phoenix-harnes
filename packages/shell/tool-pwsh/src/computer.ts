@@ -1387,9 +1387,9 @@ export function registerComputerTool(ctx: Context): void {
               ? `Phoenix embedded browser inspection:\n${value.details ?? '{}'}`
               : value.action.startsWith('browser_')
                 ? `Phoenix embedded browser command ${value.action} completed.${value.details === undefined ? '' : `\n${value.details}`}${value.postScreenshot ? '\nA fresh desktop screenshot was attached; verify the visible outcome.' : ''}`
-              : value.postScreenshot
-                ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
-                : `Desktop ${value.action} input sent.`,
+                : value.postScreenshot
+                  ? `Desktop ${value.action} input sent and a fresh post-action screenshot was attached. Verify the visible result before proceeding.`
+                  : `Desktop ${value.action} input sent.`,
       }],
     },
     async execute(args: ComputerToolArgs, exec) {

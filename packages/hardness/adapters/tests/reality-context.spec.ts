@@ -322,14 +322,14 @@ describe('Phoenix reality context', () => {
         return {
           locationFor: (id: string) => id === 'session-geo'
             ? {
-                latitude: 19.451,
-                longitude: -70.697,
-                accuracyMeters: 24,
-                observedAt: now - 2_000,
-                receivedAt: now - 1_500,
-                expiresAt: now + 120_000,
-                source: 'browser-geolocation',
-              }
+              latitude: 19.451,
+              longitude: -70.697,
+              accuracyMeters: 24,
+              observedAt: now - 2_000,
+              receivedAt: now - 1_500,
+              expiresAt: now + 120_000,
+              source: 'browser-geolocation',
+            }
             : undefined,
         }
       },

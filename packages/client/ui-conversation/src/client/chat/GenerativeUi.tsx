@@ -120,7 +120,7 @@ const validateMetricCard = (value: Record<string, unknown>): value is MetricCard
     && Array.isArray(items)
     && items.length > 0
     && items.length <= 6
-    && items.every((item) => isRecord(item)
+    && items.every(item => isRecord(item)
       && hasOnlyKeys(item, ['label', 'value', 'detail', 'status'])
       && isText(item.label)
       && isText(item.value)
@@ -140,7 +140,7 @@ const validateComparison = (value: Record<string, unknown>): value is Comparison
     && Array.isArray(rows)
     && rows.length > 0
     && rows.length <= 12
-    && rows.every((row) => isRecord(row)
+    && rows.every(row => isRecord(row)
       && hasOnlyKeys(row, ['label', 'values'])
       && isText(row.label)
       && Array.isArray(row.values)
@@ -156,7 +156,7 @@ const validateTimeline = (value: Record<string, unknown>): value is TimelineCard
     && Array.isArray(items)
     && items.length > 0
     && items.length <= 12
-    && items.every((item) => isRecord(item)
+    && items.every(item => isRecord(item)
       && hasOnlyKeys(item, ['title', 'description', 'time', 'status'])
       && isText(item.title)
       && optionalText(item.description, MAX_TEXT)
@@ -173,7 +173,7 @@ const validateSmartCard = (value: Record<string, unknown>): value is SmartCard =
     && optionalText(description, MAX_TEXT)
     && (fields === undefined || (Array.isArray(fields)
       && fields.length <= 12
-      && fields.every((field) => isRecord(field)
+      && fields.every(field => isRecord(field)
         && hasOnlyKeys(field, ['label', 'value'])
         && isText(field.label)
         && isText(field.value, MAX_TEXT))))

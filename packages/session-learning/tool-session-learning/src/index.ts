@@ -348,7 +348,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function messageText(data: unknown): string | undefined {
   if (!isRecord(data) || !Array.isArray(data.content)) return undefined
-  const parts = data.content.flatMap((part) => isRecord(part) && typeof part.text === 'string' ? [part.text] : [])
+  const parts = data.content.flatMap(part => isRecord(part) && typeof part.text === 'string' ? [part.text] : [])
   const text = parts.join(' ').replace(/\s+/gu, ' ').trim()
   return text === '' ? undefined : text
 }

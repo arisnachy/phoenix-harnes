@@ -61,7 +61,7 @@ function softwareSignals(text: string): boolean {
 function universalRiskCriteria(): VerificationCriterion[] {
   const criteria: VerificationCriterion[] = []
   const seen = new Set<string>()
-  const add = (id: string, criterion: string): void => pushCriterion(criteria, seen, criterion, 'risk', id)
+  const add = (id: string, criterion: string): void =>{  pushCriterion(criteria, seen, criterion, 'risk', id) }
 
   add('RISK-AMBIGUITY',
     'Actively search for ambiguous interpretations, representations, normalization rules, implicit conventions, or multiple plausible meanings that could change the result. Exercise the ambiguity or document the chosen rule with evidence.')
@@ -77,7 +77,7 @@ function edgeCriteria(objective: string, softwareLike: boolean): VerificationCri
   const text = objective.toLocaleLowerCase()
   const criteria: VerificationCriterion[] = []
   const seen = new Set<string>()
-  const add = (id: string, criterion: string): void => pushCriterion(criteria, seen, criterion, 'edge', id)
+  const add = (id: string, criterion: string): void =>{  pushCriterion(criteria, seen, criterion, 'edge', id) }
 
   if (softwareLike) {
     add('EDGE-EMPTY', 'Exercise empty input or zero-cardinality state at the real user-facing boundary when that state is representable.')

@@ -93,7 +93,7 @@ function harness(options: HarnessOptions = {}) {
     followup,
     start,
     dispose,
-    executor: createProactivityExecutor(agents as never, subagents as never, {
+    executor: createProactivityExecutor(agents, subagents as never, {
       pollMs: 15_000,
       privateWorkProvider: 'spawn',
       privateWorkResultChars: 2_000,

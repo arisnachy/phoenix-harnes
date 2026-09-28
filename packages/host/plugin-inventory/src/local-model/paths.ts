@@ -10,7 +10,7 @@ export interface LocalModelPaths {
   platform: string
 }
 
-function pathApiFor(platform: string): typeof path.win32 | typeof path.posix {
+function pathApiFor(platform: string): typeof path.win32   {
   return platform === 'win32' ? path.win32 : path.posix
 }
 

@@ -97,8 +97,8 @@ export class LocalLivingRegistry extends LivingRegistry {
       port: config.bridgePort ?? envPort() ?? DEFAULT_LIVING_CONTROL_PORT,
       ...(config.bridgeActionTimeoutMs === undefined ? {} : { actionTimeoutMs: config.bridgeActionTimeoutMs }),
       ...(config.bridgeHeartbeatTimeoutMs === undefined ? {} : { heartbeatTimeoutMs: config.bridgeHeartbeatTimeoutMs }),
-    }, message => ctx.logger.warn(message))
-    ctx.effect(() => () => this.disposeProviders(), 'living provider teardown')
+    }, (message) =>{  ctx.logger.warn(message) })
+    ctx.effect(() => () =>{  this.disposeProviders() }, 'living provider teardown')
   }
 
   async remember(manifest: LivingCreationManifest): Promise<LivingCreationSnapshot> {

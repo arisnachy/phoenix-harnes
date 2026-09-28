@@ -97,7 +97,7 @@ async function awaitAbortable<T>(operation: Promise<T>, signal: AbortSignal): Pr
   signal.throwIfAborted()
   let onAbort: (() => void) | undefined
   const aborted = new Promise<never>((_resolve, reject) => {
-    onAbort = () => reject(signal.reason ?? new Error('operation aborted'))
+    onAbort = () =>{  reject(signal.reason ?? new Error('operation aborted')) }
     signal.addEventListener('abort', onAbort, { once: true })
   })
   try {
@@ -119,7 +119,7 @@ function reviewProvider(runtime: GoalJudgeRuntime, requested: string, parent: Ag
   const names = [...new Set([requested, ...(runtime.list?.() ?? [])])]
     .filter(name => !(nonCodex && name.toLowerCase() === 'luna'))
     .filter(name => canReview(runtime, name))
-  const fresh = names.find((name) => runtime.getProvider(name)?.inheritsParentContext !== true)
+  const fresh = names.find(name => runtime.getProvider(name)?.inheritsParentContext !== true)
   return fresh ?? names[0]
 }
 
@@ -137,7 +137,7 @@ function durableMissionReviewHistory(parent: Agent, objective: string): object {
     && current.data.goal.objective === objective
     ? { goalId: current.data.goal.id, revision: current.data.goal.revision }
     : undefined
-  const belongsToCurrentGoal = (data: { goalId: string, revision: number }): boolean => sameGoal === undefined
+  const belongsToCurrentGoal = (data: { goalId: string; revision: number }): boolean => sameGoal === undefined
     || (data.goalId === sameGoal.goalId && data.revision === sameGoal.revision)
 
   const judgeRounds = parent.session.events

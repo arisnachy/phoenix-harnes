@@ -490,10 +490,10 @@ export class ProactivityEngine {
       }
       const normalizedRecurrence: ProactivityRecurrence = recurrence.kind === 'yearly'
         ? {
-            kind: 'yearly',
-            everyYears: recurrence.everyYears,
-            ...(recurrence.timezone === undefined ? {} : { timezone: canonicalTimezone(recurrence.timezone, 'recurrence.timezone') }),
-          }
+          kind: 'yearly',
+          everyYears: recurrence.everyYears,
+          ...(recurrence.timezone === undefined ? {} : { timezone: canonicalTimezone(recurrence.timezone, 'recurrence.timezone') }),
+        }
         : { ...recurrence }
       const task: ProactivityTask = {
         id: nonEmpty(this.id(), 'id'),

@@ -14,7 +14,7 @@ import type {
 } from './wake-engine.ts'
 
 function targetAgent(exec: ToolRunContext): string | undefined {
-  return exec.agent?.id as string | undefined
+  return exec.agent?.id
 }
 
 function scalar(value: string): WakeEventAttribute {

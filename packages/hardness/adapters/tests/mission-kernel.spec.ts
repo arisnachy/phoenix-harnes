@@ -141,7 +141,7 @@ describe('MissionPersistenceKernel', () => {
     expect(replayMissionKernel(events, 'mission-1', 1)).not.toHaveProperty('missingDependency')
   })
 
-   it('only explicit cancellation can terminate without verified delivery', () => {
+  it('only explicit cancellation can terminate without verified delivery', () => {
     const events: MissionKernelEvent[] = []
     const value = kernel(events)
     value.start()

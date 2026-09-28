@@ -103,14 +103,14 @@ function statusLabel(status: TaskStatus, t: TranslateNS<typeof NS>): string {
 }
 
 function recurrenceLabel(recurrence: TaskRecurrence, t: TranslateNS<typeof NS>): string {
-  if (recurrence.kind === 'once') return t('task.recurrence.once' as never)
+  if (recurrence.kind === 'once') return t('task.recurrence.once')
   if (recurrence.kind === 'yearly') return recurrence.everyYears === 1
-    ? t('task.recurrence.yearly' as never)
-    : t('task.recurrence.years' as never, { count: recurrence.everyYears })
+    ? t('task.recurrence.yearly')
+    : t('task.recurrence.years', { count: recurrence.everyYears })
   const minutes = Math.round(recurrence.everyMs / 60_000)
-  if (minutes % (24 * 60) === 0) return t('task.recurrence.days' as never, { count: minutes / (24 * 60) })
-  if (minutes % 60 === 0) return t('task.recurrence.hours' as never, { count: minutes / 60 })
-  return t('task.recurrence.minutes' as never, { count: minutes })
+  if (minutes % (24 * 60) === 0) return t('task.recurrence.days', { count: minutes / (24 * 60) })
+  if (minutes % 60 === 0) return t('task.recurrence.hours', { count: minutes / 60 })
+  return t('task.recurrence.minutes', { count: minutes })
 }
 
 function nextLabel(value: string): string {
@@ -161,7 +161,7 @@ export function TaskListAction({ connection, t }: TaskListActionProps) {
     triggerRef.current?.focus()
   }
 
-  const label = loaded ? t('task.count' as never, { count: tasks.length }) : t('task.title' as never)
+  const label = loaded ? t('task.count', { count: tasks.length }) : t('task.title')
 
   return (
     <div ref={rootRef} className={css.root} onKeyDown={onKeyDown}>
@@ -171,7 +171,7 @@ export function TaskListAction({ connection, t }: TaskListActionProps) {
         className={css.trigger}
         aria-expanded={open}
         aria-label={label}
-        onClick={() => setOpen(current => !current)}
+        onClick={() =>{  setOpen(current => !current) }}
       >
         {tasks.some(task => task.status === 'scheduled' || task.status === 'running')
           ? <StateDot state="ongoing" className={css.triggerDot} />
@@ -181,11 +181,11 @@ export function TaskListAction({ connection, t }: TaskListActionProps) {
       </button>
       {open
         ? (
-          <ul className={css.menu} aria-label={t('task.list.aria' as never)}>
+          <ul className={css.menu} aria-label={t('task.list.aria')}>
             {error !== undefined
               ? <li className={`${css.row} ${css.rowSettled}`}><StateDot state="error" className={css.rowDot} /><span className={css.label}>{error}</span></li>
               : tasks.length === 0
-                ? <li className={`${css.row} ${css.rowSettled}`}><span className={css.label}>{t('task.empty' as never)}</span></li>
+                ? <li className={`${css.row} ${css.rowSettled}`}><span className={css.label}>{t('task.empty')}</span></li>
                 : tasks.map(task => (
                   <li key={task.id} className={task.status === 'completed' || task.status === 'cancelled' ? `${css.row} ${css.rowSettled}` : css.row}>
                     <StateDot state={state(task.status)} className={css.rowDot} />

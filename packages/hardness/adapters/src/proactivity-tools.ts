@@ -63,7 +63,7 @@ function taskView(task: ProactivityTask): Record<string, JsonValue> {
 }
 
 function targetAgent(exec: ToolRunContext): string | undefined {
-  return exec.agent?.id as string | undefined
+  return exec.agent?.id
 }
 
 function normalizedEmail(value: string | undefined): string | undefined {

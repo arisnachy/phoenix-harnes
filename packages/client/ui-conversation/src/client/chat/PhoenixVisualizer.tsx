@@ -390,7 +390,7 @@ function ChartView({ spec }: { readonly spec: JsonRecord }) {
 function tableRows(spec: JsonRecord): { readonly columns: readonly string[]; readonly rows: readonly (readonly unknown[])[] } | undefined {
   if (Array.isArray(spec.columns) && spec.columns.every(item => typeof item === 'string') && Array.isArray(spec.rows)) {
     const rows = spec.rows.map(row => Array.isArray(row) ? row : [])
-    return { columns: spec.columns as readonly string[], rows }
+    return { columns: spec.columns, rows }
   }
   if (!Array.isArray(spec.data)) return undefined
   const records = spec.data.filter(isRecord)

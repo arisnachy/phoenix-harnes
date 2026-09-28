@@ -238,7 +238,7 @@ async function readConnectorRemoteWithRetry<T>(
   for (const delayMs of TRANSIENT_CONNECTOR_REMOTE_RETRY_MS) {
     if (cancelled()) throw new Error('Connector state read cancelled')
     if (delayMs > 0) {
-      await new Promise<void>(resolve => { globalThis.setTimeout(resolve, delayMs) })
+      await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
     }
     if (cancelled()) throw new Error('Connector state read cancelled')
     try {
@@ -302,7 +302,7 @@ function catalogDefinitionForText(value: string): ConnectorDefinition | undefine
   const haystack = normalize(value)
   return CONNECTOR_CATALOG.find((definition) => {
     const aliases = [definition.id, definition.name, ...(definition.aliases ?? [])]
-    return aliases.some(alias => {
+    return aliases.some((alias) => {
       const needle = normalize(alias)
       return needle.length >= 3 && (haystack === needle || haystack.includes(needle))
     })
@@ -439,11 +439,11 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuth
       ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
       : definition.mode === 'mcp'
         ? { text: definition.id === 'jev' ? t('jevOptionalStatus') : t('mcpReadyStatus'), className: '' }
-      : definition.mode === 'api-key'
-        ? { text: t('apiKeyStatus'), className: '' }
-        : account !== undefined
-          ? { text: t('availableStatus'), className: '' }
-          : { text: t('adapterNeededStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
+        : definition.mode === 'api-key'
+          ? { text: t('apiKeyStatus'), className: '' }
+          : account !== undefined
+            ? { text: t('availableStatus'), className: '' }
+            : { text: t('adapterNeededStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
   const oauthAccount = account !== undefined && account.methods.some(candidate => candidate.id === 'oauth')
     ? account
     : undefined
@@ -494,7 +494,7 @@ function registryCandidateLogo(candidate: McpRegistryCandidateView): string | un
   const haystack = normalize(`${candidate.name} ${candidate.title}`)
   const catalogMatch = CONNECTOR_CATALOG.find((definition) => {
     const aliases = [definition.id, definition.name, ...(definition.aliases ?? [])]
-    return aliases.some(alias => {
+    return aliases.some((alias) => {
       const needle = normalize(alias)
       return needle.length >= 3 && haystack.includes(needle)
     })
@@ -616,8 +616,8 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     let stale = false
     setChatGptWebFailure(undefined)
     void readConnectorRemoteWithRetry(() => chatGptWeb.state(), () => stale).then(
-      snapshot => { if (!stale) setChatGptWebState(snapshot) },
-      error => {
+      (snapshot) => { if (!stale) setChatGptWebState(snapshot) },
+      (error) => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) {
           setChatGptWebFailure(String(error))
         }
@@ -645,8 +645,8 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     if (mcpRegistry === undefined) return
     let stale = false
     void readConnectorRemoteWithRetry(() => mcpRegistry.state(), () => stale).then(
-      snapshot => { if (!stale) setMcpHub(snapshot) },
-      error => {
+      (snapshot) => { if (!stale) setMcpHub(snapshot) },
+      (error) => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) {
           setCatalogFailure(String(error))
         }
@@ -660,8 +660,8 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     if (readJevState === undefined) return
     let stale = false
     void readConnectorRemoteWithRetry(() => readJevState(), () => stale).then(
-      snapshot => { if (!stale) setJevState(snapshot) },
-      error => {
+      (snapshot) => { if (!stale) setJevState(snapshot) },
+      (error) => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) setJevFailure(String(error))
       },
     )
@@ -685,7 +685,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       setRegistryBusy(true)
       setRegistryFailure(false)
       void mcpRegistry.search({ query: search, limit: 12 }).then(
-        snapshot => {
+        (snapshot) => {
           if (!stale) {
             setRegistrySnapshot({
               ...snapshot,
@@ -863,7 +863,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                   aria-label={connectorT('chatgptWebToggle')}
                   checked={chatGptWebState?.enabled === true}
                   disabled={chatGptWebBusy}
-                  onChange={event => { toggleChatGptWeb(event.target.checked) }}
+                  onChange={(event) => { toggleChatGptWeb(event.target.checked) }}
                 />
                 <span>{chatGptWebBusy
                   ? connectorT('chatgptWebBusy')
@@ -960,7 +960,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
           <p>{connectorT('catalogHint')}</p>
         </div>
         <div className={hubStyles['toolbar']}>
-          <input className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('searchRegistry')} value={query} onChange={event => { setQuery(event.target.value) }} />
+          <input className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('searchRegistry')} value={query} onChange={(event) => { setQuery(event.target.value) }} />
           <div className={hubStyles['filters']}>
             {(['all', 'connected', 'available'] as const).map(value => (
               <button key={value} type="button" aria-pressed={filter === value} className={filter === value ? hubStyles['filterActive'] : undefined} onClick={() => { setFilter(value) }}>
@@ -1006,8 +1006,8 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
                 value={jevApiKey}
                 placeholder={connectorT('jevKeyPlaceholder')}
                 disabled={jevBusy}
-                onChange={event => { setJevApiKey(event.target.value) }}
-                onKeyDown={event => {
+                onChange={(event) => { setJevApiKey(event.target.value) }}
+                onKeyDown={(event) => {
                   if (event.key === 'Enter') configureJev()
                 }}
               />

@@ -76,7 +76,7 @@ function isActionableConnectorRecovery(node: OrderedChatNode): boolean {
   try {
     const parsed = JSON.parse(text) as { kind?: unknown; connectors?: unknown }
     if (parsed.kind !== 'connector_list' || !Array.isArray(parsed.connectors)) return false
-    return parsed.connectors.some(value => {
+    return parsed.connectors.some((value) => {
       if (typeof value !== 'object' || value === null) return false
       const candidate = value as { recommended_action?: unknown; relevant?: unknown }
       return candidate.relevant === true && candidate.recommended_action === 'connect-or-reconnect'

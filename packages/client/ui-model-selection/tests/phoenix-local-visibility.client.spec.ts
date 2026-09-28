@@ -65,8 +65,8 @@ describe('Phoenix Local selector availability', () => {
   })
 
   it('rejects selecting Phoenix Local when it is not installed but leaves cloud selections untouched', () => {
-    expect(() => assertPhoenixLocalSelectable(selectedLocal, localState(false))).toThrow(/install Phoenix Local/i)
-    expect(() => assertPhoenixLocalSelectable(selectedCloud, undefined)).not.toThrow()
-    expect(() => assertPhoenixLocalSelectable(selectedLocal, localState(true))).not.toThrow()
+    expect(() =>{  assertPhoenixLocalSelectable(selectedLocal, localState(false)) }).toThrow(/install Phoenix Local/i)
+    expect(() =>{  assertPhoenixLocalSelectable(selectedCloud, undefined) }).not.toThrow()
+    expect(() =>{  assertPhoenixLocalSelectable(selectedLocal, localState(true)) }).not.toThrow()
   })
 })

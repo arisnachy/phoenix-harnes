@@ -91,7 +91,7 @@ function validConfig(value: unknown): value is ManagedMcpConfig {
   }
 
   // Registry-managed remotes remain OAuth-only and may not smuggle a secret ref.
-  if (value.oauth === true) return value.bearerTokenRef === undefined
+  if (value.oauth) return value.bearerTokenRef === undefined
 
   // The only non-OAuth managed remote admitted today is the pinned Jev endpoint.
   if (value.serverName !== JEV_MCP_SERVER_NAME

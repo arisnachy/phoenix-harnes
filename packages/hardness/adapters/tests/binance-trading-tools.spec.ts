@@ -80,7 +80,7 @@ describe('Binance trading activation boundary', () => {
     const paper = broker()
     const host = agentOs()
     const approval = { request: vi.fn() }
-    const tool = activateTool({ broker: paper as never, approval: approval as never, agentOs: host })
+    const tool = activateTool({ broker: paper as never, approval: approval, agentOs: host })
 
     await expect(tool.execute({ mode: 'paper' }, exec())).resolves.toMatchObject({
       mode: 'paper',
@@ -97,7 +97,7 @@ describe('Binance trading activation boundary', () => {
     const paper = broker()
     const host = agentOs()
     const approval = { request: vi.fn() }
-    const tool = activateTool({ broker: paper as never, approval: approval as never, agentOs: host })
+    const tool = activateTool({ broker: paper as never, approval: approval, agentOs: host })
 
     await expect(tool.execute({ mode: 'real' }, exec())).resolves.toMatchObject({
       mode: 'paper',
@@ -112,7 +112,7 @@ describe('Binance trading activation boundary', () => {
     const paper = broker()
     const host = agentOs()
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }
-    const tool = activateTool({ broker: paper as never, approval: approval as never, agentOs: host })
+    const tool = activateTool({ broker: paper as never, approval: approval, agentOs: host })
     const context = exec()
 
     await expect(tool.execute({
@@ -145,7 +145,7 @@ describe('Binance trading activation boundary', () => {
   it('stays out of REAL when approval is rejected', async () => {
     const host = agentOs()
     const approval = { request: vi.fn(async () => 'rejected' as const) }
-    const tool = activateTool({ broker: broker() as never, approval: approval as never, agentOs: host })
+    const tool = activateTool({ broker: broker() as never, approval: approval, agentOs: host })
 
     await expect(tool.execute({
       mode: 'real',

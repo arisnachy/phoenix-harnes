@@ -298,7 +298,7 @@ async function writeState(path: string, state: BinancePaperState): Promise<void>
 async function withPathLock<T>(path: string, run: () => Promise<T>): Promise<T> {
   const previous = PATH_LOCKS.get(path) ?? Promise.resolve()
   let release: (() => void) | undefined
-  const gate = new Promise<void>(resolve => { release = resolve })
+  const gate = new Promise<void>((resolve) => { release = resolve })
   const current = previous.catch(() => undefined).then(() => gate)
   PATH_LOCKS.set(path, current)
   await previous.catch(() => undefined)
@@ -384,7 +384,7 @@ export class BinancePaperBroker {
     const state = await readState(this.path) ?? freshState(DEFAULT_INITIAL_CASH_USDT, DEFAULT_FEE_RATE)
     const symbols = Object.keys(state.positions)
     const marks = await this.market.prices(symbols)
-    const positions = symbols.map(symbol => {
+    const positions = symbols.map((symbol) => {
       const position = state.positions[symbol]
       if (position === undefined) throw new Error(`Missing paper position for ${symbol}`)
       const marketPriceUsdt = marks[symbol]

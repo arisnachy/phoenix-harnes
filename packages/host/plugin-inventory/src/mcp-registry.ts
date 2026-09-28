@@ -62,11 +62,11 @@ function projectIcons(server: Record<string, unknown>): McpRegistryIcon[] {
       : undefined
     const sizes = Array.isArray(item.sizes)
       ? item.sizes.flatMap((size) => {
-          const normalized = text(size)
-          return normalized !== undefined && (normalized === 'any' || /^\d+x\d+$/.test(normalized))
-            ? [normalized]
-            : []
-        })
+        const normalized = text(size)
+        return normalized !== undefined && (normalized === 'any' || /^\d+x\d+$/.test(normalized))
+          ? [normalized]
+          : []
+      })
       : []
     return [{
       src,

@@ -73,7 +73,7 @@ function toolNode(
       step: { turn, step: 1, start: undefined, end: undefined, status: 'open', data: { get: () => undefined } },
     },
     data: { root },
-  } as ChatConversationViewNode
+  }
 }
 
 function assistantNode(turn: number, status: 'running' | 'settled', blockKind: 'reasoning' | 'text'): ChatConversationViewNode {
@@ -98,7 +98,7 @@ function assistantNode(turn: number, status: 'running' | 'settled', blockKind: '
         : [{ kind: 'text', text: 'answer' }],
       time: 1_100,
     },
-  } as ChatConversationViewNode
+  }
 }
 
 describe('turnProgress', () => {

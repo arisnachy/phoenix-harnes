@@ -38,7 +38,7 @@ function emptySteps(): Record<HardnessProtocolStep, HardnessMissionStepTelemetry
 }
 
 function copySteps(steps: Readonly<Record<HardnessProtocolStep, HardnessMissionStepTelemetry>>): Readonly<Partial<Record<HardnessProtocolStep, HardnessMissionStepTelemetry>>> {
-  return Object.freeze(Object.fromEntries(PROTOCOL_STEPS.map(step => [step, Object.freeze({ ...steps[step] })]))) as Readonly<Partial<Record<HardnessProtocolStep, HardnessMissionStepTelemetry>>>
+  return Object.freeze(Object.fromEntries(PROTOCOL_STEPS.map(step => [step, Object.freeze({ ...steps[step] })])))
 }
 
 /**
