@@ -40,6 +40,8 @@ function normalizedSignature(config: StdioPlatformDescriptor): string {
  *
  * Explicit metadata is authoritative. A narrow compatibility fallback handles
  * XcodeBuildMCP configurations created before Phoenix exposed platform metadata.
+  * @param config - config supplied to this public operation.
+  * @returns Result produced by this public operation.
  */
 export function resolveSupportedPlatforms(config: StdioPlatformDescriptor): readonly SupportedPlatform[] | undefined {
   const explicit = config.supportedPlatforms ?? []
@@ -60,6 +62,9 @@ export function resolveSupportedPlatforms(config: StdioPlatformDescriptor): read
   return undefined
 }
 
+ * @param config - config supplied to this public operation.
+ * @param platform - platform supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Return whether this stdio MCP server may be started on the current host. */
 export function checkPlatformCompatibility(
   config: StdioPlatformDescriptor,
