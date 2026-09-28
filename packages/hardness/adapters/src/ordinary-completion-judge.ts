@@ -180,7 +180,8 @@ export function isGameAssetProduction(name: string, args: unknown): boolean {
   if (GAME_EDITOR_NAMESPACE.test(normalizedName)
     && !GAME_EDITOR_READ_ONLY.test(op)
     && /\b(?:asset|sprite|tile|texture|material|model|mesh|rig|anim|audio|sound|music|vfx|particle|shader|import)\b/i.test(op + ' ' + text)) return true
-  if ((MUTATION.test(op) || SHELL.test(op)) && GAME_ASSET_PATH.test(text)) return true
+  if (MUTATION.test(op) && GAME_ASSET_PATH.test(text)) return true
+  if (SHELL.test(op) && SHELL_MUTATE.test(text) && GAME_ASSET_PATH.test(text)) return true
   return false
 }
 
@@ -193,7 +194,9 @@ export function isGameAssetProduction(name: string, args: unknown): boolean {
  */
 export function isGameAssetProvenanceMutation(name: string, args: unknown): boolean {
   const op = operationName(name)
-  return (MUTATION.test(op) || SHELL.test(op)) && GAME_ASSET_PROVENANCE.test(argumentText(args))
+  const text = argumentText(args)
+  if (MUTATION.test(op)) return GAME_ASSET_PROVENANCE.test(text)
+  return SHELL.test(op) && SHELL_MUTATE.test(text) && GAME_ASSET_PROVENANCE.test(text)
 }
 
 /**
