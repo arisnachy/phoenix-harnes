@@ -407,3 +407,161 @@
   opacity: 0.4;
   cursor: default;
 }
+
+
+/* Phoenix 2026 preset refresh: the roster remains compact and functional,
+   but cards read as modern selectable capabilities rather than form rows. */
+.section {
+  gap: 16px;
+  max-width: 860px;
+  padding-bottom: 8px;
+}
+
+.title {
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -.025em;
+}
+
+.intro {
+  max-width: 760px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.group {
+  gap: 12px;
+}
+
+.group + .group {
+  margin-top: 22px;
+}
+
+.groupHead {
+  font-size: 11.5px;
+  letter-spacing: .09em;
+}
+
+.cards {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  position: relative;
+  overflow: hidden;
+  min-height: 222px;
+  border-radius: 16px;
+  background: var(--dsw-alias-bg-layer-3);
+  box-shadow: 0 6px 18px rgb(0 0 0 / 5%);
+  transition:
+    transform .18s ease,
+    border-color .18s ease,
+    box-shadow .18s ease,
+    background .18s ease;
+}
+
+.card:hover:not(.cardActive) {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 42%, var(--dsw-alias-border-l2));
+  box-shadow: 0 10px 28px rgb(0 0 0 / 8%);
+}
+
+.cardActive {
+  border-color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 6%, var(--dsw-alias-bg-layer-3));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--dsw-alias-brand-primary) 55%, transparent),
+    0 12px 30px rgb(0 0 0 / 9%);
+}
+
+.cardActive::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--dsw-alias-brand-primary);
+}
+
+.cardMain {
+  gap: 10px;
+  padding: 18px 20px 16px;
+  border-radius: 16px 16px 0 0;
+}
+
+.cardHead {
+  min-height: 30px;
+  gap: 9px;
+}
+
+.cardName {
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 650;
+  letter-spacing: -.01em;
+}
+
+.badge,
+.inUse {
+  padding: 2px 9px;
+  line-height: 18px;
+}
+
+.inUse {
+  background: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-bg-layer-3);
+}
+
+.cardDesc {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.cardId {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.cardFoot {
+  min-height: 44px;
+  align-items: center;
+  gap: 4px;
+  padding: 7px 12px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-1) 55%, transparent);
+}
+
+.iconButton {
+  border-radius: 9px;
+  padding: 7px;
+}
+
+.creatorButton {
+  height: 50px;
+  border-radius: 14px;
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 42%, var(--dsw-alias-border-l3));
+  color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 4%, transparent);
+  transition: background .16s ease, border-color .16s ease;
+}
+
+.creatorButton:hover:not(:disabled) {
+  border-color: var(--dsw-alias-brand-primary);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 9%, transparent);
+}
+
+@media (max-width: 760px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    min-height: 0;
+  }
+}
