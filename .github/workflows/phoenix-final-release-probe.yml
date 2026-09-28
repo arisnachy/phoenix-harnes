@@ -1,0 +1,30 @@
+name: Phoenix final release probe
+
+on:
+  push:
+    branches:
+      - verify/final-release-20260928
+
+permissions:
+  contents: read
+
+jobs:
+  decisive-gates:
+    runs-on: ubuntu-24.04
+    env:
+      DSH_OXLINT_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Contracts-ready lint
+        run: pnpm run lint:contracts-ready
+      - name: Client domain graph
+        run: pnpm run verify-client-domain-graph
+      - name: Static gate matrix
+        run: pnpm run check:ci:static
