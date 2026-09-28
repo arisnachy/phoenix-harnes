@@ -11,7 +11,7 @@ import type {
 import type { PropsLocale, PropsRuntime, TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
 import { NS, type KiraTeamsKey } from './locales.ts'
 import {
-  ModelActivityAvatar, stableAgentIndex, type ModelAvatarKind,
+  ModelActivityAvatar, type ModelAvatarKind,
 } from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'
 
@@ -34,10 +34,17 @@ export interface MemberRow {
   depth: number
 }
 
+export type AgentSkill =
+  | 'orchestration' | 'quality' | 'engineering' | 'testing' | 'research'
+  | 'design' | 'automation' | 'data' | 'security' | 'integration'
+  | 'planning' | 'performance' | 'browser' | 'writing' | 'general'
+
 export interface KiraRosterEntry {
   kind: ModelAvatarKind
   name: string
   tagline: string
+  specialty: KiraTeamsKey
+  skills: readonly AgentSkill[]
 }
 
 export interface KiraRosterCard extends KiraRosterEntry {
@@ -45,28 +52,28 @@ export interface KiraRosterCard extends KiraRosterEntry {
   depth?: number
 }
 
-/** Approved KIRA portrait identities. Only active members are rendered in the dock. */
+/** KIRA specialists. Identity is selected from the requested capability, never randomly. */
 export const KIRA_ROSTER: readonly KiraRosterEntry[] = [
-  { kind: 'vortice', name: 'Vórtice', tagline: 'Convirtiendo ideas en movimiento' },
-  { kind: 'aurora', name: 'Aurora', tagline: 'Ilumina nuevos caminos' },
-  { kind: 'atlas', name: 'Atlas', tagline: 'Sostiene lo importante' },
-  { kind: 'nova', name: 'Nova', tagline: 'Acelera lo posible' },
-  { kind: 'lumen', name: 'Lumen', tagline: 'Da claridad a tus ideas' },
-  { kind: 'helix', name: 'Helix', tagline: 'Conecta, resuelve, evoluciona' },
-  { kind: 'prisma', name: 'Prisma', tagline: 'Convierte ideas en posibilidades' },
-  { kind: 'orion', name: 'Orión', tagline: 'Visión estratégica para ir más lejos' },
-  { kind: 'vega', name: 'Vega', tagline: 'Agilidad que crea impacto' },
-  { kind: 'eclipse', name: 'Eclipse', tagline: 'Explora lo que otros no ven' },
-  { kind: 'argo', name: 'Argo', tagline: 'Tu soporte en cada paso' },
-  { kind: 'solaria', name: 'Solaria', tagline: 'Energía para un futuro mejor' },
-  { kind: 'nexo', name: 'Nexo', tagline: 'Une personas, ideas y resultados' },
-  { kind: 'astra', name: 'Astra', tagline: 'Da forma a lo extraordinario' },
-  { kind: 'lyra', name: 'Lyra', tagline: 'Armoniza ideas en soluciones' },
-  { kind: 'zenith', name: 'Zenith', tagline: 'Profundiza hoy para un mejor mañana' },
-  { kind: 'cobalto', name: 'Cobalto', tagline: 'Convierte desafíos en oportunidades' },
-  { kind: 'quasar', name: 'Quasar', tagline: 'Expande lo extraordinario' },
-  { kind: 'senda', name: 'Senda', tagline: 'Encuentra el camino ideal' },
-  { kind: 'orbita', name: 'Órbita', tagline: 'Mantiene todo en equilibrio' },
+  { kind: 'vortice', name: 'Vórtice', tagline: 'Rendimiento sin desperdicio', specialty: 'skill.performance', skills: ['performance', 'engineering'] },
+  { kind: 'aurora', name: 'Aurora', tagline: 'Experiencias claras y humanas', specialty: 'skill.product', skills: ['design', 'writing'] },
+  { kind: 'atlas', name: 'Atlas', tagline: 'Ingeniería sólida y precisa', specialty: 'skill.engineering', skills: ['engineering', 'performance'] },
+  { kind: 'nova', name: 'Nova', tagline: 'Investiga antes de concluir', specialty: 'skill.research', skills: ['research', 'data'] },
+  { kind: 'lumen', name: 'Lumen', tagline: 'Convierte complejidad en claridad', specialty: 'skill.knowledge', skills: ['research', 'writing', 'data'] },
+  { kind: 'helix', name: 'Helix', tagline: 'Conecta sistemas y resuelve interfaces', specialty: 'skill.integration', skills: ['integration', 'engineering', 'automation'] },
+  { kind: 'prisma', name: 'Prisma', tagline: 'Encuentra patrones en los datos', specialty: 'skill.data', skills: ['data', 'design'] },
+  { kind: 'orion', name: 'Orión', tagline: 'Prueba lo que otros dan por hecho', specialty: 'skill.testing', skills: ['testing', 'quality'] },
+  { kind: 'vega', name: 'Vega', tagline: 'Diseño que convierte intención en experiencia', specialty: 'skill.design', skills: ['design'] },
+  { kind: 'eclipse', name: 'Eclipse', tagline: 'Busca fallos antes de que lleguen al usuario', specialty: 'skill.risk', skills: ['security', 'quality', 'testing'] },
+  { kind: 'argo', name: 'Argo', tagline: 'Recupera, acompaña y desbloquea', specialty: 'skill.recovery', skills: ['general', 'testing', 'browser'] },
+  { kind: 'solaria', name: 'Solaria', tagline: 'Automatiza y despliega con control', specialty: 'skill.automation', skills: ['automation', 'integration'] },
+  { kind: 'nexo', name: 'Nexo', tagline: 'Coordina personas, agentes y objetivos', specialty: 'skill.orchestration', skills: ['orchestration', 'integration'] },
+  { kind: 'astra', name: 'Astra', tagline: 'Convierte metas en arquitectura y plan', specialty: 'skill.planning', skills: ['planning', 'orchestration'] },
+  { kind: 'lyra', name: 'Lyra', tagline: 'Comunica con precisión', specialty: 'skill.writing', skills: ['writing', 'general'] },
+  { kind: 'zenith', name: 'Zenith', tagline: 'Juzga calidad con criterio independiente', specialty: 'skill.quality', skills: ['quality', 'security'] },
+  { kind: 'cobalto', name: 'Cobalto', tagline: 'Protege superficies y límites', specialty: 'skill.security', skills: ['security', 'quality'] },
+  { kind: 'quasar', name: 'Quasar', tagline: 'Profundiza en problemas difíciles', specialty: 'skill.analysis', skills: ['research', 'data', 'planning'] },
+  { kind: 'senda', name: 'Senda', tagline: 'Navega, busca y encuentra evidencia', specialty: 'skill.browser', skills: ['browser', 'research'] },
+  { kind: 'orbita', name: 'Órbita', tagline: 'Mantiene runtime, tareas y operaciones en curso', specialty: 'skill.runtime', skills: ['automation', 'orchestration', 'performance'] },
 ] as const
 
 const COLLAPSE_KEY = 'dsh.kira-teams.collapsed'
@@ -83,61 +90,95 @@ export function activityOf(summary: SessionSummary): SubagentActivityProjection 
   return summary.projectionValues?.subagentActivity
 }
 
-function rosterIndexOf(agentId: string): number {
-  return stableAgentIndex(agentId, KIRA_ROSTER.length)
+function normalizedWorkText(summary: SessionSummary): string {
+  return [
+    summary.projectionValues?.subagent?.label ?? '',
+    summary.displayTitle ?? '',
+  ].join(' ').trim().toLocaleLowerCase()
+}
+
+/** Infer the capability the task actually needs from its explicit subagent label/title. */
+export function skillOf(summary: SessionSummary): AgentSkill {
+  const text = normalizedWorkText(summary)
+  if (/\b(playtest|play-test|qa|tester|testing|tests?|pruebas?|probar|validaci[oó]n|gameplay test)\b/u.test(text)) return 'testing'
+  if (/\b(design|designer|creative|creatividad|diseñ|disen|ui|ux|visual|art|artist|asset|sprite|avatar|animation|animaci[oó]n|layout)\b/u.test(text)) return 'design'
+  if (/\b(security|secure|vulnerab|threat|risk|riesgo|seguridad|permission|authz|hardening|attack)\b/u.test(text)) return 'security'
+  if (/\b(deploy|deployment|release|automation|automatiz|scheduler|schedule|workflow|ci\/?cd|pipeline|background task)\b/u.test(text)) return 'automation'
+  if (/\b(data|datos|sql|database|analytics|an[aá]lisis de datos|chart|metric|estad[ií]stic|dataset)\b/u.test(text)) return 'data'
+  if (/\b(connector|integration|integraci[oó]n|mcp|oauth|api|webhook|adapter|provider)\b/u.test(text)) return 'integration'
+  if (/\b(browser|web search|search web|chrome|chromedriver|playwright|puppeteer|navegar|b[uú]squeda web|scrap)\b/u.test(text)) return 'browser'
+  if (/\b(performance|optimi[sz]|latency|speed|memory|throughput|profil|rendimiento|velocidad)\b/u.test(text)) return 'performance'
+  if (/\b(document|docs|documentation|write|writer|copy|redact|traduc|translation|readme|manual)\b/u.test(text)) return 'writing'
+  if (/\b(architect|architecture|plan|planner|planning|strategy|estrateg|roadmap|diseño t[eé]cnico)\b/u.test(text)) return 'planning'
+  if (/\b(juez|judge|reviewer|review|revisor|revisi[oó]n|quality|calidad|auditor|adversarial)\b/u.test(text)) return 'quality'
+  if (/\b(supervisor|supervise|orchestrator|orchestrate|coordinator|coordinate|lead|manager|director|supervisar|coordinar|orquestar)\b/u.test(text)) return 'orchestration'
+  if (/\b(code|coding|coder|developer|engineer|debug|fix|repair|implement|programmer|programador|desarrollador|c[oó]digo|arreglar|reparar|depurar|implementar|typescript|javascript|python)\b/u.test(text)) return 'engineering'
+  if (/\b(investig|research|researcher|referencia|references|evidence|evidencia|literature|benchmark)\b/u.test(text)) return 'research'
+  return 'general'
+}
+
+const SKILL_POOLS: Readonly<Record<AgentSkill, readonly ModelAvatarKind[]>> = {
+  orchestration: ['nexo', 'astra', 'orbita'],
+  quality: ['zenith', 'eclipse', 'cobalto'],
+  engineering: ['atlas', 'helix', 'vortice'],
+  testing: ['orion', 'eclipse', 'argo'],
+  research: ['nova', 'quasar', 'lumen'],
+  design: ['vega', 'aurora', 'prisma'],
+  automation: ['solaria', 'orbita', 'helix'],
+  data: ['prisma', 'quasar', 'lumen'],
+  security: ['cobalto', 'eclipse', 'zenith'],
+  integration: ['helix', 'nexo', 'solaria'],
+  planning: ['astra', 'nexo', 'quasar'],
+  performance: ['vortice', 'atlas', 'orbita'],
+  browser: ['senda', 'argo', 'vortice'],
+  writing: ['lyra', 'lumen', 'aurora'],
+  general: ['argo', 'lumen', 'senda', 'astra', 'lyra'],
+}
+
+const ROSTER_BY_KIND = new Map(KIRA_ROSTER.map(entry => [entry.kind, entry] as const))
+
+function specialistFor(summary: SessionSummary, occupied: ReadonlySet<ModelAvatarKind>): KiraRosterEntry {
+  const skill = skillOf(summary)
+  for (const kind of SKILL_POOLS[skill]) {
+    const entry = ROSTER_BY_KIND.get(kind)
+    if (entry !== undefined && !occupied.has(kind)) return entry
+  }
+  for (const entry of KIRA_ROSTER) {
+    if (!occupied.has(entry.kind) && entry.skills.includes(skill)) return entry
+  }
+  for (const entry of KIRA_ROSTER) {
+    if (!occupied.has(entry.kind)) return entry
+  }
+  return KIRA_ROSTER[0]!
 }
 
 export function agentNameOf(summary: SessionSummary): string {
-  return KIRA_ROSTER[rosterIndexOf(String(summary.id))]?.name ?? 'Vigía'
+  return specialistFor(summary, new Set()).name
 }
 
-/** Legacy board expansion retained for API compatibility; the dock no longer renders it. */
+/** Legacy board expansion retained for API compatibility; active slots use skill-selected specialists. */
 export function rosterCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
   const cards: KiraRosterCard[] = KIRA_ROSTER.map(entry => ({ ...entry }))
-  const occupied = new Set<number>()
-
+  const occupied = new Set<ModelAvatarKind>()
   for (const row of rows) {
-    if (occupied.size >= cards.length) break
-    const preferred = rosterIndexOf(String(row.summary.id))
-    let slot = preferred
-    for (let offset = 0; offset < cards.length; offset += 1) {
-      const candidate = (preferred + offset) % cards.length
-      if (!occupied.has(candidate)) {
-        slot = candidate
-        break
-      }
-    }
-    occupied.add(slot)
-    const card = cards[slot]
-    if (card === undefined) continue
-    cards[slot] = { ...card, summary: row.summary, depth: row.depth }
+    const identity = specialistFor(row.summary, occupied)
+    occupied.add(identity.kind)
+    const slot = cards.findIndex(card => card.kind === identity.kind)
+    if (slot >= 0) cards[slot] = { ...identity, summary: row.summary, depth: row.depth }
   }
-
   return cards
 }
 
-/** Render one card per live subagent while keeping deterministic portrait identity. */
+/** Render one card per live subagent, assigning identity from the capability actually requested. */
 export function liveCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
-  const occupied = new Set<number>()
+  const occupied = new Set<ModelAvatarKind>()
   const cards: KiraRosterCard[] = []
-
   for (const row of rows) {
     if (occupied.size >= KIRA_ROSTER.length) break
-    const preferred = rosterIndexOf(String(row.summary.id))
-    let slot = preferred
-    for (let offset = 0; offset < KIRA_ROSTER.length; offset += 1) {
-      const candidate = (preferred + offset) % KIRA_ROSTER.length
-      if (!occupied.has(candidate)) {
-        slot = candidate
-        break
-      }
-    }
-    occupied.add(slot)
-    const identity = KIRA_ROSTER[slot]
-    if (identity === undefined) continue
+    const identity = specialistFor(row.summary, occupied)
+    occupied.add(identity.kind)
     cards.push({ ...identity, summary: row.summary, depth: row.depth })
   }
-
   return cards
 }
 
@@ -156,23 +197,23 @@ function normalizedAgentLabel(summary: SessionSummary): string {
 }
 
 export function agentRoleKeyOf(summary: SessionSummary): KiraTeamsKey {
-  const label = normalizedAgentLabel(summary)
-  if (/\b(juez|judge|reviewer|review|revisor|revisión|revision|quality|calidad|auditor)\b/u.test(label)) {
-    return 'role.judge'
+  switch (skillOf(summary)) {
+    case 'quality': return 'role.judge'
+    case 'orchestration': return 'role.supervisor'
+    case 'engineering': return 'role.coder'
+    case 'testing': return 'role.tester'
+    case 'research': return 'role.researcher'
+    case 'design': return 'role.designer'
+    case 'automation': return 'role.automation'
+    case 'data': return 'role.data'
+    case 'security': return 'role.security'
+    case 'integration': return 'role.integration'
+    case 'planning': return 'role.planner'
+    case 'performance': return 'role.performance'
+    case 'browser': return 'role.browser'
+    case 'writing': return 'role.writer'
+    default: return 'role.agent'
   }
-  if (/\b(supervisor|supervise|supervising|orchestrator|orchestrate|coordinator|coordinate|lead|manager|director|supervisar|coordinar|orquestar)\b/u.test(label)) {
-    return 'role.supervisor'
-  }
-  if (/\b(code|coding|coder|developer|engineer|debug|debugger|fix|fixing|repair|implement|implementation|programmer|programador|desarrollador|código|codigo|arreglar|reparar|depurar|implementar)\b/u.test(label)) {
-    return 'role.coder'
-  }
-  if (/\b(qa|test|tests|tester|testing|prueba|pruebas|probar|validación|validacion)\b/u.test(label)) {
-    return 'role.tester'
-  }
-  if (/\b(investigador|investigadora|investigar|research|researcher|referencia|referencias|reference|references)\b/u.test(label)) {
-    return 'role.researcher'
-  }
-  return 'role.agent'
 }
 
 export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
@@ -192,12 +233,21 @@ export function activityKeyOf(summary: SessionSummary): KiraTeamsKey {
 export function performanceKeyOf(summary: SessionSummary): KiraTeamsKey {
   if (summary.pendingInteraction !== undefined) return 'activity.waiting'
   if (!summary.running) return 'activity.done'
-  switch (agentRoleKeyOf(summary)) {
-    case 'role.judge': return 'performance.judging'
-    case 'role.supervisor': return 'performance.supervising'
-    case 'role.coder': return 'performance.coding'
-    case 'role.tester': return 'performance.testing'
-    case 'role.researcher': return 'performance.researching'
+  switch (skillOf(summary)) {
+    case 'quality': return 'performance.judging'
+    case 'orchestration': return 'performance.supervising'
+    case 'engineering': return 'performance.coding'
+    case 'testing': return 'performance.testing'
+    case 'research': return 'performance.researching'
+    case 'design': return 'performance.designing'
+    case 'automation': return 'performance.automating'
+    case 'data': return 'performance.analyzing'
+    case 'security': return 'performance.securing'
+    case 'integration': return 'performance.integrating'
+    case 'planning': return 'performance.planning'
+    case 'performance': return 'performance.optimizing'
+    case 'browser': return 'performance.browsing'
+    case 'writing': return 'performance.writing'
     default: return activityKeyOf(summary)
   }
 }
@@ -251,40 +301,30 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
   const summary = card.summary
   if (summary === undefined) return null
 
-  const roleKey = agentRoleKeyOf(summary)
   const actionKey = activityKeyOf(summary)
   const performanceKey = performanceKeyOf(summary)
-  const hasSpecificDuty = roleKey !== 'role.agent'
 
   return (
     <>
-      <ModelActivityAvatar
-        kind={card.kind}
-        activity={activityOf(summary)}
-        running={summary.running}
-        pending={summary.pendingInteraction !== undefined}
-        variant="card"
-      />
-      <span className={css.agentCopy}>
-        <span className={css.agentHeading}>
+      <span className={css.agentTop}>
+        <ModelActivityAvatar
+          kind={card.kind}
+          activity={activityOf(summary)}
+          running={summary.running}
+          pending={summary.pendingInteraction !== undefined}
+          variant="card"
+        />
+        <span className={css.agentIdentity}>
           <span className={css.agentName}>{card.name}</span>
-          <span className={css.role}>
-            <span>{t('role.agent')}</span>
-            {hasSpecificDuty && (
-              <>
-                <span className={css.roleSeparator} aria-hidden="true"> · </span>
-                <span className={css.roleDuty}>{t(roleKey)}</span>
-              </>
-            )}
-          </span>
+          <span className={css.role}>{t(card.specialty)}</span>
         </span>
+      </span>
+      <span className={css.agentAction}>
         <span className={css.statusLine} data-activity={actionKey}>
           <span className={css.statusDot} aria-hidden="true" />
           <span className={css.activity}>{t(actionKey)}</span>
         </span>
-        <span className={css.tagline}>
-          {hasSpecificDuty ? t(performanceKey) : card.tagline}
-        </span>
+        <span className={css.tagline}>{t(performanceKey)}</span>
       </span>
     </>
   )
@@ -394,6 +434,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
             const roleKey = agentRoleKeyOf(summary)
             const actionKey = activityKeyOf(summary)
             const performanceKey = performanceKeyOf(summary)
+            const skill = skillOf(summary)
             return (
               <button
                 key={String(summary.id)}
@@ -407,6 +448,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
                 data-agent-kind={card.kind}
                 data-agent-id={String(summary.id)}
                 data-agent-role={roleKey}
+                data-agent-skill={skill}
                 data-agent-activity={actionKey}
                 data-agent-performance={performanceKey}
                 title={summary.displayTitle}
