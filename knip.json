@@ -683,6 +683,11 @@
       "project": [
         "src/**/*.ts"
       ]
+    },
+    "packages/voice/voice": {
+      "ignoreDependencies": [
+        "zod"
+      ]
     }
   }
 }
