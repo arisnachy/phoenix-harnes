@@ -31,12 +31,9 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-}
-
-/* Keep a floating KIRA card from changing the perceived chat axis when the
-   left sidebar expands. This is paint-only compensation: the center column
-   keeps 100% of its usable width and no full-height rail is reserved. */
-.centerCol:has(> [data-shell-overlay] [data-kira-teams]) {
+  /* Keep the chat on the same viewport axis as the collapsed sidebar.
+     Do not gate this through :has(): slot wrappers can make that selector
+     miss KIRA even while the floating card is visible. */
   --dsh-chat-floating-overlay-axis-shift: var(--dsh-overlay-stable-chat-axis-offset, 0px);
 }
 
