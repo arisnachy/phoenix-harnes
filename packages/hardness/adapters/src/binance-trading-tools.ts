@@ -29,20 +29,19 @@ function jsonRecord(value: unknown): Record<string, JsonValue> {
   if (snapshot === undefined || snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
     throw new Error('Binance tool produced a non-object JSON result')
   }
-  return snapshot
+  const record: Record<string, JsonValue> = {}
+  for (const [key, item] of Object.entries(snapshot)) {
+    const normalized = snapshotJsonValue(item)
+    if (normalized === undefined) throw new Error(`Binance tool field ${key} is not lossless JSON`)
+    record[key] = normalized
+  }
+  return record
 }
 
 function jsonRecordArray(value: unknown): Record<string, JsonValue>[] {
   const snapshot = snapshotJsonValue(value)
   if (!Array.isArray(snapshot)) throw new Error('Binance tool produced a non-array JSON result')
-  const records: Record<string, JsonValue>[] = []
-  for (const item of snapshot) {
-    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-      throw new Error('Binance tool produced a non-object journal entry')
-    }
-    records.push(item)
-  }
-  return records
+  return snapshot.map(item => jsonRecord(item))
 }
 
 function accountSummary(account: Awaited<ReturnType<BinancePaperBroker['account']>>): string {
