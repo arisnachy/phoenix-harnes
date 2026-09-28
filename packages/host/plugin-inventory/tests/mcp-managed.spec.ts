@@ -106,6 +106,41 @@ describe('ManagedMcpController', () => {
     expect(live.create).toHaveBeenCalledTimes(1)
   })
 
+  it('installs and removes only the pinned official Binance Agent OS connector', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    await expect(controller.installBinanceAgentOs()).resolves.toEqual({
+      status: 'installed',
+      connector: {
+        entryId: 'live-entry-id',
+        serverName: 'binance-agent-os',
+        url: 'https://agent.binance.com/mcp/agentic',
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: {
+        transport: 'streamable-http',
+        serverName: 'binance-agent-os',
+        url: 'https://agent.binance.com/mcp/agentic',
+        headers: {},
+        oauth: true,
+      },
+    })
+    await expect(controller.installBinanceAgentOs()).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { serverName: 'binance-agent-os' },
+    })
+    expect(live.create).toHaveBeenCalledTimes(1)
+
+    await expect(controller.removeBinanceAgentOs()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledWith('live-entry-id')
+    await expect(controller.snapshot()).resolves.toEqual([])
+    await expect(controller.removeBinanceAgentOs()).resolves.toBe(false)
+  })
+
   it('retires a legacy managed Jev row without touching other managed MCPs', async () => {
     const patchPath = tempPatch()
     mkdirSync(dirname(patchPath), { recursive: true })
