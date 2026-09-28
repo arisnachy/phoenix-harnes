@@ -21,11 +21,17 @@ function keyOf(config: RealityContextConfig): string {
   })
 }
 
+/** Reference-counted lease over a shared reality-context engine. */
 export interface RealityContextLease {
   readonly engine: RealityContextEngine
   release(): void
 }
 
+/**
+ * Acquire the process-shared reality engine for one normalized configuration.
+ * @param config - Environment and refresh settings that identify the shared engine.
+ * @returns Reference-counted lease whose release stops the final shared engine.
+ */
 export function acquireRealityContext(config: RealityContextConfig): RealityContextLease {
   const key = keyOf(config)
   let entry = shared.get(key)
