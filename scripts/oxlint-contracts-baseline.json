@@ -1,0 +1,354 @@
+{
+  "version": 1,
+  "total": 338,
+  "files": {
+    "packages/guard/quality-policy/src/index.ts": {
+      "@stylistic(max-len)": 7,
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/client/ui-model-selection/src/client/service.ts": {
+      "typescript(no-non-null-assertion)": 1
+    },
+    "packages/mcp/mcp-client/src/index.ts": {
+      "eslint(prefer-const)": 1,
+      "typescript(unbound-method)": 1
+    },
+    "packages/client/ui-conversation/src/client/chat/GenerativeUi.tsx": {
+      "@stylistic(max-len)": 3,
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/client/ui-conversation/src/client/chat/PhoenixVisualizer.tsx": {
+      "typescript(no-non-null-assertion)": 4,
+      "@stylistic(max-len)": 6,
+      "typescript(restrict-plus-operands)": 17,
+      "typescript(no-unsafe-return)": 1,
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "apps/cli/tests/blender-mcp-config.spec.ts": {
+      "__parser__": 1
+    },
+    "packages/client/ui-settings-models/src/client/PhoenixLocalPanel.tsx": {
+      "typescript(no-non-null-assertion)": 1
+    },
+    "packages/client/ui-settings-models/src/client/AuthorizationPanel.tsx": {
+      "@stylistic(max-len)": 2,
+      "typescript(no-base-to-string)": 1,
+      "typescript(use-unknown-in-catch-callback-variable)": 3,
+      "typescript(unbound-method)": 2
+    },
+    "packages/attachment/attachment/src/index.ts": {
+      "@stylistic(max-len)": 1
+    },
+    "packages/attachment/attachment/src/types.ts": {
+      "@stylistic(max-len)": 1
+    },
+    "packages/client/ui-kira-teams/src/client/KiraTeamsDock.tsx": {
+      "@stylistic(max-len)": 2
+    },
+    "packages/client/ui-subagent/src/client/completion-verifier-visibility.ts": {
+      "typescript(no-dynamic-delete)": 1,
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/host/apiproxy/src/api-proxy.ts": {
+      "typescript(no-non-null-assertion)": 2
+    },
+    "packages/host/plugin-inventory/src/local-model/node-runtime.ts": {
+      "eslint(no-unused-expressions)": 1,
+      "typescript(no-unnecessary-condition)": 2
+    },
+    "packages/host/plugin-inventory/src/local-model/manager.ts": {
+      "@stylistic(max-len)": 2,
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/llm/llm-deepseek/src/adapter.ts": {
+      "@stylistic(max-len)": 1
+    },
+    "packages/llm/llm-pi-ai/src/config.ts": {
+      "@stylistic(max-len)": 1
+    },
+    "packages/llm/llm-pi-ai/src/provider.ts": {
+      "typescript(no-dynamic-delete)": 1
+    },
+    "packages/llm/llm-pi-ai/src/opencode-free.ts": {
+      "typescript(no-non-null-assertion)": 1
+    },
+    "packages/llm/llm-pi-ai/tests/builtin-routes-loader.spec.ts": {
+      "eslint(no-unused-expressions)": 1
+    },
+    "packages/hardness/hardness/src/cognitive-workflow.ts": {
+      "typescript(no-non-null-assertion)": 1
+    },
+    "packages/hardness/hardness/tests/cognitive-workflow.spec.ts": {
+      "@stylistic(max-len)": 4
+    },
+    "packages/hardness/adapters/src/reality-context.ts": {
+      "typescript(no-non-null-assertion)": 1,
+      "typescript(unbound-method)": 4,
+      "typescript(no-unsafe-assignment)": 5,
+      "typescript(no-unnecessary-type-conversion)": 4,
+      "typescript(no-unnecessary-type-parameters)": 1,
+      "typescript(no-base-to-string)": 1,
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/goal/tool-goal/src/verification-contract.ts": {
+      "@stylistic(max-len)": 5
+    },
+    "packages/hardness/adapters/src/ordinary-completion-judge.ts": {
+      "@stylistic(max-len)": 4,
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/hardness/adapters/src/binance-paper.ts": {
+      "typescript(no-dynamic-delete)": 1
+    },
+    "packages/hardness/adapters/src/wake-engine.ts": {
+      "typescript(no-non-null-assertion)": 1,
+      "typescript(no-unnecessary-condition)": 1,
+      "typescript(no-base-to-string)": 10,
+      "typescript(require-await)": 2
+    },
+    "packages/hardness/adapters/src/index.ts": {
+      "typescript(no-non-null-assertion)": 2,
+      "@stylistic(max-len)": 2
+    },
+    "packages/hardness/adapters/src/quality-contract.ts": {
+      "@stylistic(max-len)": 1
+    },
+    "packages/hardness/adapters/src/proactivity-tools.ts": {
+      "typescript(no-non-null-assertion)": 1
+    },
+    "packages/hardness/adapters/src/mission-telemetry.ts": {
+      "@stylistic(max-len)": 2
+    },
+    "packages/hardness/adapters/src/proactivity-engine.ts": {
+      "typescript(no-non-null-assertion)": 2,
+      "typescript(require-await)": 2,
+      "typescript(return-await)": 1
+    },
+    "packages/hardness/adapters/tests/proactivity-concurrency.spec.ts": {
+      "eslint(prefer-const)": 1
+    },
+    "packages/subagent/tool-subagent/tests/tool-subagent.spec.ts": {
+      "typescript(no-invalid-void-type)": 2
+    },
+    "packages/session-learning/tool-session-learning/src/adaptive.ts": {
+      "@stylistic(max-len)": 2,
+      "typescript(no-unnecessary-type-conversion)": 1,
+      "typescript(no-unsafe-assignment)": 1
+    },
+    "packages/session-learning/tool-session-learning/src/task-reference.ts": {
+      "@stylistic(max-len)": 1
+    },
+    "packages/session-learning/tool-session-learning/src/autonomous-curator.ts": {
+      "@stylistic(max-len)": 3
+    },
+    "packages/core/agent/src/runtime-types.ts": {
+      "@stylistic(max-len)": 1
+    },
+    "packages/core/agent/src/model-selection.ts": {
+      "@stylistic(max-len)": 7,
+      "sonarjs(duplicates-in-character-class)": 1
+    },
+    "packages/core/tools/src/index.ts": {
+      "@stylistic(max-len)": 2
+    },
+    "packages/host/plugin-inventory/src/local-model/download.ts": {
+      "typescript(no-unsafe-argument)": 1
+    },
+    "packages/host/plugin-inventory/src/mcp-managed.ts": {
+      "typescript(no-unsafe-assignment)": 1,
+      "typescript(require-await)": 1
+    },
+    "packages/host/plugin-inventory/src/index.ts": {
+      "typescript(require-await)": 1
+    },
+    "packages/voice/voice/src/index.ts": {
+      "typescript(require-await)": 2,
+      "typescript(no-unnecessary-condition)": 1,
+      "typescript(only-throw-error)": 1
+    },
+    "packages/client/ui-model-selection/src/client/directory.ts": {
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/e2b/e2b/src/index.ts": {
+      "typescript(no-unnecessary-condition)": 1,
+      "typescript(no-deprecated)": 1
+    },
+    "packages/session-learning/tool-session-learning/src/procedural.ts": {
+      "typescript(no-unsafe-argument)": 1,
+      "typescript(no-unnecessary-type-conversion)": 1
+    },
+    "packages/session-learning/tool-session-learning/src/index.ts": {
+      "typescript(no-unnecessary-type-conversion)": 1
+    },
+    "packages/session/session-learning/src/index.ts": {
+      "typescript(require-await)": 1,
+      "typescript(no-unnecessary-type-conversion)": 1
+    },
+    "packages/llm/llm-pi-ai/src/codex-discovery.ts": {
+      "typescript(no-base-to-string)": 2
+    },
+    "packages/llm/llm-pi-ai/src/codex-tool-schema.ts": {
+      "typescript(no-unnecessary-condition)": 3
+    },
+    "packages/llm/llm-pi-ai/src/context.ts": {
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/voice/voice-local/src/natural.ts": {
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/mcp/mcp-client/src/transport.ts": {
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/client/ui-settings-models/src/client/DeepSeekOnboardingDialog.tsx": {
+      "typescript(no-unnecessary-condition)": 3
+    },
+    "packages/shell/tool-pwsh/src/computer.ts": {
+      "typescript(no-base-to-string)": 2,
+      "typescript(prefer-promise-reject-errors)": 3
+    },
+    "packages/goal/tool-goal/src/judge.ts": {
+      "typescript(prefer-promise-reject-errors)": 1
+    },
+    "packages/goal/tool-goal/src/completion-gate.ts": {
+      "typescript(prefer-promise-reject-errors)": 1
+    },
+    "packages/client/ui-settings-profile/src/client/profile-controller.ts": {
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/client/ui-workspace/tests/cordis-visual-workspace.client.spec.ts": {
+      "typescript(unbound-method)": 8
+    },
+    "packages/client/ui-kira-teams/tests/kira-compact-layout.client.spec.tsx": {
+      "typescript(no-unsafe-assignment)": 2,
+      "typescript(no-unsafe-member-access)": 8,
+      "typescript(no-unsafe-call)": 1
+    },
+    "packages/client/ui-kira-teams/tests/kira-reference-board.client.spec.tsx": {
+      "typescript(no-unsafe-assignment)": 4,
+      "typescript(no-unsafe-member-access)": 12,
+      "typescript(no-unsafe-call)": 2
+    },
+    "packages/client/ui-kira-teams/tests/model-activity-avatar.client.spec.tsx": {
+      "typescript(no-unsafe-assignment)": 3,
+      "typescript(no-unsafe-member-access)": 9,
+      "typescript(no-unsafe-call)": 2
+    },
+    "packages/client/ui-settings-models/tests/authorization-popup.client.spec.tsx": {
+      "typescript(unbound-method)": 1
+    },
+    "packages/client/ui-settings-models/tests/connectors-section.client.spec.tsx": {
+      "typescript(unbound-method)": 1
+    },
+    "scripts/client-bundle-purity.spec.ts": {
+      "typescript(no-redundant-type-constituents)": 1
+    },
+    "packages/core/tools/tests/tools.spec.ts": {
+      "typescript(no-base-to-string)": 1
+    },
+    "packages/hardness/adapters/tests/binance-trading-tools.spec.ts": {
+      "typescript(no-unsafe-assignment)": 1
+    },
+    "packages/hardness/adapters/tests/cognitive-workflow-mode.spec.ts": {
+      "typescript(no-unsafe-assignment)": 2
+    },
+    "packages/hardness/adapters/tests/cognitive-workflow-tool.spec.ts": {
+      "typescript(no-unsafe-assignment)": 3
+    },
+    "packages/hardness/adapters/tests/connector-install-tool.spec.ts": {
+      "typescript(no-unsafe-assignment)": 1
+    },
+    "packages/hardness/adapters/tests/mission-orchestrator.spec.ts": {
+      "typescript(no-unsafe-assignment)": 1
+    },
+    "packages/hardness/adapters/tests/ordinary-completion-judge.spec.ts": {
+      "typescript(no-unsafe-assignment)": 1
+    },
+    "packages/hardness/adapters/tests/reality-context.spec.ts": {
+      "typescript(no-unsafe-assignment)": 5
+    },
+    "packages/hardness/adapters/tests/wake-runtime.spec.ts": {
+      "typescript(no-unsafe-assignment)": 4,
+      "typescript(no-unsafe-member-access)": 4
+    },
+    "packages/host/plugin-inventory/tests/local-model-manager.spec.ts": {
+      "typescript(no-unsafe-assignment)": 2,
+      "typescript(no-unsafe-member-access)": 2,
+      "typescript(unbound-method)": 11,
+      "typescript(no-unnecessary-type-conversion)": 1
+    },
+    "packages/host/plugin-inventory/tests/local-model-runtime-exit.regression.spec.ts": {
+      "typescript(no-unsafe-assignment)": 3,
+      "typescript(no-unsafe-member-access)": 2
+    },
+    "packages/host/plugin-inventory/tests/mcp-managed.spec.ts": {
+      "typescript(no-unsafe-assignment)": 3
+    },
+    "packages/mcp/mcp-client/tests/mcp-client.spec.ts": {
+      "typescript(no-unsafe-assignment)": 1,
+      "typescript(await-thenable)": 6
+    },
+    "packages/session/session-checkpoint-policy/tests/rewind.spec.ts": {
+      "typescript(no-unsafe-assignment)": 4
+    },
+    "scripts/generate-typert.ts": {
+      "typescript(unbound-method)": 1
+    },
+    "scripts/phoenix-prepared-restart-bridge.spec.ts": {
+      "typescript(no-unsafe-assignment)": 1
+    },
+    "scripts/tsdown-performance.ts": {
+      "typescript(no-unsafe-argument)": 1
+    },
+    "packages/subagent/subagent-codex/src/account.ts": {
+      "typescript(no-redundant-type-constituents)": 1
+    },
+    "packages/client/ui-conversation/src/client/input/facade.ts": {
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/client/ui-conversation/src/client/speech-output.ts": {
+      "typescript(no-unnecessary-condition)": 2
+    },
+    "packages/client/ui-conversation/src/client/chat/ChatView.tsx": {
+      "typescript(no-base-to-string)": 1
+    },
+    "packages/client/ui-conversation/src/client/chat/HardnessArtifactBody.tsx": {
+      "typescript(no-unsafe-assignment)": 1,
+      "typescript(no-unnecessary-condition)": 2
+    },
+    "packages/subagent/subagent-in-process-driver/src/index.ts": {
+      "typescript(no-unnecessary-condition)": 2
+    },
+    "packages/client/ui-workspace/src/client/CordisVisualWorkspace.tsx": {
+      "typescript(unbound-method)": 6
+    },
+    "packages/client/runtime/src/client/location.ts": {
+      "typescript(no-unnecessary-condition)": 2
+    },
+    "packages/hardness/adapters/src/cognitive-workflow-tool.ts": {
+      "typescript(require-await)": 1
+    },
+    "packages/hardness/adapters/src/mission-local-judge.ts": {
+      "typescript(require-await)": 1
+    },
+    "packages/hardness/adapters/src/mission-runtime.ts": {
+      "typescript(no-unnecessary-condition)": 1
+    },
+    "packages/hardness/adapters/src/initiative-context.ts": {
+      "typescript(unbound-method)": 1
+    },
+    "packages/hardness/adapters/src/wake-runtime.ts": {
+      "typescript(require-await)": 1,
+      "typescript(no-unsafe-argument)": 1
+    },
+    "packages/hardness/adapters/src/visualize-tool.ts": {
+      "typescript(no-unnecessary-type-conversion)": 3,
+      "typescript(require-await)": 1
+    },
+    "packages/core/living-local/src/bridge.ts": {
+      "typescript(no-unsafe-argument)": 1,
+      "typescript(use-unknown-in-catch-callback-variable)": 1,
+      "typescript(no-unnecessary-condition)": 2,
+      "typescript(require-await)": 1
+    }
+  }
+}
