@@ -32,5 +32,8 @@ describe('PHOENIX proactivity protocol', () => {
     expect(PROACTIVITY_PROTOCOL).toContain('stays silent while false or uncertain')
     expect(PROACTIVITY_PROTOCOL).toContain('no more often than hourly')
     expect(PROACTIVITY_PROTOCOL).toContain('event-driven connector or webhook')
+    expect(PROACTIVITY_PROTOCOL).toContain('do not claim the task is scheduled until a real recipient')
+    expect(PROACTIVITY_PROTOCOL).toContain('Never invent "the email associated with your account"')
+    expect(PROACTIVITY_PROTOCOL).toContain('dedicated Phoenix mail identity is optional')
   })
 })
