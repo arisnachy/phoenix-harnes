@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import {
+  isGameAssetDiscovery,
+  isGameAssetProduction,
+  isGameAssetProvenanceMutation,
   isSubstantiveMutation,
+  needsGameAssetPipeline,
   reviewOrdinaryCompletion,
   verificationKinds,
 } from '../src/ordinary-completion-judge.ts'
@@ -85,6 +89,23 @@ describe('ordinary completion judge', () => {
     expect(verificationKinds('pwsh', { command: 'godot --path . --headless' })).toContain('play')
   })
 
+  it('requires real asset scouting, production, and provenance for visual game work', () => {
+    expect(needsGameAssetPipeline('Create a high-quality Zelda-like 2D game')).toBe(true)
+    expect(needsGameAssetPipeline('Fix collision logic in this game')).toBe(false)
+
+    expect(isGameAssetDiscovery('web_search', { query: 'Kenney top-down RPG asset pack CC0' })).toBe(true)
+    expect(isGameAssetDiscovery('web_search', { query: 'TypeScript iterator bug' })).toBe(false)
+    expect(isGameAssetDiscovery('connector_discover', { query: 'OpenGameArt sprite packs' })).toBe(true)
+
+    expect(isGameAssetProduction('image_generation', { prompt: 'top-down hero sprite sheet' })).toBe(true)
+    expect(isGameAssetProduction('write', { path: 'assets/sprites/hero.png' })).toBe(true)
+    expect(isGameAssetProduction('write', { path: 'src/player.ts' })).toBe(false)
+    expect(isGameAssetProduction('mcp__blender__create_material', { object: 'Hero' })).toBe(true)
+
+    expect(isGameAssetProvenanceMutation('write', { path: 'asset-sourcing.json' })).toBe(true)
+    expect(isGameAssetProvenanceMutation('write', { path: 'src/game.ts' })).toBe(false)
+  })
+
   it('injects the premium game quality contract into ordinary game reviews', async () => {
     const dispose = vi.fn(async () => {})
     const start = vi.fn<SubagentRuntime['start']>(async () => ({
@@ -133,6 +154,9 @@ describe('ordinary completion judge', () => {
     expect(prompt).toMatch(/three independent evidence gates/i)
     expect(prompt).toMatch(/technical.*visual.*play/i)
     expect(prompt).toMatch(/baseline capture.*current build/i)
+    expect(prompt).toMatch(/asset-first scouting/i)
+    expect(prompt).toMatch(/candidate packs.*source\/license/i)
+    expect(prompt).toMatch(/asset-manifest\.json|asset-sourcing\.json/i)
     expect(prompt).toMatch(/image_generation backend=auto/i)
     expect(prompt).toMatch(/DOM\/CSS\/SVG\/canvas/i)
     expect(prompt).toMatch(/intro.*opening.*title sequence.*cutscene/i)
