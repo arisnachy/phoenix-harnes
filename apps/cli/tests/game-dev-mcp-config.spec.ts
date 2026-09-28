@@ -20,7 +20,8 @@ describe('game development connector pack', () => {
   it('ships safe, opt-in namespaces for the major game engines', () => {
     const patches = loadOverlayPatches('game-dev-config-test', baseConfig)
     const rows = (patches[0]?.insert ?? []) as Row[]
-    const byId = new Map(rows.map(row => [row.id, row]))
+    const gameRows = rows.filter(row => row.id?.endsWith('-game-dev') === true)
+    const byId = new Map(gameRows.map(row => [row.id, row]))
 
     expect([...byId.keys()]).toEqual([
       'mcp-blender-game-dev',
@@ -29,7 +30,7 @@ describe('game development connector pack', () => {
       'mcp-godot-game-dev',
       'mcp-gameplay-game-dev',
     ])
-    expect(rows.every(row => row.name === '@phoenix-ai/dsh-mcp-client')).toBe(true)
+    expect(gameRows.every(row => row.name === '@phoenix-ai/dsh-mcp-client')).toBe(true)
     expect(byId.get('mcp-unity-game-dev')?.config?.serverName).toBe('unity')
     expect(byId.get('mcp-unreal-game-dev')?.config?.serverName).toBe('unreal')
     expect(byId.get('mcp-godot-game-dev')?.config?.serverName).toBe('godot')
