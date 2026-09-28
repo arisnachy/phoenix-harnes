@@ -212,7 +212,7 @@ export function apply(ctx: Context): void {
       // generated codec is what validates them as JSON, and its rejection is a
       // bare field name — this is the only place that still knows which call it
       // belonged to, so the teaching has to be added here.
-      const answered = await ctx.remote.dynamicCordisRunner.invoke(pluginId, pluginRunId, method, args)
+      const answered = await ctx.remote.dynamicCordisRunner.invoke(pluginId, pluginRunId, method, args as JsonValue)
         .catch((error: unknown) => { throw new Error(wireFailure(pluginId, method, error)) })
       // Two failure layers, and they teach different things: the carrier's error
       // branch means the call never reached the host half, while the namespace's
