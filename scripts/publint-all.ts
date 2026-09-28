@@ -225,7 +225,7 @@ async function runPublint(target: PackageTarget): Promise<PublintResult> {
       status: 'failed',
       messages: [],
       closureViolations: [],
-      manifest: target.manifest as Record<string, unknown>,
+      manifest: target.manifest,
       failure: error instanceof Error ? error.message : String(error),
     }
   }
