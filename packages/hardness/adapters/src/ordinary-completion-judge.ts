@@ -70,6 +70,13 @@ const GAMEPLAY_VISUAL_ACTION = /(?:^|_)(?:capture|screenshot|snapshot|frame|insp
 // oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const GAME_NEED = /\b(?:game|games|gaming|juego|juegos|videogame|videojuego|godot|unity|unreal|blender|sprite|tileset|npc|enemy|character|pixel\s*art|2d|3d|retro|nes|snes|rpg|platformer|metroidvania|gameplay)\b/i
 const DIRECT_ASSET_MUTATION = /^(?:image_generation|audio_generation|generate_image|generate_audio)$/
+const GAME_ASSET_DISCOVERY_OP = /^(?:web_search|web_fetch|browser_search|browser_open|browser_navigate|connector_list|connector_discover)$/
+const GAME_ASSET_DISCOVERY_TEXT = /\b(?:kenney|opengameart|itch(?:\.io)?|quaternius|poly\s+haven|ambientcg|game\s+assets?|asset(?:\s|-)?packs?|sprite(?:\s|-)?sheets?|tilesets?|pixel\s+art|rpg\s+assets?|cc0|creative\s+commons|licen[cs]e)\b/i
+const GAME_ASSET_PATH = /(?:^|[\\/])(?:assets?|art|sprites?|tiles?|tilesets?|textures?|models?|audio|music|sfx|fonts?)[\\/][^"'\s]*\.(?:png|webp|jpe?g|gif|ase|aseprite|tmx|tres|blend1?|glb|gltf|fbx|obj|wav|ogg|mp3|flac|ttf|otf|woff2?)\b/i
+const GAME_ASSET_PROVENANCE = /\b(?:asset-manifest|asset-sourcing|licenses|credits)\.(?:json|md)\b/i
+const GAME_BUILD_ACTION = /\b(?:create|build|make|develop|design|crear|crea|construir|desarrollar|diseñar|diseña|hacer)\b/i
+const GAME_VISUAL_QUALITY = /\b(?:visual|graphics?|gr[aá]fic[oa]s?|arte|art|sprites?|tilesets?|characters?|personajes?|enemig(?:o|os)|enemy|enemies|npc|world|mundo|environment|entorno|ui|hud|vfx|audio|m[uú]sica|retro|nes|snes|genesis|pixel\s*art|bonit[oa]|beautiful|quality|calidad|premium|polish|pulir|presentaci[oó]n)\b/i
+const ORIGINAL_ASSET_REQUEST = /\b(?:original\s+assets?|original\s+art|arte\s+original|assets?\s+originales?|sprites?\s+originales?|desde\s+cero|from\s+scratch)\b/i
 // oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest|benchmark|tracemalloc)\b/i
 // oxlint-disable-next-line @stylistic/max-len -- Keep the game-runtime matcher auditable as one regex literal.
@@ -107,6 +114,9 @@ interface BridgeState {
   request: string
   mutations: string[]
   verifications: string[]
+  assetDiscoveryObserved: boolean
+  assetProductionObserved: boolean
+  assetProvenanceObserved: boolean
 }
 
 function operationName(toolName: string): string {
@@ -134,6 +144,64 @@ export function isSubstantiveMutation(name: string, args: unknown): boolean {
   if (GAME_EDITOR_NAMESPACE.test(normalizedName) && !GAME_EDITOR_READ_ONLY.test(op)) return true
   if (MUTATION.test(op)) return SUBSTANTIVE.test(text)
   return SHELL.test(op) && SHELL_MUTATE.test(text) && SUBSTANTIVE.test(text)
+}
+
+/**
+ * Recognize real asset-pack discovery rather than a generic web lookup.
+ * @param name - tool name.
+ * @param args - tool arguments containing the search query, URL, or connector target.
+ * @returns whether the call is evidence of game-asset discovery.
+ * @internal
+ */
+export function isGameAssetDiscovery(name: string, args: unknown): boolean {
+  return GAME_ASSET_DISCOVERY_OP.test(operationName(name)) && GAME_ASSET_DISCOVERY_TEXT.test(argumentText(args))
+}
+
+/**
+ * Recognize creation, import, or mutation of production game assets.
+ * @param name - tool name.
+ * @param args - tool arguments containing the produced/imported asset.
+ * @returns whether the call is evidence of real production-asset work.
+ * @internal
+ */
+export function isGameAssetProduction(name: string, args: unknown): boolean {
+  const normalizedName = name.toLowerCase().replaceAll('-', '_')
+  const op = operationName(name)
+  const text = argumentText(args)
+  if (DIRECT_ASSET_MUTATION.test(op)) return true
+  if (/(?:^|__|[.:/])(?:aseprite|tiled|blender)(?:__|[.:/])/i.test(normalizedName)
+    && !GAME_EDITOR_READ_ONLY.test(op)) return true
+  if (GAME_EDITOR_NAMESPACE.test(normalizedName)
+    && !GAME_EDITOR_READ_ONLY.test(op)
+    && /\b(?:asset|sprite|tile|texture|material|model|mesh|rig|anim|audio|sound|music|vfx|particle|shader|import)\b/i.test(op + ' ' + text)) return true
+  if ((MUTATION.test(op) || SHELL.test(op)) && GAME_ASSET_PATH.test(text)) return true
+  return false
+}
+
+/**
+ * Recognize durable source/license bookkeeping for the game asset pipeline.
+ * @param name - tool name.
+ * @param args - tool arguments containing manifest or credits paths.
+ * @returns whether provenance evidence was persisted.
+ * @internal
+ */
+export function isGameAssetProvenanceMutation(name: string, args: unknown): boolean {
+  const op = operationName(name)
+  return (MUTATION.test(op) || SHELL.test(op)) && GAME_ASSET_PROVENANCE.test(argumentText(args))
+}
+
+/**
+ * Decide whether the original request needs the visual asset pipeline.
+ * @param request - user request text.
+ * @returns whether game creation or visual-quality work is explicitly in scope.
+ * @internal
+ */
+export function needsGameAssetPipeline(request: string): boolean {
+  return GAME_NEED.test(request) && (GAME_BUILD_ACTION.test(request) || GAME_VISUAL_QUALITY.test(request))
+}
+
+function explicitlyRequestsOriginalAssets(request: string): boolean {
+  return ORIGINAL_ASSET_REQUEST.test(request)
 }
 
 type VerificationKind = 'technical' | 'visual' | 'play'
@@ -356,6 +424,9 @@ export function installOrdinaryCompletionJudgeBridge(
       request: requestText(message),
       mutations: [],
       verifications: [],
+      assetDiscoveryObserved: false,
+      assetProductionObserved: false,
+      assetProvenanceObserved: false,
     })
   }))
 
@@ -368,6 +439,12 @@ export function installOrdinaryCompletionJudgeBridge(
     if (exec.agent === undefined || result.isError || downstream.kind === 'block') return downstream
     const state = states.get(exec.agent)
     if (state === undefined) return downstream
+
+    if (needsGameAssetPipeline(state.request)) {
+      if (isGameAssetDiscovery(exec.name, exec.arguments)) state.assetDiscoveryObserved = true
+      if (isGameAssetProduction(exec.name, exec.arguments)) state.assetProductionObserved = true
+      if (isGameAssetProvenanceMutation(exec.name, exec.arguments)) state.assetProvenanceObserved = true
+    }
 
     if (isSubstantiveMutation(exec.name, exec.arguments)) {
       state.generation += 1
@@ -395,6 +472,17 @@ export function installOrdinaryCompletionJudgeBridge(
     if (state === undefined || state.generation === 0) return
     if (isGameDevelopmentNeed({ description: state.request })) {
       const missing: string[] = []
+      if (needsGameAssetPipeline(state.request)) {
+        if (!explicitlyRequestsOriginalAssets(state.request) && !state.assetDiscoveryObserved) {
+          missing.push('licensed asset-pack discovery with web_search/browser/connector evidence')
+        }
+        if (!state.assetProductionObserved) {
+          missing.push('real production asset import/generation instead of DOM/CSS/canvas primitives')
+        }
+        if (!state.assetProvenanceObserved) {
+          missing.push('asset-manifest.json or asset-sourcing.json provenance/license evidence')
+        }
+      }
       if (state.technicalVerifiedGeneration !== state.generation) missing.push('technical build/test/check evidence')
       if (state.visualVerifiedGeneration !== state.generation) missing.push('visual capture plus read_image/screenshot inspection')
       if (state.playVerifiedGeneration !== state.generation) missing.push('executed gameplay/playtest evidence')
@@ -403,7 +491,7 @@ export function installOrdinaryCompletionJudgeBridge(
         agent.steer(createUserMessage({
           content: [{
             type: 'text',
-            text: 'Game completion has three independent evidence gates after the latest mutation. Missing: ' + missing.join('; ') + '. A build/test cannot satisfy visual or play evidence, and a screenshot cannot substitute for actually playing the game. Run the current build/emulator, capture and inspect a fresh gameplay frame, and verify the player plus representative enemy and NPC/interactive actors. Primitive boxes/rectangles/capsules/debug shapes, dashboard-style placeholder UI, or unanimated provisional actors must be replaced before completion.',
+            text: 'Game completion requires an asset-production pipeline plus three independent evidence gates after the latest mutation. Missing: ' + missing.join('; ') + '. For visual game work, search and compare real licensed asset packs before drawing substitutes unless the user explicitly requires original assets; then import or generate real production assets and persist asset-manifest.json or asset-sourcing.json. A build/test cannot satisfy visual or play evidence, and a screenshot cannot substitute for actually playing the game. Run the current build/emulator, capture and inspect a fresh gameplay frame, and verify the player plus representative enemy and NPC/interactive actors. Primitive boxes/rectangles/capsules/debug shapes, dashboard-style placeholder UI, or unanimated provisional actors must be replaced before completion.',
           }],
           source: { kind: 'plugin', plugin: 'ordinary-completion-judge', form: 'notice', summary: 'game technical visual play verification required' },
         }))
