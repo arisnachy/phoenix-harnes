@@ -153,7 +153,7 @@ function specialistFor(summary: SessionSummary, occupied: ReadonlySet<ModelAvata
 }
 
 export function agentNameOf(summary: SessionSummary): string {
-  return specialistFor(summary, new Set()).name
+  return specialistFor(summary, new Set<ModelAvatarKind>()).name
 }
 
 /** Legacy board expansion retained for API compatibility; active slots use skill-selected specialists. */
