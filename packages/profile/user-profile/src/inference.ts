@@ -20,6 +20,9 @@ function escapeRegExp(value: string): string {
 /**
  * Infer presentation only from explicit preference statements or language clearly
  * addressed to Phoenix. Generic gender mentions about third parties never count.
+ * @param text - user-authored message to inspect.
+ * @param assistantName - current assistant name used to recognize direct address.
+ * @returns a conservative gender presentation inference, or undefined when evidence is insufficient.
  */
 export function inferAssistantGenderFromUserMessage(
   text: string,
