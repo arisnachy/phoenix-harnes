@@ -164,8 +164,6 @@ export interface Config {
   taskPollMs?: number
   /** Durable event-driven wake-trigger ledger. Empty/omitted uses ~/.dsh/phoenix-wake-triggers.json; :memory: is test-only. */
   wakeLedgerPath?: string
-  /** Persistent virtual Binance PAPER ledger. Empty/omitted uses ~/.dsh/phoenix-binance-paper.json. */
-  binancePaperLedgerPath?: string
   /** One-shot subagent provider used for private preparation and scheduled office work. */
   privateWorkProvider?: string
   /** Maximum retained characters from one private preparation result. */
@@ -185,7 +183,6 @@ export const Config: z<Config> = z.object({
   taskLedgerPath: z.string().default(''),
   taskPollMs: z.number().default(15_000),
   wakeLedgerPath: z.string().default(''),
-  binancePaperLedgerPath: z.string().default(''),
   privateWorkProvider: z.string().default('spawn'),
   privateWorkResultChars: z.number().default(12_000),
   userMailIdentity: z.string().default(''),
@@ -280,11 +277,8 @@ function wakeLedgerPath(config: Config): string {
     : join(homedir(), '.dsh', 'phoenix-wake-triggers.json')
 }
 
-function binancePaperLedgerPath(config: Config): string {
-  const configured = config.binancePaperLedgerPath?.trim()
-  return configured !== undefined && configured.length > 0
-    ? configured
-    : join(homedir(), '.dsh', 'phoenix-binance-paper.json')
+function binancePaperLedgerPath(): string {
+  return join(homedir(), '.dsh', 'phoenix-binance-paper.json')
 }
 
 /**
@@ -377,7 +371,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       for (const tool of createWakeTools(wake.engine)) {
         disposers.push(ctx.tools.register(tool))
       }
-      const binancePaper = new BinancePaperBroker(binancePaperLedgerPath(config))
+      const binancePaper = new BinancePaperBroker(binancePaperLedgerPath())
       for (const tool of createBinanceTradingTools({
         broker: binancePaper,
         approval,
