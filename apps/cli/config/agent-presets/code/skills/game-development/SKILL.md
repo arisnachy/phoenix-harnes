@@ -46,11 +46,13 @@ composición, densidad, lectura, animación, cámara y UI; crea assets, personaj
 
 ### Pipeline de herramientas primero, no primitivas de reemplazo
 
-Para arte 2D/raster, intenta primero `image_generation` con `backend=auto` cuando esté disponible y usa `read_image`
-para inspeccionar cada asset material antes de integrarlo. Para pixel art/tilesets, usa Aseprite/Tiled si están instalados
-o disponibles de forma segura; para 3D usa Blender y el pipeline nativo del motor; para audio usa el conector/generador
-autorizado disponible o síntesis procedural adecuada. Usa `connector_list` y `connector_discover` para encontrar la
-herramienta específica cuando no esté visible.
+Para arte 2D/raster, pasa primero por el router `asset-first`: un modelo textual/rápido o una sesión sin
+backend artístico fuerte debe buscar recursos licenciados antes de intentar dibujarlos. Cuando el router determine que
+la generación original puede igualar o superar los candidatos encontrados, usa `image_generation` con `backend=auto`
+y `read_image` para inspeccionar el resultado antes de integrarlo. Para pixel art/tilesets, usa Aseprite/Tiled si están
+instalados o disponibles de forma segura; para 3D usa Blender y el pipeline nativo del motor; para audio usa el
+conector/generador autorizado disponible o síntesis procedural adecuada. Usa `connector_list` y
+`connector_discover` para encontrar la herramienta específica cuando no esté visible.
 
 Un motor puede renderizar sobre canvas/WebGL, pero **canvas no es licencia para dibujar el arte final con rectángulos,
 círculos y líneas**. Del mismo modo, HTML/CSS/SVG pueden alojar el juego o su UI, pero no sustituyen sprites, tiles,
@@ -369,9 +371,10 @@ input y timings según el target. Si una restricción es crítica, conviértela 
 
 ## 6. Assets, audio y contenido
 
-Usa `image_generation` para concept art, backgrounds, UI, texturas y sprites cuando aporte calidad.
-Para pixel art generado, normaliza después la resolución, paleta, transparencia y escala; no introduzcas
-píxeles semitransparentes o tamaños inconsistentes sin intención.
+Cuando el router de calidad elija generación original, usa `image_generation` para concept art,
+backgrounds, UI, texturas y sprites. Cuando gane un asset externo, impórtalo solo después del License Gate y
+del Style Match. Para pixel art generado o reutilizado, normaliza resolución, paleta, transparencia y escala;
+no introduzcas píxeles semitransparentes o tamaños inconsistentes sin intención.
 
 Para 3D, pasa por Blender cuando haga falta modelado o rig. Para audio, prioriza formatos, sample rate,
 loop points y compresión apropiados al motor/target. En retro nativo, el presupuesto de canales y memoria
