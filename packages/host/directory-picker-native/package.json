@@ -39,7 +39,7 @@
   "dependencies": {
     "@phoenix-ai/dsh-host-directory-picker": "workspace:^",
     "@phoenix-ai/dsh-native-command": "workspace:^",
-    "koffi": "^3.1.0"
+    "koffi": "3.1.1"
   },
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",
