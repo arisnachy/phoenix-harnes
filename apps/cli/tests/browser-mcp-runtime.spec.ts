@@ -35,24 +35,15 @@ describe('bundled browser connector assembly', () => {
       },
     ]), '/opt/phoenix/chrome-connector/lib/bin.js', '/usr/bin/node')
 
-    expect(patches).toEqual([
-      expect.objectContaining({
-        id: 'phoenix-browser',
-        config: expect.objectContaining({
-          command: '/usr/bin/node',
-          args: ['/opt/phoenix/chrome-connector/lib/bin.js'],
-          cwd: '',
-        }),
-      }),
-      expect.objectContaining({
-        id: 'chrome-browser-primary',
-        config: expect.objectContaining({
-          command: '/usr/bin/node',
-          args: ['/opt/phoenix/chrome-connector/lib/bin.js'],
-          cwd: '',
-        }),
-      }),
-    ])
+    expect(patches).toHaveLength(2)
+    expect(patches[0]?.id).toBe('phoenix-browser')
+    expect(patches[1]?.id).toBe('chrome-browser-primary')
+    for (const patch of patches) {
+      const config = patch.config as Record<string, unknown>
+      expect(config.command).toBe('/usr/bin/node')
+      expect(config.args).toEqual(['/opt/phoenix/chrome-connector/lib/bin.js'])
+      expect(config.cwd).toBe('')
+    }
   })
 
   it('leaves an explicitly customized browser connector command untouched', () => {
