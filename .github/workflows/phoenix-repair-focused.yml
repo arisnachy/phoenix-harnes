@@ -1,0 +1,52 @@
+name: Phoenix focused repair checks
+
+on:
+  push:
+    branches: [repair-focused-checks-20260927]
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-focused-checks-20260927
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Focused gates
+        shell: bash
+        run: |
+          status=0
+          run_gate() {
+            echo "===== GATE: $1 ====="
+            shift
+            "$@" || status=1
+          }
+          run_gate runtime-closure pnpm run verify-runtime-closure
+          run_gate constraints pnpm run constraints
+          run_gate cordis-config pnpm run verify-cordis-config
+          run_gate type-equiv pnpm run verify-type-equiv
+          run_gate translation-pairing pnpm run verify-translation-pairing
+          run_gate export-jsdoc pnpm run verify-export-jsdoc
+          run_gate client-domain-graph pnpm run verify-client-domain-graph
+          run_gate agent-note-format pnpm run verify-agent-note-format
+          run_gate readme-model-experience pnpm run verify-package-readme-model-experience
+          run_gate readme-limitations pnpm run verify-package-readme-limitations
+          run_gate markdown-wrap pnpm run verify-md-wrap
+          echo "===== GATE: knip ====="
+          set +e
+          pnpm exec knip --treat-config-hints-as-errors > knip-output.log 2>&1
+          knip_status=$?
+          set -e
+          echo "knip exit code: $knip_status"
+          cat knip-output.log
+          if [ "$knip_status" -ne 0 ]; then status=1; fi
+          exit "$status"
