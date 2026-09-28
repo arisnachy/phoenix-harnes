@@ -149,7 +149,7 @@ export function createXMcpActivateTool(
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
-      if (args.requestedByUser !== true) {
+      if (!args.requestedByUser) {
         return {
           status: 'denied',
           message: 'X MCP activation requires an explicit user request.',
