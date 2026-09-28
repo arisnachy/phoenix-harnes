@@ -139,20 +139,19 @@ it('accepts pasted images into the composer rail in order and removes them', asy
     expect(document.querySelector('[role="group"][aria-label="Pending images"]')).toBeNull()
   })
 
-  // An unsupported file announces a transient toast (the inline strip is
-  // gone) and the banner dismisses itself after its hold-and-fade lifetime.
+  // Generic files now share the composer attachment rail. A text file must
+  // remain a file attachment instead of being rejected by the image-only path.
   fireEvent.paste(textarea, {
     clipboardData: {
       items: [{ kind: 'file', type: 'text/plain', getAsFile: () => new File(['x'], 'notes.txt', { type: 'text/plain' }) }],
       getData: () => '',
     },
   })
-  const unsupportedMessage = 'Only PNG, JPG, WebP, and GIF images are supported'
-  const toast = await screen.findByText(unsupportedMessage)
-  expect(toast.closest('[role="alert"]')).not.toBeNull()
   await waitFor(() => {
-    expect(screen.queryByText(unsupportedMessage)).toBeNull()
-  }, { timeout: 6_000 })
+    const fileRail = document.querySelector('[role="group"][aria-label="Pending images"]')
+    if (fileRail === null) throw new Error('generic attachment rail missing')
+    expect(fileRail.textContent).toContain('notes.txt')
+  }, { timeout: 5_000 })
 })
 
 it('accepts a whole-page drop under the limits-labeled overlay and refuses an over-limit batch at intake', async () => {
