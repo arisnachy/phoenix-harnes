@@ -70,6 +70,31 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByText(/"visualType"/)).toBeNull()
   })
 
+  it('renders Binance candlesticks from nested market data instead of raw JSON', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'btc-candles-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'BTC/USDT · Velas de 1 hora',
+      data: {
+        visualType: 'chart',
+        chartType: 'candlestick',
+        data: {
+          symbol: 'BTCUSDT',
+          interval: '1h',
+          candles: [
+            { time: 1790488800000, open: 84478.06, high: 84636.91, low: 84478.06, close: 84511.69 },
+            { time: 1790492400000, open: 84511.69, high: 84720.12, low: 84392.4, close: 84680.55 },
+          ],
+        },
+      },
+    })} />)
+
+    expect(document.querySelector('[data-phoenix-chart-type="candlestick"]')).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'candlestick chart' })).toBeTruthy()
+    expect(screen.queryByText(/"visualType"/)).toBeNull()
+    expect(screen.queryByText(/"candles"/)).toBeNull()
+  })
+
   it('renders sports scoreboards as a dedicated rich visual instead of raw JSON', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'sports-1',
