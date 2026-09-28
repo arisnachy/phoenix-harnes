@@ -251,8 +251,10 @@ export class ManagedMcpController {
     }, { waitMs: 15_000 })
   }
 
-   * @returns Result produced by this public operation.
-  /** Compatibility endpoint retained for old clients; Jev can no longer be installed by Phoenix. */
+  /**
+   * Compatibility endpoint retained for old clients; Jev can no longer be installed by Phoenix.
+   * @returns Rejected promise because Phoenix no longer installs Jev.
+   */
   async configureJev(): Promise<McpRegistryInstallReceipt> {
     throw new Error('Jev integration is retired because new Jev accounts are unavailable; PHOENIX uses native routing instead')
   }
