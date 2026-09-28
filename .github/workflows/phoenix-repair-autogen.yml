@@ -1,0 +1,47 @@
+name: Phoenix repair autogen
+
+on:
+  push:
+    branches: [repair-autogen-20260927]
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-autogen-20260927
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Regenerate canonical artifacts
+        run: |
+          pnpm run gen-client-catalog
+          pnpm run gen-cordis-catalog
+          pnpm run gen-cordis-api
+          pnpm run gen-tool-catalog
+          pnpm run gen-config-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-persistence-catalog
+          pnpm run gen-module-graph
+      - name: Commit generated outputs
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No generated changes."
+            exit 0
+          fi
+          git config user.name "Phoenix Repair Bot"
+          git config user.email "phoenix-repair-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(ci): regenerate canonical artifacts"
+          git push origin HEAD:repair-autogen-20260927
