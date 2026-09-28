@@ -1,0 +1,33 @@
+name: Phoenix contract ratchet check
+
+on:
+  push:
+    branches: [repair-contract-ratchet-20260928]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-contract-ratchet-20260928
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build official client and host
+        env:
+          DSH_BUILD_CLIENT_PROFILE: official
+        run: pnpm run build
+      - name: Verify contracts-ready lint ratchet
+        env:
+          DSH_OXLINT_THREADS: '2'
+        run: pnpm run lint:contracts-ready
+      - name: Verify duplication ratchet
+        run: pnpm run duplication
