@@ -8,6 +8,14 @@ export interface PhoenixVisualizerProps {
   readonly spec: JsonRecord
 }
 
+interface VisualRuntimeState {
+  readonly signature: string
+  readonly spec: JsonRecord
+  readonly attempts: number
+  readonly preflight: ReturnType<typeof preflightVisualSpec>
+  readonly verdict: 'checking' | 'pass' | 'fail'
+}
+
 interface VisualSeries {
   readonly key: string
   readonly label: string
@@ -953,7 +961,7 @@ function prepareVisualSpec(spec: JsonRecord): {
 export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
   const signature = useMemo(() => stableSpecSignature(spec), [spec])
   const prepared = useMemo(() => prepareVisualSpec(spec), [signature])
-  const [runtime, setRuntime] = useState(() => ({
+  const [runtime, setRuntime] = useState<VisualRuntimeState>(() => ({
     signature,
     spec: prepared.spec,
     attempts: prepared.attempts,
@@ -1003,8 +1011,8 @@ export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
     const root = rootRef.current
     if (root === null) return
     const report = auditRenderedVisual(root, active.spec, active.attempts)
-    emitVisualQaReport(report)
     if (report.verdict === 'pass') {
+      emitVisualQaReport(report)
       if (active.verdict !== 'pass') setRuntime(current => ({ ...current, verdict: 'pass' }))
       return
     }
@@ -1023,6 +1031,7 @@ export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
       return
     }
 
+    emitVisualQaReport(report)
     if (active.verdict !== 'fail') setRuntime(current => ({ ...current, verdict: 'fail' }))
   }, [
     active.attempts,
