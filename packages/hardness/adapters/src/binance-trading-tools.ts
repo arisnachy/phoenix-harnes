@@ -2,12 +2,14 @@ import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import type { BinancePaperBroker } from './binance-paper.ts'
 
+/** Secret-free lifecycle state of the pinned Binance Agent OS connector. */
 export interface BinanceAgentOsSnapshot {
   configured: boolean
   status?: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
   reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
 }
 
+/** Host operations exposed to the model-facing Binance activation boundary. */
 export interface BinanceAgentOsHostService {
   binanceAgentOsState(): Promise<BinanceAgentOsSnapshot>
   enableBinanceAgentOs(): Promise<{
@@ -17,6 +19,7 @@ export interface BinanceAgentOsHostService {
   disableBinanceAgentOs(): Promise<{ disabled: boolean }>
 }
 
+/** Runtime dependencies for the on-demand Binance tool family. */
 export interface BinanceTradingToolDependencies {
   broker: BinancePaperBroker
   approval: Pick<ApprovalService, 'request'>
@@ -241,7 +244,11 @@ function paperJournalTool(deps: BinanceTradingToolDependencies): ToolDefinition 
   })
 }
 
-/** Complete on-demand Binance model-tool family. */
+/**
+ * Build the complete on-demand Binance model-tool family.
+ * @param deps - Paper broker, approval seam, and optional Agent OS host controls.
+ * @returns Tool definitions for activation, status, market data, and paper execution.
+ */
 export function createBinanceTradingTools(deps: BinanceTradingToolDependencies): readonly ToolDefinition[] {
   return [
     activateTool(deps),
