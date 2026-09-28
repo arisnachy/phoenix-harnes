@@ -135,10 +135,7 @@ describe('request stability across the loop', () => {
     expect(adapter.requests[0]?.tools).toBeUndefined()
   })
 
-  it.each([
-    'como te va que se cuenta',
-    'que quieres que hagamos',
-  ])('skips tool-schema assembly for natural small talk: %s', async (prompt) => {
+  it('skips tools and runtime context for natural small talk', async () => {
     const adapter = new MockAdapter([textResponse('respuesta rápida')])
     const ctx = await harness(adapter)
     let toolProviderCalls = 0
@@ -158,15 +155,63 @@ describe('request stability across the loop', () => {
       order: 0,
       text: () => `runtime-context-${++contextProviderCalls}`,
     })
-    const agent = ctx.agentLoop.create(SessionId(`fast-natural-social-${prompt.length}`), { provider: 'mock', model: 'mock' })
+    const agent = ctx.agentLoop.create(SessionId('fast-natural-social'), { provider: 'mock', model: 'mock' })
 
-    send(agent, prompt)
+    send(agent, 'como te va que se cuenta')
     await waitForIdle(ctx, agent)
 
     expect(toolProviderCalls).toBe(0)
     expect(contextProviderCalls).toBe(0)
     expect(adapter.requests).toHaveLength(1)
     expect(adapter.requests[0]?.tools).toBeUndefined()
+  })
+
+  it('keeps runtime context and full text continuity for a contextual conversational opener while still skipping tools', async () => {
+    const adapter = new MockAdapter([
+      textResponse('Estoy trabajando en Phoenix.'),
+      textResponse('Sigamos con lo pendiente de Phoenix.'),
+    ])
+    const ctx = await harness(adapter)
+    let toolProviderCalls = 0
+    let contextProviderCalls = 0
+    ctx.systemPrompt.tools(() => {
+      toolProviderCalls += 1
+      return {
+        schemas: [{
+          name: 'expensive-contextual-noop',
+          description: 'must remain unavailable for a quick planning conversation',
+          parameters: { type: 'object', properties: {} },
+        }],
+      }
+    })
+    ctx.systemPrompt.context({
+      name: 'initiative-marker',
+      order: 0,
+      text: () => `initiative-context-${++contextProviderCalls}`,
+    })
+    const agent = ctx.agentLoop.create(SessionId('fast-contextual-open'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'estamos trabajando en Phoenix')
+    await waitForIdle(ctx, agent)
+    toolProviderCalls = 0
+    contextProviderCalls = 0
+
+    send(agent, 'que quieres que hagamos')
+    await waitForIdle(ctx, agent)
+
+    expect(toolProviderCalls).toBe(0)
+    expect(contextProviderCalls).toBe(1)
+    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests[1]?.tools).toBeUndefined()
+    expect(adapter.requests[1]?.messages.some(message =>
+      message.content.some(block =>
+        block.type === 'text' && block.text.includes('initiative-context-1')),
+    )).toBe(true)
+    expect(adapter.requests[1]?.messages.some(message =>
+      message.source.kind === 'model'
+      && message.content.some(block =>
+        block.type === 'text' && block.text.includes('Estoy trabajando en Phoenix.')),
+    )).toBe(true)
   })
 
   it('keeps contextual acknowledgements on the full-history, tool-capable path', async () => {
