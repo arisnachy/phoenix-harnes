@@ -61,7 +61,9 @@ const VISUAL_VERIFY = /^(?:read_image|read_render|screenshot|capture(?:_.*)?|bro
 const PLAY_VERIFY = /^(?:gameplay(?:_.*)?|playtest(?:_.*)?)$/
 const GAME_EDITOR_NAMESPACE = /(?:^|__|[.:/])(?:godot|unity|unreal|blender|aseprite|tiled)(?:__|[.:/])/i
 const GAMEPLAY_NAMESPACE = /(?:^|__|[.:/])gameplay(?:__|[.:/])/i
-const GAME_EDITOR_MUTATE = /(?:^|_)(?:create|add|edit|update|set|write|save|import|export|delete|remove|move|rename|generate|instantiate|spawn|attach|assign|bake|rig|animate)(?:_|$)/i
+const GAME_EDITOR_READ_ONLY = /(?:^|_)(?:get|list|read|inspect|query|search|find|status|capture|screenshot|snapshot|render|viewport|test|verify|build)(?:_|$)/i
+const GAME_EDITOR_VISUAL_ACTION = /(?:^|_)(?:capture|screenshot|snapshot|render|viewport)(?:_|$)/i
+const GAME_EDITOR_PLAY_ACTION = /(?:^|_)(?:play|run|start|launch|pie)(?:_|$)/i
 const GAMEPLAY_VISUAL_ACTION = /(?:^|_)(?:capture|screenshot|snapshot|frame|inspect|render)(?:_|$)/i
 const GAME_NEED = /\b(?:game|games|gaming|juego|juegos|videogame|videojuego|godot|unity|unreal|blender|sprite|tileset|npc|enemy|character|pixel\s*art|2d|3d|retro|nes|snes|rpg|platformer|metroidvania|gameplay)\b/i
 const DIRECT_ASSET_MUTATION = /^(?:image_generation|audio_generation|generate_image|generate_audio)$/
@@ -117,7 +119,7 @@ export function isSubstantiveMutation(name: string, args: unknown): boolean {
   const text = argumentText(args)
   if (DIRECT_ASSET_MUTATION.test(op)) return true
   if (op === 'hardness_run' && GAME_NEED.test(text)) return true
-  if (GAME_EDITOR_NAMESPACE.test(normalizedName) && GAME_EDITOR_MUTATE.test(op)) return true
+  if (GAME_EDITOR_NAMESPACE.test(normalizedName) && !GAME_EDITOR_READ_ONLY.test(op)) return true
   if (MUTATION.test(op)) return SUBSTANTIVE.test(text)
   return SHELL.test(op) && SHELL_MUTATE.test(text) && SUBSTANTIVE.test(text)
 }
@@ -129,15 +131,22 @@ export function verificationKinds(name: string, args: unknown): readonly Verific
   const normalizedName = name.toLowerCase().replaceAll('-', '_')
   const op = operationName(name)
   const argsText = argumentText(args)
+  const gameEditorTool = GAME_EDITOR_NAMESPACE.test(normalizedName)
   const gameplayTool = GAMEPLAY_NAMESPACE.test(normalizedName)
   const kinds = new Set<VerificationKind>()
   if (VERIFY.test(op) || (SHELL.test(op) && SHELL_VERIFY.test(argsText))) kinds.add('technical')
   if (
     VISUAL_VERIFY.test(op)
+    || (gameEditorTool && GAME_EDITOR_VISUAL_ACTION.test(op))
     || (gameplayTool && GAMEPLAY_VISUAL_ACTION.test(op))
     || (PLAY_VERIFY.test(op) && /(?:capture|screenshot|snapshot|frame|inspect)/u.test(op))
   ) kinds.add('visual')
-  if (PLAY_VERIFY.test(op) || gameplayTool || (SHELL.test(op) && SHELL_PLAY_VERIFY.test(argsText))) kinds.add('play')
+  if (
+    PLAY_VERIFY.test(op)
+    || (gameEditorTool && GAME_EDITOR_PLAY_ACTION.test(op))
+    || gameplayTool
+    || (SHELL.test(op) && SHELL_PLAY_VERIFY.test(argsText))
+  ) kinds.add('play')
   return [...kinds]
 }
 
