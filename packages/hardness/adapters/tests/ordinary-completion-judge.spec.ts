@@ -69,7 +69,9 @@ describe('ordinary completion judge', () => {
     expect(isSubstantiveMutation('write', { path: 'art/hero.png' })).toBe(true)
     expect(isSubstantiveMutation('write', { path: 'audio/town-theme.ogg' })).toBe(true)
     expect(isSubstantiveMutation('mcp__godot__create_scene', { name: 'Town' })).toBe(true)
+    expect(isSubstantiveMutation('mcp__unity__manage_scene', { name: 'Town' })).toBe(true)
     expect(isSubstantiveMutation('mcp__blender__update_material', { object: 'Hero' })).toBe(true)
+    expect(isSubstantiveMutation('mcp__godot__get_scene_info', {})).toBe(false)
     expect(isSubstantiveMutation('image_generation', { prompt: 'top-down pixel-art hero sprite sheet' })).toBe(true)
     expect(isSubstantiveMutation('hardness_run', { need: { kind: 'game-development' } })).toBe(true)
     expect(isSubstantiveMutation('mcp__gameplay__capture_frame', {})).toBe(false)
@@ -78,6 +80,8 @@ describe('ordinary completion judge', () => {
       expect.arrayContaining(['visual', 'play']),
     )
     expect(verificationKinds('read_image', { path: 'capture.png' })).toContain('visual')
+    expect(verificationKinds('mcp__blender__render_viewport', {})).toContain('visual')
+    expect(verificationKinds('mcp__godot__run_project', {})).toContain('play')
     expect(verificationKinds('pwsh', { command: 'godot --path . --headless' })).toContain('play')
   })
 
