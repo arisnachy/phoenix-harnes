@@ -118,6 +118,8 @@ function edgeCriteria(objective: string, softwareLike: boolean): VerificationCri
  * Build the immutable verifier-owned requirement contract before any workspace
  * or Builder test is inspected. The whole objective is always mandatory, and
  * explicit literal clauses are promoted to independently checkable criteria.
+  * @param objective - objective supplied to this public operation.
+  * @returns Result produced by this public operation.
  */
 export function buildVerificationContract(objective: string): VerificationContract {
   const root = normalize(objective)
