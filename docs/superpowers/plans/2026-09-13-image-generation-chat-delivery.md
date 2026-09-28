@@ -37,7 +37,7 @@ English | [中文](2026-09-13-image-generation-chat-delivery.zh.md)
 
 Register the tool with the existing test context and invoke its `output.render()` with a canonical result. Assert the exact content shape:
 
-```ts
+```text
 expect(tool.output.render({}, value)).toEqual([
   { type: 'text', text: expect.stringContaining('<path>') },
   { type: 'image', attachment: value.attachment },
