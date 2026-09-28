@@ -207,6 +207,8 @@
   flex: none;
   flex-direction: column;
   --dsh-composer-text-max-height: 336px;
+  transform: translateX(calc(0px - var(--dsh-chat-floating-overlay-axis-shift, 0px)));
+  transition: transform var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
 .root[data-phase='active'] {
@@ -338,6 +340,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .composerSeat,
   .crumb,
   .tab,
   .root :global([data-composer-card]) {

@@ -219,6 +219,17 @@ describe('AppFrame', () => {
     expect(slotCalls.find(c => c.key === 'sidebar')!.props).toEqual({ collapsed: false, width: 280 })
   })
 
+  it('publishes a paint-only chat-axis counter-offset from the live sidebar width', () => {
+    const { frame, instance } = mountFrame()
+    expect(frame.style.getPropertyValue('--dsh-overlay-stable-chat-axis-offset')).toBe('112px')
+
+    act(() => { instance.actions.setSidebar(360) })
+    expect(frame.style.getPropertyValue('--dsh-overlay-stable-chat-axis-offset')).toBe('152px')
+
+    act(() => { instance.actions.toggleSidebar() })
+    expect(frame.style.getPropertyValue('--dsh-overlay-stable-chat-axis-offset')).toBe('0px')
+  })
+
   it('sidebar drag widens through rAF-batched pointer moves', () => {
     const { frame } = mountFrame()
     const handles = frame.querySelectorAll('[class*="handle"]')

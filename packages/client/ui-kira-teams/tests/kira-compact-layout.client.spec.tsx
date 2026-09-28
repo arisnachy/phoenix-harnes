@@ -11,6 +11,10 @@ const conversationCss = readFileSync(
   new URL('../../ui-conversation/src/client/skeleton/ConversationRoot.module.css', import.meta.url),
   'utf8',
 )
+const chatCss = readFileSync(
+  new URL('../../ui-conversation/src/client/chat/ChatView.module.css', import.meta.url),
+  'utf8',
+)
 
 describe('KIRA compact live-agent layout regression', () => {
   it('stays a small floating window and stacks only live agent rows', () => {
@@ -29,6 +33,9 @@ describe('KIRA compact live-agent layout regression', () => {
     expect(conversationCss).not.toMatch(/padding-right:\s*var\(--dsh-kira-chat-clearance/)
     expect(conversationCss).toMatch(/--dsh-chat-content-width:\s*768px/)
     expect(conversationCss).toMatch(/--dsh-composer-card-max-width:\s*calc\(var\(--dsh-chat-content-width\) \+ 32px\)/)
+    expect(frameCss).toMatch(/--dsh-chat-floating-overlay-axis-shift:\s*var\(--dsh-overlay-stable-chat-axis-offset, 0px\)/)
+    expect(conversationCss).toMatch(/\.composerSeat\s*{[^}]*translateX\(calc\(0px - var\(--dsh-chat-floating-overlay-axis-shift, 0px\)\)\)/s)
+    expect(chatCss).toMatch(/\.column\s*{[^}]*translateX\(calc\(0px - var\(--dsh-chat-floating-overlay-axis-shift, 0px\)\)\)/s)
   })
 
   it('renders each persona from bundled portrait pixels while keeping phase data for animation', () => {

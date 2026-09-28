@@ -33,6 +33,13 @@
   overflow: hidden;
 }
 
+/* Keep a floating KIRA card from changing the perceived chat axis when the
+   left sidebar expands. This is paint-only compensation: the center column
+   keeps 100% of its usable width and no full-height rail is reserved. */
+.centerCol:has(> [data-shell-overlay] [data-kira-teams]) {
+  --dsh-chat-floating-overlay-axis-shift: var(--dsh-overlay-stable-chat-axis-offset, 0px);
+}
+
 /* Floating shell entries remain a true overlay and never participate in the
    conversation/workspace flex calculation. Feature entries opt back into
    pointer events themselves. */

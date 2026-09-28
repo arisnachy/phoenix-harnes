@@ -11,9 +11,9 @@
  * zero self-made hooks.
  */
 import { Component, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import type { ErrorInfo, ReactNode } from 'react'
+import type { CSSProperties, ErrorInfo, ReactNode } from 'react'
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from '@phoenix-ai/dsh-client-ui-slots'
-import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_DEFAULT } from './columns.ts'
+import { computeColumns, SIDEBAR_AUTO_COLLAPSE, SIDEBAR_COLLAPSED, SIDEBAR_DEFAULT } from './columns.ts'
 import type { createLayoutStore } from './stores.ts'
 import css from './AppFrame.module.css'
 
@@ -202,6 +202,13 @@ export function AppFrame({
     ? 0
     : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
   const cols = computeColumns(viewport, sidebarPreference, detailsSession === undefined ? 0 : panels.details)
+  // KIRA Teams floats above the conversation and must never create a structural
+  // rail. Expanding the sidebar would still move a centered chat to the right
+  // by half the sidebar delta, though, so publish the exact paint-only
+  // counter-offset needed to keep the same viewport axis as the collapsed rail.
+  const overlayStableChatAxisOffset = sidebarCollapsed
+    ? 0
+    : Math.max(0, (cols.sidebar - SIDEBAR_COLLAPSED) / 2)
   const colsRef = useRef(cols)
   colsRef.current = cols
 
@@ -227,7 +234,10 @@ export function AppFrame({
     <div
       ref={frameRef}
       className={css.frame}
-      style={{ gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px` }}
+      style={{
+        gridTemplateColumns: `${cols.sidebar}px minmax(0, 1fr) ${cols.details}px`,
+        '--dsh-overlay-stable-chat-axis-offset': `${overlayStableChatAxisOffset}px`,
+      } as CSSProperties}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
