@@ -196,7 +196,7 @@ function parseManagedRows(raw: string): ManagedMcpRow[] {
   if (!Array.isArray(document) || document.length !== 1) {
     throw new Error('managed MCP patch must contain exactly one insert document')
   }
-  const patch = document[0]
+  const patch: unknown = document[0]
   if (!isRecord(patch) || !Array.isArray(patch.insert)) {
     throw new Error('managed MCP patch is missing its insert list')
   }
