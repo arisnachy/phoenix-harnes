@@ -178,11 +178,13 @@ export class McpOAuthCallbackServer {
     this.server = createServer((request, response) => { this.handle(request, response) })
   }
 
+  /** Loopback redirect URI after the callback server has started. */
   get redirectUri(): string {
     if (this._redirectUri === undefined) throw new Error('MCP OAuth callback server has not started')
     return this._redirectUri
   }
 
+  /** Start the loopback OAuth callback server if it is not already listening. */
   async start(): Promise<void> {
     if (this._redirectUri !== undefined) return
     await new Promise<void>((resolve, reject) => {
@@ -207,6 +209,12 @@ export class McpOAuthCallbackServer {
     this.server.unref()
   }
 
+  /**
+   * Begin one state-bound OAuth callback attempt.
+   * @param expectedState - CSRF state value that the callback must echo.
+   * @param signal - Optional cancellation signal for the authorization attempt.
+   * @returns Callback attempt exposing the authorization-code promise and cleanup.
+   */
   begin(expectedState: string, signal?: AbortSignal): McpOAuthCallbackAttempt {
     if (this._redirectUri === undefined) throw new Error('MCP OAuth callback server has not started')
     if (this.pending !== undefined) throw new Error('MCP OAuth callback already has an active attempt')
@@ -238,6 +246,7 @@ export class McpOAuthCallbackServer {
     }
   }
 
+  /** Close the callback listener and reject any pending authorization attempt. */
   async close(): Promise<void> {
     this.pending?.reject(new Error('MCP OAuth callback server closed'))
     this.pending = undefined
@@ -339,8 +348,11 @@ function mcpCredentialKey(serverName: string): CredentialKey {
 
 /** Host controller for one MCP server's OAuth lifecycle. */
 export class McpOAuthController {
+  /** Credential-store key for this MCP server's OAuth state. */
   readonly key: CredentialKey
+  /** Loopback callback server used by this controller. */
   readonly callbackServer: McpOAuthCallbackServer
+  /** Promise resolved after the callback server is ready to receive redirects. */
   readonly ready: Promise<void>
   private readonly store: McpOAuthStateStore
   private readonly serverName: string
@@ -356,10 +368,19 @@ export class McpOAuthController {
     this.ready = this.callbackServer.start()
   }
 
+  /**
+   * Check whether stored OAuth state has a usable access or refresh token.
+   * @returns Whether this MCP server can currently authenticate from stored state.
+   */
   async isAuthorized(): Promise<boolean> {
     return hasUsableMcpOAuthTokens(await this.store.read())
   }
 
+  /**
+   * Build an SDK OAuth provider bound to this controller's callback URI and store.
+   * @param onAuthorizationUrl - Callback invoked when user authorization must open in a browser.
+   * @returns OAuth provider consumed by the MCP SDK auth flow.
+   */
   provider(onAuthorizationUrl: (url: URL) => void | Promise<void> = () => undefined): OAuthClientProvider {
     return createMcpOAuthProvider({
       serverName: this.serverName,
@@ -369,6 +390,10 @@ export class McpOAuthController {
     })
   }
 
+  /**
+   * Run one interactive authorization flow and persist the resulting OAuth state.
+   * @param session - Host authorization session used for cancellation and user notification.
+   */
   async authorize(session: AuthorizationSession): Promise<void> {
     await this.ready
     const previous = await this.store.read()
@@ -420,10 +445,12 @@ export class McpOAuthController {
     }
   }
 
+  /** Clear persisted OAuth state for this MCP server. */
   async disconnect(): Promise<void> {
     await this.store.clear()
   }
 
+  /** Close this controller and its loopback callback server. */
   async close(): Promise<void> {
     this.closed = true
     await this.callbackServer.close()
