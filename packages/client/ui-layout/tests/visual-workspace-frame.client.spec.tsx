@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** AppFrame shell geometry: Cordis owns the in-flow rail while KIRA floats in overlay. */
+/** AppFrame shell geometry: Cordis and expanded KIRA own the real in-flow workspace rail. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { useSyncExternalStore } from 'react'
@@ -34,11 +34,11 @@ function mountWith(owner: 'subagent' | 'cordis') {
   } as unknown as SessionListState)) as never
   const renderSlot = ((key: string, _owner: object) => {
     if (key === 'shell.workspace') {
-      return owner === 'cordis' ? <div data-cordis-workspace /> : null
+      if (owner === 'cordis') return <div data-cordis-workspace />
+      if (owner === 'subagent') return <div data-kira-teams data-kira-layout="floating-live" />
+      return null
     }
-    if (key === 'shell.overlay') {
-      return owner === 'subagent' ? <div data-kira-teams data-kira-layout="floating-live" /> : <div data-test-overlay />
-    }
+    if (key === 'shell.overlay') return <div data-test-overlay />
     return <div data-test-slot={key} />
   }) as AppFrameProps['renderSlot']
   const props = {
@@ -78,14 +78,14 @@ describe('AppFrame visual workspace', () => {
     expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
   })
 
-  it('mounts KIRA/subagents in shell.overlay without reserving a workspace rail', () => {
+  it('mounts expanded KIRA/subagents in the real workspace rail without touching details', () => {
     const { frame } = mountWith('subagent')
     const workspace = frame.querySelector('[data-shell-workspace]')
     const overlay = frame.querySelector('[data-shell-overlay]')
     const kira = frame.querySelector('[data-kira-teams]')
     expect(frame.style.gridTemplateColumns).toBe('280px minmax(0, 1fr) 0px')
-    expect(workspace?.contains(kira)).toBe(false)
-    expect(overlay?.contains(kira)).toBe(true)
+    expect(workspace?.contains(kira)).toBe(true)
+    expect(overlay?.contains(kira)).toBe(false)
   })
 
   it('contains a repeatedly crashing workspace surface without blanking the conversation or shell', async () => {

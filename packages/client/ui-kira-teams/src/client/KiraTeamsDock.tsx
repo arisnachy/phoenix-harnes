@@ -27,7 +27,7 @@ export interface KiraTeamsInjected {
 }
 
 export type KiraTeamsDockProps =
-  PropsRuntime<'shell.overlay'> & KiraTeamsInjected & PropsLocale<typeof NS>
+  PropsRuntime<'shell.workspace'> & KiraTeamsInjected & PropsLocale<typeof NS>
 
 export interface MemberRow {
   summary: SessionSummary
@@ -290,19 +290,21 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
   )
 }
 
-/** Floating KIRA Teams card: active subagents stay visible without consuming chat layout width. */
+/** Compact KIRA Teams card: presentation stays unchanged while the shell owns its real side rail. */
 export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeamsDockProps) {
   const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
 
+  const hasLiveTeam = root !== undefined && rows.length > 0
   useEffect(() => {
-    // This surface intentionally floats over the workspace. Never reserve the
-    // structural subagent rail, otherwise one live member expands the whole side.
-    layout.setWorkspaceOccupant('subagent', false)
+    // Announce the real lifetime of the side rail. The layout store keeps this
+    // metadata geometry-neutral; AppFrame derives width from the mounted KIRA
+    // workspace element itself, avoiding stale padding/right-offset hacks.
+    layout.setWorkspaceOccupant('subagent', hasLiveTeam)
     return () => { layout.setWorkspaceOccupant('subagent', false) }
-  }, [layout])
+  }, [hasLiveTeam, layout])
 
   const previousRunning = useRef(runningCount)
   useEffect(() => {
@@ -332,7 +334,12 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
 
   if (collapsed) {
     return (
-      <div className={`${css.root} ${css.rootCollapsed}`} data-kira-teams data-kira-layout="floating-live">
+      <div
+        className={`${css.root} ${css.rootCollapsed}`}
+        data-kira-teams
+        data-kira-collapsed
+        data-kira-layout="floating-live"
+      >
         <button
           type="button"
           className={`${css.pill} ${runningCount > 0 ? css.pillLive : ''}`}
