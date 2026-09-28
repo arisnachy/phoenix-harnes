@@ -416,6 +416,27 @@ describe('Chat node rendering', () => {
 })
 
 describe('ChatView', () => {
+  it('stops the PHOENIX activity status when running settles even if the timeline projection is still open', () => {
+    const h = makeHarness({
+      running: true,
+      partial: {
+        turn: 1,
+        step: 1,
+        blocks: [{ kind: 'reasoning', text: 'finishing stale projection' }],
+      },
+    })
+    const view = render(<h.ChatView {...h.props} />)
+
+    const status = view.getByRole('status')
+    expect(status.getAttribute('data-phase')).toBe('thinking')
+
+    // Reproduce the browser/runtime race: the authoritative session is done,
+    // while the timeline/partial projection has not received its close event yet.
+    act(() => { h.set({ running: false }) })
+
+    expect(view.queryByRole('status')).toBeNull()
+  })
+
   it('shows an ordinary sent message immediately at the flow tail before the durable Host event arrives', () => {
     const startedAt = Date.now()
     const previousUser = {
