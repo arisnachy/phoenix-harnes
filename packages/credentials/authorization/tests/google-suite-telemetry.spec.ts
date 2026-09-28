@@ -58,6 +58,26 @@ async function authorizedGoogle(grantedScopes: readonly string[]): Promise<Conte
 }
 
 describe('Google Workspace account telemetry', () => {
+  it('exposes the connected Gmail address as sanitized account telemetry', async () => {
+    const ctx = await authorizedGoogle([
+      'https://www.googleapis.com/auth/gmail.modify',
+    ])
+    internals.fetch = (async () => new Response(JSON.stringify({
+      emailAddress: 'owner@example.com',
+      messagesTotal: 42,
+      threadsTotal: 10,
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    const telemetry = await ctx.authorization.inspect(GOOGLE_ACCOUNT_KEY)
+
+    expect(telemetry).toMatchObject({
+      kind: 'account',
+      provider: 'Google Workspace',
+      email: 'owner@example.com',
+    })
+    expect(JSON.stringify(telemetry)).not.toMatch(/access-token-private|refresh-token-private/)
+  })
+
   it('projects the seven fixed Workspace services and the exact granted capabilities', async () => {
     const ctx = await authorizedGoogle([
       'openid',
