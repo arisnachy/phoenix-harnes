@@ -37,6 +37,7 @@ interface CognitiveRuntimeLike {
   get(sessionId: unknown): CognitiveStateLike | undefined
 }
 
+/** Minimal prompt-registration seam used by initiative context integration. */
 export interface InitiativePromptRegistrar {
   context: (context: {
     readonly name: string
