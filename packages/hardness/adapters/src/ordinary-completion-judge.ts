@@ -60,6 +60,7 @@ const SHELL = /^(?:bash|pwsh|run_code)$/
 const VISUAL_VERIFY = /^(?:read_image|screenshot|capture(?:_.*)?|browser_(?:snapshot|inspect))$/
 const PLAY_VERIFY = /^(?:gameplay(?:_.*)?|playtest(?:_.*)?)$/
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest|benchmark|tracemalloc)\b/i
+// oxlint-disable-next-line @stylistic/max-len -- Keep the game-runtime matcher auditable as one regex literal.
 const SHELL_PLAY_VERIFY = /\b(?:retroarch|mesen|playtest|gameplay|godot(?:\.exe)?\b.*--path|unity(?:\.exe)?\b.*playmode|unreal(?:editor)?(?:\.exe)?\b.*(?:-game|pie))\b/i
 const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
 const SUBSTANTIVE = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|c|cc|cpp|h|hpp|cs|php|rb|swift|html?|css|scss|sass|less|vue|svelte|ya?ml|toml|json)\b/i
