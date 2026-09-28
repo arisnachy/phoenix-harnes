@@ -88,3 +88,5 @@ protocol section 和 capability metadata 会增加模型 token；单纯索引源
 
 - 外部 extension 执行继续由 Capability Broker 与隔离 package-host contract 管理，不会在启动时被 eager activate。
 - 持久化 mission trace 需要 live agent session；没有 session 的直接 runner 单元调用不会记录，也不能作为 production proof。
+- Email identity 只是配置引用；本包不会创建外部 mailbox 账户。所选 provider/tool 必须事先完成配置并获得授权。
+- `surprise` visibility 会从普通 task listing 与 compact tool presentation 中隐藏尚未 reveal 的内容，但持久 ledger 会有意保留，以便获授权的 operator 审计。
