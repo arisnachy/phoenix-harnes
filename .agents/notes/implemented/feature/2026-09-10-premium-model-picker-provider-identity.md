@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-09-10-premium-model-picker-provider-identity.zh.md)
+
 ## Problem
 
 The composer model picker exposed adapter-oriented catalog labels directly, so long technical names, preview dates, and inconsistent provider casing competed at the same visual weight. The menu could also grow around pathological ids and relied on native title tooltips for overflow. Provider identity was text-only, which made a large multi-provider catalog slower to scan.
