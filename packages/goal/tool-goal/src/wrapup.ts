@@ -43,6 +43,7 @@ function canonicalDigest(value: CompletionWrapupDigest | undefined): object | un
  * @param objective - the terminal goal's objective, echoed for grounding.
  * @param blockedReason - the validated report for `blocked`; omitted for `complete`.
  * @returns a fresh one-block context for `ToolRunContext.deferContext()`.
+  * @param digest - digest supplied to this public operation.
  */
 export function renderWrapupContext(
   objective: string,
