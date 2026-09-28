@@ -2,6 +2,8 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
+import type { AuthorizationService } from '@phoenix-ai/dsh-authorization'
+import { GOOGLE_ACCOUNT_KEY } from '@phoenix-ai/dsh-authorization/google'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import type { HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
 import type {} from '@phoenix-ai/dsh-mcp-registry'
@@ -191,7 +193,7 @@ function requiredServices(ctx: Context) {
   const agents = ctx.get('agents')
   const approval = ctx.get('approval')
   const systemPrompt = ctx.get('systemPrompt') as HardnessPromptRegistrar | undefined
-  const authorization = ctx.get('authorization')
+  const authorization = ctx.get('authorization') as AuthorizationService | undefined
   const mcpConnectors = ctx.get('mcpConnectors')
   const pluginInventory = (ctx.get as (name: string) => unknown)('pluginInventory') as
     | (McpRegistryDiscoveryService & Partial<McpRegistryInstallerService>)
@@ -206,6 +208,20 @@ function requiredServices(ctx: Context) {
 function configuredIdentity(value: string | undefined): string | undefined {
   const trimmed = value?.trim()
   return trimmed === undefined || trimmed.length === 0 ? undefined : trimmed
+}
+
+async function connectedGoogleEmail(authorization: AuthorizationService | undefined): Promise<string | undefined> {
+  if (authorization === undefined) return undefined
+  try {
+    const telemetry = await authorization.inspect(GOOGLE_ACCOUNT_KEY)
+    if (telemetry?.kind !== 'account' || typeof telemetry.email !== 'string') return undefined
+    const email = telemetry.email.trim()
+    return email.length > 0 && email.length <= 320 && email.includes('@') && !/\s/u.test(email)
+      ? email
+      : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function taskLedgerPath(config: Config): string {
@@ -303,7 +319,9 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
       disposers.push(ctx.tools.register(createRealitySnapshotTool(reality.engine, ctx)))
-      for (const tool of createProactivityTools(proactivity.engine)) {
+      for (const tool of createProactivityTools(proactivity.engine, {
+        resolveDefaultEmailRecipient: () => connectedGoogleEmail(authorization),
+      })) {
         disposers.push(ctx.tools.register(tool))
       }
       for (const tool of createWakeTools(wake.engine)) {
@@ -316,6 +334,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         privateWorkResultChars: config.privateWorkResultChars ?? 12_000,
         ...(configuredIdentity(config.userMailIdentity) === undefined ? {} : { userMailIdentity: configuredIdentity(config.userMailIdentity)! }),
         ...(configuredIdentity(config.harnessMailIdentity) === undefined ? {} : { harnessMailIdentity: configuredIdentity(config.harnessMailIdentity)! }),
+        resolveDefaultMailRecipient: () => connectedGoogleEmail(authorization),
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
       disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs))
