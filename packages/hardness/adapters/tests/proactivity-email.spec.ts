@@ -115,7 +115,6 @@ describe('scheduled email execution', () => {
     await expect(executor.execute(execution({
       delivery: 'chat',
       senderIdentity: 'auto',
-      recipient: undefined,
     }))).resolves.toEqual({
       summary: 'resumed persisted Phoenix agent and completed scheduled chat turn',
     })
@@ -194,13 +193,17 @@ describe('scheduled email execution', () => {
 
   it('prefers an explicit persisted recipient without inspecting the connected account', async () => {
     const resolveDefaultMailRecipient = vi.fn(async () => 'other@example.com')
-    const start = vi.fn(async () => ({
+    const start = vi.fn(async (
+      _provider: string,
+      request: { prompt: Array<{ type: string; text: string }> },
+    ) => ({
       id: 'child',
       result: Promise.resolve({
         output: [{ type: 'text', text: 'sent explicitly' }],
         stopReason: 'completed',
       }),
       dispose: async () => {},
+      request,
     }))
     const parent = { id: 'agent-a' }
     const executor = createProactivityExecutor(
