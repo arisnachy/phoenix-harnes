@@ -22,23 +22,23 @@ jobs:
           node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Apply Oxlint fixes
-        run: pnpm run lint:fix:contracts-ready || true
-      - name: Refresh bilingual pairing records
-        run: pnpm exec tsx scripts/verify-translation-pairing.ts --write || true
+      - name: Apply suggested lint fixes
+        run: pnpm exec tsx scripts/run-oxlint.ts . --fix-suggestions || true
+      - name: Refresh confirmed bilingual pair records
+        run: pnpm exec tsx scripts/verify-translation-pairing.ts --write --all || true
       - name: Record remaining diagnostics
         run: |
           pnpm run lint:contracts-ready || true
           pnpm run duplication || true
           pnpm run verify-translation-pairing || true
-      - name: Commit autofixes
+      - name: Commit suggested fixes
         run: |
           if git diff --quiet; then
-            echo "No autofix changes."
+            echo "No suggested changes."
             exit 0
           fi
           git config user.name "Phoenix Repair Bot"
           git config user.email "phoenix-repair-bot@users.noreply.github.com"
           git add -A
-          git commit -m "chore(ci): apply final lint and i18n autofixes"
+          git commit -m "chore(ci): apply suggested lint and pairing fixes"
           git push origin HEAD:repair-final-autofix-20260928
