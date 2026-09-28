@@ -2,6 +2,57 @@ import { describe, expect, it } from 'vitest'
 import { MemoryProactivityStore, ProactivityEngine } from '../src/proactivity-engine.ts'
 import { createProactivityCreateTool } from '../src/proactivity-tools.ts'
 
+describe('phoenix_task_create email delivery', () => {
+  it('resolves and persists the connected account email before accepting the task', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async () => ({}) },
+      { id: () => 'email-self' },
+    )
+    const tool = createProactivityCreateTool(engine, {
+      resolveDefaultEmailRecipient: async () => 'owner@example.com',
+    })
+
+    const result = await tool.execute({
+      title: 'Self email',
+      instruction: 'Send the scheduled test email.',
+      runAt: '2026-09-27T22:53:29-04:00',
+      requestedByUser: true,
+      delivery: 'email',
+      senderIdentity: 'harness',
+    }, { agent: { id: 'agent-a' } } as never)
+
+    expect(result).toMatchObject({
+      id: 'email-self',
+      status: 'scheduled',
+      delivery: 'email',
+    })
+    const [task] = await engine.list({ includeHidden: true })
+    expect(task?.recipient).toBe('owner@example.com')
+  })
+
+  it('refuses to claim an email task is scheduled when no recipient can be resolved', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async () => ({}) },
+      { id: () => 'email-missing-recipient' },
+    )
+    const tool = createProactivityCreateTool(engine, {
+      resolveDefaultEmailRecipient: async () => undefined,
+    })
+
+    await expect(tool.execute({
+      title: 'Impossible email',
+      instruction: 'Send it.',
+      runAt: '2026-09-27T22:53:29-04:00',
+      requestedByUser: true,
+      delivery: 'email',
+    }, {} as never)).rejects.toThrow(/requires a recipient or a connected Google account/)
+
+    expect(await engine.list({ includeHidden: true })).toEqual([])
+  })
+})
+
 describe('phoenix_task_create timezone handling', () => {
   it('accepts timezone on a one-shot task when runAt already defines the instant', async () => {
     const engine = new ProactivityEngine(
