@@ -44,6 +44,39 @@
   pointer-events: none;
 }
 
+/* A live KIRA card is fixed at 320px + 16px from the viewport edge. The
+   conversation reserves exactly that occupied strip while keeping the rest
+   of the center column usable; collapsing KIRA removes the reservation. */
+.frame[data-details-collapsed] .centerCol:has(> [data-shell-overlay] [data-kira-teams]:not([data-kira-collapsed])) {
+  --dsh-kira-chat-clearance: 336px;
+  --dsh-kira-chat-content-width: min(940px, calc(100% - 48px));
+  --dsh-kira-composer-max-width: min(1120px, calc(100% - 24px));
+}
+
+/* Defensive compatibility for a stale/third-party KIRA registration that
+   still lands in shell.workspace: float it instead of creating a 360px rail.
+   Cordis remains the only true structural workspace owner. */
+.centerCol:has(> [data-shell-workspace] [data-kira-teams]):not(:has(> [data-shell-workspace] [data-cordis-workspace])) {
+  flex-direction: column;
+}
+
+.centerCol:has(> [data-shell-workspace] [data-kira-teams]):not(:has(> [data-shell-workspace] [data-cordis-workspace])) > [data-shell-workspace] {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: block;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.frame[data-details-collapsed] .centerCol:has(> [data-shell-workspace] [data-kira-teams]:not([data-kira-collapsed])):not(:has(> [data-shell-workspace] [data-cordis-workspace])) {
+  --dsh-kira-chat-clearance: 336px;
+  --dsh-kira-chat-content-width: min(940px, calc(100% - 48px));
+  --dsh-kira-composer-max-width: min(1120px, calc(100% - 24px));
+}
+
 /* Dedicated structural rail for true in-flow Cordis visual work.
    Floating agent chrome belongs to shell.overlay and never participates in
    this flex calculation. */
@@ -77,6 +110,14 @@
   min-height: 0;
 }
 
+
+@media (max-width: 1100px) {
+  .frame[data-details-collapsed] .centerCol {
+    --dsh-kira-chat-clearance: 0px;
+    --dsh-kira-chat-content-width: 768px;
+    --dsh-kira-composer-max-width: calc(768px + 32px);
+  }
+}
 
 @media (max-width: 760px) {
   .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]),

@@ -6,6 +6,11 @@ import { ModelActivityAvatar, portraitSrcForKind } from '../src/client/ModelActi
 
 const dockCss = readFileSync(new URL('../src/client/KiraTeamsDock.module.css', import.meta.url), 'utf8')
 const avatarCss = readFileSync(new URL('../src/client/ModelActivityAvatar.module.css', import.meta.url), 'utf8')
+const frameCss = readFileSync(new URL('../../ui-layout/src/client/AppFrame.module.css', import.meta.url), 'utf8')
+const conversationCss = readFileSync(
+  new URL('../../ui-conversation/src/client/skeleton/ConversationRoot.module.css', import.meta.url),
+  'utf8',
+)
 
 describe('KIRA compact live-agent layout regression', () => {
   it('stays a small floating window and stacks only live agent rows', () => {
@@ -15,6 +20,14 @@ describe('KIRA compact live-agent layout regression', () => {
     expect(dockCss).toMatch(/\.list\s*{[^}]*flex-direction:\s*column/s)
     expect(dockCss).not.toMatch(/grid-template-columns:\s*repeat\(5,/s)
     expect(avatarCss).toMatch(/\.card\s*{[^}]*width:\s*58px;[^}]*height:\s*72px/s)
+  })
+
+  it('reserves only the visible KIRA card strip and gives the remaining width to chat', () => {
+    expect(frameCss).toMatch(/--dsh-kira-chat-clearance:\s*336px/)
+    expect(frameCss).toMatch(/\[data-kira-teams\].*shell\.workspace|shell\.workspace.*\[data-kira-teams\]/s)
+    expect(conversationCss).toMatch(/padding-right:\s*var\(--dsh-kira-chat-clearance,\s*0px\)/)
+    expect(conversationCss).toMatch(/--dsh-chat-content-width:\s*var\(--dsh-kira-chat-content-width,\s*768px\)/)
+    expect(conversationCss).toMatch(/--dsh-kira-composer-max-width/)
   })
 
   it('renders each persona from bundled portrait pixels while keeping phase data for animation', () => {
