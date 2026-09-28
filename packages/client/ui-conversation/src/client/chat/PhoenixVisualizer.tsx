@@ -23,6 +23,18 @@ interface ParsedChart {
   readonly data: readonly VisualDatum[]
 }
 
+interface CandlestickDatum {
+  readonly label: string
+  readonly open: number
+  readonly high: number
+  readonly low: number
+  readonly close: number
+}
+
+interface ParsedCandlestick {
+  readonly data: readonly CandlestickDatum[]
+}
+
 interface SportsTeam {
   readonly name: string
   readonly abbreviation?: string
@@ -181,6 +193,140 @@ function parseChart(spec: JsonRecord): ParsedChart | undefined {
     ? requested
     : 'bar'
   return { type, series, data: data.slice(0, 80) }
+}
+
+function candlestickSource(spec: JsonRecord): readonly unknown[] {
+  if (Array.isArray(spec.candles)) return spec.candles
+  const data = isRecord(spec.data) ? spec.data : undefined
+  return Array.isArray(data?.candles) ? data.candles : []
+}
+
+function candlestickLabel(row: JsonRecord, index: number): string {
+  const raw = row.time ?? row.openTime ?? row.timestamp ?? row.date
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    const date = new Date(raw)
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    }
+  }
+  return display(raw) || String(index + 1)
+}
+
+function parseCandlestick(spec: JsonRecord): ParsedCandlestick | undefined {
+  if ((nonEmpty(spec.chartType) ?? '').toLowerCase() !== 'candlestick') return undefined
+  const rows = candlestickSource(spec).filter(isRecord)
+  const data: CandlestickDatum[] = []
+  for (const [index, row] of rows.entries()) {
+    const open = number(row.open)
+    const high = number(row.high)
+    const low = number(row.low)
+    const close = number(row.close)
+    if (open === undefined || high === undefined || low === undefined || close === undefined) continue
+    if (high < Math.max(open, close, low) || low > Math.min(open, close, high)) continue
+    data.push({
+      label: candlestickLabel(row, index),
+      open,
+      high,
+      low,
+      close,
+    })
+  }
+  return data.length === 0 ? undefined : { data: data.slice(-160) }
+}
+
+function CandlestickChart({ chart }: { readonly chart: ParsedCandlestick }) {
+  const width = 900
+  const height = 360
+  const left = 74
+  const right = 20
+  const top = 20
+  const bottom = 54
+  const rawMin = Math.min(...chart.data.map(item => item.low))
+  const rawMax = Math.max(...chart.data.map(item => item.high))
+  const rawSpan = rawMax - rawMin
+  const pad = rawSpan > 0 ? rawSpan * 0.06 : Math.max(Math.abs(rawMax) * 0.01, 1)
+  const min = rawMin - pad
+  const max = rawMax + pad
+  const plotHeight = height - top - bottom
+  const plotWidth = width - left - right
+  const y = (value: number): number => top + (max - value) / (max - min) * plotHeight
+  const slot = plotWidth / Math.max(chart.data.length, 1)
+  const bodyWidth = Math.max(2, Math.min(14, slot * 0.62))
+  const labelEvery = Math.max(1, Math.ceil(chart.data.length / 7))
+  const ticks = Array.from({ length: 5 }, (_, index) => min + (max - min) * index / 4)
+
+  return (
+    <div className={css.chartScroller}>
+      <svg
+        className={css.chart}
+        viewBox={'0 0 ' + width + ' ' + height}
+        role="img"
+        aria-label="candlestick chart"
+      >
+        {ticks.map((tick) => {
+          const yy = y(tick)
+          return (
+            <g key={tick}>
+              <line className={css.grid} x1={left} y1={yy} x2={width - right} y2={yy} />
+              <text className={css.axisLabel} x={left - 8} y={yy + 4} textAnchor="end">{formatNumber(tick)}</text>
+            </g>
+          )
+        })}
+        <line className={css.axis} x1={left} y1={top} x2={left} y2={height - bottom} />
+        <line className={css.axis} x1={left} y1={height - bottom} x2={width - right} y2={height - bottom} />
+        {chart.data.map((candle, index) => {
+          const x = left + slot * index + slot / 2
+          const rising = candle.close >= candle.open
+          const tone = rising
+            ? 'var(--phoenix-visual-up, #16a34a)'
+            : 'var(--phoenix-visual-down, #dc2626)'
+          const bodyTop = y(Math.max(candle.open, candle.close))
+          const bodyBottom = y(Math.min(candle.open, candle.close))
+          return (
+            <g key={index}>
+              <line
+                x1={x}
+                y1={y(candle.high)}
+                x2={x}
+                y2={y(candle.low)}
+                stroke={tone}
+                strokeWidth="1.5"
+              />
+              <rect
+                x={x - bodyWidth / 2}
+                y={bodyTop}
+                width={bodyWidth}
+                height={Math.max(1, bodyBottom - bodyTop)}
+                rx="1"
+                fill={tone}
+                stroke={tone}
+              >
+                <title>{candle.label + ' · O ' + formatNumber(candle.open) + ' · H ' + formatNumber(candle.high) + ' · L ' + formatNumber(candle.low) + ' · C ' + formatNumber(candle.close)}</title>
+              </rect>
+            </g>
+          )
+        })}
+        {chart.data.map((candle, index) => index % labelEvery === 0 || index === chart.data.length - 1
+          ? (
+              <text
+                key={index}
+                className={css.axisLabel}
+                x={left + slot * index + slot / 2}
+                y={height - 24}
+                textAnchor="middle"
+              >
+                {candle.label.slice(0, 18)}
+              </text>
+            )
+          : null)}
+      </svg>
+    </div>
+  )
 }
 
 function color(index: number): string {
@@ -374,6 +520,16 @@ function PolarChart({ chart }: { readonly chart: ParsedChart }) {
 }
 
 function ChartView({ spec }: { readonly spec: JsonRecord }) {
+  const candlestick = parseCandlestick(spec)
+  if (candlestick !== undefined) {
+    return (
+      <section className={css.section} data-phoenix-visual-kind="chart" data-phoenix-chart-type="candlestick">
+        {header(spec)}
+        <CandlestickChart chart={candlestick} />
+      </section>
+    )
+  }
+
   const chart = parseChart(spec)
   if (chart === undefined) return <Fallback spec={spec} />
   return (
