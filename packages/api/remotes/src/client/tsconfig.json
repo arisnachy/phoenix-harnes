@@ -1,0 +1,11 @@
+{
+  // Type-aware lint discovery shim for the split Client project.
+  // Tsgolint discovers conventional tsconfig.json files; the authoritative
+  // project remains ../../tsconfig.client.json.
+  "extends": "../../tsconfig.client.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "noEmit": true
+  }
+}
