@@ -163,6 +163,18 @@ describe('turnProgress', () => {
       .toEqual({ phase: 'preparing', activity: 'preparing' })
   })
 
+  it('ignores a stale older open turn once the newest turn is closed', () => {
+    const timeline = {
+      turnOrder: [3, 4],
+      turns: new Map([
+        [3, { turn: 3, start: undefined, end: undefined, status: 'open', steps: [], data: { get: () => undefined } }],
+        [4, { turn: 4, start: undefined, end: undefined, status: 'closed', steps: [], data: { get: () => undefined } }],
+      ]),
+    } as unknown as ConversationTimelineSnapshot
+
+    expect(turnProgress(timeline, [assistantNode(4, 'settled', 'text')])).toBeNull()
+  })
+
   it('returns null when there is no open turn', () => {
     expect(turnProgress(closedTimeline(4), [])).toBeNull()
   })
