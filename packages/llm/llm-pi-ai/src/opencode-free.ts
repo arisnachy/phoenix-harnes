@@ -76,6 +76,8 @@ function cloneModel(model: PiAiModelProfile): PiAiModelProfile {
   return input === undefined ? rest : { ...rest, input: [...input] }
 }
 
+ * @param models - models supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Built-in Phoenix provider profile shown in the normal model selector. */
 export function opencodeFreeProfile(models: readonly PiAiModelProfile[]): PiAiProviderProfile {
   return {
@@ -105,6 +107,8 @@ export interface OpenCodeFreeCatalogOptions {
   refreshMs?: number
 }
 
+ * @param options - options supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Stateful, failure-tolerant cache for OpenCode's rotating free model ids. */
 export function createOpenCodeFreeCatalog(options: OpenCodeFreeCatalogOptions = {}): OpenCodeFreeCatalog {
   const fetchImpl = options.fetchImpl ?? fetch
@@ -148,6 +152,8 @@ export function createOpenCodeFreeCatalog(options: OpenCodeFreeCatalogOptions = 
   }
 }
 
+ * @param headers - headers supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Copy safe request headers to OpenCode while removing all hop-by-hop and authorization data. */
 export function openCodeUpstreamHeaders(
   headers: Readonly<Record<string, string | readonly string[] | undefined>>,
@@ -230,6 +236,8 @@ async function handleProxyRequest(
   await pipeResponse(upstream, response)
 }
 
+ * @param fetchImpl - fetchImpl supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Start the loopback-only OpenCode bridge. Upstream requests carry no Authorization header. */
 export async function startOpenCodeFreeProxy(fetchImpl: typeof fetch = fetch): Promise<Server> {
   const server = createServer((request, response) => {
