@@ -774,36 +774,19 @@ Source: [`packages/goal/goal/src/index.ts:130`](../packages/goal/goal/src/index.
 Requires: `hardness` · `tools` · `skills` · `agents` · `approval` · `systemPrompt` · `authorization`
 
 ```ts config-catalog
-/** HARDNESS mission and durable proactivity configuration. */
+/** HARDNESS mission completion judge configuration. */
 export interface Config {
   /** Structured subagent provider used for independent completion review. */
   judgeProvider?: string
   /** Register model-facing HARDNESS tools in this scope. */
   modelTools?: boolean
-  /** Independently review verified substantive ordinary mutations before turn completion. */
-  judgeOrdinaryMutations?: boolean
-  /** Maximum independent ordinary-task judge passes before deterministic gates take over. */
-  maxOrdinaryJudgePasses?: number
-  /** Durable proactive-task ledger. Empty/omitted uses ~/.dsh/phoenix-tasks.json; :memory: is test-only. */
-  taskLedgerPath?: string
-  /** How often the host checks for due scheduled work. */
-  taskPollMs?: number
-  /** Durable event-driven wake-trigger ledger. Empty/omitted uses ~/.dsh/phoenix-wake-triggers.json; :memory: is test-only. */
-  wakeLedgerPath?: string
-  /** One-shot subagent provider used for private preparation and scheduled office work. */
-  privateWorkProvider?: string
-  /** Maximum retained characters from one private preparation result. */
-  privateWorkResultChars?: number
-  /** Configured mail identity reference used for office mail sent on the user's behalf. */
-  userMailIdentity?: string
-  /** Configured mail identity reference Phoenix uses when communicating as itself. */
-  harnessMailIdentity?: string
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:141`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:89`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
+
 ## `@phoenix-ai/dsh-headless`
 
 Requires: `agentDefaultModel` · `agents` · `sessions`
@@ -1055,7 +1038,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/living-local/src/index.ts:27`](../packages/core/living-local/src/index.ts)
+Source: [`packages/core/living-local/src/index.ts:28`](../packages/core/living-local/src/index.ts)
 
 <a id="phoenix-aidsh-llm-deepseek"></a>
 
