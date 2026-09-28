@@ -1,0 +1,50 @@
+name: Phoenix lint dangerous probe
+on:
+  push:
+    branches: [repair-lint-dangerous-20260928]
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-lint-dangerous-20260928
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build typed lint contracts
+        run: pnpm run build:lib:host
+      - name: Apply suggested and dangerous lint fixes
+        shell: bash
+        run: |
+          set +e
+          pnpm exec tsx scripts/run-oxlint.ts . --fix-suggestions --fix-dangerously
+          exit 0
+      - name: Rebuild typed lint contracts
+        run: pnpm run build:lib:host
+      - name: Commit probe fixes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No additional fixes."
+          else
+            git config user.name "Phoenix Repair Bot"
+            git config user.email "phoenix-repair-bot@users.noreply.github.com"
+            git add -A
+            git commit -m "style: apply typed lint suggested fixes"
+            git push origin HEAD:repair-lint-dangerous-20260928
+          fi
+      - name: Measure residual
+        shell: bash
+        run: |
+          set +e
+          pnpm run lint:contracts-ready
+          echo "residual_status=$?"
+          exit 0
