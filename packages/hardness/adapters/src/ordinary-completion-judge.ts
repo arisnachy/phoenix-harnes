@@ -450,7 +450,12 @@ export function installOrdinaryCompletionJudgeBridge(
     if (state === undefined) return downstream
 
     if (needsGameAssetPipeline(state.request)) {
-      if (isGameAssetDiscovery(exec.name, exec.arguments)) state.assetDiscoveryObserved = true
+      if (isGameAssetDiscovery(exec.name, exec.arguments)) {
+        state.assetDiscoveryObserved = true
+        // Discovery can satisfy a deterministic blocker without mutating the artifact.
+        // Reopen the same generation so the semantic judge still runs before completion.
+        if (state.judgedGeneration === state.generation) state.judgedGeneration = 0
+      }
       if (isGameAssetProduction(exec.name, exec.arguments)) state.assetProductionObserved = true
       if (isGameAssetProvenanceMutation(exec.name, exec.arguments)) state.assetProvenanceObserved = true
     }
