@@ -112,7 +112,13 @@ function argumentText(value: unknown): string {
   try { return JSON.stringify(value) ?? 'null' } catch { return String(value) }
 }
 
-/** @internal Pure classifier exported for focused regression coverage. */
+/**
+ * Classify whether a tool invocation represents a substantive mutation that reopens completion review.
+ * @param name - fully qualified tool name.
+ * @param args - tool arguments used to detect substantive targets or shell mutations.
+ * @returns true when the invocation changes a substantive artifact or game asset.
+ * @internal
+ */
 export function isSubstantiveMutation(name: string, args: unknown): boolean {
   const normalizedName = name.toLowerCase().replaceAll('-', '_')
   const op = operationName(name)
@@ -126,7 +132,13 @@ export function isSubstantiveMutation(name: string, args: unknown): boolean {
 
 type VerificationKind = 'technical' | 'visual' | 'play'
 
-/** @internal Pure classifier exported for focused regression coverage. */
+/**
+ * Classify which deterministic verification gates a tool invocation satisfies.
+ * @param name - fully qualified tool name.
+ * @param args - tool arguments used to recognize shell, visual, and gameplay checks.
+ * @returns verification kinds proven by the invocation.
+ * @internal
+ */
 export function verificationKinds(name: string, args: unknown): readonly VerificationKind[] {
   const normalizedName = name.toLowerCase().replaceAll('-', '_')
   const op = operationName(name)
