@@ -11,12 +11,12 @@ interface Row {
 }
 
 const root = resolve(import.meta.dirname, '../../..')
-const overlay = resolve(root, 'examples/mcp-game-dev/game-dev.cordis.yml')
+const baseConfig = resolve(root, 'packages/bundle/base/cordis.patch.yml')
 const skill = resolve(root, 'apps/cli/config/agent-presets/standard/skills/game-development/SKILL.md')
 
 describe('game development connector pack', () => {
   it('ships safe, opt-in namespaces for the major game engines', () => {
-    const patches = loadOverlayPatches('game-dev-config-test', overlay)
+    const patches = loadOverlayPatches('game-dev-config-test', baseConfig)
     const rows = (patches[0]?.insert ?? []) as Row[]
     const byId = new Map(rows.map(row => [row.id, row]))
 
@@ -35,7 +35,7 @@ describe('game development connector pack', () => {
   })
 
   it('pins only the official Blender source and keeps community engines command-configured', () => {
-    const source = readFileSync(overlay, 'utf8')
+    const source = readFileSync(baseConfig, 'utf8')
 
     expect(source).toContain('projects.blender.org/lab/blender_mcp.git@v1.0.0')
     expect(source).toContain('PHOENIX_UNITY_MCP_COMMAND')
