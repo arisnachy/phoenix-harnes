@@ -106,16 +106,11 @@
   color: var(--dsw-alias-label-primary);
 }
 
-.brandMark svg {
+.brandMark img {
   width: 38px;
   height: 38px;
-  filter: drop-shadow(0 3px 6px rgba(69, 53, 43, 0.08));
-}
-
-.brandMark img {
-  width: 36px;
-  height: 36px;
   object-fit: contain;
+  filter: drop-shadow(0 3px 7px rgba(54, 46, 40, 0.10));
 }
 
 .brandName {

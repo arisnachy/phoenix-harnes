@@ -20,33 +20,24 @@
   text-align: center;
 }
 
-/* Sculptural charcoal mark with a restrained Phoenix-orange halo. */
+/* Detailed transparent Phoenix image: no synthetic ring or SVG treatment. */
 .fishHitbox {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 76px;
-  height: 76px;
+  width: 80px;
+  height: 80px;
   margin-bottom: 14px;
-  isolation: isolate;
-}
-
-.fishHitbox::before {
-  content: '';
-  position: absolute;
-  inset: 7px;
-  z-index: -1;
-  border: 1px solid color-mix(in srgb, var(--dsw-specific-phoenix-accent) 22%, transparent);
-  border-radius: 999px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--dsw-specific-phoenix-accent) 7%, transparent) 0%, transparent 66%);
 }
 
 .fish {
-  color: var(--dsw-alias-label-primary);
+  display: block;
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
   transform-origin: 50% 60%;
-  filter: drop-shadow(0 4px 8px rgba(69, 53, 43, 0.08));
-  opacity: 0.96;
+  filter: drop-shadow(0 5px 12px rgba(54, 46, 40, 0.10));
+  opacity: 1;
 }
 
 .headline {
@@ -179,9 +170,14 @@
   }
 
   .fishHitbox {
-    width: 62px;
-    height: 62px;
+    width: 66px;
+    height: 66px;
     margin-bottom: 10px;
+  }
+
+  .fish {
+    width: 58px;
+    height: 58px;
   }
 
   .headline {

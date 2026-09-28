@@ -14,8 +14,8 @@
 
 .root[data-phase='hero'] {
   background:
-    radial-gradient(circle at 58% 44%, rgba(226, 95, 37, 0.045), transparent 30%),
-    linear-gradient(145deg, rgb(252, 251, 248) 0%, rgb(255, 254, 252) 52%, rgb(250, 248, 244) 100%);
+    radial-gradient(circle at 60% 44%, rgba(226, 95, 37, 0.018), transparent 32%),
+    var(--dsw-alias-bg-base);
 }
 
 .header {

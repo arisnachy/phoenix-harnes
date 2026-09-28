@@ -110,7 +110,7 @@ export function HeroGlow({ className }: { className?: string | undefined }) {
         </filter>
       </defs>
       <g filter={`url(#${glowFilterId})`}>
-        <ellipse cx="525.5" cy="234" rx="425.5" ry="134" fill="#E46A2A" fillOpacity="0.055" />
+        <ellipse cx="525.5" cy="234" rx="425.5" ry="134" fill="#E46A2A" fillOpacity="0.026" />
       </g>
     </svg>
   )
@@ -151,7 +151,7 @@ export function HeroShell({ renderSlot, preferredName, children }: HeroShellProp
           <span>{greeting}</span>
           {displayName === undefined ? null : (
             <>
-              <span>, </span>
+              <span>{',\u00A0'}</span>
               <span className={css.preferredName}>{displayName}</span>
             </>
           )}
