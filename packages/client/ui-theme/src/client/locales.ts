@@ -18,3 +18,12 @@ export const en = {
   'appearance.dark': 'Dark',
   'appearance.system': 'System',
 } satisfies Record<ThemeKey, string>
+
+
+/** Spanish dictionary. */
+export const es = {
+  'appearance.title': 'Apariencia',
+  'appearance.light': 'Claro',
+  'appearance.dark': 'Oscuro',
+  'appearance.system': 'Sistema',
+} satisfies Record<ThemeKey, string>
