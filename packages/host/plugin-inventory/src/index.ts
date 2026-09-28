@@ -307,10 +307,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
           credentials.describe(X_CLIENT_SECRET_REF).then(info => info.configured),
         ])
     const managed = await this.managedMcp.snapshot()
-    const apiConfigured = managed.some(connector =>
-      connector.serverName === X_API_MCP_SERVER_NAME || connector.url === X_API_MCP_URL)
-    const docsConfigured = managed.some(connector =>
-      connector.serverName === X_DOCS_MCP_SERVER_NAME || connector.url === X_DOCS_MCP_URL)
+    const apiConfigured = managed.some(connector => connector.serverName === X_API_MCP_SERVER_NAME)
+    const docsConfigured = managed.some(connector => connector.serverName === X_DOCS_MCP_SERVER_NAME)
     const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
       | { list(): readonly McpConnectorRuntimeEntry[] }
       | undefined
