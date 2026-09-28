@@ -175,7 +175,7 @@ function labelsValuesRepair(spec: JsonRecord): JsonRecord | undefined {
   const values = spec.values
   if (!Array.isArray(labels) || !Array.isArray(values)) return undefined
   const rows = labels.map((label, index) => {
-    const value = values[index]
+    const value: unknown = values[index]
     return {
       label: typeof label === 'string' || typeof label === 'number' ? String(label) : String(index + 1),
       value: finite(value) ? value : 0,
@@ -206,7 +206,7 @@ function chartJsRepair(spec: JsonRecord): JsonRecord | undefined {
     }
     for (const [index, dataset] of datasets.entries()) {
       if (!Array.isArray(dataset.data)) continue
-      const value = dataset.data[rowIndex]
+      const value: unknown = dataset.data[rowIndex]
       if (finite(value)) row[`series${index + 1}`] = value
     }
     return row
