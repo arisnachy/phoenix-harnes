@@ -79,10 +79,12 @@ export function dominatesStrategy(
   return qualityImproved || comparable.some(([next, old]) => next < old)
 }
 
+/**
+ * Keep only quality-passing strategies that are not dominated by another observation.
  * @param observations - observations supplied to this public operation.
  * @param constraint - constraint supplied to this public operation.
  * @returns Result produced by this public operation.
-/** Keep only quality-passing strategies that are not dominated by another observation. */
+ */
 export function paretoEfficientStrategies(
   observations: readonly StrategyObservation[],
   constraint: QualityConstraint = {},
