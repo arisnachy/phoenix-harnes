@@ -1,0 +1,47 @@
+name: Phoenix final lint repair
+
+on:
+  push:
+    branches: [repair-lint-final-20260928]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-lint-final-20260928
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply safe lint fixes
+        shell: bash
+        run: |
+          set +e
+          pnpm run lint:fix:contracts-ready
+          echo "autofix_exit=$?"
+          set -e
+      - name: Commit autofixes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No autofix changes."
+          else
+            git config user.name "Phoenix Repair Bot"
+            git config user.email "phoenix-repair-bot@users.noreply.github.com"
+            git add -A
+            git commit -m "style: apply remaining contracts-ready autofixes [skip ci]"
+            git push origin HEAD:repair-lint-final-20260928
+          fi
+      - name: Recheck lint
+        run: pnpm run lint:contracts-ready
+      - name: Check duplication
+        run: pnpm run duplication
