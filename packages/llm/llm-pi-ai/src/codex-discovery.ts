@@ -163,6 +163,7 @@ export function readCodexModelPage(result: unknown): {
   return { models, ...nextCursor === undefined ? {} : { nextCursor } }
 }
 
+ * @returns Result produced by this public operation.
 /** Only the ambient facts Codex needs to find its install, config and network. */
 export function codexEnvironment(): NodeJS.ProcessEnv {
   const names = [
@@ -203,6 +204,7 @@ function finishProcessSetup(child: ChildProcessWithoutNullStreams): ChildProcess
   return child
 }
 
+ * @returns Result produced by this public operation.
 /** Fixed capability-reduced argv for metadata-only Codex app-server probes. */
 export function codexDiscoveryArgs(): string[] {
   return [
