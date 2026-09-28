@@ -46,11 +46,9 @@ function isPhoenixStdioProxyPath(value: string): boolean {
  * at this running PHOENIX installation's checked-in proxy.
  */
 export function repairPhoenixStdioProxyArgs(args: readonly string[]): string[] {
-  let changed = false
   const repaired = args.map((argument) => {
     if (!isPhoenixStdioProxyPath(argument) || existsSync(argument)) return argument
     if (!existsSync(CURRENT_PHOENIX_STDIO_PROXY)) return argument
-    changed = true
     return CURRENT_PHOENIX_STDIO_PROXY
   })
   return repaired
