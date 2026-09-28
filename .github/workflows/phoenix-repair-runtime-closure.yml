@@ -1,0 +1,24 @@
+name: Phoenix runtime closure repair
+
+on:
+  push:
+    branches: [repair-runtime-closure-20260927]
+
+permissions:
+  contents: read
+
+jobs:
+  closure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-runtime-closure-20260927
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run verify-runtime-closure
