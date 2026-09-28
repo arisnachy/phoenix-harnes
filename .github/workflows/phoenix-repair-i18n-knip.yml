@@ -1,0 +1,70 @@
+name: Phoenix i18n and knip repair
+
+on:
+  push:
+    branches: [repair-i18n-knip-20260927]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-i18n-knip-20260927
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Re-record translation pairs and validate
+        id: i18n
+        shell: bash
+        run: |
+          set +e
+          pnpm exec tsx scripts/verify-translation-pairing.ts --write --all
+          write_code=$?
+          pnpm run verify-translation-pairing
+          check_code=$?
+          echo "write_code=$write_code" >> "$GITHUB_OUTPUT"
+          echo "check_code=$check_code" >> "$GITHUB_OUTPUT"
+          exit $check_code
+        continue-on-error: true
+      - name: Knip diagnostic
+        id: knip
+        shell: bash
+        run: |
+          set +e
+          pnpm exec knip --treat-config-hints-as-errors --reporter compact > knip.out 2>&1
+          code=$?
+          cat knip.out
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          exit $code
+        continue-on-error: true
+      - name: Commit validated i18n records
+        if: steps.i18n.outputs.check_code == '0'
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No i18n changes."
+            exit 0
+          fi
+          git config user.name "Phoenix Repair Bot"
+          git config user.email "phoenix-repair-bot@users.noreply.github.com"
+          find . -name '*.i18n.yaml' -print0 | xargs -0 git add --
+          if git diff --cached --quiet; then
+            echo "No pairing records changed."
+            exit 0
+          fi
+          git commit -m "docs(i18n): refresh validated translation pairing records"
+          git push origin HEAD:repair-i18n-knip-20260927
+      - name: Final status
+        shell: bash
+        run: |
+          test "${{ steps.i18n.outputs.check_code }}" = "0"
+          test "${{ steps.knip.outputs.code }}" = "0"
