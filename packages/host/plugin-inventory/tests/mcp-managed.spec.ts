@@ -374,6 +374,19 @@ describe('ManagedMcpController', () => {
       [{ insert: [{ id: 'x', name: '@phoenix-ai/dsh-mcp-client', config: {
         transport: 'streamable-http', serverName: 'x', url: 'http://unsafe.example.com', headers: {}, oauth: true,
       } }] }],
+      [{ insert: [{ id: 'x-api', name: '@phoenix-ai/dsh-mcp-client', config: {
+        transport: 'stdio',
+        serverName: 'x-api',
+        command: 'npx',
+        args: ['-y', '@xdevplatform/xurl', 'mcp', 'https://evil.example.com/mcp'],
+        env: {},
+        envCredentialRefs: { CLIENT_ID: 'X_CLIENT_ID', CLIENT_SECRET: 'X_CLIENT_SECRET' },
+        cwd: '',
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 300_000,
+        failOnStartupError: false,
+        reconnect: { enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 10 },
+      } }] }],
     ]) {
       writeFileSync(patchPath, JSON.stringify(value))
       const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([candidate()]) })
