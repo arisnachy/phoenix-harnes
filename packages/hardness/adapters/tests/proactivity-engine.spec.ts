@@ -12,6 +12,32 @@ function fixedIds(...ids: string[]) {
 }
 
 describe('HARDNESS ProactivityEngine', () => {
+  it('exposes only the already-loaded visible task snapshot without I/O', async () => {
+    const engine = new ProactivityEngine(new MemoryProactivityStore(), { execute: async () => ({}) }, { id: fixedIds('visible', 'hidden') })
+    const before = engine.peek({ now: new Date('2026-09-13T12:00:00.000Z') })
+    expect(before).toEqual([])
+
+    await engine.create({
+      title: 'Visible follow-up',
+      instruction: 'Follow up.',
+      runAt: '2026-09-14T12:00:00.000Z',
+      createdBy: 'harness',
+    })
+    await engine.create({
+      title: 'Hidden surprise',
+      instruction: 'Do not reveal yet.',
+      runAt: '2026-09-20T12:00:00.000Z',
+      revealAt: '2026-09-20T12:00:00.000Z',
+      visibility: 'surprise',
+      createdBy: 'harness',
+    })
+
+    expect(engine.peek({ now: new Date('2026-09-13T12:00:00.000Z') }).map(task => task.title))
+      .toEqual(['Visible follow-up'])
+    expect(engine.peek({ includeHidden: true, now: new Date('2026-09-13T12:00:00.000Z') }).map(task => task.title))
+      .toEqual(['Visible follow-up', 'Hidden surprise'])
+  })
+
   it('runs an overdue one-shot once after restart and records completion', async () => {
     const store = new MemoryProactivityStore()
     const firstExecutor = { execute: vi.fn(async () => ({ summary: 'sent' })) }
