@@ -35,10 +35,14 @@ function jsonRecord(value: unknown): Record<string, JsonValue> {
 function jsonRecordArray(value: unknown): Record<string, JsonValue>[] {
   const snapshot = snapshotJsonValue(value)
   if (!Array.isArray(snapshot)) throw new Error('Binance tool produced a non-array JSON result')
-  if (!snapshot.every(item => item !== null && typeof item === 'object' && !Array.isArray(item))) {
-    throw new Error('Binance tool produced a non-object journal entry')
+  const records: Record<string, JsonValue>[] = []
+  for (const item of snapshot) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error('Binance tool produced a non-object journal entry')
+    }
+    records.push(item)
   }
-  return snapshot as Record<string, JsonValue>[]
+  return records
 }
 
 function accountSummary(account: Awaited<ReturnType<BinancePaperBroker['account']>>): string {
