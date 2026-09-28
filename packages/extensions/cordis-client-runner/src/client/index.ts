@@ -162,6 +162,15 @@ function invokeError(
  * not the call it belonged to, and the model authored both halves — so this adds
  * the call and the contract it has to satisfy.
  */
+/** Narrow an untrusted dynamic-package value to the JSON vocabulary accepted by the Host Remote. */
+function isJsonValue(value: unknown): value is JsonValue {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (Array.isArray(value)) return value.every(isJsonValue)
+  if (typeof value !== 'object') return false
+  return Object.values(value as Record<string, unknown>).every(isJsonValue)
+}
+
 function wireFailure(id: CordisDynamicPluginId, method: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return `host.call("${method}") on ${id} did not complete: ${message}\n`
@@ -212,6 +221,9 @@ export function apply(ctx: Context): void {
       // generated codec is what validates them as JSON, and its rejection is a
       // bare field name — this is the only place that still knows which call it
       // belonged to, so the teaching has to be added here.
+      if (!isJsonValue(args)) {
+        throw new Error(wireFailure(pluginId, method, 'arguments are not JSON-compatible'))
+      }
       const answered = await ctx.remote.dynamicCordisRunner.invoke(pluginId, pluginRunId, method, args)
         .catch((error: unknown) => { throw new Error(wireFailure(pluginId, method, error)) })
       // Two failure layers, and they teach different things: the carrier's error
