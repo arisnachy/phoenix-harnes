@@ -326,6 +326,9 @@
     var(--dsw-alias-label-secondary) 100%
   );
   background-size: 285% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   animation-duration: 2.55s;
 }
 
