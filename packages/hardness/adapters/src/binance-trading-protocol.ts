@@ -33,7 +33,11 @@ Binance is an optional, on-demand connector. Keep it dormant unless the user's t
 - For strategy review, show equity/PnL, drawdown, trade count, win rate when defined, profit factor when defined, positions, and relevant candle context rather than dumping raw JSON.
 </phoenix_binance_trading_protocol>`
 
-/** Install Binance trading policy only in model-facing scopes. */
+/**
+ * Install Binance trading policy only in model-facing scopes.
+ * @param systemPrompt - Canonical system-prompt registrar.
+ * @returns Disposer for the registered Binance policy section.
+ */
 export function installBinanceTradingProtocol(systemPrompt: HardnessPromptRegistrar): () => void {
   return systemPrompt.section({
     name: 'hardness:binance-trading-protocol',
