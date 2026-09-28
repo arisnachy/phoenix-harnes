@@ -254,10 +254,12 @@ const MAX_FREE_IMAGE_BYTES = 32 * 1024 * 1024
 /** Hosted zero-upfront-cost providers, in the order PHOENIX tries them. */
 export const freeImageProviderOrder = ['cloudflare', 'huggingface'] as const
 
- * @param requested - requested supplied to this public operation.
- * @param _activeProvider - _activeProvider supplied to this public operation.
- * @returns Result produced by this public operation.
-/** Resolve the backend attempt order without coupling image generation to the text route. */
+/**
+ * Resolve the backend attempt order without coupling image generation to the text route.
+ * @param requested - Explicit image backend preference, when configured.
+ * @param _activeProvider - Active text provider, retained for routing compatibility.
+ * @returns Ordered concrete image backends to attempt.
+ */
 export function imageGenerationBackendOrder(
   requested: ImageGenerationBackend | undefined,
   _activeProvider: string | undefined,
@@ -266,10 +268,12 @@ export function imageGenerationBackendOrder(
   return ['codex', 'local', 'free']
 }
 
- * @param requested - requested supplied to this public operation.
- * @param activeProvider - activeProvider supplied to this public operation.
- * @returns Result produced by this public operation.
-/** Select the first image backend PHOENIX will try. */
+/**
+ * Select the first image backend PHOENIX will try.
+ * @param requested - Explicit image backend preference, when configured.
+ * @param activeProvider - Active text provider used by automatic routing.
+ * @returns Concrete image backend selected for the first attempt.
+ */
 export function selectImageGenerationBackend(
   requested: ImageGenerationBackend | undefined,
   activeProvider: string | undefined,
