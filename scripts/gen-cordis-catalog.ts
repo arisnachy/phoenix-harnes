@@ -591,6 +591,13 @@ export const FOUNDATION_TYPE_NAMES: ReadonlySet<string> = new Set([
 export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   z: 'schemastery schema constructor is owned by vendor/schemastery (vendored upstream)',
   WakeEvent: 'Phoenix wake-event payload is owned by packages/hardness/adapters/README.md',
+  ClientLocation: 'browser geolocation payload is owned by packages/host/apiproxy/src/api/sessions.ts',
+  ObservedClientLocation: 'ephemeral browser reality projection is owned by packages/host/apiproxy/src/client-reality.ts',
+  VoiceConversationStatus: 'conversation voice status is owned by packages/voice/voice/src/types.ts',
+  VoiceConversationSpeakReceipt: 'conversation voice speak receipt is owned by packages/voice/voice/src/types.ts',
+  VoiceConversationSpeakRequest: 'conversation voice speak request is owned by packages/voice/voice/src/types.ts',
+  VoiceConversationCancelReceipt: 'conversation voice cancel receipt is owned by packages/voice/voice/src/types.ts',
+  VoiceConversationCancelRequest: 'conversation voice cancel request is owned by packages/voice/voice/src/types.ts',
   McpConnectorEntry: 'MCP connector lifecycle snapshot is owned by packages/mcp/mcp-registry/README.md',
   McpConnectorRegistration: 'MCP connector registration handle is owned by packages/mcp/mcp-registry/README.md',
   McpConnectorRegistrationInput: 'MCP connector registration input is owned by packages/mcp/mcp-registry/README.md',
