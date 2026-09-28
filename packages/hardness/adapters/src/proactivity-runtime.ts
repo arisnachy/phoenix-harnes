@@ -30,6 +30,11 @@ export interface ProactivityRuntimeConfig {
   readonly userMailIdentity?: string
   readonly harnessMailIdentity?: string
   readonly resolveDefaultMailRecipient?: () => Promise<string | undefined>
+  /**
+   * Re-compose a persisted session before a scheduler-owned resume is published.
+   * This restores the same preset/tool world the original conversation used.
+   */
+  readonly composeResumedAgent?: (agentCtx: Context) => Promise<void>
 }
 
 /** Browser-safe task projection; unrevealed surprises never reach this surface. */
@@ -51,17 +56,61 @@ function requirePositive(value: number, name: string): number {
   return value
 }
 
-function chooseAgent(agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'>, targetAgentId?: string): Agent {
+type ProactivityAgentRegistry =
+  Pick<AgentRegistry, 'get' | 'roots' | 'list'>
+  & Partial<Pick<AgentRegistry, 'resume'>>
+
+interface ExecutionAgentLease {
+  readonly agent: Agent
+  readonly resumed: boolean
+  release(): Promise<void>
+}
+
+async function acquireExecutionAgent(
+  agents: ProactivityAgentRegistry,
+  targetAgentId: string | undefined,
+  config: ProactivityRuntimeConfig,
+): Promise<ExecutionAgentLease> {
   if (targetAgentId !== undefined) {
     const exact = agents.get(targetAgentId as never)
-    if (exact !== undefined) return exact
-    // Session/agent ids can be ephemeral across process restarts. A durable
-    // global task must not become permanently undeliverable just because the
-    // conversation that created it no longer exists.
+    if (exact !== undefined) {
+      return { agent: exact, resumed: false, release: async () => {} }
+    }
+
+    if (agents.resume === undefined) {
+      throw new ProactivityDeferredError(
+        `scheduled task target "${targetAgentId}" is not live and this runtime cannot resume persisted agents`,
+      )
+    }
+
+    try {
+      const handle = await agents.resume({
+        resumeSessionId: targetAgentId as never,
+        ...(config.composeResumedAgent === undefined ? {} : { setup: config.composeResumedAgent }),
+      })
+      let released = false
+      return {
+        agent: handle.agent,
+        resumed: true,
+        async release() {
+          if (released) return
+          released = true
+          await handle.agent.whenIdle()
+          await handle.dispose()
+        },
+      }
+    } catch (error: unknown) {
+      throw new ProactivityDeferredError(
+        `scheduled task target "${targetAgentId}" is not live and could not be resumed: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
   }
+
   const agent = agents.roots()[0] ?? agents.list()[0]
-  if (agent === undefined) throw new ProactivityDeferredError('no live Phoenix agent is available')
-  return agent
+  if (agent === undefined) {
+    throw new ProactivityDeferredError('no live Phoenix agent is available for an untargeted scheduled task')
+  }
+  return { agent, resumed: false, release: async () => {} }
 }
 
 function plainOutput(content: readonly ContentBlock[], limit: number): string {
@@ -223,15 +272,17 @@ async function evaluateConditionWatch(
  * @returns An executor suitable for the durable proactivity engine.
  */
 export function createProactivityExecutor(
-  agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'>,
+  agents: ProactivityAgentRegistry,
   subagents: Pick<SubagentRuntime, 'getProvider' | 'start'> | undefined,
   config: ProactivityRuntimeConfig,
 ): ProactivityExecutor {
   requirePositive(config.privateWorkResultChars, 'privateWorkResultChars')
   return {
     async execute(input): Promise<ProactivityExecutionResult> {
-      const parent = chooseAgent(agents, input.task.targetAgentId)
-      const resolvedRecipient = await deliveryRecipient(input, config)
+      const lease = await acquireExecutionAgent(agents, input.task.targetAgentId, config)
+      const parent = lease.agent
+      try {
+        const resolvedRecipient = await deliveryRecipient(input, config)
       if (input.task.delivery === 'email' && resolvedRecipient === undefined) {
         throw new ProactivityDeferredError(
           'scheduled email has no recipient and the connected account email is unavailable',
@@ -249,6 +300,7 @@ export function createProactivityExecutor(
             summary: boundContextSummary(`Condition met: ${input.task.title}`),
           },
         }))
+        await parent.whenIdle()
         return {
           summary: `condition met and notification accepted: ${decision.evidence}`,
           terminal: true,
@@ -266,7 +318,8 @@ export function createProactivityExecutor(
             summary: boundContextSummary(`Scheduled task: ${input.task.title}`),
           },
         }))
-        return { summary: 'accepted by the live Phoenix agent inbox' }
+        await parent.whenIdle()
+        return { summary: lease.resumed ? 'resumed persisted Phoenix agent and completed scheduled chat turn' : 'accepted by the live Phoenix agent inbox' }
       }
 
       if (subagents === undefined || subagents.getProvider(config.privateWorkProvider) === undefined) {
@@ -287,6 +340,9 @@ export function createProactivityExecutor(
         return { summary: plainOutput(result.output, config.privateWorkResultChars) }
       } finally {
         await run.dispose()
+      }
+      } finally {
+        await lease.release()
       }
     },
   }
