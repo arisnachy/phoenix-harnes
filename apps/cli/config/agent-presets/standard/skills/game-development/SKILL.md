@@ -65,6 +65,90 @@ píldoras gigantes, glassmorphism, cuadrículas de dashboard, iconos de app y pa
 el playfield salvo petición explícita. El HUD debe sentirse parte del juego y dejar que el mundo, los sprites y la acción
 sean la jerarquía visual principal.
 
+### Router `asset-first`: reutiliza antes de dibujar
+
+Para arte final de videojuegos, Phoenix debe optimizar por calidad y tiempo, no por demostrar que el modelo
+puede dibujar. Antes de fabricar un personaje, enemigo, NPC, tileset, prop, textura o modelo 3D desde cero,
+decide si existe un recurso reutilizable de mayor calidad y con licencia compatible.
+
+La decisión es por **capacidad real**, no solo por el nombre del modelo:
+
+1. Si el usuario pide explícitamente personajes o assets originales creados por Phoenix, usa generación
+   original como primera vía y emplea recursos externos solo como referencia visual legal, nunca para copiar.
+2. Si el modelo activo es principalmente textual/rápido o no existe un backend artístico de alta calidad
+   verificado, el modo `asset-first` es obligatorio: busca primero assets terminados y no gastes tiempo
+   intentando sustituirlos con SVG, canvas, primitivas, pixel art pobre o meshes básicos.
+3. Si existe un backend fuerte de imagen/3D, busca también candidatos reutilizables cuando ello pueda ahorrar
+   tiempo. Genera un candidato propio cuando aporte identidad o cubra un hueco y compara ambos resultados.
+4. Un asset generado **no gana por defecto por haber sido generado**. Debe superar visualmente al mejor
+   candidato reutilizable y cumplir las mismas puertas de estilo, animación, integración y rendimiento.
+5. Si ya existe un pack coherente que cubre protagonista/NPC/enemigos o mundo/UI con calidad suficiente,
+   prioriza ese pack completo sobre mezclar muchas fuentes o regenerar trabajo equivalente.
+
+#### Fuentes de descubrimiento
+
+Cuando haya acceso web, navegador o conectores, consulta varias bibliotecas apropiadas al proyecto. Entre las
+fuentes preferidas de descubrimiento están Kenney, itch.io Game Assets, OpenGameArt y Quaternius. Para 3D,
+materiales y entornos también pueden ser útiles Poly Haven y ambientCG. Servicios con cuenta o términos
+específicos, como Mixamo, solo se usan mediante flujos autorizados y sin automatizar interfaces privadas.
+
+La presencia de una fuente en esta lista **no concede licencia automática**. Verifica siempre la página del
+asset o pack exacto antes de descargarlo o integrarlo. No uses scraping para saltar autenticación, pago,
+CAPTCHA, límites del servicio ni términos de uso.
+
+#### License Gate y procedencia obligatoria
+
+Antes de importar un recurso externo, registra como mínimo:
+
+- fuente y URL/identificador original;
+- autor o publicador;
+- licencia exacta y evidencia disponible;
+- uso comercial permitido o no;
+- modificación permitida o no;
+- atribución requerida;
+- fecha de adquisición y hash del archivo descargado cuando sea viable.
+
+Si la licencia es desconocida, ambigua o incompatible con el proyecto, el candidato queda rechazado. Los
+assets aprobados se copian al proyecto o a una caché local controlada; el build final no debe depender de
+hotlinks remotos. Mantén `asset-manifest.json`, `licenses.json` y, cuando aplique, `credits.md`.
+
+#### Style Match y parada temprana
+
+Evalúa los candidatos antes de integrarlos. En 2D compara resolución/tamaño de píxel, perspectiva, paleta,
+outline, sombreado, proporciones, densidad de detalle, cadencia de frames y cobertura de animaciones. En 3D
+compara escala, topología, rig, materiales, texel density, iluminación objetivo y lenguaje de formas.
+
+Usa una puntuación interna de 100 para decidir rápido:
+
+- 30: coherencia con la dirección artística;
+- 20: calidad visual y lectura del actor/objeto;
+- 20: cobertura funcional y de animaciones;
+- 15: compatibilidad técnica/importación;
+- 15: integración con el resto del pack y del mundo.
+
+La licencia es una puerta previa, no puntos adicionales. Si un pack reutilizable alcanza **85/100** y cubre
+los estados necesarios, deja de buscar por inercia y úsalo. Solo sigue explorando si existe una carencia
+material. Para mezclar packs, exige compatibilidad artística equivalente a 85/100 o superior.
+
+Cuando haya un candidato generado y otro reutilizable, revisa ambos a escala real dentro del juego. Elige el
+que produzca el mejor resultado final. Si empatan, prefiere el reutilizable cuando ahorre trabajo y mantenga
+la identidad del proyecto; si el usuario pidió originalidad explícita, prefiere el generado que pase la puerta.
+
+#### Ruta rápida por tipo de arte
+
+- 2D/NES/SNES/Genesis moderno: busca primero packs coherentes de sprites, tiles y animaciones; después genera
+  únicamente lo que falte o lo que deba ser único para el juego.
+- Retro nativo: además de la licencia, valida límites reales de paleta, tile, sprite, VRAM y formato del target
+  antes de aceptar un asset.
+- 3D: busca primero modelos/rigs/animaciones reutilizables y compatibles; adapta o retargetea con Blender y el
+  motor cuando la licencia lo permita. No sustituyas un actor final por un primitive mesh.
+- UI/VFX/audio: aplica la misma política: reutiliza recursos legales y coherentes cuando sean mejores, y
+  genera desde cero cuando aporte una mejora material o el usuario lo haya pedido.
+
+El resultado buscado es simple: un modelo ligero no pierde minutos creando arte mediocre; un modelo o backend
+artístico fuerte sí puede crear arte original cuando pueda hacerlo mejor; y Phoenix siempre conserva la opción
+de usar recursos existentes si producen un juego más bonito, coherente y terminado.
+
 Hardness debe crear o coordinar activamente, según el proyecto:
 
 - dirección artística, paleta, shape language y style bible;
