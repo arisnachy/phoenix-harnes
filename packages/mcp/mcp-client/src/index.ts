@@ -278,7 +278,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
 
   const connection = startConnection(ctx, effectiveConnectionConfig(config), reconnect, registration, transportOptions)
-  requestReconnect = connection.reconnect
+  requestReconnect = () => connection.reconnect()
 
   if (oauthController !== undefined && authorization !== undefined && credentials !== undefined) {
     const controller = oauthController
