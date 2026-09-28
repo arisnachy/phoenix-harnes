@@ -435,8 +435,10 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuth
               : undefined
   const status = liveStatus ?? mcpStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
-    : definition.mode === 'mcp'
-      ? { text: definition.id === 'jev' ? t('jevOptionalStatus') : t('mcpReadyStatus'), className: '' }
+    : definition.id === 'binance'
+      ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+      : definition.mode === 'mcp'
+        ? { text: definition.id === 'jev' ? t('jevOptionalStatus') : t('mcpReadyStatus'), className: '' }
       : definition.mode === 'api-key'
         ? { text: t('apiKeyStatus'), className: '' }
         : account !== undefined
@@ -715,16 +717,22 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
   const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
     const account = entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
-    const mcpRuntime = definition.id === 'jev'
-      ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
-      : undefined
-    const managed = definition.id === 'jev'
-      ? mcpHub.managed.some(candidate => candidate.serverName === 'jev')
-      : false
+    const mcpRuntime = definition.id === 'binance'
+      ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
+      : definition.id === 'jev'
+        ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
+        : undefined
+    const managed = definition.id === 'binance'
+      ? mcpHub.managed.some(candidate => candidate.serverName === 'binance-agent-os'
+        || candidate.url === 'https://agent.binance.com/mcp/agentic')
+      : definition.id === 'jev'
+        ? mcpHub.managed.some(candidate => candidate.serverName === 'jev')
+        : false
     const connected = live?.installed === true
       || live?.callable === true
       || accountGrantConnectsCatalogEntry(account)
       || mcpRuntime?.status === 'ready'
+      || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, connected }
   }), [entries, liveConnectors, mcpHub])
 
