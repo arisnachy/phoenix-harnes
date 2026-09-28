@@ -62,10 +62,12 @@ export function resolveSupportedPlatforms(config: StdioPlatformDescriptor): read
   return undefined
 }
 
+/**
+ * Return whether this stdio MCP server may be started on the current host.
  * @param config - config supplied to this public operation.
  * @param platform - platform supplied to this public operation.
  * @returns Result produced by this public operation.
-/** Return whether this stdio MCP server may be started on the current host. */
+ */
 export function checkPlatformCompatibility(
   config: StdioPlatformDescriptor,
   platform: NodeJS.Platform = process.platform,
