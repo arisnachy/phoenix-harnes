@@ -28,6 +28,8 @@ interface ToolActivityFlowProps extends SeatProps {
   readonly turnStatus: {
     readonly startTime: number | null
     readonly progress: TurnProgress | null
+    /** Fail-safe expiry for optimistic admission-only activity; runtime activity uses null. */
+    readonly expiresAfterMs: number | null
   } | undefined
 }
 
@@ -277,12 +279,14 @@ function ToolActivityGroup({
 }
 
 /** Turn-level model activity label retained across first-token, tool, and streaming phases. */
-function TurnStatus({ startTime, progress, t }: {
+function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
   /** The running turn's logged `turn/start` time; null falls back to mount
    *  time when that boundary is outside the window. */
   readonly startTime: number | null
   /** Safe phase and activity derived from the current chat projection. */
   readonly progress: TurnProgress
+  /** Optional age ceiling for admission-only feedback. */
+  readonly expiresAfterMs: number | null
   /** The owning view's locale seat. */
   readonly t: ChatViewSlotProps['t']
 }) {
@@ -319,6 +323,7 @@ function TurnStatus({ startTime, progress, t }: {
   const technicalTitle = progress.detail === undefined || progress.detail === ''
     ? label
     : `${label} · ${progress.detail}`
+  if (expiresAfterMs !== null && elapsedMs >= expiresAfterMs) return null
   return (
     <div
       className={chatCss.turnStatus}
@@ -360,7 +365,12 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
       {flow.map((item, index) => (
         <Fragment key={item.key}>
           {turnStatus !== undefined && turnStatus.progress !== null && index === statusBeforeIndex && (
-            <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress} t={seatProps.t} />
+            <TurnStatus
+              startTime={turnStatus.startTime}
+              progress={turnStatus.progress}
+              expiresAfterMs={turnStatus.expiresAfterMs}
+              t={seatProps.t}
+            />
           )}
           {item.kind === 'node'
             ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
@@ -387,7 +397,12 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
         />
       )}
       {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
-        <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress} t={seatProps.t} />
+        <TurnStatus
+              startTime={turnStatus.startTime}
+              progress={turnStatus.progress}
+              expiresAfterMs={turnStatus.expiresAfterMs}
+              t={seatProps.t}
+            />
       )}
     </>
   )
