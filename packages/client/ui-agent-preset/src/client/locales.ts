@@ -42,7 +42,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
     'All Standard mode capabilities, with tools exposed through the Code Mode SDK so the model can combine multi-step operations in one TypeScript program.',
   presetMinimalName: 'Minimal mode',
   presetMinimalDescription:
-    'Two-tool coding agent with persistent bash and str_replace_editor.',
+    'Lean coding agent with persistent shell and str_replace_editor; Phoenix Living connector tools remain available so created artifacts stay connected.',
   presetCordisName: 'Creator mode',
   presetCordisDescription:
     'Built for creating custom agent presets, with all Standard mode capabilities plus runtime inspection, plugin experiments, and preset-authoring guidance.',
@@ -103,7 +103,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetCodeName: 'PTC 模式',
   presetCodeDescription: '具备标准模式的全部能力，并通过 Code Mode SDK 呈现工具，让模型用一个 TypeScript 程序组合多步操作。',
   presetMinimalName: '极简模式',
-  presetMinimalDescription: '仅提供持久 bash 与 str_replace_editor 的双工具编码 Agent。',
+  presetMinimalDescription: '精简编码 Agent，核心提供持久 shell 与 str_replace_editor；Phoenix Living 连接工具仍保持可用，以便创建的产物持续连接。',
   presetCordisName: '创造模式',
   presetCordisDescription: '用于创建自定义 Agent preset：具备标准模式的全部能力，并提供运行时检查、插件实验和 preset 创作指导。',
   duplicate: '复制',
@@ -166,7 +166,7 @@ export const es: Record<AgentPresetSettingsKey, string> = {
     'Incluye todas las capacidades del modo estándar y expone las herramientas mediante Code Mode SDK para que el modelo combine operaciones de varios pasos en un programa TypeScript.',
   presetMinimalName: 'Modo mínimo',
   presetMinimalDescription:
-    'Agente de programación de dos herramientas con bash persistente y str_replace_editor.',
+    'Agente de programación ligero con shell persistente y str_replace_editor; las herramientas Living de Phoenix siguen disponibles para mantener conectados los artefactos creados.',
   presetCordisName: 'Modo Creador',
   presetCordisDescription:
     'Diseñado para crear preajustes de agente personalizados, con todas las capacidades del modo estándar más inspección en tiempo de ejecución, experimentos con plugins y guía para crear preajustes.',
