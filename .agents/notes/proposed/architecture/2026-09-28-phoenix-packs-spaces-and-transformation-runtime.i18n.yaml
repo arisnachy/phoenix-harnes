@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-09-28-phoenix-packs-spaces-and-transformation-runtime.md
+2026-09-28-phoenix-packs-spaces-and-transformation-runtime.md: 3489ff470f2be487515c6d9f15ef80bcfdf7420d
+2026-09-28-phoenix-packs-spaces-and-transformation-runtime.zh.md: 5d0f5c8fc630dc13450b4a7f5abdd352cc9f4f57
