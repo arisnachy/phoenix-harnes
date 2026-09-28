@@ -231,6 +231,8 @@ function codexHome(): string {
  * Phoenix shares the user's real Codex home (auth/config/sessions) but keeps
  * transactional SQLite state in a Phoenix-owned directory. CODEX_SQLITE_HOME
  * is the public Codex seam for exactly this split-state layout.
+  * @param purpose - purpose supplied to this public operation.
+  * @returns Result produced by this public operation.
  */
 export async function phoenixCodexSqliteHome(purpose = 'image'): Promise<string> {
   const explicitPhoenix = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
@@ -252,6 +254,9 @@ const MAX_FREE_IMAGE_BYTES = 32 * 1024 * 1024
 /** Hosted zero-upfront-cost providers, in the order PHOENIX tries them. */
 export const freeImageProviderOrder = ['cloudflare', 'huggingface'] as const
 
+ * @param requested - requested supplied to this public operation.
+ * @param _activeProvider - _activeProvider supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Resolve the backend attempt order without coupling image generation to the text route. */
 export function imageGenerationBackendOrder(
   requested: ImageGenerationBackend | undefined,
@@ -261,6 +266,9 @@ export function imageGenerationBackendOrder(
   return ['codex', 'local', 'free']
 }
 
+ * @param requested - requested supplied to this public operation.
+ * @param activeProvider - activeProvider supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Select the first image backend PHOENIX will try. */
 export function selectImageGenerationBackend(
   requested: ImageGenerationBackend | undefined,
