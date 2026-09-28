@@ -22,6 +22,10 @@ import { installWakeProtocol } from './wake-protocol.ts'
 import { installHumanPresenceProtocol } from './presence-protocol.ts'
 import { installInitiativeContextProjection, type InitiativePromptRegistrar } from './initiative-context.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
+import { BinancePaperBroker } from './binance-paper.ts'
+import { installBinanceTradingProtocol } from './binance-trading-protocol.ts'
+import { createBinanceTradingTools } from './binance-trading-tools.ts'
+import type { BinanceAgentOsHostService } from './binance-trading-tools.ts'
 import { installCapabilityOperatingProtocol } from './capability-protocol.ts'
 import { acquireProactivityEngine } from './proactivity-registry.ts'
 import { acquireRealityContext } from './reality-registry.ts'
@@ -119,6 +123,11 @@ export { createConnectorListTool } from './connector-list-tool.ts'
 export { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 export { createConnectorInstallTool } from './connector-install-tool.ts'
 export type { McpRegistryInstallerService } from './connector-install-tool.ts'
+export { BinancePaperBroker, BinancePublicMarketClient } from './binance-paper.ts'
+export type { BinancePaperAccount, BinancePaperState, BinancePaperTrade, BinancePublicMarket } from './binance-paper.ts'
+export { BINANCE_TRADING_PROTOCOL, installBinanceTradingProtocol } from './binance-trading-protocol.ts'
+export { createBinanceTradingTools } from './binance-trading-tools.ts'
+export type { BinanceAgentOsHostService, BinanceAgentOsSnapshot, BinanceTradingToolDependencies } from './binance-trading-tools.ts'
 export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
 export { CONNECTOR_OPERATING_PROTOCOL, installConnectorProtocol } from './connector-protocol.ts'
@@ -196,7 +205,7 @@ function requiredServices(ctx: Context) {
   const authorization = ctx.get('authorization') as AuthorizationService | undefined
   const mcpConnectors = ctx.get('mcpConnectors')
   const pluginInventory = (ctx.get as (name: string) => unknown)('pluginInventory') as
-    | (McpRegistryDiscoveryService & Partial<McpRegistryInstallerService>)
+    | (McpRegistryDiscoveryService & Partial<McpRegistryInstallerService & BinanceAgentOsHostService>)
     | undefined
   if (hardness === undefined || tools === undefined || skills === undefined
     || agents === undefined || approval === undefined || systemPrompt === undefined) {
@@ -268,6 +277,10 @@ function wakeLedgerPath(config: Config): string {
     : join(homedir(), '.dsh', 'phoenix-wake-triggers.json')
 }
 
+function binancePaperLedgerPath(): string {
+  return join(homedir(), '.dsh', 'phoenix-binance-paper.json')
+}
+
 /**
  * Install the HARDNESS projections, mission runtime, and durable proactive task system.
  * @param ctx - Owning Cordis context with HARDNESS dependencies.
@@ -304,6 +317,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         ctx,
       ))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
+      disposers.push(installBinanceTradingProtocol(systemPrompt))
     }
     if (modelTools && (authorization !== undefined || mcpConnectors !== undefined)) {
       disposers.push(installConnectorProtocol(systemPrompt))
@@ -355,6 +369,14 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         disposers.push(ctx.tools.register(tool))
       }
       for (const tool of createWakeTools(wake.engine)) {
+        disposers.push(ctx.tools.register(tool))
+      }
+      const binancePaper = new BinancePaperBroker(binancePaperLedgerPath())
+      for (const tool of createBinanceTradingTools({
+        broker: binancePaper,
+        approval,
+        ...(pluginInventory === undefined ? {} : { agentOs: pluginInventory }),
+      })) {
         disposers.push(ctx.tools.register(tool))
       }
     } else {

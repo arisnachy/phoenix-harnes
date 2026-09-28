@@ -43,6 +43,10 @@ export const JEV_MCP_SERVER_NAME = 'jev'
 export const JEV_MCP_URL = 'https://www.jevai.org/api/mcp'
 /** Phoenix credential reference that holds the Jev API key outside loader config. */
 export const JEV_API_KEY_REF = 'JEV_API_KEY'
+/** Stable local MCP namespace for the official Binance Agent OS connector. */
+export const BINANCE_AGENT_OS_SERVER_NAME = 'binance-agent-os'
+/** Official Binance Agent OS Streamable HTTP MCP endpoint. */
+export const BINANCE_AGENT_OS_URL = 'https://agent.binance.com/mcp/agentic'
 
 interface ManagedMcpRow {
   id: string
@@ -162,6 +166,10 @@ function isRetiredJevCandidate(candidate: McpRegistryCandidate): boolean {
   return name === 'jev' || name.endsWith('/jev') || title === 'jev'
 }
 
+function isBinanceAgentOsManagedRow(row: ManagedMcpRow): boolean {
+  return row.config.serverName === BINANCE_AGENT_OS_SERVER_NAME || row.config.url === BINANCE_AGENT_OS_URL
+}
+
 function serverNameFor(candidate: McpRegistryCandidate): string {
   const tail = candidate.name.slice(candidate.name.lastIndexOf('/') + 1)
   const base = tail.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'mcp'
@@ -209,6 +217,67 @@ export class ManagedMcpController {
     this.registrySearch = options.registrySearch ?? searchOfficialMcpRegistry
   }
 
+  private async installManagedConfig(
+    config: ManagedMcpConfig,
+    label: string,
+  ): Promise<McpRegistryInstallReceipt> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    return withFileLock(this.path, async () => {
+      const rows = await readManagedRows(this.path)
+      const existing = rows.find(row => row.config.url === config.url)
+      if (existing !== undefined) {
+        return { status: 'already-installed', connector: connectorOf(existing) }
+      }
+      const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
+      const row: ManagedMcpRow = { id: entryId, name: MCP_CLIENT_PACKAGE, config }
+      try {
+        await writeManagedRows(this.path, [...rows, row])
+      } catch (error) {
+        try {
+          await this.loader.remove(entryId)
+        } catch (rollbackError) {
+          throw new AggregateError(
+            [error, rollbackError],
+            `failed to persist ${label} MCP and roll back live activation`,
+          )
+        }
+        throw error
+      }
+      return { status: 'installed', connector: connectorOf(row) }
+    }, { waitMs: 15_000 })
+  }
+
+  private async removeManagedRows(
+    matches: (row: ManagedMcpRow) => boolean,
+    label: string,
+  ): Promise<boolean> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    return withFileLock(this.path, async () => {
+      const rows = await readManagedRows(this.path)
+      const removed = rows.filter(matches)
+      if (removed.length === 0) return false
+
+      // Persist removal first so a failed live unload cannot resurrect access
+      // on the next Phoenix start.
+      await writeManagedRows(this.path, rows.filter(row => !matches(row)))
+      const failures: unknown[] = []
+      for (const row of removed) {
+        try {
+          await this.loader.remove(row.id)
+        } catch (error: unknown) {
+          failures.push(error)
+        }
+      }
+      if (failures.length > 0) {
+        throw new AggregateError(
+          failures,
+          `${label} was removed from persistent MCP config but one or more live entries could not be unloaded`,
+        )
+      }
+      return true
+    }, { waitMs: 15_000 })
+  }
+
   /**
    * List PHOENIX-managed MCPs without exposing headers or credentials.
    * @returns Persisted managed connector identities and endpoints.
@@ -225,30 +294,7 @@ export class ManagedMcpController {
    * @returns true when a legacy Jev row was retired.
    */
   async retireJev(): Promise<boolean> {
-    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
-    return withFileLock(this.path, async () => {
-      const rows = await readManagedRows(this.path)
-      const retired = rows.filter(isRetiredJevManagedRow)
-      if (retired.length === 0) return false
-
-      // Persist the retirement first so a failed live unload cannot resurrect
-      // Jev on the next Phoenix start.
-      await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
-      await writeManagedRows(this.path, rows.filter(row => !isRetiredJevManagedRow(row)))
-
-      const failures: unknown[] = []
-      for (const row of retired) {
-        try {
-          await this.loader.remove(row.id)
-        } catch (error: unknown) {
-          failures.push(error)
-        }
-      }
-      if (failures.length > 0) {
-        throw new AggregateError(failures, 'Jev was retired from persistent MCP config but one or more live entries could not be unloaded')
-      }
-      return true
-    }, { waitMs: 15_000 })
+    return this.removeManagedRows(isRetiredJevManagedRow, 'Jev')
   }
 
   /**
@@ -257,6 +303,30 @@ export class ManagedMcpController {
    */
   async configureJev(): Promise<McpRegistryInstallReceipt> {
     throw new Error('Jev integration is retired because new Jev accounts are unavailable; PHOENIX uses native routing instead')
+  }
+
+  /**
+   * Install the pinned official Binance Agent OS MCP. The endpoint and OAuth
+   * policy are compiled into PHOENIX; callers cannot substitute another URL.
+   * @returns Idempotent managed connector installation receipt.
+   */
+  async installBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    return this.installManagedConfig({
+      transport: 'streamable-http',
+      serverName: BINANCE_AGENT_OS_SERVER_NAME,
+      url: BINANCE_AGENT_OS_URL,
+      headers: {},
+      oauth: true,
+    }, 'Binance Agent OS')
+  }
+
+  /**
+   * Remove only the PHOENIX-managed Binance Agent OS MCP. Paper trading uses
+   * public market data and remains available after this connector is removed.
+   * @returns true when one or more Binance Agent OS rows were removed.
+   */
+  async removeBinanceAgentOs(): Promise<boolean> {
+    return this.removeManagedRows(isBinanceAgentOsManagedRow, 'Binance Agent OS')
   }
 
   /**
@@ -274,37 +344,17 @@ export class ManagedMcpController {
     if (isRetiredJevCandidate(candidate)) {
       throw new Error('Jev integration is retired and cannot be installed through the Official MCP Registry')
     }
-    const serverName = serverNameFor(candidate)
-    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
-
-    return withFileLock(this.path, async () => {
-      const rows = await readManagedRows(this.path)
-      const existing = rows.find(row => row.config.url === candidate.remoteUrl)
-      if (existing !== undefined) {
-        return { status: 'already-installed', connector: connectorOf(existing) }
-      }
-
-      const config: ManagedMcpConfig = {
-        transport: 'streamable-http',
-        serverName,
-        url: candidate.remoteUrl!,
-        headers: {},
-        oauth: true,
-      }
-      const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
-      const row: ManagedMcpRow = { id: entryId, name: MCP_CLIENT_PACKAGE, config }
-      try {
-        await writeManagedRows(this.path, [...rows, row])
-      } catch (error) {
-        try {
-          await this.loader.remove(entryId)
-        } catch (rollbackError) {
-          throw new AggregateError([error, rollbackError], 'failed to persist managed MCP and roll back live activation')
-        }
-        throw error
-      }
-      return { status: 'installed', connector: connectorOf(row) }
-    }, { waitMs: 15_000 })
+    const remoteUrl = candidate.remoteUrl
+    if (remoteUrl === undefined) {
+      throw new Error('Registry candidate no longer exposes a Streamable HTTP endpoint')
+    }
+    return this.installManagedConfig({
+      transport: 'streamable-http',
+      serverName: serverNameFor(candidate),
+      url: remoteUrl,
+      headers: {},
+      oauth: true,
+    }, candidate.name)
   }
 }
 
