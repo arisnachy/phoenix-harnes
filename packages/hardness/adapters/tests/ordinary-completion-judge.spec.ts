@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
-import { reviewOrdinaryCompletion } from '../src/ordinary-completion-judge.ts'
+import {
+  isSubstantiveMutation,
+  reviewOrdinaryCompletion,
+  verificationKinds,
+} from '../src/ordinary-completion-judge.ts'
 
 const parent = { id: 'parent' } as unknown as Agent
 
@@ -59,6 +63,24 @@ describe('ordinary completion judge', () => {
     expect(dispose).toHaveBeenCalledOnce()
   })
 
+  it('recognizes game-native assets, engine edits, and gameplay evidence', () => {
+    expect(isSubstantiveMutation('write', { path: 'game/player.gd' })).toBe(true)
+    expect(isSubstantiveMutation('write', { path: 'levels/town.tscn' })).toBe(true)
+    expect(isSubstantiveMutation('write', { path: 'art/hero.png' })).toBe(true)
+    expect(isSubstantiveMutation('write', { path: 'audio/town-theme.ogg' })).toBe(true)
+    expect(isSubstantiveMutation('mcp__godot__create_scene', { name: 'Town' })).toBe(true)
+    expect(isSubstantiveMutation('mcp__blender__update_material', { object: 'Hero' })).toBe(true)
+    expect(isSubstantiveMutation('image_generation', { prompt: 'top-down pixel-art hero sprite sheet' })).toBe(true)
+    expect(isSubstantiveMutation('hardness_run', { need: { kind: 'game-development' } })).toBe(true)
+    expect(isSubstantiveMutation('mcp__gameplay__capture_frame', {})).toBe(false)
+
+    expect(verificationKinds('mcp__gameplay__capture_frame', {})).toEqual(
+      expect.arrayContaining(['visual', 'play']),
+    )
+    expect(verificationKinds('read_image', { path: 'capture.png' })).toContain('visual')
+    expect(verificationKinds('pwsh', { command: 'godot --path . --headless' })).toContain('play')
+  })
+
   it('injects the premium game quality contract into ordinary game reviews', async () => {
     const dispose = vi.fn(async () => {})
     const start = vi.fn<SubagentRuntime['start']>(async () => ({
@@ -109,6 +131,8 @@ describe('ordinary completion judge', () => {
     expect(prompt).toMatch(/baseline capture.*current build/i)
     expect(prompt).toMatch(/image_generation backend=auto/i)
     expect(prompt).toMatch(/DOM\/CSS\/SVG\/canvas/i)
+    expect(prompt).toMatch(/intro.*opening.*title sequence.*cutscene/i)
+    expect(prompt).toMatch(/scene density|terrain transitions|prop and vegetation variety/i)
     expect(dispose).toHaveBeenCalledOnce()
   })
 
