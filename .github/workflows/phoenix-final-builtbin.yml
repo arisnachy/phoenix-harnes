@@ -1,0 +1,26 @@
+name: Phoenix final built-bin smoke
+
+on:
+  push:
+    branches: [repair-final-builtbin-20260928]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-final-builtbin-20260928
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - name: Prove failed boot exits promptly
+        run: pnpm exec vitest run --config vitest.e2e.config.ts apps/cli/tests/built-bin.e2e.ts -t "reports a patch-overlay boot failure without hanging" --maxWorkers=1
