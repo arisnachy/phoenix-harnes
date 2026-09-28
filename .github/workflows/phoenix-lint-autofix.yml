@@ -1,4 +1,4 @@
-name: Phoenix lint contracts autofix
+name: Phoenix lint project discovery probe
 
 on:
   push:
@@ -6,18 +6,16 @@ on:
       - repair/lint-contracts-ready-20260928
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  autofix:
-    if: ${{ !contains(github.event.head_commit.message, '[lint-autofix]') }}
+  verify:
     runs-on: ubuntu-24.04
     env:
       DSH_OXLINT_THREADS: '2'
+      OXC_LOG: debug
     steps:
       - uses: actions/checkout@v6
-        with:
-          ref: repair/lint-contracts-ready-20260928
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
@@ -25,17 +23,8 @@ jobs:
           cache: pnpm
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
-      - name: Apply supported Oxlint fixes
-        run: pnpm run lint:fix:contracts-ready || true
-      - name: Commit supported fixes
-        shell: bash
-        run: |
-          if [[ -n "$(git status --porcelain)" ]]; then
-            git config user.name "Phoenix CI Repair"
-            git config user.email "actions@users.noreply.github.com"
-            git add -A
-            git commit -m "fix(lint): apply contracts-ready autofixes [lint-autofix]"
-            git push origin HEAD:repair/lint-contracts-ready-20260928
-          fi
-      - name: Report remaining contracts-ready lint
+      - name: Contracts-ready lint project discovery
+        continue-on-error: true
         run: pnpm run lint:contracts-ready
+      - name: Client domain graph
+        run: pnpm run verify-client-domain-graph
