@@ -6,6 +6,7 @@ const GROUNDING =
   'Report only what earlier rounds and tool results in this session actually establish; '
   + 'when a detail is not in the session, say so instead of inventing it. '
 
+/** Verified completion facts rendered into the final autonomous goal wrap-up. */
 export interface CompletionWrapupDigest {
   readonly judgeSummary?: string
   readonly findings?: readonly string[]
