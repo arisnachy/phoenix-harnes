@@ -95,6 +95,26 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByText(/"candles"/)).toBeNull()
   })
 
+  it('blocks malformed charts instead of exposing raw visualization JSON', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'broken-candles-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'Broken candles',
+      data: {
+        visualType: 'chart',
+        chartType: 'candlestick',
+        candles: [
+          { time: 1790488800000, open: 100, high: 90, low: 80, close: 95 },
+        ],
+      },
+    })} />)
+
+    expect(document.querySelector('[data-phoenix-visual-qa="fail"]')).toBeTruthy()
+    expect(screen.getByText(/blocked a visual that did not pass render quality checks/i)).toBeTruthy()
+    expect(screen.queryByText(/"chartType"/)).toBeNull()
+    expect(screen.queryByText(/"candles"/)).toBeNull()
+  })
+
   it('renders sports scoreboards as a dedicated rich visual instead of raw JSON', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'sports-1',
