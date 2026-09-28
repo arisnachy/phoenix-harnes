@@ -63,6 +63,12 @@ it('boots the built plugin graph and renders a fixture session end to end', asyn
 
   // Opening a session reaches chat content through the fixture transport.
   fireEvent.click(waitingTitle)
+  // Settled tool/reasoning telemetry now lives behind collapsed Tools groups;
+  // opening them exercises the actual user-visible path to the detailed cards.
+  const toolGroups = await screen.findAllByRole('button', { name: 'Tools' }, { timeout: 10_000 })
+  for (const group of toolGroups) {
+    if (group.getAttribute('aria-expanded') === 'false') fireEvent.click(group)
+  }
   await waitFor(() => {
     expect(document.querySelector('[data-sample="bash"]')).not.toBeNull()
   }, { timeout: 10_000 })
