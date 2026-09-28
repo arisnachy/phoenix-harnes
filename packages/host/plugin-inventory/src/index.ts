@@ -20,6 +20,8 @@ import {
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import {
+  BINANCE_AGENT_OS_SERVER_NAME,
+  BINANCE_AGENT_OS_URL,
   JEV_API_KEY_REF,
   JEV_MCP_SERVER_NAME,
   ManagedMcpController,
@@ -224,6 +226,51 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('installMcpRegistryServer')
   async installMcpRegistryServer(request: McpRegistryInstallRequest): Promise<McpRegistryInstallReceipt> {
     return this.managedMcp.install(request)
+  }
+
+  /**
+   * Read the official Binance Agent OS connector state for in-process policy
+   * consumers. This is intentionally not a browser Remote: real activation is
+   * mediated by the HARDNESS approval tool rather than a silent Settings call.
+   * @returns Secret-free pinned connector lifecycle.
+   */
+  async binanceAgentOsState(): Promise<{
+    configured: boolean
+    status?: McpConnectorRuntimeEntry['status']
+    reasonCode?: McpConnectorRuntimeEntry['reasonCode']
+  }> {
+    const managed = await this.managedMcp.snapshot()
+    const configured = managed.some(connector =>
+      connector.serverName === BINANCE_AGENT_OS_SERVER_NAME || connector.url === BINANCE_AGENT_OS_URL)
+    const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { list(): readonly McpConnectorRuntimeEntry[] }
+      | undefined
+    const runtime = registry?.list().find(entry => entry.serverName === BINANCE_AGENT_OS_SERVER_NAME)
+    return {
+      configured,
+      ...(runtime === undefined ? {} : {
+        status: runtime.status,
+        ...(runtime.reasonCode === undefined ? {} : { reasonCode: runtime.reasonCode }),
+      }),
+    }
+  }
+
+  /**
+   * Activate the pinned official Binance Agent OS MCP after the model-facing
+   * approval boundary has been satisfied. This method never places an order.
+   * @returns Idempotent managed MCP receipt.
+   */
+  async enableBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
+    return this.managedMcp.installBinanceAgentOs()
+  }
+
+  /**
+   * Remove the managed Binance Agent OS route so PAPER mode cannot accidentally
+   * retain real-account tools from an earlier session.
+   * @returns Whether a managed Binance Agent OS entry was removed.
+   */
+  async disableBinanceAgentOs(): Promise<{ disabled: boolean }> {
+    return { disabled: await this.managedMcp.removeBinanceAgentOs() }
   }
 
   /**
