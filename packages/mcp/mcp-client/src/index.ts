@@ -86,8 +86,13 @@ export interface StdioConfig {
   command: string
   /** Arguments passed directly, without shell interpolation. */
   args: string[]
-  /** Extra env vars merged on top of scrubbed ambient env. */
+  /** Extra non-secret env vars merged on top of scrubbed ambient env. */
   env: Record<string, string>
+  /**
+   * Child env name -> PHOENIX credential reference. Values are resolved for
+   * each connection generation and never persist in Loader configuration.
+   */
+  envCredentialRefs?: Record<string, string>
   /** Working directory for the child process. */
   cwd: string
   /** Host platforms on which this stdio server may run; omission is cross-platform unless Phoenix knows the server is platform-bound. */
@@ -151,6 +156,7 @@ export const Config = z.union([
     command: z.string().required(),
     args: z.array(String).default([]),
     env: z.dict(String).default({}),
+    envCredentialRefs: z.dict(String).default({}),
     cwd: z.string().default(''),
     supportedPlatforms: z.array(String).default([]),
     toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
@@ -239,6 +245,18 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const credentials = ctx.get('credentials')
   let oauthController: McpOAuthController | undefined
   let transportOptions: TransportOptions | undefined
+  if (config.transport === 'stdio' && config.envCredentialRefs !== undefined
+    && Object.keys(config.envCredentialRefs).length > 0) {
+    for (const [envName, refName] of Object.entries(config.envCredentialRefs)) {
+      credentialRef(envName)
+      credentialRef(refName)
+    }
+    if (credentials !== undefined) {
+      transportOptions = {
+        resolveCredentialRef: async (ref) => (await credentials.resolve(credentialRef(ref)))?.value,
+      }
+    }
+  }
   if (config.transport === 'streamable-http' && config.oauth !== false
     && authorization !== undefined && credentials !== undefined) {
     oauthController = new McpOAuthController(credentials, config.serverName, config.url)
