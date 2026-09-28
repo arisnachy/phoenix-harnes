@@ -7,6 +7,10 @@ import {
 } from '@phoenix-ai/dsh-tools'
 import type { ProactivityEngine, ProactivityRecurrence, ProactivityTask } from './proactivity-engine.ts'
 
+export interface ProactivityToolOptions {
+  readonly resolveDefaultEmailRecipient?: () => Promise<string | undefined>
+}
+
 function minutesToMs(value: number | undefined, field: string): number | undefined {
   if (value === undefined) return undefined
   if (!Number.isFinite(value) || value <= 0) throw new ToolArgsError([`${field} must be greater than zero`])
@@ -61,6 +65,33 @@ function targetAgent(exec: ToolRunContext): string | undefined {
   return exec.agent?.id as string | undefined
 }
 
+function normalizedEmail(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  const trimmed = value.trim()
+  if (trimmed.length === 0 || trimmed.length > 320 || !trimmed.includes('@') || /\s/u.test(trimmed)) return undefined
+  return trimmed
+}
+
+async function emailRecipient(
+  delivery: 'chat' | 'email' | 'work' | undefined,
+  explicit: string | undefined,
+  options: ProactivityToolOptions,
+): Promise<string | undefined> {
+  const direct = normalizedEmail(explicit)
+  if (delivery !== 'email') return explicit
+  if (explicit !== undefined && direct === undefined) {
+    throw new ToolArgsError(['recipient must be a valid email address for email delivery'])
+  }
+  if (direct !== undefined) return direct
+  const resolved = normalizedEmail(await options.resolveDefaultEmailRecipient?.())
+  if (resolved === undefined) {
+    throw new ToolArgsError([
+      'email delivery requires a recipient or a connected Google account whose email address can be resolved',
+    ])
+  }
+  return resolved
+}
+
 function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone?: string }): ProactivityRecurrence | undefined {
   const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')
   const everyYears = positiveInteger(args.everyYears, 'everyYears')
@@ -84,7 +115,10 @@ function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone
  * @param engine - Host-owned proactivity engine that persists and executes scheduled tasks.
  * @returns Tool definition exposed to the model for durable task creation.
  */
-export function createProactivityCreateTool(engine: ProactivityEngine): ToolDefinition {
+export function createProactivityCreateTool(
+  engine: ProactivityEngine,
+  options: ProactivityToolOptions = {},
+): ToolDefinition {
   return defineTool({
     name: 'phoenix_task_create',
     description: 'Create durable scheduled work for Phoenix. Use it for reminders, follow-ups, recurring work, future office tasks, annual dates such as birthdays, and private surprise preparation. Tasks survive Phoenix restarts and catch up after the computer was off.',
@@ -121,6 +155,7 @@ export function createProactivityCreateTool(engine: ProactivityEngine): ToolDefi
         throw new ToolArgsError(['preparationInstruction and prepareLeadMinutes must be supplied together'])
       }
       const agentId = targetAgent(exec)
+      const recipient = await emailRecipient(args.delivery, args.recipient, options)
       const task = await engine.create({
         title: args.title,
         instruction: args.instruction,
@@ -134,7 +169,7 @@ export function createProactivityCreateTool(engine: ProactivityEngine): ToolDefi
         ...(prepareLeadMs === undefined ? {} : { prepareLeadMs }),
         ...(args.delivery === undefined ? {} : { delivery: args.delivery }),
         ...(args.senderIdentity === undefined ? {} : { senderIdentity: args.senderIdentity }),
-        ...(args.recipient === undefined ? {} : { recipient: args.recipient }),
+        ...(recipient === undefined ? {} : { recipient }),
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
       })
       return taskView(task)
@@ -239,9 +274,12 @@ function managementTool(
  * @param engine - Host-owned proactivity engine shared by the returned task tools.
  * @returns Readonly collection of task-management tool definitions.
  */
-export function createProactivityTools(engine: ProactivityEngine): readonly ToolDefinition[] {
+export function createProactivityTools(
+  engine: ProactivityEngine,
+  options: ProactivityToolOptions = {},
+): readonly ToolDefinition[] {
   return [
-    createProactivityCreateTool(engine),
+    createProactivityCreateTool(engine, options),
     createProactivityWatchTool(engine),
     createProactivityListTool(engine),
     managementTool('phoenix_task_pause', 'Pause a scheduled Phoenix task without changing its recurrence anchor.', 'Pause', id => engine.pause(id)),
