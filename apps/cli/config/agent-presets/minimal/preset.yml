@@ -1,3 +1,3 @@
 name: 极简模式
-description: 仅提供持久 bash 与 str_replace_editor 的双工具编码 Agent。
+description: 精简编码 Agent，核心提供持久 shell 与 str_replace_editor；Phoenix Living 连接工具仍保持可用，以便创建的产物持续连接。
 order: 3
