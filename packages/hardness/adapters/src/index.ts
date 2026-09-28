@@ -43,8 +43,8 @@ import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
 import type { McpRegistryDiscoveryService } from './connector-discover-tool.ts'
-import { createConnectorInstallTool } from './connector-install-tool.ts'
-import type { McpRegistryInstallerService } from './connector-install-tool.ts'
+import { createConnectorInstallTool, createXMcpActivateTool } from './connector-install-tool.ts'
+import type { McpRegistryInstallerService, XMcpHostService } from './connector-install-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { installOrdinaryCompletionJudgeBridge } from './ordinary-completion-judge.ts'
 
@@ -121,8 +121,8 @@ export { installOrdinaryCompletionJudgeBridge, reviewOrdinaryCompletion } from '
 export type { OrdinaryCompletionJudgeDecision } from './ordinary-completion-judge.ts'
 export { createConnectorListTool } from './connector-list-tool.ts'
 export { createConnectorDiscoverTool } from './connector-discover-tool.ts'
-export { createConnectorInstallTool } from './connector-install-tool.ts'
-export type { McpRegistryInstallerService } from './connector-install-tool.ts'
+export { createConnectorInstallTool, createXMcpActivateTool } from './connector-install-tool.ts'
+export type { McpRegistryInstallerService, XMcpHostService, XMcpHostSnapshot } from './connector-install-tool.ts'
 export { BinancePaperBroker, BinancePublicMarketClient } from './binance-paper.ts'
 export type { BinancePaperAccount, BinancePaperState, BinancePaperTrade, BinancePublicMarket } from './binance-paper.ts'
 export { BINANCE_TRADING_PROTOCOL, installBinanceTradingProtocol } from './binance-trading-protocol.ts'
@@ -205,7 +205,7 @@ function requiredServices(ctx: Context) {
   const authorization = ctx.get('authorization')
   const mcpConnectors = ctx.get('mcpConnectors')
   const pluginInventory = (ctx.get as (name: string) => unknown)('pluginInventory') as
-    | (McpRegistryDiscoveryService & Partial<McpRegistryInstallerService & BinanceAgentOsHostService>)
+    | (McpRegistryDiscoveryService & Partial<McpRegistryInstallerService & BinanceAgentOsHostService & XMcpHostService>)
     | undefined
   if (hardness === undefined || tools === undefined || skills === undefined
     || agents === undefined || approval === undefined || systemPrompt === undefined) {
@@ -337,6 +337,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       if (pluginInventory?.installMcpRegistryServer !== undefined) {
         disposers.push(ctx.tools.register(createConnectorInstallTool(approval, pluginInventory as McpRegistryInstallerService)))
       }
+      disposers.push(ctx.tools.register(createXMcpActivateTool(approval, pluginInventory)))
     }
 
     const acquisition = createHardnessAcquisition(hardness)
