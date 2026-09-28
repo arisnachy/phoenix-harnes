@@ -155,7 +155,7 @@ describe('approved KIRA compact live-agent dock', () => {
     const { container } = render(<KiraTeamsDock {...props} />)
 
     expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('floating-live')
-    expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', true)
+    expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', false)
     expect(container.querySelectorAll('[data-kira-agent-card]')).toHaveLength(1)
     expect(screen.getByText('Supervisor')).toBeTruthy()
     expect(screen.getByText('Preparando')).toBeTruthy()

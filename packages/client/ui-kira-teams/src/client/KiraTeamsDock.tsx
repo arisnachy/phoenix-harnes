@@ -27,7 +27,7 @@ export interface KiraTeamsInjected {
 }
 
 export type KiraTeamsDockProps =
-  PropsRuntime<'shell.workspace'> & KiraTeamsInjected & PropsLocale<typeof NS>
+  PropsRuntime<'shell.overlay'> & KiraTeamsInjected & PropsLocale<typeof NS>
 
 export interface MemberRow {
   summary: SessionSummary
@@ -290,21 +290,20 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
   )
 }
 
-/** Compact KIRA Teams card: presentation stays unchanged while the shell owns its real side rail. */
+/** Compact KIRA Teams card: unchanged presentation, floating above the chat. */
 export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeamsDockProps) {
   const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
   const [collapsed, setCollapsed] = useState(initialCollapsed)
   const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
 
-  const hasLiveTeam = root !== undefined && rows.length > 0
   useEffect(() => {
-    // Announce the real lifetime of the side rail. The layout store keeps this
-    // metadata geometry-neutral; AppFrame derives width from the mounted KIRA
-    // workspace element itself, avoiding stale padding/right-offset hacks.
-    layout.setWorkspaceOccupant('subagent', hasLiveTeam)
+    // KIRA is a fixed overlay and must never reserve structural workspace
+    // width. The conversation keeps the whole center column while the card
+    // itself stays visually identical.
+    layout.setWorkspaceOccupant('subagent', false)
     return () => { layout.setWorkspaceOccupant('subagent', false) }
-  }, [hasLiveTeam, layout])
+  }, [layout])
 
   const previousRunning = useRef(runningCount)
   useEffect(() => {
