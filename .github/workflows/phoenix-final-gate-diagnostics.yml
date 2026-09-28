@@ -1,0 +1,62 @@
+name: Phoenix final gate diagnostics
+
+on:
+  push:
+    branches: [repair-final-gates-20260927]
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-final-gates-20260927
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Re-record and validate translation pairs
+        id: translations
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          pnpm run verify-translation-pairing --write --all
+          pnpm run verify-translation-pairing
+          echo "=== translation diff ==="
+          git diff --name-only
+      - name: Knip diagnostic
+        id: knip
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          FORCE_COLOR=0 pnpm exec knip --treat-config-hints-as-errors --reporter json > /tmp/knip.json 2>&1
+          status=$?
+          cat /tmp/knip.json
+          exit $status
+      - name: Commit verified pairing records
+        if: steps.translations.outcome == 'success' && steps.knip.outcome == 'success'
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "Phoenix Repair Bot"
+          git config user.email "phoenix-repair-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "docs(i18n): record verified final pair state"
+          git push origin HEAD:repair-final-gates-20260927
+
+      - name: Fail on diagnostic red
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.translations.outcome }}" = success
+          test "${{ steps.knip.outcome }}" = success
