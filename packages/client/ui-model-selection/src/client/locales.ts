@@ -58,3 +58,28 @@ export const en = {
   'blocked.composer': 'This model is unavailable — select one to continue',
   'empty.efforts': 'This model provides no reasoning effort levels.',
 } satisfies Record<ModelKey, string>
+
+
+/** Spanish dictionary. */
+export const es = {
+  'command.description': 'Selecciona el modelo para esta conversación',
+  'option.loadError': 'No se pudo cargar el catálogo: {message}',
+  'trigger.fallback': 'Seleccionar modelo',
+  'trigger.selectAria': 'Seleccionar modelo',
+  'trigger.aria': 'Seleccionar modelo, actual {model}',
+  'trigger.ariaEffort': 'Seleccionar modelo, actual {model}, nivel de razonamiento {effort}',
+  'menu.aria': 'Modelo y nivel de razonamiento',
+  'menu.model': 'Modelo',
+  'menu.effort': 'Razonamiento',
+  'effort.providerDefault': 'Predeterminado',
+  'effort.selectorAria': 'Selector del nivel de razonamiento',
+  'effort.sliderAria': 'Seleccionar nivel de razonamiento',
+  'effort.reset': 'Restablecer el nivel de razonamiento predeterminado del proveedor',
+  'status.loading': 'Actualizando lista de modelos…',
+  'error.action': 'Falló la operación del modelo: {message}',
+  'action.reload': 'Recargar',
+  'warning.groupLoad': 'No se pudo cargar {name}: {message}',
+  'empty.models': 'No hay modelos disponibles.',
+  'blocked.composer': 'Este modelo no está disponible; selecciona uno para continuar',
+  'empty.efforts': 'Este modelo no ofrece niveles de razonamiento.',
+} satisfies Record<ModelKey, string>
