@@ -123,7 +123,7 @@ export function apply(ctx: Context): void {
   const slots = ctx.slots
 
   const disposeVoiceRemote = configureVoiceAssistantRemote(
-    ctx.remote.voice as unknown as VoiceAssistantRemote,
+    ctx.remote.voice,
   )
   ctx.effect(() => disposeVoiceRemote, 'ui-conversation: host voice remote')
   ctx.on('connection/reset', () => { void refreshVoiceAssistantRemote() })

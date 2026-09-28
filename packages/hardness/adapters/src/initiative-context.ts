@@ -153,14 +153,14 @@ export function renderInitiativeContext(
   const rawId = assembly.agent?.id
   if (typeof rawId !== 'string' || rawId.length === 0) return ''
 
-  const state = cognitiveRuntime(ctx)?.get(rawId as never)
+  const state = cognitiveRuntime(ctx)?.get(rawId)
   const candidates = [
     ...(state?.focus === undefined ? [] : [state.focus]),
     ...(state?.active ?? []),
   ]
     .filter(relevantCandidate)
     .slice(0, MAX_ATTENTION_ITEMS)
-    .flatMap(candidate => {
+    .flatMap((candidate) => {
       const line = candidateLine(candidate)
       return line === undefined ? [] : [line]
     })

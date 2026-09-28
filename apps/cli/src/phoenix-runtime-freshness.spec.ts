@@ -32,7 +32,7 @@ function repository(): string {
   return root
 }
 
-function advance(root: string): { readonly target: string, readonly head: string } {
+function advance(root: string): { readonly target: string; readonly head: string } {
   const target = git(root, ['rev-parse', 'HEAD'])
   writeFileSync(join(root, 'state.txt'), 'two\n', 'utf8')
   git(root, ['add', 'state.txt'])

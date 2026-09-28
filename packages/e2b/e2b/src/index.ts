@@ -211,11 +211,11 @@ export class E2BRuntime extends Service {
     const sandbox = reconnecting
       ? await Sandbox.connect(this.config.sandboxId as string, { apiKey: this.config.apiKey })
       : await Sandbox.create({
-          apiKey: this.config.apiKey,
-          timeoutMs: this.config.timeoutMs,
-          secure: true,
-          lifecycle: { onTimeout: this.config.autoPause ? 'pause' : 'kill' },
-        })
+        apiKey: this.config.apiKey,
+        timeoutMs: this.config.timeoutMs,
+        secure: true,
+        lifecycle: { onTimeout: this.config.autoPause ? 'pause' : 'kill' },
+      })
     try {
       // A reconnect adopts this runtime's requested lease from now, rather
       // than silently inheriting an arbitrary remaining timeout.

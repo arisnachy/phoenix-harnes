@@ -63,7 +63,7 @@ describe('HARDNESS ProactivityEngine', () => {
   it('collapses missed recurring occurrences to the latest slot by default', async () => {
     const store = new MemoryProactivityStore()
     const seen: ProactivityExecution[] = []
-    const engine = new ProactivityEngine(store, { execute: async input => { seen.push(input); return {} } }, { id: fixedIds('daily') })
+    const engine = new ProactivityEngine(store, { execute: async (input) => { seen.push(input); return {} } }, { id: fixedIds('daily') })
     await engine.create({
       title: 'Daily check',
       instruction: 'Perform the daily check.',
@@ -83,7 +83,7 @@ describe('HARDNESS ProactivityEngine', () => {
   it('supports all and skip catch-up policies without drifting the anchor', async () => {
     const allSeen: string[] = []
     const all = new ProactivityEngine(new MemoryProactivityStore(), {
-      execute: async input => { allSeen.push(input.scheduledFor); return {} },
+      execute: async (input) => { allSeen.push(input.scheduledFor); return {} },
     }, { id: fixedIds('all'), maxCatchUpOccurrences: 10 })
     await all.create({
       title: 'Every day', instruction: 'Run.', runAt: '2026-09-10T12:00:00.000Z', createdBy: 'user',
@@ -99,7 +99,7 @@ describe('HARDNESS ProactivityEngine', () => {
 
     const skipSeen: string[] = []
     const skip = new ProactivityEngine(new MemoryProactivityStore(), {
-      execute: async input => { skipSeen.push(input.scheduledFor); return {} },
+      execute: async (input) => { skipSeen.push(input.scheduledFor); return {} },
     }, { id: fixedIds('skip') })
     await skip.create({
       title: 'Every day', instruction: 'Run.', runAt: '2026-09-10T12:00:00.000Z', createdBy: 'user',
@@ -134,7 +134,7 @@ describe('HARDNESS ProactivityEngine', () => {
   it('prepares a surprise privately before delivery and passes the prepared result forward', async () => {
     const phases: ProactivityExecution[] = []
     const engine = new ProactivityEngine(new MemoryProactivityStore(), {
-      execute: async input => {
+      execute: async (input) => {
         phases.push(input)
         return input.phase === 'prepare' ? { summary: 'artifact://birthday-card' } : { summary: 'revealed' }
       },
@@ -167,7 +167,7 @@ describe('HARDNESS ProactivityEngine', () => {
     const seen: ProactivityExecution[] = []
     let met = false
     const engine = new ProactivityEngine(new MemoryProactivityStore(), {
-      execute: async input => {
+      execute: async (input) => {
         seen.push(input)
         return met
           ? { summary: 'condition met', terminal: true }

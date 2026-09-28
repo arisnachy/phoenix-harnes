@@ -36,7 +36,7 @@ describe('connector_install', () => {
   it('requires a valid name and an active agent', async () => {
     const approval = { request: vi.fn() }
     const service = installer()
-    const tool = createConnectorInstallTool(approval as never, service)
+    const tool = createConnectorInstallTool(approval, service)
 
     await expect(tool.execute({ name: ' ' }, exec())).rejects.toThrow('exact registry server name')
     await expect(tool.execute({ name: 'io.example/calendar' }, exec(undefined))).rejects.toThrow('active agent session')
@@ -47,7 +47,7 @@ describe('connector_install', () => {
   it('asks the canonical approval seam and stops when the user does not grant once', async () => {
     const approval = { request: vi.fn(async () => 'rejected' as const) }
     const service = installer()
-    const tool = createConnectorInstallTool(approval as never, service)
+    const tool = createConnectorInstallTool(approval, service)
     const context = exec()
 
     await expect(tool.execute({ name: ' io.example/calendar ', version: '1.0.0' }, context)).resolves.toEqual({
@@ -69,7 +69,7 @@ describe('connector_install', () => {
   it('installs only after approval and reports the follow-up authorization check', async () => {
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }
     const service = installer()
-    const tool = createConnectorInstallTool(approval as never, service)
+    const tool = createConnectorInstallTool(approval, service)
 
     await expect(tool.execute({ name: 'io.example/calendar' }, exec())).resolves.toEqual({
       status: 'installed',
@@ -90,7 +90,7 @@ describe('connector_install', () => {
         url: 'https://mcp.example.com/calendar',
       },
     })
-    const tool = createConnectorInstallTool(approval as never, service)
+    const tool = createConnectorInstallTool(approval, service)
 
     await expect(tool.execute({ name: 'io.example/calendar', version: '1.0.0' }, exec())).resolves.toEqual({
       status: 'already-installed',
@@ -104,8 +104,8 @@ describe('connector_install', () => {
   })
 
   it('presents installation as an edit-style call', () => {
-    const tool = createConnectorInstallTool({ request: vi.fn() } as never, installer())
-    expect(tool.presentCall?.({ name: 'io.example/calendar' } as never)).toEqual({
+    const tool = createConnectorInstallTool({ request: vi.fn() }, installer())
+    expect(tool.presentCall?.({ name: 'io.example/calendar' })).toEqual({
       card: 'generic',
       title: 'Install MCP: io.example/calendar',
       kind: 'edit',

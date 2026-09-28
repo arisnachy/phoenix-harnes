@@ -50,7 +50,7 @@ function activeRuntimePath(root: string): string | undefined {
   return resolve(isAbsolute(gitDir) ? gitDir : resolve(root, gitDir), ACTIVE_RUNTIME_FILE)
 }
 
-function readActiveRuntime(root: string): { readonly path: string, readonly record: ActiveRuntimeRecord } | undefined {
+function readActiveRuntime(root: string): { readonly path: string; readonly record: ActiveRuntimeRecord } | undefined {
   const markerPath = activeRuntimePath(root)
   if (markerPath === undefined || !existsSync(markerPath)) return undefined
   try {

@@ -54,7 +54,7 @@ describe('goal judge durable review memory', () => {
       if (label === 'goal-adversarial-tester') {
         return { result: Promise.resolve({ output: [], stopReason: 'completed' as const, structured: passingGateExecution }), dispose: async () => {} }
       }
-      const prompt = request.prompt as Array<{ type: string, text?: string }>
+      const prompt = request.prompt as Array<{ type: string; text?: string }>
       const text = prompt.map(block => block.text ?? '').join('\n')
       expect(text).toContain('Original objective: "Make restart and configuration changes self-recovering"')
       expect(text).toContain('Durable mission review history')

@@ -181,12 +181,12 @@ export type MissionKernelEvent =
     readonly evidence: readonly string[]
   }
   | {
-     readonly kind: 'dependency-missing'
-     readonly missionId: string
-     readonly revision: number
-     readonly dependency: string
-     readonly detail: string
-   }
+    readonly kind: 'dependency-missing'
+    readonly missionId: string
+    readonly revision: number
+    readonly dependency: string
+    readonly detail: string
+  }
    | {
      readonly kind: 'dependency-available'
      readonly missionId: string
@@ -196,11 +196,11 @@ export type MissionKernelEvent =
    }
    | {
      readonly kind: 'skill-registered'
-    readonly missionId: string
-    readonly revision: number
-    readonly skillId: string
-    readonly tested: boolean
-  }
+     readonly missionId: string
+     readonly revision: number
+     readonly skillId: string
+     readonly tested: boolean
+   }
   | {
     readonly kind: 'learning-recorded'
     readonly missionId: string
@@ -465,16 +465,16 @@ export class MissionPersistenceKernel {
     * @param dependency - Stable name of the dependency that became available.
     * @returns Active state; repeated notifications are idempotent.
     */
-   dependencyAvailable(dependency: string): MissionKernelState {
-     this.assertOpen()
-     const name = text(dependency, 'dependency')
-     if (this.state.status === 'ACTIVE' && this.state.missingDependency === undefined) return this.state
-     if (this.state.status !== 'WAITING_EXTERNAL' || this.state.missingDependency !== name) throw new Error(`dependency is not waiting: ${name}`)
-     this.emit({ kind: 'dependency-available', missionId: this.input.missionId, revision: this.input.revision, dependency: name, status: 'ACTIVE' })
-     return this.state
-   }
+  dependencyAvailable(dependency: string): MissionKernelState {
+    this.assertOpen()
+    const name = text(dependency, 'dependency')
+    if (this.state.status === 'ACTIVE' && this.state.missingDependency === undefined) return this.state
+    if (this.state.status !== 'WAITING_EXTERNAL' || this.state.missingDependency !== name) throw new Error(`dependency is not waiting: ${name}`)
+    this.emit({ kind: 'dependency-available', missionId: this.input.missionId, revision: this.input.revision, dependency: name, status: 'ACTIVE' })
+    return this.state
+  }
 
-   /** Register a skill after it has been tested; ATLAS remains the source of truth.
+  /** Register a skill after it has been tested; ATLAS remains the source of truth.
    * @param skillId - Stable skill identifier.
    * @param tested - Whether the skill passed its validation run.
    * @returns Current state.
@@ -668,12 +668,12 @@ export function replayMissionKernel(
       }; break
       case 'criterion': state = { ...state, criteria: state.criteria.map(item => item.id === event.criterionId ? { ...item, status: event.status, evidence: event.evidence } : item) }; break
       case 'dependency-missing': state = { ...state, status: 'WAITING_EXTERNAL', missingDependency: event.dependency, lastRootCause: event.detail }; break
-       case 'dependency-available': {
-         const { missingDependency, ...withoutDependency } = state
-         void missingDependency
-         state = { ...withoutDependency, status: event.status }
-         break
-       }
+      case 'dependency-available': {
+        const { missingDependency, ...withoutDependency } = state
+        void missingDependency
+        state = { ...withoutDependency, status: event.status }
+        break
+      }
       case 'judge': state = { ...state, status: event.status, judge: event.decision,
         ...(event.quality === undefined ? {} : { quality: event.quality }),
         criteria: event.status === 'DONE' && event.terminalReason === 'verified'

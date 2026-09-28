@@ -74,7 +74,7 @@ export function useAuthorizationAttempt(
           popupClosedAt.current = undefined
           void api.cancel({ attemptId: attempt.id }).finally(() => {
             if (stale) return
-            setAttempt((current) => current?.id === attempt.id
+            setAttempt(current => current?.id === attempt.id
               ? { ...current, status: 'cancelled' }
               : current)
           })
@@ -160,7 +160,7 @@ export function useAuthorizationAttempt(
     if (attempt?.status !== 'authorized' && attempt?.status !== 'cancelled') return
     const timeoutMs = attempt.status === 'authorized' ? 4_500 : 2_500
     const timer = window.setTimeout(() => {
-      setAttempt((current) => current?.id === attempt.id ? undefined : current)
+      setAttempt(current => current?.id === attempt.id ? undefined : current)
     }, timeoutMs)
     return () => { window.clearTimeout(timer) }
   }, [attempt?.id, attempt?.status])

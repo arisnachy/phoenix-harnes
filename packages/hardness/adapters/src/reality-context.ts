@@ -762,12 +762,12 @@ function sessionAiSnapshot(
     && typeof model === 'string'
     && model.length > 0
     ? {
-        provider,
-        model,
-        ...(agent?.options.reasoningEffort === undefined
-          ? {}
-          : { reasoningEffort: String(agent.options.reasoningEffort) }),
-      }
+      provider,
+      model,
+      ...(agent?.options.reasoningEffort === undefined
+        ? {}
+        : { reasoningEffort: String(agent.options.reasoningEffort) }),
+    }
     : null
   const defaultModel = runtimeAi?.activeModel ?? null
   const modelMatchesCachedMetadata = sameModel(activeModel, defaultModel)
@@ -915,7 +915,7 @@ async function probeRuntimeServices(ctx: Context): Promise<RuntimeServiceTelemet
 
   const mcpRegistry = get.call(ctx, 'mcpConnectors')
   const mcpList = method<() => readonly Record<string, unknown>[]>(mcpRegistry, 'list')
-  const mcp = (mcpList?.() ?? []).map((row) => ({
+  const mcp = (mcpList?.() ?? []).map(row => ({
     serverName: row.serverName ?? null,
     status: row.status ?? 'unknown',
     transport: row.transport ?? null,
@@ -1111,32 +1111,32 @@ export class RealityContextEngine {
     const now = Date.now()
     const hostProbes: Promise<void>[] = []
     if (now > this.internet.expiresAt) {
-        hostProbes.push((async () => {
-          const probe = await probeInternet()
-          this.internet = cache(
-            probe.value,
-            probe.source,
-            probe.value.reachable ? this.config.refreshMs * 2 : this.config.refreshMs,
-            probe.confidence,
-          )
+      hostProbes.push((async () => {
+        const probe = await probeInternet()
+        this.internet = cache(
+          probe.value,
+          probe.source,
+          probe.value.reachable ? this.config.refreshMs * 2 : this.config.refreshMs,
+          probe.confidence,
+        )
       })())
     }
     if (now > this.battery.expiresAt) {
-        hostProbes.push((async () => {
-          const probe = await probeBattery()
-          this.battery = cache(probe.value, probe.source, 60_000, probe.confidence)
+      hostProbes.push((async () => {
+        const probe = await probeBattery()
+        this.battery = cache(probe.value, probe.source, 60_000, probe.confidence)
       })())
     }
     if (now > this.gpu.expiresAt) {
-        hostProbes.push((async () => {
-          const probe = await probeGpu()
-          this.gpu = cache(probe.value, probe.source, 10 * 60_000, probe.confidence)
+      hostProbes.push((async () => {
+        const probe = await probeGpu()
+        this.gpu = cache(probe.value, probe.source, 10 * 60_000, probe.confidence)
       })())
     }
     if (now > this.userActivity.expiresAt) {
-        hostProbes.push((async () => {
-          const probe = await probeUserActivity()
-          this.userActivity = cache(probe.value, probe.source, this.config.refreshMs, probe.confidence)
+      hostProbes.push((async () => {
+        const probe = await probeUserActivity()
+        this.userActivity = cache(probe.value, probe.source, this.config.refreshMs, probe.confidence)
       })())
     }
     await Promise.all(hostProbes)
@@ -1289,13 +1289,13 @@ export class RealityContextEngine {
       ? this.browserWeatherKey === locationKey(location)
         ? signal(this.browserWeather, epoch)
         : {
-            value: null,
-            source: 'not-probed',
-            observedAt: now.toISOString(),
-            expiresAt: now.toISOString(),
-            confidence: 0,
-            stale: true,
-          }
+          value: null,
+          source: 'not-probed',
+          observedAt: now.toISOString(),
+          expiresAt: now.toISOString(),
+          confidence: 0,
+          stale: true,
+        }
       : signal(this.weather, epoch)
     const weatherValue = weather.value
     const sunrise = weatherValue?.sunrise ?? null
@@ -1328,60 +1328,60 @@ export class RealityContextEngine {
       },
       location: location === undefined
         ? {
-            status: 'unknown',
-            country: null,
-            region: null,
-            city: null,
-            reason: 'precise coordinates were not explicitly configured and no non-expired browser geolocation permission sample is available',
-            source: 'none',
-          }
+          status: 'unknown',
+          country: null,
+          region: null,
+          city: null,
+          reason: 'precise coordinates were not explicitly configured and no non-expired browser geolocation permission sample is available',
+          source: 'none',
+        }
         : {
-            status: location.kind === 'configured' ? 'authorized-configured' : 'authorized-browser',
-            country: null,
-            region: null,
-            city: null,
-            label: location.label,
-            latitude: location.latitude,
-            longitude: location.longitude,
-            accuracyMeters: location.accuracyMeters,
-            source: location.source,
-            observedAt: location.observedAt === null ? null : new Date(location.observedAt).toISOString(),
-            expiresAt: location.expiresAt === null ? null : new Date(location.expiresAt).toISOString(),
-            retention: location.kind === 'browser' ? 'ephemeral-host-cache' : 'configuration',
-            rule: location.kind === 'browser'
-              ? 'browser coordinates exist only because geolocation permission was already granted; do not infer city/region/country or persist the coordinates as memory'
-              : 'configured coordinates are explicit host configuration',
-          },
+          status: location.kind === 'configured' ? 'authorized-configured' : 'authorized-browser',
+          country: null,
+          region: null,
+          city: null,
+          label: location.label,
+          latitude: location.latitude,
+          longitude: location.longitude,
+          accuracyMeters: location.accuracyMeters,
+          source: location.source,
+          observedAt: location.observedAt === null ? null : new Date(location.observedAt).toISOString(),
+          expiresAt: location.expiresAt === null ? null : new Date(location.expiresAt).toISOString(),
+          retention: location.kind === 'browser' ? 'ephemeral-host-cache' : 'configuration',
+          rule: location.kind === 'browser'
+            ? 'browser coordinates exist only because geolocation permission was already granted; do not infer city/region/country or persist the coordinates as memory'
+            : 'configured coordinates are explicit host configuration',
+        },
       weather: location === undefined
         ? {
-            status: 'unknown',
-            reason: 'weather is not queried without authorized coordinates',
-            source: 'none',
-          }
+          status: 'unknown',
+          reason: 'weather is not queried without authorized coordinates',
+          source: 'none',
+        }
         : {
-            status: weather.value === null ? 'unavailable' : 'available',
-            signal: weather,
-            alerts: {
-              value: null,
-              source: 'not-provided-by-current-weather-adapter',
-              stale: true,
-            },
+          status: weather.value === null ? 'unavailable' : 'available',
+          signal: weather,
+          alerts: {
+            value: null,
+            source: 'not-provided-by-current-weather-adapter',
+            stale: true,
           },
+        },
       daylight: daylightKnown
         ? {
-            status: 'available',
-            sunrise,
-            sunset,
-            isDaylight: epoch >= sunriseMs && epoch < sunsetMs,
-            source: weather.source,
-            observedAt: weather.observedAt,
-            expiresAt: weather.expiresAt,
-            stale: weather.stale,
-          }
+          status: 'available',
+          sunrise,
+          sunset,
+          isDaylight: epoch >= sunriseMs && epoch < sunsetMs,
+          source: weather.source,
+          observedAt: weather.observedAt,
+          expiresAt: weather.expiresAt,
+          stale: weather.stale,
+        }
         : {
-            status: 'unknown',
-            reason: 'sunrise/sunset require fresh weather/location evidence',
-          },
+          status: 'unknown',
+          reason: 'sunrise/sunset require fresh weather/location evidence',
+        },
       calendar: {
         status: runtimeValue === null ? 'unknown' : 'connector-state-known',
         connectorCandidates: runtimeValue?.calendar.connectorCandidates ?? [],

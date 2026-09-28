@@ -24,7 +24,7 @@ describe('static-linked build preset', () => {
 
     if (typeof config.inputOptions !== 'function') throw new Error('static-linked native optimizer missing')
     const optimized = config.inputOptions(
-      { plugins: [{ name: 'tsdown:deps' }, { name: 'tsdown:report' }, { name: 'keep-me' }] } as never,
+      { plugins: [{ name: 'tsdown:deps' }, { name: 'tsdown:report' }, { name: 'keep-me' }] },
       'esm' as never,
       { cjsDts: false },
     )

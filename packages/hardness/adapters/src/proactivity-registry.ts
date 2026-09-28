@@ -68,14 +68,14 @@ export function acquireProactivityEngine(ledgerPath: string): ProactivityEngineL
     engine: entry.engine,
     bindExecutor(executor) {
       if (released) throw new Error('proactivity engine lease is already released')
-      entry!.executor.bind(owner, executor)
+      entry.executor.bind(owner, executor)
     },
     release() {
       if (released) return
       released = true
-      entry!.executor.unbind(owner)
-      entry!.refs -= 1
-      if (entry!.refs === 0) shared.delete(key)
+      entry.executor.unbind(owner)
+      entry.refs -= 1
+      if (entry.refs === 0) shared.delete(key)
     },
   }
 }

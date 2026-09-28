@@ -56,7 +56,7 @@ export interface LocalModelRuntimeManager {
 const MEMORY_HEADROOM_BYTES = 1_000_000_000
 const HEALTH_TIMEOUT_MS = 60_000
 
-function apiFor(platform: string): typeof path.win32 | typeof path.posix {
+function apiFor(platform: string): typeof path.win32   {
   return platform === 'win32' ? path.win32 : path.posix
 }
 
@@ -170,7 +170,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
         destinationPath: archivePath,
         expectedSha256: runtime.sha256,
         expectedSizeBytes: runtime.archiveSizeBytes,
-        onProgress: progress => {
+        onProgress: (progress) => {
           if (this.current.phase === 'installing') this.publish({ ...this.current, progress })
         },
       })
@@ -184,7 +184,7 @@ class RuntimeManager implements LocalModelRuntimeManager {
         destinationPath: modelPath,
         expectedSha256: model.sha256,
         expectedSizeBytes: model.sizeBytes,
-        onProgress: progress => {
+        onProgress: (progress) => {
           if (this.current.phase === 'installing') this.publish({ ...this.current, progress })
         },
       })

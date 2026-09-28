@@ -89,7 +89,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(managedUpdater).toContain('command(corepackBin, [pnpmSpecifier, ...args]')
     expect(build).toContain('function projectPnpmSpecifier(root: string)')
     expect(build).toContain("'corepack.cmd', pnpmSpecifier")
-    expect(build).toContain("args: [pnpmSpecifier, ...args]")
+    expect(build).toContain('args: [pnpmSpecifier, ...args]')
   })
 
   it('fails desktop startup closed after a newer stable target is known but cannot be activated', () => {
@@ -100,8 +100,8 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
   it('propagates managed updater semantic exit codes through PowerShell to the desktop', () => {
-    expect(updatePowerShell).toContain("if ($null -ne $code -and $code -ne 0) { exit $code }")
-    expect(updatePowerShell).toContain("$code -eq 13")
+    expect(updatePowerShell).toContain('if ($null -ne $code -and $code -ne 0) { exit $code }')
+    expect(updatePowerShell).toContain('$code -eq 13')
     expect(desktop).toContain('if (updateProcess.ExitCode == 13)')
     expect(desktop).toContain('La versión vieja no se iniciará')
   })

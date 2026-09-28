@@ -363,7 +363,7 @@ export function apply(ctx: Context, config: Config): void {
       if (server === undefined) return
       server.closeAllConnections()
       await new Promise<void>((resolve) => {
-        server!.close((error) => {
+        server.close((error) => {
           if (error !== undefined) ctx.logger.error(error)
           resolve()
         })

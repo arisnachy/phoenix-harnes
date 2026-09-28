@@ -54,7 +54,7 @@ function context(seq: number, label: string): ConversationNode {
     source: null,
     provenance: { role: 'inject', label },
     form: null,
-  } as ConversationNode
+  }
 }
 
 function user(seq: number, text: string): ConversationNode {
@@ -64,7 +64,7 @@ function user(seq: number, text: string): ConversationNode {
     time: seq * 1_000,
     content: [{ type: 'text', text }],
     source: { kind: 'user' },
-  } as ConversationNode
+  }
 }
 
 function assistantWithReasoning(seq: number, visible = true): ConversationNode {
@@ -78,7 +78,7 @@ function assistantWithReasoning(seq: number, visible = true): ConversationNode {
       { kind: 'reasoning', text: 'inspect the runtime first' },
       ...(visible ? [{ kind: 'text' as const, text: 'Visible answer' }] : []),
     ],
-  } as AssistantMessageNode
+  }
 }
 
 function runningTool(callId = 'search-1'): RunningToolCall {

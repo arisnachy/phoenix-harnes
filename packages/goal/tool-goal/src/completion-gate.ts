@@ -285,7 +285,7 @@ function reconcileContract(
       findings.push(matches.length === 0 || original === undefined
         ? 'Locked criterion ' + criterion.id + ' is missing from the evidence ledger.'
         : 'Locked criterion ' + criterion.id + ' appears more than once in the evidence ledger.')
-    } else if (original.criterion !== criterion.criterion || original.mandatory !== true) {
+    } else if (original.criterion !== criterion.criterion || ! original.mandatory) {
       status = 'failed'
       findings.push('Locked criterion ' + criterion.id + ' was rewritten or downgraded by the verifier.')
     }
@@ -364,7 +364,7 @@ function readExecution(value: unknown, contract: VerificationContract): GoalComp
     }
   }
 
-  const proceduralLessons = [...record.procedural_lessons as string[]]
+  const proceduralLessons = [...record.procedural_lessons]
   if (contractFindings.some(item => /provenance|circular/iu.test(item))) {
     proceduralLessons.push('Never certify a test whose expected value was copied from the implementation under test.')
   }
@@ -372,9 +372,9 @@ function readExecution(value: unknown, contract: VerificationContract): GoalComp
   return {
     checks: { requirements, builderTests, adversarialTests, startup, artifactIntegrity, cleanRoom },
     evidenceLedger: reconciled.ledger,
-    artifactFingerprint: record.artifact_fingerprint as string,
-    cleanRoomEvidence: record.clean_room_evidence as string,
-    findings: [...record.findings as string[], ...contractFindings].slice(0, MAX_ITEMS),
+    artifactFingerprint: record.artifact_fingerprint,
+    cleanRoomEvidence: record.clean_room_evidence,
+    findings: [...record.findings, ...contractFindings].slice(0, MAX_ITEMS),
     proceduralLessons: [...new Set(proceduralLessons)].slice(0, MAX_ITEMS),
     completionReport: {
       unverifiedItems: completionReport.unverifiedItems,
@@ -446,7 +446,7 @@ async function awaitAbortable<T>(operation: Promise<T>, signal: AbortSignal): Pr
   signal.throwIfAborted()
   let onAbort: (() => void) | undefined
   const aborted = new Promise<never>((_resolve, reject) => {
-    onAbort = () => reject(signal.reason ?? new Error('operation aborted'))
+    onAbort = () =>{  reject(signal.reason ?? new Error('operation aborted')) }
     signal.addEventListener('abort', onAbort, { once: true })
   })
   try {

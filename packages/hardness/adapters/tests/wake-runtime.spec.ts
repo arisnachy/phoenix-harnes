@@ -44,7 +44,7 @@ describe('Phoenix wake runtime', () => {
       get: vi.fn(() => agent),
       roots: vi.fn(() => [agent]),
       list: vi.fn(() => [agent]),
-    } as never)
+    })
 
     await executor.execute(execution('act'))
 
@@ -65,7 +65,7 @@ describe('Phoenix wake runtime', () => {
       get: vi.fn(() => agent),
       roots: vi.fn(() => [agent]),
       list: vi.fn(() => [agent]),
-    } as never)
+    })
 
     await executor.execute(execution('notify'))
 
@@ -82,7 +82,7 @@ describe('Phoenix wake runtime', () => {
       get: vi.fn(() => undefined),
       roots: vi.fn(() => [fallback]),
       list: vi.fn(() => [fallback]),
-    } as never)
+    })
 
     await executor.execute(execution('act'))
 

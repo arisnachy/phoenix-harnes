@@ -29,7 +29,7 @@ describe('Phoenix WakeEngine', () => {
     const seen: WakeExecution[] = []
     const engine = new WakeEngine(
       new MemoryWakeStore(),
-      { execute: async input => { seen.push(input); return { summary: 'accepted' } } },
+      { execute: async (input) => { seen.push(input); return { summary: 'accepted' } } },
       { id: ids('mail-trigger', 'github-trigger') },
     )
     await engine.create({

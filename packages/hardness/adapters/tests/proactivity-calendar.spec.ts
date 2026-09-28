@@ -5,7 +5,7 @@ describe('HARDNESS proactive calendar recurrence', () => {
   it('keeps an annual birthday on February 20 across a leap year', async () => {
     const seen: ProactivityExecution[] = []
     const engine = new ProactivityEngine(new MemoryProactivityStore(), {
-      execute: async input => { seen.push(input); return {} },
+      execute: async (input) => { seen.push(input); return {} },
     }, { id: () => 'birthday' })
 
     await engine.create({
@@ -31,7 +31,7 @@ describe('HARDNESS proactive calendar recurrence', () => {
   it('collapses several missed annual occurrences to the latest one', async () => {
     const seen: string[] = []
     const engine = new ProactivityEngine(new MemoryProactivityStore(), {
-      execute: async input => { seen.push(input.scheduledFor); return {} },
+      execute: async (input) => { seen.push(input.scheduledFor); return {} },
     }, { id: () => 'anniversary' })
 
     await engine.create({

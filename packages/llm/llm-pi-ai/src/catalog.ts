@@ -218,7 +218,7 @@ export function catalogModels(provider: string): Map<string, Model<Api>> {
   if (!catalogProviders().has(provider)) return new Map()
   const models = normalizeVendorCatalog(
     provider,
-    getBuiltinModels(provider as BuiltinProvider) as Model<Api>[],
+    getBuiltinModels(provider as BuiltinProvider),
   )
   return new Map(models.map(model => [model.id, model]))
 }
