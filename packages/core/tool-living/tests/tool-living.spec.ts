@@ -29,45 +29,39 @@ async function bench() {
 }
 
 describe('tool-living', () => {
-  it('states one universal rule instead of enumerating creation domains', async () => {
+  it('states one domain-neutral, fail-soft connector policy', async () => {
     const root = await bench()
     const assembly = await root.systemPrompt.assemble()
     const section = assembly.sections.find(item => item.name === 'tool:living')
     expect(section?.text).toBe(ToolLiving.LIVING_CREATION_POLICY)
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('regardless of its domain, format')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('never special-case it to a fixed list')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('automatically provisions a per-creation Phoenix control link')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('living_get_connector_kit')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain("the user's requested deliverable is the mission")
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('connectivity is an optional enhancement')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Do not register or install a connector merely because an artifact was created')
     expect(ToolLiving.LIVING_CREATION_POLICY).not.toMatch(/chess|spreadsheet|warehouse/i)
   })
 
-  it('requires a connector for every Phoenix-created output with no static downgrade', async () => {
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('mandatory, not optional')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('never judge a creation too small, too disposable, too local, or too simple to connect')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('must target connected or above')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('do not silently downgrade a Phoenix-created artifact to static')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Agent operation is optional even though Phoenix connectivity is mandatory')
+  it('bounds connector work and preserves independent task completion', () => {
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('at most two bounded connect/repair attempts')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('roughly ten seconds of foreground wall time')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('preserve any offline manifest')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('continue every independent task step')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Never let connector repair consume the main task, tests, or final delivery')
   })
 
-  it('requires telemetry, error surfacing, and live control surfaces', async () => {
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Build telemetry in from the start')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('surface errors, failures, and recoveries as they happen')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('pull that telemetry on demand')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Build control in from the start')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('operated, measured, monitored, and recovered')
+  it('honors user choice and gates verification on explicit acceptance criteria', () => {
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('ask once rather than silently enabling it')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('stop connector work immediately')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('do not retry it again in the same turn')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('use it only when Phoenix connectivity is an explicit acceptance criterion')
   })
 
-  it('gates background agents on explicit user consent with low-resource operation', async () => {
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('never enable agents silently')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('ask the user whether they want agents operating the creation in the background')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('on demand, low-resource, and idle-free')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('rather than burning continuous background work')
-  })
-
-  it('binds connector, telemetry, error, and manifest state to durable memory across every model', async () => {
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('in durable memory')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('reconnect the creation, pull its telemetry, inspect its failures, or resume operating it after a restart')
-    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('binds every model and every session')
+  it('keeps credentials, telemetry, and background operation bounded', () => {
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Never expose or commit the bearer token')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('Keep agents optional and user-approved')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('connectivity never implies background workers')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('smallest meaningful state/actions/events')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('keep telemetry bounded')
+    expect(ToolLiving.LIVING_CREATION_POLICY).toContain('retain enough resources in the manifest to reconnect later')
   })
 
   it('registers an unknown connected creation kind through the model-facing tool', async () => {

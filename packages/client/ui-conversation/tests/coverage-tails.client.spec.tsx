@@ -35,8 +35,8 @@ describe('tails', () => {
         renderMessageImages={renderMessageImages}
       />,
     )
-    expect(view.getByText(zh['reasoning.title'])).toBeTruthy()
-    expect(view.getByText(zh['reasoning.hidden'])).toBeTruthy()
+    expect(view.queryByText(zh['reasoning.title'])).toBeNull()
+    expect(view.queryByText(zh['reasoning.hidden'])).toBeNull()
     expect(view.queryByText('thinking hard')).toBeNull()
     expect(view.getByText(/未知内容块/)).toBeTruthy()
     const stopped = render(

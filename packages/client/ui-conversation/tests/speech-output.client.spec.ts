@@ -57,12 +57,17 @@ describe('speech output adapter', () => {
 
     output.speak('# Hola **Phoenix**. [Abre el panel](https://example.com)')
 
-    const utterance = speak.mock.calls[0]?.[0]
-    expect(utterance?.text).toBe('Hola Phoenix. Abre el panel')
-    expect(utterance?.voice?.name).toBe('Natural Spanish')
-    expect(utterance?.rate).toBe(0.97)
-    expect(utterance?.pitch).toBe(1)
-    expect(utterance?.volume).toBe(0.98)
+    expect(speak).toHaveBeenCalledTimes(2)
+    const first = speak.mock.calls[0]?.[0]
+    const second = speak.mock.calls[1]?.[0]
+    expect(first?.text).toBe('Hola Phoenix.')
+    expect(second?.text).toBe('Abre el panel')
+    for (const utterance of [first, second]) {
+      expect(utterance?.voice?.name).toBe('Natural Spanish')
+      expect(utterance?.rate).toBe(0.97)
+      expect(utterance?.pitch).toBe(1)
+      expect(utterance?.volume).toBe(0.98)
+    }
   })
 
   it('starts a growing response at the first stable sentence and flushes the final tail', () => {

@@ -214,6 +214,9 @@ export function isConversationalFastPathText(text: string): boolean {
  * to choose or discuss the next useful direction. They therefore keep runtime
  * context and full text history so memory, pending work, and initiative state
  * can inform the answer.
+ *
+ * @param text - Candidate user text to classify.
+ * @returns Whether the text can use the contextual conversational fast path.
  */
 export function isContextualConversationFastPathText(text: string): boolean {
   const candidate = text.trim()

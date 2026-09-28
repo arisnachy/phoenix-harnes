@@ -21,7 +21,11 @@ const LOCAL_AUTHORIZATION = 'Bearer phoenix-opencode-free'
 /** Models known to use another OpenCode wire are excluded from this chat-completions route. */
 const RESPONSE_ONLY_FREE_PREFIXES = ['muse-spark-'] as const
 
-/** Whether a Zen catalog id is eligible for the no-account chat-completions route. */
+/**
+ * Return whether a Zen catalog id is eligible for the no-account chat-completions route.
+ * @param id - upstream OpenCode model identifier.
+ * @returns true when Phoenix can route the model through the free chat-completions seam.
+ */
 export function isOpenCodeFreeCandidate(id: string): boolean {
   if (RESPONSE_ONLY_FREE_PREFIXES.some(prefix => id.startsWith(prefix))) return false
   return id === 'big-pickle' || id.endsWith('-free')
@@ -36,7 +40,11 @@ function modelDisplayName(id: string): string {
     .join(' ')} · Gratis`
 }
 
-/** Convert OpenCode's OpenAI-style catalog payload into Phoenix model descriptors. */
+/**
+ * Convert OpenCode's OpenAI-style catalog payload into Phoenix model descriptors.
+ * @param payload - unknown upstream models response.
+ * @returns normalized eligible free-model profiles sorted by id.
+ */
 export function parseOpenCodeFreeModels(payload: unknown): PiAiModelProfile[] {
   if (typeof payload !== 'object' || payload === null || !('data' in payload)) return []
   const data = (payload as { data?: unknown }).data

@@ -190,6 +190,12 @@ function mountApp(slots: SlotRegistry) {
   return render(<>{slots.renderSlot('root', {})}</>)
 }
 
+function openTechnicalHistory(container: HTMLElement): void {
+  const toggle = container.querySelector('[data-tool-activity-group] > button') as HTMLButtonElement | null
+  if (toggle === null) throw new Error('expected collapsed Tools activity group')
+  if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click()
+}
+
 describe('run_code sub-calls through the real chat machinery', () => {
   it('renders the code-variant parent row with the description summary and nested sub-rows', async () => {
     const parent = 'call-64'
@@ -199,6 +205,7 @@ describe('run_code sub-calls through the real chat machinery', () => {
     ]
     const b = await bench(snapshotWith([codeResult(10, parent)], subCalls))
     const view = mountApp(b.slots)
+    openTechnicalHistory(view.container)
 
     // Parent row: the code variant with the model-authored description.
     const codeRoot = view.container.querySelector('[data-variant="code"]')
@@ -227,6 +234,7 @@ describe('run_code sub-calls through the real chat machinery', () => {
     ]
     const b = await bench(snapshotWith([codeResult(10, parent)], subCalls))
     const view = mountApp(b.slots)
+    openTechnicalHistory(view.container)
     const nest = view.container.querySelector('[data-subcalls]')!
 
     // Each run-control verb names its act and shows the package id; without the
@@ -243,6 +251,7 @@ describe('run_code sub-calls through the real chat machinery', () => {
     const parent = 'call-64'
     const b = await bench(snapshotWith([codeResult(10, parent)], []))
     const view = mountApp(b.slots)
+    openTechnicalHistory(view.container)
     // The code row is expandable via the whole summary row (body = the program).
     const toggle = view.container.querySelector('[data-variant="code"] [data-expandable]')
     expect(toggle).not.toBeNull()
@@ -262,6 +271,7 @@ describe('run_code sub-calls through the real chat machinery', () => {
     ]
     const b = await bench(snapshotWith([codeResult(10, parent)], subCalls))
     const view = mountApp(b.slots)
+    openTechnicalHistory(view.container)
     const nested = view.container.querySelector('[data-subcalls] [data-variant][data-state="error"]')
     expect(nested).not.toBeNull()
   })
@@ -274,6 +284,7 @@ describe('run_code sub-calls through the real chat machinery', () => {
     ]
     const b = await bench(snapshotWith([codeResult(10, parent)], subCalls))
     const view = mountApp(b.slots)
+    openTechnicalHistory(view.container)
     view.getByText('notes/demo.txt').click()
     expect(b.layout.openDetails).not.toHaveBeenCalled()
     await vi.waitFor(() => {

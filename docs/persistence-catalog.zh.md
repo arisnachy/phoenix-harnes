@@ -427,6 +427,17 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/goal/goal/src/domain.ts:66`](../packages/goal/goal/src/domain.ts)
 
+<a id="goalcompletion-gate--log-only"></a>
+
+#### `goal/completion-gate` — log-only
+
+```ts persistence-catalog
+/** Independent executable/adversarial certification for one exact goal revision. */
+'goal/completion-gate': GoalCompletionGateAuditEntry
+```
+
+来源： [`packages/goal/goal/src/domain.ts:225`](../packages/goal/goal/src/domain.ts)
+
 <a id="goalcontinuation--log-only"></a>
 
 #### `goal/continuation` — log-only
@@ -437,6 +448,17 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 ```
 
 来源：[`packages/goal/goal/src/domain.ts:172`](../packages/goal/goal/src/domain.ts)
+
+<a id="goalfalse-pass--log-only"></a>
+
+#### `goal/false-pass` — log-only
+
+```ts persistence-catalog
+/** A later valid verification disproved an earlier accepted PASS. */
+'goal/false-pass': GoalFalsePassAuditEntry
+```
+
+来源： [`packages/goal/goal/src/domain.ts:227`](../packages/goal/goal/src/domain.ts)
 
 <a id="goaljudge--log-only"></a>
 

@@ -208,7 +208,10 @@ export function ChatView({
     () => transientSteering.filter(item => !durableUserMessageIds.has(String(item.messageId))),
     [durableUserMessageIds, transientSteering],
   )
-  const progress = useMemo(() => turnProgress(timeline, chatNodes), [chatNodes, timeline])
+  const progress = useMemo(
+    () => running ? turnProgress(timeline, chatNodes) : null,
+    [chatNodes, running, timeline],
+  )
   // Optimistic bubble lives only until a durable user message appears after
   // this admission began. The 1s tolerance covers browser/Host clock jitter.
   const pendingSubmitDurable = useMemo(() => {

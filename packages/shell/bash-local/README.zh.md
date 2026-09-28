@@ -18,12 +18,13 @@
     maxOutputBytes: 64000      # per-stream in-memory cap; overflow spills to disk
     maxSpillBytes: 67108864    # per-stream full-output spill cap
     graceMs: 3000              # kill escalation and post-exit pipe-drain grace
+    healthCheckTimeoutMs: 2000 # Windows Git Bash startup probe timeout
 ```
 
 ## 行为
 
-- **每次调用都 spawn，不保留 shell 状态**：每次调用都启动新的非登录 `bash -c`，且不读取 rc 文件。
-- **组装条目是一层，而不是最终值**：当组装中存在 settings 提供方时，本执行器以上面的条目为 base 注册该能力的 [`bash` 命名空间](../shell/README.zh.md)，因此 `settings.yaml` 中的用户段会叠加其上，下一条命令即按新预算运行。schema 无法判定的值（正有限、`graceMs` 的定时器上界）会在写入时被拒绝，运行中的执行器保持它最后一份可用的段；没有提供方、或提供方脱离之后，运行的就是组装条目。
+- **每次调用都 spawn，不保留 shell 状态**：每次调用都启动新的非登录 `bash -c`，且不读取 rc 文件。在 Windows 上，执行器会先用 `stdio: ignore` 对原生 Git Bash 候选执行健康检查，再接受可用项；不健康的安装会按优先级依次跳过。
+- **组装条目是一层，而不是最终值**：当组装中存在 settings 提供方时，本执行器以上面的条目为 base 注册该能力的 [`bash` 命名空间](../shell/README.zh.md)，因此 `settings.yaml` 中的用户段会叠加其上，下一条命令即按新预算运行。schema 无法判定的值（必须为正且有限，包括 `healthCheckTimeoutMs` 探测超时以及 `graceMs` 的定时器上界）会在写入时被拒绝，运行中的执行器保持它最后一份可用的段；没有提供方、或提供方脱离之后，运行的就是组装条目。
 - **在受管进程组之上应用配置预算**：`resolve()` 从配置补全 `workdir`／`timeoutMs`／`stdoutMaxBytes`，每次 spawn 都向服务传入显式的字节上限、spill 上限与 `graceMs`。该宽限期须为正有限值，且不得大于 [`MAX_TIMER_DELAY_MS`](../../util/timeout/README.zh.md)，这样 Node 就能用一个定时器表示它。进程组终止、退出后管道排空、尾部保留与有界 spill 文件是 [`dsh-subprocess-local`](../../subprocess/subprocess-local/README.zh.md) 的机制。前台 `ShellExecRequest.stdoutMaxBytes` 可为某个受信任调用方提高单次 stdout 捕获预算；stderr 和后台运行仍使用 `maxOutputBytes`。
 - **超时与取消分类**：`run()` 通过同一个 deadline 把经配置钳位的超时与调用方的信号融合；只有执行器自身的超时报告 `timedOut`，上游取消报告 `aborted`，自身因信号终止的命令两者皆不报告（见[超时库 Agent Note](../../../.agents/notes/implemented/architecture/2026-07-06-timeout-deadline-library.zh.md)）。
 - **适合模型的终端环境**：`NO_COLOR=1 TERM=dumb PAGER=cat GIT_PAGER=cat` 防止分页器与 ANSI 颜色破坏结果。这些值作为普通 env 合并，遵循服务的凭据清除与 `DSH_*` 通道规则；调用方的显式条目依旧优先。详见 [stdin/env Agent Note](../../../.agents/notes/implemented/architecture/2026-06-30-bash-stdin-env-trusted-plugin-api.zh.md) 与 [受管环境 Agent Note](../../../.agents/notes/implemented/feature/2026-07-10-agent-session-identity-and-log-location.zh.md)。
@@ -41,7 +42,7 @@
 
 - **自身不提供隔离**：此执行器始终以 harness 进程的权限运行命令；需要隔离的部署可以组合 [`dsh-bash-sandbox`](../bash-sandbox/README.zh.md)，每次调用的 allow/deny/ask 策略则属于 `tools/pre-execute`。
 - **没有持久 shell 或 PTY**：每次调用都启动新的非登录 `bash -c`；仅持久化 cwd 与交互式终端会话均继续暂缓，直到真实工作流需要它们。
-- **仅支持 POSIX**：`bash` 二进制已硬编码，底层服务的进程组语义也是 POSIX 的；不支持 Windows。
+- **需要原生 Bash**：POSIX 主机使用 `/bin/bash`；Windows 需要健康的原生 Git Bash 安装，或显式配置 `bashPath`。底层进程组语义仍具有平台差异。
 - **后台 spawn 失败提示只交付一次**：subprocess 服务不会为从未真正运行的进程缓冲任何输出，因此执行器把 `spawn failed: …` 注入恰好一个 `readOutput()` 增量；丢弃了该增量的读取方无法再恢复它。
 
 凭据清除启发式规则与 spill 保留的注意事项随 [`dsh-subprocess-local`](../../subprocess/subprocess-local/README.zh.md) 记录；这些机制归它所有。

@@ -1018,6 +1018,28 @@ export interface Config {
 
 Source: [`packages/jobs/jobs-local/src/index.ts:31`](../packages/jobs/jobs-local/src/index.ts)
 
+<a id="phoenix-aidsh-living-local"></a>
+
+## `@phoenix-ai/dsh-living-local`
+
+```ts config-catalog
+/** Configuration for durable living manifests and the owner-local control bridge. */
+export interface Config {
+  /** Owner-private JSON document containing remembered creation manifests. */
+  path: string
+  /** Loopback host for generated-runtime control. Defaults to PHOENIX_LIVING_CONTROL_HOST or 127.0.0.1. */
+  bridgeHost?: string
+  /** Loopback TCP port for generated-runtime control. Defaults to PHOENIX_LIVING_CONTROL_PORT or 32145. */
+  bridgePort?: number
+  /** Maximum time a queued Phoenix action may wait for the connected runtime. */
+  bridgeActionTimeoutMs?: number
+  /** Disconnect a runtime whose authenticated heartbeat/poll traffic goes stale beyond this bound. */
+  bridgeHeartbeatTimeoutMs?: number
+}
+```
+
+Source: [`packages/core/living-local/src/index.ts:28`](../packages/core/living-local/src/index.ts)
+
 <a id="phoenix-aidsh-llm-deepseek"></a>
 
 ## `@phoenix-ai/dsh-llm-deepseek`
@@ -1708,6 +1730,25 @@ export type Config = LocalConfig
 Depends on: [`LocalConfig`](#phoenix-aidsh-pwsh-local)
 
 Source: [`packages/shell/pwsh-sandbox/src/index.ts:40`](../packages/shell/pwsh-sandbox/src/index.ts)
+
+<a id="phoenix-aidsh-quality-policy"></a>
+
+## `@phoenix-ai/dsh-quality-policy`
+
+Requires: `tools`
+
+```ts config-catalog
+/** Deployment policy. */
+export interface Config {
+  /**
+   * Maximum turn-stop corrective nudges for one direct human task.
+   * Zero disables the stop nudge while retaining in-band post-mutation context.
+   */
+  maxStopNudges?: number
+}
+```
+
+Source: [`packages/guard/quality-policy/src/index.ts:30`](../packages/guard/quality-policy/src/index.ts)
 
 <a id="phoenix-aidsh-repeat-tool-reminder"></a>
 

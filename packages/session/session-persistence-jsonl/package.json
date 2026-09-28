@@ -38,7 +38,7 @@
     "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
-    "koffi": "^3.1.0",
+    "koffi": "3.1.1",
     "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {

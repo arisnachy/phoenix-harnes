@@ -6,6 +6,9 @@ import type { RealityContextEngine } from './reality-context.ts'
  * Create the read-only tool that waits for current Reality Context evidence.
  * Fresh mode respects signal TTLs; full mode deliberately reprobes every host
  * and runtime signal before returning.
+ * @param engine - Reality Context engine used to refresh and snapshot evidence.
+ * @param ctx - Cordis context supplying live runtime services.
+ * @returns read-only model tool for synchronized Reality Context snapshots.
  */
 export function createRealitySnapshotTool(
   engine: RealityContextEngine,
