@@ -70,12 +70,18 @@ const GAMEPLAY_VISUAL_ACTION = /(?:^|_)(?:capture|screenshot|snapshot|frame|insp
 // oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const GAME_NEED = /\b(?:game|games|gaming|juego|juegos|videogame|videojuego|godot|unity|unreal|blender|sprite|tileset|npc|enemy|character|pixel\s*art|2d|3d|retro|nes|snes|rpg|platformer|metroidvania|gameplay)\b/i
 const DIRECT_ASSET_MUTATION = /^(?:image_generation|audio_generation|generate_image|generate_audio)$/
+// oxlint-disable-next-line @stylistic/max-len -- Keep the asset-discovery matcher auditable as one regex literal.
 const GAME_ASSET_DISCOVERY_OP = /^(?:web_search|web_fetch|browser_search|browser_open|browser_navigate|connector_list|connector_discover)$/
+// oxlint-disable-next-line @stylistic/max-len -- Keep the asset-source matcher auditable as one regex literal.
 const GAME_ASSET_DISCOVERY_TEXT = /\b(?:kenney|opengameart|itch(?:\.io)?|quaternius|poly\s+haven|ambientcg|game\s+assets?|asset(?:\s|-)?packs?|sprite(?:\s|-)?sheets?|tilesets?|pixel\s+art|rpg\s+assets?|cc0|creative\s+commons|licen[cs]e)\b/i
+// oxlint-disable-next-line @stylistic/max-len -- Keep the production-asset path matcher auditable as one regex literal.
 const GAME_ASSET_PATH = /(?:^|[\\/])(?:assets?|art|sprites?|tiles?|tilesets?|textures?|models?|audio|music|sfx|fonts?)[\\/][^"'\s]*\.(?:png|webp|jpe?g|gif|ase|aseprite|tmx|tres|blend1?|glb|gltf|fbx|obj|wav|ogg|mp3|flac|ttf|otf|woff2?)\b/i
 const GAME_ASSET_PROVENANCE = /\b(?:asset-manifest|asset-sourcing|licenses|credits)\.(?:json|md)\b/i
+// oxlint-disable-next-line @stylistic/max-len -- Keep the game-build intent matcher auditable as one regex literal.
 const GAME_BUILD_ACTION = /\b(?:create|build|make|develop|design|crear|crea|construir|desarrollar|diseñar|diseña|hacer)\b/i
+// oxlint-disable-next-line @stylistic/max-len -- Keep the visual-quality intent matcher auditable as one regex literal.
 const GAME_VISUAL_QUALITY = /\b(?:visual|graphics?|gr[aá]fic[oa]s?|arte|art|sprites?|tilesets?|characters?|personajes?|enemig(?:o|os)|enemy|enemies|npc|world|mundo|environment|entorno|ui|hud|vfx|audio|m[uú]sica|retro|nes|snes|genesis|pixel\s*art|bonit[oa]|beautiful|quality|calidad|premium|polish|pulir|presentaci[oó]n)\b/i
+// oxlint-disable-next-line @stylistic/max-len -- Keep the original-asset request matcher auditable as one regex literal.
 const ORIGINAL_ASSET_REQUEST = /\b(?:original\s+assets?|original\s+art|arte\s+original|assets?\s+originales?|sprites?\s+originales?|desde\s+cero|from\s+scratch)\b/i
 // oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest|benchmark|tracemalloc)\b/i
