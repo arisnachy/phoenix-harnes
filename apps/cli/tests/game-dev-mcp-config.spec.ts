@@ -13,6 +13,8 @@ interface Row {
 const root = resolve(import.meta.dirname, '../../..')
 const baseConfig = resolve(root, 'packages/bundle/base/cordis.patch.yml')
 const skill = resolve(root, 'apps/cli/config/agent-presets/standard/skills/game-development/SKILL.md')
+const standardPreset = resolve(root, 'apps/cli/config/agent-presets/standard/agent.cordis.yml')
+const codePreset = resolve(root, 'apps/cli/config/agent-presets/code/agent.cordis.yml')
 
 describe('game development connector pack', () => {
   it('ships safe, opt-in namespaces for the major game engines', () => {
@@ -45,6 +47,13 @@ describe('game development connector pack', () => {
     expect(source).not.toContain('github.com/CoplayDev')
     expect(source).not.toContain('github.com/GenOrca')
     expect(source).not.toContain('github.com/teratron')
+  })
+
+  it('loads the game skill from both standard and code presets', () => {
+    for (const preset of [standardPreset, codePreset]) {
+      const source = readFileSync(preset, 'utf8')
+      expect(source).toContain("new URL('skills/', baseUrl)")
+    }
   })
 
   it('teaches engine routing and both modern-retro and native-retro workflows', () => {
