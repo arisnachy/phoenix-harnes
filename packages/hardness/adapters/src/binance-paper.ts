@@ -13,12 +13,14 @@ const SUPPORTED_INTERVALS = new Set([
 
 const PATH_LOCKS = new Map<string, Promise<void>>()
 
+/** One virtual spot position held by the Phoenix Binance paper broker. */
 export interface BinancePaperPosition {
   symbol: string
   quantity: number
   costBasisUsdt: number
 }
 
+/** One persisted virtual Binance paper fill and its marked portfolio outcome. */
 export interface BinancePaperTrade {
   id: string
   executedAt: string
@@ -34,6 +36,7 @@ export interface BinancePaperTrade {
   reason?: string
 }
 
+/** Durable schema for the credential-free Binance paper-trading ledger. */
 export interface BinancePaperState {
   schema: 1
   initialCashUsdt: number
@@ -44,6 +47,7 @@ export interface BinancePaperState {
   trades: BinancePaperTrade[]
 }
 
+/** Normalized public Binance Spot OHLCV candle. */
 export interface BinanceCandle {
   openTime: number
   open: number
@@ -56,6 +60,7 @@ export interface BinanceCandle {
   trades: number
 }
 
+/** Mark-to-market summary of the virtual Binance paper account. */
 export interface BinancePaperAccount {
   mode: 'paper'
   initialCashUsdt: number
@@ -82,6 +87,7 @@ export interface BinancePaperAccount {
   }>
 }
 
+/** Minimal public-market seam consumed by the paper broker and its tests. */
 export interface BinancePublicMarket {
   price(symbol: string): Promise<number>
   prices(symbols: readonly string[]): Promise<Record<string, number>>
@@ -135,6 +141,11 @@ function parsePrice(value: unknown, symbol: string): number {
 
 /** Public, credential-free Binance Spot market reader used by paper trading. */
 export class BinancePublicMarketClient implements BinancePublicMarket {
+  /**
+   * Read the latest public Binance Spot price for one symbol.
+   * @param rawSymbol - Spot symbol such as BTCUSDT.
+   * @returns Latest positive market price.
+   */
   async price(rawSymbol: string): Promise<number> {
     const symbol = normalizeSymbol(rawSymbol)
     const url = new URL('/api/v3/ticker/price', BINANCE_PUBLIC_API)
@@ -142,6 +153,11 @@ export class BinancePublicMarketClient implements BinancePublicMarket {
     return parsePrice(await fetchJson(url), symbol)
   }
 
+  /**
+   * Read latest public prices for a unique set of Binance Spot symbols.
+   * @param rawSymbols - Spot symbols to mark.
+   * @returns Symbol-to-price map.
+   */
   async prices(rawSymbols: readonly string[]): Promise<Record<string, number>> {
     const symbols = [...new Set(rawSymbols.map(normalizeSymbol))]
     if (symbols.length === 0) return {}
@@ -149,6 +165,13 @@ export class BinancePublicMarketClient implements BinancePublicMarket {
     return Object.fromEntries(entries)
   }
 
+  /**
+   * Read bounded public Binance Spot candles.
+   * @param rawSymbol - Spot symbol such as BTCUSDT.
+   * @param rawInterval - Binance kline interval.
+   * @param rawLimit - Requested candle count; clamped to Binance's public limit.
+   * @returns Normalized OHLCV candles.
+   */
   async candles(rawSymbol: string, rawInterval: string, rawLimit: number): Promise<BinanceCandle[]> {
     const symbol = normalizeSymbol(rawSymbol)
     const interval = normalizeInterval(rawInterval)
@@ -324,6 +347,11 @@ export class BinancePaperBroker {
     private readonly market: BinancePublicMarket = new BinancePublicMarketClient(),
   ) {}
 
+  /**
+   * Initialize or resume the virtual account.
+   * @param options - Optional starting capital and explicit reset switch.
+   * @returns Current marked paper account.
+   */
   async activate(options: { initialCashUsdt?: number; reset?: boolean } = {}): Promise<BinancePaperAccount> {
     const initialCashUsdt = options.initialCashUsdt ?? DEFAULT_INITIAL_CASH_USDT
     if (!finitePositive(initialCashUsdt) || initialCashUsdt > 1_000_000_000) {
@@ -337,10 +365,21 @@ export class BinancePaperBroker {
     return this.account()
   }
 
+  /**
+   * Read public candles through the broker's market seam.
+   * @param symbol - Binance Spot symbol.
+   * @param interval - Binance kline interval.
+   * @param limit - Requested candle count.
+   * @returns Public OHLCV candles.
+   */
   async candles(symbol: string, interval: string, limit = 200): Promise<BinanceCandle[]> {
     return this.market.candles(symbol, interval, limit)
   }
 
+  /**
+   * Mark every virtual position to fresh public prices.
+   * @returns Current virtual account, positions, and performance metrics.
+   */
   async account(): Promise<BinancePaperAccount> {
     const state = await readState(this.path) ?? freshState(DEFAULT_INITIAL_CASH_USDT, DEFAULT_FEE_RATE)
     const symbols = Object.keys(state.positions)
@@ -381,6 +420,11 @@ export class BinancePaperBroker {
     }
   }
 
+  /**
+   * Read recent persisted paper fills.
+   * @param limit - Maximum recent fills to return.
+   * @returns Recent paper-trade journal rows.
+   */
   async journal(limit = 100): Promise<readonly BinancePaperTrade[]> {
     const state = await readState(this.path)
     if (state === undefined) return []
@@ -388,6 +432,11 @@ export class BinancePaperBroker {
     return state.trades.slice(-size)
   }
 
+  /**
+   * Execute one virtual Spot market order at a fresh public Binance price.
+   * @param input - Symbol, side, sizing, and optional strategy evidence.
+   * @returns Persisted virtual fill plus the newly marked paper account.
+   */
   async order(input: {
     symbol: string
     side: 'buy' | 'sell'
