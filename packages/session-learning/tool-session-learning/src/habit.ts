@@ -22,6 +22,8 @@ export interface HabitAssessment {
 /**
  * Decide whether Phoenix should keep learning, reuse a learned habit, or
  * temporarily return to deliberate reasoning because recent evidence drifted.
+  * @param state - state supplied to this public operation.
+  * @returns Result produced by this public operation.
  */
 export function assessHabitExperience(state: ExperienceAggregate): HabitAssessment {
   const runs = Math.max(1, state.runs)
@@ -84,6 +86,8 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
 /**
  * Render bounded model context. Observe mode intentionally stays silent so
  * immature evidence does not bias a novel task.
+  * @param assessment - assessment supplied to this public operation.
+  * @returns Result produced by this public operation.
  */
 export function formatHabitGuidance(assessment: HabitAssessment): string {
   if (assessment.mode === 'observe') return ''
