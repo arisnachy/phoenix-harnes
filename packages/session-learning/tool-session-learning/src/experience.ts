@@ -73,8 +73,10 @@ export class ExperienceLearningEngine {
   private readonly active = new Map<string, ActiveEpisode>()
   private readonly aggregates = new Map<string, ExperienceAggregate>()
 
+  /**
+   * Restore durable experience aggregates without replacing newer in-memory evidence.
    * @param records - records supplied to this public operation.
-  /** Restore durable experience aggregates without replacing newer in-memory evidence. */
+   */
   restore(records: readonly CognitiveMemoryRecord[]): void {
     for (const record of records) {
       if (record.status !== 'active') continue
@@ -118,9 +120,11 @@ export class ExperienceLearningEngine {
     })
   }
 
+  /**
+   * Record one model usage sample without storing prompts or model output.
    * @param sessionId - sessionId supplied to this public operation.
    * @param usage - usage supplied to this public operation.
-  /** Record one model usage sample without storing prompts or model output. */
+   */
   observeUsage(sessionId: string, usage: {
     readonly inputTokens: number
     readonly outputTokens: number
@@ -137,37 +141,47 @@ export class ExperienceLearningEngine {
       + nonNegative(usage.reasoningTokens)
   }
 
+  /**
+   * Count a tool attempt. Raw arguments are deliberately not retained.
    * @param sessionId - sessionId supplied to this public operation.
-  /** Count a tool attempt. Raw arguments are deliberately not retained. */
+   */
   observeToolCall(sessionId: string): void {
     const episode = this.active.get(sessionId)
     if (episode !== undefined) episode.toolCalls += 1
   }
 
+  /**
+   * Count a failed tool result as evidence of execution friction.
    * @param sessionId - sessionId supplied to this public operation.
    * @param failed - failed supplied to this public operation.
-  /** Count a failed tool result as evidence of execution friction. */
+   */
   observeToolResult(sessionId: string, failed: boolean): void {
     const episode = this.active.get(sessionId)
     if (episode !== undefined && failed) episode.failedToolCalls += 1
   }
 
+  /**
+   * Count an LLM retry as avoidable resource overhead.
    * @param sessionId - sessionId supplied to this public operation.
-  /** Count an LLM retry as avoidable resource overhead. */
+   */
   observeRetry(sessionId: string): void {
     const episode = this.active.get(sessionId)
     if (episode !== undefined) episode.retries += 1
   }
 
+  /**
+   * Count an explicit human correction/intervention during an active episode.
    * @param sessionId - sessionId supplied to this public operation.
-  /** Count an explicit human correction/intervention during an active episode. */
+   */
   observeUserIntervention(sessionId: string): void {
     const episode = this.active.get(sessionId)
     if (episode !== undefined) episode.userInterventions += 1
   }
 
+  /**
+   * Drop unfinished experience when the governed task is explicitly cleared.
    * @param sessionId - sessionId supplied to this public operation.
-  /** Drop unfinished experience when the governed task is explicitly cleared. */
+   */
   clear(sessionId: string): void {
     this.active.delete(sessionId)
   }
@@ -226,10 +240,12 @@ export class ExperienceLearningEngine {
     return next
   }
 
+  /**
+   * Find the best prior repeated-task experience for current model guidance.
    * @param text - text supplied to this public operation.
    * @param projectId - projectId supplied to this public operation.
    * @returns Result produced by this public operation.
-  /** Find the best prior repeated-task experience for current model guidance. */
+   */
   matchTask(text: string, projectId?: string): ExperienceAggregate | undefined {
     const fingerprint = fingerprintTask(text)
     if (fingerprint.tokens.length === 0) return undefined
@@ -250,20 +266,24 @@ export class ExperienceLearningEngine {
     return best
   }
 
+  /**
+   * Read the latest aggregate for diagnostics and tests.
    * @param key - key supplied to this public operation.
    * @param projectId - projectId supplied to this public operation.
    * @returns Result produced by this public operation.
-  /** Read the latest aggregate for diagnostics and tests. */
+   */
   snapshot(key: string, projectId?: string): ExperienceAggregate | undefined {
     const state = this.aggregates.get(scopedKey(key, projectId))
     return state === undefined ? undefined : structuredClone(state)
   }
 }
 
+/**
+ * Convert a verified experience aggregate into one durable cognitive-memory update.
  * @param state - state supplied to this public operation.
  * @param provenance - provenance supplied to this public operation.
  * @returns Result produced by this public operation.
-/** Convert a verified experience aggregate into one durable cognitive-memory update. */
+ */
 export function experienceMemoryInput(
   state: ExperienceAggregate,
   provenance: ExperienceMemoryProvenance,
@@ -297,9 +317,11 @@ export function experienceMemoryInput(
   }
 }
 
+/**
+ * Decode one durable aggregate without trusting arbitrary JSON.
  * @param record - record supplied to this public operation.
  * @returns Result produced by this public operation.
-/** Decode one durable aggregate without trusting arbitrary JSON. */
+ */
 export function decodeExperienceAggregate(record: Pick<CognitiveMemoryRecord, 'subject' | 'value'>): ExperienceAggregate | undefined {
   if (record.subject === undefined || !record.subject.startsWith(EXPERIENCE_SUBJECT_PREFIX) || record.value === undefined) return undefined
   let raw: unknown
@@ -335,9 +357,11 @@ export function decodeExperienceAggregate(record: Pick<CognitiveMemoryRecord, 's
   }
 }
 
+/**
+ * Stable key for one bounded task fingerprint.
  * @param fingerprint - fingerprint supplied to this public operation.
  * @returns Result produced by this public operation.
-/** Stable key for one bounded task fingerprint. */
+ */
 export function fingerprintKey(fingerprint: TaskFingerprint): string {
   const source = fingerprint.tokens.length === 0 ? fingerprint.normalized : fingerprint.tokens.join('\n')
   let hash = 0x811c9dc5
