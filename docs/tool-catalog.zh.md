@@ -28,16 +28,61 @@
 | `@phoenix-ai/dsh-tool-bash-persistent` | `bash` | `ctx.tools`、`ctx.terminals`、`an owning Agent at execution time` | `tool/call`、`PTY shell state`、`tool/result` | - | 一个按所有者隔离的持久 bash 工具；部署组合提供 PTY 后端，并可覆盖面向模型的环境描述。 |
 | `@phoenix-ai/dsh-tool-pwsh-persistent` | `pwsh` | `ctx.tools`、`ctx.terminals`、`an owning Agent at execution time` | `tool/call`、`PTY shell state`、`tool/result` | - | 一个按所有者隔离的持久 pwsh 工具，持久 bash 工具的 Windows 对应物；部署组合提供 pwsh 方言的 PTY 后端，并可覆盖面向模型的环境描述。 |
 | `@phoenix-ai/dsh-tool-str-replace-editor` | `str_replace_editor` | `ctx.tools`、`ctx.fs` | `tool/call`、`fs/observed after view presence/absence, edit absence, or successful mutation`、`tool/result` | - | 基于文件系统 seam 的独立查看／创建／唯一字面量替换／按行插入工具；可与任何 shell 或终端接口组合。 |
-| `@phoenix-ai/dsh-tool-fs` | `edit`、`read`、`read_image`、`write` | `ctx.tools`、`ctx.fs`、`ctx.systemPrompt`、`ctx.attachments (image-tool registration)`、`ctx.llm + an image-capable route (image-tool execution)` | `tool/call`、`fs/write-intent or fs/edit-intent for mutations`、`fs/observed after read presence/absence or successful file operation`、`durable attachment (read_image)`、`tool/result` | - | 先读后写／编辑策略由 `@phoenix-ai/dsh-fs-observation-policy` 添加；它是一个 `fs/*` 事件门禁插件，不会改变 schema。加载这些工具的部署按预期也应加载该插件。没有 `ctx.attachments` 时图片工具不会注册；其 schema 与路由无关，执行时除非确切路由的模型声明图片输入，否则拒绝。 |
+| `@phoenix-ai/dsh-tool-fs` | `edit`、`fs_status`、`read`、`read_image`、`write` | `ctx.tools`、`ctx.fs`、`ctx.systemPrompt`、`ctx.attachments (image-tool registration)`、`ctx.llm + an image-capable route (image-tool execution)` | `tool/call`、`fs/write-intent or fs/edit-intent for mutations`、`fs/observed after read presence/absence or successful file operation`、`durable attachment (read_image)`、`tool/result` | - | 先读后写／编辑策略由 `@phoenix-ai/dsh-fs-observation-policy` 添加；它是一个 `fs/*` 事件门禁插件，不会改变 schema。加载这些工具的部署按预期也应加载该插件。没有 `ctx.attachments` 时图片工具不会注册；其 schema 与路由无关，执行时除非确切路由的模型声明图片输入，否则拒绝。 |
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`、`grep` | `ctx.tools`、`ctx.subprocess`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn 随包提供的 ripgrep 二进制文件（`@vscode/ripgrep`），并作为普通前台调用运行，绝不作为后台任务；无需在宿主机安装 `rg`，也不经过 shell 层。本目录使用 `sampleOverCapGlobResults: true`；部署必须显式选择该行为。结果超过上限时，会通过可选的 ctx.spillStore 后端保存完整的格式化列表；在共置部署中，如果后端公开本地路径，返回的定位信息可供后续读取／搜索。 |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`、`terminal_list`、`terminal_open`、`terminal_read`、`terminal_send`、`terminal_signal` | `ctx.tools`、`ctx.terminals`、`ctx.systemPrompt`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | 这 6 个终端工具需要选择启用，用于补充一次性 bash／文件系统工具。`terminal_send(run_in_background: true)` 会注册到 `ctx.jobs`；schema 不包含 TUI、具名按键序列、BEL、调整尺寸、自动启动和跨 agent 共享。 |
 | `@phoenix-ai/dsh-tool-goal` | `create_goal`、`get_goal`、`specialist_lab`、`update_goal` | `ctx.tools`、`ctx.agents`、`ctx.goals`、`ctx.systemPrompt`、`a calling Agent in an authorized open turn` | `tool/call`、`goal/change for mutations`、`tool/result` | - | create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。 |
 | `@phoenix-ai/dsh-tool-home-gateway` | `home_control`、`home_list_devices` | `ctx.tools`、`ctx.home`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`Home Assistant request at execution time` | - | schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在操作员提供私有 endpoint、token 变量和两个 allowlist 前保持禁用。 |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list` | `ctx.tools`、`ctx.sessions`、Session 持久化、未来创建的 live 根 Agent | `tool/call`、`schedule/change create or delete`、`tool/result` | - | 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。 |
+| `@phoenix-ai/dsh-tool-living` | `living_act`、`living_forget_creation`、`living_get_connector_kit`、`living_inspect_creation`、`living_list_creations`、`living_read_state`、`living_register_creation`、`living_verify_creation` | `ctx.tools`、`ctx.living`、`ctx.systemPrompt` | `tool/call`、`durable living creation manifest`、`live creation state/actions/events through ctx.living`、`tool/result` | - | 通用、领域无关的控制表面：任意未来创建物类型自行描述状态、动作、事件、资源、参与者及目标集成级别；低于目标级别时验证会拒绝交付。 |
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`、`ctx.lsp`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，因此其模型可见 schema 在更换提供方时保持稳定。运行时要求已注册提供方，例如 `@phoenix-ai/dsh-lsp-stdio`；如果没有提供方，查询会返回结构化 `LSP_UNAVAILABLE` 错误，而不会改变 schema。 |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`、`ctx.workflowEngine`、`ctx.subagents`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents every fresh round)` | `tool/call`、`tool/result`、`workflow and child session events during execution` | - | 固定的前台工作流会在每个 Round 启动一个全新的结构化子级；模型只能选择不可变目标和可选的 Round 上限。 |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`、`ctx.agents`、`ctx.skills` | `tool/call`、`tool/result`、`user/message replacement catalogs via agent.inject()` | - | - |
-| `@phoenix-ai/dsh-tool-session-learning` | `memory_remember`、`memory_search` | `ctx.tools`、`ctx.systemPrompt`、`ctx.learningMemory` | `tool/call`、`tool/result`、`bounded learning context` | - | memory_search 和 memory_remember 只提供有界且保留来源的学习记录；它们不会授予权限或修改受信任指令。 |
+### `memory_teach`
+
+把用户明确教授的持久流程保存为结构化、无 secret 的程序性知识。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Short name for the taught rule or procedure."
+    },
+    "scope": {
+      "type": "string",
+      "description": "Project, domain, system, or activity where this procedure applies."
+    },
+    "trigger": {
+      "type": "string",
+      "description": "Condition that should cause Phoenix to recall and apply the procedure."
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered, concrete steps taught by the user. Do not include hidden reasoning or credentials.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "string",
+      "description": "Why this is authoritative, normally a concise reference to the user instruction or demonstration."
+    }
+  },
+  "required": [
+    "title",
+    "scope",
+    "trigger",
+    "steps",
+    "evidence"
+  ]
+}
+```
+
+来源： [`packages/session-learning/tool-session-learning/src/index.ts`](../packages/session-learning/tool-session-learning/src/index.ts)
+
+| `@phoenix-ai/dsh-tool-session-learning` | `memory_remember`、`memory_search`、`memory_teach` | `ctx.tools`、`ctx.systemPrompt`、`ctx.learningMemory` | `tool/call`、`tool/result`、`bounded learning context` | - | memory_search 和 memory_remember 只提供有界且保留来源的学习记录；它们不会授予权限或修改受信任指令。 |
 | `@phoenix-ai/dsh-tool-session-query` | `session_event_read`、`session_event_search`、`session_event_trace`、`session_search`、`session_trace` | `ctx.tools`、`ctx.systemPrompt`、`ctx.sessionQuery`、`a calling Agent for workspace authority` | `tool/call`、`tool/result` | - | 这 5 个只读工具会隐藏提供方游标，并根据不可变的调用 agent 会话为每个结果授权。该包需要选择启用；需要强制截止时间或限制行内输出的组合还会挂载通用超时或 spill 策略。 |
 | `@phoenix-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`、`ctx.subagents`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`child session events through the chosen provider` | `subagent`、`subagent_fork` | 注册的工具名称取决于加载时 `toolName` 配置（默认为 `subagent`）；上述 schema 对应默认值。随产品发布的组合会为每个 subagent 后端加载一次该包，因此模型还会看到绑定到 fork 后端的 `subagent_fork`。每个实例的描述、`run_in_background` 参数与 system prompt 策略取决于它自己的 `backgroundMode` 和 `enableRunInBackground`，因此两个随附 schema 并不相同：`subagent` 为 `continuable`，省略参数时默认后台运行，并由 runtime 自动投递结束结果；`subagent_fork` 保持 `one-shot`，省略参数时默认前台运行。详见 `packages/bundle/base/cordis.patch.yml` 和 `examples/acp-agent/cordis.yml`。 |
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`、`list_agents`、`send_message` | `ctx.tools`、`ctx.subagents`、`ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`、`tool/result`、`child session events through ctx.subagents` | - | 这些是控制可继续后台 subagent 的全局命名工具：绑定提供方的 `tool-subagent` 实例注册不同的委派工具；本包注册一次 `send_message` 和 `interrupt_agent`，另由 `list_agents` 通过单独加载的 `/list-agents` 插件提供，其目录行使用 sessionProjections 和实时 Agent 注册表。 |
@@ -675,6 +720,30 @@ pwsh 工具是 Windows 组合中 bash 执行器 seam 的 PowerShell 方言消费
 ```
 
 来源：[`packages/fs/tool-fs/src/index.ts`](../packages/fs/tool-fs/src/index.ts)
+
+### `fs_status`
+
+一次低成本调用最多检查 64 个精确文件系统路径。返回存在性、类型以及已知时的大小；绝不读取文件内容，也不递归搜索。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "paths": {
+      "type": "array",
+      "description": "Exact file or directory paths. Relative paths resolve against the session workspace.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "paths"
+  ]
+}
+```
+
+来源： [`packages/fs/tool-fs/src/index.ts`](../packages/fs/tool-fs/src/index.ts)
 
 ### `read`
 
@@ -1680,6 +1749,228 @@ schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在�
 来源：[`packages/schedule/schedule/src/tools.ts`](../packages/schedule/schedule/src/tools.ts)
 
 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。
+
+<a id="phoenix-aidsh-tool-living"></a>
+
+## `@phoenix-ai/dsh-tool-living`
+
+### `living_act`
+
+执行已连接创建物声明的一项动作。创建物离线或未声明该动作时，调用会失败。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "action": {
+      "type": "string"
+    },
+    "input_json": {
+      "type": "string",
+      "description": "JSON value passed to the creation action."
+    }
+  },
+  "required": [
+    "id",
+    "action",
+    "input_json"
+  ]
+}
+```
+
+来源： [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_forget_creation`
+
+显式删除 Phoenix 与某个创建物的持久关系，并断开其实时 provider。仅当用户明确要求 Phoenix 不再记住它，或该创建物已永久删除且不打算重连时使用；仅仅丢失运行时绝不是调用理由。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+来源： [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_get_connector_kit`
+
+返回某个非静态创建物已配置的 Phoenix 控制描述符，以及可直接使用的 JavaScript 与 Python sidecar 模块。Bearer token 必须保存在本地或服务端 secret 中；绝不要提交到仓库，也不要打包进公开浏览器 bundle。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+来源： [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_inspect_creation`
+
+检查一个已记住的创建物并报告其实时集成状态。除非连接性是明确的验收条件，否则只把连接状态视为参考信息。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+来源： [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_list_creations`
+
+列出 Phoenix 记住的创建物，包括当前离线但以后可以重新连接的创建物。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源： [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_read_state`
+
+读取已连接创建物的权威实时状态。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+来源： [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_register_creation`
+
+记住 Phoenix 创建或实质修改的任何面向用户的产物或可运行系统，并使用自描述运行契约。它接受任意未来创建物类型；kind 只是描述文本，绝不是枚举。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "target_level": {
+      "type": "string",
+      "enum": [
+        "connected",
+        "reactive",
+        "controllable",
+        "inhabited"
+      ]
+    },
+    "state": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "actors": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "id",
+    "title",
+    "kind",
+    "target_level",
+    "state",
+    "actions",
+    "events",
+    "resources",
+    "actors"
+  ]
+}
+```
+
+来源： [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+### `living_verify_creation`
+
+如果创建物尚未达到其声明的目标集成级别则失败。仅在 Phoenix 连接性是明确验收条件时使用，不能把它当作通用任务完成门禁。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id"
+  ]
+}
+```
+
+来源： [`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts)
+
+通用、领域无关的控制表面：任意未来创建物类型自行描述状态、动作、事件、资源、参与者及目标集成级别；低于目标级别时验证会拒绝交付。
+
 
 <a id="phoenix-aidsh-tool-lsp"></a>
 
