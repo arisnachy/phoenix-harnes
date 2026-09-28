@@ -44,6 +44,44 @@ Si existe un conector de audio/generación musical autorizado, úsalo para el au
 procedural cuando sea viable o usa únicamente recursos con licencia compatible y documenta su procedencia. Nunca presentes
 un silencio, beep temporal, cube/mannequin por defecto, checker texture o placeholder como producción final.
 
+### Puerta obligatoria de calidad para personajes, enemigos y NPC
+
+Todo actor que el jugador vea o con el que pueda interactuar —protagonista, enemigo, jefe, aldeano/NPC,
+criatura, aliado o comerciante— debe existir como un asset visual de producción reconocible y animado.
+La geometría de colisión puede ser simple internamente, pero **nunca debe usarse como apariencia final**.
+
+No aceptes como actor final un `fillRect`, rectángulo, caja, círculo, cápsula, emoji, letra, texto, silueta de
+un solo bloque, maniquí del motor o primitive mesh, salvo que el usuario haya pedido explícitamente una
+dirección artística abstracta/minimalista y esa decisión esté respaldada por referencias y evidencia visual.
+Si un personaje puede describirse honestamente como "una caja con ojos", la revisión debe fallar y regenerarlo.
+
+Para 2D/pixel art, exige como mínimo:
+
+- silueta distinta por rol y lectura inmediata a la escala real de juego;
+- cabeza/cuerpo/extremidades o shape language equivalente, con detalles de identidad y varias regiones de
+  color/valor; no un bloque plano;
+- densidad de píxel, paleta, outline, sombreado y escala coherentes con el tileset y con el resto del reparto;
+- fondo transparente y atlas/sprite sheet limpio, sin halos ni antialiasing accidental;
+- `idle` y `walk` en todas las direcciones relevantes; en top-down, usa cuatro direcciones por defecto;
+- para actores de combate: `attack/telegraph`, `hurt` y `death` además de locomoción;
+- para NPC interactivo: `idle` y al menos una respuesta visible de interacción cuando corresponda;
+- hitbox/collision shape separada del sprite para que la lógica no degrade la apariencia.
+
+Para 3D, exige modelado/materiales/rig/animación que comuniquen el rol del actor; un cubo, cápsula,
+maniquí, rig por defecto sin personalización suficiente o mesh temporal no puede cerrar producción.
+
+Pipeline preferido para sprites/actores raster:
+`image_generation` o herramienta artística autorizada -> limpieza/transparencia -> normalización de
+paleta/resolución/pixel grid -> corte de frames/atlas -> importación al motor -> ejecución -> captura ->
+revisión visual. Si no hay generador disponible, crea pixel art procedural por matrices/capas de píxeles o
+assets vector/raster propios con detalle suficiente; **no reemplaces la generación por primitivas geométricas
+de una sola capa**.
+
+La prueba visual debe incluir al menos una captura reciente a escala normal de gameplay y otra inspección
+ampliada de los actores principales. El revisor debe comparar jugador, al menos un enemigo y un NPC/actor
+interactivo cuando existan. Si cualquiera resulta indistinguible, inconsistente, desproporcionado, sin
+animación suficiente o visualmente provisional, el resultado es `needs_changes`, no PASS.
+
 ### Rúbrica interna de 100 puntos
 
 Usa esta rúbrica como guía de iteración, no como sustituto de evidencia:
