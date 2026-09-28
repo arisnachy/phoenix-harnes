@@ -41,6 +41,7 @@ const EXPECTED_TOOLS = [
   'exit_plan_mode',
   'get_goal',
   'hardness_run',
+  'image_generate',
   'interrupt_agent',
   'job_kill',
   'job_list',
