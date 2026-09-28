@@ -419,9 +419,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 #### `goal/change` — log-only
 
 ```ts persistence-catalog
-/**
- * Complete post-mutation goal state or clear tombstone.
- */
+/** Complete post-mutation goal state or clear tombstone. */
 'goal/change': GoalChangeMeta
 ```
 

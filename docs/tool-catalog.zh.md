@@ -38,50 +38,6 @@
 | `@phoenix-ai/dsh-tool-lsp` | `lsp` | `ctx.tools`、`ctx.lsp`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | lsp 工具将提供方选择和语言服务器子进程置于 ctx.lsp 之后，因此其模型可见 schema 在更换提供方时保持稳定。运行时要求已注册提供方，例如 `@phoenix-ai/dsh-lsp-stdio`；如果没有提供方，查询会返回结构化 `LSP_UNAVAILABLE` 错误，而不会改变 schema。 |
 | `@phoenix-ai/dsh-tool-ralph` | `ralph` | `ctx.tools`、`ctx.workflowEngine`、`ctx.subagents`、`ctx.systemPrompt`、`a calling Agent (exec.agent parents every fresh round)` | `tool/call`、`tool/result`、`workflow and child session events during execution` | - | 固定的前台工作流会在每个 Round 启动一个全新的结构化子级；模型只能选择不可变目标和可选的 Round 上限。 |
 | `@phoenix-ai/dsh-tool-skill` | `skill` | `ctx.tools`、`ctx.agents`、`ctx.skills` | `tool/call`、`tool/result`、`user/message replacement catalogs via agent.inject()` | - | - |
-### `memory_teach`
-
-把用户明确教授的持久流程保存为结构化、无 secret 的程序性知识。
-
-```json
-{
-  "type": "object",
-  "properties": {
-    "title": {
-      "type": "string",
-      "description": "Short name for the taught rule or procedure."
-    },
-    "scope": {
-      "type": "string",
-      "description": "Project, domain, system, or activity where this procedure applies."
-    },
-    "trigger": {
-      "type": "string",
-      "description": "Condition that should cause Phoenix to recall and apply the procedure."
-    },
-    "steps": {
-      "type": "array",
-      "description": "Ordered, concrete steps taught by the user. Do not include hidden reasoning or credentials.",
-      "items": {
-        "type": "string"
-      }
-    },
-    "evidence": {
-      "type": "string",
-      "description": "Why this is authoritative, normally a concise reference to the user instruction or demonstration."
-    }
-  },
-  "required": [
-    "title",
-    "scope",
-    "trigger",
-    "steps",
-    "evidence"
-  ]
-}
-```
-
-来源： [`packages/session-learning/tool-session-learning/src/index.ts`](../packages/session-learning/tool-session-learning/src/index.ts)
-
 | `@phoenix-ai/dsh-tool-session-learning` | `memory_remember`、`memory_search`、`memory_teach` | `ctx.tools`、`ctx.systemPrompt`、`ctx.learningMemory` | `tool/call`、`tool/result`、`bounded learning context` | - | memory_search 和 memory_remember 只提供有界且保留来源的学习记录；它们不会授予权限或修改受信任指令。 |
 | `@phoenix-ai/dsh-tool-session-query` | `session_event_read`、`session_event_search`、`session_event_trace`、`session_search`、`session_trace` | `ctx.tools`、`ctx.systemPrompt`、`ctx.sessionQuery`、`a calling Agent for workspace authority` | `tool/call`、`tool/result` | - | 这 5 个只读工具会隐藏提供方游标，并根据不可变的调用 agent 会话为每个结果授权。该包需要选择启用；需要强制截止时间或限制行内输出的组合还会挂载通用超时或 spill 策略。 |
 | `@phoenix-ai/dsh-tool-subagent` | `subagent` | `ctx.tools`、`ctx.subagents`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`child session events through the chosen provider` | `subagent`、`subagent_fork` | 注册的工具名称取决于加载时 `toolName` 配置（默认为 `subagent`）；上述 schema 对应默认值。随产品发布的组合会为每个 subagent 后端加载一次该包，因此模型还会看到绑定到 fork 后端的 `subagent_fork`。每个实例的描述、`run_in_background` 参数与 system prompt 策略取决于它自己的 `backgroundMode` 和 `enableRunInBackground`，因此两个随附 schema 并不相同：`subagent` 为 `continuable`，省略参数时默认后台运行，并由 runtime 自动投递结束结果；`subagent_fork` 保持 `one-shot`，省略参数时默认前台运行。详见 `packages/bundle/base/cordis.patch.yml` 和 `examples/acp-agent/cordis.yml`。 |
@@ -842,6 +798,10 @@ pwsh 工具是 Windows 组合中 bash 执行器 seam 的 PowerShell 方言消费
     "path": {
       "type": "string",
       "description": "Directory to search in. Defaults to the session workspace; a relative path resolves against it."
+    },
+    "includeIgnored": {
+      "type": "boolean",
+      "description": "Include ignored/generated files. Defaults false; enable only when explicitly needed."
     }
   },
   "required": [
@@ -2167,6 +2127,50 @@ Search Phoenix cognitive memory with bounded provenance, layers, project, tempor
 
 来源：[`packages/session-learning/tool-session-learning/src/index.ts`](../packages/session-learning/tool-session-learning/src/index.ts)
 
+### `memory_teach`
+
+把用户明确教授的持久流程保存为结构化、无 secret 的程序性知识。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Short name for the taught rule or procedure."
+    },
+    "scope": {
+      "type": "string",
+      "description": "Project, domain, system, or activity where this procedure applies."
+    },
+    "trigger": {
+      "type": "string",
+      "description": "Condition that should cause Phoenix to recall and apply the procedure."
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered, concrete steps taught by the user. Do not include hidden reasoning or credentials.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "evidence": {
+      "type": "string",
+      "description": "Why this is authoritative, normally a concise reference to the user instruction or demonstration."
+    }
+  },
+  "required": [
+    "title",
+    "scope",
+    "trigger",
+    "steps",
+    "evidence"
+  ]
+}
+```
+
+来源： [`packages/session-learning/tool-session-learning/src/index.ts`](../packages/session-learning/tool-session-learning/src/index.ts)
+
 memory_search and memory_remember expose only bounded, provenance-preserving learning records; they never grant permissions or modify trusted instructions.
 
 <a id="phoenix-aidsh-tool-session-query"></a>
@@ -2423,6 +2427,14 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     "prompt": {
       "type": "string",
       "description": "Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. Devuelve solo el resultado verificable."
+    },
+    "hard_parallelism": {
+      "type": "boolean",
+      "description": "Second active slot only. Set true ONLY when one subagent is insufficient and the task has two genuinely independent difficult workstreams."
+    },
+    "extreme_parallelism": {
+      "type": "boolean",
+      "description": "Third active slot only. Set true ONLY in an extreme case that truly requires three independent workstreams. It never permits a fourth child."
     },
     "run_in_background": {
       "type": "boolean",
