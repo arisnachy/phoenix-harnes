@@ -34,22 +34,15 @@ export interface XMcpHostSnapshot {
   }
 }
 
-/** Convert the typed Host snapshot into the recursive JSON value contract used by tools. */
+/**
+ * Project the secret-free Host lifecycle snapshot into the tool runtime's JSON
+ * contract. Every field in XMcpHostSnapshot is already recursively JSON-safe;
+ * this cast records that structural fact without cloning or adding branches.
+ * @param state - Secret-free X MCP lifecycle state.
+ * @returns The same snapshot under the generic tool JSON contract.
+ */
 function xMcpSnapshotJson(state: XMcpHostSnapshot): JsonValue {
-  return {
-    clientIdConfigured: state.clientIdConfigured,
-    clientSecretConfigured: state.clientSecretConfigured,
-    api: {
-      configured: state.api.configured,
-      ...(state.api.status === undefined ? {} : { status: state.api.status }),
-      ...(state.api.reasonCode === undefined ? {} : { reasonCode: state.api.reasonCode }),
-    },
-    docs: {
-      configured: state.docs.configured,
-      ...(state.docs.status === undefined ? {} : { status: state.docs.status }),
-      ...(state.docs.reasonCode === undefined ? {} : { reasonCode: state.docs.reasonCode }),
-    },
-  }
+  return state as unknown as JsonValue
 }
 
 /** Host operations for the exact official X API and Docs MCP pair. */
