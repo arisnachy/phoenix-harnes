@@ -1,4 +1,5 @@
 import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
+import { snapshotJsonValue, type JsonValue } from '@phoenix-ai/dsh-session'
 import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import type { BinancePaperBroker } from './binance-paper.ts'
 
@@ -21,6 +22,23 @@ export interface BinanceTradingToolDependencies {
   broker: BinancePaperBroker
   approval: Pick<ApprovalService, 'request'>
   agentOs?: Partial<BinanceAgentOsHostService>
+}
+
+function jsonRecord(value: unknown): Record<string, JsonValue> {
+  const snapshot = snapshotJsonValue(value)
+  if (snapshot === undefined || snapshot === null || typeof snapshot !== 'object' || Array.isArray(snapshot)) {
+    throw new Error('Binance tool produced a non-object JSON result')
+  }
+  return snapshot
+}
+
+function jsonRecordArray(value: unknown): Record<string, JsonValue>[] {
+  const snapshot = snapshotJsonValue(value)
+  if (!Array.isArray(snapshot)) throw new Error('Binance tool produced a non-array JSON result')
+  if (!snapshot.every(item => item !== null && typeof item === 'object' && !Array.isArray(item))) {
+    throw new Error('Binance tool produced a non-object journal entry')
+  }
+  return snapshot as Record<string, JsonValue>[]
 }
 
 function accountSummary(account: Awaited<ReturnType<BinancePaperBroker['account']>>): string {
@@ -51,21 +69,21 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
           ...(args.initialCashUsdt === undefined ? {} : { initialCashUsdt: args.initialCashUsdt }),
           reset: args.resetPaper === true,
         })
-        return {
+        return jsonRecord({
           mode: 'paper',
           realTradingEnabled: false,
           account,
           message: `${accountSummary(account)}. Real Binance tools are not used in PAPER mode.`,
-        }
+        })
       }
 
       if (args.requestedByUser !== true) {
-        return {
+        return jsonRecord({
           mode: 'paper',
           realTradingEnabled: false,
           status: 'denied',
           message: 'REAL activation requires an explicit user request; staying in PAPER mode.',
-        }
+        })
       }
       if (exec.agent === undefined) throw new Error('REAL Binance activation requires an active agent session')
       if (deps.agentOs?.enableBinanceAgentOs === undefined) {
@@ -81,19 +99,19 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         signal: exec.signal,
       })
       if (outcome !== 'allowed-once') {
-        return {
+        return jsonRecord({
           mode: 'paper',
           realTradingEnabled: false,
           status: 'denied',
           approvalOutcome: outcome,
           message: 'REAL Binance activation was not approved; Phoenix remains in PAPER/read-only operation.',
-        }
+        })
       }
       const receipt = await deps.agentOs.enableBinanceAgentOs()
       const state = deps.agentOs.binanceAgentOsState === undefined
         ? undefined
         : await deps.agentOs.binanceAgentOsState()
-      return {
+      return jsonRecord({
         mode: 'real',
         realTradingEnabled: true,
         status: receipt.status,
@@ -103,7 +121,7 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         },
         ...(state === undefined ? {} : { connectorState: state }),
         message: 'Binance Agent OS is enabled. Complete Binance authorization/scopes if requested. No real order has been placed.',
-      }
+      })
     },
     presentCall(args) {
       return {
@@ -130,7 +148,7 @@ function statusTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         deps.broker.account(),
         deps.agentOs?.binanceAgentOsState?.() ?? Promise.resolve({ configured: false }),
       ])
-      return { paper, real }
+      return jsonRecord({ paper, real })
     },
     presentCall() {
       return { card: 'generic', title: 'Binance trading status', kind: 'read' }
@@ -153,12 +171,12 @@ function candlesTool(deps: BinanceTradingToolDependencies): ToolDefinition {
     },
     async execute(args) {
       const candles = await deps.broker.candles(args.symbol, args.interval, args.limit ?? 200)
-      return {
+      return jsonRecord({
         mode: 'public-market-data',
         symbol: args.symbol.trim().toUpperCase(),
         interval: args.interval,
         candles,
-      }
+      })
     },
     presentCall(args) {
       return { card: 'generic', title: `Binance candles: ${args.symbol}`, kind: 'read', rawInput: args.interval }
@@ -183,14 +201,14 @@ function paperOrderTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args) {
-      return deps.broker.order({
+      return jsonRecord(await deps.broker.order({
         symbol: args.symbol,
         side: args.side,
         ...(args.quantity === undefined ? {} : { quantity: args.quantity }),
         ...(args.quoteAmountUsdt === undefined ? {} : { quoteAmountUsdt: args.quoteAmountUsdt }),
         ...(args.strategyId === undefined ? {} : { strategyId: args.strategyId }),
         ...(args.reason === undefined ? {} : { reason: args.reason }),
-      })
+      }))
     },
     presentCall(args) {
       return {
@@ -213,7 +231,7 @@ function paperAccountTool(deps: BinanceTradingToolDependencies): ToolDefinition 
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute() {
-      return deps.broker.account()
+      return jsonRecord(await deps.broker.account())
     },
     presentCall() {
       return { card: 'generic', title: 'Binance PAPER account', kind: 'read' }
@@ -233,7 +251,7 @@ function paperJournalTool(deps: BinanceTradingToolDependencies): ToolDefinition 
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args) {
-      return [...await deps.broker.journal(args.limit ?? 100)]
+      return jsonRecordArray(await deps.broker.journal(args.limit ?? 100))
     },
     presentCall() {
       return { card: 'generic', title: 'Binance PAPER journal', kind: 'read' }
