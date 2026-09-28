@@ -470,6 +470,11 @@ export class ProactivityEngine {
     this.state = snapshot
   }
 
+  /**
+   * Create and persist a normalized proactive task.
+   * @param input - User- or harness-supplied task definition.
+   * @returns Persisted task snapshot.
+   */
   async create(input: CreateProactivityTaskInput): Promise<ProactivityTask> {
     return this.exclusive(async () => {
       const snapshot = await this.snapshot()
@@ -518,6 +523,11 @@ export class ProactivityEngine {
     })
   }
 
+  /**
+   * Read one proactive task by identifier.
+   * @param id - Durable task identifier.
+   * @returns Detached task snapshot, or undefined when absent.
+   */
   async get(id: string): Promise<ProactivityTask | undefined> {
     return this.exclusive(async () => {
       const task = (await this.snapshot()).tasks.find(candidate => candidate.id === id)
@@ -525,6 +535,11 @@ export class ProactivityEngine {
     })
   }
 
+  /**
+   * List proactive tasks visible under the requested projection rules.
+   * @param options - Visibility and time projection options.
+   * @returns Detached task snapshots visible to the caller.
+   */
   async list(options: ProactivityListOptions = {}): Promise<ProactivityTask[]> {
     return this.exclusive(async () => {
       const now = (options.now ?? new Date()).getTime()
@@ -567,8 +582,23 @@ export class ProactivityEngine {
     })
   }
 
+  /**
+   * Pause a scheduled proactive task.
+   * @param id - Durable task identifier.
+   * @returns Updated paused task snapshot.
+   */
   pause(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'paused') }
+  /**
+   * Resume a paused proactive task.
+   * @param id - Durable task identifier.
+   * @returns Updated scheduled task snapshot.
+   */
   resume(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'scheduled') }
+  /**
+   * Cancel a proactive task permanently.
+   * @param id - Durable task identifier.
+   * @returns Updated terminal task snapshot.
+   */
   cancel(id: string): Promise<ProactivityTask> { return this.setStatus(id, 'cancelled') }
 
   private dueOccurrences(task: ProactivityTask, nowMs: number): string[] {
@@ -763,7 +793,7 @@ export class ProactivityEngine {
    * Execute currently due work. Due-pass serialization is separate from the
    * ledger mutex, so active agents can safely list/create/cancel tasks while a
    * scheduled execution is awaiting model/tool work.
-    * @param now - now supplied to this public operation.
+   * @param now - Clock value used to evaluate due and catch-up occurrences.
    */
   runDue(now: Date = new Date()): Promise<void> {
     const run = this.runTail.then(() => this.runDuePass(now), () => this.runDuePass(now))
