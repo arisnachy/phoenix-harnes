@@ -48,31 +48,31 @@ function strings() {
   const spanish = typeof navigator !== 'undefined' && navigator.language.toLowerCase().startsWith('es')
   return spanish
     ? {
-        title: 'Conector requerido',
-        needs: 'Necesita autorización para continuar.',
-        connect: 'Conectar',
-        reconnect: 'Reconectar',
-        connecting: 'Conectando…',
-        connected: 'Conectado',
-        failed: 'No se pudo conectar',
-        cancelled: 'Conexión cancelada',
-        missing: 'No hay un flujo de autorización disponible para este conector.',
-      }
+      title: 'Conector requerido',
+      needs: 'Necesita autorización para continuar.',
+      connect: 'Conectar',
+      reconnect: 'Reconectar',
+      connecting: 'Conectando…',
+      connected: 'Conectado',
+      failed: 'No se pudo conectar',
+      cancelled: 'Conexión cancelada',
+      missing: 'No hay un flujo de autorización disponible para este conector.',
+    }
     : {
-        title: 'Connector required',
-        needs: 'Needs authorization to continue.',
-        connect: 'Connect',
-        reconnect: 'Reconnect',
-        connecting: 'Connecting…',
-        connected: 'Connected',
-        failed: 'Connection failed',
-        cancelled: 'Connection cancelled',
-        missing: 'No authorization flow is available for this connector.',
-      }
+      title: 'Connector required',
+      needs: 'Needs authorization to continue.',
+      connect: 'Connect',
+      reconnect: 'Reconnect',
+      connecting: 'Connecting…',
+      connected: 'Connected',
+      failed: 'Connection failed',
+      cancelled: 'Connection cancelled',
+      missing: 'No authorization flow is available for this connector.',
+    }
 }
 
 async function sleep(ms: number): Promise<void> {
-  await new Promise<void>(resolve => { window.setTimeout(resolve, ms) })
+  await new Promise<void>((resolve) => { window.setTimeout(resolve, ms) })
 }
 
 function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {

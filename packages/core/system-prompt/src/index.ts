@@ -512,9 +512,9 @@ export class SystemPrompt extends Service {
     const providers = context.omitTools === true
       ? []
       : [
-          ...this.layers.global.toolProviders.values(),
-          ...scopeLayers.flatMap(layer => [...layer.toolProviders.values()]),
-        ]
+        ...this.layers.global.toolProviders.values(),
+        ...scopeLayers.flatMap(layer => [...layer.toolProviders.values()]),
+      ]
     const collected: ToolSchema[] = []
     const knownNames = new Set<string>()
     for (const provider of providers) {

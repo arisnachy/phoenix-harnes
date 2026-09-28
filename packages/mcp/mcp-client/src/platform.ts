@@ -48,7 +48,7 @@ function normalizedSignature(config: StdioPlatformDescriptor): string {
 export function resolveSupportedPlatforms(config: StdioPlatformDescriptor): readonly SupportedPlatform[] | undefined {
   const explicit = config.supportedPlatforms ?? []
   if (explicit.length > 0) {
-    const invalid = explicit.find((platform) => !VALID_PLATFORMS.has(platform))
+    const invalid = explicit.find(platform => !VALID_PLATFORMS.has(platform))
     if (invalid !== undefined) {
       throw new Error(
         `mcp-client(${config.serverName}): unsupported platform value "${invalid}" in supportedPlatforms`,

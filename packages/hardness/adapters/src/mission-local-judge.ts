@@ -10,7 +10,7 @@ function text(value: unknown): value is string {
 function deterministicDecision(input: HardnessMissionJudgeInput): MissionJudgeDecision {
   const artifactReady = text(input.artifactId) && text(input.artifactMime)
     && text(input.rendered.kind) && input.rendered.artifactId === input.artifactId && text(input.evidenceId)
-  const criteria = input.criteria.filter(item => item.mandatory).map(item => {
+  const criteria = input.criteria.filter(item => item.mandatory).map((item) => {
     const tested = item.status === 'TESTED' || item.status === 'VERIFIED'
     const valid = tested && item.evidence.length > 0
     return {

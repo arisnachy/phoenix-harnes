@@ -100,7 +100,7 @@ describe('authorization consent window', () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     const api = panelApi(pendingForever)
-    api.begin = vi.fn(() => Promise.reject(new Error('connector unavailable'))) as never
+    api.begin = vi.fn(() => Promise.reject(new Error('connector unavailable')))
 
     renderPanel(api)
     await clickAuthorize()

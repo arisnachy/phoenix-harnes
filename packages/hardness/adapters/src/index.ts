@@ -202,7 +202,7 @@ function requiredServices(ctx: Context) {
   const agents = ctx.get('agents')
   const approval = ctx.get('approval')
   const systemPrompt = ctx.get('systemPrompt') as HardnessPromptRegistrar | undefined
-  const authorization = ctx.get('authorization') as AuthorizationService | undefined
+  const authorization = ctx.get('authorization')
   const mcpConnectors = ctx.get('mcpConnectors')
   const pluginInventory = (ctx.get as (name: string) => unknown)('pluginInventory') as
     | (McpRegistryDiscoveryService & Partial<McpRegistryInstallerService & BinanceAgentOsHostService>)
@@ -293,11 +293,11 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   const modelTools = config.modelTools ?? true
   const disposers: Disposer[] = []
   const proactivity = acquireProactivityEngine(taskLedgerPath(config))
-  disposers.push(() => proactivity.release())
+  disposers.push(() =>{  proactivity.release() })
   const wake = acquireWakeEngine(wakeLedgerPath(config))
-  disposers.push(() => wake.release())
+  disposers.push(() =>{  wake.release() })
   const reality = acquireRealityContext(realityConfigFromEnvironment())
-  disposers.push(() => reality.release())
+  disposers.push(() =>{  reality.release() })
 
   try {
     disposers.push(installHardnessProtocol(systemPrompt))

@@ -92,12 +92,12 @@ export class ModelDirectoryResolver extends Service {
     const readLocalModelState = pluginInventory?.localModelState === undefined
       ? undefined
       : async () => {
-          const result = await pluginInventory.localModelState!()
-          if (result.ok) return result.value
-          throw new Error(
-            `pluginInventory.localModelState failed: ${result.error.code}: ${result.error.message}`,
-          )
-        }
+        const result = await pluginInventory.localModelState!()
+        if (result.ok) return result.value
+        throw new Error(
+          `pluginInventory.localModelState failed: ${result.error.code}: ${result.error.message}`,
+        )
+      }
     const directory = new ModelDirectory(
       connection.api.sessions,
       sessionId,

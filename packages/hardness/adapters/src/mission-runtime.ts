@@ -158,13 +158,13 @@ export function createHardnessMissionRunner(deps: Omit<HardnessMissionRuntimeDep
   }))
   return {
     telemetry,
-     run: input => runHardnessMission({
+    run: input => runHardnessMission({
       hardness: deps.hardness,
       acquisition: deps.acquisition,
       tools: deps.tools,
       approval,
       artifacts,
-       telemetry,
+      telemetry,
       ...(input.context.agent === undefined ? {} : { audit: createHardnessMissionAudit(input.context.agent.session) }),
       ...(deps.executor === undefined ? {} : { executor: deps.executor }),
       ...(judge === undefined ? {} : { judge }),

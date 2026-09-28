@@ -42,20 +42,20 @@ async function setup(): Promise<Context> {
 describe('cognitive-runtime invariants', () => {
   it('accepts an empty bounded snapshot', async () => {
     const ctx = await setup()
-    expect(() => ctx.emit('cognitive-runtime/state', state(), config)).not.toThrow()
+    expect(() =>{  ctx.emit('cognitive-runtime/state', state(), config) }).not.toThrow()
   })
 
   it.each([
     state({ candidateCount: 1 }),
   ])('rejects a state whose candidate count has no focus', async (invalid) => {
     const ctx = await setup()
-    expect(() => ctx.emit('cognitive-runtime/state', invalid, config)).toThrow(/focus|candidate count/)
+    expect(() =>{  ctx.emit('cognitive-runtime/state', invalid, config) }).toThrow(/focus|candidate count/)
   })
 
   it('rejects an active region beyond its configured budget', async () => {
     const ctx = await setup()
     const invalid = state({ active: [{}, {}, {}] as never[] })
-    expect(() => ctx.emit('cognitive-runtime/state', invalid, config)).toThrow(/active budget/)
+    expect(() =>{  ctx.emit('cognitive-runtime/state', invalid, config) }).toThrow(/active budget/)
   })
 
   it.each([
@@ -75,6 +75,6 @@ describe('cognitive-runtime invariants', () => {
     { label: 'negative candidate score', invalid: state({ candidateCount: 1, focus: { score: -1 } as never }), message: /candidate score/ },
     { label: 'candidate score over one', invalid: state({ candidateCount: 1, focus: { score: 2 } as never }), message: /candidate score/ },
   ])('rejects $label', ({ invalid, message }) => {
-    expect(() => CognitiveRuntimeInvariant.validateCognitiveState(invalid, config)).toThrow(message)
+    expect(() =>{  CognitiveRuntimeInvariant.validateCognitiveState(invalid, config) }).toThrow(message)
   })
 })

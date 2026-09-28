@@ -35,7 +35,7 @@ describe('resolvedClientLocation', () => {
         },
         timestamp: observedAt,
         toJSON() { return {} },
-      } as GeolocationPosition)
+      })
     })
     vi.stubGlobal('navigator', {
       permissions: { query: vi.fn(async () => ({ state: 'granted' })) },

@@ -30,7 +30,7 @@ function requestHeaders(request: IncomingMessage): Headers {
   for (const [name, value] of Object.entries(request.headers)) {
     if (value === undefined) continue
     if (name.toLowerCase() === 'host' || name.toLowerCase() === 'content-length') continue
-    if (Array.isArray(value)) value.forEach(item => headers.append(name, item))
+    if (Array.isArray(value)) value.forEach((item) =>{  headers.append(name, item) })
     else headers.set(name, value)
   }
   return headers

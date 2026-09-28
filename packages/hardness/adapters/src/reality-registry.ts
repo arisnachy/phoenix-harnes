@@ -48,9 +48,9 @@ export function acquireRealityContext(config: RealityContextConfig): RealityCont
     release() {
       if (released) return
       released = true
-      entry!.refs -= 1
-      if (entry!.refs === 0) {
-        entry!.engine.stop()
+      entry.refs -= 1
+      if (entry.refs === 0) {
+        entry.engine.stop()
         shared.delete(key)
       }
     },

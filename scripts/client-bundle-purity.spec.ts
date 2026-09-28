@@ -61,8 +61,8 @@ function clientNativeInput(id = REQUESTING_PACKAGE): { external?: unknown; plugi
     throw new Error('client native input optimizer missing')
   }
   const result = config.inputOptions(
-    { plugins: [{ name: 'tsdown:deps' }, { name: 'keep-me' }] } as never,
-    'cjs' as never,
+    { plugins: [{ name: 'tsdown:deps' }, { name: 'keep-me' }] },
+    'cjs',
     { cjsDts: false },
   )
   if (result instanceof Promise) throw new Error('client input optimizer unexpectedly became async')

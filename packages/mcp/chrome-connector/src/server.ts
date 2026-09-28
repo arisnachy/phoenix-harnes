@@ -161,7 +161,7 @@ async function launchDedicatedBrowser(): Promise<string> {
     managedBrowser = child
     managedProfileDir = profileDir
     let spawnError: Error | undefined
-    child.once('error', error => { spawnError = error })
+    child.once('error', (error) => { spawnError = error })
     if (!cleanupRegistered) {
       cleanupRegistered = true
       process.once('exit', cleanupManagedBrowser)

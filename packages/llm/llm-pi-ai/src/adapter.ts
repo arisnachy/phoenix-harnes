@@ -342,9 +342,9 @@ export class PiAiAdapter extends LlmAdapter {
     const ordered = advertised === undefined
       ? available
       : advertised.flatMap((id) => {
-          const model = available.find(candidate => candidate.id === id)
-          return model === undefined ? [] : [model]
-        })
+        const model = available.find(candidate => candidate.id === id)
+        return model === undefined ? [] : [model]
+      })
     return ordered.map(model => ({
       provider,
       id: model.id,
@@ -384,11 +384,11 @@ export class PiAiAdapter extends LlmAdapter {
       ...liveReasoning === undefined
         ? reasoningInfo(resolvedModel, defaultLevel)
         : {
-            reasoning: {
-              efforts: liveReasoning.efforts.map(effort => ({ ...effort })),
-              ...liveReasoning.defaultEffort === undefined ? {} : { defaultEffort: liveReasoning.defaultEffort },
-            },
+          reasoning: {
+            efforts: liveReasoning.efforts.map(effort => ({ ...effort })),
+            ...liveReasoning.defaultEffort === undefined ? {} : { defaultEffort: liveReasoning.defaultEffort },
           },
+        },
     }
   }
 
@@ -535,15 +535,15 @@ export class PiAiAdapter extends LlmAdapter {
         ...profileOptions(profile, reasoning, apiKey),
         ...needsPayloadProjection
           ? {
-              onPayload: payload => {
-                const projected = requiresFunctionSchemaProjection
-                  ? normalizeOpenAiFunctionToolPayload(payload, requiresMondayMembrane)
-                  : payload
-                return codexWireReasoningEffort === undefined
-                  ? projected
-                  : withCodexReasoningEffort(projected, codexWireReasoningEffort)
-              },
-            }
+            onPayload: (payload) => {
+              const projected = requiresFunctionSchemaProjection
+                ? normalizeOpenAiFunctionToolPayload(payload, requiresMondayMembrane)
+                : payload
+              return codexWireReasoningEffort === undefined
+                ? projected
+                : withCodexReasoningEffort(projected, codexWireReasoningEffort)
+            },
+          }
           : {},
         ...options.temperature === undefined ? {} : { temperature: options.temperature },
         ...options.maxTokens === undefined ? {} : { maxTokens: options.maxTokens },

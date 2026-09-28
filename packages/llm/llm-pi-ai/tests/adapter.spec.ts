@@ -474,12 +474,12 @@ describe('PiAiAdapter provider routing', () => {
       auth: memoryAuth(),
       reasoningForModel: (provider, model) => provider === 'openai-codex' && model === 'gpt-5.4'
         ? {
-            efforts: [
-              { id: ReasoningEffortId('low'), name: 'Low' },
-              { id: ReasoningEffortId('ultra'), name: 'Ultra', description: 'Future Codex level' },
-            ],
-            defaultEffort: ReasoningEffortId('ultra'),
-          }
+          efforts: [
+            { id: ReasoningEffortId('low'), name: 'Low' },
+            { id: ReasoningEffortId('ultra'), name: 'Ultra', description: 'Future Codex level' },
+          ],
+          defaultEffort: ReasoningEffortId('ultra'),
+        }
         : undefined,
     }))
 
@@ -674,7 +674,7 @@ describe('PiAiAdapter provider routing', () => {
       }
       if (typeof value !== 'object' || value === null) return undefined
       const record = value as Record<string, unknown>
-      if (record.name === 'mcp__monday-com-monday-com__execute_code') return record as CapturedTool
+      if (record.name === 'mcp__monday-com-monday-com__execute_code') return record
       for (const child of Object.values(record)) {
         const found = findCapturedTool(child)
         if (found !== undefined) return found

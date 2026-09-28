@@ -31,7 +31,7 @@ export class CordisVisualWorkspaceController implements ICordisVisualWorkspace {
   /** Show or replace the current visual surface. */
   show(content: CordisVisualContent): void {
     const wasClosed = this.#content === null
-    this.#content = Object.freeze({ ...content }) as CordisVisualContent
+    this.#content = Object.freeze({ ...content })
     if (wasClosed) this.layout.setWorkspaceOccupant('cordis', true)
     this.#emit()
   }
@@ -139,7 +139,7 @@ export function CordisVisualWorkspace({
     >
       <header className={css.header}>
         <div className={css.title}>{contentTitle(content)}</div>
-        <button type="button" className={css.close} aria-label="Close Cordis workspace" onClick={() => controller.close()}>
+        <button type="button" className={css.close} aria-label="Close Cordis workspace" onClick={() =>{  controller.close() }}>
           <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
           </svg>

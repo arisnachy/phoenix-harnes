@@ -200,7 +200,7 @@ describe('connector_discover', () => {
 
   it('presents a stable search call card', () => {
     const tool = createConnectorDiscoverTool()
-    expect(tool.presentCall?.({ query: 'calendar' } as never)).toEqual({
+    expect(tool.presentCall?.({ query: 'calendar' })).toEqual({
       card: 'generic',
       title: 'Official MCP Registry: calendar',
       kind: 'search',

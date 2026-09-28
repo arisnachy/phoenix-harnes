@@ -87,7 +87,7 @@ export function createCognitiveWorkflowTool(): ToolDefinition {
       const initial = selectCognitiveWorkflow(args.profile as CognitiveMissionProfile)
       const plan = args.observation === undefined
         ? initial
-        : adaptCognitiveWorkflow(initial, args.observation as CognitiveWorkflowObservation)
+        : adaptCognitiveWorkflow(initial, args.observation)
       return projectWorkflowPlan(plan)
     },
     presentCall(args) {

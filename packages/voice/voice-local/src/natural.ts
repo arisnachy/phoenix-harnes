@@ -210,7 +210,7 @@ class NaturalVoiceDaemon {
       }, this.options.requestTimeoutMs)
       this.pending.set(id, {
         resolve: () => { finish() },
-        reject: error => { finish(error) },
+        reject: (error) => { finish(error) },
         timer,
         removeAbort: () => { request.signal?.removeEventListener('abort', abort) },
       })

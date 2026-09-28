@@ -236,8 +236,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // The supervisor owns the client/transport generations, the reconnect
   // loop, and the live tool registrations; disposal stops reconnection,
   // quiesces in-flight work, and unregisters the current generation.
-  const authorization = ctx.get('authorization') as AuthorizationService | undefined
-  const credentials = ctx.get('credentials') as CredentialProvider | undefined
+  const authorization = ctx.get('authorization')
+  const credentials = ctx.get('credentials')
   let oauthController: McpOAuthController | undefined
   let transportOptions: TransportOptions | undefined
   if (config.transport === 'streamable-http' && config.oauth !== false

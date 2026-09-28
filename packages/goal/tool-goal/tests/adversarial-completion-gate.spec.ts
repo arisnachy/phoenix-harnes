@@ -57,11 +57,11 @@ function structuredPass(objective: string) {
     })),
     builder_test_audit: contract.requiresBuilderTestAudit
       ? [{
-          test: 'builder-regression-suite',
-          expected_source: 'specification',
-          circular: false,
-          evidence: ['expected values traced to the original requirement'],
-        }]
+        test: 'builder-regression-suite',
+        expected_source: 'specification',
+        circular: false,
+        evidence: ['expected values traced to the original requirement'],
+      }]
       : [],
     completion_report: { unverified_items: [] as string[], known_limitations: [] as string[] },
     artifact_fingerprint: 'sha256:artifact',
@@ -120,7 +120,7 @@ describe('adversarial completion tester', () => {
       subagents: {
         getProvider: () => provider() as never,
         list: () => ['spawn'],
-        start: start as never,
+        start: start,
       },
       provider: 'spawn',
       parent: {

@@ -23,7 +23,7 @@ afterEach(async () => {
   context = undefined
   if (localServer !== undefined) {
     await new Promise<void>((resolve, reject) => {
-      localServer!.close(error => error === undefined ? resolve() : reject(error))
+      localServer!.close((error) =>{  error === undefined ? resolve() : reject(error) })
     })
     localServer = undefined
   }

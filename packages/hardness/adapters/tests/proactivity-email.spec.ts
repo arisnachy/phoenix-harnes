@@ -47,7 +47,7 @@ describe('scheduled email execution', () => {
       resumeSessionId: unknown
       setup?: (ctx: unknown) => Promise<void> | void
     }) => {
-      await options.setup?.({} as never)
+      await options.setup?.({})
       return { agent: parent, dispose }
     })
     const start = vi.fn(async () => ({

@@ -292,7 +292,7 @@ export function ModelSelect(
   }
 
   const toggleGroup = (groupId: string): void => {
-    setGroupToggles(previous => {
+    setGroupToggles((previous) => {
       const next = new Map(previous)
       next.set(groupId, !groupExpanded(groupId))
       return next

@@ -231,7 +231,7 @@ export function ChatView({
       [pendingSubmit.text, pendingSubmit.modelText]
         .filter((value): value is string => value !== undefined && value !== ''),
     )
-    return pendingSteering.some(item => {
+    return pendingSteering.some((item) => {
       const text = item.content
         .flatMap(block => block.type === 'text' ? [block.text] : [])
         .join('')
@@ -259,19 +259,19 @@ export function ChatView({
   const visibleProgress = progress ?? (visiblePendingSubmit === undefined
     ? null
     : {
-        phase: 'preparing' as const,
-        activity: 'preparing' as const,
-        startedAt: visiblePendingSubmit.startedAt,
-      })
+      phase: 'preparing' as const,
+      activity: 'preparing' as const,
+      startedAt: visiblePendingSubmit.startedAt,
+    })
   // Session.running can remain true while Host-side settlement, logging, or
   // verification finishes after user-visible assistant output has arrived.
   // Render status only for an observable activity, never from running alone.
   const visibleTurnStatus = visibleProgress === null
     ? undefined
     : {
-        startTime: progress?.startedAt ?? runningTurnStart ?? visiblePendingSubmit?.startedAt ?? null,
-        progress: visibleProgress,
-      }
+      startTime: progress?.startedAt ?? runningTurnStart ?? visiblePendingSubmit?.startedAt ?? null,
+      progress: visibleProgress,
+    }
 
   useEffect(() => {
     const finished = previousRunning.current && !running

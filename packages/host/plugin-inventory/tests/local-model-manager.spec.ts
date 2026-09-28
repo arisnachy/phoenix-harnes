@@ -98,7 +98,7 @@ describe('LocalModelRuntimeManager', () => {
     const first = manager.ensureRunning()
     const second = manager.ensureRunning()
 
-    await vi.waitFor(() => expect(dependencies.spawnServer).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() =>{  expect(dependencies.spawnServer).toHaveBeenCalledTimes(1) })
     releaseHealth?.()
     await expect(Promise.all([first, second])).resolves.toEqual([
       'http://127.0.0.1:17842/v1',

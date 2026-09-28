@@ -55,7 +55,7 @@ async function allocateLoopbackPort(): Promise<number> {
         return
       }
       const port = address.port
-      server.close(error => error === undefined ? resolve(port) : reject(error))
+      server.close((error) =>{  error === undefined ? resolve(port) : reject(error) })
     })
   })
 }
@@ -72,7 +72,7 @@ function spawnLocalServer(executable: string, args: string[], onExit: (error?: E
   }
   child.stdout?.on('data', remember)
   child.stderr?.on('data', remember)
-  child.once('error', error => onExit(error))
+  child.once('error', (error) =>{  onExit(error) })
   child.once('exit', (code, signal) => {
     if (code === 0 || signal === 'SIGTERM') onExit()
     else onExit(new Error(

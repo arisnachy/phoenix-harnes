@@ -116,7 +116,7 @@ async function runCode(
 }
 
 describe('mode-aware wire contribution', () => {
-  it("forces the native image tool ahead of Higgsfield for an explicit image request, then restores the catalog after the attempt", async () => {
+  it('forces the native image tool ahead of Higgsfield for an explicit image request, then restores the catalog after the attempt', async () => {
     const { ctx, systemPrompt } = await setup({ mode: 'native', runtime: false })
     ctx.tools.register(defineTool({
       name: 'image_generation',

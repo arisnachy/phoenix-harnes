@@ -116,7 +116,7 @@ describe('withFileLock', () => {
     if (stalePid === undefined) throw new Error('test child did not expose a pid')
     await new Promise<void>((resolve, reject) => {
       child.once('error', reject)
-      child.once('exit', () => resolve())
+      child.once('exit', () =>{  resolve() })
     })
     for (let attempt = 0; attempt < 100; attempt += 1) {
       try {

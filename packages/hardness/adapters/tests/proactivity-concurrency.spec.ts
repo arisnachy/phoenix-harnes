@@ -8,7 +8,7 @@ describe('HARDNESS proactivity concurrency', () => {
       execute: async () => {
         const visible = await Promise.race([
           engine.list({ includeHidden: true }),
-          new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error('ledger stayed locked during execution')), 100)),
+          new Promise<never>((_resolve, reject) => setTimeout(() =>{  reject(new Error('ledger stayed locked during execution')) }, 100)),
         ])
         expect(visible).toHaveLength(1)
         return { summary: 'ok' }

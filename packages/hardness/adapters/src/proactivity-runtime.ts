@@ -114,7 +114,7 @@ async function acquireExecutionAgent(
 }
 
 function plainOutput(content: readonly ContentBlock[], limit: number): string {
-  const text = content.map((block) => block.type === 'text' ? block.text : JSON.stringify(block)).join('\n').trim()
+  const text = content.map(block => block.type === 'text' ? block.text : JSON.stringify(block)).join('\n').trim()
   if (text.length <= limit) return text
   return `${text.slice(0, Math.max(0, limit - 1))}…`
 }
@@ -283,64 +283,64 @@ export function createProactivityExecutor(
       const parent = lease.agent
       try {
         const resolvedRecipient = await deliveryRecipient(input, config)
-      if (input.task.delivery === 'email' && resolvedRecipient === undefined) {
-        throw new ProactivityDeferredError(
-          'scheduled email has no recipient and the connected account email is unavailable',
-        )
-      }
-      if (input.phase === 'deliver' && input.task.condition !== undefined) {
-        const decision = await evaluateConditionWatch(input, parent, subagents, config.privateWorkProvider)
-        if (!decision.met) return { summary: `condition not met: ${decision.evidence}` }
-        parent.followup(createUserMessage({
-          content: [{ type: 'text', text: proactivePrompt(input, config, decision.evidence, resolvedRecipient) }],
-          source: {
-            kind: 'plugin',
-            plugin: 'hardness-adapters',
-            form: 'notice',
-            summary: boundContextSummary(`Condition met: ${input.task.title}`),
-          },
-        }))
-        await parent.whenIdle()
-        return {
-          summary: `condition met and notification accepted: ${decision.evidence}`,
-          terminal: true,
+        if (input.task.delivery === 'email' && resolvedRecipient === undefined) {
+          throw new ProactivityDeferredError(
+            'scheduled email has no recipient and the connected account email is unavailable',
+          )
         }
-      }
-
-      const privateWork = input.phase === 'prepare' || input.task.delivery === 'email' || input.task.delivery === 'work'
-      if (!privateWork) {
-        parent.followup(createUserMessage({
-          content: [{ type: 'text', text: proactivePrompt(input, config, undefined, resolvedRecipient) }],
-          source: {
-            kind: 'plugin',
-            plugin: 'hardness-adapters',
-            form: 'notice',
-            summary: boundContextSummary(`Scheduled task: ${input.task.title}`),
-          },
-        }))
-        await parent.whenIdle()
-        return { summary: lease.resumed ? 'resumed persisted Phoenix agent and completed scheduled chat turn' : 'accepted by the live Phoenix agent inbox' }
-      }
-
-      if (subagents === undefined || subagents.getProvider(config.privateWorkProvider) === undefined) {
-        throw new ProactivityDeferredError(`private-work provider is not available: ${config.privateWorkProvider}`)
-      }
-      const controller = new AbortController()
-      const run = await subagents.start(config.privateWorkProvider, {
-        label: input.phase === 'prepare' ? `Prepare: ${input.task.title}` : `Scheduled: ${input.task.title}`,
-        prompt: [{ type: 'text', text: proactivePrompt(input, config, undefined, resolvedRecipient) }],
-        parent,
-        signal: controller.signal,
-      })
-      try {
-        const result = await run.result
-        if (result.stopReason !== 'completed') {
-          throw new Error(result.diagnostic ?? `private proactive work ended with ${result.stopReason}`)
+        if (input.phase === 'deliver' && input.task.condition !== undefined) {
+          const decision = await evaluateConditionWatch(input, parent, subagents, config.privateWorkProvider)
+          if (!decision.met) return { summary: `condition not met: ${decision.evidence}` }
+          parent.followup(createUserMessage({
+            content: [{ type: 'text', text: proactivePrompt(input, config, decision.evidence, resolvedRecipient) }],
+            source: {
+              kind: 'plugin',
+              plugin: 'hardness-adapters',
+              form: 'notice',
+              summary: boundContextSummary(`Condition met: ${input.task.title}`),
+            },
+          }))
+          await parent.whenIdle()
+          return {
+            summary: `condition met and notification accepted: ${decision.evidence}`,
+            terminal: true,
+          }
         }
-        return { summary: plainOutput(result.output, config.privateWorkResultChars) }
-      } finally {
-        await run.dispose()
-      }
+
+        const privateWork = input.phase === 'prepare' || input.task.delivery === 'email' || input.task.delivery === 'work'
+        if (!privateWork) {
+          parent.followup(createUserMessage({
+            content: [{ type: 'text', text: proactivePrompt(input, config, undefined, resolvedRecipient) }],
+            source: {
+              kind: 'plugin',
+              plugin: 'hardness-adapters',
+              form: 'notice',
+              summary: boundContextSummary(`Scheduled task: ${input.task.title}`),
+            },
+          }))
+          await parent.whenIdle()
+          return { summary: lease.resumed ? 'resumed persisted Phoenix agent and completed scheduled chat turn' : 'accepted by the live Phoenix agent inbox' }
+        }
+
+        if (subagents === undefined || subagents.getProvider(config.privateWorkProvider) === undefined) {
+          throw new ProactivityDeferredError(`private-work provider is not available: ${config.privateWorkProvider}`)
+        }
+        const controller = new AbortController()
+        const run = await subagents.start(config.privateWorkProvider, {
+          label: input.phase === 'prepare' ? `Prepare: ${input.task.title}` : `Scheduled: ${input.task.title}`,
+          prompt: [{ type: 'text', text: proactivePrompt(input, config, undefined, resolvedRecipient) }],
+          parent,
+          signal: controller.signal,
+        })
+        try {
+          const result = await run.result
+          if (result.stopReason !== 'completed') {
+            throw new Error(result.diagnostic ?? `private proactive work ended with ${result.stopReason}`)
+          }
+          return { summary: plainOutput(result.output, config.privateWorkResultChars) }
+        } finally {
+          await run.dispose()
+        }
       } finally {
         await lease.release()
       }
@@ -405,7 +405,7 @@ export function installProactivityRuntime(ctx: Context, engine: ProactivityEngin
   let rpcDispose: (() => Promise<void>) | undefined
 
   const syncRpc = (): void => {
-    const connection = ctx.get('connection') as HostConnectionHandle | undefined
+    const connection = ctx.get('connection')
     if (connection === activeConnection) return
     const previous = rpcDispose
     activeConnection = undefined

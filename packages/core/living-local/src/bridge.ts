@@ -207,7 +207,7 @@ export class LivingHttpBridge {
 
     this.server = createServer((req, res) => { void this.handle(req, res) })
     this.readyPromise = new Promise<string>((resolve, reject) => {
-      const onError = (error: Error): void => reject(error)
+      const onError = (error: Error): void =>{  reject(error) }
       this.server.once('error', onError)
       this.server.listen(config.port, config.host, () => {
         this.server.off('error', onError)
@@ -220,9 +220,9 @@ export class LivingHttpBridge {
         resolve(`http://${host}:${address.port}/v1/living`)
       })
     })
-    void this.readyPromise.catch(error => this.warn(`living control bridge unavailable: ${messageOf(error)}`))
+    void this.readyPromise.catch((error) =>{  this.warn(`living control bridge unavailable: ${messageOf(error)}`) })
 
-    this.sweep = setInterval(() => this.disconnectStale(), Math.min(DEFAULT_SWEEP_MS, this.heartbeatTimeoutMs))
+    this.sweep = setInterval(() =>{  this.disconnectStale() }, Math.min(DEFAULT_SWEEP_MS, this.heartbeatTimeoutMs))
     this.sweep.unref?.()
   }
 

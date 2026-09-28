@@ -56,7 +56,7 @@ describe('universal living creations', () => {
     const disposeProvider = root.living.attach(ecosystem.id, {
       readState: () => ({ species: 7, temperature: 24 }),
       act: async (action, input) => ({ action, input, accepted: true }),
-      subscribe: emit => {
+      subscribe: (emit) => {
         emit('mutationOccurred', { species: 'phoenix-bird' })
         return () => undefined
       },
@@ -243,8 +243,8 @@ describe('universal living creations', () => {
     let emit: ((name: string, data: null) => void) | undefined
     root.living.attach(id, {
       readState: () => ({ status: 'ready' }),
-      subscribe: callback => {
-        emit = callback as (name: string, data: null) => void
+      subscribe: (callback) => {
+        emit = callback
         return () => undefined
       },
     })

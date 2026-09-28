@@ -377,7 +377,7 @@ async function openConnection(
   const connection = new CodexAccountConnection(
     child,
     config.disposeGraceMs,
-    message => { ctx.logger.warn(message) },
+    (message) => { ctx.logger.warn(message) },
   )
   try {
     await Promise.race([connection.initialize(signal, experimentalApi), connection.processEnded()])

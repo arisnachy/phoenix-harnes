@@ -49,7 +49,7 @@ function hasHostTypertExport(exportsField: unknown): boolean {
 
 function contributorManifests(root: string): ContributorManifest[] {
   return globSync('packages/*/*/package.json', { cwd: root })
-    .map(path => {
+    .map((path) => {
       const absolute = resolve(root, path)
       return { path, root: dirname(absolute), manifest: readManifest(absolute) }
     })

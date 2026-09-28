@@ -323,9 +323,9 @@ describe('quality-policy evidence freshness', () => {
   })
 
   it('invalid direct construction config fails loud for range and integer violations', () => {
-    expect(() => QualityPolicy.apply(new Context(), { maxStopNudges: -1 })).toThrow(/0 through 3/)
-    expect(() => QualityPolicy.apply(new Context(), { maxStopNudges: 4 })).toThrow(/0 through 3/)
-    expect(() => QualityPolicy.apply(new Context(), { maxStopNudges: 1.5 })).toThrow(/0 through 3/)
+    expect(() =>{  QualityPolicy.apply(new Context(), { maxStopNudges: -1 }) }).toThrow(/0 through 3/)
+    expect(() =>{  QualityPolicy.apply(new Context(), { maxStopNudges: 4 }) }).toThrow(/0 through 3/)
+    expect(() =>{  QualityPolicy.apply(new Context(), { maxStopNudges: 1.5 }) }).toThrow(/0 through 3/)
   })
 
   it('drops agent-local state when the owning agent is disposed', async () => {
