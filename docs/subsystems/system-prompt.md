@@ -8,7 +8,7 @@ Source: [`packages/core/system-prompt/src/index.ts`](../../packages/core/system-
 
 ## Assembly context
 
-`AssembleContext` identifies the scope layer one assembly resolves and may carry the explicit control signal for that request. It is merge-extensible: `dsh-agent` adds the optional live `agent` field, and `assembleContextFor(agent, signal)` sets the explicit fields together. `omitTools` is an explicit optimization hint for requests already proven tool-free; it skips tool-provider evaluation while preserving the rest of prompt assembly. A bare assembly has neither scope nor signal and does not omit tools.
+`AssembleContext` identifies the scope layer one assembly resolves and may carry the explicit control signal for that request. It is merge-extensible: `dsh-agent` adds the optional live `agent` field, and `assembleContextFor(agent, signal)` sets the explicit fields together. `omitTools` is an explicit optimization hint for requests already proven tool-free; it skips tool-provider evaluation while preserving the rest of prompt assembly. `omitRuntimeContext` similarly skips dynamic runtime-context providers for requests that will not send runtime snapshots. A bare assembly has neither scope nor signal and omits neither tools nor runtime context.
 
 ```ts type-equiv
 /** Merge-extensible context for one prompt assembly. */
@@ -27,6 +27,12 @@ interface AssembleContext {
    * boundary should also clear any tools a listener deliberately adds.
    */
   omitTools?: boolean
+  /**
+   * Skip dynamic runtime-context provider evaluation for a request that will
+   * not send runtime snapshots to the model. This is request-scoped and does
+   * not clear or mutate the retained runtime-context projection.
+   */
+  omitRuntimeContext?: boolean
 }
 ```
 
