@@ -28,6 +28,12 @@ export function greetingForHour(hour: number): 'Buenos días' | 'Buenas tardes' 
   return 'Buenas noches'
 }
 
+/** Normalize the user-owned preferred name for hero presentation. */
+export function preferredNameForHero(value: string | undefined): string | undefined {
+  const normalized = value?.trim()
+  return normalized === '' ? undefined : normalized
+}
+
 /**
  * Basename label for the workspace chip (the shared derivation);
  * separator-only paths echo the raw cwd.
@@ -116,6 +122,8 @@ export interface HeroShellProps {
   t: HeroTranslate
   /** Authorized renderer for the hero brand-mark slot. */
   renderSlot: ConversationSlotProps['renderSlot']
+  /** Durable preferred name from the current user's Profile settings. */
+  preferredName?: string | undefined
   /** Overlay content after the stack (modals). */
   children?: ReactNode
 }
@@ -127,8 +135,9 @@ export interface HeroShellProps {
  * @param props - see {@link HeroShellProps}.
  * @returns the centered hero element tree.
  */
-export function HeroShell({ renderSlot, children }: HeroShellProps) {
+export function HeroShell({ renderSlot, preferredName, children }: HeroShellProps) {
   const greeting = greetingForHour(new Date().getHours())
+  const displayName = preferredNameForHero(preferredName)
 
   return (
     <div className={css.root}>
@@ -139,8 +148,13 @@ export function HeroShell({ renderSlot, children }: HeroShellProps) {
           })}
         </span>
         <h1 className={css.headline}>
-          <span>{greeting}, </span>
-          <span className={css.preferredName}>Arisnachy</span>
+          <span>{greeting}</span>
+          {displayName === undefined ? null : (
+            <>
+              <span>, </span>
+              <span className={css.preferredName}>{displayName}</span>
+            </>
+          )}
         </h1>
         <p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>
       </div>

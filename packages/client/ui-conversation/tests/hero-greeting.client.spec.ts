@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { greetingForHour } from '../src/client/skeleton/EmptyHero.tsx'
+import { greetingForHour, preferredNameForHero } from '../src/client/skeleton/EmptyHero.tsx'
 
 describe('greetingForHour', () => {
   it('uses the morning greeting before noon', () => {
@@ -15,5 +15,18 @@ describe('greetingForHour', () => {
   it('uses the evening greeting from 19:00 onward', () => {
     expect(greetingForHour(19)).toBe('Buenas noches')
     expect(greetingForHour(23)).toBe('Buenas noches')
+  })
+})
+
+
+describe('preferredNameForHero', () => {
+  it('uses the live profile name and trims presentation whitespace', () => {
+    expect(preferredNameForHero('  Arisnachy  ')).toBe('Arisnachy')
+    expect(preferredNameForHero('Ada')).toBe('Ada')
+  })
+
+  it('omits the name when the profile has none', () => {
+    expect(preferredNameForHero(undefined)).toBeUndefined()
+    expect(preferredNameForHero('   ')).toBeUndefined()
   })
 })

@@ -11,7 +11,6 @@ import {
   resolveClientBuildEnvironment,
   writeClientBuildRecord,
 } from './client-build-environment.ts'
-import { pnpmInvocation } from './pnpm-invocation.ts'
 
 /** Build scope selected by callers such as the stable updater. */
 type BuildScope = 'full' | 'client'
@@ -37,11 +36,18 @@ function projectPnpmSpecifier(root: string): string {
   return configured
 }
 
-/** Resolve pnpm even when the stable updater launches this script outside a pnpm lifecycle. */
-function buildPnpmInvocation(args: readonly string[], environment: NodeJS.ProcessEnv): { command: string; args: string[] } {
-  if (environment.npm_execpath !== undefined && environment.npm_execpath !== '') {
-    return pnpmInvocation(args, environment)
-  }
+/**
+ * Resolve the exact project-pinned pnpm for every nested build command.
+ *
+ * Do not trust npm_execpath here. When the updater starts pnpm@11.7.0 through
+ * Corepack, some Windows Corepack installations leak their own cached
+ * pnpm@12.x entrypoint through npm_execpath. Reusing that entrypoint makes
+ * pnpm reject this repository's 11.7.0 packageManager pin mid-build.
+ */
+export function buildPnpmInvocation(
+  args: readonly string[],
+  environment: NodeJS.ProcessEnv,
+): { command: string; args: string[] } {
   const root = resolve(import.meta.dirname, '..')
   const pnpmSpecifier = projectPnpmSpecifier(root)
   if (process.platform === 'win32') {

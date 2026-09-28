@@ -90,6 +90,8 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(build).toContain('function projectPnpmSpecifier(root: string)')
     expect(build).toContain("'corepack.cmd', pnpmSpecifier")
     expect(build).toContain('args: [pnpmSpecifier, ...args]')
+    expect(build).not.toContain('environment.npm_execpath')
+    expect(build).not.toContain('pnpmInvocation(args, environment)')
   })
 
   it('fails desktop startup closed after a newer stable target is known but cannot be activated', () => {

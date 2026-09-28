@@ -3,7 +3,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import type { ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
 import { resolveSlotLabel, type BoundActions } from '@phoenix-ai/dsh-client-ui-slots'
 import {
-  resolveWorkspacePath, type ISessions, type SessionId,
+  createSnapshotStore, resolveWorkspacePath, type ISessions, type SessionId,
 } from '@phoenix-ai/dsh-client-runtime/client'
 // Type-only: the ctx.settingsScope Context merge. Cross-plugin collaboration
 // goes through the service, never a value import (client bundle purity gate).
@@ -15,7 +15,7 @@ import type { ViewTab } from './contract/views.ts'
 import type {
   ApprovalWait, ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected, ComposerBarInjected,
   ComposerChainProps, ConversationInjected, ConversationSessionHeaderInjected, ConversationSessionInjected,
-  DetailsInjected,
+  ConversationUserProfileState, DetailsInjected,
 } from './contract/slots.ts'
 import type { InputNotice } from './input/contract.ts'
 import { createChatStore } from './stores.ts'
@@ -78,6 +78,9 @@ const ABSENT_MENU_LAUNCHER = {
   getSnapshot: (): string | null => null,
   subscribe: () => () => {},
 }
+
+/** Durable profile namespace mirrored by the Settings service. */
+const USER_PROFILE_SETTINGS_NAMESPACE = 'user-profile'
 
 const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
   hooks: {
@@ -142,6 +145,24 @@ export function apply(ctx: Context): void {
   const chatStore = createChatStore()
   const submissionPolicy = new ComposerSubmissionPolicy(
     ctx.settingsScope.bind<ConversationSettings>({ namespace: CONVERSATION_SETTINGS_NAMESPACE }),
+  )
+
+  // The welcome name is local UI chrome, not model context. It follows the
+  // user's durable preferredName even when prompt-context consent is disabled.
+  const userProfileScope = ctx.settingsScope.bind<ConversationUserProfileState>({
+    namespace: USER_PROFILE_SETTINGS_NAMESPACE,
+  })
+  const userProfile = createSnapshotStore<ConversationUserProfileState>({})
+  const syncUserProfile = (): void => {
+    const snapshot = userProfileScope.getSnapshot()
+    const preferredName = snapshot.status === 'ready' ? snapshot.value?.preferredName : undefined
+    const next = typeof preferredName === 'string' ? { preferredName } : {}
+    if (userProfile.getSnapshot().preferredName !== next.preferredName) userProfile.set(next)
+  }
+  syncUserProfile()
+  ctx.effect(
+    () => userProfileScope.subscribe(syncUserProfile),
+    'ui-conversation: hero preferred-name mirror',
   )
 
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
@@ -221,7 +242,10 @@ export function apply(ctx: Context): void {
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
-      hooks: { composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId) },
+      hooks: {
+        composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
+        userProfile,
+      },
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaces.connectWorkspace(workspaceId)
         if (sessionId !== undefined && nextId !== sessionId) {

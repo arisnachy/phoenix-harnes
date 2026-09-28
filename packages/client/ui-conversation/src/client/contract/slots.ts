@@ -488,6 +488,12 @@ export type ConvViewProps = PropsRuntime<'conversation.view'>
 /** The shared chat store handle type declared by the Session header/body, details, and chat-view registrations. */
 export type ChatStore = ReturnType<typeof createChatStore>
 
+/** Minimal private profile projection used by the local welcome chrome. */
+export interface ConversationUserProfileState {
+  /** User-configured preferred name; model-context consent does not gate local UI chrome. */
+  preferredName?: string
+}
+
 /** Business callbacks injected into the conversation slot. */
 export interface ConversationInjected {
   /**
@@ -500,7 +506,10 @@ export interface ConversationInjected {
    * plugin raised one; the reason is the blocker's own localized copy, which
    * the root renders as the inert composer's placeholder.
    */
-  hooks: { composerBlock: ObservableSnapshot<ComposerBlock | undefined> }
+  hooks: {
+    composerBlock: ObservableSnapshot<ComposerBlock | undefined>
+    userProfile: ObservableSnapshot<ConversationUserProfileState>
+  }
 }
 
 /** Business callbacks injected into the strict Session body seat. */
