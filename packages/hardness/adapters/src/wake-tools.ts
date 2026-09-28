@@ -89,6 +89,11 @@ function triggerView(trigger: WakeTrigger): Record<string, JsonValue> {
   }
 }
 
+/**
+ * Build the model-facing tool that creates durable event-driven wake triggers.
+ * @param engine - Wake engine receiving validated trigger definitions.
+ * @returns Tool definition for `phoenix_wake_trigger_create`.
+ */
 export function createWakeTriggerTool(engine: WakeEngine): ToolDefinition {
   return defineTool({
     name: 'phoenix_wake_trigger_create',
@@ -128,6 +133,11 @@ export function createWakeTriggerTool(engine: WakeEngine): ToolDefinition {
   })
 }
 
+/**
+ * Build the model-facing tool that lists durable wake triggers.
+ * @param engine - Wake engine providing trigger snapshots.
+ * @returns Tool definition for `phoenix_wake_trigger_list`.
+ */
 export function createWakeTriggerListTool(engine: WakeEngine): ToolDefinition {
   return defineTool({
     name: 'phoenix_wake_trigger_list',
@@ -169,6 +179,11 @@ function managementTool(
   })
 }
 
+/**
+ * Build the complete wake-trigger management tool family.
+ * @param engine - Wake engine backing create, list, pause, resume, and cancel operations.
+ * @returns Immutable list of wake-trigger tool definitions.
+ */
 export function createWakeTools(engine: WakeEngine): readonly ToolDefinition[] {
   return [
     createWakeTriggerTool(engine),
