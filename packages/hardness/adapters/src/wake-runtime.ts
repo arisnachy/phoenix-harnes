@@ -163,7 +163,7 @@ function webServer(ctx: Context): WebServerLike | undefined {
   return typeof candidate.register === 'function' ? candidate as WebServerLike : undefined
 }
 
-function installWakeWebhook(ctx: Context, engine: WakeEngine): () => void {
+function installWakeWebhook(ctx: Context): () => void {
   const token = process.env.PHOENIX_WAKE_TOKEN?.trim()
   const server = webServer(ctx)
   if (token === undefined || token.length < 24 || server === undefined) return () => {}
@@ -213,7 +213,7 @@ export function installWakeRuntime(ctx: Context, engine: WakeEngine): () => void
     })
   })
 
-  let disposeWebhook = installWakeWebhook(ctx, engine)
+  let disposeWebhook = installWakeWebhook(ctx)
   let activeWebServer = webServer(ctx)
   const disposeService = ctx.on('internal/service', (serviceName) => {
     if (serviceName !== 'webServer') return
@@ -221,7 +221,7 @@ export function installWakeRuntime(ctx: Context, engine: WakeEngine): () => void
     if (next === activeWebServer) return
     disposeWebhook()
     activeWebServer = next
-    disposeWebhook = installWakeWebhook(ctx, engine)
+    disposeWebhook = installWakeWebhook(ctx)
   })
 
   return () => {
