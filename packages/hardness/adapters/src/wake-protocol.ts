@@ -14,6 +14,11 @@ export const WAKE_PROTOCOL = `Phoenix has durable event-driven wake triggers in 
 - The authenticated local wake webhook is enabled only when PHOENIX_WAKE_TOKEN is configured. Never reveal, print, infer, or place that token in prompts, logs, generated artifacts, or event attributes.
 - Wake events do not keep a model running. The lightweight Host receives/matches the event and wakes an agent only after a trigger matches.`
 
+/**
+ * Register the model-facing wake-trigger operating rules.
+ * @param systemPrompt - Prompt registrar owned by HARDNESS.
+ * @returns Disposer that removes the registered wake protocol section.
+ */
 export function installWakeProtocol(systemPrompt: HardnessPromptRegistrar): () => void {
   return systemPrompt.section({
     name: 'hardness:wake-protocol',
