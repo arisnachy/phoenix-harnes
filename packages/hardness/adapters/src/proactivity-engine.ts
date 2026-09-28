@@ -763,6 +763,7 @@ export class ProactivityEngine {
    * Execute currently due work. Due-pass serialization is separate from the
    * ledger mutex, so active agents can safely list/create/cancel tasks while a
    * scheduled execution is awaiting model/tool work.
+    * @param now - now supplied to this public operation.
    */
   runDue(now: Date = new Date()): Promise<void> {
     const run = this.runTail.then(() => this.runDuePass(now), () => this.runDuePass(now))
