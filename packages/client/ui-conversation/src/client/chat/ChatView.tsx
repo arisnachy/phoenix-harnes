@@ -256,7 +256,14 @@ export function ChatView({
   // as the optimistic bubble instead of waiting for Host admission/running
   // propagation. Authoritative turn progress replaces this placeholder as soon
   // as the session stream exposes it.
-  const visibleProgress = progress ?? (visiblePendingSubmit === undefined
+  //
+  // The timeline projection may lag one event behind Session.running when a
+  // turn settles. Never let that stale open-turn projection keep the PHOENIX
+  // activity animation alive after the runtime has declared the turn finished.
+  // The optimistic submit remains independent so the immediate post-Enter
+  // feedback still appears before running flips true.
+  const activeProgress = running ? progress : null
+  const visibleProgress = activeProgress ?? (visiblePendingSubmit === undefined
     ? null
     : {
       phase: 'preparing' as const,
@@ -265,11 +272,15 @@ export function ChatView({
     })
   // Session.running can remain true while Host-side settlement, logging, or
   // verification finishes after user-visible assistant output has arrived.
-  // Render status only for an observable activity, never from running alone.
+  // Render status only for an observable activity, never from running alone,
+  // and never from a stale open-turn projection after running becomes false.
   const visibleTurnStatus = visibleProgress === null
     ? undefined
     : {
-      startTime: progress?.startedAt ?? runningTurnStart ?? visiblePendingSubmit?.startedAt ?? null,
+      startTime: activeProgress?.startedAt
+        ?? (running ? runningTurnStart : null)
+        ?? visiblePendingSubmit?.startedAt
+        ?? null,
       progress: visibleProgress,
     }
 
