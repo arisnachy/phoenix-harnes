@@ -24,6 +24,7 @@ function parseStatusArgs(args: { paths: string[] }): string[] {
   })
 }
 
+ * @param ctx - ctx supplied to this public operation.
 /** Register the exact-path metadata probe. */
 export function applyStatusTool(ctx: Context): void {
   ctx.systemPrompt.section({
