@@ -301,9 +301,9 @@ export class PluginInventoryGateway extends TypertRemoteService {
     const [clientIdConfigured, clientSecretConfigured] = credentials === undefined
       ? [false, false]
       : await Promise.all([
-          credentials.describe(X_CLIENT_ID_REF).then(info => info.configured),
-          credentials.describe(X_CLIENT_SECRET_REF).then(info => info.configured),
-        ])
+        credentials.describe(X_CLIENT_ID_REF).then(info => info.configured),
+        credentials.describe(X_CLIENT_SECRET_REF).then(info => info.configured),
+      ])
     const managed = await this.managedMcp.snapshot()
     const apiConfigured = managed.some(connector => connector.serverName === X_API_MCP_SERVER_NAME)
     const docsConfigured = managed.some(connector => connector.serverName === X_DOCS_MCP_SERVER_NAME)
