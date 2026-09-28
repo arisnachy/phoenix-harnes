@@ -129,6 +129,7 @@ interface ImageGenerationValue {
 export const imageGenerationToolDescription =
   'Generate one actual, high-quality raster image with PHOENIX. Never satisfy an image, photo, hero, logo, banner, poster, cover, illustration, mockup, thumbnail, or visual-asset request with SVG, HTML, CSS, canvas drawing, emoji, ASCII art, a placeholder, or an anthropomorphic mascot unless the user explicitly requested that style. '
   + 'Use this whenever the user explicitly asks to create, draw, design, render, visualize, or generate an image, and when a project materially requires real imagery. '
+  + 'For game work, use it for production sprites, character sheets, tiles, backgrounds, portraits, textures, and other raster assets when appropriate; prefer transparent backgrounds for sprite/character assets when supported, then inspect the generated local path with read_image before shipping or importing it. '
   + 'Normally use backend=auto. Auto is independent of the active text-model provider: it tries the locally authenticated OpenAI Codex/ChatGPT built-in image generator first, then a configured local image endpoint with no hosted quota, then configured allocation-backed providers: Cloudflare Workers AI first and Hugging Face free credits second. '
   + 'Do not claim that only an external connector such as Higgsfield is available until image_generation itself has actually been attempted. Do not silently switch to a separately billed OpenAI API. '
   + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '

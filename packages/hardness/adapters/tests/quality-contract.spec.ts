@@ -51,7 +51,11 @@ describe('qualityRequirementsForNeed', () => {
     expect(text).toMatch(/gameplay feel|input response|camera/i)
     expect(text).toMatch(/frame-time|performance|memory/i)
     expect(text).toMatch(/executed game|ROM|play evidence/i)
-    expect(requirements.length).toBeGreaterThanOrEqual(12)
+    expect(text).toMatch(/baseline.*current runnable build|baseline-before|candidate/i)
+    expect(text).toMatch(/image_generation|Aseprite|Tiled|Blender/i)
+    expect(text).toMatch(/DOM\/CSS\/SVG\/canvas/i)
+    expect(text).toMatch(/SaaS|dashboard|glassmorphism|web-app chrome/i)
+    expect(requirements.length).toBeGreaterThanOrEqual(15)
   })
 
   it('keeps a strong domain-neutral baseline for unknown capability kinds', () => {

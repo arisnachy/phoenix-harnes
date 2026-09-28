@@ -57,8 +57,10 @@ const READ_ONLY_TOOLS = [
 const MUTATION = /^(?:write|edit|str_replace_editor|apply_patch|create_file|update_file|delete_file|move_file|rename_file|upload(?:_.*)?|deploy(?:_.*)?|publish(?:_.*)?)$/
 const VERIFY = /^(?:verify(?:_.*)?|check(?:_.*)?|test(?:_.*)?|lint(?:_.*)?|typecheck(?:_.*)?|build(?:_.*)?|smoke(?:_.*)?)$/
 const SHELL = /^(?:bash|pwsh|run_code)$/
-const VISUAL_VERIFY = /^(?:read_image|screenshot|capture(?:_.*)?|browser_(?:snapshot|inspect)|gameplay(?:_.*)?|playtest(?:_.*)?)$/
+const VISUAL_VERIFY = /^(?:read_image|screenshot|capture(?:_.*)?|browser_(?:snapshot|inspect))$/
+const PLAY_VERIFY = /^(?:gameplay(?:_.*)?|playtest(?:_.*)?)$/
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest|benchmark|tracemalloc)\b/i
+const SHELL_PLAY_VERIFY = /\b(?:retroarch|mesen|playtest|gameplay|godot(?:\.exe)?\b.*--path|unity(?:\.exe)?\b.*playmode|unreal(?:editor)?(?:\.exe)?\b.*(?:-game|pie))\b/i
 const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
 const SUBSTANTIVE = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|c|cc|cpp|h|hpp|cs|php|rb|swift|html?|css|scss|sass|less|vue|svelte|ya?ml|toml|json)\b/i
 
@@ -81,6 +83,9 @@ type JudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'> & Partial<Pic
 interface BridgeState {
   generation: number
   verifiedGeneration: number
+  technicalVerifiedGeneration: number
+  visualVerifiedGeneration: number
+  playVerifiedGeneration: number
   judgedGeneration: number
   judgePasses: number
   request: string
@@ -104,10 +109,16 @@ function isSubstantiveMutation(name: string, args: unknown): boolean {
   return SHELL.test(op) && SHELL_MUTATE.test(text) && SUBSTANTIVE.test(text)
 }
 
-function isVerification(name: string, args: unknown): boolean {
+type VerificationKind = 'technical' | 'visual' | 'play'
+
+function verificationKinds(name: string, args: unknown): readonly VerificationKind[] {
   const op = operationName(name)
-  return VERIFY.test(op) || VISUAL_VERIFY.test(op)
-    || (SHELL.test(op) && SHELL_VERIFY.test(argumentText(args)))
+  const argsText = argumentText(args)
+  const kinds = new Set<VerificationKind>()
+  if (VERIFY.test(op) || (SHELL.test(op) && SHELL_VERIFY.test(argsText))) kinds.add('technical')
+  if (VISUAL_VERIFY.test(op) || (PLAY_VERIFY.test(op) && /(?:capture|screenshot|snapshot|frame|inspect)/u.test(op))) kinds.add('visual')
+  if (PLAY_VERIFY.test(op) || (SHELL.test(op) && SHELL_PLAY_VERIFY.test(argsText))) kinds.add('play')
+  return [...kinds]
 }
 
 function requestText(message: UserMessage): string {
@@ -198,7 +209,7 @@ export async function reviewOrdinaryCompletion(input: {
   const toolFilter: ToolRestriction = { allow: [...READ_ONLY_TOOLS] }
   const taskQuality = qualityRequirementsForNeed({ description: input.request })
   const gameReview = isGameDevelopmentNeed({ description: input.request })
-    ? 'This is game-development work. Require actual evidence for graphics/art direction, character quality, environment quality, animation/VFX, UI, music/ambience/SFX and mix, gameplay feel, camera/input/collision feedback, and performance from an executed build or emulator. Compare with strong current category references when web tools are available. Inspect the latest gameplay frame with read_image when available and explicitly judge the player plus representative enemy and NPC/interactive actors at normal gameplay scale and close enough to see sprite/model detail. Do not pass any final actor rendered as a rectangle, box, circle, capsule, emoji, text glyph, single flat block, default mannequin, primitive mesh, or collision/debug shape unless the user explicitly requested an abstract/minimalist art direction and the evidence shows that choice is intentional and polished. For 2D/pixel art require role-readable silhouettes, coherent palette/pixel density/scale, clean transparency, and animation-state coverage appropriate to the role: locomotion in every relevant direction plus attack/telegraph, hurt, death, or interaction states where applicable. Do not pass placeholders, default/template assets, silent or temporary audio, empty environments, generic characters, screenshot-only evidence, compile-only evidence, or technically functional but visibly unpolished gameplay. '
+    ? 'This is game-development work. Require three independent evidence gates from the current mutation generation: technical build/test/check evidence, visual capture inspected with read_image/screenshot, and executed gameplay/playtest evidence. A build cannot satisfy the visual or play gate; a screenshot cannot satisfy the play gate; a gameplay tool call cannot replace close visual inspection. Require actual evidence for graphics/art direction, character quality, environment quality, animation/VFX, UI, music/ambience/SFX and mix, gameplay feel, camera/input/collision feedback, and performance from an executed build or emulator. When improving an existing game, require a baseline capture of the current build and a comparable after capture; visible regressions or no material improvement fail when the request is to make it better. Compare with strong current category references when web tools are available. Inspect the latest gameplay frame with read_image when available and explicitly judge the player plus representative enemy and NPC/interactive actors at normal gameplay scale and close enough to see sprite/model detail. Inspect session evidence for use of production asset tools such as image_generation backend=auto, Aseprite/Tiled, Blender, engine-native asset pipelines, or an equivalent real raster/3D/audio workflow when available; DOM/CSS/SVG/canvas primitives are not a substitute for final character or environment art. Do not pass any final actor rendered as a rectangle, box, circle, capsule, emoji, text glyph, single flat block, default mannequin, primitive mesh, or collision/debug shape unless the user explicitly requested an abstract/minimalist art direction and the evidence shows that choice is intentional and polished. For 2D/pixel art require role-readable silhouettes, coherent palette/pixel density/scale, clean transparency, and animation-state coverage appropriate to the role: locomotion in every relevant direction plus attack/telegraph, hurt, death, or interaction states where applicable. Do not pass placeholders, default/template assets, silent or temporary audio, empty environments, generic characters, screenshot-only evidence, compile-only evidence, or technically functional but visibly unpolished gameplay. '
     : ''
   let run: Awaited<ReturnType<JudgeRuntime['start']>> | undefined
   try {
@@ -290,6 +301,9 @@ export function installOrdinaryCompletionJudgeBridge(
     states.set(agent, {
       generation: 0,
       verifiedGeneration: 0,
+      technicalVerifiedGeneration: 0,
+      visualVerifiedGeneration: 0,
+      playVerifiedGeneration: 0,
       judgedGeneration: 0,
       judgePasses: 0,
       request: requestText(message),
@@ -312,13 +326,19 @@ export function installOrdinaryCompletionJudgeBridge(
       state.generation += 1
       state.mutations.push(operationName(exec.name))
       state.mutations = state.mutations.slice(-12)
-    } else if (state.generation > 0 && isVerification(exec.name, exec.arguments)) {
-      state.verifiedGeneration = state.generation
-      // A judge may ask only for missing evidence. New deterministic evidence
-      // must therefore reopen this unchanged generation for a fresh review.
-      if (state.judgedGeneration === state.generation) state.judgedGeneration = 0
-      state.verifications.push(operationName(exec.name) + ':' + argumentText(exec.arguments).slice(0, 300))
-      state.verifications = state.verifications.slice(-12)
+    } else if (state.generation > 0) {
+      const kinds = verificationKinds(exec.name, exec.arguments)
+      if (kinds.length > 0) {
+        state.verifiedGeneration = state.generation
+        if (kinds.includes('technical')) state.technicalVerifiedGeneration = state.generation
+        if (kinds.includes('visual')) state.visualVerifiedGeneration = state.generation
+        if (kinds.includes('play')) state.playVerifiedGeneration = state.generation
+        // A judge may ask only for missing evidence. New deterministic evidence
+        // must therefore reopen this unchanged generation for a fresh review.
+        if (state.judgedGeneration === state.generation) state.judgedGeneration = 0
+        state.verifications.push(kinds.join('+') + ':' + operationName(exec.name) + ':' + argumentText(exec.arguments).slice(0, 260))
+        state.verifications = state.verifications.slice(-12)
+      }
     }
     return downstream
   }))
@@ -326,18 +346,22 @@ export function installOrdinaryCompletionJudgeBridge(
   disposers.push(ctx.on('agent/turn-stopping', async ({ agent, signal }) => {
     const state = states.get(agent)
     if (state === undefined || state.generation === 0) return
-    if (isGameDevelopmentNeed({ description: state.request })
-      && state.verifiedGeneration !== state.generation
-      && state.judgedGeneration !== state.generation) {
-      state.judgedGeneration = state.generation
-      agent.steer(createUserMessage({
-        content: [{
-          type: 'text',
-          text: 'Game completion review requires fresh executed visual/play evidence after the latest mutation. Run the current game/build or emulator, capture a current gameplay frame, inspect it with read_image or equivalent, and verify the player plus representative enemy and NPC/interactive actors. Primitive boxes/rectangles/capsules/debug shapes or unanimated placeholder actors must be replaced before completion.',
-        }],
-        source: { kind: 'plugin', plugin: 'ordinary-completion-judge', form: 'notice', summary: 'game visual verification required' },
-      }))
-      return
+    if (isGameDevelopmentNeed({ description: state.request })) {
+      const missing: string[] = []
+      if (state.technicalVerifiedGeneration !== state.generation) missing.push('technical build/test/check evidence')
+      if (state.visualVerifiedGeneration !== state.generation) missing.push('visual capture plus read_image/screenshot inspection')
+      if (state.playVerifiedGeneration !== state.generation) missing.push('executed gameplay/playtest evidence')
+      if (missing.length > 0 && state.judgedGeneration !== state.generation) {
+        state.judgedGeneration = state.generation
+        agent.steer(createUserMessage({
+          content: [{
+            type: 'text',
+            text: 'Game completion has three independent evidence gates after the latest mutation. Missing: ' + missing.join('; ') + '. A build/test cannot satisfy visual or play evidence, and a screenshot cannot substitute for actually playing the game. Run the current build/emulator, capture and inspect a fresh gameplay frame, and verify the player plus representative enemy and NPC/interactive actors. Primitive boxes/rectangles/capsules/debug shapes, dashboard-style placeholder UI, or unanimated provisional actors must be replaced before completion.',
+          }],
+          source: { kind: 'plugin', plugin: 'ordinary-completion-judge', form: 'notice', summary: 'game technical visual play verification required' },
+        }))
+        return
+      }
     }
     if (state.verifiedGeneration !== state.generation || state.judgedGeneration === state.generation) return
     if (state.judgePasses >= maxPasses) return

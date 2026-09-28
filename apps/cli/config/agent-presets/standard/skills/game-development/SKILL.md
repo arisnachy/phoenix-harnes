@@ -27,6 +27,44 @@ atributos concretos que importan al proyecto: densidad visual, iluminación, sil
 mezcla sonora, ritmo, rendimiento y claridad. Usa esas referencias como barra de calidad, nunca para copiar personajes,
 niveles, marcas, música o assets protegidos.
 
+
+### Benchmark obligatorio contra el juego actual
+
+Cuando el usuario pida mejorar un juego existente, **el propio juego actual es el primer benchmark**. Antes de cambiar
+arte, UI o presentación, ejecuta la versión vigente y captura al menos una escena representativa. Conserva esa evidencia
+como baseline y repite una captura comparable después de los cambios: misma zona o una equivalente, viewport/cámara
+comparables y actores visibles suficientes para juzgar protagonista, enemigo, NPC/actor interactivo y entorno.
+
+La iteración solo puede cerrar como mejora si el candidato muestra una ganancia material observable sin introducir
+regresiones relevantes. Compara, según aplique: legibilidad y silueta de actores, riqueza/densidad del escenario,
+variedad de tiles/props, integración del HUD, claridad de combate/interacción, cobertura y fluidez de animación,
+feedback/VFX, sonido, frame-time y estabilidad. Si el usuario dijo "mejor que el juego actual", "más bonito" o equivalente,
+un resultado meramente distinto o funcional **no satisface la petición**.
+
+Las referencias externas sirven para elevar la barra, no para copiar IP. Captura atributos de dirección artística,
+composición, densidad, lectura, animación, cámara y UI; crea assets, personajes, niveles y música originales.
+
+### Pipeline de herramientas primero, no primitivas de reemplazo
+
+Para arte 2D/raster, intenta primero `image_generation` con `backend=auto` cuando esté disponible y usa `read_image`
+para inspeccionar cada asset material antes de integrarlo. Para pixel art/tilesets, usa Aseprite/Tiled si están instalados
+o disponibles de forma segura; para 3D usa Blender y el pipeline nativo del motor; para audio usa el conector/generador
+autorizado disponible o síntesis procedural adecuada. Usa `connector_list` y `connector_discover` para encontrar la
+herramienta específica cuando no esté visible.
+
+Un motor puede renderizar sobre canvas/WebGL, pero **canvas no es licencia para dibujar el arte final con rectángulos,
+círculos y líneas**. Del mismo modo, HTML/CSS/SVG pueden alojar el juego o su UI, pero no sustituyen sprites, tiles,
+fondos, retratos, personajes, enemigos, NPC ni VFX finales cuando la dirección pide arte representacional.
+
+Si `image_generation` no está disponible, no caigas silenciosamente a cajas CSS. Para pixel art genera raster real
+mediante matrices/capas de píxeles, normaliza paleta y transparencia, crea spritesheets/atlases y revísalos con visión.
+Si una dependencia artística bloquea de verdad el nivel solicitado, mantén la misión abierta o declara el bloqueo exacto.
+
+Para juegos retro/top-down, evita que las heurísticas de diseño web contaminen la pantalla jugable: tarjetas SaaS,
+píldoras gigantes, glassmorphism, cuadrículas de dashboard, iconos de app y paneles sobredimensionados no deben dominar
+el playfield salvo petición explícita. El HUD debe sentirse parte del juego y dejar que el mundo, los sprites y la acción
+sean la jerarquía visual principal.
+
 Hardness debe crear o coordinar activamente, según el proyecto:
 
 - dirección artística, paleta, shape language y style bible;

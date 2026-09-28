@@ -104,6 +104,11 @@ describe('ordinary completion judge', () => {
     expect(prompt).toMatch(/environment quality/i)
     expect(prompt).toMatch(/music\/ambience\/SFX/i)
     expect(prompt).toMatch(/executed build or emulator/i)
+    expect(prompt).toMatch(/three independent evidence gates/i)
+    expect(prompt).toMatch(/technical.*visual.*play/i)
+    expect(prompt).toMatch(/baseline capture.*current build/i)
+    expect(prompt).toMatch(/image_generation backend=auto/i)
+    expect(prompt).toMatch(/DOM\/CSS\/SVG\/canvas/i)
     expect(dispose).toHaveBeenCalledOnce()
   })
 
