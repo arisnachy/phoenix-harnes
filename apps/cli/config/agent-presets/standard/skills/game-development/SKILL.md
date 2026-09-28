@@ -11,6 +11,70 @@ description: >-
 Phoenix debe tratar un videojuego como un producto ejecutable, no como una demo de código. El objetivo incluye
 gameplay, arte coherente, audio, controles, rendimiento, build reproducible y una ronda real de juego/pruebas.
 
+## Mandato premium de producción
+
+Cuando el usuario pida un videojuego terminado o de alta calidad, Phoenix/Hardness debe asumir que también es responsable
+de la producción audiovisual necesaria para que el resultado alcance ese nivel. No puede limitarse al código y esperar
+que el usuario aporte después los personajes, escenarios, UI, texturas, animaciones, efectos o sonido salvo que el usuario
+haya reservado explícitamente esa parte.
+
+El objetivo por defecto es competir con referencias actuales fuertes de la misma categoría y, cuando el alcance y las
+herramientas lo permitan, superarlas en acabado, coherencia, legibilidad, respuesta y personalidad. No afirmes que se
+superó a una referencia solo por intención: exige evidencia visual, técnica y jugable.
+
+Antes de producir, identifica 2-5 referencias relevantes por género/plataforma/estilo cuando exista acceso web y extrae
+atributos concretos que importan al proyecto: densidad visual, iluminación, siluetas, animación, feedback, cámara, UI,
+mezcla sonora, ritmo, rendimiento y claridad. Usa esas referencias como barra de calidad, nunca para copiar personajes,
+niveles, marcas, música o assets protegidos.
+
+Hardness debe crear o coordinar activamente, según el proyecto:
+
+- dirección artística, paleta, shape language y style bible;
+- concept art y diseño final de personajes, enemigos, NPC, props y criaturas;
+- escenarios, fondos, tilesets, set dressing, iluminación y storytelling ambiental;
+- modelos 3D, materiales, texturas, UV, rig, facial/body animation y LOD cuando corresponda;
+- sprites, tiles, backgrounds, parallax, portrait art y animación pixel-perfect en 2D/retro;
+- VFX, partículas, shaders, hit effects, camera shake y feedback audiovisual;
+- HUD, menús, iconografía, tipografía, accesibilidad visual y UX;
+- música, ambience, Foley/SFX, UI sounds, loops, transiciones y mezcla;
+- trailers/capturas/material de presentación solo después de que el juego real tenga calidad suficiente.
+
+Usa `image_generation` para producir recursos raster originales cuando sea apropiado y Blender para 3D cuando haga falta.
+Si existe un conector de audio/generación musical autorizado, úsalo para el audio original; si no existe, crea sonido
+procedural cuando sea viable o usa únicamente recursos con licencia compatible y documenta su procedencia. Nunca presentes
+un silencio, beep temporal, cube/mannequin por defecto, checker texture o placeholder como producción final.
+
+### Rúbrica interna de 100 puntos
+
+Usa esta rúbrica como guía de iteración, no como sustituto de evidencia:
+
+- 15: dirección artística y coherencia visual;
+- 15: personajes, siluetas, rig y animación;
+- 15: ambientes, iluminación, composición y storytelling;
+- 10: VFX, shaders, cámara y feedback;
+- 10: UI/UX, legibilidad y accesibilidad;
+- 10: música, ambience, SFX y mezcla;
+- 15: gameplay feel, controles, cámara, colisiones, combate/interacción y pacing;
+- 10: rendimiento, estabilidad, tiempos de carga y calidad del build.
+
+Un promedio alto no compensa una categoría esencial ausente. Para un entregable que se presenta como premium, apunta a
+90/100 o más y no aceptes ninguna categoría material por debajo de un nivel profesional. Si una categoría no aplica,
+redistribuye su peso entre las categorías relevantes y documenta el criterio.
+
+### Puerta de finalización
+
+Hardness no debe permitir PASS final mientras ocurra cualquiera de estas condiciones:
+
+- quedan placeholders, assets de template o elementos visuales incoherentes;
+- personajes principales parecen genéricos o tienen animaciones claramente provisionales;
+- escenarios relevantes están vacíos, repetitivos o sin iluminación/set dressing suficiente;
+- falta música/ambience/SFX material para la experiencia o la mezcla resulta deficiente;
+- la UI parece prototipo o rompe la identidad artística;
+- el gameplay solo fue compilado pero no ejecutado y probado;
+- no existe evidencia audiovisual reciente del juego real en ejecución;
+- el rendimiento objetivo no se verificó cuando es material;
+- el proyecto depende de una afirmación de "calidad AAA/premium" sin comparación observable.
+
 ## 1. Detecta el tipo de proyecto antes de elegir herramientas
 
 Inspecciona primero el workspace.
