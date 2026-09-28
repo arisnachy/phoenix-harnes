@@ -18,8 +18,17 @@ const JEV_TOOL_TIMEOUT_MS = 30_000
 const JEV_STARTUP_TIMEOUT_MS = 5_000
 const JEV_LEGACY_TOOL_TIMEOUT_MS = 1_800
 const JEV_LEGACY_STARTUP_TIMEOUT_MS = 1_200
+const X_API_TOOL_TIMEOUT_MS = 60_000
+const X_API_STARTUP_TIMEOUT_MS = 300_000
 
-interface ManagedMcpConfig {
+interface ManagedMcpReconnect {
+  enabled: boolean
+  initialDelayMs: number
+  maxDelayMs: number
+  maxAttempts: number
+}
+
+interface ManagedStreamableHttpMcpConfig {
   transport: 'streamable-http'
   serverName: string
   url: string
@@ -29,13 +38,24 @@ interface ManagedMcpConfig {
   toolCallTimeoutMs?: number
   startupTimeoutMs?: number
   failOnStartupError?: boolean
-  reconnect?: {
-    enabled: boolean
-    initialDelayMs: number
-    maxDelayMs: number
-    maxAttempts: number
-  }
+  reconnect?: ManagedMcpReconnect
 }
+
+interface ManagedStdioMcpConfig {
+  transport: 'stdio'
+  serverName: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+  envCredentialRefs: Record<string, string>
+  cwd: string
+  toolCallTimeoutMs: number
+  startupTimeoutMs: number
+  failOnStartupError: boolean
+  reconnect: ManagedMcpReconnect
+}
+
+type ManagedMcpConfig = ManagedStreamableHttpMcpConfig | ManagedStdioMcpConfig
 
 /** Stable local MCP namespace for the pinned Jev connector. */
 export const JEV_MCP_SERVER_NAME = 'jev'
@@ -47,6 +67,18 @@ export const JEV_API_KEY_REF = 'JEV_API_KEY'
 export const BINANCE_AGENT_OS_SERVER_NAME = 'binance-agent-os'
 /** Official Binance Agent OS Streamable HTTP MCP endpoint. */
 export const BINANCE_AGENT_OS_URL = 'https://agent.binance.com/mcp/agentic'
+/** Stable local MCP namespace for the official X API bridge. */
+export const X_API_MCP_SERVER_NAME = 'x-api'
+/** Official X API hosted MCP endpoint reached through xurl. */
+export const X_API_MCP_URL = 'https://api.x.com/mcp'
+/** Stable local MCP namespace for the official X documentation server. */
+export const X_DOCS_MCP_SERVER_NAME = 'x-docs'
+/** Official keyless X documentation MCP endpoint. */
+export const X_DOCS_MCP_URL = 'https://docs.x.com/mcp'
+/** Phoenix credential reference for the X developer OAuth client id. */
+export const X_CLIENT_ID_REF = 'X_CLIENT_ID'
+/** Phoenix credential reference for the X developer OAuth client secret. */
+export const X_CLIENT_SECRET_REF = 'X_CLIENT_SECRET'
 
 interface ManagedMcpRow {
   id: string
@@ -79,33 +111,80 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-function validConfig(value: unknown): value is ManagedMcpConfig {
+function isEmptyRecord(value: unknown): value is Record<string, never> {
+  return isRecord(value) && Object.keys(value).length === 0
+}
+
+function exactStringRecord(value: unknown, expected: Readonly<Record<string, string>>): boolean {
   if (!isRecord(value)) return false
-  if (value.transport !== 'streamable-http' || typeof value.serverName !== 'string'
-    || typeof value.url !== 'string' || typeof value.oauth !== 'boolean') return false
-  if (!isRecord(value.headers) || Object.keys(value.headers).length !== 0) return false
+  const entries = Object.entries(expected)
+  return Object.keys(value).length === entries.length
+    && entries.every(([key, item]) => value[key] === item)
+}
+
+function exactStringArray(value: unknown, expected: readonly string[]): boolean {
+  return Array.isArray(value)
+    && value.length === expected.length
+    && expected.every((item, index) => value[index] === item)
+}
+
+function exactReconnect(value: unknown, maxAttempts: number): boolean {
+  return isRecord(value)
+    && Object.keys(value).length === 4
+    && value.enabled === true
+    && value.initialDelayMs === 1000
+    && value.maxDelayMs === 30_000
+    && value.maxAttempts === maxAttempts
+}
+
+function validXApiConfig(value: Record<string, unknown>): boolean {
+  return value.transport === 'stdio'
+    && value.serverName === X_API_MCP_SERVER_NAME
+    && value.command === 'npx'
+    && exactStringArray(value.args, ['-y', '@xdevplatform/xurl', 'mcp', X_API_MCP_URL])
+    && isEmptyRecord(value.env)
+    && exactStringRecord(value.envCredentialRefs, {
+      CLIENT_ID: X_CLIENT_ID_REF,
+      CLIENT_SECRET: X_CLIENT_SECRET_REF,
+    })
+    && value.cwd === ''
+    && value.toolCallTimeoutMs === X_API_TOOL_TIMEOUT_MS
+    && value.startupTimeoutMs === X_API_STARTUP_TIMEOUT_MS
+    && value.failOnStartupError === false
+    && exactReconnect(value.reconnect, 10)
+}
+
+function validHttpConfig(value: Record<string, unknown>): boolean {
+  if (typeof value.serverName !== 'string' || typeof value.url !== 'string'
+    || typeof value.oauth !== 'boolean' || !isEmptyRecord(value.headers)) return false
   try {
     if (new URL(value.url).protocol !== 'https:') return false
   } catch {
     return false
   }
 
-  // Registry-managed remotes remain OAuth-only and may not smuggle a secret ref.
+  // Registry-managed remotes and Binance remain OAuth-only and may not smuggle a secret ref.
   if (value.oauth) return value.bearerTokenRef === undefined
 
-  // The only non-OAuth managed remote admitted today is the pinned Jev endpoint.
+  // X Docs is the only active pinned keyless HTTP remote admitted outside the registry.
+  if (value.serverName === X_DOCS_MCP_SERVER_NAME && value.url === X_DOCS_MCP_URL) {
+    return value.bearerTokenRef === undefined
+  }
+
+  // Keep accepting the exact retired Jev form only so older owner overlays can be parsed and removed.
   if (value.serverName !== JEV_MCP_SERVER_NAME
     || value.url !== JEV_MCP_URL
     || value.bearerTokenRef !== JEV_API_KEY_REF
     || (value.toolCallTimeoutMs !== JEV_TOOL_TIMEOUT_MS && value.toolCallTimeoutMs !== JEV_LEGACY_TOOL_TIMEOUT_MS)
     || (value.startupTimeoutMs !== JEV_STARTUP_TIMEOUT_MS && value.startupTimeoutMs !== JEV_LEGACY_STARTUP_TIMEOUT_MS)
     || value.failOnStartupError !== false) return false
-  const reconnect = value.reconnect
-  return isRecord(reconnect)
-    && reconnect.enabled === true
-    && reconnect.initialDelayMs === 1000
-    && reconnect.maxDelayMs === 30_000
-    && reconnect.maxAttempts === 3
+  return exactReconnect(value.reconnect, 3)
+}
+
+function validConfig(value: unknown): value is ManagedMcpConfig {
+  if (!isRecord(value)) return false
+  if (value.transport === 'stdio') return validXApiConfig(value)
+  return value.transport === 'streamable-http' && validHttpConfig(value)
 }
 
 function parseManagedRows(raw: string): ManagedMcpRow[] {
@@ -151,12 +230,20 @@ function connectorOf(row: ManagedMcpRow): ManagedMcpConnector {
   return {
     entryId: row.id,
     serverName: row.config.serverName,
-    url: row.config.url,
+    url: row.config.transport === 'streamable-http' ? row.config.url : X_API_MCP_URL,
   }
 }
 
+function sameManagedIdentity(row: ManagedMcpRow, config: ManagedMcpConfig): boolean {
+  if (row.config.serverName === config.serverName) return true
+  return row.config.transport === 'streamable-http'
+    && config.transport === 'streamable-http'
+    && row.config.url === config.url
+}
+
 function isRetiredJevManagedRow(row: ManagedMcpRow): boolean {
-  return row.config.serverName === JEV_MCP_SERVER_NAME || row.config.url === JEV_MCP_URL
+  return row.config.serverName === JEV_MCP_SERVER_NAME
+    || (row.config.transport === 'streamable-http' && row.config.url === JEV_MCP_URL)
 }
 
 function isRetiredJevCandidate(candidate: McpRegistryCandidate): boolean {
@@ -167,7 +254,14 @@ function isRetiredJevCandidate(candidate: McpRegistryCandidate): boolean {
 }
 
 function isBinanceAgentOsManagedRow(row: ManagedMcpRow): boolean {
-  return row.config.serverName === BINANCE_AGENT_OS_SERVER_NAME || row.config.url === BINANCE_AGENT_OS_URL
+  return row.config.serverName === BINANCE_AGENT_OS_SERVER_NAME
+    || (row.config.transport === 'streamable-http' && row.config.url === BINANCE_AGENT_OS_URL)
+}
+
+function isXMcpManagedRow(row: ManagedMcpRow): boolean {
+  return row.config.serverName === X_API_MCP_SERVER_NAME
+    || row.config.serverName === X_DOCS_MCP_SERVER_NAME
+    || (row.config.transport === 'streamable-http' && row.config.url === X_DOCS_MCP_URL)
 }
 
 function serverNameFor(candidate: McpRegistryCandidate): string {
@@ -197,9 +291,9 @@ function selectInstallableCandidate(
 }
 
 /**
- * Host-owned installer for safe remote MCPs. Every install is re-resolved from
- * the Official MCP Registry, activates the existing PHOENIX MCP client, then
- * persists the exact loader row in a generated owner-private overlay.
+ * Host-owned installer for safe remote MCPs. Registry installs are re-resolved
+ * from the Official MCP Registry; pinned vendor integrations are admitted only
+ * by exact configuration validators before this durable overlay is reloaded.
  */
 export class ManagedMcpController {
   private readonly path: string
@@ -224,7 +318,7 @@ export class ManagedMcpController {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
       const rows = await readManagedRows(this.path)
-      const existing = rows.find(row => row.config.url === config.url)
+      const existing = rows.find(row => sameManagedIdentity(row, config))
       if (existing !== undefined) {
         return { status: 'already-installed', connector: connectorOf(existing) }
       }
@@ -306,8 +400,7 @@ export class ManagedMcpController {
   }
 
   /**
-   * Install the pinned official Binance Agent OS MCP. The endpoint and OAuth
-   * policy are compiled into PHOENIX; callers cannot substitute another URL.
+   * Install the pinned official Binance Agent OS MCP.
    * @returns Idempotent managed connector installation receipt.
    */
   async installBinanceAgentOs(): Promise<McpRegistryInstallReceipt> {
@@ -321,12 +414,59 @@ export class ManagedMcpController {
   }
 
   /**
-   * Remove only the PHOENIX-managed Binance Agent OS MCP. Paper trading uses
-   * public market data and remains available after this connector is removed.
+   * Remove only the PHOENIX-managed Binance Agent OS MCP.
    * @returns true when one or more Binance Agent OS rows were removed.
    */
   async removeBinanceAgentOs(): Promise<boolean> {
     return this.removeManagedRows(isBinanceAgentOsManagedRow, 'Binance Agent OS')
+  }
+
+  /**
+   * Install X's official keyless Docs MCP plus the official xurl OAuth bridge
+   * for the hosted X API MCP. The bridge receives only credential references.
+   * @returns Independent idempotent receipts for the API and Docs connectors.
+   */
+  async installXMcp(): Promise<{
+    api: McpRegistryInstallReceipt
+    docs: McpRegistryInstallReceipt
+  }> {
+    const docs = await this.installManagedConfig({
+      transport: 'streamable-http',
+      serverName: X_DOCS_MCP_SERVER_NAME,
+      url: X_DOCS_MCP_URL,
+      headers: {},
+      oauth: false,
+    }, 'X Docs')
+    const api = await this.installManagedConfig({
+      transport: 'stdio',
+      serverName: X_API_MCP_SERVER_NAME,
+      command: 'npx',
+      args: ['-y', '@xdevplatform/xurl', 'mcp', X_API_MCP_URL],
+      env: {},
+      envCredentialRefs: {
+        CLIENT_ID: X_CLIENT_ID_REF,
+        CLIENT_SECRET: X_CLIENT_SECRET_REF,
+      },
+      cwd: '',
+      toolCallTimeoutMs: X_API_TOOL_TIMEOUT_MS,
+      startupTimeoutMs: X_API_STARTUP_TIMEOUT_MS,
+      failOnStartupError: false,
+      reconnect: {
+        enabled: true,
+        initialDelayMs: 1000,
+        maxDelayMs: 30_000,
+        maxAttempts: 10,
+      },
+    }, 'X API')
+    return { api, docs }
+  }
+
+  /**
+   * Remove only the PHOENIX-managed X API and X Docs MCP entries.
+   * @returns true when at least one X MCP entry was removed.
+   */
+  async removeXMcp(): Promise<boolean> {
+    return this.removeManagedRows(isXMcpManagedRow, 'X')
   }
 
   /**
