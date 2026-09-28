@@ -14,11 +14,13 @@ const CHART_TYPE_ALIASES: Readonly<Record<string, string>> = {
   spline: 'line',
 }
 
+/** Deterministic validation result produced before a visual reaches the renderer. */
 export interface VisualQaPreflight {
   readonly valid: boolean
   readonly issues: readonly string[]
 }
 
+/** Browser-render audit report used to decide pass, repair, or vision escalation. */
 export interface VisualQaReport {
   readonly visualType: string
   readonly chartType?: string
@@ -34,6 +36,7 @@ export interface VisualQaReport {
   readonly needsVisionReview: boolean
 }
 
+/** Result of one bounded deterministic visual-spec repair attempt. */
 export interface VisualRepairResult {
   readonly spec: JsonRecord
   readonly changed: boolean
@@ -141,6 +144,8 @@ function validateCollection(
 /**
  * Validate a declarative Phoenix visual before allowing it into the renderer.
  * The check is intentionally deterministic and never calls a model.
+ * @param spec - Declarative visual specification to validate.
+ * @returns Validation status and deterministic issue identifiers.
  */
 export function preflightVisualSpec(spec: JsonRecord): VisualQaPreflight {
   const issues: string[] = []
@@ -223,6 +228,9 @@ function chartJsRepair(spec: JsonRecord): JsonRecord | undefined {
 
 /**
  * Apply one bounded, deterministic repair pass. Callers may invoke at most twice.
+ * @param spec - Declarative visual specification to repair.
+ * @param attempt - Bounded repair pass number.
+ * @returns Repaired specification plus whether and why it changed.
  */
 export function repairVisualSpec(spec: JsonRecord, attempt: 1 | 2): VisualRepairResult {
   const kind = visualType(spec)
@@ -319,6 +327,10 @@ function clippingState(root: HTMLElement): boolean {
 /**
  * Audit what the browser actually rendered. This is deliberately DOM-based so
  * passing schema validation does not count as visual success by itself.
+ * @param root - Root element containing the rendered visual.
+ * @param spec - Declarative visual specification that produced the render.
+ * @param repairAttempts - Number of deterministic repair passes already used.
+ * @returns Render audit measurements, issues, and escalation verdict.
  */
 export function auditRenderedVisual(
   root: HTMLElement,
@@ -377,7 +389,10 @@ export function auditRenderedVisual(
   }
 }
 
-/** Publish QA telemetry without coupling the renderer to a host transport. */
+/**
+ * Publish QA telemetry without coupling the renderer to a host transport.
+ * @param report - Completed visual QA report to publish to browser listeners.
+ */
 export function emitVisualQaReport(report: VisualQaReport): void {
   if (typeof window === 'undefined') return
   window.dispatchEvent(new CustomEvent('phoenix:visual-qa', { detail: report }))
