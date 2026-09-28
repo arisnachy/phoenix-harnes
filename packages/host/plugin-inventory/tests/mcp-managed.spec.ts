@@ -141,6 +141,80 @@ describe('ManagedMcpController', () => {
     await expect(controller.removeBinanceAgentOs()).resolves.toBe(false)
   })
 
+  it('installs and removes only the pinned official X API and Docs MCP pair', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    await expect(controller.installXMcp()).resolves.toEqual({
+      docs: {
+        status: 'installed',
+        connector: {
+          entryId: 'live-entry-id',
+          serverName: 'x-docs',
+          url: 'https://docs.x.com/mcp',
+        },
+      },
+      api: {
+        status: 'installed',
+        connector: {
+          entryId: 'live-entry-id',
+          serverName: 'x-api',
+          url: 'https://api.x.com/mcp',
+        },
+      },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(1, {
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: {
+        transport: 'streamable-http',
+        serverName: 'x-docs',
+        url: 'https://docs.x.com/mcp',
+        headers: {},
+        oauth: false,
+      },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(2, {
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: {
+        transport: 'stdio',
+        serverName: 'x-api',
+        command: 'npx',
+        args: ['-y', '@xdevplatform/xurl', 'mcp', 'https://api.x.com/mcp'],
+        env: {},
+        envCredentialRefs: {
+          CLIENT_ID: 'X_CLIENT_ID',
+          CLIENT_SECRET: 'X_CLIENT_SECRET',
+        },
+        cwd: '',
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 300_000,
+        failOnStartupError: false,
+        reconnect: {
+          enabled: true,
+          initialDelayMs: 1000,
+          maxDelayMs: 30_000,
+          maxAttempts: 10,
+        },
+      },
+    })
+    const persisted = readFileSync(patchPath, 'utf8')
+    expect(persisted).toContain('X_CLIENT_ID')
+    expect(persisted).toContain('X_CLIENT_SECRET')
+    expect(persisted).not.toContain('client-secret-value')
+
+    await expect(controller.installXMcp()).resolves.toMatchObject({
+      api: { status: 'already-installed' },
+      docs: { status: 'already-installed' },
+    })
+    expect(live.create).toHaveBeenCalledTimes(2)
+
+    await expect(controller.removeXMcp()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledTimes(2)
+    await expect(controller.snapshot()).resolves.toEqual([])
+    await expect(controller.removeXMcp()).resolves.toBe(false)
+  })
+
   it('retires a legacy managed Jev row without touching other managed MCPs', async () => {
     const patchPath = tempPatch()
     mkdirSync(dirname(patchPath), { recursive: true })
