@@ -183,6 +183,20 @@ function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
 }
 
+function gmailProfileEmail(body: string): string | undefined {
+  try {
+    const value: unknown = JSON.parse(body)
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+    const email = (value as { emailAddress?: unknown }).emailAddress
+    if (typeof email !== 'string') return undefined
+    const normalized = email.trim()
+    if (normalized.length === 0 || normalized.length > 320 || !normalized.includes('@')) return undefined
+    return normalized
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Resolve broker configuration without inventing scopes or a deployment identity.
  * @param config - deployment-owned Google OAuth client id and requested scopes.
@@ -437,6 +451,8 @@ export default class GoogleApiBroker extends Service {
   private readonly startupCleanup: Promise<void>
   private grant: GoogleGrant | undefined
   private refreshInFlight: Promise<GoogleGrant> | undefined
+  private accountEmail: string | undefined
+  private emailLookupInFlight: Promise<string | undefined> | undefined
 
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
@@ -464,14 +480,34 @@ export default class GoogleApiBroker extends Service {
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
     await this.startupCleanup
     const grant = this.grant
-    return grant === undefined
-      ? undefined
-      : {
-        kind: 'account',
-        provider: 'Google Workspace',
-        accountType: 'oauth',
-        connectors: serviceTelemetry(grant),
-      }
+    if (grant === undefined) return undefined
+    const email = await this.inspectAccountEmail(grant)
+    return {
+      kind: 'account',
+      provider: 'Google Workspace',
+      accountType: 'oauth',
+      ...(email === undefined ? {} : { email }),
+      connectors: serviceTelemetry(grant),
+    }
+  }
+
+  private inspectAccountEmail(grant: GoogleGrant): Promise<string | undefined> {
+    if (this.accountEmail !== undefined) return Promise.resolve(this.accountEmail)
+    if (!grant.scopes.includes(SERVICES.gmail.scope)) return Promise.resolve(undefined)
+    if (this.emailLookupInFlight !== undefined) return this.emailLookupInFlight
+    const running = this.request({ service: 'gmail', path: 'users/me/profile' })
+      .then((response) => {
+        if (!response.ok) return undefined
+        const email = gmailProfileEmail(response.body)
+        if (email !== undefined) this.accountEmail = email
+        return email
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (this.emailLookupInFlight === running) this.emailLookupInFlight = undefined
+      })
+    this.emailLookupInFlight = running
+    return running
   }
 
   /**
@@ -504,6 +540,8 @@ export default class GoogleApiBroker extends Service {
     const grant = this.grant
     this.grant = undefined
     this.refreshInFlight = undefined
+    this.accountEmail = undefined
+    this.emailLookupInFlight = undefined
     let revoked = grant === undefined
     if (grant !== undefined) {
       const token = grant.refreshToken ?? grant.accessToken
@@ -567,6 +605,8 @@ export default class GoogleApiBroker extends Service {
         scopes: parseGrantedScopes(token.scope),
       }
       await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
+      this.accountEmail = undefined
+      this.emailLookupInFlight = undefined
       this.grant = next
     } finally {
       await receiver.close()
