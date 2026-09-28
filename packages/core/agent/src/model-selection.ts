@@ -154,7 +154,8 @@ function isToolAcquisitionRequest(text: string): boolean {
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
-const FAST_SOCIAL_OPEN = /^(?:qu[eé]\s+quieres\s+que\s+hagamos|qu[eé]\s+te\s+gustar[ií]a\s+que\s+hagamos|de\s+qu[eé]\s+hablamos|cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|what\s+do\s+you\s+want\s+to\s+do|what\s+should\s+we\s+talk\s+about|tell\s+me\s+something(?:\s+good)?)$/iu
+const FAST_SOCIAL_OPEN = /^(?:cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|tell\s+me\s+something(?:\s+good)?)$/iu
+const FAST_CONTEXTUAL_OPEN = /^(?:qu[eé]\s+quieres\s+que\s+hagamos|qu[eé]\s+te\s+gustar[ií]a\s+que\s+hagamos|de\s+qu[eé]\s+hablamos|what\s+do\s+you\s+want\s+to\s+do|what\s+should\s+we\s+talk\s+about)$/iu
 
 function normalizedFastSocialText(value: string): string {
   return value
@@ -204,6 +205,22 @@ export function isConversationalFastPathText(text: string): boolean {
   // of tools or a multi-megabyte work transcript. Keep questions on the normal
   // path: even a short "¿eso parece X?" can be a real factual request.
   return !/[?¿]/u.test(candidate) && FAST_CASUAL_REACTION.test(candidate)
+}
+
+/**
+ * Low-latency conversational opener that still needs project continuity.
+ *
+ * These phrases are tool-free, but unlike ordinary small talk they ask Phoenix
+ * to choose or discuss the next useful direction. They therefore keep runtime
+ * context and full text history so memory, pending work, and initiative state
+ * can inform the answer.
+ */
+export function isContextualConversationFastPathText(text: string): boolean {
+  const candidate = text.trim()
+  if (candidate.length === 0 || candidate.length > 180) return false
+  if (/https?:\/\/|\x60\x60\x60|(?:[A-Za-z]:\\|\.\/|\.\.\/)/u.test(candidate)) return false
+  if (isToolAcquisitionRequest(candidate) || CONTEXTUAL_CONTINUATION.test(candidate)) return false
+  return FAST_CONTEXTUAL_OPEN.test(normalizedFastSocialText(candidate))
 }
 
 function defaultConversationalSelection(selection: ModelSelection | undefined): ModelSelection | undefined {
@@ -301,7 +318,8 @@ export function installModelSelection(
       if (selected === undefined) return resolved
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
-      const conversation = _payload.step === 1 && isConversationalFastPathText(directText)
+      const conversation = _payload.step === 1
+        && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
         ? defaultConversationalSelection(selected)
         : undefined
       const acquisition = _payload.step === 1
