@@ -882,6 +882,9 @@ type CallSiteIndex = Map<ts.SignatureDeclaration | ts.JSDocSignature, ts.CallExp
  */
 const EVENT_API_METHODS = new Set(['on', 'once', 'emit', 'parallel', 'serial', 'waterfall', 'dispatch'])
 
+/** Events whose producer is intentionally outside the repository TypeScript graph. */
+const EXTERNALLY_DISPATCHED_EVENTS = new Set(['phoenix/wake-event'])
+
 /**
  * Collect event dispatch/listener relations from real cross-file receiver types.
  *
@@ -1290,14 +1293,16 @@ function renderEventRelations(pkgs: Pkg[], events: readonly EventEntry[]): strin
     const relation = relations.get(event.name) ?? { dispatchers: new Map<string, Set<string>>(), listeners: new Set<string>() }
     lines.push(`| \`${event.name}\` | \`${event.mode}\` | ${sourceLink(event.source)} | ${relationPackages(relation.dispatchers, pkgsByShort)} | ${listenerPackages(relation.listeners, pkgsByShort)} |`)
   }
-  // Every declared event needs a dispatcher: zero means dead vocabulary or an
-  // unrecognized semantic dispatch form. Listener-free extension points remain
+  // Every declared internal event needs a dispatcher: zero means dead vocabulary or an
+  // unrecognized semantic dispatch form. Explicit external-ingress events are exempt.
+  // Listener-free extension points remain
   // valid. Client-declared events are exempt: the relation scan seeds the HOST
   // aggregate program only (host+client cannot share one program — the cordis
   // Context merges collide), so client dispatch sites are structurally
   // invisible here; their rows stay in the table for the declarations' sake.
   const undispatched = [...events]
     .filter(event => !event.source.startsWith('packages/client/'))
+    .filter(event => !EXTERNALLY_DISPATCHED_EVENTS.has(event.name))
     .filter(event => (relations.get(event.name)?.dispatchers.size ?? 0) === 0)
     .map(event => event.name)
     .sort()
