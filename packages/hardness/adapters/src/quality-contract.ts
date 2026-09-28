@@ -1,6 +1,6 @@
 /** Task-specific quality requirements layered on HARDNESS completion. */
 
-const MAX_REQUIREMENTS = 12
+const MAX_REQUIREMENTS = 20
 
 const GENERAL_REQUIREMENTS = [
   'The final result is complete, internally consistent, and usable without unfinished placeholders, scaffolds, mocks, or partial substitutes.',
@@ -41,11 +41,32 @@ const AUTOMATION_REQUIREMENTS = [
   'Credentials, authorization state, user data, and external inputs are kept within the intended security and permission boundaries.',
 ] as const
 
+const GAME_REQUIREMENTS = [
+  'The game is judged against current high-quality references in the same genre, platform, camera style, and art direction; a functional prototype, template look, or generic indie presentation is not an acceptable final quality bar.',
+  'Graphics and art direction are cohesive and production-grade: lighting, composition, materials or pixel treatment, color, VFX, readability, UI, and scene density form one deliberate visual language rather than a collection of placeholders or mismatched assets.',
+  'Characters have a clear visual identity, readable silhouettes, coherent proportions and materials, expressive animation, and presentation quality appropriate to the target style; generic mannequins, default rigs, or unfinished animation do not satisfy completion.',
+  'Environments provide atmosphere, depth, landmarks, environmental storytelling, navigational clarity, and intentional lighting and set dressing without looking empty, repetitive, or template-derived.',
+  'Sound is a first-class quality surface: music, ambience, effects, UI feedback, spatial treatment where relevant, synchronization, loudness balance, loops, and transitions are reviewed in actual play rather than treated as optional polish.',
+  'Gameplay feel is verified in a real runnable build or emulator: input response, movement, camera, collision, combat or interaction feedback, pacing, transitions, failure states, and moment-to-moment clarity must feel polished rather than merely function.',
+  'Animation, particles, shaders, camera work, feedback, and other presentation effects support impact without sacrificing legibility or performance; the game meets its target frame-time, memory, loading, and platform constraints with measured evidence.',
+  'Completion requires both technical evidence and audiovisual/play evidence from an executed game or ROM. Screenshots alone do not prove gameplay quality, and passing unit/build tests alone do not prove art, sound, animation, or feel quality.',
+] as const
+
 function requestText(need: unknown): string {
   try { return JSON.stringify(need).toLocaleLowerCase() } catch { return String(need).toLocaleLowerCase() }
 }
 
 function matches(value: string, pattern: RegExp): boolean { return pattern.test(value) }
+
+/**
+ * Identify game-development work from the capability request without requiring
+ * one specific engine or platform name.
+ * @param need - Capability request or descriptive need.
+ * @returns Whether game-specific quality requirements and review apply.
+ */
+export function isGameDevelopmentNeed(need: unknown): boolean {
+  return matches(requestText(need), /\b(?:game|games|gaming|videogame|video-game|videojuego|videojuegos|unreal|unity|godot|blender|pixel\s*art|nes|snes|genesis|mega\s*drive|master\s*system|game\s*gear|game\s*boy|rom|homebrew|platformer|metroidvania|rpg|shooter|gameplay)\b/u)
+}
 
 /**
  * Derive a bounded quality contract from a capability request. Generic
@@ -71,6 +92,9 @@ export function qualityRequirementsForNeed(need: unknown): readonly string[] {
   }
   if (matches(text, /\b(?:automation|integration|connector|oauth|mcp|workflow|scheduler|scheduled|webhook|sync)\b/u)) {
     requirements.push(...AUTOMATION_REQUIREMENTS)
+  }
+  if (isGameDevelopmentNeed(need)) {
+    requirements.push(...GAME_REQUIREMENTS)
   }
 
   return [...new Set(requirements)].slice(0, MAX_REQUIREMENTS)
