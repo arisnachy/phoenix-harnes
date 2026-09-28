@@ -131,6 +131,7 @@ export function ChatView({
   const timeline = useSession(s => s.chat.timeline)
   const inbox = useSession(s => s.queue)
   const pendingSubmit = useInput(s => s.pendingSubmit)
+  const inputPhase = useInput(s => s.phase)
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
   const running = useSession(s => s.running)
@@ -263,13 +264,19 @@ export function ChatView({
   // The optimistic submit remains independent so the immediate post-Enter
   // feedback still appears before running flips true.
   const activeProgress = running ? progress : null
-  const visibleProgress = activeProgress ?? (visiblePendingSubmit === undefined
-    ? null
-    : {
+  const admissionInFlight = inputPhase === 'adjudicating' || inputPhase === 'submitting'
+  // Keep the optimistic user bubble until the durable transcript takes over,
+  // but do not let that receipt impersonate model activity after Host
+  // admission has already settled. This is the race that left "preparing"
+  // spinning after a completed/closed task.
+  const admissionProgress = admissionInFlight && visiblePendingSubmit !== undefined
+    ? {
       phase: 'preparing' as const,
       activity: 'preparing' as const,
       startedAt: visiblePendingSubmit.startedAt,
-    })
+    }
+    : null
+  const visibleProgress = activeProgress ?? admissionProgress
   // Session.running can remain true while Host-side settlement, logging, or
   // verification finishes after user-visible assistant output has arrived.
   // Render status only for an observable activity, never from running alone,
@@ -282,6 +289,9 @@ export function ChatView({
         ?? visiblePendingSubmit?.startedAt
         ?? null,
       progress: visibleProgress,
+      // A lost Host admission settlement must not leave an eternal animation.
+      // Real runtime activity is authoritative and never expires here.
+      expiresAfterMs: activeProgress === null ? 30_000 : null,
     }
 
   useEffect(() => {
