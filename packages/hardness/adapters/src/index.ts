@@ -27,6 +27,9 @@ import { installRealityContextProjection, realityConfigFromEnvironment, type Rea
 import { createRealitySnapshotTool } from './reality-tool.ts'
 import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
+import { acquireWakeEngine } from './wake-registry.ts'
+import { createWakeExecutor, installWakeRuntime } from './wake-runtime.ts'
+import { createWakeTools } from './wake-tools.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
@@ -123,6 +126,10 @@ export { REALITY_OPERATING_PROTOCOL, installRealityProtocol } from './reality-pr
 export { RealityContextEngine, installRealityContextProjection, realityConfigFromEnvironment } from './reality-context.ts'
 export { createRealitySnapshotTool } from './reality-tool.ts'
 export type { RealityContextConfig, RealityPromptRegistrar, RealitySignal, RealitySnapshot } from './reality-context.ts'
+export { WakeEngine, JsonWakeStore, MemoryWakeStore, wakeEvent } from './wake-engine.ts'
+export type { CreateWakeTriggerInput, WakeDispatchResult, WakeEvent, WakeEventAttribute, WakeExecution, WakeExecutionResult, WakeExecutor, WakeMatcher, WakeMode, WakeTrigger, WakeTriggerHistoryEntry, WakeTriggerStatus } from './wake-engine.ts'
+export { createWakeExecutor, installWakeRuntime } from './wake-runtime.ts'
+export { createWakeTools, createWakeTriggerTool, createWakeTriggerListTool } from './wake-tools.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -142,6 +149,8 @@ export interface Config {
   taskLedgerPath?: string
   /** How often the host checks for due scheduled work. */
   taskPollMs?: number
+  /** Durable event-driven wake-trigger ledger. Empty/omitted uses ~/.dsh/phoenix-wake-triggers.json; :memory: is test-only. */
+  wakeLedgerPath?: string
   /** One-shot subagent provider used for private preparation and scheduled office work. */
   privateWorkProvider?: string
   /** Maximum retained characters from one private preparation result. */
@@ -160,6 +169,7 @@ export const Config: z<Config> = z.object({
   maxOrdinaryJudgePasses: z.number().step(1).min(1).max(3).default(2),
   taskLedgerPath: z.string().default(''),
   taskPollMs: z.number().default(15_000),
+  wakeLedgerPath: z.string().default(''),
   privateWorkProvider: z.string().default('spawn'),
   privateWorkResultChars: z.number().default(12_000),
   userMailIdentity: z.string().default(''),
@@ -203,6 +213,13 @@ function taskLedgerPath(config: Config): string {
     : join(homedir(), '.dsh', 'phoenix-tasks.json')
 }
 
+function wakeLedgerPath(config: Config): string {
+  const configured = config.wakeLedgerPath?.trim()
+  return configured !== undefined && configured.length > 0
+    ? configured
+    : join(homedir(), '.dsh', 'phoenix-wake-triggers.json')
+}
+
 /**
  * Install the HARDNESS projections, mission runtime, and durable proactive task system.
  * @param ctx - Owning Cordis context with HARDNESS dependencies.
@@ -216,6 +233,8 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
   const disposers: Disposer[] = []
   const proactivity = acquireProactivityEngine(taskLedgerPath(config))
   disposers.push(() => proactivity.release())
+  const wake = acquireWakeEngine(wakeLedgerPath(config))
+  disposers.push(() => wake.release())
   const reality = acquireRealityContext(realityConfigFromEnvironment())
   disposers.push(() => reality.release())
 
@@ -284,6 +303,9 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       for (const tool of createProactivityTools(proactivity.engine)) {
         disposers.push(ctx.tools.register(tool))
       }
+      for (const tool of createWakeTools(wake.engine)) {
+        disposers.push(ctx.tools.register(tool))
+      }
     } else {
       const runtimeConfig = {
         pollMs: config.taskPollMs ?? 15_000,
@@ -294,6 +316,8 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
       disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs))
+      wake.bindExecutor(createWakeExecutor(agents))
+      disposers.push(installWakeRuntime(ctx, wake.engine))
     }
 
     if (!modelTools) {
