@@ -81,3 +81,42 @@ export const en: Record<SubagentKey, string> = {
 
 /** Key domain of the `subagent` namespace (zh is the source of truth). */
 export type SubagentKey = keyof typeof zh
+
+
+/** Spanish dictionary, key-identical to the Chinese source of truth. */
+export const es: Record<SubagentKey, string> = {
+  'diagnostic.corrupt': 'registro de sesión dañado',
+  'diagnostic.unsupported': 'versión del registro de subagente no compatible',
+  'diagnostic.unavailable': 'registro de sesión no disponible temporalmente',
+  'duration.seconds': '{seconds} s',
+  'duration.minutes': '{minutes} min {seconds} s',
+  'duration.hours': '{hours} h {minutes} min {seconds} s',
+  'duration.days': '{days} d',
+  'duration.daysHours': '{days} d {hours} h',
+  'duration.months': '~{months} mes',
+  'duration.monthsDays': '~{months} mes {days} d',
+  'duration.years': '~{years} a',
+  'duration.yearsMonths': '~{years} a {months} mes',
+  'duration.exactDays': '{days} d {hours} h {minutes} min {seconds} s',
+  'duration.exactTitle': 'Duración activa total: {duration}',
+  'loading.label': 'Cargando subagentes…',
+  'loading.aria': 'Cargando subagentes',
+  'load.error': 'No se pudieron cargar los subagentes',
+  'retry': 'Reintentar',
+  'mode.oneShot': 'una ejecución',
+  'mode.continuable': 'continuable',
+  'activity.running': 'en ejecución',
+  'activity.inactive': 'sin ejecutar',
+  'branch.collapse': 'Contraer descendientes de {label}',
+  'branch.expand': 'Expandir descendientes de {label}',
+  'count.total.one': '{count} subagente',
+  'count.total.other': '{count} subagentes',
+  'count.running.one': '{count} subagente en ejecución',
+  'count.running.other': '{count} subagentes en ejecución',
+  'switcher.aria': 'Cambiar subagente: {title}',
+  'tree.aria': 'Sesiones de subagentes',
+  'readonly.oneShot.title': 'Registro de subagente de una sola ejecución',
+  'readonly.title': 'Este subagente está temporalmente en solo lectura',
+  'readonly.oneShot.body': 'Las tareas de una sola ejecución no aceptan seguimientos; revisa aquí el registro completo de ejecución.',
+  'readonly.body': 'La sesión principal está desconectada; vuelve a abrirla para seguir enviando mensajes.',
+}
