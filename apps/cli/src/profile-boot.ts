@@ -73,7 +73,7 @@ export function bundledBrowserConnectorPatches(
     const legacySourceLaunch = args.includes('tsx/esm')
       && args.some(argument =>
         typeof argument === 'string'
-        && argument.replaceAll('\\\\', '/').includes('packages/mcp/chrome-connector/src/'))
+        && argument.replaceAll('\\', '/').includes('packages/mcp/chrome-connector/src/'))
     if (!legacySourceLaunch) continue
     patches.push({
       id,
