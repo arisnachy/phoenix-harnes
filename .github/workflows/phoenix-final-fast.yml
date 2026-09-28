@@ -1,0 +1,30 @@
+name: Phoenix final fast checks
+on:
+  push:
+    branches: [repair-final-fast-20260928]
+permissions:
+  contents: read
+jobs:
+  fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-final-fast-20260928
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Client domain graph
+        run: pnpm run verify-client-domain-graph
+      - name: Knip
+        shell: bash
+        run: |
+          set +e
+          pnpm exec knip --treat-config-hints-as-errors --reporter json > knip.json 2>&1
+          status=$?
+          cat knip.json
+          exit $status
