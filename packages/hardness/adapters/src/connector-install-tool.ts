@@ -1,6 +1,7 @@
 import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import {
   defineTool,
+  type JsonValue,
   type ToolDefinition,
 } from '@phoenix-ai/dsh-tools'
 
@@ -30,6 +31,24 @@ export interface XMcpHostSnapshot {
     readonly configured: boolean
     readonly status?: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
     readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+  }
+}
+
+/** Convert the typed Host snapshot into the recursive JSON value contract used by tools. */
+function xMcpSnapshotJson(state: XMcpHostSnapshot): JsonValue {
+  return {
+    clientIdConfigured: state.clientIdConfigured,
+    clientSecretConfigured: state.clientSecretConfigured,
+    api: {
+      configured: state.api.configured,
+      ...(state.api.status === undefined ? {} : { status: state.api.status }),
+      ...(state.api.reasonCode === undefined ? {} : { reasonCode: state.api.reasonCode }),
+    },
+    docs: {
+      configured: state.docs.configured,
+      ...(state.docs.status === undefined ? {} : { status: state.docs.status }),
+      ...(state.docs.reasonCode === undefined ? {} : { reasonCode: state.docs.reasonCode }),
+    },
   }
 }
 
@@ -171,7 +190,7 @@ export function createXMcpActivateTool(
         api: receipt.api.status,
         docs: receipt.docs.status,
         credentialsReady,
-        state,
+        state: xMcpSnapshotJson(state),
         message: credentialsReady
           ? 'Official X MCP is installed. Complete the X browser authorization if xurl requests it, then use connector_list for live tool status.'
           : 'Official X MCP is installed. X Docs can work without credentials; X API needs X_CLIENT_ID and X_CLIENT_SECRET stored with the human-only /secret command before xurl can authorize.',
