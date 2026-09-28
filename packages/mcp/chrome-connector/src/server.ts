@@ -41,6 +41,9 @@ function isLoopback(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]'
 }
 
+ * @param profileDir - profileDir supplied to this public operation.
+ * @param headless - headless supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Build Chrome/Edge flags for PHOENIX's isolated CDP browser. */
 export function buildDedicatedBrowserArgs(profileDir: string, headless = false): string[] {
   return [
