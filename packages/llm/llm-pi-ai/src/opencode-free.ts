@@ -96,6 +96,7 @@ export function opencodeFreeProfile(models: readonly PiAiModelProfile[]): PiAiPr
   }
 }
 
+/** Live no-account OpenCode model catalog backed by a failure-tolerant cache. */
 export interface OpenCodeFreeCatalog {
   /** Last known-good free models; always non-empty because a conservative fallback ships with Phoenix. */
   models(): readonly PiAiModelProfile[]
@@ -103,6 +104,7 @@ export interface OpenCodeFreeCatalog {
   refresh(force?: boolean): Promise<boolean>
 }
 
+/** Network and refresh options used to construct an OpenCode Free catalog. */
 export interface OpenCodeFreeCatalogOptions {
   fetchImpl?: typeof fetch
   now?: () => number
