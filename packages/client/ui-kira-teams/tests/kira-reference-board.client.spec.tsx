@@ -10,6 +10,7 @@ import {
   agentRoleKeyOf,
   liveCardsOf,
   performanceKeyOf,
+  skillOf,
   type KiraTeamsDockProps,
 } from '../src/client/KiraTeamsDock.tsx'
 import { en, es, zh, type KiraTeamsKey } from '../src/client/locales.ts'
@@ -49,6 +50,7 @@ describe('approved KIRA compact live-agent dock', () => {
       origin: 'subagent',
       running: true,
       projectionValues: {
+        subagent: { mode: 'continuable', label: 'creative UI designer', seq: 1 },
         subagentActivity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
       },
     })
@@ -58,6 +60,33 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(cards[0]?.summary?.id).toBe(sid('c1'))
     expect(cards[0]?.name).toBe('Vega')
     expect(cards[0]?.kind).toBe('vega')
+    expect(skillOf(active)).toBe('design')
+  })
+
+  it('assigns specialist identities from the requested capability instead of agent-id randomness', () => {
+    const coder = summary({
+      id: sid('random-id-a'), parentId: sid('root'), origin: 'subagent', running: true,
+      projectionValues: { subagent: { mode: 'continuable', label: 'typescript engineer fixing code', seq: 11 } },
+    })
+    const tester = summary({
+      id: sid('random-id-b'), parentId: sid('root'), origin: 'subagent', running: true,
+      projectionValues: { subagent: { mode: 'continuable', label: 'playtest QA gameplay', seq: 12 } },
+    })
+    const researcher = summary({
+      id: sid('random-id-c'), parentId: sid('root'), origin: 'subagent', running: true,
+      projectionValues: { subagent: { mode: 'continuable', label: 'research evidence and references', seq: 13 } },
+    })
+
+    const cards = liveCardsOf([
+      { summary: coder, depth: 1 },
+      { summary: tester, depth: 1 },
+      { summary: researcher, depth: 1 },
+    ])
+
+    expect(cards.map(card => card.name)).toEqual(['Atlas', 'Orión', 'Nova'])
+    expect(skillOf(coder)).toBe('engineering')
+    expect(skillOf(tester)).toBe('testing')
+    expect(skillOf(researcher)).toBe('research')
   })
 
   it('keeps simultaneous live agents individually identifiable even when hashes collide', () => {
@@ -157,7 +186,7 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('floating-live')
     expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', false)
     expect(container.querySelectorAll('[data-kira-agent-card]')).toHaveLength(1)
-    expect(screen.getByText('Supervisor')).toBeTruthy()
+    expect(screen.getByText('Coordinación / orquestación')).toBeTruthy()
     expect(screen.getByText('Preparando')).toBeTruthy()
     expect(screen.getByText('Supervisando misión')).toBeTruthy()
   })
