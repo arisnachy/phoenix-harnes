@@ -930,7 +930,7 @@ function stableSpecSignature(spec: JsonRecord): string {
   try {
     return JSON.stringify(spec)
   } catch {
-    return String(spec)
+    return 'unserializable-visual-spec'
   }
 }
 
