@@ -24,11 +24,9 @@ import {
   BINANCE_AGENT_OS_URL,
   JEV_API_KEY_REF,
   X_API_MCP_SERVER_NAME,
-  X_API_MCP_URL,
   X_CLIENT_ID_REF,
   X_CLIENT_SECRET_REF,
   X_DOCS_MCP_SERVER_NAME,
-  X_DOCS_MCP_URL,
   JEV_MCP_SERVER_NAME,
   ManagedMcpController,
 } from './mcp-managed.ts'
