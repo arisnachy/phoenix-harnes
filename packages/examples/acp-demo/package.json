@@ -36,7 +36,8 @@
     "lib/index.js",
     "lib/invariant.js",
     "lib/bin.js",
-    "lib/types/**/*.d.ts"
+    "lib/types/**/*.d.ts",
+    "bin/dsh-acp-demo.js"
   ],
   "license": "MIT",
   "peerDependencies": {

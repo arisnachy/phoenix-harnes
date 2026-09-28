@@ -177,6 +177,33 @@ function relativeImports(file: string, sourceText: string): RelativeImport[] {
   return imports
 }
 
+/**
+ * Phoenix dynamic client artifacts are closure scripts, not ESM modules. They are
+ * published at ./client so the web plugin loader can resolve their bytes, then
+ * executed through window.__ModuleLoader__. publint otherwise interprets
+ * lib/client.js through package type=module and reports the intentional CJS
+ * wrapper as an ESM mismatch. Suppress only that exact, manifest-proven shape.
+ */
+function isIntentionalClientClosureDiagnostic(
+  target: PackageTarget,
+  message: Message,
+  manifest: Record<string, unknown>,
+): boolean {
+  const dsh = target.manifest as PackageManifest & {
+    dsh?: { client?: unknown }
+    exports?: Record<string, unknown>
+  }
+  if (dsh.dsh?.client === undefined) return false
+  const clientExport = dsh.exports?.['./client']
+  if (typeof clientExport !== 'object' || clientExport === null) return false
+  const defaultPath = (clientExport as { default?: unknown }).default
+  if (defaultPath !== './lib/client.js') return false
+  const rendered = formatMessage(message, manifest, { color: false }) ?? message.code
+  return rendered.includes(
+    'pkg.exports["./client"].default is ./lib/client.js and is written in CJS, but is interpreted as ESM',
+  )
+}
+
 async function runPublint(target: PackageTarget): Promise<PublintResult> {
   try {
     const files = publicationFiles(target)
@@ -186,9 +213,11 @@ async function runPublint(target: PackageTarget): Promise<PublintResult> {
       pack: { files },
     })
     const manifest = result.pkg as Record<string, unknown>
-    return result.messages.some(message => message.type === 'error') || closureViolations.length > 0
-      ? { path: target.path, status: 'failed', messages: result.messages, closureViolations, manifest }
-      : { path: target.path, status: 'passed', messages: result.messages, closureViolations, manifest }
+    const messages = result.messages.filter(message =>
+      !isIntentionalClientClosureDiagnostic(target, message, manifest))
+    return messages.some(message => message.type === 'error') || closureViolations.length > 0
+      ? { path: target.path, status: 'failed', messages, closureViolations, manifest }
+      : { path: target.path, status: 'passed', messages, closureViolations, manifest }
   } catch (error: unknown) {
     return {
       path: target.path,
