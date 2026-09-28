@@ -6,6 +6,7 @@ import {
   defaultExecutionHandoff,
   installModelSelection,
   isCodexPlannerModel,
+  isContextualConversationFastPathText,
   isConversationalFastPathText,
   jevSelectedModelId,
   type Agent,
@@ -43,7 +44,10 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('como te va que se cuenta')).toBe(true)
     expect(isConversationalFastPathText('¿cómo te va, qué se cuenta?')).toBe(true)
     expect(isConversationalFastPathText('hola, cómo te va, qué se cuenta')).toBe(true)
-    expect(isConversationalFastPathText('que quieres que hagamos')).toBe(true)
+    expect(isConversationalFastPathText('que quieres que hagamos')).toBe(false)
+    expect(isContextualConversationFastPathText('que quieres que hagamos')).toBe(true)
+    expect(isContextualConversationFastPathText('¿qué te gustaría que hagamos?')).toBe(true)
+    expect(isContextualConversationFastPathText('de qué hablamos')).toBe(true)
     expect(isConversationalFastPathText('cuéntame algo bueno')).toBe(true)
     expect(isConversationalFastPathText('¿estás usando Jev?')).toBe(true)
     expect(isConversationalFastPathText('gracias')).toBe(true)
@@ -70,6 +74,7 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('revisa el repo y arregla el error')).toBe(false)
     expect(isConversationalFastPathText('qué se cuenta de OpenAI hoy')).toBe(false)
     expect(isConversationalFastPathText('qué quieres que hagamos con Phoenix')).toBe(false)
+    expect(isContextualConversationFastPathText('qué quieres que hagamos con Phoenix')).toBe(false)
     expect(isConversationalFastPathText('cómo te va el build de Phoenix')).toBe(false)
     expect(isConversationalFastPathText('¿esto parece un error de memoria?')).toBe(false)
     expect(isConversationalFastPathText('qué tiempo hace hoy')).toBe(false)
@@ -93,6 +98,49 @@ describe('installModelSelection()', () => {
             data: {
               source: { kind: 'user' },
               content: [{ type: 'text', text: 'hola' }],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request',
+      { turn: 1, step: 1, signal },
+      () => Promise.resolve({
+        provider: 'openai-codex',
+        model: 'gpt-6-sol',
+        reasoningEffort: ReasoningEffortId('max'),
+      }),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('low'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('routes a contextual conversational opener to Luna/low while preserving its context-aware classification', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: 'gpt-6-sol', reasoningEffort: ReasoningEffortId('max') },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const agent = {
+      session: {
+        events: [
+          { type: 'turn/start', data: { turn: 1 } },
+          {
+            type: 'user/message',
+            data: {
+              source: { kind: 'user' },
+              content: [{ type: 'text', text: 'que quieres que hagamos' }],
             },
           },
         ],
