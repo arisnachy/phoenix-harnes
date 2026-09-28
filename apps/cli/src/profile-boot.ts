@@ -42,7 +42,7 @@ const SHIPPED_PRESET_ROOT = fileURLToPath(new URL('../config/agent-presets/', im
  */
 const APP_REQUIRE = createRequire(import.meta.url)
 const BASE_REQUIRE = createRequire(APP_REQUIRE.resolve('@phoenix-ai/dsh-base/package.json'))
-export const SHIPPED_CHROME_CONNECTOR_BIN = join(
+const SHIPPED_CHROME_CONNECTOR_BIN = join(
   dirname(BASE_REQUIRE.resolve('@phoenix-ai/dsh-chrome-connector/package.json')),
   'lib',
   'bin.js',
