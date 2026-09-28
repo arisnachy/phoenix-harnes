@@ -116,8 +116,6 @@ switch (invocation.mode) {
       import('./profile-boot.ts'),
       import('./phoenix-update-watch.ts'),
     ])
-    startPhoenixUpdateWatcher()
-
     // `dsh codex-plugin enable <name>` builds this patch entirely from public
     // plugin metadata and environment-variable references. Loading it here
     // makes enabled Codex MCP servers native PHOENIX tools on the next boot,
@@ -146,6 +144,10 @@ switch (invocation.mode) {
       patchFiles: patches,
       args: invocation.args,
     })
+    // A failed profile boot must leave no updater child behind holding the
+    // launcher's inherited stdio open. Start update watching only once the
+    // profile tree has successfully mounted and its lifecycle is established.
+    startPhoenixUpdateWatcher()
     break
   }
   case 'plugin': {
