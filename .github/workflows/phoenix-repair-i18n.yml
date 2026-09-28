@@ -1,0 +1,40 @@
+name: Phoenix i18n repair check
+
+on:
+  push:
+    branches: [repair-i18n-check-20260927]
+
+permissions:
+  contents: write
+
+jobs:
+  i18n:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-i18n-check-20260927
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Re-record current complete pairs
+        run: pnpm run verify-translation-pairing -- --write --all
+      - name: Validate pair structure
+        run: pnpm run verify-translation-pairing
+      - name: Commit pairing records
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No i18n record changes."
+            exit 0
+          fi
+          git config user.name "Phoenix Repair Bot"
+          git config user.email "phoenix-repair-bot@users.noreply.github.com"
+          git add '**/*.i18n.yaml'
+          git commit -m "docs(i18n): record synchronized translation pairs"
+          git push origin HEAD:repair-i18n-check-20260927
