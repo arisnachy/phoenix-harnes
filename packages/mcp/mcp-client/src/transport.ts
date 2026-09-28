@@ -53,7 +53,7 @@ export function repairPhoenixStdioProxyArgs(args: readonly string[]): string[] {
     changed = true
     return CURRENT_PHOENIX_STDIO_PROXY
   })
-  return changed ? repaired : [...args]
+  return repaired
 }
 
 /**
