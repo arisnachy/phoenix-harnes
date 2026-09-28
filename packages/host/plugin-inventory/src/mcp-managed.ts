@@ -177,7 +177,12 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
     || (value.toolCallTimeoutMs !== JEV_TOOL_TIMEOUT_MS && value.toolCallTimeoutMs !== JEV_LEGACY_TOOL_TIMEOUT_MS)
     || (value.startupTimeoutMs !== JEV_STARTUP_TIMEOUT_MS && value.startupTimeoutMs !== JEV_LEGACY_STARTUP_TIMEOUT_MS)
     || value.failOnStartupError !== false) return false
-  return exactReconnect(value.reconnect, 3)
+  const reconnect = value.reconnect
+  return isRecord(reconnect)
+    && reconnect.enabled === true
+    && reconnect.initialDelayMs === 1000
+    && reconnect.maxDelayMs === 30_000
+    && reconnect.maxAttempts === 3
 }
 
 function validConfig(value: unknown): value is ManagedMcpConfig {
