@@ -542,8 +542,8 @@ export function ChatView({
               double-render the same wait. */}
           {completionPulse && (
             <div className={css.phoenixCompletion} aria-hidden="true">
-              <span className={css.phoenixActivity}>
-                <PhoenixLogo size={28} />
+              <span className={css.phoenixActivity} data-activity="done">
+                <PhoenixLogo size={30} variant="activity" />
               </span>
             </div>
           )}

@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import {
   createConnectorInstallTool,
+  createXMcpActivateTool,
   type McpRegistryInstallerService,
+  type XMcpHostService,
 } from '../src/connector-install-tool.ts'
 
 function exec(agent: Agent | undefined = {} as Agent) {
@@ -113,3 +115,106 @@ describe('connector_install', () => {
     })
   })
 })
+
+describe('x_mcp_activate', () => {
+  function xHost(options: { credentials?: boolean } = {}): XMcpHostService & {
+    enableXMcp: ReturnType<typeof vi.fn>
+    xMcpState: ReturnType<typeof vi.fn>
+  } {
+    const credentials = options.credentials ?? true
+    return {
+      enableXMcp: vi.fn(async () => ({
+        api: {
+          status: 'installed' as const,
+          connector: { serverName: 'x-api', url: 'https://api.x.com/mcp' },
+        },
+        docs: {
+          status: 'installed' as const,
+          connector: { serverName: 'x-docs', url: 'https://docs.x.com/mcp' },
+        },
+      })),
+      xMcpState: vi.fn(async () => ({
+        clientIdConfigured: credentials,
+        clientSecretConfigured: credentials,
+        api: { configured: true, status: credentials ? 'starting' as const : 'auth-required' as const },
+        docs: { configured: true, status: 'ready' as const },
+      })),
+    }
+  }
+
+  it('requires explicit user intent, an agent, and a live Host integration', async () => {
+    const approval = { request: vi.fn() }
+    const host = xHost()
+    const tool = createXMcpActivateTool(approval, host)
+
+    await expect(tool.execute({ requestedByUser: false }, exec())).resolves.toEqual({
+      status: 'denied',
+      message: 'X MCP activation requires an explicit user request.',
+    })
+    await expect(tool.execute({ requestedByUser: true }, exec(undefined))).rejects.toThrow('active agent session')
+    await expect(createXMcpActivateTool(approval).execute({ requestedByUser: true }, exec()))
+      .rejects.toThrow('host integration is unavailable')
+    await expect(createXMcpActivateTool(approval, { enableXMcp: host.enableXMcp })
+      .execute({ requestedByUser: true }, exec()))
+      .rejects.toThrow('host integration is unavailable')
+    expect(approval.request).not.toHaveBeenCalled()
+    expect(host.enableXMcp).not.toHaveBeenCalled()
+  })
+
+  it('asks for one-shot approval before installing the pinned X bundle', async () => {
+    const approval = { request: vi.fn(async () => 'rejected' as const) }
+    const host = xHost()
+    const tool = createXMcpActivateTool(approval, host)
+    const context = exec()
+
+    await expect(tool.execute({ requestedByUser: true }, context)).resolves.toEqual({
+      status: 'denied',
+      approvalOutcome: 'rejected',
+      message: 'Official X MCP activation was not approved.',
+    })
+    expect(approval.request).toHaveBeenCalledWith(expect.objectContaining({
+      agent: (context as { agent: Agent }).agent,
+      toolName: 'x_mcp_activate',
+      callId: 'call-install',
+      risk: 'medium',
+      reversible: true,
+      signal: expect.any(AbortSignal),
+    }))
+    expect(host.enableXMcp).not.toHaveBeenCalled()
+  })
+
+  it('installs X and reports whether the vault is ready for xurl OAuth', async () => {
+    const approval = { request: vi.fn(async () => 'allowed-once' as const) }
+    const ready = xHost({ credentials: true })
+    const readyTool = createXMcpActivateTool(approval, ready)
+
+    await expect(readyTool.execute({ requestedByUser: true }, exec())).resolves.toMatchObject({
+      status: 'enabled',
+      api: 'installed',
+      docs: 'installed',
+      credentialsReady: true,
+      message: expect.stringContaining('Complete the X browser authorization'),
+    })
+
+    const missing = xHost({ credentials: false })
+    const missingTool = createXMcpActivateTool(approval, missing)
+    await expect(missingTool.execute({ requestedByUser: true }, exec())).resolves.toMatchObject({
+      status: 'enabled',
+      credentialsReady: false,
+      message: expect.stringContaining('/secret'),
+    })
+    expect(ready.enableXMcp).toHaveBeenCalledTimes(1)
+    expect(missing.enableXMcp).toHaveBeenCalledTimes(1)
+  })
+
+  it('presents X activation as an edit-style connector action', () => {
+    const tool = createXMcpActivateTool({ request: vi.fn() }, xHost())
+    expect(tool.presentCall?.({ requestedByUser: true })).toEqual({
+      card: 'generic',
+      title: 'Enable official X MCP',
+      kind: 'edit',
+      rawInput: 'X',
+    })
+  })
+})
+

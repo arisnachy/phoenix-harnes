@@ -153,6 +153,77 @@ describe('PluginInventoryGateway', () => {
     })
   })
 
+  it('projects and controls the official X MCP bundle without exposing secrets', async () => {
+    const { ctx, inventory } = await harness()
+    ;(ctx as unknown as { provide(name: string, value: unknown): void }).provide('credentials', {
+      describe: vi.fn(async (ref: string) => ({ configured: ref === 'X_CLIENT_ID' })),
+    })
+    ;(ctx as unknown as { provide(name: string, value: unknown): void }).provide('mcpConnectors', {
+      list: () => [
+        {
+          serverName: 'x-api',
+          transport: 'stdio',
+          status: 'auth-required',
+          reasonCode: 'authorization-required',
+          toolNames: [],
+        },
+        {
+          serverName: 'x-docs',
+          transport: 'streamable-http',
+          status: 'ready',
+          toolNames: ['mcp__x-docs__search_x'],
+        },
+      ],
+    })
+    const managed = (inventory as unknown as {
+      managedMcp: {
+        snapshot(): Promise<Array<{ entryId: string; serverName: string; url: string }>>
+        installXMcp(): Promise<unknown>
+        removeXMcp(): Promise<boolean>
+      }
+    }).managedMcp
+    vi.spyOn(managed, 'snapshot').mockResolvedValue([
+      { entryId: 'x-api-id', serverName: 'x-api', url: 'https://api.x.com/mcp' },
+      { entryId: 'x-docs-id', serverName: 'x-docs', url: 'https://docs.x.com/mcp' },
+    ])
+    const install = vi.spyOn(managed, 'installXMcp').mockResolvedValue({
+      api: { status: 'installed', connector: { entryId: 'x-api-id', serverName: 'x-api', url: 'https://api.x.com/mcp' } },
+      docs: { status: 'installed', connector: { entryId: 'x-docs-id', serverName: 'x-docs', url: 'https://docs.x.com/mcp' } },
+    })
+    const remove = vi.spyOn(managed, 'removeXMcp').mockResolvedValue(true)
+
+    await expect(inventory.xMcpState()).resolves.toEqual({
+      clientIdConfigured: true,
+      clientSecretConfigured: false,
+      api: {
+        configured: true,
+        status: 'auth-required',
+        reasonCode: 'authorization-required',
+      },
+      docs: {
+        configured: true,
+        status: 'ready',
+      },
+    })
+    await expect(inventory.enableXMcp()).resolves.toMatchObject({
+      api: { status: 'installed' },
+      docs: { status: 'installed' },
+    })
+    expect(install).toHaveBeenCalledTimes(1)
+    await expect(inventory.disableXMcp()).resolves.toEqual({ disabled: true })
+    expect(remove).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports X credentials and runtimes absent when their services are not mounted', async () => {
+    const { inventory } = await harness()
+    await expect(inventory.xMcpState()).resolves.toEqual({
+      clientIdConfigured: false,
+      clientSecretConfigured: false,
+      api: { configured: false },
+      docs: { configured: false },
+    })
+  })
+
   it('delegates exact registry identities to the managed MCP installer', async () => {
     const { inventory } = await harness()
     const managed = (inventory as unknown as {

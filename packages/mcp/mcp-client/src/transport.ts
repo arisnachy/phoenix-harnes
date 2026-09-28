@@ -46,14 +46,12 @@ function isPhoenixStdioProxyPath(value: string): boolean {
  * at this running PHOENIX installation's checked-in proxy.
  */
 export function repairPhoenixStdioProxyArgs(args: readonly string[]): string[] {
-  let changed = false
   const repaired = args.map((argument) => {
     if (!isPhoenixStdioProxyPath(argument) || existsSync(argument)) return argument
     if (!existsSync(CURRENT_PHOENIX_STDIO_PROXY)) return argument
-    changed = true
     return CURRENT_PHOENIX_STDIO_PROXY
   })
-  return changed ? repaired : [...args]
+  return repaired
 }
 
 /**
@@ -83,8 +81,12 @@ export interface TransportOptions {
   authProvider?: OAuthClientProvider
   /** Resolved Bearer token for one transport generation; never persisted in connector config. */
   bearerToken?: string
-  /** Resolve a PHOENIX credential reference when a fresh generation connects. */
+  /** Resolve a PHOENIX Bearer credential reference when a fresh generation connects. */
   resolveBearerToken?: (ref: string) => Promise<string | undefined>
+  /** Resolve a PHOENIX credential reference for one stdio child env slot. */
+  resolveCredentialRef?: (ref: string) => Promise<string | undefined>
+  /** Already-resolved secret env values for this stdio generation. */
+  stdioCredentialEnv?: Record<string, string>
 }
 
 /**
@@ -130,7 +132,7 @@ export function createTransport(config: Config, options: TransportOptions = {}):
       return new StdioClientTransport({
         command: config.command,
         args: repairPhoenixStdioProxyArgs(config.args),
-        env: buildChildEnv(config.env),
+        env: buildChildEnv({ ...config.env, ...options.stdioCredentialEnv }),
         cwd: config.cwd,
       })
     case 'streamable-http': {
