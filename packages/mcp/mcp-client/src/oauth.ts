@@ -117,10 +117,12 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
   }
 }
 
+/**
+ * Credential-provider adapter that stores only an opaque MCP OAuth grant.
  * @param credentials - credentials supplied to this public operation.
  * @param key - key supplied to this public operation.
  * @returns Result produced by this public operation.
-/** Credential-provider adapter that stores only an opaque MCP OAuth grant. */
+ */
 export function createCredentialStateStore(credentials: CredentialProvider, key: CredentialKey): McpOAuthStateStore {
   let volatileState: McpOAuthState | undefined
   const readPersisted = async (): Promise<McpOAuthState | undefined> => {
@@ -309,9 +311,11 @@ export class McpOAuthCallbackServer {
   }
 }
 
+/**
+ * Whether a stored state contains a token that the SDK can use or refresh.
  * @param state - state supplied to this public operation.
  * @returns Result produced by this public operation.
-/** Whether a stored state contains a token that the SDK can use or refresh. */
+ */
 export function hasUsableMcpOAuthTokens(state: McpOAuthState | undefined): boolean {
   const tokens = state?.tokens
   return typeof tokens?.access_token === 'string' && tokens.access_token.length > 0
