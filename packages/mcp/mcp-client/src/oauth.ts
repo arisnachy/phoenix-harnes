@@ -50,6 +50,8 @@ function randomState(): string {
 /**
  * Build the SDK OAuth provider for one MCP server. Token and registration data
  * are read and written only through the supplied host-owned store.
+  * @param options - options supplied to this public operation.
+  * @returns Result produced by this public operation.
  */
 export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthClientProvider {
   const configuredState = options.state
@@ -115,6 +117,9 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
   }
 }
 
+ * @param credentials - credentials supplied to this public operation.
+ * @param key - key supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Credential-provider adapter that stores only an opaque MCP OAuth grant. */
 export function createCredentialStateStore(credentials: CredentialProvider, key: CredentialKey): McpOAuthStateStore {
   let volatileState: McpOAuthState | undefined
@@ -304,6 +309,8 @@ export class McpOAuthCallbackServer {
   }
 }
 
+ * @param state - state supplied to this public operation.
+ * @returns Result produced by this public operation.
 /** Whether a stored state contains a token that the SDK can use or refresh. */
 export function hasUsableMcpOAuthTokens(state: McpOAuthState | undefined): boolean {
   const tokens = state?.tokens
