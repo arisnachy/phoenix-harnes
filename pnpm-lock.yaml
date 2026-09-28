@@ -4732,7 +4732,7 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
       koffi:
-        specifier: ^3.1.0
+        specifier: 3.1.1
         version: 3.1.1
     devDependencies:
       '@phoenix-ai/cordis':
@@ -5558,7 +5558,7 @@ importers:
         specifier: workspace:^
         version: link:../../util/native-command
       koffi:
-        specifier: ^3.1.0
+        specifier: 3.1.1
         version: 3.1.1
     devDependencies:
       '@phoenix-ai/cordis':
@@ -6473,7 +6473,7 @@ importers:
   packages/sandbox/sandbox-windows-acl:
     dependencies:
       koffi:
-        specifier: ^3.1.0
+        specifier: 3.1.1
         version: 3.1.1
     devDependencies:
       '@phoenix-ai/cordis':
@@ -6885,7 +6885,7 @@ importers:
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
       koffi:
-        specifier: ^3.1.0
+        specifier: 3.1.1
         version: 3.1.1
     devDependencies:
       '@phoenix-ai/cordis':
@@ -8406,7 +8406,7 @@ importers:
   packages/subprocess/subprocess-local:
     dependencies:
       koffi:
-        specifier: ^3.1.0
+        specifier: 3.1.1
         version: 3.1.1
       node-pty:
         specifier: 1.2.0-beta.15
@@ -8883,9 +8883,6 @@ importers:
       '@phoenix-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
     devDependencies:
       '@phoenix-ai/cordis':
         specifier: workspace:^
