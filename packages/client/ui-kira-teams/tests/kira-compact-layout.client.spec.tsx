@@ -22,12 +22,13 @@ describe('KIRA compact live-agent layout regression', () => {
     expect(avatarCss).toMatch(/\.card\s*{[^}]*width:\s*58px;[^}]*height:\s*72px/s)
   })
 
-  it('reserves only the visible KIRA card strip and gives the remaining width to chat', () => {
-    expect(frameCss).toMatch(/--dsh-kira-chat-clearance:\s*336px/)
-    expect(frameCss).toMatch(/\[data-kira-teams\].*shell\.workspace|shell\.workspace.*\[data-kira-teams\]/s)
-    expect(conversationCss).toMatch(/padding-right:\s*var\(--dsh-kira-chat-clearance,\s*0px\)/)
-    expect(conversationCss).toMatch(/--dsh-chat-content-width:\s*var\(--dsh-kira-chat-content-width,\s*768px\)/)
-    expect(conversationCss).toMatch(/--dsh-kira-composer-max-width/)
+  it('lets chat use the full center column while KIRA occupies only its floating card rectangle', () => {
+    expect(frameCss).not.toMatch(/--dsh-kira-chat-clearance/)
+    expect(frameCss).not.toMatch(/--dsh-kira-chat-content-width/)
+    expect(frameCss).not.toMatch(/--dsh-kira-composer-max-width/)
+    expect(conversationCss).not.toMatch(/padding-right:\s*var\(--dsh-kira-chat-clearance/)
+    expect(conversationCss).toMatch(/--dsh-chat-content-width:\s*768px/)
+    expect(conversationCss).toMatch(/--dsh-composer-card-max-width:\s*calc\(var\(--dsh-chat-content-width\) \+ 32px\)/)
   })
 
   it('renders each persona from bundled portrait pixels while keeping phase data for animation', () => {

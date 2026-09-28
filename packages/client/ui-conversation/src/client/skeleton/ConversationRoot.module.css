@@ -6,13 +6,9 @@
   flex-direction: column;
   height: 100%;
   min-width: 0;
-  padding-right: var(--dsh-kira-chat-clearance, 0px);
   background: var(--dsw-alias-bg-base);
-  --dsh-chat-content-width: var(--dsh-kira-chat-content-width, 768px);
-  --dsh-composer-card-max-width: var(
-    --dsh-kira-composer-max-width,
-    calc(var(--dsh-chat-content-width) + 32px)
-  );
+  --dsh-chat-content-width: 768px;
+  --dsh-composer-card-max-width: calc(var(--dsh-chat-content-width) + 32px);
   --dsh-composer-side-clearance: clamp(10px, 2vw, 18px);
   --dsh-composer-dock-inset: 8px;
 }
