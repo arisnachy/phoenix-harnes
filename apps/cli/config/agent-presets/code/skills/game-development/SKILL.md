@@ -120,6 +120,33 @@ ampliada de los actores principales. El revisor debe comparar jugador, al menos 
 interactivo cuando existan. Si cualquiera resulta indistinguible, inconsistente, desproporcionado, sin
 animación suficiente o visualmente provisional, el resultado es `needs_changes`, no PASS.
 
+### Puerta obligatoria de riqueza del mundo y reparto
+
+Un juego de aventura/RPG/top-down no puede cerrar con un campo vacío y unas pocas rocas o árboles repetidos.
+El escenario final debe sentirse construido y habitable: terreno con transiciones coherentes, caminos, bordes,
+vegetación variada, props, landmarks, estructuras/edificios cuando correspondan, sombras/iluminación, capas,
+set dressing y storytelling ambiental. Repetir el mismo árbol/roca sobre una cuadrícula o dejar grandes zonas
+sin composición deliberada es prototipo, no producción.
+
+Mantén una ficha visual persistente del reparto (character bible) para protagonista, enemigos, jefes y NPC:
+silueta, proporciones, paleta/materiales, rostro o rasgos identificables, vestuario/equipo, escala y set de
+animaciones. Los secundarios deben pertenecer al mismo lenguaje artístico pero seguir siendo reconocibles por
+rol; simples recolores, cajas, cápsulas o variaciones mínimas no satisfacen una petición de alta calidad.
+
+### Intro, title screen y presentación inicial
+
+Cuando el usuario pida una intro, opening, presentación, title sequence, menú o cinemática, esa parte es un
+entregable obligatorio. No empieces directamente en gameplay ni sustituyas la apertura por texto provisional.
+
+Flujo mínimo cuando aplique:
+`Boot -> Title -> Intro/Cutscene -> Main Menu -> Gameplay`.
+
+La apertura debe compartir la misma dirección artística y sonora del juego, tener transiciones reales, timing,
+cámara/parallax/animación según el estilo, música o ambience, y permitir saltarse la secuencia cuando sea
+apropiado. En 2D usa escenas/estados separados para boot, title, intro y gameplay; en 3D usa el pipeline
+cinematográfico nativo del motor. La revisión debe ejecutar el flujo completo y comprobar que termina en una
+partida controlable sin errores.
+
 ### Rúbrica interna de 100 puntos
 
 Usa esta rúbrica como guía de iteración, no como sustituto de evidencia:
