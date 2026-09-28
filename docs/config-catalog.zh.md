@@ -1555,8 +1555,13 @@ export interface StdioConfig {
   command: string
   /** Arguments passed directly, without shell interpolation. */
   args: string[]
-  /** Extra env vars merged on top of scrubbed ambient env. */
+  /** Extra non-secret env vars merged on top of scrubbed ambient env. */
   env: Record<string, string>
+  /**
+   * Child env name -> PHOENIX credential reference. Values are resolved for
+   * each connection generation and never persist in Loader configuration.
+   */
+  envCredentialRefs?: Record<string, string>
   /** Working directory for the child process. */
   cwd: string
   /** Host platforms on which this stdio server may run; omission is cross-platform unless Phoenix knows the server is platform-bound. */
@@ -1619,7 +1624,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:105`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:143`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 

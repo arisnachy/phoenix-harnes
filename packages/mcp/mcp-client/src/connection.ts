@@ -80,9 +80,8 @@ function httpStatus(error: unknown): number | undefined {
   return typeof code === 'number' ? code : undefined
 }
 
-function failureStatus(config: Config, error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {
-  if (error instanceof UnauthorizedError
-    || (config.transport === 'streamable-http' && (httpStatus(error) === 401 || httpStatus(error) === 403))) {
+function failureStatus(error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {
+  if (error instanceof UnauthorizedError || httpStatus(error) === 401 || httpStatus(error) === 403) {
     return { status: 'auth-required', reasonCode: 'authorization-required' }
   }
   return { status: 'failed', reasonCode: 'connection-failed' }
@@ -334,6 +333,21 @@ export function startConnection(
     )
     try {
       let generationTransportOptions = transportOptions
+      if (config.transport === 'stdio' && config.envCredentialRefs !== undefined
+        && Object.keys(config.envCredentialRefs).length > 0) {
+        const stdioCredentialEnv: Record<string, string> = {}
+        for (const [envName, ref] of Object.entries(config.envCredentialRefs)) {
+          const value = await transportOptions?.resolveCredentialRef?.(ref)
+          if (value === undefined) {
+            throw Object.assign(
+              new Error(`${label}: credential reference "${ref}" is not configured`),
+              { status: 401 },
+            )
+          }
+          stdioCredentialEnv[envName] = value
+        }
+        generationTransportOptions = { ...transportOptions, stdioCredentialEnv }
+      }
       if (config.transport === 'streamable-http' && config.bearerTokenRef !== undefined) {
         const token = await transportOptions?.resolveBearerToken?.(config.bearerTokenRef)
         generationTransportOptions = {
@@ -352,7 +366,7 @@ export function startConnection(
       if (firstAttemptError === undefined) firstAttemptError = error
       // Disposal clears current ownership before it closes the generation, so
       // only a live supervisor reports an attempt failure.
-      const status = failureStatus(config, error)
+      const status = failureStatus(error)
       if (isCurrent(generation)) {
         publishStatus?.(status.status, status.reasonCode)
         ctx.logger.warn(`${label}: connection attempt failed: ${String(error)}`)

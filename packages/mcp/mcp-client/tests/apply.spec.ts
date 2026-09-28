@@ -4,6 +4,7 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
+import CredentialsLocal from '@phoenix-ai/dsh-credentials-local'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime from '@phoenix-ai/dsh-tools'
 import McpConnectorRegistry from '@phoenix-ai/dsh-mcp-connector-registry/src/index.ts'
@@ -128,13 +129,16 @@ describe('mcp-client plugin module exports', () => {
     expect(resolved.serverName).toBe('github-prod_1')
   })
 
-  it('Config schema materializes reconnect defaults and merges partial overrides', () => {
+  it('Config schema materializes reconnect and secret-env defaults', () => {
     const omitted = ConfigSchema({
       transport: 'stdio',
       serverName: 'srv',
       command: 'echo',
     } as never)
     expect(omitted.reconnect).toEqual({ enabled: true, initialDelayMs: 500, maxDelayMs: 30_000, maxAttempts: 10 })
+    expect(omitted.transport).toBe('stdio')
+    if (omitted.transport !== 'stdio') throw new Error('expected stdio config')
+    expect(omitted.envCredentialRefs).toEqual({})
 
     const partial = ConfigSchema({
       transport: 'stdio',
@@ -425,6 +429,49 @@ describe('apply (plugin lifecycle)', () => {
     await sleep(50)
 
     expect(mockClose).toHaveBeenCalled()
+  })
+
+  it('resolves stdio credential refs per connection and classifies a missing ref as auth-required', async () => {
+    process.env.X_TEST_CLIENT_ID = 'test-client-secret'
+    try {
+      await ctx.plugin(CredentialsLocal, {
+        path: `${process.cwd()}/.tmp-mcp-client-credentials-${process.pid}.yaml`,
+        watch: false,
+      })
+      const secretConfig: Config = {
+        ...stdioConfig,
+        serverName: 'x-secret',
+        envCredentialRefs: { CLIENT_ID: 'X_TEST_CLIENT_ID' },
+        reconnect: { enabled: false },
+      }
+
+      await apply(ctx, secretConfig)
+      expect(mockConnect).toHaveBeenCalled()
+      expect(ctx.mcpConnectors.list()).toEqual(expect.arrayContaining([expect.objectContaining({
+        serverName: 'x-secret',
+        status: 'ready',
+      })]))
+
+      await ctx.fiber.dispose()
+      delete process.env.X_TEST_CLIENT_ID
+
+      ctx = await mountRegistry()
+      await apply(ctx, {
+        ...stdioConfig,
+        serverName: 'x-missing-secret',
+        envCredentialRefs: { CLIENT_ID: 'X_TEST_CLIENT_ID' },
+        reconnect: { enabled: false },
+      })
+      expect(ctx.mcpConnectors.list()).toEqual([{
+        serverName: 'x-missing-secret',
+        transport: 'stdio',
+        status: 'auth-required',
+        reasonCode: 'authorization-required',
+        toolNames: [],
+      }])
+    } finally {
+      delete process.env.X_TEST_CLIENT_ID
+    }
   })
 
   it('uses streamable-http config path', async () => {

@@ -77,6 +77,12 @@ Inspect the need, resolve a verified capability, plan the operation, obtain appr
 The model also receives the read-only connector_list tool when the authorization or MCP connector seam is mounted. Authorization rows report registered flows, provider telemetry, and sanitized callable service metadata. MCP rows report server identity, transport, lifecycle status, stable reason code, and public tool names. The tool never begins authorization, grants permission, invokes a connection, or exposes credentials or transport configuration.
 ```
 
+##### X MCP activation
+
+```markdown
+Full model-tool scopes also expose `x_mcp_activate`. It is usable only after an explicit user request and one-shot medium-risk approval; it installs the exact official X Docs endpoint and the pinned `@xdevplatform/xurl` bridge, then reports whether the vault contains the two X developer credential references. Activation does not perform an X account mutation.
+```
+
 #### Token effect
 
 The protocol sections, task-tool schemas, and capability metadata contribute model tokens; indexing source registries alone does not add prompt text.

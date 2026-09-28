@@ -16,8 +16,8 @@ One plugin instance per MCP server in `cordis.yml`:
     transport: stdio
     command: npx
     args: ['-y', '@modelcontextprotocol/server-github']
-    env:
-      GITHUB_TOKEN: !!js process.env.GITHUB_TOKEN
+    envCredentialRefs:
+      GITHUB_TOKEN: GITHUB_TOKEN
 
 - id: mcp-web
   name: '@phoenix-ai/dsh-mcp-client'
@@ -36,6 +36,7 @@ The model sees `mcp__github__create_issue`, `mcp__web__search`, … — the same
 - Remote `streamable-http` endpoints must use `https:` and must not embed credentials in the URL.
 - Plain `http:` is accepted only for explicit loopback fixtures (`localhost`, `127.0.0.1`, or `::1`).
 - Stdio servers remain opt-in and should use a pinned command, arguments, working directory, and least-privilege environment.
+- Secret stdio environment values should use `envCredentialRefs`. Phoenix resolves each referenced credential for the connection generation and passes the value only to that child process; the Loader configuration retains only the reference name.
 
 ## Config
 
@@ -45,7 +46,8 @@ The model sees `mcp__github__create_issue`, `mcp__web__search`, … — the same
 | `serverName` | both | yes | Namespace for this server's model-facing tool names; `[A-Za-z0-9_-]{1,32}`, unique across live instances |
 | `command` | stdio | yes | Executable to spawn |
 | `args` | stdio | no | Arguments passed to the command |
-| `env` | stdio | no | Extra env vars merged on top of scrubbed ambient env |
+| `env` | stdio | no | Extra non-secret env vars merged on top of scrubbed ambient env |
+| `envCredentialRefs` | stdio | no | Child env name → Phoenix credential reference; secret values are resolved per connection generation and are not stored in Loader config |
 | `cwd` | stdio | no | Working directory for the child process |
 | `url` | http | yes | MCP server URL |
 | `headers` | http | no | Extra headers (e.g. auth tokens) |
