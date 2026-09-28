@@ -136,6 +136,12 @@ function cognitiveRuntime(ctx: Context): CognitiveRuntimeLike | undefined {
  * it never performs I/O, starts a model, polls a connector, or delays prompt
  * assembly. User-authored memory summaries are serialized as data and must
  * never be treated as instructions.
+ *
+ * @param ctx - Active Cordis context used to read already-loaded cognitive state.
+ * @param engine - Proactivity engine that supplies durable task state.
+ * @param assembly - Current prompt-assembly coordinates, including the active agent.
+ * @param now - Clock value used to evaluate task relevance and expiry.
+ * @returns The bounded initiative context, or an empty string when nothing is relevant.
  */
 export function renderInitiativeContext(
   ctx: Context,
@@ -181,6 +187,11 @@ export function renderInitiativeContext(
  * Install the deterministic memory/task-to-initiative bridge.
  * Fast conversational turns already suppress runtime contexts, so this adds
  * no work to greetings/small talk and performs no additional model request.
+ *
+ * @param systemPrompt - Prompt registrar that owns request-scoped context providers.
+ * @param engine - Proactivity engine whose durable tasks feed the projection.
+ * @param ctx - Active Cordis context used to read local cognitive state.
+ * @returns A disposer that unregisters the initiative context provider.
  */
 export function installInitiativeContextProjection(
   systemPrompt: InitiativePromptRegistrar,
