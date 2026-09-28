@@ -1,0 +1,27 @@
+name: Phoenix final built lint
+
+on:
+  push:
+    branches: [repair-final-lint-built-20260928]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-final-lint-built-20260928
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build official tree
+        run: pnpm run build
+      - name: Lint after build
+        run: pnpm run lint:contracts-ready
