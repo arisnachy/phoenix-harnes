@@ -9688,6 +9688,39 @@ importers:
       '@phoenix-ai/dsh-session-learning':
         specifier: workspace:^
         version: link:../../packages/session/session-learning
+      '@phoenix-ai/dsh-host-webserver':
+        specifier: workspace:^
+        version: link:../../packages/host/webserver
+      '@phoenix-ai/dsh-agent-presets':
+        specifier: workspace:^
+        version: link:../../packages/preset/agent-presets
+      '@phoenix-ai/dsh-api-remotes':
+        specifier: workspace:^
+        version: link:../../packages/api/remotes
+      '@phoenix-ai/dsh-api-gateway':
+        specifier: workspace:^
+        version: link:../../packages/api/gateway
+      '@phoenix-ai/dsh-file-reference':
+        specifier: workspace:^
+        version: link:../../packages/context/file-reference
+      '@phoenix-ai/dsh-host-plugin-inventory':
+        specifier: workspace:^
+        version: link:../../packages/host/plugin-inventory
+      '@phoenix-ai/dsh-message-feedback':
+        specifier: workspace:^
+        version: link:../../packages/feedback/message-feedback
+      '@phoenix-ai/dsh-typert-registry':
+        specifier: workspace:^
+        version: link:../../packages/typert/registry
+      '@phoenix-ai/dsh-voice':
+        specifier: workspace:^
+        version: link:../../packages/voice/voice
+      '@phoenix-ai/dsh-storage-domain':
+        specifier: workspace:^
+        version: link:../../packages/storage/storage-domain
+      '@phoenix-ai/dsh-storage':
+        specifier: workspace:^
+        version: link:../../packages/storage/storage
 
   vendor/cordis:
     dependencies:
