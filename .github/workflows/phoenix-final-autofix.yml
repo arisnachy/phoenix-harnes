@@ -5,40 +5,25 @@ on:
     branches: [repair-final-autofix-20260928]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  autofix:
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
         with:
           ref: repair-final-autofix-20260928
-          fetch-depth: 0
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Apply suggested lint fixes
-        run: pnpm exec tsx scripts/run-oxlint.ts . --fix-suggestions || true
-      - name: Refresh confirmed bilingual pair records
-        run: pnpm exec tsx scripts/verify-translation-pairing.ts --write --all || true
-      - name: Record remaining diagnostics
-        run: |
-          pnpm run lint:contracts-ready || true
-          pnpm run duplication || true
-          pnpm run verify-translation-pairing || true
-      - name: Commit suggested fixes
-        run: |
-          if git diff --quiet; then
-            echo "No suggested changes."
-            exit 0
-          fi
-          git config user.name "Phoenix Repair Bot"
-          git config user.email "phoenix-repair-bot@users.noreply.github.com"
-          git add -A
-          git commit -m "chore(ci): apply suggested lint and pairing fixes"
-          git push origin HEAD:repair-final-autofix-20260928
+      - name: Build official tree
+        run: pnpm run build
+      - name: Validate lint
+        run: pnpm run lint:contracts-ready
+      - name: Validate translations
+        run: pnpm run verify-translation-pairing
