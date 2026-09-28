@@ -29,6 +29,7 @@ export interface ProactivityRuntimeConfig {
   readonly privateWorkResultChars: number
   readonly userMailIdentity?: string
   readonly harnessMailIdentity?: string
+  readonly resolveDefaultMailRecipient?: () => Promise<string | undefined>
 }
 
 /** Browser-safe task projection; unrevealed surprises never reach this surface. */
@@ -69,21 +70,32 @@ function plainOutput(content: readonly ContentBlock[], limit: number): string {
   return `${text.slice(0, Math.max(0, limit - 1))}…`
 }
 
-function mailIdentity(sender: ProactivitySenderIdentity, config: ProactivityRuntimeConfig): string {
-  if (sender === 'user') {
-    if (config.userMailIdentity === undefined) throw new Error('user mail identity is not configured')
-    return config.userMailIdentity
-  }
-  if (sender === 'harness') {
-    if (config.harnessMailIdentity === undefined) throw new Error('Phoenix mail identity is not configured')
-    return config.harnessMailIdentity
-  }
-  if (config.harnessMailIdentity !== undefined) return config.harnessMailIdentity
-  if (config.userMailIdentity !== undefined) return config.userMailIdentity
-  throw new Error('no mail identity is configured')
+function mailIdentity(sender: ProactivitySenderIdentity, config: ProactivityRuntimeConfig): string | undefined {
+  if (sender === 'user') return config.userMailIdentity
+  if (sender === 'harness') return config.harnessMailIdentity ?? config.userMailIdentity
+  return config.harnessMailIdentity ?? config.userMailIdentity
 }
 
-function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntimeConfig, conditionEvidence?: string): string {
+function normalizedEmail(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  const trimmed = value.trim()
+  if (trimmed.length === 0 || trimmed.length > 320 || !trimmed.includes('@') || /\s/u.test(trimmed)) return undefined
+  return trimmed
+}
+
+async function deliveryRecipient(input: ProactivityExecution, config: ProactivityRuntimeConfig): Promise<string | undefined> {
+  if (input.task.delivery !== 'email') return undefined
+  const explicit = normalizedEmail(input.task.recipient)
+  if (explicit !== undefined) return explicit
+  return normalizedEmail(await config.resolveDefaultMailRecipient?.())
+}
+
+function proactivePrompt(
+  input: ProactivityExecution,
+  config: ProactivityRuntimeConfig,
+  conditionEvidence?: string,
+  resolvedRecipient?: string,
+): string {
   const lines = [
     '<phoenix_proactive_task>',
     `Task: ${input.task.title}`,
@@ -95,8 +107,13 @@ function proactivePrompt(input: ProactivityExecution, config: ProactivityRuntime
   if (input.preparationResult !== undefined) lines.push(`Prepared result: ${input.preparationResult}`)
   if (conditionEvidence !== undefined) lines.push(`Condition verified true: ${conditionEvidence}`)
   if (input.task.delivery === 'email') {
-    lines.push(`Delivery: send email using configured identity reference ${JSON.stringify(mailIdentity(input.task.senderIdentity, config))}.`)
-    if (input.task.recipient !== undefined) lines.push(`Recipient: ${input.task.recipient}`)
+    const identity = mailIdentity(input.task.senderIdentity, config)
+    if (identity !== undefined) {
+      lines.push(`Delivery sender: use configured identity reference ${JSON.stringify(identity)}.`)
+    } else {
+      lines.push('Delivery sender: no dedicated mail identity reference is configured; use the currently authorized connected mail account through the normal governed mail tool. Do not invent an account or identity.')
+    }
+    if (resolvedRecipient !== undefined) lines.push(`Recipient: ${resolvedRecipient}`)
     lines.push('Do not expose credentials. Revalidate authorization and use the normal governed mail tool.')
   } else if (input.task.delivery === 'work') {
     lines.push('Delivery: complete the requested work and return a concise result.')
@@ -214,11 +231,17 @@ export function createProactivityExecutor(
   return {
     async execute(input): Promise<ProactivityExecutionResult> {
       const parent = chooseAgent(agents, input.task.targetAgentId)
+      const resolvedRecipient = await deliveryRecipient(input, config)
+      if (input.task.delivery === 'email' && resolvedRecipient === undefined) {
+        throw new ProactivityDeferredError(
+          'scheduled email has no recipient and the connected account email is unavailable',
+        )
+      }
       if (input.phase === 'deliver' && input.task.condition !== undefined) {
         const decision = await evaluateConditionWatch(input, parent, subagents, config.privateWorkProvider)
         if (!decision.met) return { summary: `condition not met: ${decision.evidence}` }
         parent.followup(createUserMessage({
-          content: [{ type: 'text', text: proactivePrompt(input, config, decision.evidence) }],
+          content: [{ type: 'text', text: proactivePrompt(input, config, decision.evidence, resolvedRecipient) }],
           source: {
             kind: 'plugin',
             plugin: 'hardness-adapters',
@@ -235,7 +258,7 @@ export function createProactivityExecutor(
       const privateWork = input.phase === 'prepare' || input.task.delivery === 'email' || input.task.delivery === 'work'
       if (!privateWork) {
         parent.followup(createUserMessage({
-          content: [{ type: 'text', text: proactivePrompt(input, config) }],
+          content: [{ type: 'text', text: proactivePrompt(input, config, undefined, resolvedRecipient) }],
           source: {
             kind: 'plugin',
             plugin: 'hardness-adapters',
@@ -252,7 +275,7 @@ export function createProactivityExecutor(
       const controller = new AbortController()
       const run = await subagents.start(config.privateWorkProvider, {
         label: input.phase === 'prepare' ? `Prepare: ${input.task.title}` : `Scheduled: ${input.task.title}`,
-        prompt: [{ type: 'text', text: proactivePrompt(input, config) }],
+        prompt: [{ type: 'text', text: proactivePrompt(input, config, undefined, resolvedRecipient) }],
         parent,
         signal: controller.signal,
       })
