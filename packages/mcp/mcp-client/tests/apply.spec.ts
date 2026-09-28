@@ -136,6 +136,8 @@ describe('mcp-client plugin module exports', () => {
       command: 'echo',
     } as never)
     expect(omitted.reconnect).toEqual({ enabled: true, initialDelayMs: 500, maxDelayMs: 30_000, maxAttempts: 10 })
+    expect(omitted.transport).toBe('stdio')
+    if (omitted.transport !== 'stdio') throw new Error('expected stdio config')
     expect(omitted.envCredentialRefs).toEqual({})
 
     const partial = ConfigSchema({
