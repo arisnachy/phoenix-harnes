@@ -38,6 +38,94 @@ function execution(overrides: Partial<ProactivityTask> = {}): ProactivityExecuti
 }
 
 describe('scheduled email execution', () => {
+  it('resumes the persisted target session when scheduled work fires with no live agent', async () => {
+    const dispose = vi.fn(async () => {})
+    const whenIdle = vi.fn(async () => {})
+    const parent = { id: 'agent-a', whenIdle }
+    const composeResumedAgent = vi.fn(async () => {})
+    const resume = vi.fn(async (options: {
+      resumeSessionId: unknown
+      setup?: (ctx: unknown) => Promise<void> | void
+    }) => {
+      await options.setup?.({} as never)
+      return { agent: parent, dispose }
+    })
+    const start = vi.fn(async () => ({
+      id: 'child',
+      result: Promise.resolve({
+        output: [{ type: 'text', text: 'email sent after autonomous resume' }],
+        stopReason: 'completed',
+      }),
+      dispose: async () => {},
+    }))
+    const unrelated = { id: 'other-agent' }
+    const executor = createProactivityExecutor(
+      {
+        get: vi.fn(() => undefined),
+        roots: vi.fn(() => [unrelated]),
+        list: vi.fn(() => [unrelated]),
+        resume,
+      } as never,
+      {
+        getProvider: vi.fn(() => ({ capabilities: {} })),
+        start,
+      } as never,
+      {
+        pollMs: 15_000,
+        privateWorkProvider: 'spawn',
+        privateWorkResultChars: 12_000,
+        resolveDefaultMailRecipient: async () => 'owner@example.com',
+        composeResumedAgent,
+      },
+    )
+
+    await expect(executor.execute(execution())).resolves.toEqual({
+      summary: 'email sent after autonomous resume',
+    })
+
+    expect(resume).toHaveBeenCalledTimes(1)
+    expect(resume.mock.calls[0]?.[0]?.resumeSessionId).toBe('agent-a')
+    expect(composeResumedAgent).toHaveBeenCalledTimes(1)
+    expect(start).toHaveBeenCalledTimes(1)
+    expect(dispose).toHaveBeenCalledTimes(1)
+    expect(whenIdle).toHaveBeenCalledTimes(1)
+  })
+
+  it('resumes, wakes, drains, and releases a persisted chat session without user input', async () => {
+    const followup = vi.fn()
+    const whenIdle = vi.fn(async () => {})
+    const dispose = vi.fn(async () => {})
+    const parent = { id: 'agent-a', followup, whenIdle }
+    const resume = vi.fn(async () => ({ agent: parent, dispose }))
+    const executor = createProactivityExecutor(
+      {
+        get: vi.fn(() => undefined),
+        roots: vi.fn(() => []),
+        list: vi.fn(() => []),
+        resume,
+      } as never,
+      undefined,
+      {
+        pollMs: 15_000,
+        privateWorkProvider: 'spawn',
+        privateWorkResultChars: 12_000,
+      },
+    )
+
+    await expect(executor.execute(execution({
+      delivery: 'chat',
+      senderIdentity: 'auto',
+      recipient: undefined,
+    }))).resolves.toEqual({
+      summary: 'resumed persisted Phoenix agent and completed scheduled chat turn',
+    })
+
+    expect(resume).toHaveBeenCalledTimes(1)
+    expect(followup).toHaveBeenCalledTimes(1)
+    expect(whenIdle).toHaveBeenCalledTimes(2)
+    expect(dispose).toHaveBeenCalledTimes(1)
+  })
+
   it('recovers a legacy task without recipient from the connected Google account and does not require harnessMailIdentity', async () => {
     const dispose = vi.fn(async () => {})
     const start = vi.fn(async (_provider: string, request: { prompt: Array<{ type: string; text: string }> }) => ({
