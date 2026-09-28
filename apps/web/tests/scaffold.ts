@@ -474,6 +474,11 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
           shutdownTimeoutMillis: 1_000,
         },
       },
+    // Browser e2e owns its Playwright browser. External MCP browser children
+    // are unrelated to these UI/session assertions and would make the hermetic
+    // temp workspace depend on optional host browser tooling.
+    { id: 'phoenix-browser', disabled: true },
+    { id: 'chrome-browser-primary', disabled: true },
     {
       id: 'webserver',
       config: { host: '127.0.0.1', port: 0 },
