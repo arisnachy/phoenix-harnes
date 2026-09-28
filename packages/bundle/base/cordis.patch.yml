@@ -609,6 +609,109 @@
     - id: mcp-connector-registry
       name: '@phoenix-ai/dsh-mcp-connector-registry'
 
+    # Game-development connector pack. It is zero-cost while disabled and
+    # becomes live only when the workstation opts in. Blender is pinned to the
+    # Blender Foundation MCP source already validated by PHOENIX. Unity,
+    # Unreal, Godot and gameplay bridges are command-configured because no
+    # single vendor-official MCP server covers every supported editor/version;
+    # PHOENIX must never execute an arbitrary community repository by default.
+    - id: mcp-blender-game-dev
+      name: '@phoenix-ai/dsh-mcp-client'
+      disabled: !!js process.env.PHOENIX_GAME_DEV_ENABLE !== '1'
+      config:
+        transport: stdio
+        serverName: blender
+        command: !!js process.env.PHOENIX_BLENDER_MCP_COMMAND ?? 'uvx'
+        args: !!js process.env.PHOENIX_BLENDER_MCP_ARGS ? JSON.parse(process.env.PHOENIX_BLENDER_MCP_ARGS) : ['--from', 'git+https://projects.blender.org/lab/blender_mcp.git@v1.0.0#subdirectory=mcp', 'blender-mcp']
+        env:
+          BLENDER_MCP_HOST: !!js process.env.PHOENIX_BLENDER_MCP_HOST ?? 'localhost'
+          BLENDER_MCP_PORT: !!js process.env.PHOENIX_BLENDER_MCP_PORT ?? '9876'
+        cwd: ''
+        toolCallTimeoutMs: 120000
+        startupTimeoutMs: 120000
+        failOnStartupError: false
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+          maxAttempts: 60
+
+    - id: mcp-unity-game-dev
+      name: '@phoenix-ai/dsh-mcp-client'
+      disabled: !!js process.env.PHOENIX_GAME_DEV_ENABLE !== '1' || !process.env.PHOENIX_UNITY_MCP_COMMAND
+      config:
+        transport: stdio
+        serverName: unity
+        command: !!js process.env.PHOENIX_UNITY_MCP_COMMAND ?? 'node'
+        args: !!js process.env.PHOENIX_UNITY_MCP_ARGS ? JSON.parse(process.env.PHOENIX_UNITY_MCP_ARGS) : []
+        env: {}
+        cwd: !!js process.env.PHOENIX_UNITY_MCP_CWD ?? ''
+        toolCallTimeoutMs: 120000
+        startupTimeoutMs: 30000
+        failOnStartupError: false
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+          maxAttempts: 60
+
+    - id: mcp-unreal-game-dev
+      name: '@phoenix-ai/dsh-mcp-client'
+      disabled: !!js process.env.PHOENIX_GAME_DEV_ENABLE !== '1' || !process.env.PHOENIX_UNREAL_MCP_COMMAND
+      config:
+        transport: stdio
+        serverName: unreal
+        command: !!js process.env.PHOENIX_UNREAL_MCP_COMMAND ?? 'uv'
+        args: !!js process.env.PHOENIX_UNREAL_MCP_ARGS ? JSON.parse(process.env.PHOENIX_UNREAL_MCP_ARGS) : []
+        env: {}
+        cwd: !!js process.env.PHOENIX_UNREAL_MCP_CWD ?? ''
+        toolCallTimeoutMs: 180000
+        startupTimeoutMs: 60000
+        failOnStartupError: false
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+          maxAttempts: 60
+
+    - id: mcp-godot-game-dev
+      name: '@phoenix-ai/dsh-mcp-client'
+      disabled: !!js process.env.PHOENIX_GAME_DEV_ENABLE !== '1' || !process.env.PHOENIX_GODOT_MCP_COMMAND
+      config:
+        transport: stdio
+        serverName: godot
+        command: !!js process.env.PHOENIX_GODOT_MCP_COMMAND ?? 'node'
+        args: !!js process.env.PHOENIX_GODOT_MCP_ARGS ? JSON.parse(process.env.PHOENIX_GODOT_MCP_ARGS) : []
+        env: {}
+        cwd: !!js process.env.PHOENIX_GODOT_MCP_CWD ?? ''
+        toolCallTimeoutMs: 120000
+        startupTimeoutMs: 30000
+        failOnStartupError: false
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+          maxAttempts: 60
+
+    - id: mcp-gameplay-game-dev
+      name: '@phoenix-ai/dsh-mcp-client'
+      disabled: !!js process.env.PHOENIX_GAME_DEV_ENABLE !== '1' || !process.env.PHOENIX_GAMEPLAY_MCP_COMMAND
+      config:
+        transport: stdio
+        serverName: gameplay
+        command: !!js process.env.PHOENIX_GAMEPLAY_MCP_COMMAND ?? 'node'
+        args: !!js process.env.PHOENIX_GAMEPLAY_MCP_ARGS ? JSON.parse(process.env.PHOENIX_GAMEPLAY_MCP_ARGS) : []
+        env: {}
+        cwd: !!js process.env.PHOENIX_GAMEPLAY_MCP_CWD ?? ''
+        toolCallTimeoutMs: 120000
+        startupTimeoutMs: 30000
+        failOnStartupError: false
+        reconnect:
+          enabled: true
+          initialDelayMs: 1000
+          maxDelayMs: 30000
+          maxAttempts: 60
+
     # Stable browser automation path. This connector is isolated from Phoenix
     # Desktop and can start its own temporary Chrome/Edge profile over loopback
     # CDP. Failure is non-fatal: the Host keeps running and the connector
