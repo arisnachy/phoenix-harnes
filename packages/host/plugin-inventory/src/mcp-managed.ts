@@ -355,7 +355,8 @@ export class ManagedMcpController {
       headers: {},
       oauth: true,
     }, candidate.name)
-  }}
+  }
+}
 
 /**
  * Path to the generated MCP overlay consumed by the PHOENIX launcher.
