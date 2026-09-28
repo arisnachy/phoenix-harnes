@@ -87,6 +87,34 @@ La decisión es por **capacidad real**, no solo por el nombre del modelo:
 5. Si ya existe un pack coherente que cubre protagonista/NPC/enemigos o mundo/UI con calidad suficiente,
    prioriza ese pack completo sobre mezclar muchas fuentes o regenerar trabajo equivalente.
 
+#### Fase obligatoria de scouting de assets
+
+Cuando la petición implique crear o mejorar la presentación visual de un juego —personajes, enemigos, NPC, mundo,
+tiles, UI, VFX, audio o calidad "premium"— **no empieces dibujando primitivas ni montando el HUD**. Antes del arte final:
+
+1. Define un mini `asset brief`: motor/target, cámara, resolución lógica, tamaño de tile/sprite, perspectiva, paleta,
+   densidad de detalle, animaciones obligatorias y referencias de calidad.
+2. Ejecuta descubrimiento real con `web_search`, navegador o conectores. Busca al menos 3 candidatos cuando existan
+   resultados razonables y compara packs completos antes que piezas aisladas. Para 2D/retro consulta primero Kenney
+   y al menos otra fuente adecuada como OpenGameArt, itch.io Game Assets o una biblioteca equivalente; para 3D usa
+   Quaternius/Poly Haven/ambientCG cuando encajen.
+3. Inspecciona la página exacta del pack elegido y su licencia. No basta con "conocer" que una web suele tener assets
+   libres. Registra el candidato, URL, licencia, autor/publicador, compatibilidad de uso y motivo de aceptación/rechazo.
+4. Si ningún pack supera la barra o el usuario exige identidad original, usa `image_generation`, Aseprite/Tiled,
+   Blender o la herramienta artística correspondiente. Después inspecciona el asset real con visión antes de importarlo.
+5. Antes de cerrar una misión visual, deja evidencia durable en `asset-manifest.json` o `asset-sourcing.json`.
+   Para assets generados, registra origen `generated`, herramienta/provider y prompts/transformaciones relevantes;
+   para assets externos, registra además licencia y procedencia.
+
+Para un juego top-down de aventura/RPG, el mundo debe dominar la pantalla. Un gran panel lateral tipo dashboard,
+tarjetas SaaS o un HUD que robe una porción sustancial y permanente del viewport es una regresión visual salvo que
+la referencia del género lo justifique. El mapa debe mostrar composición, caminos/transiciones, estructuras o
+landmarks, vegetación/props variados, sombras/iluminación y actores con sprites reales. Un campo de tiles repetidos
+con personajes de pocos bloques de color es prototipo y debe fallar la revisión.
+
+La secuencia preferida para 2D premium es:
+`asset brief -> búsqueda/comparación de packs -> licencia/procedencia -> importación o generación -> atlas/tileset -> motor -> ejecución -> captura -> read_image -> iteración`.
+
 #### Fuentes de descubrimiento
 
 Cuando haya acceso web, navegador o conectores, consulta varias bibliotecas apropiadas al proyecto. Entre las
