@@ -8,5 +8,3 @@
 - id: phoenix-browser
   disabled: true
 
-- id: chrome-browser-primary
-  disabled: true
