@@ -101,7 +101,9 @@ interface ImageRuntimeContext {
 type ImageSize = 'auto' | '1024x1024' | '1536x1024' | '1024x1536'
 type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
 type ImageBackground = 'auto' | 'opaque' | 'transparent'
+/** Image-generation routing backend selectable by Phoenix. */
 export type ImageGenerationBackend = 'auto' | 'codex' | 'local' | 'free'
+/** Concrete provider that produced a Phoenix raster image. */
 export type ImageGenerationProvider = 'codex' | 'local' | 'cloudflare' | 'huggingface'
 
 interface ImageGenerationArgs {
