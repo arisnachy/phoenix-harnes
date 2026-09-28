@@ -58,8 +58,8 @@ function main(args: string[]): void {
   const automaticWindowsLib = process.platform === 'win32' && configuredExampleMode !== 'lib'
   const inheritedNodeOptions = process.env.NODE_OPTIONS
   const snapshotNodeOptions = inheritedNodeOptions
-    ?.replace(/(?:^|\\s)--import(?:=|\\s+)["']?tsx(?:\\/esm)?["']?(?=\\s|$)/gu, ' ')
-    .replace(/\\s+/gu, ' ')
+    ?.replace(/(?:^|\s)--import(?:=|\s+)["']?tsx(?:[/]esm)?["']?(?=\s|$)/gu, ' ')
+    .replace(/\s+/gu, ' ')
     .trim()
   const env: NodeJS.ProcessEnv = {
     ...process.env,
