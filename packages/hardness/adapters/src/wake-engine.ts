@@ -2,18 +2,25 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 
+/** Action performed when a matching wake event fires. */
 export type WakeMode = 'notify' | 'act'
+/** Authority that created a durable wake trigger. */
 export type WakeTriggerCreator = 'user' | 'harness'
+/** Lifecycle state of a durable wake trigger. */
 export type WakeTriggerStatus = 'active' | 'paused' | 'cancelled' | 'completed'
+/** Supported scalar matching operator for event attributes. */
 export type WakeMatchOperator = 'equals' | 'contains' | 'exists'
+/** Scalar value admitted into normalized wake-event attributes. */
 export type WakeEventAttribute = string | number | boolean | null
 
+/** One predicate evaluated against a normalized wake event. */
 export interface WakeMatcher {
   readonly field: string
   readonly operator: WakeMatchOperator
   readonly value?: WakeEventAttribute
 }
 
+/** Durable record of one trigger attempt for an event. */
 export interface WakeTriggerHistoryEntry {
   readonly eventId: string
   readonly occurredAt: string
@@ -23,6 +30,7 @@ export interface WakeTriggerHistoryEntry {
   readonly error?: string
 }
 
+/** Persisted wake-trigger definition and execution history. */
 export interface WakeTrigger {
   readonly id: string
   readonly title: string
@@ -42,6 +50,7 @@ export interface WakeTrigger {
   readonly history: readonly WakeTriggerHistoryEntry[]
 }
 
+/** User- or harness-supplied fields used to create a wake trigger. */
 export interface CreateWakeTriggerInput {
   readonly title: string
   readonly source: string
@@ -54,6 +63,7 @@ export interface CreateWakeTriggerInput {
   readonly targetAgentId?: string
 }
 
+/** Normalized event admitted to the Phoenix wake runtime. */
 export interface WakeEvent {
   readonly id: string
   readonly source: string
@@ -63,35 +73,42 @@ export interface WakeEvent {
   readonly attributes: Readonly<Record<string, WakeEventAttribute>>
 }
 
+/** Matched trigger invocation handed to a wake executor. */
 export interface WakeExecution {
   readonly trigger: WakeTrigger
   readonly event: WakeEvent
   readonly idempotencyKey: string
 }
 
+/** Optional executor result persisted into wake history. */
 export interface WakeExecutionResult {
   readonly summary?: string
 }
 
+/** Runtime boundary that turns matched wake events into Phoenix work. */
 export interface WakeExecutor {
   execute(input: WakeExecution): Promise<WakeExecutionResult>
 }
 
+/** Versioned durable wake-engine snapshot. */
 export interface WakeSnapshot {
   readonly version: 1
   readonly triggers: readonly WakeTrigger[]
 }
 
+/** Persistence seam for wake-engine snapshots. */
 export interface WakeStore {
   load(): Promise<WakeSnapshot>
   save(snapshot: WakeSnapshot): Promise<void>
 }
 
+/** Construction options for the durable wake engine. */
 export interface WakeEngineOptions {
   readonly id?: () => string
   readonly historyLimit?: number
 }
 
+/** Aggregate outcome after dispatching one normalized event. */
 export interface WakeDispatchResult {
   readonly eventId: string
   readonly matched: number
@@ -280,6 +297,7 @@ function parseSnapshot(value: unknown): WakeSnapshot {
   return { version: 1, triggers }
 }
 
+/** In-memory wake store used by tests and ephemeral runtimes. */
 export class MemoryWakeStore implements WakeStore {
   private snapshot: WakeSnapshot = EMPTY_SNAPSHOT
 
@@ -292,6 +310,7 @@ export class MemoryWakeStore implements WakeStore {
   }
 }
 
+/** Owner-local JSON persistence backend for durable wake triggers. */
 export class JsonWakeStore implements WakeStore {
   constructor(private readonly path: string) {
     nonEmpty(path, 'wake store path')
@@ -315,6 +334,7 @@ export class JsonWakeStore implements WakeStore {
   }
 }
 
+/** Durable trigger registry and serialized event dispatcher. */
 export class WakeEngine {
   private state: WakeSnapshot | undefined
   private tail: Promise<void> = Promise.resolve()
@@ -347,6 +367,11 @@ export class WakeEngine {
     this.state = snapshot
   }
 
+  /**
+   * Create and persist a normalized active wake trigger.
+   * @param input - Trigger definition supplied by the user or harness.
+   * @returns Persisted trigger snapshot.
+   */
   async create(input: CreateWakeTriggerInput): Promise<WakeTrigger> {
     return this.exclusive(async () => {
       const snapshot = await this.snapshot()
@@ -376,10 +401,19 @@ export class WakeEngine {
     })
   }
 
+  /**
+   * List all persisted wake triggers.
+   * @returns Detached trigger snapshots in storage order.
+   */
   async list(): Promise<WakeTrigger[]> {
     return this.exclusive(async () => (await this.snapshot()).triggers.map(cloneTrigger))
   }
 
+  /**
+   * Read one persisted wake trigger.
+   * @param id - Trigger identifier.
+   * @returns Detached trigger snapshot, or undefined when absent.
+   */
   async get(id: string): Promise<WakeTrigger | undefined> {
     return this.exclusive(async () => {
       const trigger = (await this.snapshot()).triggers.find(candidate => candidate.id === id)
@@ -404,10 +438,30 @@ export class WakeEngine {
     })
   }
 
+  /**
+   * Pause an active wake trigger.
+   * @param id - Trigger identifier.
+   * @returns Updated trigger snapshot.
+   */
   pause(id: string): Promise<WakeTrigger> { return this.setStatus(id, 'paused') }
+  /**
+   * Resume a paused wake trigger.
+   * @param id - Trigger identifier.
+   * @returns Updated trigger snapshot.
+   */
   resume(id: string): Promise<WakeTrigger> { return this.setStatus(id, 'active') }
+  /**
+   * Cancel a wake trigger permanently.
+   * @param id - Trigger identifier.
+   * @returns Updated terminal trigger snapshot.
+   */
   cancel(id: string): Promise<WakeTrigger> { return this.setStatus(id, 'cancelled') }
 
+  /**
+   * Normalize and serialize dispatch of one wake event.
+   * @param input - Event received from an authenticated internal or external producer.
+   * @returns Aggregate matched, fired, and failed counts.
+   */
   emit(input: WakeEvent): Promise<WakeDispatchResult> {
     const event = normalizeEvent(input)
     const run = this.runTail.then(() => this.dispatch(event), () => this.dispatch(event))
@@ -476,6 +530,11 @@ export class WakeEngine {
   }
 }
 
+/**
+ * Build and validate a normalized wake event.
+ * @param input - Event identity, source, type, optional summary, and scalar attributes.
+ * @returns Normalized wake event with an ISO occurrence timestamp.
+ */
 export function wakeEvent(input: {
   readonly id: string
   readonly source: string
