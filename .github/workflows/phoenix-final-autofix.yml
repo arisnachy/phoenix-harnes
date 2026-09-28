@@ -1,0 +1,44 @@
+name: Phoenix final autofix
+
+on:
+  push:
+    branches: [repair-final-autofix-20260928]
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-final-autofix-20260928
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply Oxlint fixes
+        run: pnpm run lint:fix:contracts-ready || true
+      - name: Refresh bilingual pairing records
+        run: pnpm exec tsx scripts/verify-translation-pairing.ts --write || true
+      - name: Record remaining diagnostics
+        run: |
+          pnpm run lint:contracts-ready || true
+          pnpm run duplication || true
+          pnpm run verify-translation-pairing || true
+      - name: Commit autofixes
+        run: |
+          if git diff --quiet; then
+            echo "No autofix changes."
+            exit 0
+          fi
+          git config user.name "Phoenix Repair Bot"
+          git config user.email "phoenix-repair-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "chore(ci): apply final lint and i18n autofixes"
+          git push origin HEAD:repair-final-autofix-20260928
