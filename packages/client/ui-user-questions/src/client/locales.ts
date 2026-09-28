@@ -46,3 +46,26 @@ export const en = {
   'automatic.none': 'No option selected',
   'automatic.seconds': 'seconds remaining',
 } satisfies Record<QuestionKey, string>
+
+
+/** Spanish dictionary. */
+export const es = {
+  'error.incomplete': 'Completa esta pregunta primero.',
+  'error.unanswered': 'Selecciona una opción o escribe una respuesta personalizada.',
+  'nav.prev': 'Pregunta anterior',
+  'nav.next': 'Pregunta siguiente',
+  'nav.minimize': 'Contraer la tarjeta de preguntas',
+  'nav.maximize': 'Expandir la tarjeta de preguntas',
+  'nav.cancel': 'Descartar todas las preguntas',
+  'option.recommended': 'Recomendado',
+  'custom.placeholder': 'Escribe tu respuesta',
+  'action.skip': 'Omitir esta pregunta',
+  'action.next': 'Siguiente',
+  'plan.header': 'Revisión del plan',
+  'plan.approve': 'Aprobar',
+  'plan.decline': 'Rechazar',
+  'plan.discuss': 'Hablar en el chat',
+  'automatic.choice': 'Selección automática',
+  'automatic.none': 'Ninguna opción seleccionada',
+  'automatic.seconds': 'segundos restantes',
+} satisfies Record<QuestionKey, string>

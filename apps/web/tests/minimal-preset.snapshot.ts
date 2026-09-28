@@ -121,6 +121,14 @@ describe('minimal agent preset', () => {
         "prompt": "You are a helpful software engineer assistant.",
         "tools": [
           "bash",
+          "living_act",
+          "living_forget_creation",
+          "living_get_connector_kit",
+          "living_inspect_creation",
+          "living_list_creations",
+          "living_read_state",
+          "living_register_creation",
+          "living_verify_creation",
           "str_replace_editor",
         ],
       }

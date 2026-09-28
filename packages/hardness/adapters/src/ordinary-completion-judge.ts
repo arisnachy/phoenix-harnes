@@ -54,6 +54,7 @@ const READ_ONLY_TOOLS = [
   'web_fetch',
 ] as const
 
+// oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const MUTATION = /^(?:write|edit|str_replace_editor|apply_patch|create_file|update_file|delete_file|move_file|rename_file|upload(?:_.*)?|deploy(?:_.*)?|publish(?:_.*)?)$/
 const VERIFY = /^(?:verify(?:_.*)?|check(?:_.*)?|test(?:_.*)?|lint(?:_.*)?|typecheck(?:_.*)?|build(?:_.*)?|smoke(?:_.*)?)$/
 const SHELL = /^(?:bash|pwsh|run_code)$/
@@ -61,17 +62,22 @@ const VISUAL_VERIFY = /^(?:read_image|read_render|screenshot|capture(?:_.*)?|bro
 const PLAY_VERIFY = /^(?:gameplay(?:_.*)?|playtest(?:_.*)?)$/
 const GAME_EDITOR_NAMESPACE = /(?:^|__|[.:/])(?:godot|unity|unreal|blender|aseprite|tiled)(?:__|[.:/])/i
 const GAMEPLAY_NAMESPACE = /(?:^|__|[.:/])gameplay(?:__|[.:/])/i
+// oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const GAME_EDITOR_READ_ONLY = /(?:^|_)(?:get|list|read|inspect|query|search|find|status|capture|screenshot|snapshot|render|viewport|test|verify|build)(?:_|$)/i
 const GAME_EDITOR_VISUAL_ACTION = /(?:^|_)(?:capture|screenshot|snapshot|render|viewport)(?:_|$)/i
 const GAME_EDITOR_PLAY_ACTION = /(?:^|_)(?:play|run|start|launch|pie)(?:_|$)/i
 const GAMEPLAY_VISUAL_ACTION = /(?:^|_)(?:capture|screenshot|snapshot|frame|inspect|render)(?:_|$)/i
+// oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const GAME_NEED = /\b(?:game|games|gaming|juego|juegos|videogame|videojuego|godot|unity|unreal|blender|sprite|tileset|npc|enemy|character|pixel\s*art|2d|3d|retro|nes|snes|rpg|platformer|metroidvania|gameplay)\b/i
 const DIRECT_ASSET_MUTATION = /^(?:image_generation|audio_generation|generate_image|generate_audio)$/
+// oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest|benchmark|tracemalloc)\b/i
 // oxlint-disable-next-line @stylistic/max-len -- Keep the game-runtime matcher auditable as one regex literal.
 const SHELL_PLAY_VERIFY = /\b(?:retroarch|mesen|playtest|gameplay|godot(?:\.exe)?\b.*--path|unity(?:\.exe)?\b.*playmode|unreal(?:editor)?(?:\.exe)?\b.*(?:-game|pie))\b/i
+// oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
 // Game-native source, scene, model, raster and audio files must reopen completion review just like ordinary code files.
+// oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const SUBSTANTIVE = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|c|cc|cpp|h|hpp|cs|php|rb|swift|html?|css|scss|sass|less|vue|svelte|ya?ml|toml|json|gd|tscn|tres|godot|gdshader|shader|prefab|unity|anim|controller|mat|uasset|umap|blend1?|glb|gltf|fbx|obj|ase|aseprite|tmx|png|webp|jpe?g|gif|wav|ogg|mp3|flac|ttf|otf|woff2?)\b/i
 
 /** Structured outcome returned by one ordinary-task independent completion review. */

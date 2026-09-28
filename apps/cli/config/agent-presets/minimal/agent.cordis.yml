@@ -1,10 +1,11 @@
-# The `minimal` agent preset: a fixed-prompt, two-tool coding-agent composition.
+# The `minimal` agent preset: a fixed-prompt, lean coding-agent composition.
 #
 # The persona is the complete system prompt, so global identity, Web orientation,
 # tool guidance, and later assembly listeners cannot add prompt text. Runtime
 # context snapshots are suppressed for this preset, and the model composes only
 # the persistent shell (`bash` on POSIX, `pwsh` on win32) and
-# `str_replace_editor`. Context compaction is absent.
+# `str_replace_editor`. Universal Phoenix Living connector tools remain on the host plane so
+# artifacts created even from Minimal mode stay connected. Context compaction is absent.
 
 - id: persona
   name: '@phoenix-ai/dsh-persona'

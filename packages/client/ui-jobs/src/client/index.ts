@@ -7,7 +7,7 @@ import type { ClientContext } from '@phoenix-ai/dsh-client-runtime/client'
 import { JobListAction } from './JobListAction.tsx'
 import { TaskListAction, type TaskListActionSlotProps, type TaskRpcConnection } from './TaskListAction.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
-import { en, NS, zh, type JobKey } from './locales.ts'
+import { en, es, NS, zh, type JobKey } from './locales.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
@@ -31,7 +31,7 @@ export function apply(ctx: ClientContext): void {
   if (connection === undefined) throw new Error('ui-jobs requires the client connection service')
   const TaskAction = (props: TaskListActionSlotProps) => createElement(TaskListAction, { ...props, connection })
 
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-job: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-job: dictionaries')
   ctx.slots.inject(
     'conversation.session.header.actions',
     () => ctx.slots.register({

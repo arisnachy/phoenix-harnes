@@ -56,8 +56,17 @@ function main(args: string[]): void {
   const configuredExampleMode = process.env.DSH_EXAMPLE_MODE
   const useBuilt = shouldUseBuiltExamples()
   const automaticWindowsLib = process.platform === 'win32' && configuredExampleMode !== 'lib'
+  const inheritedNodeOptions = process.env.NODE_OPTIONS
+  const snapshotNodeOptions = inheritedNodeOptions
+    ?.replace(/(?:^|\s)--import(?:=|\s+)["']?tsx(?:[/]esm)?["']?(?=\s|$)/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
   const env: NodeJS.ProcessEnv = {
     ...process.env,
+    // This runner itself is started through `tsx`. Do not leak a bare
+    // `--import tsx` into Vitest and then into subprocesses whose cwd is a
+    // temporary directory with no resolvable `tsx` package.
+    NODE_OPTIONS: snapshotNodeOptions ?? '',
     DSH_SNAPSHOT: mode,
     ...(useBuilt ? { DSH_EXAMPLE_MODE: 'lib' } : {}),
     // The historical public snapshot command does not own the assembled Web

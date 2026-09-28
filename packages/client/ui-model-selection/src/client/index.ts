@@ -23,7 +23,7 @@ import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
 import { CodexQuotaRemaining } from './CodexQuotaRemaining.tsx'
 import type { CodexQuotaRemainingInjected } from './CodexQuotaRemaining.tsx'
-import { en, zh, type ModelKey } from './locales.ts'
+import { en, es, zh, type ModelKey } from './locales.ts'
 
 export { ModelDirectory } from './directory.ts'
 export type { ModelDirectoryState } from './directory.ts'
@@ -89,7 +89,7 @@ const NS = 'model'
 export const inject = ['commandUi', 'connection', 'locale', 'sessions', 'slots', 'remote']
 
 export function apply(ctx: ClientContext): void {
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-model-selection: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-model-selection: dictionaries')
   const t = ctx.locale.bind(NS)
   ctx.plugin(ModelDirectoryResolver, { blockReason: () => t('blocked.composer') })
 

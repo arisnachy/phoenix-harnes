@@ -26,6 +26,7 @@ import { normalizeCredentialOrigin, originCredentialRef } from '@phoenix-ai/dsh-
 import { defineTool, type ToolRunContext } from '@phoenix-ai/dsh-tools'
 
 const POST_ACTION_SETTLE_MS = 250
+const DESKTOP_ACTION_TIMEOUT_MS = 45_000
 
 /** Desktop authority derived from the session's existing permission policy. */
 export type ComputerMode = 'off' | 'observe' | 'interact'
@@ -1092,6 +1093,7 @@ function executeComputerInvocation(invocation: ComputerInvocation, signal?: Abor
       encoding: 'utf8',
       windowsHide: true,
       maxBuffer: 64 * 1024 * 1024,
+      timeout: DESKTOP_ACTION_TIMEOUT_MS,
       env: { ...process.env, ...invocation.env },
       ...signal === undefined ? {} : { signal },
     }, (error, stdout) => {
