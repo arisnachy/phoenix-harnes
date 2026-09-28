@@ -18,7 +18,9 @@ export interface UserProfileFamilyMember {
 
 /** Presentation preference for the assistant identity shown by Settings. */
 export type AssistantGender = 'masculine' | 'feminine' | 'neutral'
+/** Provenance for the assistant gender presentation preference. */
 export type AssistantGenderSource = 'inferred' | 'manual'
+/** Whether assistant gender follows inference automatically or a fixed provenance choice. */
 export type AssistantGenderMode = 'auto' | AssistantGenderSource
 
 /** Browser-local settings values mirrored from the Host profile namespace. */

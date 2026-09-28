@@ -17,6 +17,7 @@ import type { Context } from '@phoenix-ai/cordis'
 
 const execFileAsync = promisify(execFile)
 
+/** Configuration controlling Reality Context refresh cadence and optional location hints. */
 export interface RealityContextConfig {
   readonly refreshMs: number
   readonly latitude?: number
@@ -26,6 +27,7 @@ export interface RealityContextConfig {
   readonly currency?: string
 }
 
+/** Provenance-bearing value for one observed reality signal. */
 export interface RealitySignal<T> {
   readonly value: T | null
   readonly source: string
@@ -162,6 +164,7 @@ interface RuntimeServiceTelemetry {
   }
 }
 
+/** Complete secret-free Reality Context snapshot projected to Phoenix. */
 export interface RealitySnapshot {
   readonly schema: 1
   readonly generatedAt: string
@@ -205,6 +208,11 @@ function positiveNumber(value: string | undefined): number | undefined {
   return parsed !== undefined && parsed >= 0 ? parsed : undefined
 }
 
+/**
+ * Resolve Reality Context configuration from Phoenix environment variables.
+ * @param env - environment map to inspect.
+ * @returns validated refresh, location, accuracy, label, and currency settings.
+ */
 export function realityConfigFromEnvironment(env: NodeJS.ProcessEnv = process.env): RealityContextConfig {
   const latitude = finiteNumber(env.PHOENIX_REALITY_LATITUDE)
   const longitude = finiteNumber(env.PHOENIX_REALITY_LONGITUDE)
@@ -1057,6 +1065,7 @@ async function probeClockSync(): Promise<{ value: boolean | null; source: string
   return { value: null, source: 'unverified', confidence: 0 }
 }
 
+/** Stateful collector that refreshes, caches, and renders Phoenix reality evidence. */
 export class RealityContextEngine {
   private internet = cache<InternetProbePayload>(null, 'not-probed', 1, 0)
   private userActivity = cache<UserActivityPayload>(null, 'not-probed', 1, 0)
@@ -1074,6 +1083,7 @@ export class RealityContextEngine {
 
   constructor(readonly config: RealityContextConfig) {}
 
+  /** Start best-effort periodic refreshes without keeping the process alive. */
   start(): void {
     if (this.timer !== undefined) return
     void this.refresh()
@@ -1081,6 +1091,7 @@ export class RealityContextEngine {
     this.timer.unref?.()
   }
 
+  /** Stop periodic Reality Context refreshes. */
   stop(): void {
     if (this.timer === undefined) return
     clearInterval(this.timer)
@@ -1149,6 +1160,10 @@ export class RealityContextEngine {
     }
   }
 
+  /**
+   * Refresh secret-free Phoenix runtime-service telemetry when its TTL expires.
+   * @param ctx - Cordis context exposing the optional runtime services.
+   */
   async refreshRuntimeServices(ctx: Context): Promise<void> {
     if (Date.now() <= this.runtimeServices.expiresAt) return
     if (this.runtimeRefreshJob !== undefined) return this.runtimeRefreshJob
@@ -1218,6 +1233,7 @@ export class RealityContextEngine {
    * for currently due work.
    * @param ctx - Cordis scope supplying live Phoenix runtime services.
    * @param full - Whether to invalidate every configured probe before refreshing.
+   * @param assembly - active agent/request context used for scoped browser and model facts.
    */
   async refreshNow(
     ctx: Context,
@@ -1250,6 +1266,13 @@ export class RealityContextEngine {
     ])
   }
 
+  /**
+   * Materialize the current provenance-bearing Reality Context snapshot.
+   * @param ctx - Cordis context supplying runtime and browser observations.
+   * @param now - wall-clock instant used to evaluate freshness and regional facts.
+   * @param assembly - active request context for scoped model and location telemetry.
+   * @returns the complete secret-free Reality Context snapshot.
+   */
   snapshot(
     ctx: Context,
     now = new Date(),
@@ -1493,6 +1516,12 @@ export class RealityContextEngine {
     }
   }
 
+  /**
+   * Render the current snapshot into the model-facing reality context envelope.
+   * @param ctx - Cordis context supplying current observations.
+   * @param assembly - active request context for scoped facts.
+   * @returns serialized model-facing Reality Context block.
+   */
   render(ctx: Context, assembly?: RealityAssemblyContext): string {
     return [
       '<phoenix_reality_context>',
@@ -1503,6 +1532,7 @@ export class RealityContextEngine {
   }
 }
 
+/** Minimal SystemPrompt registration surface required by the Reality projection. */
 export interface RealityPromptRegistrar {
   context: (context: {
     readonly name: string
@@ -1512,6 +1542,13 @@ export interface RealityPromptRegistrar {
   }) => () => void
 }
 
+/**
+ * Register Reality Context as a non-interpolated dynamic prompt contribution.
+ * @param systemPrompt - prompt registry receiving the context provider.
+ * @param engine - Reality Context engine that renders each request snapshot.
+ * @param ctx - Cordis context used when rendering runtime facts.
+ * @returns disposer for the registered prompt context.
+ */
 export function installRealityContextProjection(
   systemPrompt: RealityPromptRegistrar,
   engine: RealityContextEngine,
