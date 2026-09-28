@@ -81,8 +81,7 @@ function httpStatus(error: unknown): number | undefined {
 }
 
 function failureStatus(config: Config, error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {
-  if (error instanceof UnauthorizedError
-    || (config.transport === 'streamable-http' && (httpStatus(error) === 401 || httpStatus(error) === 403))) {
+  if (error instanceof UnauthorizedError || httpStatus(error) === 401 || httpStatus(error) === 403) {
     return { status: 'auth-required', reasonCode: 'authorization-required' }
   }
   return { status: 'failed', reasonCode: 'connection-failed' }
@@ -334,6 +333,21 @@ export function startConnection(
     )
     try {
       let generationTransportOptions = transportOptions
+      if (config.transport === 'stdio' && config.envCredentialRefs !== undefined
+        && Object.keys(config.envCredentialRefs).length > 0) {
+        const stdioCredentialEnv: Record<string, string> = {}
+        for (const [envName, ref] of Object.entries(config.envCredentialRefs)) {
+          const value = await transportOptions?.resolveCredentialRef?.(ref)
+          if (value === undefined) {
+            throw Object.assign(
+              new Error(`${label}: credential reference "${ref}" is not configured`),
+              { status: 401 },
+            )
+          }
+          stdioCredentialEnv[envName] = value
+        }
+        generationTransportOptions = { ...transportOptions, stdioCredentialEnv }
+      }
       if (config.transport === 'streamable-http' && config.bearerTokenRef !== undefined) {
         const token = await transportOptions?.resolveBearerToken?.(config.bearerTokenRef)
         generationTransportOptions = {
