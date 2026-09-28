@@ -1,0 +1,45 @@
+name: Phoenix lint autofix
+
+on:
+  push:
+    branches: [repair-lint-autofix-20260928]
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-lint-autofix-20260928
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Apply safe Oxlint fixes
+        shell: bash
+        run: |
+          set +e
+          pnpm run lint:fix:contracts-ready
+          lint_status=$?
+          set -e
+          echo "lint fix exit code: $lint_status"
+          git diff --stat
+      - name: Commit autofixes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No autofix changes."
+            exit 0
+          fi
+          git config user.name "Phoenix Repair Bot"
+          git config user.email "phoenix-repair-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "style: apply final contracts-ready lint autofixes"
+          git push origin HEAD:repair-lint-autofix-20260928
