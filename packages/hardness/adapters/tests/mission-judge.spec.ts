@@ -138,6 +138,10 @@ describe('HARDNESS mission judges', () => {
     expect(prompt).toMatch(/sound\/music\/ambience/i)
     expect(prompt).toMatch(/gameplay feel/i)
     expect(prompt).toMatch(/executed build or emulator/i)
+    expect(prompt).toMatch(/asset-first scouting/i)
+    expect(prompt).toMatch(/candidate packs/i)
+    expect(prompt).toMatch(/source\/license/i)
+    expect(prompt).toMatch(/asset-manifest\.json|asset-sourcing\.json/i)
     expect(prompt).toMatch(/meet or exceed strong current category references/i)
   })
 
