@@ -24,7 +24,7 @@
     },
     "./ledger": {
       "types": "./lib/types/ledger.d.ts",
-      "default": "./lib/index.js"
+      "default": "./lib/ledger.js"
     },
     "./src/*": "./src/*",
     "./package.json": "./package.json"
@@ -32,6 +32,7 @@
   "files": [
     "lib/index.js",
     "lib/invariant.js",
+    "lib/ledger.js",
     "lib/types/**/*.d.ts"
   ],
   "license": "MIT",
