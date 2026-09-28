@@ -72,6 +72,11 @@ function wakePrompt(input: WakeExecution): string {
   return lines.join('\n')
 }
 
+/**
+ * Create the wake executor that hands matched events to a live Phoenix agent.
+ * @param agents - Registry view used to resolve the requested or fallback agent.
+ * @returns Executor that converts durable wake executions into agent follow-ups.
+ */
 export function createWakeExecutor(
   agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'>,
 ): WakeExecutor {
@@ -178,8 +183,8 @@ function installWakeWebhook(ctx: Context, engine: WakeEngine): () => void {
       }
       try {
         const event = externalWakeEvent(await readJsonBody(req))
-        const result = await engine.emit(event)
-        respondJson(res, 202, { ok: true, ...result })
+        ctx.emit('phoenix/wake-event', event)
+        respondJson(res, 202, { ok: true, eventId: event.id, accepted: true })
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error)
         ctx.logger.warn(`wake webhook rejected event: ${message}`)
@@ -195,6 +200,9 @@ function installWakeWebhook(ctx: Context, engine: WakeEngine): () => void {
  * Internal adapters should emit `phoenix/wake-event` after authenticating and
  * normalizing provider events. The webhook is disabled unless a sufficiently
  * long PHOENIX_WAKE_TOKEN is configured.
+ * @param ctx - Cordis context hosting the process-local Wake Bus.
+ * @param engine - Durable wake engine that evaluates normalized events.
+ * @returns Disposer that unmounts the bus listener and webhook ingress.
  */
 export function installWakeRuntime(ctx: Context, engine: WakeEngine): () => void {
   let disposed = false
