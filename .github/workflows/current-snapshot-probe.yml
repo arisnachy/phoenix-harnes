@@ -1,0 +1,42 @@
+name: Current snapshot failure probe
+
+on:
+  push:
+    branches:
+      - verify/current-snapshots-20260928
+
+permissions:
+  contents: read
+
+jobs:
+  targeted:
+    runs-on: ubuntu-24.04
+    env:
+      DSH_SNAPSHOT_MAX_CONCURRENCY: '1'
+      DSH_EXAMPLE_MODE: lib
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm run build
+      - name: Previously failing snapshot files
+        run: >-
+          pnpm exec tsx scripts/run-snapshot-tests.ts replay
+          apps/cli/tests/dsh-badge.snapshot.ts
+          apps/cli/tests/web-browser-open.snapshot.ts
+          apps/web/tests/built-boot.snapshot.ts
+          apps/web/tests/command-image-envelope.snapshot.ts
+          apps/web/tests/image-display.snapshot.ts
+          apps/web/tests/search-card.snapshot.ts
+          apps/web/tests/todo-row.snapshot.ts
+          examples/headless-agent/tests/headless.snapshot.ts
+      - name: Built-bin e2e
+        run: pnpm exec vitest run --config vitest.e2e.config.ts apps/cli/tests/built-bin.e2e.ts
+      - name: HMR live e2e
+        run: pnpm exec vitest run --config vitest.web.config.ts apps/web/tests/hmr-live.e2e.ts
