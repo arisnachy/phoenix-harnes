@@ -89,6 +89,11 @@ it('accepts pasted images into the composer rail in order and removes them', asy
   // Image-only send arming is pinned at package level (input-bar.spec.tsx);
   // this assembled lane pins the intake chain over the built graph.
   const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  await waitFor(() => {
+    expect((textarea as HTMLTextAreaElement).disabled).toBe(false)
+    expect((textarea as HTMLTextAreaElement).readOnly).toBe(false)
+    expect(textarea.getAttribute('data-phase')).toBe('plain')
+  }, { timeout: 10_000 })
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'pasted.png', { type: 'image/png' })
   fireEvent.paste(textarea, {
     clipboardData: {
@@ -158,6 +163,11 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
   if (start === null) throw new Error('fixture Workspace new-session action missing')
   fireEvent.click(start)
   const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  await waitFor(() => {
+    expect((textarea as HTMLTextAreaElement).disabled).toBe(false)
+    expect((textarea as HTMLTextAreaElement).readOnly).toBe(false)
+    expect(textarea.getAttribute('data-phase')).toBe('plain')
+  }, { timeout: 10_000 })
 
   // A file drag anywhere over the page raises the full-viewport overlay whose
   // desc line carries the projected limits — copy that can only render after
@@ -209,6 +219,11 @@ it('renders a host dimension rejection with the projected 2000px limit', async (
   fireEvent.click(start)
 
   const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  await waitFor(() => {
+    expect((textarea as HTMLTextAreaElement).disabled).toBe(false)
+    expect((textarea as HTMLTextAreaElement).readOnly).toBe(false)
+    expect(textarea.getAttribute('data-phase')).toBe('plain')
+  }, { timeout: 10_000 })
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'too-wide.png', { type: 'image/png' })
   fireEvent.paste(textarea, {
     clipboardData: {
