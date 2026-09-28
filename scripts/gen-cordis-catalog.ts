@@ -64,6 +64,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   shell: 'shell.md',
   shellEnv: 'shell.md',
   clientModules: 'client-modules.md',
+  clientReality: 'typert.md',
   codeRuntime: 'code-runtime.md',
   pythonCodeRuntime: 'code-runtime.md',
   commands: 'commands.md',
