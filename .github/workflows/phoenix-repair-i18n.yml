@@ -23,7 +23,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Re-record current complete pairs
-        run: pnpm run verify-translation-pairing -- --write --all
+        run: pnpm run verify-translation-pairing --write --all
       - name: Validate pair structure
         run: pnpm run verify-translation-pairing
       - name: Commit pairing records
