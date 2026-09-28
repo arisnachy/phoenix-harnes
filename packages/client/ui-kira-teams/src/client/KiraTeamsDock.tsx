@@ -192,10 +192,6 @@ export function statusKeyOf(summary: SessionSummary): KiraTeamsKey {
   }
 }
 
-function normalizedAgentLabel(summary: SessionSummary): string {
-  return summary.projectionValues?.subagent?.label?.trim().toLocaleLowerCase() ?? ''
-}
-
 export function agentRoleKeyOf(summary: SessionSummary): KiraTeamsKey {
   switch (skillOf(summary)) {
     case 'quality': return 'role.judge'
