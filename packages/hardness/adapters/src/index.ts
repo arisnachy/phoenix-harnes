@@ -224,6 +224,30 @@ async function connectedGoogleEmail(authorization: AuthorizationService | undefi
   }
 }
 
+interface AgentPresetComposer {
+  mount(agentCtx: Context, id?: string): Promise<unknown>
+}
+
+function persistedAgentPreset(agentCtx: Context): string | undefined {
+  const session = agentCtx.agent?.session
+  if (session === undefined) return undefined
+  for (let index = session.events.length - 1; index >= 0; index -= 1) {
+    const event = session.events[index]
+    if (event?.type !== 'agent-preset/selected') continue
+    const data = event.data as { agentPreset?: unknown }
+    if (typeof data.agentPreset === 'string' && data.agentPreset.length > 0) return data.agentPreset
+  }
+  return session.header.agentPreset
+}
+
+async function composeResumedScheduledAgent(ctx: Context, agentCtx: Context): Promise<void> {
+  const value = (ctx.get as unknown as (name: string) => unknown)('agentPresets')
+  if (value === null || typeof value !== 'object') return
+  const composer = value as Partial<AgentPresetComposer>
+  if (typeof composer.mount !== 'function') return
+  await composer.mount(agentCtx, persistedAgentPreset(agentCtx))
+}
+
 function taskLedgerPath(config: Config): string {
   const configured = config.taskLedgerPath?.trim()
   return configured !== undefined && configured.length > 0
@@ -335,6 +359,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         ...(configuredIdentity(config.userMailIdentity) === undefined ? {} : { userMailIdentity: configuredIdentity(config.userMailIdentity)! }),
         ...(configuredIdentity(config.harnessMailIdentity) === undefined ? {} : { harnessMailIdentity: configuredIdentity(config.harnessMailIdentity)! }),
         resolveDefaultMailRecipient: () => connectedGoogleEmail(authorization),
+        composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
       disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs))
