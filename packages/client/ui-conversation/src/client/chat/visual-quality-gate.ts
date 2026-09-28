@@ -171,11 +171,16 @@ function withChartType(spec: JsonRecord, value: string): JsonRecord {
 }
 
 function labelsValuesRepair(spec: JsonRecord): JsonRecord | undefined {
-  if (!Array.isArray(spec.labels) || !Array.isArray(spec.values)) return undefined
-  const rows = spec.labels.map((label, index) => ({
-    label: typeof label === 'string' || typeof label === 'number' ? String(label) : String(index + 1),
-    value: finite(spec.values[index]) ? spec.values[index] : 0,
-  }))
+  const labels = spec.labels
+  const values = spec.values
+  if (!Array.isArray(labels) || !Array.isArray(values)) return undefined
+  const rows = labels.map((label, index) => {
+    const value = values[index]
+    return {
+      label: typeof label === 'string' || typeof label === 'number' ? String(label) : String(index + 1),
+      value: finite(value) ? value : 0,
+    }
+  })
   return {
     ...spec,
     visualType: 'chart',
