@@ -1,0 +1,44 @@
+name: Phoenix built lint safe autofix
+
+on:
+  push:
+    branches:
+      - repair/lint-safe-autofix-20260928b
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    if: ${{ !contains(github.event.head_commit.message, '[safe-lint-fix]') }}
+    runs-on: ubuntu-24.04
+    env:
+      DSH_OXLINT_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair/lint-safe-autofix-20260928b
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Build contracts and artifacts
+        run: pnpm run build
+      - name: Apply safe lint fixes
+        run: pnpm run lint:fix:contracts-ready || true
+      - name: Commit safe fixes
+        shell: bash
+        run: |
+          git status --short
+          if [[ -n "$(git status --porcelain)" ]]; then
+            git config user.name "Phoenix CI Repair"
+            git config user.email "actions@users.noreply.github.com"
+            git add -A
+            git commit -m "fix(lint): apply safe Oxlint fixes [safe-lint-fix]"
+            git push origin HEAD:repair/lint-safe-autofix-20260928b
+          fi
+      - name: Report remaining lint
+        run: pnpm run lint:contracts-ready
