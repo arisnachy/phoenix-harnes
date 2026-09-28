@@ -534,6 +534,22 @@ export class ProactivityEngine {
     })
   }
 
+  /**
+   * Read the already-loaded task snapshot without filesystem I/O or queueing.
+   * This is intentionally best-effort: before the host runtime has loaded the
+   * ledger it returns an empty list rather than delaying a model request.
+   * @param options - Visibility/time projection rules, identical to {@link list}.
+   * @returns Detached visible tasks from the in-memory snapshot.
+   */
+  peek(options: ProactivityListOptions = {}): ProactivityTask[] {
+    const snapshot = this.state
+    if (snapshot === undefined) return []
+    const now = (options.now ?? new Date()).getTime()
+    return snapshot.tasks
+      .filter(task => options.includeHidden === true || task.visibility !== 'surprise' || now >= Date.parse(task.revealAt ?? task.nextRunAt))
+      .map(cloneTask)
+  }
+
   private async setStatus(id: string, status: 'paused' | 'cancelled' | 'scheduled'): Promise<ProactivityTask> {
     return this.exclusive(async () => {
       const snapshot = await this.snapshot()
