@@ -7,6 +7,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import { sessionResolveOptions } from './session-cwd.ts'
 
+/** Maximum exact paths accepted by one filesystem status request. */
 export const FS_STATUS_MAX_PATHS = 64
 
 function parseStatusArgs(args: { paths: string[] }): string[] {
