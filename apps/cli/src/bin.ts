@@ -36,9 +36,17 @@ const rawArgs = process.argv.slice(2)
 // activated and relaunched. Route every direct Windows Web launch through the
 // supervisor. The Host process started by that supervisor carries the guard
 // below, preventing recursion while keeping the normal CLI invocation intact.
+const directWebArgs = rawArgs[0] === 'web' ? rawArgs.slice(1) : []
+const directWebIsHelp = directWebArgs.some(argument => argument === '-h' || argument === '--help')
+const directWebHasUnsafeWildcardHost = directWebArgs.some((argument, index) =>
+  argument === '--host' && directWebArgs[index + 1] === '0.0.0.0',
+)
+
 if (
   process.platform === 'win32'
   && rawArgs[0] === 'web'
+  && !directWebIsHelp
+  && !directWebHasUnsafeWildcardHost
   && process.env.PHOENIX_UPDATE_SUPERVISED !== '1'
 ) {
   const supervisor = resolve(

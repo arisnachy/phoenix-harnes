@@ -376,6 +376,12 @@ describe.skipIf(!existsSync(dshBin))('dsh BUILT bin (node lib/bin.js, no tsx)', 
     })
     const home = mkdtempSync(join(tmpdir(), 'dsh-built-headless-'))
     try {
+      writeFileSync(join(home, 'settings.yaml'), [
+        'agent-default-model:',
+        '  provider: deepseek-official',
+        '  model: deepseek-v4-flash',
+        '',
+      ].join('\n'))
       const result = await runBuiltBin(['--profile', 'headless', 'answer', 'from', 'the', 'published', 'entry'], {
         DSH_HOME: home,
         DSH_TELEMETRY_DISABLED: '1',
