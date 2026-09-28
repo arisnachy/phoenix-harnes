@@ -17,6 +17,7 @@ import {
 import { installHardnessProtocol, type HardnessPromptRegistrar } from './protocol.ts'
 import { installProactivityProtocol } from './proactivity-protocol.ts'
 import { installHumanPresenceProtocol } from './presence-protocol.ts'
+import { installInitiativeContextProjection } from './initiative-context.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
 import { installCapabilityOperatingProtocol } from './capability-protocol.ts'
 import { acquireProactivityEngine } from './proactivity-registry.ts'
@@ -116,6 +117,7 @@ export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
 export { CONNECTOR_OPERATING_PROTOCOL, installConnectorProtocol } from './connector-protocol.ts'
 export { HUMAN_PRESENCE_PROTOCOL, installHumanPresenceProtocol } from './presence-protocol.ts'
+export { renderInitiativeContext, installInitiativeContextProjection } from './initiative-context.ts'
 export { CAPABILITY_OPERATING_PROTOCOL, installCapabilityOperatingProtocol } from './capability-protocol.ts'
 export { REALITY_OPERATING_PROTOCOL, installRealityProtocol } from './reality-protocol.ts'
 export { RealityContextEngine, installRealityContextProjection, realityConfigFromEnvironment } from './reality-context.ts'
@@ -228,6 +230,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(installRealityProtocol(systemPrompt))
       disposers.push(installProactivityProtocol(systemPrompt))
       disposers.push(installHumanPresenceProtocol(systemPrompt))
+      disposers.push(installInitiativeContextProjection(systemPrompt, proactivity.engine, ctx))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
     }
     if (modelTools && (authorization !== undefined || mcpConnectors !== undefined)) {
