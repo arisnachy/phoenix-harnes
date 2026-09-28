@@ -30,6 +30,9 @@ interface PackageTarget {
 interface PackageManifest {
   name?: string
   files?: unknown
+  bin?: string | Record<string, string>
+  dsh?: { client?: unknown }
+  exports?: Record<string, unknown>
 }
 
 type PublintResult =
@@ -80,8 +83,14 @@ function publicationFiles(target: PackageTarget): PackFile[] {
   const declared = Array.isArray(target.manifest.files)
     ? target.manifest.files.filter((value): value is string => typeof value === 'string')
     : []
+  const declaredBins = typeof target.manifest.bin === 'string'
+    ? [target.manifest.bin]
+    : target.manifest.bin !== undefined
+      ? Object.values(target.manifest.bin)
+      : []
   for (const pattern of [
     ...declared,
+    ...declaredBins,
     'README*',
     'LICENSE*',
     'LICENCE*',
@@ -189,12 +198,8 @@ function isIntentionalClientClosureDiagnostic(
   message: Message,
   manifest: Record<string, unknown>,
 ): boolean {
-  const dsh = target.manifest as PackageManifest & {
-    dsh?: { client?: unknown }
-    exports?: Record<string, unknown>
-  }
-  if (dsh.dsh?.client === undefined) return false
-  const clientExport = dsh.exports?.['./client']
+  if (target.manifest.dsh?.client === undefined) return false
+  const clientExport = target.manifest.exports?.['./client']
   if (typeof clientExport !== 'object' || clientExport === null) return false
   const defaultPath = (clientExport as { default?: unknown }).default
   if (defaultPath !== './lib/client.js') return false
