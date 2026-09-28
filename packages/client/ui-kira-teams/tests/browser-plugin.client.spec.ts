@@ -1,4 +1,4 @@
-/** ui-kira-teams browser half: workspace registration, injected actions, lineage read model. */
+/** ui-kira-teams browser half: overlay registration, injected actions, lineage read model. */
 import { Context } from '@phoenix-ai/cordis'
 import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
 import { describe, expect, it } from 'vitest'
@@ -56,6 +56,7 @@ async function provideSlotFaces(ctx: Context): Promise<void> {
     name: 'root',
     children: {
       'shell.workspace': { kind: 'list', scope: 'root' },
+      'shell.overlay': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
 }
@@ -225,12 +226,12 @@ describe('apply', () => {
     expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout'])
   })
 
-  it('registers one shell.workspace entry whose inject exposes the sessions face and actions', async () => {
+  it('registers one shell.overlay entry whose inject exposes the sessions face and actions', async () => {
     const { ctx, face, layout } = await fullBench(FAMILY, sid('root'))
-    const entry = ctx.slots.entries('shell.workspace')
+    const entry = ctx.slots.entries('shell.overlay')
       .find(slotEntry => slotEntry.component === KiraTeamsDock)!
     expect(entry).toBeDefined()
-    expect(ctx.slots.entries('shell.overlay')).toHaveLength(0)
+    expect(ctx.slots.entries('shell.workspace').some(slotEntry => slotEntry.component === KiraTeamsDock)).toBe(false)
     const injected = (entry.inject as unknown as () => {
       list: { getSnapshot(): SessionListState }
       layout: unknown
