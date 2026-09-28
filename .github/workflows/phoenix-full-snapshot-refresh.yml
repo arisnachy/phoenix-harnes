@@ -1,0 +1,46 @@
+name: Phoenix full snapshot refresh
+
+on:
+  push:
+    branches: [repair-full-snapshots-20260928]
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: repair-full-snapshots-20260928
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Refresh complete snapshot corpus
+        shell: bash
+        run: |
+          set +e
+          pnpm run test:snapshot:refresh
+          echo "refresh_exit=$?" >> "$GITHUB_ENV"
+          exit 0
+      - name: Commit refreshed snapshots
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No snapshot changes."
+          else
+            git config user.name "Phoenix Repair Bot"
+            git config user.email "phoenix-repair-bot@users.noreply.github.com"
+            git add -A
+            git commit -m "test: refresh final snapshot corpus"
+            git push origin HEAD:repair-full-snapshots-20260928
+          fi
+      - name: Verify refreshed snapshot corpus
+        run: pnpm run test:snapshot
