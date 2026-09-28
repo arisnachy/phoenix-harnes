@@ -308,7 +308,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * @returns Installation receipt for the pinned Jev connector.
    */
   @Remote('configureJevMcp')
-  async configureJevMcp(_request: JevMcpConfigureRequest): Promise<McpRegistryInstallReceipt> {
+  configureJevMcp(_request: JevMcpConfigureRequest): McpRegistryInstallReceipt {
     throw new Error('Jev integration is retired because new Jev accounts are unavailable; PHOENIX uses native routing instead')
   }
 

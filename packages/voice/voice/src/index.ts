@@ -284,7 +284,7 @@ export class VoiceRuntime extends TypertRemoteService {
    * @returns Current conversational voice availability and selected provider.
    */
   @Remote('conversationStatus')
-  async conversationStatus(): Promise<VoiceConversationStatus> {
+  conversationStatus(): VoiceConversationStatus {
     const provider = this.selectTtsProvider()
     return {
       enabled: this.config.enabled,
@@ -357,7 +357,7 @@ export class VoiceRuntime extends TypertRemoteService {
    * @returns Number of in-flight segment controllers aborted for the response.
    */
   @Remote('conversationCancel')
-  async conversationCancel(request: VoiceConversationCancelRequest): Promise<VoiceConversationCancelReceipt> {
+  conversationCancel(request: VoiceConversationCancelRequest): VoiceConversationCancelReceipt {
     const key = request.key.trim()
     const channel = this.conversationSpeech.get(key)
     if (channel === undefined) return { cancelled: 0 }

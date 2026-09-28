@@ -41,7 +41,7 @@ import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
 import {
-  configureVoiceAssistantRemote, refreshVoiceAssistantRemote, type VoiceAssistantRemote,
+  configureVoiceAssistantRemote, refreshVoiceAssistantRemote,
 } from './voice.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {

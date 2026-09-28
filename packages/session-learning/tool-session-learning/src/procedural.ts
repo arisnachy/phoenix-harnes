@@ -530,7 +530,7 @@ export function installProceduralLearning(
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
-    const eventType = String(event.type)
+    const eventType = event.type
     const data = event.data as unknown
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
     const occurredAt = typeof event.time === 'number' ? event.time : Date.now()

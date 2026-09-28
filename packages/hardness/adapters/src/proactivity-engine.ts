@@ -370,10 +370,10 @@ function parseSnapshot(value: unknown): ProactivitySnapshot {
 /** In-memory store used by deterministic tests and ephemeral compositions. */
 export class MemoryProactivityStore implements ProactivityStore {
   private snapshot: ProactivitySnapshot = EMPTY_SNAPSHOT
-  async load(): Promise<ProactivitySnapshot> {
+  load(): ProactivitySnapshot {
     return { version: 1, tasks: this.snapshot.tasks.map(cloneTask) }
   }
-  async save(snapshot: ProactivitySnapshot): Promise<void> {
+  save(snapshot: ProactivitySnapshot): void {
     this.snapshot = { version: 1, tasks: snapshot.tasks.map(cloneTask) }
   }
 }
@@ -673,7 +673,7 @@ export class ProactivityEngine {
         ...(preparationResult === undefined ? {} : { preparationResult }),
       })
       const finishedAt = new Date().toISOString()
-      return this.exclusive(async () => {
+      return await this.exclusive(async () => {
         const state = await this.snapshot()
         const current = state.tasks.find(task => task.id === taskId)
         if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)

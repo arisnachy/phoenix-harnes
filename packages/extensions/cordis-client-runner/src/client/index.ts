@@ -12,8 +12,7 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import type {
-  ApprovalRequestId, CordisDynamicPluginId, DynamicCordisInvokeResult, JsonValue,
-  DynamicCordisInventoryRow,
+  ApprovalRequestId, CordisDynamicPluginId, DynamicCordisInvokeResult, DynamicCordisInventoryRow,
 } from '@phoenix-ai/dsh-api-remotes/client'
 import type { ClientModuleSystem } from '@phoenix-ai/dsh-client-modules/client'
 import type { SlotRegistry } from '@phoenix-ai/dsh-client-runtime/client'

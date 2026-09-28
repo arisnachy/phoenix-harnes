@@ -1304,7 +1304,7 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 60_000,
       failOnStartupError: false,
     }
-    const transport = await createTransport(config)
+    const transport =  createTransport(config)
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
@@ -1319,7 +1319,7 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 60_000,
       failOnStartupError: false,
     }
-    const transport = await createTransport(config)
+    const transport =  createTransport(config)
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
@@ -1334,7 +1334,7 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 60_000,
       failOnStartupError: false,
     }
-    const transport = await createTransport(config)
+    const transport =  createTransport(config)
     expect(transport).toBeDefined()
     expect(transport).toHaveProperty('start')
     expect(transport).toHaveProperty('close')
@@ -1366,7 +1366,7 @@ describe('createTransport', () => {
       codeVerifier: () => 'verifier',
     } satisfies OAuthClientProvider
 
-    const transport = await createTransport(config, { authProvider: provider })
+    const transport =  createTransport(config, { authProvider: provider })
 
     expect(transport).toHaveProperty('_authProvider', provider)
   })
@@ -1407,7 +1407,7 @@ describe('createTransport', () => {
       }
       // StdioClientTransport keeps its env private; the observable contract is
       // that createTransport(config) returns a transport without throwing.
-      const transport = await createTransport(config)
+      const transport =  createTransport(config)
       expect(transport).toBeDefined()
     } finally {
       delete process.env.SAFE_VAR
@@ -1431,7 +1431,7 @@ describe('createTransport', () => {
       toolCallTimeoutMs: 60_000,
       failOnStartupError: false,
     }
-    const transport = await createTransport(config)
+    const transport =  createTransport(config)
     expect(transport).toBeDefined()
   })
 

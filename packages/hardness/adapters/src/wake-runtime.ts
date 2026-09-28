@@ -81,7 +81,7 @@ export function createWakeExecutor(
   agents: Pick<AgentRegistry, 'get' | 'roots' | 'list'>,
 ): WakeExecutor {
   return {
-    async execute(input) {
+    execute(input) {
       const parent = chooseAgent(agents, input.trigger.targetAgentId)
       parent.followup(createUserMessage({
         content: [{ type: 'text', text: wakePrompt(input) }],

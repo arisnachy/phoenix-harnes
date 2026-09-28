@@ -466,7 +466,7 @@ async function windowsCimJson(script: string): Promise<Record<string, unknown>[]
     windowsHide: true,
     maxBuffer: 512 * 1024,
   })
-  const text = String(stdout).trim()
+  const text = stdout.trim()
   if (text === '' || text === 'null') return []
   const parsed: unknown = JSON.parse(text)
   const rows = Array.isArray(parsed) ? parsed : [parsed]
@@ -580,7 +580,7 @@ public static class PhoenixLastInput {
       windowsHide: true,
       maxBuffer: 64 * 1024,
     })
-    const record = asRecord(JSON.parse(String(stdout).trim()))
+    const record = asRecord(JSON.parse(stdout.trim()))
     const idleSeconds = numericValue(record?.idleSeconds)
     if (idleSeconds === null || idleSeconds < 0) {
       return { value: null, source: 'windows-user32:GetLastInputInfo-invalid', confidence: 0 }
@@ -661,13 +661,13 @@ async function probeInternet(): Promise<{ value: InternetProbePayload; source: s
   }
 }
 
-function method<T>(
+function method(
   value: unknown,
   name: string,
-): T | undefined {
+): unknown | undefined {
   const record = asRecord(value)
   const candidate = record?.[name]
-  return typeof candidate === 'function' ? candidate.bind(value) as T : undefined
+  return typeof candidate === 'function' ? candidate.bind(value) as unknown : undefined
 }
 
 interface EffectiveLocation {
@@ -1046,7 +1046,7 @@ async function probeClockSync(): Promise<{ value: boolean | null; source: string
         timeout: 2_000,
         windowsHide: true,
       })
-      const text = String(stdout)
+      const text = stdout
       if (/free-running system clock/iu.test(text)) return { value: false, source: 'w32tm', confidence: 0.95 }
       if (/source\s*:/iu.test(text)) return { value: true, source: 'w32tm', confidence: 0.9 }
       return { value: null, source: 'w32tm-unrecognized', confidence: 0 }
@@ -1055,7 +1055,7 @@ async function probeClockSync(): Promise<{ value: boolean | null; source: string
       const { stdout } = await execFileAsync('timedatectl', ['show', '-p', 'NTPSynchronized', '--value'], {
         timeout: 2_000,
       })
-      const text = String(stdout).trim().toLowerCase()
+      const text = stdout.trim().toLowerCase()
       if (text === 'yes') return { value: true, source: 'timedatectl', confidence: 0.98 }
       if (text === 'no') return { value: false, source: 'timedatectl', confidence: 0.98 }
     }

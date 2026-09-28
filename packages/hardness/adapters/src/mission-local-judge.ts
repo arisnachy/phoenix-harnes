@@ -52,5 +52,5 @@ function deterministicDecision(input: HardnessMissionJudgeInput): MissionJudgeDe
  * @returns judge that passes only complete artifacts with tested criterion evidence.
  */
 export function createDeterministicMissionJudge(): HardnessMissionJudge {
-  return async input => deterministicDecision(input)
+  return input => deterministicDecision(input)
 }

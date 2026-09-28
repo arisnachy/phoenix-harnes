@@ -220,7 +220,7 @@ export class LivingHttpBridge {
         resolve(`http://${host}:${address.port}/v1/living`)
       })
     })
-    void this.readyPromise.catch((error) =>{  this.warn(`living control bridge unavailable: ${messageOf(error)}`) })
+    void this.readyPromise.catch((error: unknown) =>{  this.warn(`living control bridge unavailable: ${messageOf(error)}`) })
 
     this.sweep = setInterval(() =>{  this.disconnectStale() }, Math.min(DEFAULT_SWEEP_MS, this.heartbeatTimeoutMs))
     this.sweep.unref?.()
@@ -314,7 +314,7 @@ export class LivingHttpBridge {
           this.manifest(req, res, body)
           return
         case '/v1/living/connect':
-          await this.connect(req, res, body)
+           this.connect(req, res, body)
           return
         case '/v1/living/state':
           this.state(req, res, body)
@@ -381,7 +381,7 @@ export class LivingHttpBridge {
     return connection
   }
 
-  private async connect(req: IncomingMessage, res: ServerResponse, body: Record<string, unknown>): Promise<void> {
+  private connect(req: IncomingMessage, res: ServerResponse, body: Record<string, unknown>): void {
     const { id, manifest, token, endpoint } = this.authorized(req, body)
     const capabilities = parseCapabilities(body.capabilities)
     assertCapabilities(manifest, capabilities)

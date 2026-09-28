@@ -62,7 +62,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
-    const eventType = String(event.type)
+    const eventType = event.type
     const data = event.data as unknown
     const occurredAt = typeof event.time === 'number' ? event.time : Date.now()
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0

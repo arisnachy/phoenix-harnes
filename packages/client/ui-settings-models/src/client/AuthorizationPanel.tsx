@@ -617,7 +617,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     setChatGptWebFailure(undefined)
     void readConnectorRemoteWithRetry(() => chatGptWeb.state(), () => stale).then(
       (snapshot) => { if (!stale) setChatGptWebState(snapshot) },
-      (error) => {
+      (error: unknown) => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) {
           setChatGptWebFailure(String(error))
         }
@@ -646,7 +646,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     let stale = false
     void readConnectorRemoteWithRetry(() => mcpRegistry.state(), () => stale).then(
       (snapshot) => { if (!stale) setMcpHub(snapshot) },
-      (error) => {
+      (error: unknown) => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) {
           setCatalogFailure(String(error))
         }
@@ -661,7 +661,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
     let stale = false
     void readConnectorRemoteWithRetry(() => readJevState(), () => stale).then(
       (snapshot) => { if (!stale) setJevState(snapshot) },
-      (error) => {
+      (error: unknown) => {
         if (!stale && !isTransientConnectorRemoteFailure(error)) setJevFailure(String(error))
       },
     )

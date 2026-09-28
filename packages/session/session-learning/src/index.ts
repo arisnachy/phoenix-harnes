@@ -81,7 +81,7 @@ export class LearningMemoryService extends Service {
   }
 
   /** Load memory without holding Phoenix boot on large historical ledgers. */
-  protected async [Service.init](): Promise<void> {
+  protected ;[Service.init](): void {
     for (const session of this.ctx.sessions.list()) this.setCurrentSession(session)
 
     const loading = Promise.all([this.ledger.load(), this.cognitive.load()])
@@ -402,7 +402,7 @@ function cognitiveObservationFor(session: Session, event: SessionEvent): Cogniti
   const error = isErrorEvent(event, content)
   const success = isSuccessEvent(event)
   const prospective = /\b(?:goal|mission|pending|blocked|blocker|unfinished|follow[- ]?up|pendiente|misión|bloqueo)\b/iu.test(content)
-  const procedural = String(event.type) === 'goal/false-pass'
+  const procedural = event.type === 'goal/false-pass'
     || event.type.startsWith('tool/')
     || error
     || /\b(?:strategy|workflow|skill|estrategia|flujo|habilidad)\b/iu.test(content)

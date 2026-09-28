@@ -301,11 +301,11 @@ function parseSnapshot(value: unknown): WakeSnapshot {
 export class MemoryWakeStore implements WakeStore {
   private snapshot: WakeSnapshot = EMPTY_SNAPSHOT
 
-  async load(): Promise<WakeSnapshot> {
+  load(): WakeSnapshot {
     return { version: 1, triggers: this.snapshot.triggers.map(cloneTrigger) }
   }
 
-  async save(snapshot: WakeSnapshot): Promise<void> {
+  save(snapshot: WakeSnapshot): void {
     this.snapshot = { version: 1, triggers: snapshot.triggers.map(cloneTrigger) }
   }
 }

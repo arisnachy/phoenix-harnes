@@ -45,19 +45,19 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Rich visual ready: ${String(value.title)}`,
+        text: `Rich visual ready: ${value.title}`,
       }],
       presentationMeta: (args, value) => ({
         artifact: {
-          id: String(value.artifactId),
+          id: value.artifactId,
           mime: 'application/vnd.phoenix.visual+json',
-          title: String(value.title),
+          title: value.title,
           data: args.visual,
           executable: false,
         },
       }),
     },
-    async execute(args, exec) {
+    execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0) throw new Error('title must be a non-empty string')
       return {

@@ -138,7 +138,7 @@ describe('LocalModelRuntimeManager', () => {
 
     expect(server.stop).toHaveBeenCalledTimes(1)
     for (const [target] of vi.mocked(dependencies.remove).mock.calls) {
-      expect(String(target).startsWith('C:\\PhoenixData\\local-models')).toBe(true)
+      expect(target.startsWith('C:\\PhoenixData\\local-models')).toBe(true)
     }
     expect(manager.snapshot().phase).toBe('not-installed')
   })
