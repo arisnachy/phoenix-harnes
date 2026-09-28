@@ -92,6 +92,8 @@ export interface TransportOptions {
  * the Authorization header. This accepts the common copy/paste forms
  * "Bearer <token>" and one pair of wrapping quotes without ever logging the
  * resulting secret.
+  * @param value - value supplied to this public operation.
+  * @returns Result produced by this public operation.
  */
 export function normalizeBearerToken(value: string | undefined): string | undefined {
   if (value === undefined) return undefined
