@@ -7,6 +7,7 @@ import {
 } from '@phoenix-ai/dsh-tools'
 import type { ProactivityEngine, ProactivityRecurrence, ProactivityTask } from './proactivity-engine.ts'
 
+/** Optional integrations used by the model-facing proactivity tools. */
 export interface ProactivityToolOptions {
   readonly resolveDefaultEmailRecipient?: () => Promise<string | undefined>
 }
@@ -113,6 +114,7 @@ function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone
 /**
  * Create the model-facing tool that schedules durable proactive work.
  * @param engine - Host-owned proactivity engine that persists and executes scheduled tasks.
+ * @param options - Optional integrations used while resolving delivery defaults.
  * @returns Tool definition exposed to the model for durable task creation.
  */
 export function createProactivityCreateTool(
@@ -272,6 +274,7 @@ function managementTool(
 /**
  * Create all model-facing task tools backed by one host-owned engine.
  * @param engine - Host-owned proactivity engine shared by the returned task tools.
+ * @param options - Optional integrations shared by the returned task tools.
  * @returns Readonly collection of task-management tool definitions.
  */
 export function createProactivityTools(
