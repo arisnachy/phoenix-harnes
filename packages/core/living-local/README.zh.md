@@ -14,8 +14,12 @@
 
 ## Model Experience
 
-模型不直接调用本包。挂载 `@phoenix-ai/dsh-tool-living` 后，每个非静态创建物都会获得控制描述符和 connector kit。生成的运行时连接后，普通的 `living_read_state`、`living_act`、检查与验证都通过同一个 `ctx.living` seam 工作。
+模型通过 `@phoenix-ai/dsh-tool-living` 间接访问本包的持久创建物状态和认证控制桥，而不是直接调用后端。
+
+#### KV Cache effect
+
+本包不直接注册 prompt 或 schema，因此不会增加直接的重复模型上下文成本；缓存变化由面向模型的 `dsh-tool-living` consumer 负责。
 
 ## Known Limitations and Deferred Work
 
-内置 bridge 有意只绑定 loopback，适用于 owner-local 运行时或受信任的服务端 sidecar。纯公共浏览器 bundle 无法安全保存 bearer secret；这类部署需要服务端连接器或另一个 `LivingRegistry` 传输实现。
+- 内置 bridge 有意只绑定 loopback，适用于 owner-local 运行时或受信任的服务端 sidecar。纯公共浏览器 bundle 无法安全保存 bearer secret；这类部署需要服务端连接器或另一个 `LivingRegistry` 传输实现。
