@@ -307,6 +307,12 @@ export class LearningMemoryService extends Service {
 
   private observeEvent(session: Session, event: SessionEvent): Promise<void> {
     this.setCurrentSession(session)
+    // Runtime-context snapshots are derived projections of state Phoenix
+    // already owns (memory, reality, initiative, etc.). Re-indexing them as
+    // new autobiographical memories creates a feedback loop in which memory
+    // learns its own prompt projection. The canonical session log still keeps
+    // the snapshot for replay/diagnostics; the learning index ignores it.
+    if (isDerivedRuntimeContextEvent(event)) return Promise.resolve()
     const observation = observationFor(session, event)
     const cognitiveObservation = cognitiveObservationFor(session, event)
     return Promise.all([
@@ -368,6 +374,14 @@ export class LearningMemoryService extends Service {
     this.operationTail = next.then(() => undefined, () => undefined)
     return next
   }
+}
+
+const RUNTIME_CONTEXT_PLUGIN = '@phoenix-ai/dsh-system-prompt'
+
+function isDerivedRuntimeContextEvent(event: SessionEvent): boolean {
+  return event.type === 'user/message'
+    && event.data.source.kind === 'plugin'
+    && event.data.source.plugin === RUNTIME_CONTEXT_PLUGIN
 }
 
 interface Observation {
