@@ -1,9 +1,8 @@
 /** Verify that active PHOENIX-owned packages use the PHOENIX npm scope. */
 
-import { execFileSync } from 'node:child_process'
-import { existsSync, lstatSync, readFileSync, readlinkSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { trackedTextFiles } from './tracked-text-files.ts'
 
 const root = resolve(import.meta.dirname, '..')
 const legacyPackage = /@deepseek-ai\/dsh-[A-Za-z0-9][A-Za-z0-9._-]*/gu
@@ -29,13 +28,6 @@ export interface NamespaceViolation {
   readonly line: number
   /** Legacy or unclassified package reference. */
   readonly reference: string
-}
-
-/** Return tracked files while keeping the scan independent of generated output. */
-function trackedFiles(repoRoot: string): string[] {
-  return execFileSync('git', ['ls-files', '-z'], { cwd: repoRoot, encoding: 'utf8' })
-    .split('\0')
-    .filter(file => file !== '')
 }
 
 function excluded(file: string): boolean {
@@ -65,13 +57,8 @@ export function findNamespaceViolations(file: string, source: string): Namespace
 
 function scanRepository(repoRoot: string): NamespaceViolation[] {
   const violations: NamespaceViolation[] = []
-  for (const file of trackedFiles(repoRoot).filter(candidate => !excluded(candidate))) {
-    const path = resolve(repoRoot, file)
-    if (!existsSync(path)) continue
-    const stat = lstatSync(path)
-    if (!stat.isFile() && !stat.isSymbolicLink()) continue
-    const source = stat.isSymbolicLink() ? readlinkSync(path) : readFileSync(path, 'utf8')
-    if (source.includes('\0')) continue
+  for (const { file, source } of trackedTextFiles(repoRoot)) {
+    if (excluded(file)) continue
     violations.push(...findNamespaceViolations(file, source))
   }
   return violations
