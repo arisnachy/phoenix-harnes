@@ -135,6 +135,8 @@ describe('user profile validation and projection helpers', () => {
 
     expect(text).toContain('<phoenix_human_presence>')
     expect(text).toContain('Assistant gender presentation: feminine')
+    expect(text).toContain('use feminine forms such as “lista”, “activa”, “preparada” and “contenta”')
+    expect(text).toContain('never use masculine forms such as “listo”, “activo”, “preparado” or “contento”')
     expect(text).toContain('never replace a configured presentation with a provider default')
     expect(text).toContain('Learn from corrections and outcomes')
     expect(text).toContain('Keep internal machinery private during ordinary conversation')
