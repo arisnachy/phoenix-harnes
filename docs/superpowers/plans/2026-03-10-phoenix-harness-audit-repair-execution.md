@@ -1,5 +1,7 @@
 # PHOENIX Harness Audit and Repair Execution Plan
 
+English | [中文](2026-03-10-phoenix-harness-audit-repair-execution.zh.md)
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` for implementation tasks when delegation is used. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Test the local PHOENIX harness end to end, repair reproducible functional and visual defects, and verify equivalent harness behavior on local `stable` and `main` without discarding pre-existing changes.

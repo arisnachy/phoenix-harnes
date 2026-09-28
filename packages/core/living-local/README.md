@@ -14,8 +14,12 @@ For out-of-process creations, the built-in `phoenix-living-http-v1` bridge binds
 
 ## Model Experience
 
-Models do not call this package directly. With `@phoenix-ai/dsh-tool-living` mounted, every non-static registration receives a control descriptor and connector kit. Once the generated runtime connects, ordinary `living_read_state`, `living_act`, inspection, and verification operate through the same `ctx.living` seam as an in-process provider.
+Indirectly, through `@phoenix-ai/dsh-tool-living`, the model reaches this package's durable creation state and authenticated control bridge rather than calling the backend directly.
+
+#### KV Cache effect
+
+No prompt or schema is registered here, so this backend adds no direct repeated model-context cost; cache changes are owned by the model-facing `dsh-tool-living` consumer.
 
 ## Known Limitations and Deferred Work
 
-The built-in bridge intentionally binds only to loopback and is designed for owner-local runtimes or a trusted server-side sidecar. A public browser-only bundle cannot safely hold its bearer secret; such deployments need a server-side connector or another `LivingRegistry` transport implementation.
+- The built-in bridge intentionally binds only to loopback and is designed for owner-local runtimes or a trusted server-side sidecar. A public browser-only bundle cannot safely hold its bearer secret; such deployments need a server-side connector or another `LivingRegistry` transport implementation.

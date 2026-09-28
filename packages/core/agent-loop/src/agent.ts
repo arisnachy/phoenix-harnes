@@ -61,7 +61,6 @@ type Phase =
 
 type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }>
 
-const SILENT_TOOL_PROGRESS_REMINDER = 'Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning.'
 const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest tool result without waiting for a new user prompt. Keep working until the task is complete. Before more tool calls, give the user a brief progress update if you have not done so recently; do not reveal hidden chain-of-thought.'
 
 type PreparedStep =
@@ -553,16 +552,11 @@ export class ReactLoopAgent implements Agent {
       } finally {
         this.toolBoundaryActive = false
       }
-      // Some providers jump straight from hidden reasoning into tool calls.
-      // Nudge the next model step to narrate safe, user-visible progress instead
-      // of letting a long tool chain remain opaque. This is an internal prompt,
-      // never synthetic assistant text and never hidden chain-of-thought.
-      if (!concluded && !hasVisibleProgress) {
-        this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [createUserMessage({
-          content: [{ type: 'text', text: SILENT_TOOL_PROGRESS_REMINDER }],
-          source: { kind: 'plugin', plugin: 'agent-loop' },
-        })])
-      }
+      // User-visible progress is a prompt-level behavior contract. Do not
+      // synthesize a durable user/plugin message here: doing so changes request
+      // coordinates and retained history even when the model already has the
+      // same instruction in the system prompt and continuation boundary.
+      void hasVisibleProgress
       return concluded ? { kind: 'completed' } : null
     }
   }

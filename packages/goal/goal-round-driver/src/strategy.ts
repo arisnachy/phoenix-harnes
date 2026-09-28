@@ -27,6 +27,10 @@ export interface GoalVerificationProgress {
  * rounds are not a failure signal by themselves: only rounds that add no new
  * verified criterion, no new passed gate dimension, and resolve no finding
  * count as stagnant.
+ * @param events - durable session events containing completion-gate history.
+ * @param goalId - exact goal identity whose revision is being measured.
+ * @param revision - positive goal revision to include.
+ * @returns progress counters for verified criteria, passed checks, and stagnation.
  */
 export function measureGoalVerificationProgress(
   events: readonly SessionEvent[],
@@ -63,6 +67,9 @@ export function measureGoalVerificationProgress(
 /**
  * Keep the current strategy while independent evidence is still increasing.
  * Rotate only after a verifier round adds no new useful coverage.
+ * @param previous - strategy used by the preceding round, when one exists.
+ * @param stagnantRounds - consecutive rounds without useful verification growth.
+ * @returns the bounded strategy selected for the next round.
  */
 export function selectNextStrategy(previous: GoalStrategyId | undefined, stagnantRounds: number): GoalStrategyId {
   if (!Number.isSafeInteger(stagnantRounds) || stagnantRounds < 0) {
@@ -76,7 +83,12 @@ export function selectNextStrategy(previous: GoalStrategyId | undefined, stagnan
   return GOAL_STRATEGIES[(index + offset) % GOAL_STRATEGIES.length] ?? 'baseline'
 }
 
-/** Rebuild the latest selected strategy for one exact goal and round history. */
+/**
+ * Rebuild the latest selected strategy for one exact goal and round history.
+ * @param events - durable session events to replay.
+ * @param goalId - exact goal whose latest strategy is requested.
+ * @returns the latest recorded selection, or undefined when none exists.
+ */
 export function replayGoalStrategy(
   events: readonly SessionEvent[],
   goalId: GoalId | string,
@@ -86,7 +98,11 @@ export function replayGoalStrategy(
     ?.data
 }
 
-/** Append the selected strategy before its model-visible prompt. */
+/**
+ * Append the selected strategy before its model-visible prompt.
+ * @param session - durable session receiving the strategy event.
+ * @param selection - validated strategy decision to persist.
+ */
 export function recordGoalStrategy(session: Session, selection: GoalStrategySelection): void {
   if (selection.goalId.trim().length === 0 || !Number.isSafeInteger(selection.revision) || selection.revision < 1
     || !Number.isSafeInteger(selection.round) || selection.round < 1

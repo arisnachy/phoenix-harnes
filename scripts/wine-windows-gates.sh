@@ -244,6 +244,11 @@ grep -q '^smoke: win32 x64' "$scratch/logs/smoke.log" || { echo 'wine-windows-ga
 # Both statuses are captured so one failure cannot hide the other's result.
 build_gate() {
   wine_node "$scratch/logs/host-tsc.log" "$tsc_js" -b tsconfig.host.json --pretty false || return $?
+  # Match package.json build:lib:host exactly: Host declarations must exist
+  # before Typert projects every Remote contribution consumed by Client tsc.
+  # Skipping this phase leaves TypertClientRemote structurally empty and turns
+  # every legitimate namespace into a misleading TS2307/TS2339 cascade.
+  wine_node "$scratch/logs/host-typert.log" --import tsx/esm scripts/generate-typert.ts || return $?
   wine_node "$scratch/logs/host-tsdown.log" "$tsdown_js" --env.DSH_BUILD_FACE host || return $?
   wine_node "$scratch/logs/client-tsc.log" "$tsc_js" -b tsconfig.client.json --pretty false || return $?
   wine_node "$scratch/logs/client-tsdown.log" "$tsdown_js" --env.DSH_BUILD_FACE client
@@ -272,8 +277,9 @@ report() {
     for log in "$@"; do tail -n 200 "$log" >&2 || true; done
   fi
 }
-report 'build (Host tsc/tsdown, Client tsc/tsdown)' "$build_status" \
+report 'build (Host tsc/Typert/tsdown, Client tsc/tsdown)' "$build_status" \
   "$scratch/logs/host-tsc.log" \
+  "$scratch/logs/host-typert.log" \
   "$scratch/logs/host-tsdown.log" \
   "$scratch/logs/client-tsc.log" \
   "$scratch/logs/client-tsdown.log"

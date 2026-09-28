@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
-import type { HardnessArtifactValue } from '../conversation-nodes/hardness-artifact.ts'
+import type { HardnessArtifactValue } from '../artifact.ts'
 import type { RenderMessageImages } from '../contract/slots.ts'
 import styles from './HardnessArtifactNodeView.module.css'
 import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.tsx'

@@ -1,0 +1,56 @@
+name: Repair generated artifacts
+
+on:
+  push:
+    branches:
+      - repair/static-gates-and-vitest-20260924
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.7.0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Regenerate requested catalogs and graphs
+        run: |
+          pnpm run gen-config-catalog
+          pnpm run gen-cordis-catalog
+          pnpm run gen-doc-graphs
+          pnpm run gen-tool-catalog
+          pnpm run gen-persistence-catalog
+          pnpm run gen-module-graph
+      - name: Upload generated outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: repair-generated-outputs
+          if-no-files-found: error
+          path: |
+            docs/config-catalog.md
+            docs/config-catalog.zh.md
+            docs/config-catalog.i18n.yaml
+            docs/cordis-catalog/**
+            docs/subsystems/**
+            docs/capability-seams.md
+            docs/capability-seams.zh.md
+            docs/event-producer-consumer.md
+            docs/event-producer-consumer.zh.md
+            docs/tool-catalog.md
+            docs/tool-catalog.zh.md
+            docs/persistence-catalog.md
+            docs/persistence-catalog.zh.md
+            docs/module-graph.md
+            docs/module-graph.zh.md
+            apps/cli/composition.md
+            packages/extensions/tool-cordis/src/api-catalog.ts

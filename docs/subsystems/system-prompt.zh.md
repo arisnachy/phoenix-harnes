@@ -27,6 +27,12 @@ interface AssembleContext {
    * boundary should also clear any tools a listener deliberately adds.
    */
   omitTools?: boolean
+  /**
+   * Skip dynamic runtime-context provider evaluation for a request that will
+   * not send runtime snapshots to the model. This is request-scoped and does
+   * not clear or mutate the retained runtime-context projection.
+   */
+  omitRuntimeContext?: boolean
 }
 ```
 

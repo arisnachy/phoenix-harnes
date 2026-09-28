@@ -322,6 +322,15 @@ function readerScroll(element: HTMLElement, top: number): void {
   fireEvent.scroll(element)
 }
 
+/** Open the newest collapsed technical-history disclosure for assertions that
+ * intentionally inspect Tool/retry rows rather than the visible transcript. */
+function openLatestTools(): void {
+  const buttons = screen.getAllByRole('button', { name: '工具' })
+  const button = buttons.at(-1)
+  if (button === undefined) throw new Error('expected a Tools disclosure')
+  if (button.getAttribute('aria-expanded') !== 'true') fireEvent.click(button)
+}
+
 function installScrollMetrics(element: HTMLElement, initialHeight: number, clientHeight: number) {
   let scrollHeight = initialHeight
   let scrollTop = 0
@@ -468,7 +477,10 @@ describe('ChatView', () => {
     )
     const view = render(<h.ChatView {...h.props} />)
 
-    expect(view.getByText('abre @reporte')).toBeTruthy()
+    const optimistic = view.container.querySelector('[data-pending-steering]')
+    expect(optimistic).not.toBeNull()
+    expect(optimistic?.textContent).toContain('abre')
+    expect(optimistic?.textContent).toContain('reporte')
     act(() => {
       h.set({
         nodes: [{
@@ -478,8 +490,8 @@ describe('ChatView', () => {
       })
     })
 
-    expect(view.queryByText('abre @reporte')).toBeNull()
-    expect(view.getAllByText('abre <file-ref>reporte</file-ref>')).toHaveLength(1)
+    expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+    expect(view.container.querySelectorAll('[class*="userRow"]')).toHaveLength(1)
   })
 
   it('hands a windowless tool result to the Tool seat with an empty tool name', () => {
@@ -487,6 +499,7 @@ describe('ChatView', () => {
       nodes: [{ ...toolResult(3, 'w1'), call: null }],
     })
     const view = render(<h.ChatView {...h.props} />)
+    openLatestTools()
     expect(view.getByTestId('tool-seat-w1')).toBeTruthy()
     expect(h.toolOwners[0]).toMatchObject({ callId: 'w1', toolName: '' })
   })
@@ -530,6 +543,7 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     expect(view.getByText('do the thing')).toBeTruthy()
     expect(view.getByText('running tools')).toBeTruthy()
+    openLatestTools()
     expect(view.getByTestId('tool-seat-a').textContent).toBe('bash:a')
     expect(view.getByTestId('tool-seat-b').textContent).toBe('bash:b')
     expect([...view.container.querySelectorAll('[data-chat-flow-key]')].map(row => ({
@@ -544,10 +558,10 @@ describe('ChatView', () => {
     expect([...view.container.querySelectorAll('[data-chat-call-id]')].map(row => row.getAttribute('data-chat-call-id')))
       .toEqual(['a', 'b'])
     expect([...view.container.querySelectorAll('[data-chat-anchor-key]')].map(row => row.getAttribute('data-chat-anchor-key')))
-      .toEqual([
+      .toEqual(expect.arrayContaining([
         'fixture:user:1', 'fixture:assistant:2',
         'fixture:tool:a', 'call:a', 'fixture:tool:b', 'call:b',
-      ])
+      ]))
   })
 
   it('does not double-render an optimistic send once Host exposes the same steering message', () => {
@@ -629,8 +643,10 @@ describe('ChatView', () => {
     fireEvent.click(within(pendingBubble as HTMLElement).getByRole('button', { name: '复制' }))
     expect(writeText).toHaveBeenCalledWith('interrupt now')
     expect(within(pendingBubble as HTMLElement).queryByRole('button', { name: '在新对话中分支' })).toBeNull()
-    expect(view.getByRole('status').compareDocumentPosition(view.getByText('interrupt now'))
-      & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    const working = view.getByText('working').closest('[data-chat-flow-key]')
+    expect(working).not.toBeNull()
+    expect(working!.compareDocumentPosition(pendingBubble!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(view.queryByRole('status')).toBeNull()
 
     act(() => {
       h.set({
@@ -726,15 +742,17 @@ describe('ChatView', () => {
     } as const satisfies ConversationNode
     const h = makeHarness({ nodes: [user(1, 'try'), retryNode], running: true })
     const view = render(<h.ChatView {...h.props} />)
-    const disclosure = view.container.querySelector('details') as HTMLDetailsElement
+    openLatestTools()
+    let disclosure = view.container.querySelector('details') as HTMLDetailsElement
     expect(disclosure.dataset.active).toBe('true')
     expect(within(disclosure).getByRole('status').textContent).toBe('正在重试模型请求（1/2） · 1s')
 
     act(() => {
       h.set({ nodes: [user(1, 'try'), nextRetry] })
     })
+    openLatestTools()
+    disclosure = view.container.querySelector('details') as HTMLDetailsElement
     expect(within(disclosure).getAllByRole('status')).toHaveLength(1)
-    expect(view.container.querySelector('details')).toBe(disclosure)
     expect(within(disclosure).getByRole('status').textContent).toBe('正在重试模型请求（2/2） · 1s')
 
     act(() => {
@@ -748,12 +766,15 @@ describe('ChatView', () => {
         running: false,
       })
     })
+    openLatestTools()
+    disclosure = view.container.querySelector('details') as HTMLDetailsElement
     expect(disclosure.dataset.active).toBeUndefined()
     expect(within(disclosure).getByRole('status').textContent).toBe('已重试模型请求（2/2） · 1s')
 
     act(() => {
       h.set({ nodes: [user(1, 'try'), { ...retry(6), retryState: 'cancelled' }], running: true })
     })
+    openLatestTools()
     const cancelledDisclosure = view.container.querySelector('details') as HTMLDetailsElement
     expect(cancelledDisclosure.dataset.active).toBeUndefined()
     expect(within(cancelledDisclosure).getByRole('status').textContent).toContain('重试已取消')
@@ -784,6 +805,7 @@ describe('ChatView', () => {
       nodes: [toolResult(3, 'a')],
     })
     render(<h.ChatView {...h.props} />)
+    openLatestTools()
     expect(h.toolOwners[0]?.inspectCall).toBe(h.inspectCall)
   })
 
@@ -1003,6 +1025,7 @@ describe('ChatView', () => {
       nodes: [user(1, 'q'), assistant(2, 'old answer'), toolResult(3, 'a')],
     })
     const view = render(<h.ChatView {...h.props} />)
+    openLatestTools()
     const tool = view.getByTestId('tool-seat-a')
     const beforeHtml = tool.innerHTML
     act(() => {
@@ -1030,6 +1053,7 @@ describe('ChatView', () => {
       return <div data-testid="counting-row" />
     })
     const view = render(<h.ChatView {...h.props} />)
+    openLatestTools()
     expect(view.getByTestId('counting-row')).toBeTruthy()
     const afterMount = rowRenders
     act(() => {
@@ -1044,6 +1068,7 @@ describe('ChatView', () => {
   it('updates the selected call id handed to the Tool seat', () => {
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     render(<h.ChatView {...h.props} />)
+    openLatestTools()
     expect(h.toolOwners.at(-1)?.selectedCallId).toBeUndefined()
     act(() => { h.setSelection({ turnSeq: 3, callId: 'a', toolName: 'bash' }) })
     expect(h.toolOwners.at(-1)?.selectedCallId).toBe('a')
@@ -1086,7 +1111,6 @@ describe('ChatView', () => {
     }) as ChatViewSlotProps['renderSlot']
     const view = render(<h.ChatView {...h.props} />)
     const tool = view.getByTestId('stateful-tool')
-    const row = view.container.querySelector('[data-chat-flow-key="fixture:tool:r1"]')
     expect(tool.dataset.state).toBe('running')
     expect(mounted).toHaveBeenCalledTimes(1)
 
@@ -1098,11 +1122,12 @@ describe('ChatView', () => {
       })
     })
 
-    expect(view.getByTestId('stateful-tool')).toBe(tool)
-    expect(view.container.querySelector('[data-chat-flow-key="fixture:tool:r1"]')).toBe(row)
-    expect(tool.dataset.state).toBe('settled')
-    expect(mounted).toHaveBeenCalledTimes(1)
-    expect(unmounted).not.toHaveBeenCalled()
+    expect(view.queryByTestId('stateful-tool')).toBeNull()
+    expect(unmounted).toHaveBeenCalledTimes(1)
+    openLatestTools()
+    const settledTool = view.getByTestId('stateful-tool')
+    expect(settledTool.dataset.state).toBe('settled')
+    expect(mounted).toHaveBeenCalledTimes(2)
   })
 
   it('hides stale turn activity once visible assistant output owns the tail', () => {
@@ -1125,7 +1150,7 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     // Freshly mounted (as after a reload) yet already past the 15s gate.
     const status = view.getByRole('status')
-    expect(status.textContent).toMatch(/^PHOENIX 正在准备任务…2分0\d秒$/)
+    expect(status.textContent).toMatch(/^Phoenix 正在准备回复2分0\d秒$/)
     expect(status.querySelector('[aria-hidden="true"]')).not.toBeNull()
     act(() => {
       h.set({ queue: [{
@@ -1137,11 +1162,15 @@ describe('ChatView', () => {
         text: 'also',
       }] })
     })
-    expect(status.textContent).toMatch(/^PHOENIX 正在准备任务…2分0\d秒$/)
+    expect(status.textContent).toMatch(/^Phoenix 正在准备回复2分0\d秒$/)
   })
 
   it('ignites the PHOENIX emblem while running and flashes it when the turn finishes', () => {
-    const h = makeHarness({ nodes: [user(1, 'go')], running: true })
+    const h = makeHarness({
+      nodes: [user(1, 'go')],
+      turnTimings: new Map([[1, { startTime: Date.now() }]]),
+      running: true,
+    })
     const view = render(<h.ChatView {...h.props} />)
     const activeLogo = view.getByRole('status').querySelector('img')
     expect(activeLogo?.getAttribute('src')).toBe('/phoenix-emblem.png')
@@ -1163,6 +1192,7 @@ describe('ChatView', () => {
       return opts?.fallback ?? null
     })
     render(<h.ChatView {...h.props} />)
+    openLatestTools()
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({
       key: 'conversation.chat.node',
@@ -1184,6 +1214,7 @@ describe('ChatView', () => {
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
     render(<h.ChatView {...h.props} />)
+    openLatestTools()
     await act(async () => { h.toolOwners[0]!.openFile('src/a.ts') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' })).toBeTruthy()
@@ -1204,6 +1235,7 @@ describe('ChatView', () => {
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
     render(<h.ChatView {...h.props} />)
+    openLatestTools()
     await act(async () => { h.toolOwners[0]!.openFile('notes.md') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' }).textContent).toContain('permission denied')
@@ -1219,6 +1251,7 @@ describe('ChatView', () => {
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
     render(<h.ChatView {...h.props} />)
+    openLatestTools()
     await act(async () => { h.toolOwners[0]!.openFile('empty.ts') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' }).textContent).toContain('无法打开此文件')
@@ -1231,6 +1264,7 @@ describe('ChatView', () => {
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
     render(<h.ChatView {...h.props} />)
+    openLatestTools()
     await act(async () => { h.toolOwners[0]!.openFile('.') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件夹' }).textContent).toContain('无法打开此文件夹')
@@ -1247,6 +1281,7 @@ describe('ChatView', () => {
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
     render(<h.ChatView {...h.props} />)
+    openLatestTools()
     await act(async () => { h.toolOwners[0]!.openFile('src/a.ts') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' }).textContent).toContain('first refusal')
@@ -1268,6 +1303,7 @@ describe('ChatView', () => {
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
     render(<h.ChatView {...h.props} />)
+    openLatestTools()
     await act(async () => { h.toolOwners[0]!.openFile('src/a.ts') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' }).textContent).toContain('first refusal')

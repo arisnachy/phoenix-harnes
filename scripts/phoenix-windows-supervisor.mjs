@@ -886,6 +886,7 @@ restoreActiveRuntime()
 recoverConfigurationBeforeFirstBoot()
 
 let finalCode = 0
+let consecutiveUnhealthyExits = 0
 while (true) {
   const launchConfiguration = captureBootCriticalConfiguration()
   let lastObservedFingerprint = configurationFingerprint(launchConfiguration)
@@ -906,6 +907,7 @@ while (true) {
     try {
       persistLastKnownGoodConfiguration(launchConfiguration)
       healthyCheckpointWritten = true
+      consecutiveUnhealthyExits = 0
       console.error('[PHOENIX RECOVERY] healthy Host checkpoint recorded as last-known-good configuration.')
     } catch (error) {
       console.error(`[PHOENIX RECOVERY] warning: could not record healthy configuration checkpoint: ${error instanceof Error ? error.message : String(error)}`)
@@ -1050,6 +1052,19 @@ while (true) {
   }
 
   const reason = hostExit.code === null ? `signal ${hostExit.signal ?? 'unknown'}` : `exit code ${String(hostExit.code)}`
+  if (earlyCrash) {
+    consecutiveUnhealthyExits += 1
+    if (consecutiveUnhealthyExits >= 3) {
+      finalCode = hostExit.code ?? 1
+      console.error(
+        `[PHOENIX] host failed before its healthy checkpoint ${String(consecutiveUnhealthyExits)} consecutive times (${reason}); `
+        + 'stopping the crash loop so the original startup error remains actionable.',
+      )
+      break
+    }
+  } else {
+    consecutiveUnhealthyExits = 0
+  }
   console.error(`[PHOENIX] host exited unexpectedly (${reason}); supervisor remains alive and will relaunch it in ${String(HOST_RESTART_DELAY_MS)}ms.`)
   await sleep(HOST_RESTART_DELAY_MS)
   continue

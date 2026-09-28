@@ -18,6 +18,12 @@ Separately, the pi-ai provider authorization flows registered `key`, `label`, `m
 
 Each pi-ai provider flow now declares `inspect`, which reads the credential records and answers account telemetry only for the record that flow owns: `accountType` is `apiKey` for an api-key record and `oauth` for a grant. No record means no telemetry, so an unauthenticated provider still reads as not connected. The telemetry names the provider and the credential kind and carries no secret material, matching the closed telemetry contract the authorization seam already enforces.
 
+## Alternatives considered
+
+**Treat every numeric SDK `code` as a generic transport failure.** Rejected because `StreamableHTTPError` uses a numeric HTTP `code`; preserving the generic path would continue hiding actionable 401/403 authorization demands.
+
+**Report a provider as connected merely because its flow is registered.** Rejected because registration does not prove that the matching API-key or OAuth credential exists; `inspect` must derive connectivity from the credential record the flow owns.
+
 ## Consequences
 
 Authorization required by a remote MCP connector is now visible in the connector inventory through the existing `auth-required` status and `authorization-required` reason code, which is what a status surface and the model both read; no new status or reason code was introduced. Providers whose credential is already stored stop being reported as not connected, so a settings surface that filters on connected entries no longer hides routes the user has already authenticated.

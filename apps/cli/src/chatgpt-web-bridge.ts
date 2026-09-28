@@ -6,4 +6,4 @@ export {
   parseChatGptWebCommand,
   resolveChatGptWebConfig,
   runChatGptWebBridge,
-} from '@phoenix-ai/dsh-host-plugin-inventory/chatgpt-web'
+} from '@phoenix-ai/dsh-host-plugin-inventory/src/chatgpt-web.ts'

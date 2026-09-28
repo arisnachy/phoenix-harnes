@@ -431,8 +431,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [],
       },
       {
-        signature: 'readonly fileLimits: FileAttachmentLimits = Object.freeze({ maxFileBytes: 25 * 1024 * 1024, maxFilesPerMessage: 20, maxMessageFileBytes: 100 * 1024 * 1024, })',
-        description: 'Deployment-resolved limits for arbitrary file uploads.',
+        signature: 'readonly fileLimits: FileAttachmentLimits = Object.freeze({ maxFilesPerMessage: 20, })',
+        description: 'Deployment-resolved limits for arbitrary file uploads. Byte caps are omitted by default so the selected model/provider route owns size acceptance.',
         parameters: [],
       },
       {
@@ -576,6 +576,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Fires after any flush that recomposed the graph (row added/removed, or a rebuilt rev change). Pull model: listeners re-read graph.',
         parameters: [{ name: 'listener', description: 'notified with no payload.' }],
         returns: 'the unsubscriber.',
+      },
+    ],
+  },
+  {
+    key: 'clientReality',
+    summary: 'Ephemeral browser reality cache.',
+    description: 'Ephemeral browser reality cache. It deliberately stores no history and unregisters with the owning ApiProxy fiber.',
+    methods: [
+      {
+        signature: 'observeLocation(sessionId: SessionId, location: ClientLocation): void',
+        description: 'Record a browser position only when its observation time is plausibly current.',
+        parameters: [{ name: 'sessionId', description: 'Session whose browser supplied the observation.' }, { name: 'location', description: 'Browser geolocation sample to validate and cache.' }],
+      },
+      {
+        signature: 'locationFor(sessionId: SessionId): ObservedClientLocation | undefined',
+        description: 'Read the current non-expired position for one live/persisted session id.',
+        parameters: [{ name: 'sessionId', description: 'Session whose current browser location is requested.' }],
+        returns: 'A defensive copy of the live observation, or undefined when absent or expired.',
       },
     ],
   },
@@ -1342,6 +1360,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'a handle that publishes state and removes the entry.',
       },
       {
+        signature: 'reconnect(serverName: string): boolean',
+        description: 'Request an immediate reconnect for one registered server. This is a same-process control seam: the callback itself is never returned by list, so model/browser projections remain secret-free.',
+        parameters: [{ name: 'serverName', description: 'Stable MCP namespace to reconnect.' }],
+        returns: 'true when a live registration accepted the request.',
+      },
+      {
         signature: 'list(): readonly McpConnectorEntry[]',
         description: 'Return detached entries in registration order.',
         parameters: [],
@@ -1474,7 +1498,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'resolve(request: SandboxPolicyRequest = {}): SandboxExecutionPolicy',
-        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. HARDNESS protection then clamps the result: the live runtime/data roots are never writable through model-controlled capabilities, and unconfined access becomes workspace-confined while protection is active.',
+        description: 'Resolve the complete policy for one capability call. An approved explicit mode outranks the session\'s last `sandbox/mode` event, which outranks the deployment default. A deliberate danger-full-access result is returned unchanged. HARDNESS protection applies only to restricted modes, redirecting workspace-write away from the live runtime/data roots when necessary.',
         parameters: [{ name: 'request', description: 'optional session and approved mode override.' }],
         returns: 'the fully resolved per-call mode and absolute workspace root.',
       },
@@ -2584,6 +2608,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Provider registry and non-blocking important-event announcement queue.',
     methods: [
       {
+        signature: '@Remote(\'conversationStatus\') async conversationStatus(): Promise<VoiceConversationStatus>',
+        description: 'Report whether the local Client can route conversation speech through neural TTS.',
+        parameters: [],
+        returns: 'Current conversational voice availability and selected provider.',
+      },
+      {
+        signature: '@Remote(\'conversationSpeak\') async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt>',
+        description: 'Play one stable semantic segment on the Host without blocking the browser thread.',
+        parameters: [{ name: 'request', description: 'Message identity, ordering, text, language, and final-segment metadata.' }],
+        returns: 'Admission/playback receipt for the selected neural provider.',
+      },
+      {
+        signature: '@Remote(\'conversationCancel\') async conversationCancel(request: VoiceConversationCancelRequest): Promise<VoiceConversationCancelReceipt>',
+        description: 'Abort queued or active speech for one growing assistant response.',
+        parameters: [{ name: 'request', description: 'Stable assistant-response key whose speech should be cancelled.' }],
+        returns: 'Number of in-flight segment controllers aborted for the response.',
+      },
+      {
         signature: 'registerTextToSpeechProvider(provider: VoiceTextToSpeechProvider): () => void',
         description: 'Register a TTS provider and dispose it with its contributing fiber.',
         parameters: [{ name: 'provider', description: 'Provider implementation with a unique id.' }],
@@ -2849,10 +2891,10 @@ export const EVENT_API: readonly EventApiEntry[] = [
   {
     name: 'agent/pre-step',
     mode: 'waterfall',
-    signature: '\'agent/pre-step\'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>',
+    signature: '\'agent/pre-step\'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal; fastConversation?: boolean }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>',
     summary: 'Reject a proposed step or replace the messages that enter it.',
     description: 'Reject a proposed step or replace the messages that enter it. Calling `next()` preserves the current messages.',
-    parameters: [{ name: 'payload', description: '.signal - the current turn\'s cancellation signal. Scope-filtered dispatch (`@phoenix-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
+    parameters: [{ name: 'payload', description: '.fastConversation - true only for the strict tool-free conversational fast path; background refreshers may defer work that this path will not send to the model. Scope-filtered dispatch (`@phoenix-ai/dsh-scope`): agent-scoped listeners receive only that agent.' }],
   },
   {
     name: 'agent/request',
@@ -3384,7 +3426,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AssembleContext',
-    declaration: 'export interface AssembleContext {\n    scope?: ScopeKey;\n    signal?: AbortSignal;\n}',
+    declaration: 'export interface AssembleContext {\n    scope?: ScopeKey;\n    signal?: AbortSignal;\n    omitTools?: boolean;\n    omitRuntimeContext?: boolean;\n}',
   },
   {
     name: 'AssembledContext',
@@ -3517,6 +3559,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'CancelOptions',
     declaration: 'export interface CancelOptions {\n    keepInbox?: boolean | undefined;\n}',
+  },
+  {
+    name: 'ClientLocation',
+    declaration: 'export interface ClientLocation {\n    latitude: number;\n    longitude: number;\n    accuracyMeters: number;\n    observedAt: number;\n}',
   },
   {
     name: 'ClientResponse',
@@ -3888,7 +3934,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'FileAttachmentLimits',
-    declaration: 'export interface FileAttachmentLimits {\n    maxFileBytes: number;\n    maxFilesPerMessage: number;\n    maxMessageFileBytes: number;\n}',
+    declaration: 'export interface FileAttachmentLimits {\n    maxFileBytes?: number;\n    maxFilesPerMessage: number;\n    maxMessageFileBytes?: number;\n}',
   },
   {
     name: 'FileAttachmentRef',
@@ -4360,7 +4406,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpConnectorRegistrationInput',
-    declaration: 'export interface McpConnectorRegistrationInput {\n    readonly serverName: string;\n    readonly transport: McpConnectorTransport;\n}',
+    declaration: 'export interface McpConnectorRegistrationInput {\n    readonly serverName: string;\n    readonly transport: McpConnectorTransport;\n    readonly reconnect?: () => void;\n}',
   },
   {
     name: 'McpConnectorStatus',
@@ -4493,6 +4539,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'ObjectJsonSchema',
     declaration: 'export type ObjectJsonSchema = JsonSchemaNode & {\n    type: \'object\';\n};',
+  },
+  {
+    name: 'ObservedClientLocation',
+    declaration: 'export interface ObservedClientLocation extends ClientLocation {\n    readonly source: \'browser-geolocation\';\n    readonly receivedAt: number;\n    readonly expiresAt: number;\n}',
   },
   {
     name: 'OneShotSubagentDescriptorData',
@@ -5768,7 +5818,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'UserProfileUpdate',
-    declaration: 'export interface UserProfileUpdate {\n    assistantName?: string | null;\n    assistantGender?: AssistantGender | null;\n    modelProviderOrder?: string[] | null;\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
+    declaration: 'export interface UserProfileUpdate {\n    assistantName?: string | null;\n    assistantGender?: AssistantGender | null;\n    assistantGenderSource?: AssistantGenderSource | null;\n    modelProviderOrder?: string[] | null;\n    preferredName?: string | null;\n    dateOfBirth?: string | null;\n    gender?: string | null;\n    pronouns?: string | null;\n    tone?: string | null;\n    family?: UserProfileFamilyMember[] | null;\n    consent?: Partial<UserProfileConsent>;\n}',
   },
   {
     name: 'UserProfileView',
@@ -5785,6 +5835,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'VoiceAnnouncementReceipt',
     declaration: 'export interface VoiceAnnouncementReceipt {\n    readonly id: VoiceAnnouncementId;\n    readonly accepted: boolean;\n    readonly reason?: \'disabled\' | \'not-important\' | \'empty\' | \'queue-full\' | \'duplicate\' | \'no-provider\';\n    readonly text?: string;\n}',
+  },
+  {
+    name: 'VoiceConversationCancelReceipt',
+    declaration: 'export interface VoiceConversationCancelReceipt {\n    readonly cancelled: number;\n}',
+  },
+  {
+    name: 'VoiceConversationCancelRequest',
+    declaration: 'export interface VoiceConversationCancelRequest {\n    readonly key: string;\n}',
+  },
+  {
+    name: 'VoiceConversationSpeakReceipt',
+    declaration: 'export interface VoiceConversationSpeakReceipt {\n    readonly accepted: boolean;\n    readonly reason?: \'disabled\' | \'natural-unavailable\' | \'empty\' | \'invalid\' | \'duplicate\';\n    readonly provider?: string;\n}',
+  },
+  {
+    name: 'VoiceConversationSpeakRequest',
+    declaration: 'export interface VoiceConversationSpeakRequest {\n    readonly key: string;\n    readonly sequence: number;\n    readonly text: string;\n    readonly language?: string;\n    readonly final?: boolean;\n}',
+  },
+  {
+    name: 'VoiceConversationStatus',
+    declaration: 'export interface VoiceConversationStatus {\n    readonly enabled: boolean;\n    readonly natural: boolean;\n    readonly provider?: string;\n}',
   },
   {
     name: 'VoiceEventKind',

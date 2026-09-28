@@ -45,6 +45,7 @@ dsh --profile web --dump-config
 | [`core/session`](subsystems/session.zh.md) | 仅追加的 `SessionEvent` 日志和内存存储 | `ctx.sessions` |
 | [`core/system-prompt`](subsystems/system-prompt.zh.md) | 提示词片段与工具 schema 的组装 | `ctx.systemPrompt` |
 | [`core/tools`](subsystems/tools.zh.md) | 作用域化的工具注册表和带把关的执行流水线 | `ctx.tools` |
+| [`core/living`](subsystems/living.zh.md) | 为 Phoenix 创建的一切提供持久身份与运行连接 | `ctx.living` |
 | [`core/agent`](subsystems/core.zh.md) | `Agent` 接口、活跃 agent 注册表和 `agent/*` 事件 | `ctx.agents` |
 | [`core/agent-loop`](subsystems/core.zh.md) | 实现该接口的默认驱动器 | `ctx.agentLoop` |
 | [`core/scope`](subsystems/scope.zh.md) | 按 agent 划分作用域的注册原语 | 库，无 ctx 键 |
@@ -117,6 +118,7 @@ HARDNESS 在 `ctx.hardness` 上增加 provider-neutral 的能力索引和声明�
 |---|---|
 | 添加模型提供方 | 在 `ctx.llm` 上注册其适配器 |
 | 添加面向模型的能力 | 在 `ctx.tools` 上注册；其 schema 加入提示词组装 |
+| 让 Phoenix 创建的 artifact 或系统保持可运行连接 | 在 `ctx.living` 上注册其自描述 manifest；挂载 provider 或 adapter，以提供该目标能实现的最高有效 live level |
 | 在不替换提供方的前提下索引能力 | 通过 `ctx.hardness` 发布 descriptor；只有具备证据支持的验证后才解析为 `have` |
 | 让某个会话拥有不同的能力集合 | 组装一个 agent preset；其中的服务行需要 `isolate` realm |
 | 添加 shell 执行 | 注册 `ctx.shell` 后端；本地后端通过 `ctx.subprocess` spawn 进程 |

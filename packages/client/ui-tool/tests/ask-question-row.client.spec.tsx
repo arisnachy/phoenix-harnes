@@ -80,7 +80,8 @@ describe('AskQuestionRow', () => {
     { label: 'empty result content', text: null },
   ])('settled result falls back to the generic summary on $label', ({ text }) => {
     render(<AskQuestionRow {...rowProps(resultNode(ARGS, text))} />)
-    expect(screen.getByText(`ask_user_question · ${ARGS}`)).toBeTruthy()
+    expect(screen.getByText('ask_user_question')).toBeTruthy()
+    expect(screen.getByText(ARGS)).toBeTruthy()
   })
 
   it('user cancellation names the verdict instead of the generic failed shape', () => {
@@ -104,18 +105,21 @@ describe('AskQuestionRow', () => {
       { isError: true, error: { name: 'Interrupted', code: 'interrupted' } }))} />)
     expect(view.container.querySelector('[data-state="stopped"]')).not.toBeNull()
     expect(screen.queryByText('已取消')).toBeNull()
-    expect(screen.getByText(`ask_user_question · ${ARGS}`)).toBeTruthy()
+    expect(screen.getByText('ask_user_question')).toBeTruthy()
+    expect(screen.getByText(ARGS)).toBeTruthy()
   })
 
   it('other tool errors keep the generic summary with the error state', () => {
     const view = render(<AskQuestionRow {...rowProps(resultNode(ARGS, null, { isError: true }))} />)
     expect(view.container.querySelector('[data-state="error"]')).not.toBeNull()
-    expect(screen.getByText(`ask_user_question · ${ARGS}`)).toBeTruthy()
+    expect(screen.getByText('ask_user_question')).toBeTruthy()
+    expect(screen.getByText(ARGS)).toBeTruthy()
   })
 
   it('window-truncated result (call head lost) falls back to the callId summary', () => {
     render(<AskQuestionRow {...rowProps(resultNode('', null, { call: null }))} />)
-    expect(screen.getByText('ask_user_question · c1')).toBeTruthy()
+    expect(screen.getByText('ask_user_question')).toBeTruthy()
+    expect(screen.getByText('c1')).toBeTruthy()
   })
 
   it('leading toggle expands the raw args body', () => {

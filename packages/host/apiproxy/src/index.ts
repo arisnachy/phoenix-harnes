@@ -104,6 +104,7 @@ export class ApiProxyService extends Service implements ApiProxy {
     })]),
   })
 
+  /** Browser-observation service used by host-side Reality Context consumers. */
   readonly clientReality: ClientRealityService
   readonly sessions: ApiProxy['sessions']
   readonly subagents: ApiProxy['subagents']

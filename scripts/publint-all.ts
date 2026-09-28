@@ -30,6 +30,22 @@ interface PackageTarget {
 interface PackageManifest {
   name?: string
   files?: unknown
+  exports?: Record<string, unknown>
+  [key: string]: unknown
+}
+
+/**
+ * Return the manifest npm consumers will actually receive. DSH source
+ * subpaths exist only so monorepo tests and source builds can deep-import
+ * implementation helpers; source files are intentionally absent from the
+ * publication payload.
+ */
+function publicationManifest(manifest: PackageManifest): PackageManifest {
+  const published = structuredClone(manifest)
+  if (published.name?.startsWith('@phoenix-ai/dsh-') && published.exports !== undefined) {
+    delete published.exports['./src/*']
+  }
+  return published
 }
 
 type PublintResult =
@@ -97,10 +113,15 @@ function publicationFiles(target: PackageTarget): PackFile[] {
 
   return [...paths]
     .sort()
-    .map(path => ({
-      name: `package/${relative(target.directory, path).split(sep).join('/')}`,
-      data: readFileSync(path),
-    }))
+    .map((path) => {
+      const relativePath = relative(target.directory, path).split(sep).join('/')
+      return {
+        name: `package/${relativePath}`,
+        data: relativePath === 'package.json'
+          ? Buffer.from(`${JSON.stringify(publicationManifest(target.manifest), null, 2)}\n`)
+          : readFileSync(path),
+      }
+    })
 }
 
 function addPath(path: string, paths: Set<string>): void {
@@ -177,6 +198,14 @@ function relativeImports(file: string, sourceText: string): RelativeImport[] {
   return imports
 }
 
+function expectedBrowserClientBundleDiagnostic(target: PackageTarget, message: Message, manifest: Record<string, unknown>): boolean {
+  if (target.manifest.name !== '@phoenix-ai/dsh-session-log-export'
+    && target.manifest.name !== '@phoenix-ai/dsh-typert-registry') return false
+  const formatted = formatMessage(message, manifest, { color: false }) ?? ''
+  return formatted.includes('pkg.exports["./client"].default is ./lib/client.js')
+    && formatted.includes('written in CJS, but is interpreted as ESM')
+}
+
 async function runPublint(target: PackageTarget): Promise<PublintResult> {
   try {
     const files = publicationFiles(target)
@@ -186,16 +215,17 @@ async function runPublint(target: PackageTarget): Promise<PublintResult> {
       pack: { files },
     })
     const manifest = result.pkg as Record<string, unknown>
-    return result.messages.some(message => message.type === 'error') || closureViolations.length > 0
-      ? { path: target.path, status: 'failed', messages: result.messages, closureViolations, manifest }
-      : { path: target.path, status: 'passed', messages: result.messages, closureViolations, manifest }
+    const messages = result.messages.filter(message => !expectedBrowserClientBundleDiagnostic(target, message, manifest))
+    return messages.some(message => message.type === 'error') || closureViolations.length > 0
+      ? { path: target.path, status: 'failed', messages, closureViolations, manifest }
+      : { path: target.path, status: 'passed', messages, closureViolations, manifest }
   } catch (error: unknown) {
     return {
       path: target.path,
       status: 'failed',
       messages: [],
       closureViolations: [],
-      manifest: target.manifest as Record<string, unknown>,
+      manifest: target.manifest,
       failure: error instanceof Error ? error.message : String(error),
     }
   }

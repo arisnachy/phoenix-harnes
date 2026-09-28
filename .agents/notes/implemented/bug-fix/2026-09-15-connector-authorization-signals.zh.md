@@ -18,6 +18,12 @@ MCP 客户端中的 `httpStatus` 先读取数字型 `status`，再回退到数�
 
 每个 pi-ai 提供方授权流现在声明 `inspect`，它读取凭据记录，并且只为该授权流自身拥有的记录返回账户遥测：api-key 记录的 `accountType` 为 `apiKey`，授权的为 `oauth`。没有记录即没有遥测，因此未认证的提供方仍读作未连接。遥测只说明提供方与凭据类型，不携带任何机密材料，符合授权接缝已强制执行的封闭遥测契约。
 
+## 考虑过的替代方案
+
+**把 SDK 中每个数字型 `code` 都当作通用 transport failure。** 被拒绝，因为 `StreamableHTTPError` 正是用数字 HTTP `code`；继续走通用路径会继续隐藏可操作的 401/403 授权请求。
+
+**仅因为授权 flow 已注册就把 provider 报告为已连接。** 被拒绝，因为注册并不能证明对应 API-key 或 OAuth 凭据存在；`inspect` 必须依据该 flow 自身拥有的 credential record 判断连接状态。
+
 ## 影响
 
 远程 MCP 连接器所需的授权现在通过既有 `auth-required` 状态与 `authorization-required` 原因码在连接器清单中可见，这也是状态界面与模型共同读取的内容；没有引入新的状态或原因码。凭据已存储的提供方不再被报告为未连接，因此按已连接条目过滤的设置界面不再隐藏用户已认证的路由。

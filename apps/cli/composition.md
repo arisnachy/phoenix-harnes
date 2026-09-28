@@ -184,6 +184,8 @@ flowchart LR
   cfg --> plugin_dsh_base_tool_web
   plugin_dsh_base_mcp_connector_registry["mcp-connector-registry<br/>@phoenix-ai/dsh-mcp-connector-registry"]
   cfg --> plugin_dsh_base_mcp_connector_registry
+  plugin_dsh_base_phoenix_browser["phoenix-browser<br/>@phoenix-ai/dsh-mcp-client"]
+  cfg --> plugin_dsh_base_phoenix_browser
   plugin_dsh_base_tools["tools<br/>@phoenix-ai/dsh-tools"]
   cfg --> plugin_dsh_base_tools
   plugin_dsh_base_hardness["hardness<br/>@phoenix-ai/dsh-hardness"]
@@ -290,6 +292,7 @@ flowchart LR
 | `web-search-free` | `@phoenix-ai/dsh-web-search-free` |
 | `tool-web` | `@phoenix-ai/dsh-tool-web` |
 | `mcp-connector-registry` | `@phoenix-ai/dsh-mcp-connector-registry` |
+| `phoenix-browser` | `@phoenix-ai/dsh-mcp-client` |
 | `tools` | `@phoenix-ai/dsh-tools` |
 | `hardness` | `@phoenix-ai/dsh-hardness` |
 | `hardness-adapters` | `@phoenix-ai/dsh-hardness-adapters` |

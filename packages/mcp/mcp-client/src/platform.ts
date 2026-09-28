@@ -9,6 +9,7 @@
  */
 
 export const SUPPORTED_PLATFORMS = ['darwin', 'linux', 'win32'] as const
+/** Host platform identifiers supported by Phoenix stdio MCP policy. */
 export type SupportedPlatform = typeof SUPPORTED_PLATFORMS[number]
 
 export interface StdioPlatformDescriptor {
