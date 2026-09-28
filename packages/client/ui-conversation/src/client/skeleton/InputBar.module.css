@@ -84,7 +84,8 @@
   inset: -1px;
   border-radius: 22px;
   background: var(--dsw-alias-border-l4);
-  transition: background-color 100ms ease;
+  box-shadow: 0 4px 10px rgba(57, 48, 41, 0.12);
+  transition: background-color 100ms ease, box-shadow 100ms ease;
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' fill='none' rx='22' ry='22' stroke='black' stroke-width='2' stroke-dasharray='4 4'/%3E%3C/svg%3E");
   mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' fill='none' rx='22' ry='22' stroke='black' stroke-width='2' stroke-dasharray='4 4'/%3E%3C/svg%3E");
   pointer-events: none;
@@ -425,7 +426,7 @@
   height: 34px;
   border: none;
   border-radius: 999px;
-  background: var(--dsw-alias-button-info-fill);
+  background: var(--dsw-specific-phoenix-action);
   /* Static white, not the foreground token: the arrow stays white on the blue
      fill in both themes (design 34:10465). */
   color: #fff;
@@ -438,7 +439,8 @@
 }
 
 .primary:hover:not(:disabled) {
-  background: var(--dsw-alias-button-info-hover);
+  background: var(--dsw-specific-phoenix-action-hover);
+  box-shadow: 0 6px 14px rgba(57, 48, 41, 0.16);
 }
 
 .primary:disabled {

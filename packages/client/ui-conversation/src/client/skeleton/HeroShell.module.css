@@ -20,21 +20,33 @@
   text-align: center;
 }
 
-/* Quiet Phoenix mark: enough presence to anchor the welcome without competing
-   with the greeting. */
+/* Sculptural charcoal mark with a restrained Phoenix-orange halo. */
 .fishHitbox {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
-  margin-bottom: 12px;
+  width: 76px;
+  height: 76px;
+  margin-bottom: 14px;
+  isolation: isolate;
+}
+
+.fishHitbox::before {
+  content: '';
+  position: absolute;
+  inset: 7px;
+  z-index: -1;
+  border: 1px solid color-mix(in srgb, var(--dsw-specific-phoenix-accent) 22%, transparent);
+  border-radius: 999px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--dsw-specific-phoenix-accent) 7%, transparent) 0%, transparent 66%);
 }
 
 .fish {
   color: var(--dsw-alias-label-primary);
   transform-origin: 50% 60%;
-  opacity: 0.92;
+  filter: drop-shadow(0 4px 8px rgba(69, 53, 43, 0.08));
+  opacity: 0.96;
 }
 
 .headline {
@@ -44,20 +56,20 @@
   flex-wrap: wrap;
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: clamp(28px, 2.2vw, 34px);
+  font-size: clamp(30px, 2.45vw, 38px);
   line-height: 1.2;
   font-weight: 600;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.035em;
 }
 
 .preferredName {
-  color: var(--dsw-alias-label-primary-bluish);
+  color: var(--dsw-specific-phoenix-accent);
 }
 
 .subtitle {
-  margin: 7px 0 0;
+  margin: 8px 0 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: clamp(16px, 1.35vw, 19px);
+  font-size: clamp(16px, 1.3vw, 18px);
   line-height: 1.45;
   font-weight: 400;
   letter-spacing: -0.01em;
@@ -167,13 +179,13 @@
   }
 
   .fishHitbox {
-    width: 44px;
-    height: 44px;
+    width: 62px;
+    height: 62px;
     margin-bottom: 10px;
   }
 
   .headline {
-    font-size: 28px;
+    font-size: 30px;
   }
 
   .subtitle {

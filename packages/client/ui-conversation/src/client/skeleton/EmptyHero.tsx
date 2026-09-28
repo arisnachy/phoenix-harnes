@@ -77,7 +77,7 @@ export function WorkspaceChip({ buttonRef, label, menuOpen = false, onClick, t }
 }
 
 /**
- * The soft blue backdrop ellipse. Rendered by the hero owner
+ * The soft warm-neutral backdrop ellipse. Rendered by the hero owner
  * (ConversationRoot), not HeroShell, so it can center on the input card; the
  * owner's className supplies all positioning.
  * @param props.className - positioning class from the owner.
@@ -104,7 +104,7 @@ export function HeroGlow({ className }: { className?: string | undefined }) {
         </filter>
       </defs>
       <g filter={`url(#${glowFilterId})`}>
-        <ellipse cx="525.5" cy="234" rx="425.5" ry="134" fill="#6187D8" fillOpacity="0.08" />
+        <ellipse cx="525.5" cy="234" rx="425.5" ry="134" fill="#E46A2A" fillOpacity="0.055" />
       </g>
     </svg>
   )
@@ -134,8 +134,8 @@ export function HeroShell({ renderSlot, children }: HeroShellProps) {
     <div className={css.root}>
       <div className={css.stack}>
         <span className={css.fishHitbox} aria-hidden="true">
-          {renderSlot('conversation.hero.brand.mark', { size: 48, className: css.fish }, {
-            fallback: <PhoenixLogo size={48} {...(css.fish === undefined ? {} : { className: css.fish })} />,
+          {renderSlot('conversation.hero.brand.mark', { size: 64, className: css.fish }, {
+            fallback: <PhoenixLogo size={64} {...(css.fish === undefined ? {} : { className: css.fish })} />,
           })}
         </span>
         <h1 className={css.headline}>

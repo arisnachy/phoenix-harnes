@@ -12,6 +12,12 @@
   --dsh-composer-dock-inset: 8px;
 }
 
+.root[data-phase='hero'] {
+  background:
+    radial-gradient(circle at 58% 44%, rgba(226, 95, 37, 0.045), transparent 30%),
+    linear-gradient(145deg, rgb(252, 251, 248) 0%, rgb(255, 254, 252) 52%, rgb(250, 248, 244) 100%);
+}
+
 .header {
   position: relative;
   flex: none;
@@ -278,8 +284,8 @@
 .composerHero {
   position: relative;
   align-self: center;
-  gap: 8px;
-  padding-bottom: 32px;
+  gap: 10px;
+  padding-bottom: 36px;
   width: min(calc(var(--dsh-composer-card-max-width) + 2 * var(--dsh-composer-side-clearance)), 100%);
   z-index: 1;
 }
@@ -300,7 +306,7 @@
   align-items: center;
   gap: 2px;
   min-width: 0;
-  margin-top: 4px;
+  margin-top: 5px;
   padding-left: 20px;
 }
 

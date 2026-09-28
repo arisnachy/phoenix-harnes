@@ -74,3 +74,11 @@
 .chevronOpen {
   transform: rotate(180deg);
 }
+
+.triggerFullAccess {
+  color: var(--dsw-specific-phoenix-accent);
+}
+
+.triggerFullAccess .chevron {
+  color: color-mix(in srgb, var(--dsw-specific-phoenix-accent) 72%, var(--dsw-alias-label-caption));
+}
