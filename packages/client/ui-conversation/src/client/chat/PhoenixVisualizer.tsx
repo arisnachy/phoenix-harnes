@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import css from './PhoenixVisualizer.module.css'
+import { auditRenderedVisual, emitVisualQaReport, preflightVisualSpec, repairVisualSpec } from './visual-quality-gate.ts'
 
 type JsonRecord = Readonly<Record<string, unknown>>
 
@@ -288,7 +289,7 @@ function CandlestickChart({ chart }: { readonly chart: ParsedCandlestick }) {
           const bodyTop = y(Math.max(candle.open, candle.close))
           const bodyBottom = y(Math.min(candle.open, candle.close))
           return (
-            <g key={index}>
+            <g key={index} data-phoenix-visual-mark="candlestick">
               <line
                 x1={x}
                 y1={y(candle.high)}
@@ -411,6 +412,7 @@ function CartesianChart({ chart }: { readonly chart: ParsedChart }) {
             return (
               <rect
                 key={pointIndex + '-' + seriesIndex}
+                data-phoenix-visual-mark="bar"
                 className={css.bar}
                 x={x}
                 y={Math.min(base, valueY)}
@@ -435,6 +437,7 @@ function CartesianChart({ chart }: { readonly chart: ParsedChart }) {
               {chart.data.map((datum, pointIndex) => (
                 <circle
                   key={pointIndex}
+                  data-phoenix-visual-mark={chart.type === 'area' ? 'area-point' : 'line-point'}
                   className={css.point}
                   cx={g.x(pointIndex)}
                   cy={g.y(datum.values[seriesIndex] ?? 0)}
@@ -452,6 +455,7 @@ function CartesianChart({ chart }: { readonly chart: ParsedChart }) {
           chart.data.map((datum, pointIndex) => (
             <circle
               key={series.key + '-' + pointIndex}
+              data-phoenix-visual-mark="scatter-point"
               className={css.point}
               cx={g.x(pointIndex)}
               cy={g.y(datum.values[seriesIndex] ?? 0)}
@@ -489,6 +493,7 @@ function PolarChart({ chart }: { readonly chart: ParsedChart }) {
             return (
               <circle
                 key={index}
+                data-phoenix-visual-mark={chart.type === 'donut' ? 'donut-slice' : 'pie-slice'}
                 cx="100"
                 cy="100"
                 r={radius}
@@ -523,7 +528,12 @@ function ChartView({ spec }: { readonly spec: JsonRecord }) {
   const candlestick = parseCandlestick(spec)
   if (candlestick !== undefined) {
     return (
-      <section className={css.section} data-phoenix-visual-kind="chart" data-phoenix-chart-type="candlestick">
+      <section
+        className={css.section}
+        data-phoenix-visual-kind="chart"
+        data-phoenix-chart-type="candlestick"
+        data-phoenix-expected-marks={candlestick.data.length}
+      >
         {header(spec)}
         <CandlestickChart chart={candlestick} />
       </section>
@@ -532,8 +542,16 @@ function ChartView({ spec }: { readonly spec: JsonRecord }) {
 
   const chart = parseChart(spec)
   if (chart === undefined) return <Fallback spec={spec} />
+  const expectedMarks = chart.type === 'pie' || chart.type === 'donut'
+    ? chart.data.length
+    : chart.data.length * chart.series.length
   return (
-    <section className={css.section} data-phoenix-visual-kind="chart">
+    <section
+      className={css.section}
+      data-phoenix-visual-kind="chart"
+      data-phoenix-chart-type={chart.type}
+      data-phoenix-expected-marks={expectedMarks}
+    >
       {header(spec)}
       <Legend series={chart.series} />
       {chart.type === 'pie' || chart.type === 'donut'
@@ -855,7 +873,7 @@ function ProgressView({ spec }: { readonly spec: JsonRecord }) {
 }
 
 function Fallback({ spec }: { readonly spec: JsonRecord }) {
-  return <pre className={css.fallback}>{JSON.stringify(spec, null, 2)}</pre>
+  return <pre className={css.fallback} data-phoenix-visual-fallback="true">{JSON.stringify(spec, null, 2)}</pre>
 }
 
 /**
@@ -863,7 +881,7 @@ function Fallback({ spec }: { readonly spec: JsonRecord }) {
  * @param props - Visual specification supplied by a tool or model artifact.
  * @returns The responsive visualization surface or a safe structured fallback.
  */
-export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
+function PhoenixVisualizerContent({ spec }: PhoenixVisualizerProps) {
   const kind = visualType(spec)
   switch (kind) {
     case 'chart':
@@ -897,4 +915,140 @@ export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
     default:
       return <Fallback spec={spec} />
   }
+}
+
+
+function stableSpecSignature(spec: JsonRecord): string {
+  try {
+    return JSON.stringify(spec)
+  } catch {
+    return String(spec)
+  }
+}
+
+function prepareVisualSpec(spec: JsonRecord): {
+  readonly spec: JsonRecord
+  readonly attempts: number
+  readonly preflight: ReturnType<typeof preflightVisualSpec>
+} {
+  let current = spec
+  let preflight = preflightVisualSpec(current)
+  let attempts = 0
+  for (const attempt of [1, 2] as const) {
+    if (preflight.valid) break
+    attempts = attempt
+    const repaired = repairVisualSpec(current, attempt)
+    if (!repaired.changed) continue
+    current = repaired.spec
+    preflight = preflightVisualSpec(current)
+  }
+  return { spec: current, attempts, preflight }
+}
+
+/**
+ * Render through a deterministic Visual QA gate. Schema failures are repaired
+ * before render; browser-output failures get at most two bounded repair passes.
+ * A failed visual is blocked instead of exposing raw JSON as a successful chart.
+ */
+export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
+  const signature = useMemo(() => stableSpecSignature(spec), [spec])
+  const prepared = useMemo(() => prepareVisualSpec(spec), [signature])
+  const [runtime, setRuntime] = useState(() => ({
+    signature,
+    spec: prepared.spec,
+    attempts: prepared.attempts,
+    preflight: prepared.preflight,
+    verdict: prepared.preflight.valid ? 'checking' as const : 'fail' as const,
+  }))
+  const active = runtime.signature === signature
+    ? runtime
+    : {
+        signature,
+        spec: prepared.spec,
+        attempts: prepared.attempts,
+        preflight: prepared.preflight,
+        verdict: prepared.preflight.valid ? 'checking' as const : 'fail' as const,
+      }
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (runtime.signature !== signature) {
+      setRuntime({
+        signature,
+        spec: prepared.spec,
+        attempts: prepared.attempts,
+        preflight: prepared.preflight,
+        verdict: prepared.preflight.valid ? 'checking' : 'fail',
+      })
+      return
+    }
+
+    if (!active.preflight.valid) {
+      emitVisualQaReport({
+        visualType: typeof active.spec.visualType === 'string' ? active.spec.visualType : 'visual',
+        expectedMarks: 0,
+        renderedMarks: 0,
+        dimensions: null,
+        fallbackUsed: false,
+        invalidCoordinates: 0,
+        clipped: false,
+        repairAttempts: active.attempts,
+        verdict: 'fail',
+        issues: active.preflight.issues,
+        needsVisionReview: true,
+      })
+      return
+    }
+
+    const root = rootRef.current
+    if (root === null) return
+    const report = auditRenderedVisual(root, active.spec, active.attempts)
+    emitVisualQaReport(report)
+    if (report.verdict === 'pass') {
+      if (active.verdict !== 'pass') setRuntime(current => ({ ...current, verdict: 'pass' }))
+      return
+    }
+
+    for (let next = active.attempts + 1; next <= 2; next += 1) {
+      const repaired = repairVisualSpec(active.spec, next as 1 | 2)
+      if (!repaired.changed) continue
+      const preflight = preflightVisualSpec(repaired.spec)
+      setRuntime({
+        signature,
+        spec: repaired.spec,
+        attempts: next,
+        preflight,
+        verdict: preflight.valid ? 'checking' : 'fail',
+      })
+      return
+    }
+
+    if (active.verdict !== 'fail') setRuntime(current => ({ ...current, verdict: 'fail' }))
+  }, [
+    active.attempts,
+    active.preflight,
+    active.spec,
+    active.verdict,
+    prepared.attempts,
+    prepared.preflight,
+    prepared.spec,
+    runtime.signature,
+    signature,
+  ])
+
+  if (!active.preflight.valid || active.verdict === 'fail') {
+    return (
+      <section className={css.section} data-phoenix-visual-qa="fail">
+        <div className={css.empty}>
+          Phoenix blocked a visual that did not pass render quality checks after {active.attempts} repair attempt{active.attempts === 1 ? '' : 's'}.
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <div ref={rootRef} data-phoenix-visual-qa={active.verdict}>
+      <PhoenixVisualizerContent spec={active.spec} />
+    </div>
+  )
 }
