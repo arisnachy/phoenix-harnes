@@ -123,6 +123,8 @@
     "@phoenix-ai/dsh-workflow-worker-thread": "workspace:^",
     "@phoenix-ai/dsh-agent-instructions": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
-    "@phoenix-ai/schemastery": "workspace:^"
+    "@phoenix-ai/schemastery": "workspace:^",
+    "@phoenix-ai/dsh-hardness-adapters": "workspace:^",
+    "@phoenix-ai/dsh-tool-session-learning": "workspace:^"
   }
 }

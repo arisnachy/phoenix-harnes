@@ -11,6 +11,8 @@ declare module '@phoenix-ai/cordis' {
     /**
      * Deliver one normalized, already-authenticated external or internal event
      * to Phoenix's durable wake-trigger runtime.
+     * @mode emit
+     * @param event - Normalized event accepted by the durable wake runtime.
      */
     'phoenix/wake-event'(event: WakeEvent): void
   }
