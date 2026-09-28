@@ -1,5 +1,6 @@
 import type { Branded } from '@phoenix-ai/dsh-brand'
 
+/** Stable identifier assigned to a remembered Phoenix living creation. */
 export type LivingCreationId = Branded<'LivingCreationId'>
 /** Achieved or requested integration depth for one Living creation. */
 export type LivingIntegrationLevel = 'static' | 'connected' | 'reactive' | 'controllable' | 'inhabited'
