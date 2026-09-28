@@ -292,21 +292,10 @@ export function repairVisualSpec(spec: JsonRecord, attempt: 1 | 2): VisualRepair
   return { spec, changed: false }
 }
 
-function numberAttribute(element: Element, name: string): number | undefined {
-  const raw = element.getAttribute(name)
-  if (raw === null || raw.trim() === '') return undefined
-  const value = Number(raw)
-  return Number.isFinite(value) ? value : undefined
-}
-
 function invalidSvgCoordinates(root: HTMLElement): number {
   let invalid = 0
   for (const element of root.querySelectorAll('svg *')) {
-    for (const name of ['x', 'y', 'x1', 'x2', 'y1', 'y2', 'cx', 'cy', 'r', 'width', 'height']) {
-      const raw = element.getAttribute(name)
-      if (raw !== null && raw.trim() !== '' && numberAttribute(element, name) === undefined) invalid += 1
-    }
-    for (const name of ['points', 'd']) {
+    for (const name of ['x', 'y', 'x1', 'x2', 'y1', 'y2', 'cx', 'cy', 'r', 'width', 'height', 'points', 'd']) {
       const raw = element.getAttribute(name)
       if (raw !== null && /(?:NaN|Infinity)/u.test(raw)) invalid += 1
     }
