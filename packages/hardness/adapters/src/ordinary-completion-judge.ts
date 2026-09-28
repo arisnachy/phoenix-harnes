@@ -18,6 +18,7 @@ import type {
   ToolRestriction,
 } from '@phoenix-ai/dsh-tools'
 import { resolveStructuredProvider, type SubagentRuntime } from '@phoenix-ai/dsh-subagent'
+import { isGameDevelopmentNeed, qualityRequirementsForNeed } from './quality-contract.ts'
 
 const OUTPUT_SCHEMA: ObjectJsonSchema = {
   type: 'object',
@@ -193,6 +194,10 @@ export async function reviewOrdinaryCompletion(input: {
   }
 
   const toolFilter: ToolRestriction = { allow: [...READ_ONLY_TOOLS] }
+  const taskQuality = qualityRequirementsForNeed({ description: input.request })
+  const gameReview = isGameDevelopmentNeed({ description: input.request })
+    ? 'This is game-development work. Require actual evidence for graphics/art direction, character quality, environment quality, animation/VFX, UI, music/ambience/SFX and mix, gameplay feel, camera/input/collision feedback, and performance from an executed build or emulator. Compare with strong current category references when web tools are available. Do not pass placeholders, default/template assets, silent or temporary audio, empty environments, generic characters, screenshot-only evidence, compile-only evidence, or technically functional but visibly unpolished gameplay. '
+    : ''
   let run: Awaited<ReturnType<JudgeRuntime['start']>> | undefined
   try {
     run = await input.subagents.start(resolved.name, {
@@ -206,8 +211,10 @@ export async function reviewOrdinaryCompletion(input: {
         text: '<phoenix_ordinary_completion_judge>\n'
           + 'Original request: ' + JSON.stringify(input.request) + '\n'
           + 'Observed mutation tools: ' + JSON.stringify(input.mutations) + '\n'
-          + 'Observed verification tools: ' + JSON.stringify(input.verifications) + '\n\n'
+          + 'Observed verification tools: ' + JSON.stringify(input.verifications) + '\n'
+          + 'Task quality contract: ' + JSON.stringify(taskQuality) + '\n\n'
           + 'Act as a fresh, read-only completion judge. Inspect the actual changed artifact and durable session evidence. '
+          + gameReview
           + 'First derive an immutable literal checklist from the original request. Every explicitly named library, API, CLI flag, function name, format, wording, limit, and required behavior is mandatory and may not disappear during review. '
           + 'Map every explicit mandatory requirement to concrete evidence; passing tests are evidence, not blanket proof. Audit material assertions for expected-value provenance: '
           + 'an expected result must come from the specification, a reference implementation/standard, a mathematical or metamorphic invariant, or an independent fixture. '
