@@ -448,7 +448,7 @@ describe('ChatView', () => {
     const previousAnswer = assistant(2, 'respuesta previa')
     const h = makeHarness(
       { nodes: [previousUser, previousAnswer] },
-      { pendingSubmit: { text: 'mensaje inmediato', startedAt } },
+      { phase: 'submitting', pendingSubmit: { text: 'mensaje inmediato', startedAt } },
     )
     const view = render(<h.ChatView {...h.props} />)
 
@@ -473,6 +473,31 @@ describe('ChatView', () => {
     const durableRow = view.getByText('mensaje inmediato').closest('[data-chat-flow-key]')
     expect(durableRow).not.toBeNull()
     expect(previousRow!.compareDocumentPosition(durableRow!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
+  it('stops admission-only preparing once Host admission has settled, while keeping the optimistic bubble', () => {
+    const startedAt = Date.now()
+    const h = makeHarness(
+      { nodes: [] },
+      { phase: 'plain', pendingSubmit: { text: 'ya cierralo', startedAt } },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getByText('ya cierralo')).toBeTruthy()
+    expect(view.container.querySelector('[data-pending-steering]')).not.toBeNull()
+    expect(view.queryByRole('status')).toBeNull()
+  })
+
+  it('expires a lost admission-only preparing animation instead of spinning forever', () => {
+    const startedAt = Date.now() - 31_000
+    const h = makeHarness(
+      { nodes: [] },
+      { phase: 'submitting', pendingSubmit: { text: 'ya cierralo', startedAt } },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getByText('ya cierralo')).toBeTruthy()
+    expect(view.queryByRole('status')).toBeNull()
   })
 
   it('hands off a reference-bearing optimistic bubble using its serialized model text', () => {
