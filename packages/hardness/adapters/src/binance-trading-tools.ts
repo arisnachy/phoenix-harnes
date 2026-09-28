@@ -1,6 +1,11 @@
 import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
-import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
-import type { BinancePaperBroker } from './binance-paper.ts'
+import { defineTool, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import type {
+  BinanceCandle,
+  BinancePaperAccount,
+  BinancePaperBroker,
+  BinancePaperTrade,
+} from './binance-paper.ts'
 
 /** Secret-free lifecycle state of the pinned Binance Agent OS connector. */
 export interface BinanceAgentOsSnapshot {
@@ -31,6 +36,73 @@ function accountSummary(account: Awaited<ReturnType<BinancePaperBroker['account'
   return `Paper equity ${account.equityUsdt.toFixed(2)} USDT · PnL ${sign}${account.totalPnlUsdt.toFixed(2)} USDT (${sign}${account.totalReturnPct.toFixed(2)}%) · ${account.tradeCount} trades`
 }
 
+function paperAccountJson(account: BinancePaperAccount): Record<string, JsonValue> {
+  return {
+    mode: account.mode,
+    initialCashUsdt: account.initialCashUsdt,
+    cashUsdt: account.cashUsdt,
+    equityUsdt: account.equityUsdt,
+    realizedPnlUsdt: account.realizedPnlUsdt,
+    unrealizedPnlUsdt: account.unrealizedPnlUsdt,
+    totalPnlUsdt: account.totalPnlUsdt,
+    totalReturnPct: account.totalReturnPct,
+    feeRate: account.feeRate,
+    tradeCount: account.tradeCount,
+    closedTradeCount: account.closedTradeCount,
+    winRatePct: account.winRatePct,
+    profitFactor: account.profitFactor,
+    maxDrawdownPct: account.maxDrawdownPct,
+    positions: account.positions.map(position => ({
+      symbol: position.symbol,
+      quantity: position.quantity,
+      averageEntryUsdt: position.averageEntryUsdt,
+      marketPriceUsdt: position.marketPriceUsdt,
+      marketValueUsdt: position.marketValueUsdt,
+      costBasisUsdt: position.costBasisUsdt,
+      unrealizedPnlUsdt: position.unrealizedPnlUsdt,
+    })),
+  }
+}
+
+function paperTradeJson(trade: BinancePaperTrade): Record<string, JsonValue> {
+  return {
+    id: trade.id,
+    executedAt: trade.executedAt,
+    symbol: trade.symbol,
+    side: trade.side,
+    quantity: trade.quantity,
+    price: trade.price,
+    grossUsdt: trade.grossUsdt,
+    feeUsdt: trade.feeUsdt,
+    realizedPnlUsdt: trade.realizedPnlUsdt,
+    equityAfterUsdt: trade.equityAfterUsdt,
+    ...(trade.strategyId === undefined ? {} : { strategyId: trade.strategyId }),
+    ...(trade.reason === undefined ? {} : { reason: trade.reason }),
+  }
+}
+
+function candleJson(candle: BinanceCandle): Record<string, JsonValue> {
+  return {
+    openTime: candle.openTime,
+    open: candle.open,
+    high: candle.high,
+    low: candle.low,
+    close: candle.close,
+    volume: candle.volume,
+    closeTime: candle.closeTime,
+    quoteVolume: candle.quoteVolume,
+    trades: candle.trades,
+  }
+}
+
+function agentOsJson(state: BinanceAgentOsSnapshot): Record<string, JsonValue> {
+  return {
+    configured: state.configured,
+    ...(state.status === undefined ? {} : { status: state.status }),
+    ...(state.reasonCode === undefined ? {} : { reasonCode: state.reasonCode }),
+  }
+}
+
 function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
   return defineTool({
     name: 'binance_trading_activate',
@@ -57,7 +129,7 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         return {
           mode: 'paper',
           realTradingEnabled: false,
-          account,
+          account: paperAccountJson(account),
           message: `${accountSummary(account)}. Real Binance tools are not used in PAPER mode.`,
         }
       }
@@ -104,7 +176,7 @@ function activateTool(deps: BinanceTradingToolDependencies): ToolDefinition {
           serverName: receipt.connector.serverName,
           url: receipt.connector.url,
         },
-        ...(state === undefined ? {} : { connectorState: state }),
+        ...(state === undefined ? {} : { connectorState: agentOsJson(state) }),
         message: 'Binance Agent OS is enabled. Complete Binance authorization/scopes if requested. No real order has been placed.',
       }
     },
@@ -133,7 +205,7 @@ function statusTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         deps.broker.account(),
         deps.agentOs?.binanceAgentOsState?.() ?? Promise.resolve({ configured: false }),
       ])
-      return { paper, real }
+      return { paper: paperAccountJson(paper), real: agentOsJson(real) }
     },
     presentCall() {
       return { card: 'generic', title: 'Binance trading status', kind: 'read' }
@@ -160,7 +232,7 @@ function candlesTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         mode: 'public-market-data',
         symbol: args.symbol.trim().toUpperCase(),
         interval: args.interval,
-        candles,
+        candles: candles.map(candleJson),
       }
     },
     presentCall(args) {
@@ -186,7 +258,7 @@ function paperOrderTool(deps: BinanceTradingToolDependencies): ToolDefinition {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args) {
-      return deps.broker.order({
+      const result = await deps.broker.order({
         symbol: args.symbol,
         side: args.side,
         ...(args.quantity === undefined ? {} : { quantity: args.quantity }),
@@ -194,6 +266,10 @@ function paperOrderTool(deps: BinanceTradingToolDependencies): ToolDefinition {
         ...(args.strategyId === undefined ? {} : { strategyId: args.strategyId }),
         ...(args.reason === undefined ? {} : { reason: args.reason }),
       })
+      return {
+        trade: paperTradeJson(result.trade),
+        account: paperAccountJson(result.account),
+      }
     },
     presentCall(args) {
       return {
@@ -216,7 +292,7 @@ function paperAccountTool(deps: BinanceTradingToolDependencies): ToolDefinition 
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute() {
-      return deps.broker.account()
+      return paperAccountJson(await deps.broker.account())
     },
     presentCall() {
       return { card: 'generic', title: 'Binance PAPER account', kind: 'read' }
@@ -236,7 +312,7 @@ function paperJournalTool(deps: BinanceTradingToolDependencies): ToolDefinition 
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args) {
-      return [...await deps.broker.journal(args.limit ?? 100)]
+      return [...await deps.broker.journal(args.limit ?? 100)].map(paperTradeJson)
     },
     presentCall() {
       return { card: 'generic', title: 'Binance PAPER journal', kind: 'read' }
