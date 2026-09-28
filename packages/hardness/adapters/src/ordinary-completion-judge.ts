@@ -57,6 +57,7 @@ const READ_ONLY_TOOLS = [
 const MUTATION = /^(?:write|edit|str_replace_editor|apply_patch|create_file|update_file|delete_file|move_file|rename_file|upload(?:_.*)?|deploy(?:_.*)?|publish(?:_.*)?)$/
 const VERIFY = /^(?:verify(?:_.*)?|check(?:_.*)?|test(?:_.*)?|lint(?:_.*)?|typecheck(?:_.*)?|build(?:_.*)?|smoke(?:_.*)?)$/
 const SHELL = /^(?:bash|pwsh|run_code)$/
+const VISUAL_VERIFY = /^(?:read_image|screenshot|capture(?:_.*)?|browser_(?:snapshot|inspect)|gameplay(?:_.*)?|playtest(?:_.*)?)$/
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest|benchmark|tracemalloc)\b/i
 const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|merge|rebase|cherry-pick|reset|checkout|switch)|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|New-Item|Rename-Item)\b|(?:>>?|\b(?:sed\s+-i|tee)\b)/i
 const SUBSTANTIVE = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|c|cc|cpp|h|hpp|cs|php|rb|swift|html?|css|scss|sass|less|vue|svelte|ya?ml|toml|json)\b/i
@@ -105,7 +106,8 @@ function isSubstantiveMutation(name: string, args: unknown): boolean {
 
 function isVerification(name: string, args: unknown): boolean {
   const op = operationName(name)
-  return VERIFY.test(op) || (SHELL.test(op) && SHELL_VERIFY.test(argumentText(args)))
+  return VERIFY.test(op) || VISUAL_VERIFY.test(op)
+    || (SHELL.test(op) && SHELL_VERIFY.test(argumentText(args)))
 }
 
 function requestText(message: UserMessage): string {
@@ -324,6 +326,19 @@ export function installOrdinaryCompletionJudgeBridge(
   disposers.push(ctx.on('agent/turn-stopping', async ({ agent, signal }) => {
     const state = states.get(agent)
     if (state === undefined || state.generation === 0) return
+    if (isGameDevelopmentNeed({ description: state.request })
+      && state.verifiedGeneration !== state.generation
+      && state.judgedGeneration !== state.generation) {
+      state.judgedGeneration = state.generation
+      agent.steer(createUserMessage({
+        content: [{
+          type: 'text',
+          text: 'Game completion review requires fresh executed visual/play evidence after the latest mutation. Run the current game/build or emulator, capture a current gameplay frame, inspect it with read_image or equivalent, and verify the player plus representative enemy and NPC/interactive actors. Primitive boxes/rectangles/capsules/debug shapes or unanimated placeholder actors must be replaced before completion.',
+        }],
+        source: { kind: 'plugin', plugin: 'ordinary-completion-judge', form: 'notice', summary: 'game visual verification required' },
+      }))
+      return
+    }
     if (state.verifiedGeneration !== state.generation || state.judgedGeneration === state.generation) return
     if (state.judgePasses >= maxPasses) return
 
