@@ -431,12 +431,15 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuth
           : mcpRuntime?.status === 'disconnected'
             ? { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
             : managed === true
-              ? { text: t('jevConfiguredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
+              ? {
+                  text: definition.id === 'binance' ? t('authorizationRequiredStatus') : t('jevConfiguredStatus'),
+                  className: connectorStyles['connectorStatusWarn'] ?? '',
+                }
               : undefined
   const status = liveStatus ?? mcpStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
-      ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+      ? { text: t('binancePaperReadyStatus'), className: '' }
       : definition.mode === 'mcp'
         ? { text: definition.id === 'jev' ? t('jevOptionalStatus') : t('mcpReadyStatus'), className: '' }
       : definition.mode === 'api-key'
@@ -732,7 +735,6 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
       || live?.callable === true
       || accountGrantConnectsCatalogEntry(account)
       || mcpRuntime?.status === 'ready'
-      || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, connected }
   }), [entries, liveConnectors, mcpHub])
 
