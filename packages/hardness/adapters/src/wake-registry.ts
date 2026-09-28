@@ -29,12 +29,18 @@ interface SharedWakeEntry {
 
 const shared = new Map<string, SharedWakeEntry>()
 
+/** Shared wake-engine lease with executor binding and reference-counted release. */
 export interface WakeEngineLease {
   readonly engine: WakeEngine
   bindExecutor(executor: WakeExecutor): void
   release(): void
 }
 
+/**
+ * Acquire the process-shared wake engine for one durable ledger path.
+ * @param ledgerPath - JSON ledger path, or `:memory:` for ephemeral state.
+ * @returns Reference-counted lease over the shared engine.
+ */
 export function acquireWakeEngine(ledgerPath: string): WakeEngineLease {
   const key = ledgerPath.trim()
   if (key.length === 0) throw new Error('wake ledger path must be a non-empty string')
