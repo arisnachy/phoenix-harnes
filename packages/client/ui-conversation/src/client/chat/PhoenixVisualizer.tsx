@@ -198,7 +198,7 @@ function parseChart(spec: JsonRecord): ParsedChart | undefined {
 function candlestickSource(spec: JsonRecord): readonly unknown[] {
   if (Array.isArray(spec.candles)) return spec.candles
   const data = isRecord(spec.data) ? spec.data : undefined
-  return Array.isArray(data?.candles) ? data.candles : []
+  return data !== undefined && Array.isArray(data.candles) ? data.candles : []
 }
 
 function candlestickLabel(row: JsonRecord, index: number): string {
