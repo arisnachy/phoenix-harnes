@@ -59,6 +59,50 @@ describe('ordinary completion judge', () => {
     expect(dispose).toHaveBeenCalledOnce()
   })
 
+  it('injects the premium game quality contract into ordinary game reviews', async () => {
+    const dispose = vi.fn(async () => {})
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'game-judge' as never,
+      localAgent: undefined,
+      result: Promise.resolve({
+        stopReason: 'completed' as const,
+        output: [],
+        structured: {
+          verdict: 'needs_changes',
+          summary: 'audiovisual evidence is incomplete',
+          evidence: ['build-log'],
+          known_limitations: ['audio mix not yet reviewed'],
+          risk_coverage: { ambiguity: true, limitations: true, report_integrity: true },
+          required_changes: ['capture executed gameplay and review audio mix'],
+        },
+      }),
+      dispose,
+    }))
+
+    await reviewOrdinaryCompletion({
+      subagents: {
+        getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never,
+        start,
+      },
+      provider: 'spawn',
+      parent,
+      request: 'Crea un juego SNES premium con personajes, ambientes, animaciones, música y efectos',
+      mutations: ['write'],
+      verifications: ['pwsh:build'],
+      signal: new AbortController().signal,
+    })
+
+    const options = start.mock.calls[0]?.[1]
+    const prompt = options?.prompt?.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') ?? ''
+    expect(prompt).toMatch(/Task quality contract/i)
+    expect(prompt).toMatch(/current high-quality references/i)
+    expect(prompt).toMatch(/character quality/i)
+    expect(prompt).toMatch(/environment quality/i)
+    expect(prompt).toMatch(/music\/ambience\/SFX/i)
+    expect(prompt).toMatch(/executed build or emulator/i)
+    expect(dispose).toHaveBeenCalledOnce()
+  })
+
   it('fails closed when pass has no concrete evidence', async () => {
     const start = vi.fn<SubagentRuntime['start']>(async () => ({
       id: 'judge' as never,

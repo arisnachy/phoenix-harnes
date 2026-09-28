@@ -36,8 +36,8 @@ describe('qualityRequirementsForNeed', () => {
   })
 
   it('requires premium audiovisual, gameplay, and executed-build evidence for game work', () => {
-    const requirements = qualityRequirementsForNeed(need('game', {
-      description: 'Create a high-quality SNES-style action game with characters, environments and audio',
+    const requirements = qualityRequirementsForNeed(need('creative', {
+      description: 'Crea un juego SNES de alta calidad con personajes, ambientes, animación y sonido',
     }))
     const text = requirements.join(' ')
     expect(text).toMatch(/current high-quality references|quality bar/i)
@@ -48,6 +48,7 @@ describe('qualityRequirementsForNeed', () => {
     expect(text).toMatch(/gameplay feel|input response|camera/i)
     expect(text).toMatch(/frame-time|performance|memory/i)
     expect(text).toMatch(/executed game|ROM|play evidence/i)
+    expect(requirements.length).toBeGreaterThanOrEqual(12)
   })
 
   it('keeps a strong domain-neutral baseline for unknown capability kinds', () => {

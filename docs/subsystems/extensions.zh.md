@@ -297,6 +297,15 @@ Process-local MCP lifecycle registry. It stores no connection settings, credenti
 register(input: McpConnectorRegistrationInput): McpConnectorRegistration
 
 /**
+ * Request an immediate reconnect for one registered server.
+ * This is a same-process control seam: the callback itself is never returned
+ * by {@link list}, so model/browser projections remain secret-free.
+ * @param serverName - Stable MCP namespace to reconnect.
+ * @returns true when a live registration accepted the request.
+ */
+reconnect(serverName: string): boolean
+
+/**
  * Return detached entries in registration order.
  * @returns snapshots safe to pass to model-facing projection code.
  */
@@ -312,6 +321,26 @@ Source: [`packages/mcp/mcp-registry/src/index.ts`](../../packages/mcp/mcp-regist
 Provider registry and non-blocking important-event announcement queue.
 
 ```ts cordis-catalog
+/**
+ * Report whether the local Client can route conversation speech through neural TTS.
+ * @returns Current conversational voice availability and selected provider.
+ */
+@Remote('conversationStatus') async conversationStatus(): Promise<VoiceConversationStatus>
+
+/**
+ * Play one stable semantic segment on the Host without blocking the browser thread.
+ * @param request - Message identity, ordering, text, language, and final-segment metadata.
+ * @returns Admission/playback receipt for the selected neural provider.
+ */
+@Remote('conversationSpeak') async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt>
+
+/**
+ * Abort queued or active speech for one growing assistant response.
+ * @param request - Stable assistant-response key whose speech should be cancelled.
+ * @returns Number of in-flight segment controllers aborted for the response.
+ */
+@Remote('conversationCancel') async conversationCancel(request: VoiceConversationCancelRequest): Promise<VoiceConversationCancelReceipt>
+
 /**
  * Register a TTS provider and dispose it with its contributing fiber.
  * @param provider - Provider implementation with a unique id.
@@ -470,6 +499,28 @@ A pending Client activation request left the answerable state.
 ```
 
 Source: [`packages/extensions/cordis-host-runner/src/types.ts`](../../packages/extensions/cordis-host-runner/src/types.ts)
+
+<a id="phoenix-events"></a>
+
+### `phoenix/*` events
+
+<a id="phoenixwake-event--emit"></a>
+
+#### `phoenix/wake-event` — emit
+
+Deliver one normalized, already-authenticated external or internal event to Phoenix's durable wake-trigger runtime.
+
+```ts cordis-catalog
+/**
+ * Deliver one normalized, already-authenticated external or internal event
+ * to Phoenix's durable wake-trigger runtime.
+ * @mode emit
+ * @param event - Normalized event accepted by the durable wake runtime.
+ */
+'phoenix/wake-event'(event: WakeEvent): void
+```
+
+Source: [`packages/hardness/adapters/src/wake-runtime.ts`](../../packages/hardness/adapters/src/wake-runtime.ts)
 
 <a id="voice-events"></a>
 

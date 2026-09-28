@@ -889,10 +889,12 @@ Reject a proposed step or replace the messages that enter it. Calling `next()` p
  * @param payload.turn - the turn that will own the step.
  * @param payload.step - the step proposed by the loop.
  * @param payload.signal - the current turn's cancellation signal.
+ * @param payload.fastConversation - true only for strict small talk that omits tools, runtime context, and refresh work.
+ * @param payload.toolFreeConversation - true for any low-latency conversational turn that must not expose tools; contextual openers may still retain memory/runtime context.
  * Scope-filtered dispatch (`@phoenix-ai/dsh-scope`): agent-scoped listeners receive only that agent.
  * @mode waterfall
  */
-'agent/pre-step'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>
+'agent/pre-step'(this: Scoped<Agent>, payload: { agent: Agent; messages: UserMessage[]; turn: number; step: number; signal: AbortSignal; fastConversation?: boolean; toolFreeConversation?: boolean }, next: () => Promise<PreStepDecision>): Promise<PreStepDecision>
 ```
 
 Types: [Scoped](scope.zh.md) · [UserMessage](session.zh.md)

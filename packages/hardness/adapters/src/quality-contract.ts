@@ -1,6 +1,6 @@
 /** Task-specific quality requirements layered on HARDNESS completion. */
 
-const MAX_REQUIREMENTS = 20
+const MAX_REQUIREMENTS = 32
 
 const GENERAL_REQUIREMENTS = [
   'The final result is complete, internally consistent, and usable without unfinished placeholders, scaffolds, mocks, or partial substitutes.',
@@ -65,7 +65,7 @@ function matches(value: string, pattern: RegExp): boolean { return pattern.test(
  * @returns Whether game-specific quality requirements and review apply.
  */
 export function isGameDevelopmentNeed(need: unknown): boolean {
-  return matches(requestText(need), /\b(?:game|games|gaming|videogame|video-game|videojuego|videojuegos|unreal|unity|godot|blender|pixel\s*art|nes|snes|genesis|mega\s*drive|master\s*system|game\s*gear|game\s*boy|rom|homebrew|platformer|metroidvania|rpg|shooter|gameplay)\b/u)
+  return matches(requestText(need), /\b(?:game|games|gaming|juego|juegos|videogame|video-game|videojuego|videojuegos|unreal|unity|godot|blender|pixel\s*art|nes|snes|genesis|mega\s*drive|master\s*system|game\s*gear|game\s*boy|rom|homebrew|platformer|metroidvania|rpg|shooter|gameplay)\b/u)
 }
 
 /**
