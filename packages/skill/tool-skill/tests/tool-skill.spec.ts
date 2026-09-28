@@ -101,11 +101,19 @@ async function proposeStep(
   agent: Agent,
   messages: UserMessage[],
   fastConversation = false,
+  toolFreeConversation = fastConversation,
 ): Promise<PreStepDecision> {
   const signal = new AbortController().signal
   return await agentEvents(ctx, agent).waterfall(
     'agent/pre-step',
-    { messages, turn: 1, step: 1, signal, ...fastConversation ? { fastConversation: true } : {} },
+    {
+      messages,
+      turn: 1,
+      step: 1,
+      signal,
+      ...fastConversation ? { fastConversation: true } : {},
+      ...toolFreeConversation ? { toolFreeConversation: true } : {},
+    },
     () => Promise.resolve({ kind: 'enter' as const, messages }),
   )
 }
@@ -203,6 +211,31 @@ describe('dsh-tool-skill', () => {
 
     const fast = await proposeStep(ctx, agent, [prompt], true)
     expect(fast).toEqual({ kind: 'enter', messages: [prompt] })
+
+    const normal = await proposeStep(ctx, agent, [prompt])
+    expect(normal.kind).toBe('enter')
+    if (normal.kind === 'reject') throw new Error('expected normal catalog step')
+    expect(normal.messages.some(message => message.source.kind === 'skill-catalog')).toBe(true)
+  })
+
+  it('also defers the skill catalog for context-aware tool-free conversation', async () => {
+    const home = await tempDir('tool-contextual-catalog')
+    const ctx = await setup(home)
+    ctx.skills.register({
+      name: 'available-skill',
+      description: 'Available skill',
+      source: 'runtime',
+      content: 'Body.',
+    })
+    const session = Session.create(SessionId('contextual-catalog'))
+    const agent = sessionAgent(session)
+    const prompt = createUserMessage({
+      content: [{ type: 'text', text: 'que quieres que hagamos' }],
+      source: { kind: 'user' },
+    })
+
+    const contextual = await proposeStep(ctx, agent, [prompt], false, true)
+    expect(contextual).toEqual({ kind: 'enter', messages: [prompt] })
 
     const normal = await proposeStep(ctx, agent, [prompt])
     expect(normal.kind).toBe('enter')
