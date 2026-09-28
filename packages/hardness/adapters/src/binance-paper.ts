@@ -274,7 +274,7 @@ async function writeState(path: string, state: BinancePaperState): Promise<void>
 
 async function withPathLock<T>(path: string, run: () => Promise<T>): Promise<T> {
   const previous = PATH_LOCKS.get(path) ?? Promise.resolve()
-  let release!: () => void
+  let release: (() => void) | undefined
   const gate = new Promise<void>(resolve => { release = resolve })
   const current = previous.catch(() => undefined).then(() => gate)
   PATH_LOCKS.set(path, current)
@@ -282,7 +282,7 @@ async function withPathLock<T>(path: string, run: () => Promise<T>): Promise<T> 
   try {
     return await run()
   } finally {
-    release()
+    release?.()
     if (PATH_LOCKS.get(path) === current) PATH_LOCKS.delete(path)
   }
 }
@@ -408,7 +408,9 @@ export class BinancePaperBroker {
         if (hasQuantity === hasQuote) {
           throw new Error('Paper BUY requires exactly one of quantity or quoteAmountUsdt')
         }
-        quantity = hasQuantity ? input.quantity! : input.quoteAmountUsdt! / price
+        if (input.quantity !== undefined) quantity = input.quantity
+        else if (input.quoteAmountUsdt !== undefined) quantity = input.quoteAmountUsdt / price
+        else throw new Error('Paper BUY requires a quantity or quoteAmountUsdt')
       } else {
         if (input.quoteAmountUsdt !== undefined || input.quantity === undefined) {
           throw new Error('Paper SELL requires quantity and does not accept quoteAmountUsdt')
