@@ -4,6 +4,8 @@ export interface PhoenixLogoProps {
   size?: number
   /** Optional host styling. */
   className?: string
+  /** Brand mark by default; activity uses the warm animated-chat avatar artwork. */
+  variant?: 'brand' | 'activity'
 }
 
 /**
@@ -13,10 +15,10 @@ export interface PhoenixLogoProps {
  * used by the approved Phoenix visual direction; CSS controls only sizing and
  * a restrained shadow.
  */
-export function PhoenixLogo({ size = 24, className }: PhoenixLogoProps) {
+export function PhoenixLogo({ size = 24, className, variant = 'brand' }: PhoenixLogoProps) {
   return (
     <img
-      src="/phoenix-emblem.png"
+      src={variant === 'activity' ? '/phoenix-activity-avatar.svg' : '/phoenix-emblem.png'}
       width={size}
       height={size}
       className={className}
