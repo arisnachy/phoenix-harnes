@@ -346,7 +346,8 @@ export class BinancePaperBroker {
     const symbols = Object.keys(state.positions)
     const marks = await this.market.prices(symbols)
     const positions = symbols.map(symbol => {
-      const position = state.positions[symbol]!
+      const position = state.positions[symbol]
+      if (position === undefined) throw new Error(`Missing paper position for ${symbol}`)
       const marketPriceUsdt = marks[symbol]
       if (!finitePositive(marketPriceUsdt)) throw new Error(`Missing market price for ${symbol}`)
       const marketValueUsdt = position.quantity * marketPriceUsdt
