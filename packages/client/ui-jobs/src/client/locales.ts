@@ -75,3 +75,39 @@ export const en: Record<JobKey, string> = {
 
 /** Key domain of the `job` namespace (zh is the source of truth). */
 export type JobKey = keyof typeof zh
+
+
+/** Spanish dictionary, key-identical to the Chinese source of truth. */
+export const es: Record<JobKey, string> = {
+  'count.live.one': '{count} tarea en segundo plano en ejecución',
+  'count.live.other': '{count} tareas en segundo plano en ejecución',
+  'count.idle.one': '{count} tarea en segundo plano',
+  'count.idle.other': '{count} tareas en segundo plano',
+  'list.aria': 'Tareas en segundo plano',
+  'status.running': 'en ejecución',
+  'status.stopping': 'deteniéndose',
+  'status.completed': 'completada',
+  'status.killed': 'cancelada',
+  'status.failed': 'fallida',
+  'duration.seconds': '{seconds} s',
+  'duration.minutes': '{minutes} min {seconds} s',
+  'duration.hours': '{hours} h {minutes} min',
+  'duration.title.live': 'En ejecución durante {duration}',
+  'duration.title.done': 'Duró {duration}',
+  'task.title': 'Tareas',
+  'task.count': 'Tareas {count}',
+  'task.list.aria': 'Tareas persistentes de Phoenix',
+  'task.empty': 'No hay tareas programadas',
+  'task.status.scheduled': 'programada',
+  'task.status.running': 'en ejecución',
+  'task.status.completed': 'completada',
+  'task.status.failed': 'fallida',
+  'task.status.paused': 'pausada',
+  'task.status.cancelled': 'cancelada',
+  'task.recurrence.once': 'una vez',
+  'task.recurrence.yearly': 'cada año',
+  'task.recurrence.years': 'cada {count} años',
+  'task.recurrence.days': 'cada {count} días',
+  'task.recurrence.hours': 'cada {count} horas',
+  'task.recurrence.minutes': 'cada {count} minutos',
+}
