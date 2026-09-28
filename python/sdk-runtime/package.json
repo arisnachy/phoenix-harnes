@@ -125,6 +125,10 @@
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/schemastery": "workspace:^",
     "@phoenix-ai/dsh-hardness-adapters": "workspace:^",
-    "@phoenix-ai/dsh-tool-session-learning": "workspace:^"
+    "@phoenix-ai/dsh-tool-session-learning": "workspace:^",
+    "@phoenix-ai/dsh-client-connection": "workspace:^",
+    "@phoenix-ai/dsh-hardness": "workspace:^",
+    "@phoenix-ai/dsh-host-apiproxy": "workspace:^",
+    "@phoenix-ai/dsh-session-learning": "workspace:^"
   }
 }
