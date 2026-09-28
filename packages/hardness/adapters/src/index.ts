@@ -16,6 +16,7 @@ import {
 } from './mission-runtime.ts'
 import { installHardnessProtocol, type HardnessPromptRegistrar } from './protocol.ts'
 import { installProactivityProtocol } from './proactivity-protocol.ts'
+import { installWakeProtocol } from './wake-protocol.ts'
 import { installHumanPresenceProtocol } from './presence-protocol.ts'
 import { installInitiativeContextProjection, type InitiativePromptRegistrar } from './initiative-context.ts'
 import { installConnectorProtocol } from './connector-protocol.ts'
@@ -120,6 +121,7 @@ export { installHardnessProtocol } from './protocol.ts'
 export type { HardnessPromptRegistrar } from './protocol.ts'
 export { CONNECTOR_OPERATING_PROTOCOL, installConnectorProtocol } from './connector-protocol.ts'
 export { HUMAN_PRESENCE_PROTOCOL, installHumanPresenceProtocol } from './presence-protocol.ts'
+export { WAKE_PROTOCOL, installWakeProtocol } from './wake-protocol.ts'
 export { renderInitiativeContext, installInitiativeContextProjection } from './initiative-context.ts'
 export { CAPABILITY_OPERATING_PROTOCOL, installCapabilityOperatingProtocol } from './capability-protocol.ts'
 export { REALITY_OPERATING_PROTOCOL, installRealityProtocol } from './reality-protocol.ts'
@@ -248,6 +250,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     if (modelTools) {
       disposers.push(installRealityProtocol(systemPrompt))
       disposers.push(installProactivityProtocol(systemPrompt))
+      disposers.push(installWakeProtocol(systemPrompt))
       disposers.push(installHumanPresenceProtocol(systemPrompt))
       disposers.push(installInitiativeContextProjection(
         systemPrompt as HardnessPromptRegistrar & InitiativePromptRegistrar,
