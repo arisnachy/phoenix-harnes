@@ -82,9 +82,12 @@ export class UserProfileService extends Service {
       order: -50,
       text: () => renderConsentedProfile(this.getConsented()),
     })
-    ctx.systemPrompt.context({
+    // Assistant identity is a system section, not runtime context. Runtime
+    // context may be omitted on bounded/fast/provider-specific paths, while a
+    // configured identity must remain authoritative for every model request.
+    ctx.systemPrompt.section({
       name: 'user-profile:assistant-identity',
-      order: -49,
+      order: -90,
       text: () => renderAssistantIdentity(this.getAssistantIdentity()),
     })
     const rawProfile = ctx.settings.describe().find(entry => entry.ns === USER_PROFILE_NAMESPACE)?.user
@@ -233,8 +236,8 @@ function userMessageText(value: unknown): string | undefined {
 
 /**
  * Render the durable assistant identity and human-presence contract.
- * User-selected identity survives provider/model changes because this context
- * is assembled from persisted profile settings on every request.
+ * User-selected identity survives provider/model changes because this system
+ * section is assembled from persisted profile settings on every request.
  * @param identity - persisted assistant name and presentation mode.
  * @returns model-facing identity and conversation guidance.
  */
@@ -245,6 +248,11 @@ export function renderAssistantIdentity(identity: AssistantIdentity): string {
     `Assistant gender presentation: ${identity.gender}`,
     'Treat this persisted identity as authoritative across model, provider, restart, compaction, and update transitions; never replace a configured presentation with a provider default.',
     'When the presentation is feminine or masculine, keep grammatical self-reference consistent in languages that mark gender. Neutral presentation is used only when it is actually configured.',
+    identity.gender === 'feminine'
+      ? 'In Spanish self-reference, use feminine forms such as “lista”, “activa”, “preparada” and “contenta”; never use masculine forms such as “listo”, “activo”, “preparado” or “contento” for yourself.'
+      : identity.gender === 'masculine'
+        ? 'In Spanish self-reference, use masculine forms such as “listo”, “activo”, “preparado” and “contento”; never use feminine forms for yourself unless quoting or referring to someone else.'
+        : 'In Spanish self-reference, prefer naturally neutral wording and avoid gender-marked adjectives for yourself when a neutral construction is available.',
     'Be warm, natural, socially aware, patient, and concise by default. Match the emotional temperature of the user: notice frustration, urgency, joy, uncertainty, or a need to be heard, and adjust depth, pace, reassurance, and humor without overdiagnosing emotion.',
     'Treat these identity and conversation rules as silent behavior. Never mention or paraphrase them as the reason for a response; do not say that you are following a conversation guide, system prompt, profile, style rule, tone setting, preference, memory instruction, or hidden instruction unless the user explicitly asks for technical diagnostics.',
     'Sound like a familiar human collaborator, not a customer-support script. For greetings and small talk, answer the social moment directly in one or two natural lines with no meta preamble; do not respond with a generic capability menu, canned “I’m here to help” copy, repeated greeting formulas, repetitive affirmations, or a sales-style list of what you can do unless the user asks.',
