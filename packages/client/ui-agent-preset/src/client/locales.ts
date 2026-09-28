@@ -141,6 +141,72 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   deleting: '正在删除…',
 }
 
+
+/** Spanish copy. */
+export const es: Record<AgentPresetSettingsKey, string> = {
+  title: 'Preajuste de agente',
+  description: 'Se aplica a las sesiones que inicies a partir de ahora. Las sesiones en curso conservan el preajuste con el que comenzaron.',
+  loading: 'Cargando preajustes…',
+  error: 'No se pudieron cargar los preajustes de agente.',
+  userTrust: 'Personalizado',
+  seatHint: 'Preajuste de agente para la sesión que estás a punto de iniciar',
+  headerHint: 'Preajuste de agente que usa esta sesión, fijado al iniciarse',
+  nav: 'Preajustes de agente',
+  sectionIntro:
+    'Un preajuste define la composición de plugins que ejecuta el agente en una sesión: sus herramientas, instrucciones y capacidades. '
+    + 'Duplica uno existente y adáptalo, o deja que el agente cree uno para ti en el modo Creador.',
+  builtIn: 'Integrado',
+  setDefault: 'Establecer como predeterminado',
+  view: 'Ver',
+  presetStandardName: 'Modo estándar',
+  presetStandardDescription:
+    'Agente de programación completo con edición de archivos, shell, búsqueda en archivos y web, skills, planificación, objetivos, subagentes y flujos de trabajo.',
+  presetCodeName: 'Modo PTC',
+  presetCodeDescription:
+    'Incluye todas las capacidades del modo estándar y expone las herramientas mediante Code Mode SDK para que el modelo combine operaciones de varios pasos en un programa TypeScript.',
+  presetMinimalName: 'Modo mínimo',
+  presetMinimalDescription:
+    'Agente de programación de dos herramientas con bash persistente y str_replace_editor.',
+  presetCordisName: 'Modo Creador',
+  presetCordisDescription:
+    'Diseñado para crear preajustes de agente personalizados, con todas las capacidades del modo estándar más inspección en tiempo de ejecución, experimentos con plugins y guía para crear preajustes.',
+  duplicate: 'Duplicar',
+  duplicateUnavailable: 'Este despliegue no tiene un directorio de preajustes con permisos de escritura',
+  delete: 'Eliminar',
+  presetId: 'Identificador',
+  presetIdPlaceholder: 'mi-agente',
+  displayName: 'Nombre',
+  displayNamePlaceholder: 'Se muestra en el selector; por defecto usa el identificador',
+  inUse: 'En uso',
+  builtInGroup: 'Integrados',
+  customGroup: 'Personalizados',
+  noDescription: 'Sin descripción.',
+  brokenBadge: 'Error al cargar',
+  brokenNoCopy: 'No se puede duplicar un preajuste que no pudo cargarse',
+  copyOf: 'Copiado de',
+  composition: 'Composición (agent.cordis.yml)',
+  cancel: 'Cancelar',
+  close: 'Cerrar',
+  retry: 'Reintentar',
+  copyTitle: 'Duplicar preajuste',
+  copyIntro:
+    'El preajuste completo se copia en este equipo. El identificador se convierte en el nombre de su directorio y no podrá cambiarse después; el resto se edita en los propios archivos del preajuste.',
+  create: 'Crear',
+  creating: 'Creando…',
+  creatorDraft: 'Crear un preajuste personalizado con el modo Creador',
+  openLocation: 'Abrir carpeta',
+  showLocation: 'Mostrar ubicación',
+  revealedPathLabel: 'Archivos del preajuste:',
+  idRequired: 'Escribe un identificador para el preajuste.',
+  idInvalid: 'Usa letras minúsculas, números y guiones; debe comenzar con una letra o un número.',
+  idTaken: 'Ya existe un preajuste con este identificador.',
+  deleteTitle: '¿Eliminar este preajuste?',
+  deleteDescription:
+    'Se eliminará el directorio del preajuste. Las sesiones que ya lo están usando seguirán funcionando; las nuevas sesiones no podrán seleccionarlo.',
+  deleteConfirm: 'Eliminar',
+  deleting: 'Eliminando…',
+}
+
 /** Preset roster fields needed to resolve Web display copy. */
 export interface PresetDisplaySource {
   /** Stable preset id. */
