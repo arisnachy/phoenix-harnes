@@ -25,3 +25,15 @@ export const en: Record<keyof typeof zh, string> = {
 
 /** Stable locale keys consumed by the shared modal. */
 export type SessionLogDownloadKey = keyof typeof zh
+
+
+/** Spanish Session export strings. */
+export const es: Record<keyof typeof zh, string> = {
+  'dialog.preparingTitle': 'Exportando sesión',
+  'dialog.preparingDescription': 'Preparando un ZIP con esta sesión, sus subsesiones y los archivos adjuntos.',
+  'dialog.successTitle': 'Descarga de la sesión iniciada',
+  'dialog.successDescription': 'El navegador está descargando el ZIP de la sesión.',
+  'dialog.errorTitle': 'Falló la exportación de la sesión',
+  'dialog.close': 'Cerrar',
+  'dialog.commandFailed': 'No se pudo iniciar la exportación de la sesión.',
+}
