@@ -80,7 +80,7 @@ function httpStatus(error: unknown): number | undefined {
   return typeof code === 'number' ? code : undefined
 }
 
-function failureStatus(config: Config, error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {
+function failureStatus(error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {
   if (error instanceof UnauthorizedError || httpStatus(error) === 401 || httpStatus(error) === 403) {
     return { status: 'auth-required', reasonCode: 'authorization-required' }
   }
@@ -366,7 +366,7 @@ export function startConnection(
       if (firstAttemptError === undefined) firstAttemptError = error
       // Disposal clears current ownership before it closes the generation, so
       // only a live supervisor reports an attempt failure.
-      const status = failureStatus(config, error)
+      const status = failureStatus(error)
       if (isCurrent(generation)) {
         publishStatus?.(status.status, status.reasonCode)
         ctx.logger.warn(`${label}: connection attempt failed: ${String(error)}`)
