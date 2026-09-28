@@ -41,7 +41,8 @@
     "lib/invariant.js",
     "lib/bin.js",
     "lib/packaged-bin.js",
-    "lib/types/**/*.d.ts"
+    "lib/types/**/*.d.ts",
+    "bin/dsh-jsonrpc-agent.js"
   ],
   "license": "MIT",
   "dependencies": {
