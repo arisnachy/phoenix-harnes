@@ -15,7 +15,13 @@ import type {
   PreStepDecision,
   RequestErrorAction,
 } from '@phoenix-ai/dsh-agent'
-import { Inbox, agentEvents, assembleContextFor, isConversationalFastPathText } from '@phoenix-ai/dsh-agent'
+import {
+  Inbox,
+  agentEvents,
+  assembleContextFor,
+  isContextualConversationFastPathText,
+  isConversationalFastPathText,
+} from '@phoenix-ai/dsh-agent'
 import type { GenerateOptions, LlmCallConfig, Message, PreparedLlmCall } from '@phoenix-ai/dsh-llm'
 import {
   BlockAssembler,
@@ -302,20 +308,28 @@ export class ReactLoopAgent implements Agent {
     const claimed = this.inbox.claim(target, position.turn)
     const firstTurnBoundary = target === 'next-turn' && position.step === 1
     const userSteeringBoundary = target === 'next-step'
-    const fastConversation = (firstTurnBoundary || userSteeringBoundary)
+    const directText = directUserText(claimed)
+    const conversationalBoundary = firstTurnBoundary || userSteeringBoundary
+    const fastConversation = conversationalBoundary
       && isTextOnlyHumanBatch(claimed)
-      && isConversationalFastPathText(directUserText(claimed))
-    // Decide the fast path before prompt assembly. Otherwise a one-word social
-    // turn still enumerates and structured-clones the complete MCP/tool catalog
-    // before throwing those schemas away.
+      && isConversationalFastPathText(directText)
+    const contextualConversation = conversationalBoundary
+      && isTextOnlyHumanBatch(claimed)
+      && !fastConversation
+      && isContextualConversationFastPathText(directText)
+    const toolFreeConversation = fastConversation || contextualConversation
+    // Decide both low-latency paths before prompt assembly. Strict small talk
+    // skips tools and runtime context; contextual openers stay tool-free while
+    // retaining memory/initiative context and full conversational continuity.
     const assembled = await this.loopCtx.systemPrompt.assemble({
       ...assembleContextFor(this, signal),
-      ...fastConversation ? { omitTools: true, omitRuntimeContext: true } : {},
+      ...toolFreeConversation ? { omitTools: true } : {},
+      ...fastConversation ? { omitRuntimeContext: true } : {},
     })
     signal.throwIfAborted()
     // A waterfall listener may deliberately add a schema even when providers
     // were skipped. Keep the conversational boundary strictly tool-free.
-    const assembly = fastConversation && assembled.tools.length > 0
+    const assembly = toolFreeConversation && assembled.tools.length > 0
       ? { ...assembled, tools: [] }
       : assembled
     const sections = renderContextSections(assembly)
@@ -326,7 +340,13 @@ export class ReactLoopAgent implements Agent {
       ? undefined
       : this.runtimeContext.project(joinContextSections(sections), sections)
     const decision = await this.dispatch.waterfall(
-      'agent/pre-step', { messages: claimed, ...position, signal, ...fastConversation ? { fastConversation: true } : {} },
+      'agent/pre-step', {
+        messages: claimed,
+        ...position,
+        signal,
+        ...fastConversation ? { fastConversation: true } : {},
+        ...toolFreeConversation ? { toolFreeConversation: true } : {},
+      },
       (): Promise<PreStepDecision> => Promise.resolve<PreStepDecision>({
         kind: 'enter',
         messages: context === undefined ? claimed : [...claimed, context],
