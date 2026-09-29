@@ -39,7 +39,7 @@ const SessionBodyOutlet = memo(function SessionBodyOutlet({
 })
 
 export function ConversationRoot({
-  sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock, useUserProfile,
+  sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock, useUserProfile, useProactivityAttention,
   renderSlot, renderSlotChain, selectWorkspace, t,
 }: ConversationRootProps) {
   const openState = useSession(s => s.openState)
@@ -54,6 +54,7 @@ export function ConversationRoot({
   // send; its reason is already localized by whoever raised it.
   const composerBlock = useComposerBlock(block => block)
   const preferredName = useUserProfile(profile => profile.preferredName)
+  const proactiveAttention = useProactivityAttention(items => items)
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
@@ -186,7 +187,7 @@ export function ConversationRoot({
   const composerBar = (
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
       {hero && <HeroGlow className={css.heroGlow} />}
-      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} />}
+      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} attention={proactiveAttention} />}
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
