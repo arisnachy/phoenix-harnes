@@ -2636,7 +2636,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:203`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:209`](../packages/core/system-prompt/src/index.ts)
 
 <a id="phoenix-aidsh-terminal-bash"></a>
 
@@ -3168,7 +3168,7 @@ type ConfiguredAgentOptions = Omit<AgentOptions, 'reasoningEffort'> & {
 
 Depends on: [`AgentOptions`](subsystems/core.md)
 
-Source: [`packages/subagent/tool-subagent/src/index.ts:107`](../packages/subagent/tool-subagent/src/index.ts)
+Source: [`packages/subagent/tool-subagent/src/index.ts:118`](../packages/subagent/tool-subagent/src/index.ts)
 
 <a id="phoenix-aidsh-tool-subagent-report"></a>
 
