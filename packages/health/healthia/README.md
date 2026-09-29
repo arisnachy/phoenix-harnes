@@ -1,5 +1,7 @@
 # `@phoenix-ai/dsh-healthia`
 
+[English](README.md) | [中文](README.zh.md)
+
 Provider-neutral longitudinal health capability seam for PHOENIX.
 
 HealthIA is additive: it does not replace PHOENIX, change the Web layout, own a
