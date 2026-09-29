@@ -147,8 +147,10 @@ export interface Config {
     whenProvider: string
     /** Provider used for the child request. */
     provider: string
-    /** Model id used for the child request. */
+    /** Fallback model id used for the child request. */
     model: string
+    /** Reuse the parent's model when its id matches this regular expression. */
+    inheritParentModelPattern?: string
     /** Explicit adapter reasoning level for the child request. */
     reasoningEffort?: string
   }
@@ -198,8 +200,15 @@ export const Config: z<Config> = z.object({
     whenProvider: z.string().required(),
     provider: z.string().required(),
     model: z.string().required(),
+    inheritParentModelPattern: z.string(),
     reasoningEffort: z.string(),
-  }).default(undefined as unknown as { whenProvider: string; provider: string; model: string; reasoningEffort: string }),
+  }).default(undefined as unknown as {
+    whenProvider: string
+    provider: string
+    model: string
+    inheritParentModelPattern: string
+    reasoningEffort: string
+  }),
   /* jscpd:ignore-end */
   persona: z.string(),
   // Preserve omission; Schemastery's `{ allow: [] }` default would deny every tool.
@@ -517,12 +526,22 @@ export function apply(ctx: Context, config: Config): void {
         const childRoute = config.childRoute !== undefined && parent.options.provider === config.childRoute.whenProvider
           ? config.childRoute
           : undefined
+        let inheritedChildModel: string | undefined
+        if (childRoute?.inheritParentModelPattern !== undefined && parent.options.model !== undefined) {
+          let inherit: RegExp
+          try {
+            inherit = new RegExp(childRoute.inheritParentModelPattern, 'iu')
+          } catch (error: unknown) {
+            throw new Error(`subagent childRoute inheritParentModelPattern is invalid: ${String(error)}`, { cause: error })
+          }
+          if (inherit.test(parent.options.model)) inheritedChildModel = parent.options.model
+        }
         const configuredAgentOptions = childRoute === undefined
           ? config.agentOptions
           : {
             ...config.agentOptions,
             provider: childRoute.provider,
-            model: childRoute.model,
+            model: inheritedChildModel ?? childRoute.model,
             ...childRoute.reasoningEffort === undefined
               ? {}
               : { reasoningEffort: ReasoningEffortId(childRoute.reasoningEffort) },
