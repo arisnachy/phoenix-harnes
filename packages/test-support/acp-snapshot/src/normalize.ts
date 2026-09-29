@@ -429,6 +429,7 @@ export function normalizeStdout(
   }
   const frames = lines.map((line) => {
     const frame = JSON.parse(line) as Record<string, unknown>
+    canonicalizeAuxiliarySnapshotContent(frame)
     if ('id' in frame && frame.id !== undefined && frame.id !== null) {
       frame.id = stableId(frame.id)
     }
