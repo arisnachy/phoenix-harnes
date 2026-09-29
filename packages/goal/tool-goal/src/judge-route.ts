@@ -8,7 +8,7 @@ const REASONING_RANK = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'ma
 
 /**
  * Resolve the exact independent verifier model route.
- * Codex parents use Luna xhigh. Every non-Codex parent keeps the exact active
+ * Codex parents use GPT-6 Luna high. Every non-Codex parent keeps the exact active
  * provider and model, with the same effort or the highest advertised effort
  * when the parent omitted one.
  * @param input - parent route, optional model catalog, and cancellation signal.
@@ -24,8 +24,8 @@ export async function resolveGoalJudgeAgentOptions(input: {
   if (provider === 'openai-codex') {
     return {
       provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('high'),
     }
   }
   if (reasoningEffort !== undefined) return { provider, model, reasoningEffort }
