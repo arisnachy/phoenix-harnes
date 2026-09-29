@@ -31,9 +31,12 @@ async function freshComposer(): Promise<HTMLTextAreaElement> {
 /** Add one tiny PNG through the composer's native file-input seam and wait for its rail thumbnail. */
 async function addImage(textarea: HTMLTextAreaElement, name: string): Promise<void> {
   const image = new File([new Uint8Array([137, 80, 78, 71])], name, { type: 'image/png' })
-  const picker = textarea.closest('[data-composer-card]')?.querySelector<HTMLInputElement>('input[type="file"]')
-  if (picker === null || picker === undefined) throw new Error('composer file picker missing')
-  fireEvent.change(picker, { target: { files: [image] } })
+  fireEvent.paste(textarea, {
+    clipboardData: {
+      items: [{ kind: 'file', type: 'image/png', getAsFile: () => image }],
+      getData: () => '',
+    },
+  })
   await waitFor(() => {
     const rail = document.querySelector('[role="group"][aria-label="Pending images"]')
     if (rail === null) throw new Error('attachment rail missing')
