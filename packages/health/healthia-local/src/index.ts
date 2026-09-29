@@ -241,14 +241,13 @@ export class LocalHealthiaService extends HealthiaService {
   static inject = ['credentials']
   static Config: z<Config> = Config
 
-  private readonly keyPromise: Promise<Buffer>
+  private keyPromise: Promise<Buffer> | undefined
 
   constructor(ctx: Context, private readonly config: Config) {
     super(ctx)
     if (config.path.length === 0 || config.path !== config.path.trim()) {
       throw new TypeError('healthia-local: path must be a non-empty normalized string')
     }
-    this.keyPromise = this.resolveKey(config.keyRef ?? DEFAULT_HEALTHIA_KEY_REF)
   }
 
   override async listPatients(): Promise<readonly HealthPatient[]> {
@@ -287,20 +286,27 @@ export class LocalHealthiaService extends HealthiaService {
   ): Promise<HealthPatient> {
     const patient = await this.mutate((document) => {
       const current = patientExists(document, id)
-      const next: HealthPatient = {
+      const next: {
+        id: HealthPatient['id']
+        displayName: string
+        birthDate?: string
+        sexAtBirth?: HealthSexAtBirth
+        genderIdentity?: string
+        createdAt: string
+        updatedAt: string
+      } = {
         ...current,
         ...(input.displayName === undefined ? {} : { displayName: normalizedText('displayName', input.displayName, 200) }),
-        ...(input.birthDate === undefined ? {} : input.birthDate === null
-          ? { birthDate: undefined }
-          : { birthDate: assertBirthDate(input.birthDate) }),
-        ...(input.sexAtBirth === undefined ? {} : input.sexAtBirth === null
-          ? { sexAtBirth: undefined }
-          : { sexAtBirth: input.sexAtBirth }),
-        ...(input.genderIdentity === undefined ? {} : input.genderIdentity === null
-          ? { genderIdentity: undefined }
+        ...(input.birthDate === undefined || input.birthDate === null ? {} : { birthDate: assertBirthDate(input.birthDate) }),
+        ...(input.sexAtBirth === undefined || input.sexAtBirth === null ? {} : { sexAtBirth: input.sexAtBirth }),
+        ...(input.genderIdentity === undefined || input.genderIdentity === null
+          ? {}
           : { genderIdentity: normalizedText('genderIdentity', input.genderIdentity, 200) }),
         updatedAt: now(),
       }
+      if (input.birthDate === null) delete next.birthDate
+      if (input.sexAtBirth === null) delete next.sexAtBirth
+      if (input.genderIdentity === null) delete next.genderIdentity
       const patients = document.patients.map(candidate => candidate.id === id ? next : candidate)
       return [{ ...document, patients }, next] as const
     })
@@ -396,15 +402,27 @@ export class LocalHealthiaService extends HealthiaService {
       if (current === undefined) throw new HealthiaError(`unknown episode ${id}`, 'HEALTHIA_EPISODE_NOT_FOUND')
       const timestamp = now()
       const status = input.status ?? current.status
-      const next: HealthEpisode = {
+      const next: {
+        id: HealthEpisode['id']
+        patientId: HealthEpisode['patientId']
+        kind: string
+        title: string
+        status: HealthEpisode['status']
+        openedAt: string
+        updatedAt: string
+        closedAt?: string
+        summary?: string
+      } = {
         ...current,
         status,
         updatedAt: timestamp,
-        ...(status === 'open' ? { closedAt: undefined } : { closedAt: current.closedAt ?? timestamp }),
-        ...(input.summary === undefined ? {} : input.summary === null
-          ? { summary: undefined }
+        ...(status === 'open' ? {} : { closedAt: current.closedAt ?? timestamp }),
+        ...(input.summary === undefined || input.summary === null
+          ? {}
           : { summary: normalizedText('summary', input.summary, 8_000) }),
       }
+      if (status === 'open') delete next.closedAt
+      if (input.summary === null) delete next.summary
       const episodes = document.episodes.map(candidate => candidate.id === id ? next : candidate)
       return [{ ...document, episodes }, next] as const
     })
@@ -449,8 +467,13 @@ export class LocalHealthiaService extends HealthiaService {
     return deriveKey(resolved.value)
   }
 
+  private encryptionKey(): Promise<Buffer> {
+    this.keyPromise ??= this.resolveKey(this.config.keyRef ?? DEFAULT_HEALTHIA_KEY_REF)
+    return this.keyPromise
+  }
+
   private async read(): Promise<HealthDocument> {
-    const key = await this.keyPromise
+    const key = await this.encryptionKey()
     return await this.readUnlocked(key)
   }
 
@@ -468,7 +491,7 @@ export class LocalHealthiaService extends HealthiaService {
   private async mutate<T>(
     mutation: (document: HealthDocument) => readonly [HealthDocument, T],
   ): Promise<T> {
-    const key = await this.keyPromise
+    const key = await this.encryptionKey()
     await mkdir(dirname(this.config.path), { recursive: true, mode: 0o700 })
     return await withFileLock(this.config.path, async () => {
       const current = await this.readUnlocked(key)
