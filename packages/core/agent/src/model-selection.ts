@@ -343,10 +343,16 @@ function failedToolFingerprint(event: PhoenixAutoEvent): string | undefined {
   if (event.type !== 'tool/result') return undefined
   const data = event.data as {
     readonly error?: { readonly name?: string; readonly code?: string }
-    readonly message?: unknown
+    readonly message?: {
+      readonly content?: readonly { readonly type?: string; readonly text?: string }[]
+    }
   }
   if (data.error === undefined) return undefined
-  return `${data.error.name ?? ''}:${data.error.code ?? ''}:${stableFingerprint(data.message)}`
+  const text = data.message?.content
+    ?.filter(block => block.type === 'text' && typeof block.text === 'string')
+    .map(block => block.text as string)
+    .join(' ') ?? ''
+  return `${data.error.name ?? ''}:${data.error.code ?? ''}:${stableFingerprint(text)}`
 }
 
 function toolCallFingerprint(event: PhoenixAutoEvent): string | undefined {
