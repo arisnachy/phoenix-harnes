@@ -60,6 +60,43 @@ describe('subagent activity projection', () => {
     ])).toMatchObject({ phase: 'running-tools' })
   })
 
+  it('projects only text authored by the child model and resets it on a new step', () => {
+    const callId = 'call-live' as CallId
+    const live = fold([
+      descriptor(),
+      event('turn/start', 1, { turn: 1 }),
+      event('step/start', 2, { turn: 1, step: 1 }),
+      event('assistant/chunk', 3, {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'text-delta', text: 'Abriré lunaris-quest.html ' },
+      }),
+      event('assistant/chunk', 4, {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'text-delta', text: 'en el navegador.' },
+      }),
+      event('tool/call', 5, { turn: 1, step: 1, callId, name: 'browser_open', arguments: '{}' }),
+    ])
+    expect(live).toMatchObject({
+      phase: 'running-tools',
+      text: 'Abriré lunaris-quest.html en el navegador.',
+    })
+
+    const reset = fold([
+      descriptor(),
+      event('turn/start', 1, { turn: 1 }),
+      event('step/start', 2, { turn: 1, step: 1 }),
+      event('assistant/chunk', 3, {
+        turn: 1,
+        step: 1,
+        chunk: { type: 'text-delta', text: 'Primera acción' },
+      }),
+      event('step/start', 4, { turn: 1, step: 2 }),
+    ])
+    expect(reset).toEqual({ phase: 'preparing' })
+  })
+
   it('waits for every pending tool before verifying', () => {
     const c1 = 'call-1' as CallId
     const c2 = 'call-2' as CallId
