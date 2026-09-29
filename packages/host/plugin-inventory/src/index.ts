@@ -24,11 +24,13 @@ import {
   BINANCE_AGENT_OS_URL,
   JEV_API_KEY_REF,
   X_API_MCP_SERVER_NAME,
+  X_PHOENIX_API_MCP_SERVER_NAME,
   X_CLIENT_ID_REF,
   X_CLIENT_SECRET_REF,
   X_DOCS_MCP_SERVER_NAME,
   JEV_MCP_SERVER_NAME,
   ManagedMcpController,
+  type XMcpIdentity,
 } from './mcp-managed.ts'
 import type {
   ChatGptWebSnapshot,
@@ -289,6 +291,11 @@ export class PluginInventoryGateway extends TypertRemoteService {
       status?: McpConnectorRuntimeEntry['status']
       reasonCode?: McpConnectorRuntimeEntry['reasonCode']
     }
+    phoenixApi: {
+      configured: boolean
+      status?: McpConnectorRuntimeEntry['status']
+      reasonCode?: McpConnectorRuntimeEntry['reasonCode']
+    }
     docs: {
       configured: boolean
       status?: McpConnectorRuntimeEntry['status']
@@ -306,11 +313,15 @@ export class PluginInventoryGateway extends TypertRemoteService {
       ])
     const managed = await this.managedMcp.snapshot()
     const apiConfigured = managed.some(connector => connector.serverName === X_API_MCP_SERVER_NAME)
+    const phoenixApiConfigured = managed.some(connector =>
+      connector.serverName === X_PHOENIX_API_MCP_SERVER_NAME)
     const docsConfigured = managed.some(connector => connector.serverName === X_DOCS_MCP_SERVER_NAME)
     const registry = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
       | { list(): readonly McpConnectorRuntimeEntry[] }
       | undefined
     const apiRuntime = registry?.list().find(entry => entry.serverName === X_API_MCP_SERVER_NAME)
+    const phoenixApiRuntime = registry?.list().find(entry =>
+      entry.serverName === X_PHOENIX_API_MCP_SERVER_NAME)
     const docsRuntime = registry?.list().find(entry => entry.serverName === X_DOCS_MCP_SERVER_NAME)
     const runtimeState = (configured: boolean, runtime: McpConnectorRuntimeEntry | undefined) => ({
       configured,
@@ -323,6 +334,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
       clientIdConfigured,
       clientSecretConfigured,
       api: runtimeState(apiConfigured, apiRuntime),
+      phoenixApi: runtimeState(phoenixApiConfigured, phoenixApiRuntime),
       docs: runtimeState(docsConfigured, docsRuntime),
     }
   }
@@ -331,11 +343,11 @@ export class PluginInventoryGateway extends TypertRemoteService {
    * Activate the exact official X API xurl bridge and X Docs MCP pair.
    * @returns Idempotent receipts for both pinned connectors.
    */
-  async enableXMcp(): Promise<{
+  async enableXMcp(options: { identity?: XMcpIdentity; username?: string } = {}): Promise<{
     api: McpRegistryInstallReceipt
     docs: McpRegistryInstallReceipt
   }> {
-    return this.managedMcp.installXMcp()
+    return this.managedMcp.installXMcp(options)
   }
 
   /**
