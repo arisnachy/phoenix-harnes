@@ -442,6 +442,7 @@ describe('dsh-tool-subagent', () => {
           whenProvider: 'openai-codex',
           provider: 'openai-codex',
           model: 'gpt-5.6-luna',
+          inheritParentModelPattern: '-luna(?:$|-)',
           reasoningEffort: 'high',
         },
         maxDepth: 'provider-managed',
@@ -456,6 +457,47 @@ describe('dsh-tool-subagent', () => {
       expect(seen?.agentOptions).toBeUndefined()
     },
   )
+
+  it('inherits a newer Luna generation from the Phoenix Auto live parent route', async () => {
+    let seen: { agentOptions?: { provider?: string; model?: string; reasoningEffort?: string } } | undefined
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    await ctx.plugin(ToolRuntime)
+    await ctx.plugin(SubagentRuntime)
+    ctx.subagents.registerProvider({
+      name: 'capture-latest-luna',
+      capabilities: { outputSchema: false, depthLimit: false, toolFilter: false, persona: false },
+      inheritsParentContext: false,
+      start: async (request) => {
+        seen = request
+        return {
+          id: SessionId('capture-latest-luna-child'),
+          localAgent: undefined,
+          result: Promise.resolve({ output: [{ type: 'text', text: 'ok' }], stopReason: 'completed' as const }),
+          dispose: async () => {},
+        }
+      },
+    })
+    await ctx.plugin(tool, {
+      provider: 'capture-latest-luna',
+      childRoute: {
+        whenProvider: 'openai-codex',
+        provider: 'openai-codex',
+        model: 'gpt-6-luna',
+        inheritParentModelPattern: '-luna(?:$|-)',
+        reasoningEffort: 'max',
+      },
+      maxDepth: 'provider-managed',
+    })
+
+    const parent = { ...fakeAgent(), options: { provider: 'openai-codex', model: 'gpt-6.2-luna' } } as Agent
+    await callSubagent(ctx, { description: 'review', prompt: 'audit the final result' }, { agent: parent })
+    expect(seen?.agentOptions).toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6.2-luna',
+      reasoningEffort: 'max',
+    })
+  })
 
   it('defaults toolName and omits agentOptions when apply() is called directly (schema bypass)', async () => {
     // `ctx.plugin` validates+defaults config first (toolName→'subagent', the

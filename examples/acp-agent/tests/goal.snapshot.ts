@@ -23,6 +23,11 @@ const sessionExpected = join(scenarioDir, 'session.expected.jsonl')
 const wrapupDir = join(dirname(fileURLToPath(import.meta.url)), 'goal-snapshots/goal-wrapup')
 const refreshing = process.env.DSH_SNAPSHOT === 'refresh'
 
+const COMMITTED_CONTEXT: NormalizeContext = {
+  sessionIds: ['{{sessionId}}'],
+  cwd: '{{cwd}}',
+}
+
 const agent: AgentUnderTest = {
   binScript: fileURLToPath(new URL('../../../packages/examples/acp-demo/src/bin.ts', import.meta.url)),
   configPath: fileURLToPath(new URL('../cordis.yml', import.meta.url)),
@@ -110,8 +115,8 @@ describe('same-session goal snapshot through the ACP automation driver', () => {
         writeFile(sessionExpected, session),
       ])
     }
-    expect(stdout).toBe(await readFile(stdoutExpected, 'utf8'))
-    expect(session).toBe(await readFile(sessionExpected, 'utf8'))
+    expect(stdout).toBe(normalizeStdout(await readFile(stdoutExpected, 'utf8'), COMMITTED_CONTEXT))
+    expect(session).toBe(normalizeGoalLog(await readFile(sessionExpected, 'utf8'), COMMITTED_CONTEXT))
   })
 
   it('persists a newly created goal before autonomous continuation', async () => {
@@ -164,8 +169,11 @@ describe('same-session goal snapshot through the ACP automation driver', () => {
         writeFile(wrapupSessionExpected, session),
       ])
     }
-    expect(stdout).toBe(await readFile(wrapupStdoutExpected, 'utf8'))
-    const expectedSession = await readFile(wrapupSessionExpected, 'utf8')
+    expect(stdout).toBe(normalizeStdout(await readFile(wrapupStdoutExpected, 'utf8'), COMMITTED_CONTEXT))
+    const expectedSession = normalizeGoalLog(
+      await readFile(wrapupSessionExpected, 'utf8'),
+      COMMITTED_CONTEXT,
+    )
     const continuationMarkers = [
       '\n{"type":"goal/strategy"',
       '\n{"type":"turn/start","data":{"turn":2}}',

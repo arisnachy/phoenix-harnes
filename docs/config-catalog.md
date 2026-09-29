@@ -3126,8 +3126,10 @@ export interface Config {
     whenProvider: string
     /** Provider used for the child request. */
     provider: string
-    /** Model id used for the child request. */
+    /** Fallback model id used for the child request. */
     model: string
+    /** Reuse the parent's model when its id matches this regular expression. */
+    inheritParentModelPattern?: string
     /** Explicit adapter reasoning level for the child request. */
     reasoningEffort?: string
   }
@@ -3168,7 +3170,7 @@ type ConfiguredAgentOptions = Omit<AgentOptions, 'reasoningEffort'> & {
 
 Depends on: [`AgentOptions`](subsystems/core.md)
 
-Source: [`packages/subagent/tool-subagent/src/index.ts:118`](../packages/subagent/tool-subagent/src/index.ts)
+Source: [`packages/subagent/tool-subagent/src/index.ts:116`](../packages/subagent/tool-subagent/src/index.ts)
 
 <a id="phoenix-aidsh-tool-subagent-report"></a>
 
@@ -3657,8 +3659,10 @@ export interface Config {
     whenProvider: string
     /** Provider used for child agents. */
     provider: string
-    /** Model id used for child agents. */
+    /** Fallback model id used for child agents. */
     model: string
+    /** Reuse the parent's model when its id matches this regular expression. */
+    inheritParentModelPattern?: string
     /** Explicit adapter reasoning level for child agents. */
     reasoningEffort?: string
   }

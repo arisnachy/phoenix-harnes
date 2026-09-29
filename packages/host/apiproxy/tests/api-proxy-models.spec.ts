@@ -10,8 +10,6 @@ import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, {
   agentEvents,
   PHOENIX_CODEX_AUTO_MODEL,
-  PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-  PHOENIX_CODEX_AUTO_WORKER_MODEL,
 } from '@phoenix-ai/dsh-agent'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import AttachmentStore from '@phoenix-ai/dsh-attachment'
@@ -69,6 +67,27 @@ class CatalogAdapter extends LlmAdapter {
   }
 }
 
+class MutableCatalogAdapter extends CatalogAdapter {
+  private currentModels: readonly LlmModelInfo[]
+
+  constructor(
+    name: string,
+    models: readonly LlmModelInfo[],
+    reasoning?: LlmModelReasoningInfo,
+  ) {
+    super(name, models, reasoning)
+    this.currentModels = models
+  }
+
+  setModels(models: readonly LlmModelInfo[]): void {
+    this.currentModels = models
+  }
+
+  override listModels(): Promise<readonly LlmModelInfo[]> {
+    return Promise.resolve(this.currentModels)
+  }
+}
+
 const REASONING: LlmModelReasoningInfo = {
   efforts: [
     { id: ReasoningEffortId('off'), name: 'Off' },
@@ -88,11 +107,15 @@ const CODEX_REASONING: LlmModelReasoningInfo = {
   defaultEffort: ReasoningEffortId('max'),
 }
 
-function registerCodex6(ctx: Context): void {
-  ctx.llm.registerAdapter(['openai-codex'], new CatalogAdapter('OpenAI Codex', [
-    { provider: 'openai-codex', id: PHOENIX_CODEX_AUTO_PLANNER_MODEL, name: 'GPT-6 Sol' },
-    { provider: 'openai-codex', id: PHOENIX_CODEX_AUTO_WORKER_MODEL, name: 'GPT-6 Luna' },
-  ], CODEX_REASONING))
+function registerCodex6(ctx: Context): MutableCatalogAdapter {
+  const adapter = new MutableCatalogAdapter('OpenAI Codex', [
+    { provider: 'openai-codex', id: 'gpt-6-sol', name: 'GPT-6 Sol' },
+    { provider: 'openai-codex', id: 'gpt-6-luna', name: 'GPT-6 Luna' },
+    { provider: 'openai-codex', id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol' },
+    { provider: 'openai-codex', id: 'gpt-6.2-luna', name: 'GPT-6.2 Luna' },
+  ], CODEX_REASONING)
+  ctx.llm.registerAdapter(['openai-codex'], adapter)
+  return adapter
 }
 
 async function harness(logged?: {
@@ -339,7 +362,7 @@ describe('Web session model selection', () => {
 
   it('adds Phoenix Auto to OpenAI Codex and selects it as a virtual Sol/Luna router', async () => {
     const { ctx, agent, sessionId } = await harness()
-    registerCodex6(ctx)
+    const codexAdapter = registerCodex6(ctx)
     const saved: unknown[] = []
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
@@ -355,7 +378,7 @@ describe('Web session model selection', () => {
     expect(codex?.models[0]).toEqual({
       id: PHOENIX_CODEX_AUTO_MODEL,
       name: 'Phoenix Auto',
-      description: 'GPT-6 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
+      description: 'Latest Sol plans · latest Luna Max executes · independent Luna reviews · Sol decides',
     })
 
     const selected = expectValue(await api.sessions.selectModel(request({
@@ -369,7 +392,7 @@ describe('Web session model selection', () => {
     })
     expect(agent.options).toEqual({
       provider: 'openai-codex',
-      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      model: 'gpt-6.2-luna',
       reasoningEffort: ReasoningEffortId('max'),
     })
     expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual({
@@ -378,9 +401,30 @@ describe('Web session model selection', () => {
     })
     expect(saved).toEqual([{
       provider: 'openai-codex',
-      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      model: 'gpt-6.2-luna',
       reasoningEffort: ReasoningEffortId('max'),
     }])
+
+    codexAdapter.setModels([
+      { provider: 'openai-codex', id: 'gpt-6.1-sol', name: 'GPT-6.1 Sol' },
+      { provider: 'openai-codex', id: 'gpt-6.2-luna', name: 'GPT-6.2 Luna' },
+      { provider: 'openai-codex', id: 'gpt-6.3-luna', name: 'GPT-6.3 Luna' },
+      { provider: 'openai-codex', id: 'gpt-6.4-sol', name: 'GPT-6.4 Sol' },
+    ])
+    const followup = vi.fn()
+    Object.assign(agent, { followup })
+    const refreshed = await api.sessions.prompt(request({
+      sessionId,
+      mode: 'queue' as const,
+      content: [{ type: 'text' as const, text: 'continua con la tarea' }],
+    }))
+    expect(refreshed.result.ok).toBe(true)
+    expect(agent.options).toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6.3-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+    expect(followup).toHaveBeenCalledOnce()
 
     const rejectedEffort = await api.sessions.selectModel(request({
       sessionId,

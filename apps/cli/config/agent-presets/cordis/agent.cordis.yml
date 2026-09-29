@@ -217,6 +217,7 @@
           whenProvider: openai-codex
           provider: openai-codex
           model: gpt-6-luna
+          inheritParentModelPattern: '-luna(?:$|-)'
           reasoningEffort: max
 
     - id: tool-subagent-fork
@@ -229,6 +230,7 @@
           whenProvider: openai-codex
           provider: openai-codex
           model: gpt-6-luna
+          inheritParentModelPattern: '-luna(?:$|-)'
           reasoningEffort: max
 
     # Production dsh does not install these optional providers. Install the
@@ -263,6 +265,7 @@
           whenProvider: openai-codex
           provider: openai-codex
           model: gpt-6-luna
+          inheritParentModelPattern: '-luna(?:$|-)'
           reasoningEffort: max
 
     - id: tool-workflow

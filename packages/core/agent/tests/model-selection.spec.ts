@@ -9,13 +9,55 @@ import {
   isContextualConversationFastPathText,
   isConversationalFastPathText,
   jevSelectedModelId,
+  latestPhoenixCodexAutoRoutes,
   PHOENIX_CODEX_AUTO_MODEL,
+  PHOENIX_CODEX_AUTO_REVIEW_MARKER,
   type Agent,
   type ModelSelectionRef,
 } from '../src/index.ts'
 import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 describe('installModelSelection()', () => {
+  it('tracks the newest advertised Sol and Luna generations independently', () => {
+    expect(latestPhoenixCodexAutoRoutes([
+      { id: 'gpt-6-sol' },
+      { id: 'gpt-6-luna' },
+      { id: 'gpt-6.1-sol-preview' },
+      { id: 'gpt-6.1-sol' },
+      { id: 'gpt-6.2-luna' },
+      { id: 'gpt-6.2-luna-preview' },
+      { id: 'gpt-7-astra' },
+    ])).toEqual({
+      planner: 'gpt-6.1-sol',
+      worker: 'gpt-6.2-luna',
+    })
+    expect(latestPhoenixCodexAutoRoutes([{ id: 'gpt-6-sol' }])).toBeUndefined()
+  })
+
+  it('injects the execution/review contract only when Phoenix Auto is selected', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+
+    const auto = await ctx.systemPrompt.assemble()
+    const autoSection = auto.sections.find(section => section.name === 'phoenix-auto:routing')
+    expect(autoSection?.text).toContain(PHOENIX_CODEX_AUTO_REVIEW_MARKER)
+    expect(autoSection?.text).toContain('fresh independent Luna reviewer')
+    expect(autoSection?.text).toContain('rendered screenshots or the running output')
+    expect(autoSection?.text).toContain('final acceptance decision')
+
+    selection.current = { provider: 'openai-codex', model: 'gpt-6-luna' }
+    const direct = await ctx.systemPrompt.assemble()
+    expect(direct.sections.some(section => section.name === 'phoenix-auto:routing')).toBe(false)
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('accepts only an explicit Jev choice from the supplied same-family candidates', () => {
     const candidates = ['gpt-5.6-sol', 'gpt-5.6-luna']
     expect(jevSelectedModelId({
@@ -91,6 +133,7 @@ describe('installModelSelection()', () => {
     const selection: ModelSelectionRef = {
       current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
       assembled: undefined,
+      phoenixAutoRoutes: { planner: 'gpt-6.1-sol', worker: 'gpt-6.2-luna' },
     }
     const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
     const events: { type: string; data: unknown }[] = [
@@ -112,14 +155,14 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-sol',
+      model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('medium'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-luna',
+      model: 'gpt-6.2-luna',
       reasoningEffort: ReasoningEffortId('max'),
     })
 
@@ -161,6 +204,64 @@ describe('installModelSelection()', () => {
       provider: 'openai-codex',
       model: 'gpt-6-luna',
       reasoningEffort: ReasoningEffortId('low'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('routes the step after an independent Luna review back to Sol for the final decision', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+      phoenixAutoRoutes: { planner: 'gpt-6.1-sol', worker: 'gpt-6.1-luna' },
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Arregla el juego, pruébalo y revisa el resultado visual.' }],
+        },
+      },
+      {
+        type: 'tool/call',
+        data: {
+          name: 'workflow',
+          arguments: JSON.stringify({
+            script: `return await agent('${PHOENIX_CODEX_AUTO_REVIEW_MARKER}: audit final build')`,
+          }),
+        },
+      },
+      {
+        type: 'tool/result',
+        data: {
+          message: { role: 'tool', content: [{ type: 'text', text: 'PASS: visual and tests verified' }] },
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('medium'),
+    })
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 5, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6.1-luna',
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()

@@ -125,8 +125,18 @@ describe('parent-only override inheritance snapshot', () => {
           await writeFile(parentExpected, normalizedParent)
           await writeFile(childExpected, normalizedChild)
         }
-        expect(normalizedParent).toBe(await readFile(parentExpected, 'utf8'))
-        expect(normalizedChild).toBe(await readFile(childExpected, 'utf8'))
+        const committedContext: NormalizeContext = {
+          sessionIds: ['{{sessionId}}'],
+          cwd: '{{cwd}}',
+        }
+        expect(normalizedParent).toBe(normalizeSessionSnapshot(
+          await readFile(parentExpected, 'utf8'),
+          committedContext,
+        ))
+        expect(normalizedChild).toBe(normalizeSessionSnapshot(
+          await readFile(childExpected, 'utf8'),
+          committedContext,
+        ))
         // The child's real write was denied by the real fence.
         expect(normalizedChild).toContain('file access denied under read-only mode')
       },

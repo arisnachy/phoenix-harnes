@@ -42,8 +42,10 @@ export interface Config {
     whenProvider: string
     /** Provider used for child agents. */
     provider: string
-    /** Model id used for child agents. */
+    /** Fallback model id used for child agents. */
     model: string
+    /** Reuse the parent's model when its id matches this regular expression. */
+    inheritParentModelPattern?: string
     /** Explicit adapter reasoning level for child agents. */
     reasoningEffort?: string
   }
@@ -132,8 +134,15 @@ class WorkerThreadWorkflowEngine extends WorkflowEngine {
       whenProvider: z.string().required(),
       provider: z.string().required(),
       model: z.string().required(),
+      inheritParentModelPattern: z.string(),
       reasoningEffort: z.string(),
-    }).default(undefined as unknown as { whenProvider: string; provider: string; model: string; reasoningEffort: string }),
+    }).default(undefined as unknown as {
+      whenProvider: string
+      provider: string
+      model: string
+      inheritParentModelPattern: string
+      reasoningEffort: string
+    }),
     /* jscpd:ignore-end */
     maxItemsPerCall: z.natural().min(1).default(4096),
     syncTimeoutMs: z.natural().min(1).default(5000),

@@ -54,6 +54,11 @@ const mode = process.env.DSH_SNAPSHOT ?? 'replay'
 const recording = mode === 'record'
 const refreshing = mode === 'refresh'
 
+const COMMITTED_CONTEXT: NormalizeContext = {
+  sessionIds: ['{{sessionId}}'],
+  cwd: '{{cwd}}',
+}
+
 function dirOf(url: string): string {
   return fileURLToPath(new URL('.', url))
 }
@@ -443,8 +448,14 @@ describe('TypeScript SDK snapshots over the jsonrpc runtime', () => {
         await writeFile(notificationsExpectedPath, normalizedNotifications)
         await writeFile(resultExpectedPath, normalizedResult)
       }
-      expect(normalizedNotifications).toBe(await readFile(notificationsExpectedPath, 'utf8'))
-      expect(normalizedResult).toBe(await readFile(resultExpectedPath, 'utf8'))
+      expect(normalizedNotifications).toBe(normalizeStdout(
+        await readFile(notificationsExpectedPath, 'utf8'),
+        COMMITTED_CONTEXT,
+      ))
+      expect(normalizedResult).toBe(normalizeStdout(
+        await readFile(resultExpectedPath, 'utf8'),
+        COMMITTED_CONTEXT,
+      ))
 
       // Wire-shape invariants that must hold in every mode.
       expect(notifications.at(-1)).toMatchObject({
