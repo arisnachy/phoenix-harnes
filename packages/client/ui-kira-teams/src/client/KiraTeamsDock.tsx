@@ -127,9 +127,11 @@ function visibleLiveActivityTextOf(
 }
 
 function normalizedWorkText(summary: SessionSummary): string {
+  // oxlint-disable typescript/no-unnecessary-condition -- SessionSummary.projectionValues is optional in the source contract; the contracts lint resolves a generated companion that currently narrows it.
+  const subagentLabel = summary.projectionValues?.subagent?.label ?? ''
+  // oxlint-enable typescript/no-unnecessary-condition
   return [
-    // oxlint-disable-next-line typescript/no-unnecessary-condition -- SessionSummary.projectionValues is optional; tsc requires this guard.
-    summary.projectionValues?.subagent?.label ?? '',
+    subagentLabel,
     summary.displayTitle ?? '',
   ].join(' ').trim().toLocaleLowerCase()
 }
