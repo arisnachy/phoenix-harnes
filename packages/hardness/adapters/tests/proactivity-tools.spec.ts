@@ -112,3 +112,38 @@ describe('phoenix_task_create timezone handling', () => {
     })
   })
 })
+
+describe('phoenix_task_create home attention metadata', () => {
+  it('persists presentation policy for recurring background intelligence', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async () => ({}) },
+      { id: () => 'interest-mission' },
+    )
+    const tool = createProactivityCreateTool(engine)
+
+    const result = await tool.execute({
+      title: 'NBA intelligence',
+      instruction: 'Recalculate the slate and report only material changes.',
+      runAt: '2026-09-29T18:00:00-04:00',
+      everyMinutes: 360,
+      requestedByUser: true,
+      delivery: 'work',
+      attentionMode: 'auto',
+      attentionPriority: 'normal',
+      attentionText: 'Actualiza el análisis antes de los partidos.',
+    }, { agent: { id: 'agent-a' } } as never)
+
+    expect(result).toMatchObject({
+      attention_mode: 'auto',
+      attention_priority: 'normal',
+      attention_text: 'Actualiza el análisis antes de los partidos.',
+    })
+    const [task] = await engine.list({ includeHidden: true })
+    expect(task).toMatchObject({
+      attentionMode: 'auto',
+      attentionPriority: 'normal',
+      attentionText: 'Actualiza el análisis antes de los partidos.',
+    })
+  })
+})
