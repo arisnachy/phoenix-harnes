@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-29-phoenix-auto-latest-family-review.md
-2026-09-29-phoenix-auto-latest-family-review.md: fb021280207c73157de88bd337886a732581fd74
-2026-09-29-phoenix-auto-latest-family-review.zh.md: a88ee0937568867371939c4b9bb998a3c5686c86
+2026-09-29-phoenix-auto-latest-family-review.md: a3f9ee6145380bbb207485cf6ef5104b1e7ac9fe
+2026-09-29-phoenix-auto-latest-family-review.zh.md: 37ca65c6ba005ec0bec36937db8a6f7ca559faa9
