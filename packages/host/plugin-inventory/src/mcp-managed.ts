@@ -465,6 +465,7 @@ export class ManagedMcpController {
   /**
    * Install X's official keyless Docs MCP plus the official xurl OAuth bridge
    * for the hosted X API MCP. The bridge receives only credential references.
+   * @param options - X identity selection and optional xurl username.
    * @returns Independent idempotent receipts for the API and Docs connectors.
    */
   async installXMcp(options: { identity?: XMcpIdentity; username?: string } = {}): Promise<{
