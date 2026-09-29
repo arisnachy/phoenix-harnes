@@ -560,7 +560,7 @@ export class LocalSandboxProvider extends SandboxProvider {
     const builtEntry = this.internals.windowsAclRunnerEntry ?? fileURLToPath(import.meta.resolve('@phoenix-ai/dsh-sandbox-windows-acl/runner'))
     if (existsSync(builtEntry)) return [process.execPath, builtEntry]
     const sourceEntry = fileURLToPath(import.meta.resolve('@phoenix-ai/dsh-sandbox-windows-acl/src/runner.ts'))
-    return [process.execPath, '--import', 'tsx/esm', sourceEntry]
+    return [process.execPath, '--import', import.meta.resolve('tsx/esm'), sourceEntry]
   }
 }
 
