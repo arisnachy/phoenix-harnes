@@ -6,7 +6,7 @@ const REQUIRED_CONNECTORS = [
   'outlook-mail', 'outlook-calendar', 'onedrive', 'sharepoint', 'box', 'notion',
   'slack', 'microsoft-teams', 'zoom', 'github', 'linear', 'vercel', 'firebase',
   'supabase', 'neon', 'posthog', 'hugging-face', 'canva', 'heygen', 'magnific',
-  'coursera', 'devpost', 'apollo', 'binance', 'openai-platform',
+  'coursera', 'devpost', 'apollo', 'binance', 'x', 'openai-platform',
 ] as const
 
 const REQUIRED_PRESETS = [
