@@ -132,7 +132,7 @@ function normalizedWorkText(summary: SessionSummary): string {
   // oxlint-enable typescript/no-unnecessary-condition
   return [
     subagentLabel,
-    summary.displayTitle ?? '',
+    summary.displayTitle,
   ].join(' ').trim().toLocaleLowerCase()
 }
 
