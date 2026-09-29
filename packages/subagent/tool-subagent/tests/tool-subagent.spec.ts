@@ -100,6 +100,31 @@ describe('dsh-tool-subagent', () => {
     expect(text(result)).toBe('child says hi')
   })
 
+  it('asks the child itself to author the live activity sentence', async () => {
+    let seen: SubagentStartRequest | undefined
+    const ctx = await setup({ provider: 'mock' }, {
+      onStart: (request: SubagentStartRequest) => {
+        seen = request
+      },
+    })
+
+    const result = await callSubagent(ctx, {
+      description: 'open page',
+      prompt: 'Abre lunaris-quest.html y verifica que cargue.',
+      run_in_background: false,
+    })
+    expect(result.isError).toBe(false)
+
+    const promptText = (seen?.prompt ?? [])
+      .map(block => block.type === 'text' ? block.text : '')
+      .join('\n')
+
+    expect(promptText).toContain('Abre lunaris-quest.html y verifica que cargue.')
+    expect(promptText).toContain('primera persona')
+    expect(promptText).toContain('máximo 72 caracteres')
+    expect(promptText).toContain('Phoenix mostrará literalmente esa frase')
+  })
+
   it('exposes description + prompt + run_in_background to the model (no provider/type parameter)', async () => {
     const ctx = await setup({ provider: 'mock' })
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
