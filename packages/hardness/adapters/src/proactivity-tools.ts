@@ -49,6 +49,9 @@ function taskView(task: ProactivityTask): Record<string, JsonValue> {
     ...(task.condition === undefined ? {} : { condition: task.condition }),
     sender_identity: task.senderIdentity,
     created_by: task.createdBy,
+    ...(task.attentionMode === undefined ? {} : { attention_mode: task.attentionMode }),
+    ...(task.attentionPriority === undefined ? {} : { attention_priority: task.attentionPriority }),
+    ...(task.attentionText === undefined ? {} : { attention_text: task.attentionText }),
     history: task.history.slice(-5).map(row => ({
       phase: row.phase,
       scheduled_for: row.scheduledFor,
@@ -123,7 +126,7 @@ export function createProactivityCreateTool(
 ): ToolDefinition {
   return defineTool({
     name: 'phoenix_task_create',
-    description: 'Create durable scheduled work for Phoenix. Use it for reminders, follow-ups, recurring work, future office tasks, annual dates such as birthdays, and private surprise preparation. Tasks survive Phoenix restarts and catch up after the computer was off.',
+    description: 'Create durable scheduled work for Phoenix. Use it for reminders, follow-ups, recurring background intelligence, future office tasks, annual dates such as birthdays, and private surprise preparation. delivery=work can maintain an ongoing user objective in the background. Tasks survive Phoenix restarts and catch up after the computer was off.',
     parameters: {
       title: { type: 'string', required: true },
       instruction: { type: 'string', required: true },
@@ -140,6 +143,9 @@ export function createProactivityCreateTool(
       delivery: { type: 'string', enum: ['chat', 'email', 'work'] },
       senderIdentity: { type: 'string', enum: ['user', 'harness', 'auto'] },
       recipient: { type: 'string', description: 'Optional delivery recipient, normally an email address for email tasks.' },
+      attentionMode: { type: 'string', enum: ['auto', 'result', 'upcoming', 'off'], description: 'Controls the quiet Phoenix home feed. auto surfaces material background results and useful one-shot/upcoming context; off never surfaces this task there.' },
+      attentionPriority: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Relative ranking for useful home-feed signals. Do not mark routine work high.' },
+      attentionText: { type: 'string', description: 'Optional concise user-facing reason an upcoming occurrence matters. Keep it short and specific.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true },
@@ -172,6 +178,9 @@ export function createProactivityCreateTool(
         ...(args.delivery === undefined ? {} : { delivery: args.delivery }),
         ...(args.senderIdentity === undefined ? {} : { senderIdentity: args.senderIdentity }),
         ...(recipient === undefined ? {} : { recipient }),
+        ...(args.attentionMode === undefined ? {} : { attentionMode: args.attentionMode }),
+        ...(args.attentionPriority === undefined ? {} : { attentionPriority: args.attentionPriority }),
+        ...(args.attentionText === undefined ? {} : { attentionText: args.attentionText }),
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
       })
       return taskView(task)
@@ -219,6 +228,7 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
         recurrence: { kind: 'interval', everyMs },
         catchUp: 'latest',
         delivery: 'chat',
+        attentionMode: 'off',
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
       })
       return taskView(task)
