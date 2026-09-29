@@ -153,9 +153,11 @@ switch (invocation.mode) {
       args: invocation.args,
     })
     // A failed profile boot must leave no updater child behind holding the
-    // launcher's inherited stdio open. Start update watching only once the
-    // profile tree has successfully mounted and its lifecycle is established.
-    startPhoenixUpdateWatcher()
+    // launcher's inherited stdio open. The updater belongs to the long-lived
+    // Phoenix Web host only: starting it for one-shot/headless profiles can
+    // outlive the app and keep inherited stdout/stderr pipes open after the
+    // CLI result is already complete.
+    if (invocation.profile === 'web') startPhoenixUpdateWatcher()
     break
   }
   case 'plugin': {
