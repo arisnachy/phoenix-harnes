@@ -271,7 +271,7 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(container.querySelector('[data-kira-teams]')).toBeNull()
   })
 
-  it('floats above the conversation and renders only the currently live agent', () => {
+  it('uses the activity strip and rail for the currently live agent', () => {
     const root = summary({ id: sid('root') })
     const supervisor = summary({
       id: sid('supervisor-live'), parentId: root.id, origin: 'subagent', running: true,
@@ -299,13 +299,47 @@ describe('approved KIRA compact live-agent dock', () => {
 
     const { container } = render(<KiraTeamsDock {...props} />)
 
-    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('floating-live')
+    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('activity-rail')
     expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', false)
-    expect(container.querySelectorAll('[data-kira-agent-card]')).toHaveLength(1)
+    expect(container.querySelectorAll('[data-kira-agent-rail]')).toHaveLength(1)
     expect(screen.getByText('Coordinación / orquestación')).toBeTruthy()
     expect(screen.getByText('Preparando')).toBeTruthy()
     expect(screen.getByText('Coordinaré la revisión breve del agente.')).toBeTruthy()
   })
+
+  it('caps the strip stack at three portraits while the rail keeps every live agent selectable', () => {
+    const root = summary({ id: sid('root-many') })
+    const children = Array.from({ length: 5 }, (_, index) => summary({
+      id: sid(`child-${index}`),
+      parentId: root.id,
+      origin: 'subagent',
+      running: true,
+      projectionValues: {
+        subagent: { mode: 'continuable', label: `research agent ${index}`, seq: index + 1 },
+        subagentActivity: {
+          model: 'gpt-5.6-luna',
+          phase: 'running-tools',
+          text: `Revisando fuente ${index + 1}`,
+        },
+      },
+    }))
+    const byId = Object.fromEntries([root, ...children].map(item => [String(item.id), item]))
+    const state = { current: root.id, byId } as unknown as SessionListState
+    const props = {
+      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      layout: { setWorkspaceOccupant: vi.fn() },
+      openChild: vi.fn(),
+      refresh: vi.fn(),
+      t: translate,
+    } as unknown as KiraTeamsDockProps
+
+    const { container } = render(<KiraTeamsDock {...props} />)
+
+    expect(container.querySelectorAll('[data-kira-stack-avatar]')).toHaveLength(3)
+    expect(container.querySelector('[data-kira-stack-overflow]')?.textContent).toBe('+2')
+    expect(container.querySelectorAll('[data-kira-agent-rail]')).toHaveLength(5)
+  })
+
 })
 
 describe('individual KIRA portrait assets', () => {

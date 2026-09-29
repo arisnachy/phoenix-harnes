@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useSyncExternalStore } from 'react'
 import {
-  IconChevronDownOutline14, IconRefreshOutline14, StateDot,
+  IconChevronDownOutline14, IconRefreshOutline14,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ILayout } from '@phoenix-ai/dsh-client-ui-layout/client'
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
@@ -76,11 +76,11 @@ export const KIRA_ROSTER: readonly KiraRosterEntry[] = [
   { kind: 'orbita', name: 'Órbita', tagline: 'Mantiene runtime, tareas y operaciones en curso', specialty: 'skill.runtime', skills: ['automation', 'orchestration', 'performance'] },
 ] as const
 
-const COLLAPSE_KEY = 'dsh.kira-teams.collapsed'
+const DETAILS_KEY = 'dsh.kira-teams.details-open'
 
-function initialCollapsed(): boolean {
+function initialDetailsOpen(): boolean {
   try {
-    return window.localStorage.getItem(COLLAPSE_KEY) === '1'
+    return window.localStorage.getItem(DETAILS_KEY) === '1'
   } catch {
     return false
   }
@@ -329,185 +329,228 @@ export function lineageMembers(state: SessionListState): {
   return { root, rows }
 }
 
-function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
+function openAgent(card: KiraRosterCard, openChild: (address: SubagentAddress) => void): void {
   const summary = card.summary
-  if (summary === undefined) return null
-
-  const actionKey = activityKeyOf(summary)
-  const liveActivity = visibleLiveActivityTextOf(summary, actionKey, t)
-
-  return (
-    <>
-      <span className={css.agentPortrait}>
-        <ModelActivityAvatar
-          kind={card.kind}
-          activity={activityOf(summary)}
-          running={summary.running}
-          pending={summary.pendingInteraction !== undefined}
-          variant="card"
-        />
-      </span>
-      <span className={css.agentIdentity}>
-        <span className={css.agentName}>{card.name}</span>
-        <span className={css.role}>{t(card.specialty)}</span>
-      </span>
-      <span className={css.statusBadge} data-activity={actionKey}>
-        <span className={css.statusDot} aria-hidden="true" />
-        <span className={css.activity}>{t(actionKey)}</span>
-      </span>
-      {liveActivity.length > 0 && (
-        <span className={css.agentAction} title={liveActivity}>
-          <span className={css.actionChevron} aria-hidden="true">›</span>
-          <span className={css.tagline}>{liveActivity}</span>
-        </span>
-      )}
-    </>
-  )
+  if (summary?.parentId === undefined) return
+  openChild({
+    parentSessionId: summary.parentId,
+    childSessionId: summary.id,
+    mode: 'continuable',
+  })
 }
 
-/** Compact KIRA Teams card: unchanged presentation, floating above the chat. */
+/**
+ * Render the fixed-height KIRA activity strip plus the right-side live-agent rail.
+ *
+ * Agent count never changes the strip height: the strip shows at most three stacked
+ * portraits and a +N overflow indicator, while the rail owns individual selection.
+ */
 export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeamsDockProps) {
   const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
   const { root, rows } = lineageMembers(state)
-  const [collapsed, setCollapsed] = useState(initialCollapsed)
+  const cards = liveCardsOf(rows)
+  const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen)
+  const [selectedId, setSelectedId] = useState<string>()
   const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
 
   useEffect(() => {
-    // KIRA is a fixed overlay and must never reserve structural workspace
-    // width. The conversation keeps the whole center column while the card
-    // itself stays visually identical.
+    // KIRA stays in the overlay layer; neither the strip nor the rail consumes chat width.
     layout.setWorkspaceOccupant('subagent', false)
     return () => { layout.setWorkspaceOccupant('subagent', false) }
   }, [layout])
 
-  const previousRunning = useRef(runningCount)
-  useEffect(() => {
-    if (runningCount > previousRunning.current) setCollapsed(false)
-    previousRunning.current = runningCount
-  }, [runningCount])
+  if (root === undefined || cards.length === 0) return null
 
-  if (root === undefined || rows.length === 0) return null
+  const selectedCard = cards.find(card => String(card.summary?.id) === selectedId)
+    ?? cards.find(card => card.summary?.id === state.current)
+    ?? cards[0]
+  const selectedSummary = selectedCard?.summary
+  if (selectedCard === undefined || selectedSummary === undefined) return null
 
-  const toggleCollapse = (event: MouseEvent<HTMLButtonElement>): void => {
-    event.stopPropagation()
-    setCollapsed((current) => {
+  const selectedActionKey = activityKeyOf(selectedSummary)
+  const selectedLiveActivity = visibleLiveActivityTextOf(selectedSummary, selectedActionKey, t)
+  const selectedActivity = selectedLiveActivity.length > 0
+    ? selectedLiveActivity
+    : t(selectedActionKey)
+
+  const membersKey = cards.length === 1 ? 'count.members.one' : 'count.members.other'
+  const runningKey = runningCount === 1 ? 'count.running.one' : 'count.running.other'
+  const countCopy = runningCount > 0
+    ? `${t(membersKey, { count: cards.length })} · ${t(runningKey, { count: runningCount })}`
+    : t(membersKey, { count: cards.length })
+
+  const stackCards = cards.slice(0, 3)
+  const hiddenStackCount = Math.max(0, cards.length - stackCards.length)
+  const toggleDetails = (): void => {
+    setDetailsOpen((current) => {
+      const next = !current
       try {
-        window.localStorage.setItem(COLLAPSE_KEY, current ? '0' : '1')
+        window.localStorage.setItem(DETAILS_KEY, next ? '1' : '0')
       } catch {
         /* persistence is best-effort */
       }
-      return !current
+      return next
     })
   }
 
-  const membersKey = rows.length === 1 ? 'count.members.one' : 'count.members.other'
-  const runningKey = runningCount === 1 ? 'count.running.one' : 'count.running.other'
-  const countCopy = runningCount > 0
-    ? `${t(membersKey, { count: rows.length })} · ${t(runningKey, { count: runningCount })}`
-    : t(membersKey, { count: rows.length })
-
-  if (collapsed) {
-    return (
-      <div
-        className={`${css.root} ${css.rootCollapsed}`}
-        data-kira-teams
-        data-kira-collapsed
-        data-kira-layout="floating-live"
-      >
-        <button
-          type="button"
-          className={`${css.pill} ${runningCount > 0 ? css.pillLive : ''}`}
-          aria-expanded={false}
-          aria-label={t('dock.expand')}
-          onClick={toggleCollapse}
-        >
-          {runningCount > 0 && <StateDot state="ongoing" />}
-          <span className={css.pillTitle}>{t('dock.title')}</span>
-          <span className={css.pillCount}>{countCopy}</span>
-        </button>
-      </div>
-    )
-  }
-
-  const cards = liveCardsOf(rows)
   return (
     <div
       className={css.root}
       data-kira-teams
-      data-kira-layout="floating-live"
+      data-kira-layout="activity-rail"
       data-kira-count={cards.length}
     >
-      <section className={css.dock} aria-label={t('team.aria')}>
-        <header className={css.header}>
-          <button
-            type="button"
-            className={css.collapse}
-            aria-expanded={true}
-            aria-label={t('dock.collapse')}
-            onClick={toggleCollapse}
-          >
-            <IconChevronDownOutline14 />
-          </button>
-          <span className={css.headerCopy}>
-            <span className={css.headerTitleLine}>
-              <span className={css.title}>{t('dock.title')}</span>
-              <span className={css.teamMark} aria-hidden="true" />
-            </span>
-            <span className={css.counts}>
-              <span className={css.countText}>{countCopy}</span>
+      <section className={css.strip} aria-label={t('team.aria')} data-kira-activity-strip>
+        <span className={css.teamBlock}>
+          <span className={css.avatarStack} aria-hidden="true">
+            {stackCards.map((card) => {
+              const summary = card.summary
+              if (summary === undefined) return null
+              return (
+                <span
+                  key={String(summary.id)}
+                  className={css.stackAvatar}
+                  data-kira-stack-avatar
+                >
+                  <ModelActivityAvatar
+                    kind={card.kind}
+                    activity={activityOf(summary)}
+                    running={summary.running}
+                    pending={summary.pendingInteraction !== undefined}
+                  />
+                </span>
+              )
+            })}
+            {hiddenStackCount > 0 && (
+              <span className={css.stackOverflow} data-kira-stack-overflow>
+                +{hiddenStackCount}
+              </span>
+            )}
+          </span>
+          <span className={css.teamCopy}>
+            <span className={css.teamTitle}>{t('dock.title')}</span>
+            <span className={css.teamCount} title={countCopy}>{countCopy}</span>
+          </span>
+        </span>
+
+        <button
+          type="button"
+          className={css.focusActivity}
+          data-running={selectedSummary.running ? 'true' : 'false'}
+          aria-label={`${selectedCard.name} · ${t(selectedActionKey)}`}
+          title={selectedSummary.displayTitle}
+          onClick={() => { openAgent(selectedCard, openChild) }}
+        >
+          <span className={css.focusHeading}>
+            <span className={css.focusName}>{selectedCard.name}</span>
+            <span className={css.focusRole}>{t(selectedCard.specialty)}</span>
+            <span className={css.focusStatus} data-activity={selectedActionKey}>
+              <span className={css.statusDot} aria-hidden="true" />
+              {t(selectedActionKey)}
             </span>
           </span>
-          <button
-            type="button"
-            className={css.refresh}
-            aria-label={t('dock.refresh')}
-            onClick={() => { refresh(root.id) }}
-          >
-            <IconRefreshOutline14 />
-          </button>
-        </header>
+          <span className={css.focusText} title={selectedActivity}>{selectedActivity}</span>
+          <span className={css.activityPulse} aria-hidden="true" />
+        </button>
 
-        <div className={css.list} role="tree" aria-label={t('team.aria')}>
+        <button
+          type="button"
+          className={css.iconButton}
+          aria-label={t('dock.refresh')}
+          onClick={() => { refresh(root.id) }}
+        >
+          <IconRefreshOutline14 />
+        </button>
+        <button
+          type="button"
+          className={`${css.iconButton} ${detailsOpen ? css.detailsButtonOpen : ''}`}
+          aria-expanded={detailsOpen}
+          aria-label={detailsOpen ? t('dock.collapse') : t('dock.expand')}
+          onClick={toggleDetails}
+        >
+          <IconChevronDownOutline14 />
+        </button>
+      </section>
+
+      {detailsOpen && (
+        <section className={css.detailsPanel} aria-label={t('team.aria')} data-kira-details>
           {cards.map((card) => {
             const summary = card.summary
             if (summary === undefined) return null
-            const roleKey = agentRoleKeyOf(summary)
             const actionKey = activityKeyOf(summary)
-            const performanceKey = performanceKeyOf(summary)
-            const skill = skillOf(summary)
-            const visibleLiveActivity = visibleLiveActivityTextOf(summary, actionKey, t)
+            const liveActivity = visibleLiveActivityTextOf(summary, actionKey, t)
+            const selected = String(summary.id) === String(selectedSummary.id)
             return (
               <button
                 key={String(summary.id)}
                 type="button"
-                role="treeitem"
-                aria-level={card.depth ?? 1}
-                aria-selected={state.current === summary.id}
-                aria-label={`${card.name} · ${t('role.agent')} · ${roleKey === 'role.agent' ? '' : `${t(roleKey)} · `}${t(actionKey)} · ${t(performanceKey)}`}
-                className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''} ${visibleLiveActivity.length > 0 ? css.rowHasActivity : css.rowNoActivity}`}
-                data-kira-agent-card
-                data-agent-kind={card.kind}
-                data-agent-id={String(summary.id)}
-                data-agent-role={roleKey}
-                data-agent-skill={skill}
-                data-agent-activity={actionKey}
-                data-agent-performance={performanceKey}
-                title={summary.displayTitle}
-                onClick={() => {
-                  if (summary.parentId === undefined) return
-                  openChild({
-                    parentSessionId: summary.parentId,
-                    childSessionId: summary.id,
-                    mode: 'continuable',
-                  })
-                }}
+                className={`${css.detailRow} ${selected ? css.detailRowSelected : ''}`}
+                aria-pressed={selected}
+                data-kira-agent-detail
+                onClick={() => { setSelectedId(String(summary.id)) }}
+                onDoubleClick={() => { openAgent(card, openChild) }}
               >
-                {cardBody(card, t)}
+                <span className={css.detailPortrait}>
+                  <ModelActivityAvatar
+                    kind={card.kind}
+                    activity={activityOf(summary)}
+                    running={summary.running}
+                    pending={summary.pendingInteraction !== undefined}
+                  />
+                </span>
+                <span className={css.detailIdentity}>
+                  <span className={css.detailName}>{card.name}</span>
+                  <span className={css.detailRole}>{t(card.specialty)}</span>
+                </span>
+                <span className={css.detailStatus} data-activity={actionKey}>
+                  <span className={css.statusDot} aria-hidden="true" />
+                  {t(actionKey)}
+                </span>
+                <span className={css.detailAction} title={liveActivity}>
+                  {liveActivity}
+                </span>
               </button>
             )
           })}
-        </div>
-      </section>
+        </section>
+      )}
+
+      <aside className={css.rail} aria-label={t('team.aria')} data-kira-agent-rail-container>
+        <span className={css.railBrand} aria-hidden="true">
+          <span className={css.railBrandMark} />
+        </span>
+        <span className={css.railDivider} aria-hidden="true" />
+        <span className={css.railAgents}>
+          {cards.map((card) => {
+            const summary = card.summary
+            if (summary === undefined) return null
+            const actionKey = activityKeyOf(summary)
+            const selected = String(summary.id) === String(selectedSummary.id)
+            return (
+              <button
+                key={String(summary.id)}
+                type="button"
+                className={`${css.railAgent} ${selected ? css.railAgentSelected : ''}`}
+                aria-label={`${card.name} · ${t(actionKey)}`}
+                aria-pressed={selected}
+                title={`${card.name} · ${t(actionKey)}`}
+                data-kira-agent-rail
+                data-agent-kind={card.kind}
+                data-agent-id={String(summary.id)}
+                data-agent-activity={actionKey}
+                onClick={() => { setSelectedId(String(summary.id)) }}
+              >
+                <ModelActivityAvatar
+                  kind={card.kind}
+                  activity={activityOf(summary)}
+                  running={summary.running}
+                  pending={summary.pendingInteraction !== undefined}
+                />
+              </button>
+            )
+          })}
+        </span>
+      </aside>
     </div>
   )
 }

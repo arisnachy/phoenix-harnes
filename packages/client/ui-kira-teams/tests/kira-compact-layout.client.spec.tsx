@@ -16,17 +16,18 @@ const chatCss = readFileSync(
   'utf8',
 )
 
-describe('KIRA compact live-agent layout regression', () => {
-  it('stays a small floating window and stacks only live agent rows', () => {
+describe('KIRA mission-control layout regression', () => {
+  it('keeps one fixed-height activity strip and a narrow independent agent rail', () => {
     expect(dockCss).toMatch(/\.root\s*{[^}]*position:\s*fixed/s)
-    expect(dockCss).toMatch(/\.root\s*{[^}]*max-width:\s*320px/s)
-    expect(dockCss).toMatch(/\.list\s*{[^}]*display:\s*flex/s)
-    expect(dockCss).toMatch(/\.list\s*{[^}]*flex-direction:\s*column/s)
-    expect(dockCss).not.toMatch(/grid-template-columns:\s*repeat\(5,/s)
-    expect(avatarCss).toMatch(/\.card\s*{[^}]*width:\s*58px;[^}]*height:\s*72px/s)
+    expect(dockCss).toMatch(/\.strip\s*{[^}]*height:\s*44px/s)
+    expect(dockCss).toMatch(/\.rail\s*{[^}]*width:\s*48px/s)
+    expect(dockCss).toMatch(/\.avatarStack\s*{[^}]*display:\s*flex/s)
+    expect(dockCss).toMatch(/\.railAgents\s*{[^}]*overflow-y:\s*auto/s)
+    expect(dockCss).not.toMatch(/grid-template-columns:\s*repeat\(2,/s)
+    expect(avatarCss).toMatch(/\.avatar\s*{[^}]*width:\s*42px;[^}]*height:\s*42px/s)
   })
 
-  it('lets chat use the full center column while KIRA occupies only its floating card rectangle', () => {
+  it('lets chat use the full center column because KIRA remains an overlay', () => {
     expect(frameCss).not.toMatch(/--dsh-kira-chat-clearance/)
     expect(frameCss).not.toMatch(/--dsh-kira-chat-content-width/)
     expect(frameCss).not.toMatch(/--dsh-kira-composer-max-width/)
@@ -47,7 +48,6 @@ describe('KIRA compact live-agent layout regression', () => {
       activity: { model: 'gpt-5.6-luna', phase: 'verifying' },
       running: true,
       pending: false,
-      variant: 'card',
     })
     const children = Array.isArray(avatar.props.children) ? avatar.props.children : [avatar.props.children]
     const portrait = children.find((child: { props?: Record<string, unknown> }) =>
