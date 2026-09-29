@@ -5237,6 +5237,9 @@ importers:
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
 
   packages/health/healthia-local:
     dependencies:
@@ -5256,6 +5259,9 @@ importers:
       '@phoenix-ai/dsh-healthia':
         specifier: workspace:^
         version: link:../healthia
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
 
   packages/health/tool-healthia:
     devDependencies:
@@ -5268,6 +5274,9 @@ importers:
       '@phoenix-ai/dsh-healthia':
         specifier: workspace:^
         version: link:../healthia
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
       '@phoenix-ai/dsh-system-prompt':
         specifier: workspace:^
         version: link:../../core/system-prompt
