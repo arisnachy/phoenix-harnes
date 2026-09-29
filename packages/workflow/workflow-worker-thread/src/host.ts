@@ -141,6 +141,7 @@ export class WorkerRun implements WorkflowRun {
       whenProvider: string
       provider: string
       model: string
+      inheritParentModelPattern?: string
       reasoningEffort?: string
     } | undefined,
     private readonly disposeGraceMs: number,
@@ -355,15 +356,35 @@ export class WorkerRun implements WorkflowRun {
   private async startChild(callId: number, request: ChildStartRequest): Promise<void> {
     let run: SubagentRun
     try {
-      const routed = this.childRoute !== undefined && this.parent.options.provider === this.childRoute.whenProvider
-        ? {
+      let routed: {
+        provider?: string
+        model?: string
+        reasoningEffort?: ReturnType<typeof ReasoningEffortId>
+      } = {}
+      if (this.childRoute !== undefined && this.parent.options.provider === this.childRoute.whenProvider) {
+        let model = this.childRoute.model
+        const pattern = this.childRoute.inheritParentModelPattern
+        if (pattern !== undefined && this.parent.options.model !== undefined) {
+          let inherit: RegExp
+          try {
+            inherit = new RegExp(pattern, 'iu')
+          } catch (error: unknown) {
+            throw new WorkflowError(
+              `workflow childRoute inheritParentModelPattern is invalid: ${String(error)}`,
+              'INVALID_ARGUMENT',
+              { cause: error },
+            )
+          }
+          if (inherit.test(this.parent.options.model)) model = this.parent.options.model
+        }
+        routed = {
           provider: this.childRoute.provider,
-          model: this.childRoute.model,
+          model,
           ...this.childRoute.reasoningEffort === undefined
             ? {}
             : { reasoningEffort: ReasoningEffortId(this.childRoute.reasoningEffort) },
         }
-        : {}
+      }
       const requested = {
         ...routed,
         ...request.provider !== undefined ? { provider: request.provider } : {},
