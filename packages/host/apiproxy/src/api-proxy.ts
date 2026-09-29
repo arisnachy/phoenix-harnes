@@ -377,7 +377,7 @@ async function buildModelCatalog(ctx: Context): Promise<{
           ? [{
             id: PHOENIX_CODEX_AUTO_MODEL,
             name: 'Phoenix Auto',
-            description: 'GPT-6 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
+            description: 'GPT-6.1 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
           }, ...entries]
           : entries,
       }
@@ -2570,7 +2570,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 }),
               ])
               if (planner.provider !== 'openai-codex' || worker.provider !== 'openai-codex') {
-                throw new Error('Phoenix Auto requires OpenAI Codex GPT-6 Sol and Luna routes')
+                throw new Error('Phoenix Auto requires OpenAI Codex GPT-6.1 Sol and GPT-6 Luna routes')
               }
               selected = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
               liveRoute = {
