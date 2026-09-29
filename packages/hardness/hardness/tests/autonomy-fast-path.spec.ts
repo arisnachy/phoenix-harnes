@@ -90,5 +90,7 @@ describe('HARDNESS autonomy fast path', () => {
     expect(guide).toContain('bounded cosmetic, wording, styling, and localized implementation changes')
     expect(guide).toContain('fast mode')
     expect(guide).toContain('escalate only when new evidence adds risk, scope, failure, or another real trigger')
+    expect(guide).toContain('do not reopen work for non-material noise')
+    expect(guide).toContain('reviewer-infrastructure failures')
   })
 })
