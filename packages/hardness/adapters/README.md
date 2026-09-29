@@ -20,6 +20,8 @@ A task may use `visibility: surprise`. It is omitted from ordinary listings unti
 
 The host polls the durable engine and also pumps it when an agent is created. Chat delivery wakes a live target agent with a proactive follow-up. Private preparation, scheduled office work, and email use a configured one-shot subagent provider. If no live execution target exists, execution is deferred without consuming the occurrence.
 
+Recurring `delivery: work` tasks can maintain an explicitly requested ongoing objective such as research, class preparation, project monitoring, or sports analysis. Execution revalidates reality and may use already-authorized MCP/connectors; a durable interest authorizes analysis, not external transactions. Material results enter a ranked, bounded loopback attention projection, unchanged recurring runs can return `NO_MATERIAL_UPDATE`, and the browser shows only the highest-value rows in the blank-session Hero. Optional task attention metadata controls whether results or upcoming occurrences participate without changing task execution.
+
 Email has two independent identity references. `userMailIdentity` identifies the authorized mailbox used for office work sent on the user's behalf. `harnessMailIdentity` identifies Phoenix's own mailbox for direct communication with the user. A task chooses `user`, `harness`, or `auto`; `auto` prefers the Phoenix identity and falls back to the user identity. These references do not contain credentials and scheduled execution does not bypass normal mail-tool authorization or approval.
 
 Relevant configuration keys are `taskLedgerPath`, `taskPollMs`, `privateWorkProvider`, `privateWorkResultChars`, `userMailIdentity`, and `harnessMailIdentity`. The special `:memory:` ledger exists only for deterministic tests and ephemeral compositions.
@@ -46,7 +48,7 @@ Consumers may expose stable capability identifiers such as `tool:<name>`, `skill
 
 When the canonical system-prompt service is mounted, this package installs the `hardness:operating-protocol` section. It gives every model the same lifecycle vocabulary and requires resolution, approval, verification, presentation, and evidence before a task is described as complete.
 
-Model-facing scopes also install `hardness:proactivity-protocol`. It tells the model to use durable tasks for explicit reminders and useful autonomous follow-ups, avoid duplicates and spam, use private preparation for surprises, preserve calendar timing, and keep all scheduled external actions behind the same authorization policy used for immediate work.
+Model-facing scopes also install `hardness:proactivity-protocol`. It tells the model to use durable tasks for explicit reminders and useful autonomous follow-ups, turn explicit ongoing objectives into bounded recurring background work when useful, prefer authorized event-driven connectors over polling, suppress unchanged background results, preserve calendar timing, and keep all external actions behind the same authorization policy used for immediate work.
 
 Tool projections may subscribe to `tools/change`; this keeps dynamically connected tools, including MCP tools, represented in HARDNESS while registrations are reversible. The internal `hardness_run` tool is excluded from that projection to prevent recursive routing.
 

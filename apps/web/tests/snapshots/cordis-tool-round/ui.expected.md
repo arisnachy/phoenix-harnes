@@ -3,31 +3,45 @@
     - button "Use only Cordis tools. First" [disabled]
   - img
   - text: Standard mode
+  - button "Tasks":
+    - text: Tasks
+    - img
   - button "Session log":
     - text: Session log
     - img
   - tablist:
     - tab "Chat" [selected]
     - tab "Trajectory"
-- text: "Use only Cordis tools. First call cordis_inspect_self with no arguments. Then call cordis_define with plugin kind \"new\", idPrefix \"snap\", name \"snapshot noop\", purpose \"does nothing, for the snapshot\", code.host exactly \"return { name: \\\"snapshot-noop\\\", apply(ctx) {} }\" and code.client exactly \"return { inject: [\\\"slots\\\"], apply(ctx) { ctx.slots.register({ name: \\\"shell.overlay\\\", id: \\\"snapshot-probe\\\" }, () => React.createElement(\\\"div\\\", { \\\"data-snapshot-probe\\\": \\\"loaded\\\" })) } }\". Read its returned pluginId and packageId, then call cordis_run with those exact IDs and mode \"run\". After the run request returns, reply exactly CORDIS_UI_READY and stop. {{clock}}"
+- paragraph: "Use only Cordis tools. First call cordis_inspect_self with no arguments. Then call cordis_define with plugin kind \"new\", idPrefix \"snap\", name \"snapshot noop\", purpose \"does nothing, for the snapshot\", code.host exactly \"return { name: \"snapshot-noop\", apply(ctx) {} }\" and code.client exactly \"return { inject: [\"slots\"], apply(ctx) { ctx.slots.register({ name: \"shell.overlay\", id: \"snapshot-probe\" }, () => React.createElement(\"div\", { \"data-snapshot-probe\": \"loaded\" })) } }\". Read its returned pluginId and packageId, then call cordis_run with those exact IDs and mode \"run\". After the run request returns, reply exactly CORDIS_UI_READY and stop."
+- text: {{clock}}
 - button "Copy":
   - img
-- button "Context injection @phoenix-ai/dsh-system-prompt":
+- paragraph: CORDIS_UI_READY
+- button "Tools" [expanded]
+- button "Context injection System internal":
   - img
   - img
-  - text: Context injection @phoenix-ai/dsh-system-prompt
-- button "Think I will inspect the current Session's dynamic Cordis Plugins before defining the snapshot Package.":
+  - text: Context injection System internal
+- button "Context injection skill-catalog":
   - img
   - img
-  - text: Think I will inspect the current Session's dynamic Cordis Plugins before defining the snapshot Package.
-- 'button "Tool call cordis_inspect_self · {}"':
+  - text: Context injection skill-catalog
+- button "Reasoning Internal reasoning hidden":
   - img
   - img
-  - text: "Tool call cordis_inspect_self · {}"
-- button "Think No dynamic Plugins are present, so I will define the requested Host and Client Package.":
+  - text: Reasoning Internal reasoning hidden
+- 'button "cordis_inspect_self {}"':
   - img
   - img
-  - text: Think No dynamic Plugins are present, so I will define the requested Host and Client Package.
+  - text: "cordis_inspect_self {}"
+- button "Context injection agent-loop":
+  - img
+  - img
+  - text: Context injection agent-loop
+- button "Reasoning Internal reasoning hidden":
+  - img
+  - img
+  - text: Reasoning Internal reasoning hidden
 - button "Register Cordis Plugin snapshot noop does nothing, for the snapshot Ready" [expanded]:
   - img
   - text: Register Cordis Plugin snapshot noop does nothing, for the snapshot Ready
@@ -40,65 +54,86 @@
   - code: "return { name: \"snapshot-noop\", apply(ctx) {} }"
 - text: Result Defined snap-1/pkg-1 (snapshot noop); it is not running yet. Use cordis_run to activate this Package. Run controls live in the Cordis panel above Settings
 - button "Inspect"
-- button "Think The Host returned snap-1/pkg-1, so I will request its first activation.":
+- button "Context injection agent-loop":
   - img
   - img
-  - text: Think The Host returned snap-1/pkg-1, so I will request its first activation.
+  - text: Context injection agent-loop
+- button "Reasoning Internal reasoning hidden":
+  - img
+  - img
+  - text: Reasoning Internal reasoning hidden
 - img
 - text: Run Cordis Plugin snap-1 · pkg-1 Ready
 - button "Inspect"
 - text: snap-1/pkg-1 is awaiting user approval (run-1).
-- button "Think The activation request has been submitted, so I will return the requested readiness marker.":
+- button "Context injection agent-loop":
   - img
   - img
-  - text: Think The activation request has been submitted, so I will return the requested readiness marker.
-- paragraph: CORDIS_UI_READY
+  - text: Context injection agent-loop
+- button "Reasoning Internal reasoning hidden":
+  - img
+  - img
+  - text: Reasoning Internal reasoning hidden
 - button "Copy":
   - img
 - button "Good response":
   - img
 - button "Bad response":
   - img
+- button "Read answer aloud"
 - button "Branch into a new conversation":
   - img
 - text: {{clock}} Ran for {{duration}}
+- paragraph: The Cordis Plugin is running.
+- button "Tools" [expanded]
 - button "Context injection cordis-host-runner":
   - img
   - img
   - text: Context injection cordis-host-runner
-- paragraph: The Cordis Plugin is running.
 - button "Copy":
   - img
 - button "Good response":
   - img
 - button "Bad response":
   - img
+- button "Read answer aloud"
 - button "Branch into a new conversation":
   - img
-- text: {{clock}} Ran for {{duration}} Use only Cordis tools. Call cordis_stop with pluginId "snap-1". After it succeeds, reply exactly CORDIS_UI_DONE and stop. {{clock}}
+- text: {{clock}} Ran for {{duration}}
+- paragraph: Use only Cordis tools. Call cordis_stop with pluginId "snap-1". After it succeeds, reply exactly CORDIS_UI_DONE and stop.
+- text: {{clock}}
 - button "Copy":
   - img
+- paragraph: CORDIS_UI_DONE
+- button "Tools" [expanded]
 - img
 - text: Stop Cordis Plugin snap-1
 - button "Inspect"
 - text: Dynamic Plugin snap-1 is stopped; its definition and versions remain.
-- paragraph: CORDIS_UI_DONE
+- button "Context injection agent-loop":
+  - img
+  - img
+  - text: Context injection agent-loop
 - button "Copy":
   - img
 - button "Good response":
   - img
 - button "Bad response":
   - img
+- button "Read answer aloud"
 - button "Branch into a new conversation":
   - img
 - text: {{clock}} Ran for {{duration}}
 - textbox "Message the agent"
 - button "Commands":
   - img
+- button "Add files":
+  - img
 - 'button "Access mode, current: Workspace Write"': Workspace Write
-- button "Select model, current DeepSeek-V4-Flash":
-  - text: DeepSeek-V4-Flash
+- button "Select model, current DeepSeek V4 Flash":
+  - text: DeepSeek V4 Flash
   - img
 - button "0% of context used"
+- button "Start voice assistant"
 - button "Send message" [disabled]
 - text: 3 turns · 7 steps LLM {{duration}} · Tool call {{duration}} Cache hit 77% Input 66.5K tok · Output 321 tok

@@ -488,6 +488,17 @@ export type ConvViewProps = PropsRuntime<'conversation.view'>
 /** The shared chat store handle type declared by the Session header/body, details, and chat-view registrations. */
 export type ChatStore = ReturnType<typeof createChatStore>
 
+/** One non-intrusive proactive signal shown only in the blank-session Hero. */
+export interface ProactivityAttentionItem {
+  readonly id: string
+  readonly taskId: string
+  readonly kind: 'result' | 'failure' | 'upcoming'
+  readonly title: string
+  readonly detail?: string
+  readonly at: string
+  readonly score: number
+}
+
 /** Minimal private profile projection used by the local welcome chrome. */
 export interface ConversationUserProfileState {
   /** User-configured preferred name; model-context consent does not gate local UI chrome. */
@@ -509,6 +520,8 @@ export interface ConversationInjected {
   hooks: {
     composerBlock: ObservableSnapshot<ComposerBlock | undefined>
     userProfile: ObservableSnapshot<ConversationUserProfileState>
+    /** Ranked background results/upcoming work for the quiet Hero feed. */
+    proactivityAttention: ObservableSnapshot<readonly ProactivityAttentionItem[]>
   }
 }
 
