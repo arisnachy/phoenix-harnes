@@ -341,6 +341,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
 
   /**
    * Activate the exact official X API xurl bridge and X Docs MCP pair.
+   * @param options - X identity selection and optional cached-account username.
    * @returns Idempotent receipts for both pinned connectors.
    */
   async enableXMcp(options: { identity?: XMcpIdentity; username?: string } = {}): Promise<{
