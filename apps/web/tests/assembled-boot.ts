@@ -139,6 +139,7 @@ class EventSourceStub {
 
 const win = window as FixtureWindow
 let unmount: (() => Promise<void>) | undefined
+let bootReady: Promise<void> | undefined
 
 /**
  * Register the per-test jsdom setup and teardown the assembled boot needs:
@@ -167,6 +168,7 @@ export function installAssembledBootEnv(): void {
   afterEach(async () => {
     await act(async () => { await unmount?.() })
     unmount = undefined
+    bootReady = undefined
     cleanup()
     delete win.__DSH_BOOT__
     delete win.__ModuleLoader__
@@ -213,9 +215,20 @@ export function mountAssembledApp(search = '?fixture'): void {
         ;(0, eval)(code)
       },
     })
-    void entry.run()
+    bootReady = entry.run()
     unmount = () => entry.dispose()
   })
+}
+
+/**
+ * Wait until AppWebEntry has loaded and activated the complete built client graph.
+ * Tests that exercise optional presentation plugins must use this instead of
+ * inferring readiness from controls owned by the conversation core.
+ */
+export async function waitForAssembledBoot(): Promise<void> {
+  const pending = bootReady
+  if (pending === undefined) throw new Error('assembled boot: no mounted application')
+  await act(async () => { await pending })
 }
 
 /**

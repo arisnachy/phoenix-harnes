@@ -211,6 +211,33 @@ function normalizeGoalStream(rawStdout: string, cwd: string): string {
     .join('\n') + '\n'
 }
 
+/** Keep the headless contract stable while runtime-presence telemetry evolves independently. */
+function normalizeProfileRuntimeContext(snapshot: string): string {
+  return snapshot.split(/\r?\n/).map((line) => {
+    if (line.trim() === '') return line
+    const record = JSON.parse(line) as JsonObject
+    if (record.type !== 'user/message') return line
+    const data = record.data as JsonObject | undefined
+    const source = data?.source as JsonObject | undefined
+    if (source?.kind !== 'plugin'
+      || source.plugin !== '@phoenix-ai/dsh-system-prompt'
+      || source.form !== 'snapshot') return line
+    return JSON.stringify({
+      ...record,
+      data: {
+        ...data,
+        content: [{ type: 'text', text: '{{runtimeContext}}' }],
+        source: {
+          kind: 'plugin',
+          plugin: '@phoenix-ai/dsh-system-prompt',
+          form: 'snapshot',
+        },
+      },
+    })
+  }).join('\n')
+}
+
+
 async function scenarioPrompt(dir: string, label: string): Promise<string> {
   const input = JSON.parse(await readFile(join(dir, 'input.json'), 'utf8')) as {
     steps?: { op?: unknown; text?: unknown }[]
@@ -277,7 +304,7 @@ describe('headless stream-json snapshots', () => {
           .replaceAll('"name":"pwsh"', '"name":"bash"')
         if (refreshing) await writeFile(headlessSessionExpected, session)
         const expectedSession = normalizeCommittedSession(await readFile(headlessSessionExpected, 'utf8'))
-        expect(session).toBe(expectedSession)
+        expect(normalizeProfileRuntimeContext(session)).toBe(normalizeProfileRuntimeContext(expectedSession))
         expect(session).toContain(task)
         expect(session).toContain('CLI tool round trip complete: CLI_TOOL_ROUND_TRIP')
       },

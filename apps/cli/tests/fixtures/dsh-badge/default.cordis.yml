@@ -4,3 +4,7 @@
 
 - id: session-telemetry-otel
   disabled: true
+
+- id: phoenix-browser
+  disabled: true
+

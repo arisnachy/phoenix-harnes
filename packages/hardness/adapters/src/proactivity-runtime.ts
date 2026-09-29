@@ -38,6 +38,21 @@ export interface ProactivityRuntimeConfig {
 }
 
 /** Browser-safe task projection; unrevealed surprises never reach this surface. */
+/** Kinds of concise signals rendered by the blank-session Phoenix home feed. */
+export type ProactivityAttentionKind = 'result' | 'failure' | 'upcoming'
+
+/** Browser-safe attention row. Task instructions, credentials, and raw event payloads never cross this projection. */
+export interface ProactivityAttentionItem {
+  readonly id: string
+  readonly taskId: string
+  readonly kind: ProactivityAttentionKind
+  readonly title: string
+  readonly detail?: string
+  readonly at: string
+  readonly score: number
+}
+
+/** Browser-safe projection of one visible durable proactive task. */
 export interface ProactivityTaskView {
   readonly id: string
   readonly title: string
@@ -48,6 +63,9 @@ export interface ProactivityTaskView {
   readonly delivery: ProactivityTask['delivery']
   readonly senderIdentity: ProactivityTask['senderIdentity']
   readonly createdBy: ProactivityTask['createdBy']
+  readonly attentionMode?: ProactivityTask['attentionMode']
+  readonly attentionPriority?: ProactivityTask['attentionPriority']
+  readonly attentionText?: string
   readonly recentHistory: readonly Pick<ProactivityTask['history'][number], 'phase' | 'scheduledFor' | 'finishedAt' | 'status' | 'summary' | 'error'>[]
 }
 
@@ -152,7 +170,21 @@ function proactivePrompt(
     `Idempotency key: ${input.idempotencyKey}`,
     `Instruction: ${input.instruction}`,
     'Execution-time reality: use the current Phoenix Reality Context. Re-check any stale or missing time, timezone, calendar, location, weather/daylight, network, device-resource, connector-auth, provider/quota, or update-state fact that materially affects this task before acting. When phoenix_reality_now is available, use it for synchronized refresh rather than guessing.',
+    'Use relevant already-authorized MCP and connector tools when they provide fresher or more authoritative evidence. Do not install, connect, authenticate, or broaden permissions merely to complete background work.',
   ]
+  if (input.task.delivery === 'work') {
+    const recent = input.task.history
+      .filter(row => row.phase === 'deliver' && row.status === 'completed' && row.summary !== undefined)
+      .slice(-3)
+      .map(row => ({ scheduledFor: row.scheduledFor, summary: row.summary }))
+    if (recent.length > 0) lines.push(`Recent background summaries: ${JSON.stringify(recent)}`)
+    lines.push('Treat a durable user interest as permission to analyze and monitor, not as standing permission for purchases, wagers, trades, transfers, messages, bookings, or other external writes. An external write still needs explicit task authorization and the normal approval policy.')
+    if (input.task.recurrence.kind !== 'once') {
+      lines.push('If this recurring background check finds no material change from the recent summaries, return exactly NO_MATERIAL_UPDATE. Otherwise return a concise, actionable result suitable for Phoenix home attention.')
+    } else {
+      lines.push('Return a concise, actionable result suitable for Phoenix home attention.')
+    }
+  }
   if (input.preparationResult !== undefined) lines.push(`Prepared result: ${input.preparationResult}`)
   if (conditionEvidence !== undefined) lines.push(`Condition verified true: ${conditionEvidence}`)
   if (input.task.delivery === 'email') {
@@ -359,6 +391,9 @@ function taskView(task: ProactivityTask): ProactivityTaskView {
     delivery: task.delivery,
     senderIdentity: task.senderIdentity,
     createdBy: task.createdBy,
+    ...(task.attentionMode === undefined ? {} : { attentionMode: task.attentionMode }),
+    ...(task.attentionPriority === undefined ? {} : { attentionPriority: task.attentionPriority }),
+    ...(task.attentionText === undefined ? {} : { attentionText: task.attentionText }),
     recentHistory: task.history.slice(-10).map(row => ({
       phase: row.phase,
       scheduledFor: row.scheduledFor,
@@ -370,18 +405,118 @@ function taskView(task: ProactivityTask): ProactivityTaskView {
   }
 }
 
+const ATTENTION_RESULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+const ATTENTION_UPCOMING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+const MAX_ATTENTION_ITEMS = 8
+
+function compactAttentionText(value: string | undefined, limit = 280): string | undefined {
+  if (value === undefined) return undefined
+  const normalized = value.replace(/\s+/gu, ' ').trim()
+  if (normalized.length === 0) return undefined
+  return normalized.length <= limit ? normalized : `${normalized.slice(0, Math.max(0, limit - 1))}…`
+}
+
+function materialAttentionSummary(value: string | undefined): string | undefined {
+  const summary = compactAttentionText(value)
+  if (summary === undefined || /^NO_MATERIAL_UPDATE[.!]?$/iu.test(summary)) return undefined
+  return summary
+}
+
+function attentionPriority(task: ProactivityTask): number {
+  if (task.attentionPriority === 'high') return 24
+  if (task.attentionPriority === 'low') return 0
+  return 12
+}
+
+/**
+ * Rank task state into the two-line, non-intrusive Phoenix home feed.
+ * @param tasks - Visible durable tasks; unrevealed surprises must already be filtered by the engine.
+ * @param now - Ranking clock.
+ * @returns At most eight browser-safe attention rows, highest-value first.
+ */
+export function buildProactivityAttentionItems(
+  tasks: readonly ProactivityTask[],
+  now = new Date(),
+): ProactivityAttentionItem[] {
+  const nowMs = now.getTime()
+  if (!Number.isFinite(nowMs)) throw new Error('now must be a valid date')
+  const oldestResult = nowMs - ATTENTION_RESULT_MAX_AGE_MS
+  const latestUpcoming = nowMs + ATTENTION_UPCOMING_WINDOW_MS
+  const items: ProactivityAttentionItem[] = []
+
+  for (const task of tasks) {
+    const mode = task.attentionMode ?? 'auto'
+    if (mode === 'off') continue
+    const priority = attentionPriority(task)
+    const failed = [...task.history].reverse().find(row => row.status === 'failed')
+    if (failed !== undefined && Date.parse(failed.finishedAt) >= oldestResult) {
+      items.push({
+        id: `${task.id}:failure:${failed.finishedAt}`,
+        taskId: task.id,
+        kind: 'failure',
+        title: task.title,
+        at: failed.finishedAt,
+        score: 130 + priority,
+      })
+      continue
+    }
+
+    const latestDelivery = [...task.history].reverse().find(row =>
+      row.phase === 'deliver' && row.status === 'completed' && row.summary !== undefined)
+    const summary = materialAttentionSummary(latestDelivery?.summary)
+    const canSurfaceResult = mode === 'result' || (mode === 'auto' && task.delivery === 'work')
+    if (canSurfaceResult && latestDelivery !== undefined && summary !== undefined
+      && Date.parse(latestDelivery.finishedAt) >= oldestResult) {
+      const ageHours = Math.max(0, (nowMs - Date.parse(latestDelivery.finishedAt)) / 3_600_000)
+      items.push({
+        id: `${task.id}:result:${latestDelivery.finishedAt}`,
+        taskId: task.id,
+        kind: 'result',
+        title: task.title,
+        detail: summary,
+        at: latestDelivery.finishedAt,
+        score: 100 + priority - Math.min(20, ageHours / 8),
+      })
+      continue
+    }
+
+    const nextMs = Date.parse(task.nextRunAt)
+    const canSurfaceUpcoming = mode === 'upcoming'
+      || (mode === 'auto' && (task.recurrence.kind === 'once' || task.attentionText !== undefined))
+    if (canSurfaceUpcoming && task.status === 'scheduled' && nextMs >= nowMs && nextMs <= latestUpcoming) {
+      const hoursAway = Math.max(0, (nextMs - nowMs) / 3_600_000)
+      const detail = compactAttentionText(task.attentionText)
+      items.push({
+        id: `${task.id}:upcoming:${task.nextRunAt}`,
+        taskId: task.id,
+        kind: 'upcoming',
+        title: task.title,
+        ...(detail === undefined ? {} : { detail }),
+        at: task.nextRunAt,
+        score: 70 + priority + Math.max(0, 14 - Math.min(14, hoursAway / 12)),
+      })
+    }
+  }
+
+  return items
+    .sort((left, right) => right.score - left.score || Date.parse(right.at) - Date.parse(left.at) || left.id.localeCompare(right.id))
+    .slice(0, MAX_ATTENTION_ITEMS)
+}
+
 function rpcFailure(message: string): RpcResult<never> {
   return { ok: false, error: { code: 'internal', message, details: {} } }
 }
 
-/** Mount a read-only loopback endpoint used by the browser Task Center. */
+/** Mount the read-only loopback endpoints used by the browser task and attention surfaces. */
 function installProactivityRpc(connection: HostConnectionHandle, engine: ProactivityEngine): () => Promise<void> {
-  return connection.rpc.handle('/phoenix-tasks', async (endpoint): Promise<RpcResult<readonly ProactivityTaskView[]>> => {
-    if (endpoint !== 'list') return rpcFailure(`unknown Phoenix tasks endpoint: ${endpoint}`)
+  return connection.rpc.handle('/phoenix-tasks', async (endpoint): Promise<RpcResult<readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[]>> => {
     try {
       // `list()` intentionally omits surprises until reveal time. Hidden task
       // content therefore never crosses the browser transport ahead of time.
-      return { ok: true, value: (await engine.list()).map(taskView) }
+      const tasks = await engine.list()
+      if (endpoint === 'list') return { ok: true, value: tasks.map(taskView) }
+      if (endpoint === 'attention') return { ok: true, value: buildProactivityAttentionItems(tasks) }
+      return rpcFailure(`unknown Phoenix tasks endpoint: ${endpoint}`)
     } catch (error: unknown) {
       return rpcFailure(error instanceof Error ? error.message : String(error))
     }

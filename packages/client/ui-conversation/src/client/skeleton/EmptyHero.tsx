@@ -8,10 +8,10 @@
 import { useId } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import {
-  IconChevronDownOutline14, IconFolderClose16, IconFolderOpen16, PhoenixLogo,
+  IconChevronDownOutline14, IconFolderClose16, IconFolderOpen16, IconSparkle16, IconWarningOutline16, PhoenixLogo,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import { workspaceTitleOf } from '@phoenix-ai/dsh-client-runtime/client'
-import type { ConversationSlotProps } from '../contract/slots.ts'
+import type { ConversationSlotProps, ProactivityAttentionItem } from '../contract/slots.ts'
 import css from './HeroShell.module.css'
 
 /** The owner's locale seat type, passed to hero chrome as a plain prop. */
@@ -116,6 +116,14 @@ export function HeroGlow({ className }: { className?: string | undefined }) {
   )
 }
 
+/** Resolve concise fallback copy without exposing internal task mechanics. */
+export function heroAttentionDetail(item: ProactivityAttentionItem): string {
+  if (item.detail !== undefined && item.detail.trim().length > 0) return item.detail.trim()
+  if (item.kind === 'failure') return 'Necesita revisión.'
+  if (item.kind === 'upcoming') return 'Phoenix lo está preparando.'
+  return 'Hay un resultado nuevo.'
+}
+
 /** Hero chrome props. The workspace row rides the InputBar accessory hole, not here. */
 export interface HeroShellProps {
   /** The owner's locale seat, retained for the workspace chip contract. */
@@ -124,6 +132,8 @@ export interface HeroShellProps {
   renderSlot: ConversationSlotProps['renderSlot']
   /** Durable preferred name from the current user's Profile settings. */
   preferredName?: string | undefined
+  /** Highest-value proactive signals; the Hero renders only the first two. */
+  attention?: readonly ProactivityAttentionItem[] | undefined
   /** Overlay content after the stack (modals). */
   children?: ReactNode
 }
@@ -135,7 +145,7 @@ export interface HeroShellProps {
  * @param props - see {@link HeroShellProps}.
  * @returns the centered hero element tree.
  */
-export function HeroShell({ renderSlot, preferredName, children }: HeroShellProps) {
+export function HeroShell({ renderSlot, preferredName, attention = [], children }: HeroShellProps) {
   const greeting = greetingForHour(new Date().getHours())
   const displayName = preferredNameForHero(preferredName)
 
@@ -157,6 +167,20 @@ export function HeroShell({ renderSlot, preferredName, children }: HeroShellProp
           )}
         </h1>
         <p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>
+        {attention.length === 0 ? null : (
+          <div className={css.attention} aria-label="Atención proactiva de Phoenix">
+            {attention.slice(0, 2).map(item => (
+              <div className={css.attentionRow} key={item.id}>
+                {item.kind === 'failure'
+                  ? <IconWarningOutline16 className={css.attentionIcon} size={15} />
+                  : <IconSparkle16 className={css.attentionIcon} size={15} />}
+                <span className={css.attentionTitle}>{item.title}</span>
+                <span className={css.attentionSeparator} aria-hidden="true">·</span>
+                <span className={css.attentionDetail}>{heroAttentionDetail(item)}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       {children}
     </div>
