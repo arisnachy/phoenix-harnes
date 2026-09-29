@@ -117,11 +117,12 @@ describe('connector_install', () => {
 })
 
 describe('x_mcp_activate', () => {
-  function xHost(options: { credentials?: boolean } = {}): XMcpHostService & {
+  function xHost(options: { credentials?: boolean; phoenixConfigured?: boolean } = {}): XMcpHostService & {
     enableXMcp: ReturnType<typeof vi.fn>
     xMcpState: ReturnType<typeof vi.fn>
   } {
     const credentials = options.credentials ?? true
+    const phoenixConfigured = options.phoenixConfigured ?? false
     return {
       enableXMcp: vi.fn(async () => ({
         api: {
@@ -137,7 +138,10 @@ describe('x_mcp_activate', () => {
         clientIdConfigured: credentials,
         clientSecretConfigured: credentials,
         api: { configured: true, status: credentials ? 'starting' as const : 'auth-required' as const },
-        phoenixApi: { configured: false },
+        phoenixApi: {
+          configured: phoenixConfigured,
+          ...(phoenixConfigured ? { status: 'ready' as const } : {}),
+        },
         docs: { configured: true, status: 'ready' as const },
       })),
     }
@@ -223,12 +227,53 @@ describe('x_mcp_activate', () => {
     })
   })
 
-  it('requires a username before connecting the Phoenix-owned X identity', async () => {
-    const tool = createXMcpActivateTool({ request: vi.fn() }, xHost())
+  it('starts official signup onboarding when the Phoenix-owned identity does not exist yet', async () => {
+    const approval = { request: vi.fn(async () => 'allowed-once' as const) }
+    const host = xHost()
+    const tool = createXMcpActivateTool(approval, host)
+    const deferred = vi.fn()
+    const context = exec() as unknown as { deferContext: typeof deferred }
+    context.deferContext = deferred
+
     await expect(tool.execute({
       requestedByUser: true,
       identity: 'phoenix',
-    }, exec())).rejects.toThrow('requires the X username')
+    }, context as never)).resolves.toMatchObject({
+      status: 'setup-required',
+      identity: 'phoenix',
+      signupUrl: 'https://x.com/signup',
+      requiresHumanVerification: true,
+      message: expect.stringContaining('official X signup flow'),
+    })
+    expect(approval.request).toHaveBeenCalledWith(expect.objectContaining({
+      reason: expect.stringContaining('Phoenix-owned X account'),
+      risk: 'medium',
+    }))
+    expect(host.enableXMcp).not.toHaveBeenCalled()
+    expect(deferred).toHaveBeenCalledWith(expect.objectContaining({
+      source: { kind: 'plugin', plugin: 'x-mcp' },
+      content: [expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('browser_open to https://x.com/signup'),
+      })],
+    }))
+  })
+
+  it('reuses an already configured Phoenix-owned X identity without restarting signup', async () => {
+    const approval = { request: vi.fn() }
+    const host = xHost({ phoenixConfigured: true })
+    const tool = createXMcpActivateTool(approval, host)
+
+    await expect(tool.execute({
+      requestedByUser: true,
+      identity: 'phoenix',
+    }, exec())).resolves.toMatchObject({
+      status: 'enabled',
+      identity: 'phoenix',
+      message: expect.stringContaining('already configured'),
+    })
+    expect(approval.request).not.toHaveBeenCalled()
+    expect(host.enableXMcp).not.toHaveBeenCalled()
   })
 
   it('presents X activation as an edit-style connector action', () => {
