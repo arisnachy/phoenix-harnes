@@ -168,6 +168,12 @@ describe('PluginInventoryGateway', () => {
           toolNames: [],
         },
         {
+          serverName: 'x-api-phoenix',
+          transport: 'stdio',
+          status: 'ready',
+          toolNames: ['mcp__x-api-phoenix__users_me'],
+        },
+        {
           serverName: 'x-docs',
           transport: 'streamable-http',
           status: 'ready',
@@ -184,6 +190,7 @@ describe('PluginInventoryGateway', () => {
     }).managedMcp
     vi.spyOn(managed, 'snapshot').mockResolvedValue([
       { entryId: 'x-api-id', serverName: 'x-api', url: 'https://api.x.com/mcp' },
+      { entryId: 'x-api-phoenix-id', serverName: 'x-api-phoenix', url: 'https://api.x.com/mcp' },
       { entryId: 'x-docs-id', serverName: 'x-docs', url: 'https://docs.x.com/mcp' },
     ])
     const install = vi.spyOn(managed, 'installXMcp').mockResolvedValue({
@@ -200,6 +207,10 @@ describe('PluginInventoryGateway', () => {
         status: 'auth-required',
         reasonCode: 'authorization-required',
       },
+      phoenixApi: {
+        configured: true,
+        status: 'ready',
+      },
       docs: {
         configured: true,
         status: 'ready',
@@ -209,7 +220,12 @@ describe('PluginInventoryGateway', () => {
       api: { status: 'installed' },
       docs: { status: 'installed' },
     })
-    expect(install).toHaveBeenCalledTimes(1)
+    await expect(inventory.enableXMcp({ identity: 'phoenix', username: 'PhoenixAI' })).resolves.toMatchObject({
+      api: { status: 'installed' },
+      docs: { status: 'installed' },
+    })
+    expect(install).toHaveBeenNthCalledWith(1, {})
+    expect(install).toHaveBeenNthCalledWith(2, { identity: 'phoenix', username: 'PhoenixAI' })
     await expect(inventory.disableXMcp()).resolves.toEqual({ disabled: true })
     expect(remove).toHaveBeenCalledTimes(1)
   })
@@ -220,6 +236,7 @@ describe('PluginInventoryGateway', () => {
       clientIdConfigured: false,
       clientSecretConfigured: false,
       api: { configured: false },
+      phoenixApi: { configured: false },
       docs: { configured: false },
     })
   })
