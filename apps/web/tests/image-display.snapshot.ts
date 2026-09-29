@@ -196,12 +196,9 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
   // only the previously accepted thumbnail — no submit-time rollback.
   const batch = Array.from({ length: 20 }, (_, i) =>
     new File([new Uint8Array([137, 80, 78, 71])], `bulk-${String(i)}.png`, { type: 'image/png' }))
-  fireEvent.paste(textarea, {
-    clipboardData: {
-      items: batch.map(file => ({ kind: 'file', type: 'image/png', getAsFile: () => file })),
-      getData: () => '',
-    },
-  })
+  const picker = textarea.closest('[data-composer-card]')?.querySelector<HTMLInputElement>('input[type="file"]')
+  if (picker === null || picker === undefined) throw new Error('composer file picker missing')
+  fireEvent.change(picker, { target: { files: batch } })
   const limitMessage = 'A message can include up to 20 images'
   const banner = await screen.findByText(limitMessage)
   expect(banner.closest('[role="alert"]')).not.toBeNull()
@@ -224,12 +221,9 @@ it('renders a host dimension rejection with the projected 2000px limit', async (
     expect(textarea.getAttribute('data-phase')).toBe('plain')
   }, { timeout: 10_000 })
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'too-wide.png', { type: 'image/png' })
-  fireEvent.paste(textarea, {
-    clipboardData: {
-      items: [{ kind: 'file', type: 'image/png', getAsFile: () => image }],
-      getData: () => '',
-    },
-  })
+  const picker = textarea.closest('[data-composer-card]')?.querySelector<HTMLInputElement>('input[type="file"]')
+  if (picker === null || picker === undefined) throw new Error('composer file picker missing')
+  fireEvent.change(picker, { target: { files: [image] } })
   await waitFor(() => {
     expect(document.querySelector('[role="group"][aria-label="Pending images"]')).not.toBeNull()
   })
