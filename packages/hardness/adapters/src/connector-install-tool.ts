@@ -27,6 +27,11 @@ export interface XMcpHostSnapshot {
     readonly status?: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
     readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
   }
+  readonly phoenixApi: {
+    readonly configured: boolean
+    readonly status?: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
+    readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+  }
   readonly docs: {
     readonly configured: boolean
     readonly status?: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
@@ -48,7 +53,7 @@ function xMcpSnapshotJson(state: XMcpHostSnapshot): JsonValue {
 /** Host operations for the exact official X API and Docs MCP pair. */
 export interface XMcpHostService {
   xMcpState(): Promise<XMcpHostSnapshot>
-  enableXMcp(): Promise<{
+  enableXMcp(options?: { identity?: 'user' | 'phoenix'; username?: string }): Promise<{
     api: { status: 'installed' | 'already-installed'; connector: { serverName: string; url: string } }
     docs: { status: 'installed' | 'already-installed'; connector: { serverName: string; url: string } }
   }>
@@ -140,9 +145,11 @@ export function createXMcpActivateTool(
 ): ToolDefinition {
   return defineTool({
     name: 'x_mcp_activate',
-    description: 'Activate the official X MCP integration only when the user explicitly asks to connect or use X/Twitter. Installs the keyless official X Docs MCP and the pinned @xdevplatform/xurl bridge for https://api.x.com/mcp. The bridge reads X_CLIENT_ID and X_CLIENT_SECRET only from the Phoenix vault. Activation itself never posts, deletes, follows, or performs another X account action.',
+    description: 'Activate the official X MCP integration for either the user account or a separate Phoenix-owned X account. The user identity uses x-api; the Phoenix identity uses x-api-phoenix and xurl -u/--username so both OAuth users can coexist without mixing tokens. This installs connector access only and never creates an X account or performs an X account action.',
     parameters: {
       requestedByUser: { type: 'boolean', required: true, description: 'Must be true only when the user explicitly requested X/Twitter MCP access.' },
+      identity: { type: 'string', enum: ['user', 'phoenix'], description: 'Which X identity Phoenix should connect. Defaults to user.' },
+      username: { type: 'string', description: 'Required for the Phoenix-owned identity; optional for the user identity.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true },
@@ -156,6 +163,11 @@ export function createXMcpActivateTool(
         }
       }
       if (exec.agent === undefined) throw new Error('X MCP activation requires an active agent session')
+      const identity = args.identity === 'phoenix' ? 'phoenix' : 'user'
+      const username = args.username?.trim()
+      if (identity === 'phoenix' && !username) {
+        throw new Error('Phoenix-owned X identity requires the X username after that account is created')
+      }
       if (host?.enableXMcp === undefined || host.xMcpState === undefined) {
         throw new Error('Official X MCP host integration is unavailable in this Phoenix runtime')
       }
@@ -163,7 +175,7 @@ export function createXMcpActivateTool(
         agent: exec.agent,
         toolName: 'x_mcp_activate',
         callId: exec.callId,
-        reason: 'Enable the official X Docs MCP and the pinned @xdevplatform/xurl bridge for the X API. This installs connector access only and performs no X account action.',
+        reason: `Enable the official X MCP for the ${identity === 'phoenix' ? 'Phoenix-owned' : 'user'} identity. This installs connector access only and performs no X account action.`,
         risk: 'medium',
         reversible: true,
         signal: exec.signal,
@@ -175,17 +187,21 @@ export function createXMcpActivateTool(
           message: 'Official X MCP activation was not approved.',
         }
       }
-      const receipt = await host.enableXMcp()
+      const receipt = await host.enableXMcp({
+        identity,
+        ...(username === undefined ? {} : { username }),
+      })
       const state = await host.xMcpState()
       const credentialsReady = state.clientIdConfigured && state.clientSecretConfigured
       return {
         status: 'enabled',
+        identity,
         api: receipt.api.status,
         docs: receipt.docs.status,
         credentialsReady,
         state: xMcpSnapshotJson(state),
         message: credentialsReady
-          ? 'Official X MCP is installed. Complete the X browser authorization if xurl requests it, then use connector_list for live tool status.'
+          ? `Official X MCP is installed for the ${identity} identity. Complete the X browser authorization if xurl requests it; Phoenix can keep the user and Phoenix-owned accounts authorized separately.`
           : 'Official X MCP is installed. X Docs can work without credentials; X API needs X_CLIENT_ID and X_CLIENT_SECRET stored with the human-only /secret command before xurl can authorize.',
       }
     },

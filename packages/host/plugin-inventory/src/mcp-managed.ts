@@ -71,6 +71,10 @@ export const BINANCE_AGENT_OS_URL = 'https://agent.binance.com/mcp/agentic'
 export const X_API_MCP_SERVER_NAME = 'x-api'
 /** Official X API hosted MCP endpoint reached through xurl. */
 export const X_API_MCP_URL = 'https://api.x.com/mcp'
+/** Dedicated MCP namespace for Phoenix's own X account. */
+export const X_PHOENIX_API_MCP_SERVER_NAME = 'x-api-phoenix'
+/** Public identity kinds supported by the managed X bridge. */
+export type XMcpIdentity = 'user' | 'phoenix'
 /** Stable local MCP namespace for the official X documentation server. */
 export const X_DOCS_MCP_SERVER_NAME = 'x-docs'
 /** Official keyless X documentation MCP endpoint. */
@@ -125,12 +129,26 @@ function xDocsMcpConfig(): ManagedStreamableHttpMcpConfig {
   }
 }
 
-function xApiMcpConfig(): ManagedStdioMcpConfig {
+function normalizeXUsername(username: string): string {
+  const normalized = username.trim().replace(/^@/, '')
+  if (!/^[A-Za-z0-9_]{1,64}$/.test(normalized)) {
+    throw new Error('X username must contain only letters, numbers, or underscores')
+  }
+  return normalized
+}
+
+function xApiMcpConfig(identity: XMcpIdentity = 'user', username?: string): ManagedStdioMcpConfig {
+  const normalizedUsername = username === undefined ? undefined : normalizeXUsername(username)
+  if (identity === 'phoenix' && normalizedUsername === undefined) {
+    throw new Error('Phoenix-owned X identity requires its X username')
+  }
   return {
     transport: 'stdio',
-    serverName: X_API_MCP_SERVER_NAME,
+    serverName: identity === 'phoenix' ? X_PHOENIX_API_MCP_SERVER_NAME : X_API_MCP_SERVER_NAME,
     command: 'npx',
-    args: ['-y', '@xdevplatform/xurl', 'mcp', X_API_MCP_URL],
+    args: normalizedUsername === undefined
+      ? ['-y', '@xdevplatform/xurl', 'mcp', X_API_MCP_URL]
+      : ['-y', '@xdevplatform/xurl', 'mcp', '-u', normalizedUsername, X_API_MCP_URL],
     env: {},
     envCredentialRefs: {
       CLIENT_ID: X_CLIENT_ID_REF,
@@ -154,7 +172,23 @@ function exactJson(value: unknown, expected: ManagedMcpConfig): boolean {
 }
 
 function validXApiConfig(value: Record<string, unknown>): boolean {
-  return exactJson(value, xApiMcpConfig())
+  if (exactJson(value, xApiMcpConfig())) return true
+  if (!Array.isArray(value.args) || value.args.length !== 6
+    || value.args[0] !== '-y'
+    || value.args[1] !== '@xdevplatform/xurl'
+    || value.args[2] !== 'mcp'
+    || value.args[3] !== '-u'
+    || typeof value.args[4] !== 'string'
+    || value.args[5] !== X_API_MCP_URL) return false
+  const identity: XMcpIdentity | undefined = value.serverName === X_API_MCP_SERVER_NAME
+    ? 'user'
+    : value.serverName === X_PHOENIX_API_MCP_SERVER_NAME ? 'phoenix' : undefined
+  if (identity === undefined) return false
+  try {
+    return exactJson(value, xApiMcpConfig(identity, value.args[4]))
+  } catch {
+    return false
+  }
 }
 
 function validHttpConfig(value: Record<string, unknown>): boolean {
@@ -261,7 +295,11 @@ function isBinanceAgentOsManagedRow(row: ManagedMcpRow): boolean {
     || (row.config.transport === 'streamable-http' && row.config.url === BINANCE_AGENT_OS_URL)
 }
 
-const X_MCP_SERVER_NAMES = new Set([X_API_MCP_SERVER_NAME, X_DOCS_MCP_SERVER_NAME])
+const X_MCP_SERVER_NAMES = new Set([
+  X_API_MCP_SERVER_NAME,
+  X_PHOENIX_API_MCP_SERVER_NAME,
+  X_DOCS_MCP_SERVER_NAME,
+])
 
 function isXMcpManagedRow(row: ManagedMcpRow): boolean {
   return X_MCP_SERVER_NAMES.has(row.config.serverName)
@@ -427,14 +465,19 @@ export class ManagedMcpController {
   /**
    * Install X's official keyless Docs MCP plus the official xurl OAuth bridge
    * for the hosted X API MCP. The bridge receives only credential references.
+   * @param options - X identity selection and optional xurl username.
    * @returns Independent idempotent receipts for the API and Docs connectors.
    */
-  async installXMcp(): Promise<{
+  async installXMcp(options: { identity?: XMcpIdentity; username?: string } = {}): Promise<{
     api: McpRegistryInstallReceipt
     docs: McpRegistryInstallReceipt
   }> {
+    const identity = options.identity ?? 'user'
     const docs = await this.installManagedConfig(xDocsMcpConfig(), 'X Docs')
-    const api = await this.installManagedConfig(xApiMcpConfig(), 'X API')
+    const api = await this.installManagedConfig(
+      xApiMcpConfig(identity, options.username),
+      identity === 'phoenix' ? 'Phoenix X API' : 'X API',
+    )
     return { api, docs }
   }
 

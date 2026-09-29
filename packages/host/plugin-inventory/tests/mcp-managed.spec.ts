@@ -209,8 +209,34 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenCalledTimes(2)
 
+    await expect(controller.installXMcp({
+      identity: 'phoenix',
+      username: '@PhoenixAI',
+    })).resolves.toMatchObject({
+      api: {
+        status: 'installed',
+        connector: {
+          serverName: 'x-api-phoenix',
+          url: 'https://api.x.com/mcp',
+        },
+      },
+      docs: { status: 'already-installed' },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(3, {
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: expect.objectContaining({
+        transport: 'stdio',
+        serverName: 'x-api-phoenix',
+        args: ['-y', '@xdevplatform/xurl', 'mcp', '-u', 'PhoenixAI', 'https://api.x.com/mcp'],
+      }),
+    })
+    await expect(controller.installXMcp({ identity: 'phoenix' }))
+      .rejects.toThrow('requires its X username')
+    await expect(controller.installXMcp({ identity: 'phoenix', username: 'bad-name!' }))
+      .rejects.toThrow('letters, numbers, or underscores')
+
     await expect(controller.removeXMcp()).resolves.toBe(true)
-    expect(live.remove).toHaveBeenCalledTimes(2)
+    expect(live.remove).toHaveBeenCalledTimes(3)
     await expect(controller.snapshot()).resolves.toEqual([])
     await expect(controller.removeXMcp()).resolves.toBe(false)
   })

@@ -137,6 +137,7 @@ describe('x_mcp_activate', () => {
         clientIdConfigured: credentials,
         clientSecretConfigured: credentials,
         api: { configured: true, status: credentials ? 'starting' as const : 'auth-required' as const },
+        phoenixApi: { configured: false },
         docs: { configured: true, status: 'ready' as const },
       })),
     }
@@ -190,6 +191,7 @@ describe('x_mcp_activate', () => {
 
     await expect(readyTool.execute({ requestedByUser: true }, exec())).resolves.toMatchObject({
       status: 'enabled',
+      identity: 'user',
       api: 'installed',
       docs: 'installed',
       credentialsReady: true,
@@ -203,8 +205,30 @@ describe('x_mcp_activate', () => {
       credentialsReady: false,
       message: expect.stringContaining('/secret'),
     })
-    expect(ready.enableXMcp).toHaveBeenCalledTimes(1)
-    expect(missing.enableXMcp).toHaveBeenCalledTimes(1)
+    expect(ready.enableXMcp).toHaveBeenCalledWith({ identity: 'user' })
+    expect(missing.enableXMcp).toHaveBeenCalledWith({ identity: 'user' })
+
+    await expect(readyTool.execute({
+      requestedByUser: true,
+      identity: 'phoenix',
+      username: '@PhoenixAI',
+    }, exec())).resolves.toMatchObject({
+      status: 'enabled',
+      identity: 'phoenix',
+      credentialsReady: true,
+    })
+    expect(ready.enableXMcp).toHaveBeenLastCalledWith({
+      identity: 'phoenix',
+      username: '@PhoenixAI',
+    })
+  })
+
+  it('requires a username before connecting the Phoenix-owned X identity', async () => {
+    const tool = createXMcpActivateTool({ request: vi.fn() }, xHost())
+    await expect(tool.execute({
+      requestedByUser: true,
+      identity: 'phoenix',
+    }, exec())).rejects.toThrow('requires the X username')
   })
 
   it('presents X activation as an edit-style connector action', () => {
