@@ -13,11 +13,13 @@ import {
   defaultExecutionHandoff,
   installModelSelection,
   isPhoenixCodexAutoSelection,
+  latestPhoenixCodexAutoRoutes,
   PHOENIX_CODEX_AUTO_MODEL,
-  PHOENIX_CODEX_AUTO_PLANNER_MODEL,
   PHOENIX_CODEX_AUTO_WORKER_MODEL,
 } from '@phoenix-ai/dsh-agent'
-import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@phoenix-ai/dsh-agent'
+import type {
+  Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus, PhoenixCodexAutoRoutes,
+} from '@phoenix-ai/dsh-agent'
 import type {} from '@phoenix-ai/dsh-agent-presets/types'
 import { AttachmentError, admitEncodedFiles, admitEncodedImages } from '@phoenix-ai/dsh-attachment'
 import type { FileAttachmentRef, ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
@@ -367,19 +369,19 @@ async function buildModelCatalog(ctx: Context): Promise<{
           ...reasoning === undefined ? {} : { reasoning },
         }
       }))
-      const hasPhoenixAutoPair = provider.id === 'openai-codex'
-        && entries.some(model => model.id === PHOENIX_CODEX_AUTO_PLANNER_MODEL)
-        && entries.some(model => model.id === PHOENIX_CODEX_AUTO_WORKER_MODEL)
+      const phoenixAutoRoutes = provider.id === 'openai-codex'
+        ? latestPhoenixCodexAutoRoutes(entries)
+        : undefined
       const group: ModelProviderGroup = {
         id: provider.id,
         name: provider.name,
-        models: hasPhoenixAutoPair
-          ? [{
+        models: phoenixAutoRoutes === undefined
+          ? entries
+          : [{
             id: PHOENIX_CODEX_AUTO_MODEL,
             name: 'Phoenix Auto',
-            description: 'GPT-6 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
-          }, ...entries]
-          : entries,
+            description: 'Latest Sol plans · latest Luna Max executes · independent Luna reviews · Sol decides',
+          }, ...entries],
       }
       return { kind: 'group' as const, group }
     } catch (error: unknown) {
@@ -1209,6 +1211,37 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     return result
   }
 
+  /** Resolve the newest live Sol/Luna routes currently advertised by OpenAI Codex. */
+  async function phoenixAutoRoutes(): Promise<PhoenixCodexAutoRoutes> {
+    const models = await ctx.llm.listModels('openai-codex')
+    const routes = latestPhoenixCodexAutoRoutes(models)
+    if (routes === undefined) {
+      throw new Error('Phoenix Auto requires at least one advertised Sol model and one advertised Luna model')
+    }
+    return routes
+  }
+
+  /** Refresh one selected Phoenix Auto session before it starts a new turn. */
+  async function refreshPhoenixAutoRoute(agent: Agent, selection: WebModelSelectionRef): Promise<void> {
+    if (!isPhoenixCodexAutoSelection(selection.current)) return
+    const routes = await phoenixAutoRoutes()
+    const worker = await ctx.llm.resolveCallConfig({
+      provider: 'openai-codex',
+      model: routes.worker,
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+    await ctx.llm.resolveCallConfig({
+      provider: 'openai-codex',
+      model: routes.planner,
+      reasoningEffort: ReasoningEffortId('medium'),
+    })
+    selection.phoenixAutoRoutes = routes
+    agent.options.provider = worker.provider
+    agent.options.model = worker.model
+    if (worker.reasoningEffort === undefined) delete agent.options.reasoningEffort
+    else agent.options.reasoningEffort = worker.reasoningEffort
+  }
+
   /**
    * Install or return the session-local model selection that prompt assembly snapshots.
    *
@@ -1983,7 +2016,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const found = await agentFor(sessionId)
     if ('error' in found) return { refused: err(request, found.error) }
     const agent = found.agent
-    const selection = selectionFor(agent).current
+    const selectionRef = selectionFor(agent)
+    await refreshPhoenixAutoRoute(agent, selectionRef)
+    const selection = selectionRef.current
     if (!routeServed(selection.provider)) {
       return {
         refused: err(request, {
@@ -2553,24 +2588,26 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             }
             let selected: ModelSelection
             let liveRoute: ModelSelection
+            let autoRoutes: PhoenixCodexAutoRoutes | undefined
             if (isPhoenixCodexAutoSelection(requested)) {
               if (reasoningEffort !== undefined) {
                 throw new Error('Phoenix Auto manages reasoning effort automatically')
               }
+              autoRoutes = await phoenixAutoRoutes()
               const [planner, worker] = await Promise.all([
                 ctx.llm.resolveCallConfig({
                   provider: 'openai-codex',
-                  model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+                  model: autoRoutes.planner,
                   reasoningEffort: ReasoningEffortId('medium'),
                 }),
                 ctx.llm.resolveCallConfig({
                   provider: 'openai-codex',
-                  model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+                  model: autoRoutes.worker,
                   reasoningEffort: ReasoningEffortId('max'),
                 }),
               ])
               if (planner.provider !== 'openai-codex' || worker.provider !== 'openai-codex') {
-                throw new Error('Phoenix Auto requires OpenAI Codex GPT-6 Sol and Luna routes')
+                throw new Error('Phoenix Auto requires OpenAI Codex Sol and Luna routes')
               }
               selected = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
               liveRoute = {
@@ -2591,7 +2628,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               }
               liveRoute = selected
             }
-            selectionFor(found.agent).current = selected
+            const selectionRef = selectionFor(found.agent)
+            selectionRef.current = selected
+            selectionRef.phoenixAutoRoutes = autoRoutes
             // Synchronize the live Agent route so delegators inherit a real
             // provider route. Phoenix Auto itself remains a selector-level
             // virtual model and resolves Sol/Luna immediately before requests.
@@ -2819,14 +2858,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         const admit = async (): Promise<RpcResponse<{ accepted: true }>> => {
           try {
             if (hasImage) {
-              const current = selectionFor(agent).current
-              const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
+              const selectionRef = selectionFor(agent)
+              const current = selectionRef.current
+              const modelRoute = isPhoenixCodexAutoSelection(current) && selectionRef.phoenixAutoRoutes !== undefined
+                ? { provider: 'openai-codex', model: selectionRef.phoenixAutoRoutes.worker }
+                : current
+              const modelInfo = await ctx.llm.resolveModelInfo(modelRoute.provider, modelRoute.model)
               if (modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')) {
-                const route = await resolveVisionFallbackRoute(ctx, current, defaults.visionFallback ?? {})
+                const route = await resolveVisionFallbackRoute(ctx, modelRoute, defaults.visionFallback ?? {})
                 if (route === undefined) {
                   return err(request, {
                     code: 'attachment-error',
-                    message: `Model "${current.model}" does not support image input.`,
+                    message: `Model "${modelRoute.model}" does not support image input.`,
                     details: { reason: 'MODEL_DOES_NOT_SUPPORT_IMAGES' },
                   })
                 }
