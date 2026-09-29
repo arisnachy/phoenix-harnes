@@ -228,9 +228,9 @@ export class SlotTestRuntime {
     // Keep the default namespace inert; voice-specific specs exercise their own
     // adapter directly and suites can still replace the broader remote carrier.
     ctx.provide('remote.voice', {
-      conversationStatus: async () => ({ ok: true, value: { enabled: false, natural: false } }),
-      conversationSpeak: async () => ({ ok: true, value: { accepted: false, reason: 'disabled' as const } }),
-      conversationCancel: async () => ({ ok: true, value: { cancelled: 0 } }),
+      conversationStatus: () => Promise.resolve({ ok: true, value: { enabled: false, natural: false } }),
+      conversationSpeak: () => Promise.resolve({ ok: true, value: { accepted: false, reason: 'disabled' as const } }),
+      conversationCancel: () => Promise.resolve({ ok: true, value: { cancelled: 0 } }),
     } as never)
     // Capturing install: the production renderer does the rendering; the
     // wrapper only takes the host face for storeOf (no machinery copied).
