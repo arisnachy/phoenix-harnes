@@ -176,7 +176,7 @@ export function enrichManualModels(
   const rows: readonly unknown[] = models
   if (rows.length === 0 || discovered.length === 0) return rows
   const byId = new Map(discovered.map(model => [model.id, model]))
-  return rows.map(model => {
+  return rows.map((model) => {
     if (typeof model !== 'object' || model === null || Array.isArray(model)) return model
     const row = model as Record<string, unknown>
     const id = typeof row.id === 'string' ? row.id : undefined
