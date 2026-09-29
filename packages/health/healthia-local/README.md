@@ -1,5 +1,7 @@
 # `@phoenix-ai/dsh-healthia-local`
 
+[English](README.md) | [中文](README.zh.md)
+
 Encrypted owner-local provider for `ctx.healthia`.
 
 The provider keeps HealthIA data outside PHOENIX conversation/session memory.
