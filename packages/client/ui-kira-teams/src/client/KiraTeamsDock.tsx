@@ -368,10 +368,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
   if (selectedCard === undefined || selectedSummary === undefined) return null
 
   const selectedActionKey = activityKeyOf(selectedSummary)
-  const selectedLiveActivity = visibleLiveActivityTextOf(selectedSummary, selectedActionKey, t)
-  const selectedActivity = selectedLiveActivity.length > 0
-    ? selectedLiveActivity
-    : t(selectedActionKey)
+  const selectedActivity = visibleLiveActivityTextOf(selectedSummary, selectedActionKey, t)
 
   const membersKey = cards.length === 1 ? 'count.members.one' : 'count.members.other'
   const runningKey = runningCount === 1 ? 'count.running.one' : 'count.running.other'
@@ -449,7 +446,9 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
               {t(selectedActionKey)}
             </span>
           </span>
-          <span className={css.focusText} title={selectedActivity}>{selectedActivity}</span>
+          {selectedActivity.length > 0 && (
+            <span className={css.focusText} title={selectedActivity}>{selectedActivity}</span>
+          )}
           <span className={css.activityPulse} aria-hidden="true" />
         </button>
 
