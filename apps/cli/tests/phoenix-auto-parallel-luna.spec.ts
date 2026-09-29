@@ -13,8 +13,9 @@ describe('Phoenix Auto Sol/Luna execution and review', () => {
       })),
     )
 
+    const lunaRoutePattern = /model: gpt-6-luna\n\s+inheritParentModelPattern: '-luna\(\?:\$\|-\)'\n\s+reasoningEffort: max/gu
     for (const { name, content } of presets) {
-      const lunaFallbackRoutes = content.match(/model: gpt-6-luna\n\s+inheritParentModelPattern: '-luna\(\?:\$\|-\)'\n\s+reasoningEffort: max/gu) ?? []
+      const lunaFallbackRoutes = content.match(lunaRoutePattern) ?? []
       expect(lunaFallbackRoutes, `${name} should keep three latest-family-aware Luna child routes`)
         .toHaveLength(3)
       expect(content).toContain('maxConcurrentAgents: 2')
