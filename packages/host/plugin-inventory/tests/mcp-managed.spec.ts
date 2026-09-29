@@ -72,20 +72,21 @@ describe('ManagedMcpController', () => {
     const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
 
     await expect(controller.snapshot()).resolves.toEqual([])
-    await expect(controller.install({ name: ' io.example/calendar ', version: '1.0.0' })).resolves.toEqual({
+    const installed = await controller.install({ name: ' io.example/calendar ', version: '1.0.0' })
+    expect(installed).toMatchObject({
       status: 'installed',
       connector: {
         entryId: 'live-entry-id',
-        serverName: expect.stringMatching(/^calendar-[a-f0-9]{7}$/),
         url: 'https://mcp.example.com/calendar',
       },
     })
+    expect(installed.connector.serverName).toMatch(/^calendar-[a-f0-9]{7}$/)
     expect(search).toHaveBeenCalledWith({ query: 'io.example/calendar', limit: 20 })
     expect(live.create).toHaveBeenCalledWith({
       name: '@phoenix-ai/dsh-mcp-client',
       config: {
         transport: 'streamable-http',
-        serverName: expect.stringMatching(/^calendar-[a-f0-9]{7}$/),
+        serverName: installed.connector.serverName,
         url: 'https://mcp.example.com/calendar',
         headers: {},
         oauth: true,
@@ -95,7 +96,7 @@ describe('ManagedMcpController', () => {
     expect(persisted).toHaveLength(1)
     await expect(controller.snapshot()).resolves.toEqual([{
       entryId: 'live-entry-id',
-      serverName: expect.stringMatching(/^calendar-[a-f0-9]{7}$/),
+      serverName: installed.connector.serverName,
       url: 'https://mcp.example.com/calendar',
     }])
 
@@ -224,11 +225,27 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenNthCalledWith(3, {
       name: '@phoenix-ai/dsh-mcp-client',
-      config: expect.objectContaining({
+      config: {
         transport: 'stdio',
         serverName: 'x-api-phoenix',
+        command: 'npx',
         args: ['-y', '@xdevplatform/xurl', 'mcp', '-u', 'PhoenixAI', 'https://api.x.com/mcp'],
-      }),
+        env: {},
+        envCredentialRefs: {
+          CLIENT_ID: 'X_CLIENT_ID',
+          CLIENT_SECRET: 'X_CLIENT_SECRET',
+        },
+        cwd: '',
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 300_000,
+        failOnStartupError: false,
+        reconnect: {
+          enabled: true,
+          initialDelayMs: 1000,
+          maxDelayMs: 30_000,
+          maxAttempts: 10,
+        },
+      },
     })
     await expect(controller.installXMcp({ identity: 'phoenix' }))
       .rejects.toThrow('requires its X username')
