@@ -187,6 +187,7 @@ describe('dsh-workflow-worker-thread', () => {
             whenProvider: 'openai-codex',
             provider: 'openai-codex',
             model: 'gpt-5.6-luna',
+            inheritParentModelPattern: '-luna(?:$|-)',
             reasoningEffort: 'high',
           },
         },
@@ -206,6 +207,33 @@ describe('dsh-workflow-worker-thread', () => {
     },
   )
 
+  it('inherits a newer Luna generation from a Phoenix Auto live parent route', async () => {
+    const { ctx, provider } = await setup({
+      config: {
+        maxConcurrentAgents: 2,
+        maxTotalAgents: 2,
+        childRoute: {
+          whenProvider: 'openai-codex',
+          provider: 'openai-codex',
+          model: 'gpt-6-luna',
+          inheritParentModelPattern: '-luna(?:$|-)',
+          reasoningEffort: 'max',
+        },
+      },
+    })
+    const result = await run(
+      ctx,
+      fakeParent({ provider: 'openai-codex', model: 'gpt-6.2-luna' }),
+      scripted("return await agent('independent Phoenix Auto review')"),
+    )
+    expect(result.stopReason).toBe('completed')
+    expect(provider.runs[0]?.request.agentOptions).toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6.2-luna',
+      reasoningEffort: 'max',
+    })
+  })
+
   it('inherits the exact parent route for non-OpenAI roots instead of routing to Luna', async () => {
     const { ctx, provider } = await setup({
       config: {
@@ -215,6 +243,7 @@ describe('dsh-workflow-worker-thread', () => {
           whenProvider: 'openai-codex',
           provider: 'openai-codex',
           model: 'gpt-5.6-luna',
+          inheritParentModelPattern: '-luna(?:$|-)',
           reasoningEffort: 'high',
         },
       },
