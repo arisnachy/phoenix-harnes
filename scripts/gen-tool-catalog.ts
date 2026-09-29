@@ -240,7 +240,10 @@ const TOOL_PACKAGES: ToolPackage[] = [
     async mount(ctx) {
       await ctx.plugin(LocalSubprocessRuntime)
       await ctx.plugin(BashEnvPlugin)
-      await ctx.plugin(LocalBashExecutor)
+      // Catalog generation harvests schemas only; it never executes Bash.
+      // Pin an inert explicit command so Windows CI does not turn a documentation
+      // freshness check into a host Git Bash health probe.
+      await ctx.plugin(LocalBashExecutor, { bashPath: 'bash' })
       await ctx.plugin(ToolBash)
     },
     note:
