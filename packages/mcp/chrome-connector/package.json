@@ -10,7 +10,7 @@
     "directory": "packages/mcp/chrome-connector"
   },
   "bin": {
-    "dsh-chrome-connector": "bin.js"
+    "dsh-chrome-connector": "lib/bin.js"
   },
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -20,7 +20,7 @@
     "./src/*": "./src/*",
     "./package.json": "./package.json"
   },
-  "files": ["bin.js", "lib/index.js", "lib/invariant.js", "lib/bin.js", "lib/server-*.js", "lib/types/**/*.d.ts"],
+  "files": ["lib/index.js", "lib/invariant.js", "lib/bin.js", "lib/server-*.js", "lib/types/**/*.d.ts"],
   "license": "MIT",
   "peerDependencies": {
     "@phoenix-ai/cordis": "workspace:^",
