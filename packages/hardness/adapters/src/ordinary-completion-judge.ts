@@ -93,6 +93,43 @@ const SHELL_MUTATE = /(?:^|[\s;&|])(?:rm|mv|cp|mkdir|touch|git\s+(?:add|commit|m
 // oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const SUBSTANTIVE = /\.(?:ts|tsx|js|jsx|mjs|cjs|py|rs|go|java|kt|c|cc|cpp|h|hpp|cs|php|rb|swift|html?|css|scss|sass|less|vue|svelte|ya?ml|toml|json|gd|tscn|tres|godot|gdshader|shader|prefab|unity|anim|controller|mat|uasset|umap|blend1?|glb|gltf|fbx|obj|ase|aseprite|tmx|png|webp|jpe?g|gif|wav|ogg|mp3|flac|ttf|otf|woff2?)\b/i
 
+// Fast ordinary work should not pay for a semantic judge after deterministic verification.
+// Keep the expensive independent pass for genuinely broad/risky work, failures, and game quality gates.
+// oxlint-disable-next-line @stylistic/max-len -- Keep the review-risk matcher auditable as one regex literal.
+const DEEP_REVIEW_REQUEST = /\b(?:security|secure|authentication|authorization|permissions?|credentials?|secrets?|encryption|cryptograph|payments?|billing|production|deploy(?:ment)?|release|migration|database|schema|transactions?|concurren|race\s+condition|thread(?:ing)?|sandbox|kernel|scheduler|data\s+loss|destructive|seguridad|autenticaci[oó]n|autorizaci[oó]n|permisos?|credenciales?|secretos?|cifrado|pagos?|facturaci[oó]n|producci[oó]n|despliegue|migraci[oó]n|base\s+de\s+datos|transacciones?|concurrencia|p[eé]rdida\s+de\s+datos|destructiv[oa])\b/i
+// oxlint-disable-next-line @stylistic/max-len -- Keep the broad-scope matcher auditable as one regex literal.
+const STANDARD_REVIEW_REQUEST = /\b(?:architecture|architectural|refactor|framework|runtime|router|routing|orchestrat|multi-agent|distributed|whole\s+project|entire\s+project|across\s+the\s+project|system-wide|ci\b|main\b|stable\b|merge\b|rebase\b|arquitectura|refactor|framework|runtime|router|enrutamiento|orquest|multiagente|distribuid[oa]|todo\s+el\s+proyecto|proyecto\s+completo|sistema\s+completo|fusionar|rebase)\b/i
+
+/** Review depth for verified ordinary mutations. */
+export type OrdinaryCompletionReviewMode = 'fast' | 'standard' | 'deep'
+
+/**
+ * Select the cheapest completion-review depth that preserves quality.
+ * Fast routine work stops after fresh deterministic verification. Standard
+ * work gets one independent semantic pass. Deep/risky work and repeated
+ * failures may use the configured upper bound.
+ * @param input - request facts and bounded execution history.
+ * @returns review mode and maximum semantic judge passes for this generation.
+ * @internal
+ */
+export function ordinaryCompletionReviewBudget(input: {
+  readonly request: string
+  readonly configuredMaxPasses: number
+  readonly mutationCount: number
+  readonly failureCount: number
+}): { readonly mode: OrdinaryCompletionReviewMode; readonly maxPasses: number } {
+  const configured = Math.max(0, Math.min(3, Math.trunc(input.configuredMaxPasses)))
+  if (configured === 0) return { mode: 'fast', maxPasses: 0 }
+  if (isGameDevelopmentNeed({ description: input.request }) || DEEP_REVIEW_REQUEST.test(input.request)) {
+    return { mode: 'deep', maxPasses: configured }
+  }
+  if (input.failureCount > 1) return { mode: 'deep', maxPasses: configured }
+  if (input.failureCount === 1 || STANDARD_REVIEW_REQUEST.test(input.request) || input.mutationCount >= 8) {
+    return { mode: 'standard', maxPasses: Math.min(1, configured) }
+  }
+  return { mode: 'fast', maxPasses: 0 }
+}
+
 /** Structured outcome returned by one ordinary-task independent completion review. */
 export interface OrdinaryCompletionJudgeDecision {
   readonly verdict: 'pass' | 'needs_changes' | 'blocked'
@@ -117,6 +154,7 @@ interface BridgeState {
   playVerifiedGeneration: number
   judgedGeneration: number
   judgePasses: number
+  failureCount: number
   request: string
   mutations: string[]
   verifications: string[]
@@ -390,6 +428,12 @@ export async function reviewOrdinaryCompletion(input: {
   }
 }
 
+function isJudgeInfrastructureBlock(decision: OrdinaryCompletionJudgeDecision): boolean {
+  if (decision.verdict !== 'blocked') return false
+  return /^Independent completion judge (?:is unavailable|did not complete|returned invalid evidence|failed)\.?$/i
+    .test(decision.summary.trim())
+}
+
 function judgeNotice(decision: OrdinaryCompletionJudgeDecision): UserMessage {
   const repairs = decision.requiredChanges.length > 0
     ? ' Required changes: ' + decision.requiredChanges.map((item, index) => `${index + 1}. ${item}`).join(' ')
@@ -430,6 +474,7 @@ export function installOrdinaryCompletionJudgeBridge(
       playVerifiedGeneration: 0,
       judgedGeneration: 0,
       judgePasses: 0,
+      failureCount: 0,
       request: requestText(message),
       mutations: [],
       verifications: [],
@@ -445,9 +490,16 @@ export function installOrdinaryCompletionJudgeBridge(
     next,
   ): Promise<PostToolDecision> => {
     const downstream = await next()
-    if (exec.agent === undefined || result.isError || downstream.kind === 'block') return downstream
+    if (exec.agent === undefined || downstream.kind === 'block') return downstream
     const state = states.get(exec.agent)
     if (state === undefined) return downstream
+
+    if (result.isError) {
+      if (isSubstantiveMutation(exec.name, exec.arguments) || verificationKinds(exec.name, exec.arguments).length > 0) {
+        state.failureCount += 1
+      }
+      return downstream
+    }
 
     if (needsGameAssetPipeline(state.request)) {
       if (isGameAssetDiscovery(exec.name, exec.arguments)) {
@@ -513,7 +565,13 @@ export function installOrdinaryCompletionJudgeBridge(
       }
     }
     if (state.verifiedGeneration !== state.generation || state.judgedGeneration === state.generation) return
-    if (state.judgePasses >= maxPasses) return
+    const reviewBudget = ordinaryCompletionReviewBudget({
+      request: state.request,
+      configuredMaxPasses: maxPasses,
+      mutationCount: state.mutations.length,
+      failureCount: state.failureCount,
+    })
+    if (reviewBudget.maxPasses === 0 || state.judgePasses >= reviewBudget.maxPasses) return
 
     state.judgePasses += 1
     const decision = await reviewOrdinaryCompletion({
@@ -526,7 +584,8 @@ export function installOrdinaryCompletionJudgeBridge(
       signal,
     })
     state.judgedGeneration = state.generation
-    if (decision.verdict !== 'pass') agent.steer(judgeNotice(decision))
+    if (decision.verdict === 'needs_changes') agent.steer(judgeNotice(decision))
+    else if (decision.verdict === 'blocked' && !isJudgeInfrastructureBlock(decision)) agent.steer(judgeNotice(decision))
   }))
 
   disposers.push(ctx.on('agent/disposed', ({ agent }) => {
