@@ -254,6 +254,7 @@ describe('manual Codex model capability hydration', () => {
     ])
     expect(enrichManualModels(undefined, [])).toBeUndefined()
     expect(enrichManualModels([], [])).toEqual([])
+    expect(enrichManualModels([{ id: 'unchanged' }], [])).toEqual([{ id: 'unchanged' }])
   })
 
   it('hydrates a manually typed Codex model before saving it', async () => {
@@ -301,6 +302,28 @@ describe('manual Codex model capability hydration', () => {
           max: 'max',
         },
       }],
+    })
+  })
+
+  it('still saves a manual Codex id when capability discovery returns a provider error', async () => {
+    const discover = vi.fn(() => Promise.resolve(
+      fail('Codex model metadata unavailable', 'model-discovery-failed'),
+    ))
+    const { mutate } = await mountSection({
+      discover,
+      providers: { 'openai-codex': {} },
+    })
+    openEditor('openai-codex')
+
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'private-codex-model' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops).toContainEqual({
+      op: 'set',
+      path: ['providers', 'openai-codex', 'models'],
+      value: [{ id: 'private-codex-model' }],
     })
   })
 
