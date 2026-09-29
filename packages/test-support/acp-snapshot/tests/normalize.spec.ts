@@ -331,6 +331,30 @@ Additional instructions from: nested\AGENTS.md`,
     expect(() => normalizeStdout(raw, ctx)).toThrow()
   })
 
+  it('canonicalizes nested runtime context in wire frames', () => {
+    const raw = JSON.stringify({
+      method: 'session.event',
+      params: {
+        event: {
+          type: 'user/message',
+          data: {
+            content: [{ type: 'text', text: 'Background runtime context: volatile machine state' }],
+            source: {
+              kind: 'plugin',
+              plugin: '@phoenix-ai/dsh-system-prompt',
+              form: 'snapshot',
+              sections: [{ name: 'machine', text: 'volatile machine state' }],
+            },
+          },
+        },
+      },
+    })
+    const out = normalizeStdout(`${raw}\n`, ctx)
+    expect(out).toContain('{{runtimeContext}}')
+    expect(out).toContain('"sections":[]')
+    expect(out).not.toContain('volatile machine state')
+  })
+
   it('ignores blank lines', () => {
     const raw = `\n${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'm' })}\n\n`
     expect(() => normalizeStdout(raw, ctx)).not.toThrow()
