@@ -19,6 +19,13 @@ async function freshComposer(): Promise<HTMLTextAreaElement> {
   const start = tree.querySelector<HTMLButtonElement>('button[aria-label="New session in fixture"]')
   if (start === null) throw new Error('fixture Workspace new-session action missing')
   fireEvent.click(start)
+  // The click starts an async Session transition. When the full client graph is
+  // already settled, the previous session's composer can remain in the DOM
+  // briefly; wait for the newly selected blank row before addressing its bar.
+  await waitFor(() => {
+    const selected = tree.querySelector<HTMLElement>('[role="treeitem"][aria-selected="true"]')
+    expect(selected?.textContent).toContain('New Session')
+  }, { timeout: 10_000 })
   const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 }) as HTMLTextAreaElement
   await waitFor(() => {
     expect(textarea.disabled).toBe(false)
