@@ -11,6 +11,7 @@ import {
   liveCardsOf,
   performanceKeyOf,
   skillOf,
+  isVisibleAgentSummary,
   type KiraTeamsDockProps,
 } from '../src/client/KiraTeamsDock.tsx'
 import { en, es, zh, type KiraTeamsKey } from '../src/client/locales.ts'
@@ -148,15 +149,46 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(performanceKeyOf(researcher)).toBe('performance.researching')
   })
 
-  it('shows a runtime-idle live agent as ready while preserving unknown telemetry as working', () => {
-    const ready = summary({
-      id: sid('ready'), parentId: sid('root'), origin: 'subagent', running: true,
+  it('treats idle or completed subagents as absent from the live dock', () => {
+    const idle = summary({
+      id: sid('idle'), parentId: sid('root'), origin: 'subagent', running: true,
       projectionValues: { subagentActivity: { model: 'gpt-5.6-luna', phase: 'idle' } },
+    })
+    const completed = summary({
+      id: sid('completed'), parentId: sid('root'), origin: 'subagent', running: false,
+      projectionValues: { subagentActivity: { model: 'gpt-5.6-luna', phase: 'verifying' } },
     })
     const working = summary({ id: sid('working'), parentId: sid('root'), origin: 'subagent', running: true })
 
-    expect(activityKeyOf(ready)).toBe('activity.ready')
-    expect(activityKeyOf(working)).toBe('activity.working')
+    expect(activityKeyOf(idle)).toBe('activity.ready')
+    expect(isVisibleAgentSummary(idle)).toBe(false)
+    expect(isVisibleAgentSummary(completed)).toBe(false)
+    expect(isVisibleAgentSummary(working)).toBe(true)
+  })
+
+  it('removes the whole window when the last agent finishes or is stopped', () => {
+    const root = summary({ id: sid('root') })
+    const stopped = summary({
+      id: sid('stopped'), parentId: root.id, origin: 'subagent', running: false,
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'playtest QA gameplay', seq: 20 },
+        subagentActivity: { model: 'gpt-5.6-luna', phase: 'verifying' },
+      },
+    })
+    const state = {
+      current: root.id,
+      byId: { [String(root.id)]: root, [String(stopped.id)]: stopped },
+    } as unknown as SessionListState
+    const props = {
+      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      layout: { setWorkspaceOccupant: vi.fn() },
+      openChild: vi.fn(),
+      refresh: vi.fn(),
+      t: translate,
+    } as unknown as KiraTeamsDockProps
+
+    const { container } = render(<KiraTeamsDock {...props} />)
+    expect(container.querySelector('[data-kira-teams]')).toBeNull()
   })
 
   it('floats above the conversation and renders only the currently live agent', () => {
