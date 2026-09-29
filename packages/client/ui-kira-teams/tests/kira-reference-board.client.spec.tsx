@@ -182,6 +182,35 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(liveActivityTextOf(runtime)).toBe('Estoy revisando la página cargada')
   })
 
+  it('does not duplicate a generic authored word when it equals the visible state', () => {
+    const root = summary({ id: sid('root-duplicate') })
+    const child = summary({
+      id: sid('child-duplicate'), parentId: root.id, origin: 'subagent', running: true,
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'support check', seq: 1 },
+        subagentActivity: {
+          model: 'gpt-5.6-luna',
+          phase: 'preparing',
+          text: 'Preparando',
+        },
+      },
+    })
+    const state = {
+      current: root.id,
+      byId: { [String(root.id)]: root, [String(child.id)]: child },
+    } as unknown as SessionListState
+    const props = {
+      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      layout: { setWorkspaceOccupant: vi.fn() },
+      openChild: vi.fn(),
+      refresh: vi.fn(),
+      t: translate,
+    } as unknown as KiraTeamsDockProps
+
+    render(<KiraTeamsDock {...props} />)
+    expect(screen.getAllByText('Preparando')).toHaveLength(1)
+  })
+
   it('describes what each running agent is actually doing', () => {
     const judge = summary({ id: sid('judge'), running: true, projectionValues: { subagent: { mode: 'continuable', label: 'judge output quality', seq: 5 } } })
     const supervisor = summary({ id: sid('supervisor'), running: true, projectionValues: { subagent: { mode: 'continuable', label: 'supervisor', seq: 6 } } })
