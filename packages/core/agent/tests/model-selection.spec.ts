@@ -82,7 +82,7 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
   })
 
-  it('routes Phoenix Auto from Sol planning to Luna Max execution', async () => {
+  it('routes Phoenix Auto from GPT-6.1 Sol planning to Luna Max execution', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -112,7 +112,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-sol',
+      model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('medium'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
@@ -167,7 +167,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('rescues repeated Phoenix Auto tool failures with Sol, then returns to Luna Max', async () => {
+  it('rescues repeated Phoenix Auto tool failures with GPT-6.1 Sol, then returns to Luna Max', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -212,7 +212,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-sol',
+      model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('medium'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
