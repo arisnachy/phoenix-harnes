@@ -263,53 +263,48 @@ describe('dsh-tool-subagent', () => {
     expect(retry.isError).toBe(false)
   })
 
-  it('shares the 1 -> 2 -> 3 escalation budget across different parent sessions', async () => {
+  it('isolates the escalation budget per parent session', async () => {
     const gate = Promise.withResolvers<void>()
     const started: string[] = []
     const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
       onStart: (request: SubagentStartRequest) => {
-        const label = request.label ?? '(unlabeled)'
-        started.push(label)
-        // Calls labelled blocked would only reach the provider if the global
-        // guard regressed; let them settle immediately so the test fails fast.
-        return label.includes('blocked') ? Promise.resolve() : gate.promise
+        started.push(request.label ?? '(unlabeled)')
+        return gate.promise
       },
     })
+
+    const firstParent = fakeAgent('parent-a')
+    const secondParent = fakeAgent('parent-b')
 
     const first = callSubagent(
       ctx,
       { description: 'first parent', prompt: 'p1' },
-      { agent: fakeAgent('parent-a') },
+      { agent: firstParent },
     )
     await vi.waitFor(() => { expect(started).toEqual(['first parent']) })
 
-    const secondBlocked = await callSubagent(
+    // A child running for another conversation must not consume this parent's
+    // first slot or force hard_parallelism on an unrelated task.
+    const independentFirst = callSubagent(
       ctx,
-      { description: 'second blocked', prompt: 'p2' },
-      { agent: fakeAgent('parent-b') },
+      { description: 'independent first', prompt: 'p2' },
+      { agent: secondParent },
     )
-    expect(secondBlocked.isError).toBe(true)
-    expect(text(secondBlocked)).toContain('1 subagente es la norma')
-    expect(started).toEqual(['first parent'])
+    await vi.waitFor(() => {
+      expect(started).toEqual(['first parent', 'independent first'])
+    })
 
-    const second = callSubagent(
+    const secondSameParentBlocked = await callSubagent(
       ctx,
-      { description: 'second hard', prompt: 'p2', hard_parallelism: true },
-      { agent: fakeAgent('parent-b') },
+      { description: 'second same parent blocked', prompt: 'p3' },
+      { agent: secondParent },
     )
-    await vi.waitFor(() => { expect(started).toEqual(['first parent', 'second hard']) })
-
-    const thirdBlocked = await callSubagent(
-      ctx,
-      { description: 'third blocked', prompt: 'p3', hard_parallelism: true },
-      { agent: fakeAgent('parent-c') },
-    )
-    expect(thirdBlocked.isError).toBe(true)
-    expect(text(thirdBlocked)).toContain('Un tercero solo se admite en casos extremos')
-    expect(started).toEqual(['first parent', 'second hard'])
+    expect(secondSameParentBlocked.isError).toBe(true)
+    expect(text(secondSameParentBlocked)).toContain('1 subagente es la norma')
+    expect(started).toEqual(['first parent', 'independent first'])
 
     gate.resolve()
-    const accepted = await Promise.all([first, second])
+    const accepted = await Promise.all([first, independentFirst])
     expect(accepted.every(result => !result.isError)).toBe(true)
   })
 
