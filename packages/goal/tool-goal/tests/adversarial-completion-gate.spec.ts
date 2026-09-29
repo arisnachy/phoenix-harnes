@@ -3,6 +3,7 @@ import { SessionId } from '@phoenix-ai/dsh-session'
 import { completionGatePassed, runAdversarialCompletionGate } from '../src/completion-gate.ts'
 import { buildVerificationContract } from '../src/verification-contract.ts'
 import { judgeGoalCompletion } from '../src/judge.ts'
+import { resolveGoalJudgeAgentOptions } from '../src/judge-route.ts'
 
 function provider() {
   return {
@@ -108,6 +109,25 @@ async function runWithStructured(objective: string, executeStructured: Record<st
   })
   return { result, starts }
 }
+
+describe('completion verifier model routing', () => {
+  it('uses GPT-6 Luna high for Codex parents', async () => {
+    await expect(resolveGoalJudgeAgentOptions({
+      parent: {
+        options: {
+          provider: 'openai-codex',
+          model: 'gpt-6.1-sol',
+          reasoningEffort: 'max',
+        },
+      } as never,
+      signal: new AbortController().signal,
+    })).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: 'high',
+    })
+  })
+})
 
 describe('adversarial completion tester', () => {
   it('reports verifier launch failures instead of collapsing them into a generic block', async () => {
