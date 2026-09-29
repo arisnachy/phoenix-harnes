@@ -392,7 +392,8 @@ function turnEvents(
 function stableFingerprint(value: unknown): string {
   let serialized: string
   try {
-    serialized = JSON.stringify(value) ?? String(value)
+    const encoded: unknown = JSON.stringify(value)
+    serialized = typeof encoded === 'string' ? encoded : String(value)
   } catch {
     serialized = String(value)
   }
@@ -442,9 +443,10 @@ export function isPhoenixCodexAutoStalled(
 ): boolean {
   const events = turnEvents(agent, turn)
   const results = events.filter(event => event.type === 'tool/result').slice(-2)
-  if (results.length === 2) {
-    const left = failedToolFingerprint(results[0]!)
-    const right = failedToolFingerprint(results[1]!)
+  const [leftResult, rightResult] = results
+  if (leftResult !== undefined && rightResult !== undefined) {
+    const left = failedToolFingerprint(leftResult)
+    const right = failedToolFingerprint(rightResult)
     if (left !== undefined && left === right) return true
   }
 
