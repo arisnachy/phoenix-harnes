@@ -37,6 +37,16 @@ const ACTIVE_SUBAGENT_GUIDANCE =
   'Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, ' +
   'el contexto, la identidad y la síntesis final en el agente principal.'
 
+/**
+ * Child-only instruction for the KIRA live activity surface. The UI never
+ * supplies display copy: the child authors the exact sentence that is shown.
+ */
+const LIVE_ACTIVITY_GUIDANCE =
+  'Mientras trabajas, antes de usar una herramienta o cambiar de acción, escribe una sola frase breve ' +
+  '(máximo 72 caracteres) en primera persona describiendo exactamente lo que vas a hacer o estás haciendo. ' +
+  'No uses una frase fija, no inventes actividad y no describas razonamiento interno. ' +
+  'Phoenix mostrará literalmente esa frase como actividad en vivo.'
+
 interface ActiveSubagentBudget {
   /** One runtime-wide count shared by every parent session and provider alias. */
   activeTotal: number
@@ -526,7 +536,10 @@ export function apply(ctx: Context, config: Config): void {
         }
         const request = {
           label: args.description,
-          prompt: [{ type: 'text', text: args.prompt }] as ContentBlock[],
+          prompt: [
+            { type: 'text', text: args.prompt },
+            { type: 'text', text: LIVE_ACTIVITY_GUIDANCE },
+          ] as ContentBlock[],
           parent,
           ...routedAgentOptions !== undefined ? { agentOptions: routedAgentOptions } : {},
           ...config.persona !== undefined ? { persona: config.persona } : {},
