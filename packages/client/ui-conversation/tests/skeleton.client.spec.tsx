@@ -27,7 +27,7 @@ import type { HeroShellProps } from '../src/client/skeleton/EmptyHero.tsx'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import type {
-  ComposerBarOwnerProps, ConversationHeaderLineageOwnerProps,
+  ComposerBarOwnerProps, ConversationHeaderLineageOwnerProps, ProactivityAttentionItem,
 } from '../src/client/contract/slots.ts'
 import type { ViewTab } from '../src/client/contract/views.ts'
 
@@ -137,7 +137,7 @@ function mount(
   const userProfile = createSnapshotStore<{ preferredName?: string }>(
     options.preferredName === undefined ? {} : { preferredName: options.preferredName },
   )
-  const proactivityAttention = createSnapshotStore([])
+  const proactivityAttention = createSnapshotStore<readonly ProactivityAttentionItem[]>([])
   const useSession = bindSnapshotSelector(session)
   const chat = createChatStore().create()
   chat.actions.setDraft('ordinary draft')
