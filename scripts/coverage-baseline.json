@@ -5,7 +5,7 @@
     "branch": "repair/final-release-20260928",
     "sha": "3ed0d3ffaa30247d3cd9e09aa6a499fbc6cde256",
     "workflowJob": 109204081451,
-    "calibratedAgainstMainSha": "30ce76383ef3cc2eef5ae6a9de4b4f89de74512c"
+    "calibratedAgainstMainSha": "38f4fbb36a6850678efb3ab2f78e03fc617fea05"
   },
   "totals": {
     "statements": 5047,
