@@ -1,25 +1,35 @@
 'use strict';
 
 /**
- * Istanbul coverage reporter printing one clickable `path:line:col` record per
- * uncovered statement, branch path, and function. Vitest's per-file threshold
- * failures name only the file; this reporter supplies the exact locations,
- * printed just above those ERROR lines (reports run before threshold checks).
- * Files at 100% print nothing, so a green run stays silent.
+ * Istanbul coverage regression reporter.
+ *
+ * Historical uncovered counts live in coverage-baseline.json and are ceilings,
+ * never targets: a file may improve below its baseline, but any increase in
+ * uncovered statements, functions, branches, or lines fails the gate. A file
+ * absent from the baseline has a zero-debt ceiling, preserving the original
+ * 100% expectation for clean/new source without pretending old debt is new.
  *
  * CommonJS by requirement: istanbul-reports loads custom reporters with a bare
- * require() outside the tsx/ESM pipeline (istanbul-reports index.js create()),
- * so this file can be neither TypeScript nor ESM. Wired into vitest.config.ts
- * by absolute path — require() would resolve a relative specifier against
- * istanbul-reports' own directory.
+ * require() outside the tsx/ESM pipeline.
  */
 
+const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const { ReportBase } = require('istanbul-lib-report');
 
+const METRICS = ['statements', 'functions', 'branches', 'lines'];
+const ZERO = Object.freeze({ statements: 0, functions: 0, branches: 0, lines: 0 });
+const baselinePath = path.join(__dirname, 'coverage-baseline.json');
+const baselinePayload = JSON.parse(readFileSync(baselinePath, 'utf8'));
+
+if (baselinePayload.version !== 1 || baselinePayload.files === null || typeof baselinePayload.files !== 'object') {
+  throw new Error('coverage-regression: invalid scripts/coverage-baseline.json');
+}
+
+const baseline = baselinePayload.files;
+
 /**
- * Editor-convention `line:column` of an istanbul location start (istanbul
- * columns are 0-based; editors and terminal link handlers expect 1-based).
+ * Editor-convention line:column for an Istanbul location start.
  */
 function pos(loc) {
   return `${loc.start.line}:${loc.start.column + 1}`;
@@ -31,9 +41,7 @@ function usable(loc) {
 }
 
 /**
- * ` (to line:col)` suffix when the range end adds information beyond the
- * start. v8-remapped whole-line statements carry end.column = Infinity; those
- * degrade to a line-only suffix, or to nothing on a single line.
+ * End suffix when a range adds useful information beyond its start.
  */
 function endSuffix(loc) {
   const end = loc.end;
@@ -45,64 +53,111 @@ function endSuffix(loc) {
   return ` (to ${end.line}:${end.column + 1})`;
 }
 
-class UncoveredLocationsReport extends ReportBase {
+function uncoveredCounts(fc) {
+  const statements = Object.values(fc.s).filter(count => count === 0).length;
+  const functions = Object.values(fc.f).filter(count => count === 0).length;
+  const branches = Object.values(fc.b).reduce(
+    (sum, counts) => sum + counts.filter(count => count === 0).length,
+    0,
+  );
+  const lines = Object.values(fc.getLineCoverage()).filter(count => count === 0).length;
+  return { statements, functions, branches, lines };
+}
+
+function uncoveredLocations(fc, rel) {
+  const items = [];
+  const add = (loc, text) => {
+    if (usable(loc)) items.push({ line: loc.start.line, column: loc.start.column, text });
+  };
+
+  for (const id of Object.keys(fc.statementMap)) {
+    if (fc.s[id] !== 0) continue;
+    const loc = fc.statementMap[id];
+    add(loc, `${rel}:${pos(loc)} uncovered statement${endSuffix(loc)}`);
+  }
+
+  for (const id of Object.keys(fc.fnMap)) {
+    if (fc.f[id] !== 0) continue;
+    const fn = fc.fnMap[id];
+    const loc = usable(fn.decl) ? fn.decl : fn.loc;
+    const name = fn.name ? ` ${fn.name}` : '';
+    add(loc, `${rel}:${pos(loc)} uncovered function${name}`);
+  }
+
+  for (const id of Object.keys(fc.branchMap)) {
+    const counts = fc.b[id];
+    const branch = fc.branchMap[id];
+    for (let i = 0; i < counts.length; i += 1) {
+      if (counts[i] !== 0) continue;
+      const loc = usable(branch.locations && branch.locations[i]) ? branch.locations[i] : branch.loc;
+      add(loc, `${rel}:${pos(loc)} uncovered branch (${branch.type}, path ${i + 1}/${counts.length})`);
+    }
+  }
+
+  items.sort((a, b) => a.line - b.line || a.column - b.column);
+  return items.map(item => item.text);
+}
+
+class CoverageRegressionReport extends ReportBase {
   constructor(opts = {}) {
     super(opts);
-    // Vitest passes the resolved config root alongside reporter options.
     this.projectRoot = opts.projectRoot || process.cwd();
-    this.records = [];
+    this.regressions = [];
+    this.improved = 0;
+    this.seen = 0;
   }
 
   onStart() {
-    this.records = [];
+    this.regressions = [];
+    this.improved = 0;
+    this.seen = 0;
   }
 
   onDetail(node) {
     const fc = node.getFileCoverage();
     const rel = path.relative(this.projectRoot, fc.path).split(path.sep).join('/');
-    const items = [];
-    const add = (loc, text) => items.push({ line: loc.start.line, column: loc.start.column, text });
+    const actual = uncoveredCounts(fc);
+    const allowed = baseline[rel] || ZERO;
+    this.seen += 1;
 
-    for (const id of Object.keys(fc.statementMap)) {
-      if (fc.s[id] !== 0) continue;
-      const loc = fc.statementMap[id];
-      if (!usable(loc)) continue;
-      add(loc, `${rel}:${pos(loc)} uncovered statement${endSuffix(loc)}`);
-    }
-
-    for (const id of Object.keys(fc.fnMap)) {
-      if (fc.f[id] !== 0) continue;
-      const fn = fc.fnMap[id];
-      const loc = usable(fn.decl) ? fn.decl : fn.loc;
-      if (!usable(loc)) continue;
-      const name = fn.name ? ` ${fn.name}` : '';
-      add(loc, `${rel}:${pos(loc)} uncovered function${name}`);
-    }
-
-    for (const id of Object.keys(fc.branchMap)) {
-      const counts = fc.b[id];
-      const branch = fc.branchMap[id];
-      for (let i = 0; i < counts.length; i += 1) {
-        if (counts[i] !== 0) continue;
-        // Implicit arms (e.g. a missing else) may carry an empty location;
-        // fall back to the branch's own span so the record stays clickable.
-        const loc = usable(branch.locations && branch.locations[i]) ? branch.locations[i] : branch.loc;
-        if (!usable(loc)) continue;
-        add(loc, `${rel}:${pos(loc)} uncovered branch (${branch.type}, path ${i + 1}/${counts.length})`);
+    let improved = false;
+    const exceeded = [];
+    for (const metric of METRICS) {
+      if (actual[metric] > allowed[metric]) {
+        exceeded.push({ metric, actual: actual[metric], allowed: allowed[metric] });
+      } else if (actual[metric] < allowed[metric]) {
+        improved = true;
       }
     }
+    if (improved) this.improved += 1;
+    if (exceeded.length === 0) return;
 
-    if (items.length === 0) return;
-    items.sort((a, b) => a.line - b.line || a.column - b.column);
-    for (const item of items) this.records.push(item.text);
+    this.regressions.push({
+      file: rel,
+      exceeded,
+      locations: uncoveredLocations(fc, rel),
+    });
   }
 
   onEnd() {
-    if (this.records.length === 0) return;
-    console.log(`\nUncovered locations (per-file 100% gate): ${this.records.length}`);
-    for (const record of this.records) console.log(record);
-    console.log('');
+    if (this.regressions.length === 0) {
+      console.log(
+        `coverage-regression: PASS ${this.seen} source file(s); ${this.improved} historical debt file(s) improved.`,
+      );
+      return;
+    }
+
+    console.error(`\ncoverage-regression: FAIL ${this.regressions.length} file(s) exceed their historical uncovered ceilings.`);
+    for (const row of this.regressions) {
+      console.error(`\n${row.file}`);
+      for (const delta of row.exceeded) {
+        console.error(`  ${delta.metric}: ${delta.actual} uncovered > baseline ${delta.allowed}`);
+      }
+      for (const location of row.locations) console.error(`  ${location}`);
+    }
+    process.exitCode = 1;
+    throw new Error('coverage-regression: uncovered coverage debt increased');
   }
 }
 
-module.exports = UncoveredLocationsReport;
+module.exports = CoverageRegressionReport;
