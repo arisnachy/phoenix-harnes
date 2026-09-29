@@ -20,6 +20,8 @@ Task 可以使用 `visibility: surprise`。在 reveal time 之前，它不会出
 
 Host 会轮询持久 engine，并在 agent 创建时主动 pump。Chat delivery 通过 proactive follow-up 唤醒在线目标 agent。私有 preparation、定时 office work 与 email 使用配置的一次性 subagent provider。若不存在在线 execution target，则 execution 会延后，不会消耗该 occurrence。
 
+循环 `delivery: work` 任务可以维护用户明确要求的持续目标，例如研究、课程准备、项目监控或体育分析。执行时会重新验证现实状态，并可使用已经授权的 MCP/connector；持久兴趣授权分析，而不是外部交易。实质结果会进入有界排序的 loopback attention 投影，没有变化的循环运行可以返回 `NO_MATERIAL_UPDATE`，浏览器只在空白会话 Hero 中显示价值最高的少量信息。可选的 task attention metadata 只控制结果或 upcoming occurrence 是否参与展示，不会改变任务执行。
+
 Email 有两个独立 identity reference。`userMailIdentity` 表示获授权的用户 mailbox，用于代表用户发送 office work；`harnessMailIdentity` 表示 Phoenix 自己的 mailbox，用于直接与用户通信。Task 可选择 `user`、`harness` 或 `auto`；`auto` 优先使用 Phoenix identity，并在不可用时回退到 user identity。这些 reference 不包含 credential，scheduled execution 也不会绕过正常的 mail-tool authorization 或 approval。
 
 相关配置键为 `taskLedgerPath`、`taskPollMs`、`privateWorkProvider`、`privateWorkResultChars`、`userMailIdentity` 与 `harnessMailIdentity`。特殊的 `:memory:` ledger 仅用于确定性测试与临时 composition。
@@ -45,7 +47,7 @@ Consumers may expose stable capability identifiers such as `tool:<name>`, `skill
 
 When the canonical system-prompt service is mounted, this package installs the `hardness:operating-protocol` section. It gives every model the same lifecycle vocabulary and requires resolution, approval, verification, presentation, and evidence before a task is described as complete.
 
-Model-facing scopes also install `hardness:proactivity-protocol`. It tells the model to use durable tasks for explicit reminders and useful autonomous follow-ups, avoid duplicates and spam, use private preparation for surprises, preserve calendar timing, and keep all scheduled external actions behind the same authorization policy used for immediate work.
+Model-facing scopes also install `hardness:proactivity-protocol`. It tells the model to use durable tasks for explicit reminders and useful autonomous follow-ups, turn explicit ongoing objectives into bounded recurring background work when useful, prefer authorized event-driven connectors over polling, suppress unchanged background results, preserve calendar timing, and keep all external actions behind the same authorization policy used for immediate work.
 
 Tool projections may subscribe to `tools/change`; this keeps dynamically connected tools, including MCP tools, represented in HARDNESS while registrations are reversible. The internal `hardness_run` tool is excluded from that projection to prevent recursive routing.
 
