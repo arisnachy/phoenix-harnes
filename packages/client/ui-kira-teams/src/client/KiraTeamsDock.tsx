@@ -116,6 +116,16 @@ export function liveActivityTextOf(summary: SessionSummary, maxLength = 72): str
   return authored === undefined ? '' : compactAgentAuthoredText(authored, maxLength)
 }
 
+function visibleLiveActivityTextOf(
+  summary: SessionSummary,
+  actionKey: KiraTeamsKey,
+  t: TranslateNS<typeof NS>,
+): string {
+  const authored = liveActivityTextOf(summary)
+  if (authored.length === 0) return ''
+  return authored.toLocaleLowerCase() === t(actionKey).trim().toLocaleLowerCase() ? '' : authored
+}
+
 function normalizedWorkText(summary: SessionSummary): string {
   return [
     summary.projectionValues?.subagent?.label ?? '',
@@ -324,11 +334,11 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
   if (summary === undefined) return null
 
   const actionKey = activityKeyOf(summary)
-  const liveActivity = liveActivityTextOf(summary)
+  const liveActivity = visibleLiveActivityTextOf(summary, actionKey, t)
 
   return (
     <>
-      <span className={css.agentVisualRow}>
+      <span className={css.agentPortrait}>
         <ModelActivityAvatar
           kind={card.kind}
           activity={activityOf(summary)}
@@ -336,14 +346,14 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
           pending={summary.pendingInteraction !== undefined}
           variant="card"
         />
-        <span className={css.statusBadge} data-activity={actionKey}>
-          <span className={css.statusDot} aria-hidden="true" />
-          <span className={css.activity}>{t(actionKey)}</span>
-        </span>
       </span>
       <span className={css.agentIdentity}>
         <span className={css.agentName}>{card.name}</span>
         <span className={css.role}>{t(card.specialty)}</span>
+      </span>
+      <span className={css.statusBadge} data-activity={actionKey}>
+        <span className={css.statusDot} aria-hidden="true" />
+        <span className={css.activity}>{t(actionKey)}</span>
       </span>
       {liveActivity.length > 0 && (
         <span className={css.agentAction} title={liveActivity}>
@@ -465,6 +475,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
             const actionKey = activityKeyOf(summary)
             const performanceKey = performanceKeyOf(summary)
             const skill = skillOf(summary)
+            const visibleLiveActivity = visibleLiveActivityTextOf(summary, actionKey, t)
             return (
               <button
                 key={String(summary.id)}
@@ -473,7 +484,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
                 aria-level={card.depth ?? 1}
                 aria-selected={state.current === summary.id}
                 aria-label={`${card.name} · ${t('role.agent')} · ${roleKey === 'role.agent' ? '' : `${t(roleKey)} · `}${t(actionKey)} · ${t(performanceKey)}`}
-                className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''}`}
+                className={`${css.row} ${summary.running ? css.rowRunning : ''} ${summary.pendingInteraction !== undefined ? css.rowPending : ''} ${visibleLiveActivity.length > 0 ? css.rowHasActivity : css.rowNoActivity}`}
                 data-kira-agent-card
                 data-agent-kind={card.kind}
                 data-agent-id={String(summary.id)}
