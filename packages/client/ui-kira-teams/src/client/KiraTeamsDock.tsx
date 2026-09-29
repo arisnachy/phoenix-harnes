@@ -133,7 +133,7 @@ function normalizedWorkText(summary: SessionSummary): string {
   const label = subagent == null ? '' : subagent.label ?? ''
   return [
     label,
-    summary.displayTitle ?? '',
+    summary.displayTitle,
   ].join(' ').trim().toLocaleLowerCase()
 }
 
