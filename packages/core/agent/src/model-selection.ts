@@ -38,10 +38,26 @@ export interface ModelSelectionHandoff {
 type ModelSelectionHandoffResolver = (selection: ModelSelection | undefined) => ModelSelectionHandoff | undefined
 
 
+/** Synthetic selector row that enables Phoenix's adaptive GPT-6 Codex router. */
+export const PHOENIX_CODEX_AUTO_MODEL = 'phoenix-auto'
+/** GPT-6 planner/rescue route used by Phoenix Auto. */
+export const PHOENIX_CODEX_AUTO_PLANNER_MODEL = 'gpt-6-sol'
+/** GPT-6 execution route used by Phoenix Auto. */
+export const PHOENIX_CODEX_AUTO_WORKER_MODEL = 'gpt-6-luna'
+
 /** Premium Codex tiers that should spend one step planning before Luna executes. */
 const CODEX_PLANNER_MODEL = /^gpt-(\d+(?:\.\d+)?)-(?:sol|astra|terra)(?:$|-)/i
 /** Luna worker ids, grouped by the same GPT generation as their planner. */
 const CODEX_LUNA_MODEL = /^gpt-(\d+(?:\.\d+)?)-luna(?:$|-)/i
+
+/**
+ * Whether the user selected Phoenix's synthetic OpenAI Codex router row.
+ * @param selection - Current selector value, when one exists.
+ * @returns true only for the virtual Phoenix Auto row under OpenAI Codex.
+ */
+export function isPhoenixCodexAutoSelection(selection: ModelSelection | undefined): boolean {
+  return selection?.provider === 'openai-codex' && selection.model === PHOENIX_CODEX_AUTO_MODEL
+}
 
 function codexPlannerGeneration(model: string): string | undefined {
   return CODEX_PLANNER_MODEL.exec(model)?.[1]
@@ -151,6 +167,16 @@ const TOOL_ARTIFACT = /(?:\b(?:file|files|archivo|archivos|code|c[oó]digo|repo|
 function isToolAcquisitionRequest(text: string): boolean {
   return TOOL_ACTION.test(text) && TOOL_ARTIFACT.test(text)
 }
+
+/**
+ * Wider action vocabulary for the synthetic Phoenix Auto route. This remains
+ * deterministic: the router spends no extra model call merely to decide which
+ * GPT-6 tier should handle the next step.
+ */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic routing vocabulary auditable as one regex literal.
+const AUTO_TASK_ACTION = /\b(?:fix|repair|debug|implement|edit|modify|update|create|build|run|execute|test|inspect|review|audit|refactor|deploy|install|remove|delete|rename|commit|merge|revert|resolve|diagnose|search|research|investigate|browse|compare|fill|submit|schedule|automate|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*|busc\p{L}*|investig\p{L}*|compar\p{L}*|llen\p{L}*|envi\p{L}*|program\p{L}*|automatiz\p{L}*)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Compact reply-depth vocabulary is easier to audit in one literal.
+const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|deep|analiz\p{L}*|razon\p{L}*|explic\p{L}*\s+en\s+detalle|profund\p{L}*)\b/iu
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
@@ -280,6 +306,159 @@ function directUserTextForTurn(agent: {
   return fragments.reverse().join('\n')
 }
 
+type PhoenixAutoEvent = { readonly type: string; readonly data: unknown }
+
+function turnEvents(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): readonly PhoenixAutoEvent[] {
+  const events = agent.session.events
+  let start = events.length
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event?.type === 'turn/start' && (event.data as { turn?: number }).turn === turn) {
+      start = index + 1
+      break
+    }
+  }
+  return events.slice(start)
+}
+
+function stableFingerprint(value: unknown): string {
+  let serialized: string
+  try {
+    serialized = JSON.stringify(value) ?? String(value)
+  } catch {
+    serialized = String(value)
+  }
+  return serialized
+    .toLocaleLowerCase()
+    .replace(/\b\d+\b/gu, '#')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, 320)
+}
+
+function failedToolFingerprint(event: PhoenixAutoEvent): string | undefined {
+  if (event.type !== 'tool/result') return undefined
+  const data = event.data as {
+    readonly error?: { readonly name?: string; readonly code?: string }
+    readonly message?: unknown
+  }
+  if (data.error === undefined) return undefined
+  return `${data.error.name ?? ''}:${data.error.code ?? ''}:${stableFingerprint(data.message)}`
+}
+
+function toolCallFingerprint(event: PhoenixAutoEvent): string | undefined {
+  if (event.type !== 'tool/call') return undefined
+  const data = event.data as { readonly name?: string; readonly arguments?: string }
+  if (typeof data.name !== 'string') return undefined
+  return `${data.name}:${stableFingerprint(data.arguments ?? '')}`
+}
+
+/**
+ * Detect a genuine no-progress pattern without another model call.
+ *
+ * Two identical consecutive tool failures, three identical recent tool calls,
+ * or two provider retries in one turn are enough to ask Sol for a fresh plan.
+ * @param agent - Agent-like session owner whose current turn events are inspected.
+ * @param turn - Current 1-based turn number.
+ * @returns true when deterministic evidence shows the current strategy is repeating.
+ */
+export function isPhoenixCodexAutoStalled(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): boolean {
+  const events = turnEvents(agent, turn)
+  const results = events.filter(event => event.type === 'tool/result').slice(-2)
+  if (results.length === 2) {
+    const left = failedToolFingerprint(results[0]!)
+    const right = failedToolFingerprint(results[1]!)
+    if (left !== undefined && left === right) return true
+  }
+
+  const calls = events.filter(event => event.type === 'tool/call').slice(-6)
+  const latestCall = calls.at(-1)
+  const latestFingerprint = latestCall === undefined ? undefined : toolCallFingerprint(latestCall)
+  if (latestFingerprint !== undefined) {
+    const repeats = calls.reduce(
+      (count, event) => count + (toolCallFingerprint(event) === latestFingerprint ? 1 : 0),
+      0,
+    )
+    if (repeats >= 3) return true
+  }
+
+  return events.filter(event => event.type === 'llm/retry').length >= 2
+}
+
+function phoenixAutoTaskRequest(text: string): boolean {
+  const candidate = text.trim()
+  return CONTEXTUAL_CONTINUATION.test(candidate)
+    || isToolAcquisitionRequest(candidate)
+    || AUTO_TASK_ACTION.test(candidate)
+}
+
+interface PhoenixAutoRouterState {
+  turn: number
+  lastRescueStep: number
+  rescueCount: number
+}
+
+function phoenixAutoRoute(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+  step: number,
+  directText: string,
+  state: PhoenixAutoRouterState,
+): ModelSelection {
+  if (step <= 1) {
+    if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('low'),
+      }
+    }
+    if (phoenixAutoTaskRequest(directText)) {
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+        reasoningEffort: ReasoningEffortId('medium'),
+      }
+    }
+    return {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: ReasoningEffortId(AUTO_DEEP_REPLY.test(directText) ? 'medium' : 'low'),
+    }
+  }
+
+  if (state.turn !== turn) {
+    state.turn = turn
+    state.lastRescueStep = 0
+    state.rescueCount = 0
+  }
+
+  const repeatedStall = isPhoenixCodexAutoStalled(agent, turn)
+  const canRescue = repeatedStall
+    && (state.lastRescueStep === 0 || step - state.lastRescueStep >= 2)
+  if (canRescue) {
+    state.lastRescueStep = step
+    state.rescueCount += 1
+    return {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+      reasoningEffort: ReasoningEffortId(state.rescueCount > 1 ? 'high' : 'medium'),
+    }
+  }
+
+  return {
+    provider: 'openai-codex',
+    model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+    reasoningEffort: ReasoningEffortId('max'),
+  }
+}
+
 /**
  * Couple one mutable selection to Agent-scoped prompt assembly and request routing.
  * Prompt assembly snapshots the selected model before delegating, then applies
@@ -298,6 +477,7 @@ export function installModelSelection(
   selection: ModelSelectionRef,
   handoff?: ModelSelectionHandoff | ModelSelectionHandoffResolver,
 ): () => void {
+  const phoenixAutoState: PhoenixAutoRouterState = { turn: 0, lastRescueStep: 0, rescueCount: 0 }
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -321,6 +501,24 @@ export function installModelSelection(
       if (selected === undefined) return resolved
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
+      if (isPhoenixCodexAutoSelection(selected)) {
+        const routed = phoenixAutoRoute(
+          _payload.agent,
+          _payload.turn,
+          _payload.step,
+          directText,
+          phoenixAutoState,
+        )
+        const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
+        return {
+          ...withoutInheritedEffort,
+          provider: routed.provider,
+          model: routed.model,
+          ...routed.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: routed.reasoningEffort },
+        }
+      }
       const conversation = _payload.step === 1
         && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
         ? defaultConversationalSelection(selected)

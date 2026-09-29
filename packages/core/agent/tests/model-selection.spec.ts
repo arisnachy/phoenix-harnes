@@ -9,6 +9,7 @@ import {
   isContextualConversationFastPathText,
   isConversationalFastPathText,
   jevSelectedModelId,
+  PHOENIX_CODEX_AUTO_MODEL,
   type Agent,
   type ModelSelectionRef,
 } from '../src/index.ts'
@@ -79,6 +80,151 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('¿esto parece un error de memoria?')).toBe(false)
     expect(isConversationalFastPathText('qué tiempo hace hoy')).toBe(false)
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
+  })
+
+  it('routes Phoenix Auto from Sol planning to Luna Max execution', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'read', description: 'read a file', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Arregla router.ts y ejecuta los tests.' }],
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-sol',
+      reasoningEffort: ReasoningEffortId('medium'),
+    })
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('uses Luna low for answer-only Phoenix Auto turns', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const agent = {
+      session: {
+        events: [
+          { type: 'turn/start', data: { turn: 1 } },
+          {
+            type: 'user/message',
+            data: {
+              source: { kind: 'user' },
+              content: [{ type: 'text', text: 'hola' }],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve({
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_MODEL,
+      }),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('low'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('rescues repeated Phoenix Auto tool failures with Sol, then returns to Luna Max', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Arregla router.ts y ejecuta los tests.' }],
+        },
+      },
+      {
+        type: 'tool/result',
+        data: {
+          turn: 1,
+          step: 2,
+          error: { name: 'ToolError', code: 'TS2345' },
+          message: { role: 'tool', content: [{ type: 'text', text: 'TS2345 at router.ts:42' }] },
+        },
+      },
+      {
+        type: 'tool/result',
+        data: {
+          turn: 1,
+          step: 3,
+          error: { name: 'ToolError', code: 'TS2345' },
+          message: { role: 'tool', content: [{ type: 'text', text: 'TS2345 at router.ts:84' }] },
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-sol',
+      reasoningEffort: ReasoningEffortId('medium'),
+    })
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 5, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
   })
 
   it('routes trivial GPT-6 Codex conversation to Luna/low without spending Max reasoning', async () => {

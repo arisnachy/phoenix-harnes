@@ -7,7 +7,12 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import AgentRegistry, { agentEvents } from '@phoenix-ai/dsh-agent'
+import AgentRegistry, {
+  agentEvents,
+  PHOENIX_CODEX_AUTO_MODEL,
+  PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+  PHOENIX_CODEX_AUTO_WORKER_MODEL,
+} from '@phoenix-ai/dsh-agent'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import AttachmentStore from '@phoenix-ai/dsh-attachment'
 import LlmRuntime, { LlmAdapter, ReasoningEffortId } from '@phoenix-ai/dsh-llm'
@@ -71,6 +76,23 @@ const REASONING: LlmModelReasoningInfo = {
     { id: ReasoningEffortId('max'), name: 'Max' },
   ],
   defaultEffort: ReasoningEffortId('high'),
+}
+
+const CODEX_REASONING: LlmModelReasoningInfo = {
+  efforts: [
+    { id: ReasoningEffortId('low'), name: 'Low' },
+    { id: ReasoningEffortId('medium'), name: 'Medium' },
+    { id: ReasoningEffortId('high'), name: 'High' },
+    { id: ReasoningEffortId('max'), name: 'Max' },
+  ],
+  defaultEffort: ReasoningEffortId('max'),
+}
+
+function registerCodex6(ctx: Context): void {
+  ctx.llm.registerAdapter(['openai-codex'], new CatalogAdapter('OpenAI Codex', [
+    { provider: 'openai-codex', id: PHOENIX_CODEX_AUTO_PLANNER_MODEL, name: 'GPT-6 Sol' },
+    { provider: 'openai-codex', id: PHOENIX_CODEX_AUTO_WORKER_MODEL, name: 'GPT-6 Luna' },
+  ], CODEX_REASONING))
 }
 
 async function harness(logged?: {
@@ -312,6 +334,67 @@ describe('Web session model selection', () => {
         message: 'adapter returned invalid or duplicate model metadata for provider "duplicate"',
       },
     ])
+    await ctx.fiber.dispose()
+  })
+
+  it('adds Phoenix Auto to OpenAI Codex and selects it as a virtual Sol/Luna router', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    registerCodex6(ctx)
+    const saved: unknown[] = []
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      saveDefaultModelSelection: (selection) => {
+        saved.push(selection)
+        return Promise.resolve()
+      },
+      cwd: '/tmp',
+    })
+
+    const catalog = expectValue(await api.sessions.models(request({ sessionId })))
+    const codex = catalog.groups.find(group => group.id === 'openai-codex')
+    expect(codex?.models[0]).toEqual({
+      id: PHOENIX_CODEX_AUTO_MODEL,
+      name: 'Phoenix Auto',
+      description: 'GPT-6 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
+    })
+
+    const selected = expectValue(await api.sessions.selectModel(request({
+      sessionId,
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
+    })))
+    expect(selected.selected).toEqual({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
+    })
+    expect(agent.options).toEqual({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
+    })
+    expect(saved).toEqual([{
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: ReasoningEffortId('max'),
+    }])
+
+    const rejectedEffort = await api.sessions.selectModel(request({
+      sessionId,
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
+      reasoningEffort: 'high',
+    }))
+    expect(rejectedEffort.result).toMatchObject({
+      ok: false,
+      error: {
+        code: 'model-unavailable',
+        message: 'Phoenix Auto manages reasoning effort automatically',
+      },
+    })
     await ctx.fiber.dispose()
   })
 
