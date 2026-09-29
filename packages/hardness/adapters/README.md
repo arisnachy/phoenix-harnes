@@ -80,7 +80,7 @@ The model also receives the read-only connector_list tool when the authorization
 ##### X MCP activation
 
 ```markdown
-Full model-tool scopes also expose `x_mcp_activate`. It is usable only after an explicit user request and one-shot medium-risk approval; it installs the exact official X Docs endpoint and the pinned `@xdevplatform/xurl` bridge, then reports whether the vault contains the two X developer credential references. Activation does not perform an X account mutation.
+Full model-tool scopes also expose `x_mcp_activate`. It is usable only after an explicit user request and one-shot medium-risk approval. The user identity maps to `x-api`; the Phoenix-owned identity maps to `x-api-phoenix`, so their OAuth sessions stay separate. If the Phoenix-owned account does not exist yet, activation returns `setup-required`, defers an instruction to continue through Computer Use at `https://x.com/signup`, and stops for required human verification before connecting the resulting username. Setup never posts, follows, DMs, or performs another social action.
 ```
 
 #### Token effect
