@@ -57,6 +57,17 @@ export const PHOENIX_CODEX_AUTO_WORKER_MODEL = 'gpt-6-luna'
 /** Marker required at the start of the independent Luna review workflow prompt. */
 export const PHOENIX_CODEX_AUTO_REVIEW_MARKER = 'PHOENIX_AUTO_REVIEW'
 
+const PHOENIX_CODEX_AUTO_GUIDANCE = `
+Phoenix Auto routing contract:
+- The newest available Sol plans, orchestrates, rescues stalled work, and makes the final acceptance decision.
+- The newest available Luna at Max performs substantive execution. The root Luna is the primary executor; add at most one independent Luna executor only when a genuinely independent branch shortens the critical path, so execution uses one or two Luna workers in total.
+- Prefer deterministic tests, lint, build, and runtime checks before model review.
+- After substantive execution, launch one fresh independent Luna reviewer through workflow. Its prompt must begin exactly with PHOENIX_AUTO_REVIEW. The reviewer audits without editing: original objective, acceptance criteria, changes, outputs, tests, regressions, and risks, and returns a compact PASS/FIX digest with concrete evidence.
+- For games, 3D, websites, images, and other visual deliverables, the reviewer must inspect rendered screenshots or the running output when tools permit. A successful compile or build is not evidence of visual quality.
+- After a PHOENIX_AUTO_REVIEW result returns, do not finalize from Luna. The router sends the next model step to Sol so Sol can inspect the review evidence and accept the result or order corrections.
+- If Sol requests a correction, Luna executes it. Repeat independent review only after material changes. Skip this review cycle for trivial conversation or work where it adds no value.
+`.trim()
+
 /** Premium Codex tiers that should spend one step planning before Luna executes. */
 const CODEX_PLANNER_MODEL = /^gpt-(\d+(?:\.\d+)*)-(?:sol|astra|terra)(?:$|-)/i
 /** Sol ids eligible to back Phoenix Auto's planner/reviewer role. */
@@ -596,6 +607,9 @@ export function installModelSelection(
     if (selected === undefined) return assembled
     return {
       ...assembled,
+      sections: isPhoenixCodexAutoSelection(selected)
+        ? [...assembled.sections, { name: 'phoenix-auto:routing', text: PHOENIX_CODEX_AUTO_GUIDANCE }]
+        : assembled.sections,
       variables: {
         ...assembled.variables,
         provider: selected.provider,
