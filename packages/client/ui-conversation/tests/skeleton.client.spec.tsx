@@ -137,6 +137,7 @@ function mount(
   const userProfile = createSnapshotStore<{ preferredName?: string }>(
     options.preferredName === undefined ? {} : { preferredName: options.preferredName },
   )
+  const proactivityAttention = createSnapshotStore([])
   const useSession = bindSnapshotSelector(session)
   const chat = createChatStore().create()
   chat.actions.setDraft('ordinary draft')
@@ -268,6 +269,7 @@ function mount(
     useProjection: (() => undefined),
     useComposerBlock: select => select(options.composerBlock),
     useUserProfile: bindSnapshotSelector(userProfile),
+    useProactivityAttention: bindSnapshotSelector(proactivityAttention),
     useInput,
     inputActions,
     renderSlot,
