@@ -20,11 +20,16 @@ export interface SubagentTimingProjection {
 /** Safe activity phase shown by the teams dock. */
 export type SubagentActivityPhase = 'preparing' | 'running-tools' | 'verifying' | 'idle'
 
-/** Effective model route and durable phase for one child session. */
+/** Effective model route, durable phase, and agent-authored live text for one child session. */
 export interface SubagentActivityProjection {
   provider?: string
   model?: string
   phase: SubagentActivityPhase
+  /**
+   * Latest text authored by the child model in its currently open turn.
+   * Phoenix may truncate this for layout, but never synthesizes or rewrites it.
+   */
+  text?: string
 }
 
 /**
