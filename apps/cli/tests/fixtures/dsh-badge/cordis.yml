@@ -7,3 +7,7 @@
 
 - id: session-telemetry-otel
   disabled: true
+
+# Badge snapshot isolates the skill surface; browser MCP startup belongs to profile-boot coverage.
+- id: phoenix-browser
+  disabled: true
