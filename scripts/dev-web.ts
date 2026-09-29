@@ -270,7 +270,16 @@ if (isMain) {
   // first build reads current lib bundles rather than whatever the last full
   // build left. Its own watch then covers later lib rewrites — those files are
   // in its module graph.
-  await watchClientPlugins(repoRoot, [...pluginDirs, ...libraryDirs], pollInterval)
+  const clientBundles = await watchClientPlugins(repoRoot, [...pluginDirs, ...libraryDirs], pollInterval)
+  // Keep the tsdown bundle handles strongly reachable for the lifetime of the
+  // dev loop. Tsdown's watch handles are disposable objects; dropping the
+  // returned array after the initial build can leave the process alive while
+  // the client-bundle watcher itself is no longer retained.
+  stages.push({
+    kill: () => {
+      for (const bundle of clientBundles) void bundle[Symbol.asyncDispose]()
+    },
+  })
   // Through the shell's own `watch` script rather than vite's API: vite is not a
   // repository-root dependency, and more importantly the vite root is its
   // working directory — `resolve.dedupe` resolves react from that root, so
