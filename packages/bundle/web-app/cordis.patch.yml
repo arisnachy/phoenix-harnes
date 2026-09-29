@@ -108,7 +108,7 @@
     # first browser call. Failure is non-fatal and reconnect attempts are bounded.
     - id: chrome-browser-primary
       name: '@phoenix-ai/dsh-mcp-client'
-      disabled: !!js process.platform !== 'win32' || ['replay', 'refresh'].includes(process.env.DSH_SNAPSHOT ?? '')
+      disabled: !!js process.platform !== 'win32'
       config:
         serverName: chrome
         transport: stdio
@@ -117,7 +117,7 @@
           - --import
           - tsx/esm
           - packages/mcp/chrome-connector/src/bin.ts
-        cwd: !!js process.cwd()
+        cwd: !!js process.env.INIT_CWD ?? process.cwd()
         env:
           PHOENIX_BROWSER_AUTOSTART: 'true'
           PHOENIX_BROWSER_PREFERRED_ENGINE: chrome
