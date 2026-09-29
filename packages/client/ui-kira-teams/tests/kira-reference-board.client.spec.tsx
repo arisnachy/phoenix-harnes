@@ -12,6 +12,7 @@ import {
   performanceKeyOf,
   skillOf,
   isVisibleAgentSummary,
+  liveActivityTextOf,
   type KiraTeamsDockProps,
 } from '../src/client/KiraTeamsDock.tsx'
 import { en, es, zh, type KiraTeamsKey } from '../src/client/locales.ts'
@@ -131,6 +132,27 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(agentRoleKeyOf(tester)).toBe('role.tester')
   })
 
+  it('shows short real task text instead of canned activity copy', () => {
+    const real = summary({
+      id: sid('real-task'),
+      running: true,
+      displayTitle: 'fallback title',
+      projectionValues: {
+        subagent: {
+          mode: 'continuable',
+          label: 'ORQUESTACIÓN: abre lunaris-quest.html en el navegador solo para comprobar que carga y describir lo visible sin modificar archivos',
+          seq: 9,
+        },
+      },
+    })
+
+    const text = liveActivityTextOf(real, 58)
+    expect(text.startsWith('abre lunaris-quest.html')).toBe(true)
+    expect(text.length).toBeLessThanOrEqual(58)
+    expect(text).not.toContain('Preparando')
+    expect(text).not.toContain('Supervisando misión')
+  })
+
   it('describes what each running agent is actually doing', () => {
     const judge = summary({ id: sid('judge'), running: true, projectionValues: { subagent: { mode: 'continuable', label: 'judge output quality', seq: 5 } } })
     const supervisor = summary({ id: sid('supervisor'), running: true, projectionValues: { subagent: { mode: 'continuable', label: 'supervisor', seq: 6 } } })
@@ -220,7 +242,7 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(container.querySelectorAll('[data-kira-agent-card]')).toHaveLength(1)
     expect(screen.getByText('Coordinación / orquestación')).toBeTruthy()
     expect(screen.getByText('Preparando')).toBeTruthy()
-    expect(screen.getByText('Supervisando misión')).toBeTruthy()
+    expect(screen.getByText('mission supervisor')).toBeTruthy()
   })
 })
 
