@@ -1,3 +1,4 @@
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { ApprovalService } from '@phoenix-ai/dsh-user-approval'
 import {
   defineTool,
@@ -145,7 +146,7 @@ export function createXMcpActivateTool(
 ): ToolDefinition {
   return defineTool({
     name: 'x_mcp_activate',
-    description: 'Activate the official X MCP integration for either the user account or a separate Phoenix-owned X account. The user identity uses x-api; the Phoenix identity uses x-api-phoenix and xurl -u/--username so both OAuth users can coexist without mixing tokens. This installs connector access only and never creates an X account or performs an X account action.',
+    description: 'Activate the official X MCP integration for either the user account or a separate Phoenix-owned X account. The user identity uses x-api; the Phoenix identity uses x-api-phoenix and xurl -u/--username so both OAuth users can coexist without mixing tokens. If the Phoenix identity does not exist yet and no username is known, begin the official X signup onboarding through Computer Use and stop for required human verification before activation.',
     parameters: {
       requestedByUser: { type: 'boolean', required: true, description: 'Must be true only when the user explicitly requested X/Twitter MCP access.' },
       identity: { type: 'string', enum: ['user', 'phoenix'], description: 'Which X identity Phoenix should connect. Defaults to user.' },
@@ -164,18 +165,27 @@ export function createXMcpActivateTool(
       }
       if (exec.agent === undefined) throw new Error('X MCP activation requires an active agent session')
       const identity = args.identity === 'phoenix' ? 'phoenix' : 'user'
-      const username = args.username?.trim()
-      if (identity === 'phoenix' && !username) {
-        throw new Error('Phoenix-owned X identity requires the X username after that account is created')
-      }
+      const username = args.username?.trim() || undefined
       if (host?.enableXMcp === undefined || host.xMcpState === undefined) {
         throw new Error('Official X MCP host integration is unavailable in this Phoenix runtime')
+      }
+      const currentState = await host.xMcpState()
+      if (identity === 'phoenix' && username === undefined && currentState.phoenixApi.configured) {
+        return {
+          status: 'enabled',
+          identity,
+          credentialsReady: currentState.clientIdConfigured && currentState.clientSecretConfigured,
+          state: xMcpSnapshotJson(currentState),
+          message: 'Phoenix-owned X identity is already configured as x-api-phoenix.',
+        }
       }
       const outcome = await approval.request({
         agent: exec.agent,
         toolName: 'x_mcp_activate',
         callId: exec.callId,
-        reason: `Enable the official X MCP for the ${identity === 'phoenix' ? 'Phoenix-owned' : 'user'} identity. This installs connector access only and performs no X account action.`,
+        reason: identity === 'phoenix' && username === undefined
+          ? 'Start one-time setup for a Phoenix-owned X account using the official X signup flow. Phoenix will use Computer Use and stop for any required human verification.'
+          : `Enable the official X MCP for the ${identity === 'phoenix' ? 'Phoenix-owned' : 'user'} identity. This installs connector access only and performs no X account action.`,
         risk: 'medium',
         reversible: true,
         signal: exec.signal,
@@ -185,6 +195,23 @@ export function createXMcpActivateTool(
           status: 'denied',
           approvalOutcome: outcome,
           message: 'Official X MCP activation was not approved.',
+        }
+      }
+      if (identity === 'phoenix' && username === undefined) {
+        exec.deferContext(createUserMessage({
+          content: [{
+            type: 'text',
+            text: 'Continue the approved Phoenix-owned X account onboarding now. Use the computer tool with browser_open to https://x.com/signup in the Phoenix embedded browser. Advance through the official signup flow using only information the user has already authorized. Stop and ask for human intervention when X requires email/SMS verification, CAPTCHA, MFA, acceptance of materially changed terms, or any other verification that must be completed by a person. After signup succeeds, inspect the resulting profile to determine the new X username. If X exposes its automated-account transparency/label setup, stop for the human owner to complete or confirm that linkage before autonomous social actions. Then call x_mcp_activate again with requestedByUser=true, identity="phoenix", and that username. Do not post, follow, DM, or perform any other X account action during setup.',
+          }],
+          source: { kind: 'plugin', plugin: 'x-mcp' },
+        }))
+        return {
+          status: 'setup-required',
+          identity,
+          signupUrl: 'https://x.com/signup',
+          requiresHumanVerification: true,
+          state: xMcpSnapshotJson(currentState),
+          message: 'Phoenix-owned X account setup is ready. Phoenix will continue in the official X signup flow and stop only when X requires human verification.',
         }
       }
       const receipt = await host.enableXMcp({
