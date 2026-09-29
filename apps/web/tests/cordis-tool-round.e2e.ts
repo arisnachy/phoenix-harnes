@@ -42,6 +42,17 @@ const PROMPT = 'Use only Cordis tools. First call cordis_inspect_self with no ar
 const STOP_PROMPT = 'Use only Cordis tools. Call cordis_stop with pluginId "snap-1". '
   + 'After it succeeds, reply exactly CORDIS_UI_DONE and stop.'
 
+async function expandToolsGroups(page: Page): Promise<void> {
+  const firstGroup = page.getByRole('button', { name: 'Tools', exact: true }).first()
+  await firstGroup.waitFor({ timeout: 30_000 })
+  const groups = page.getByRole('button', { name: 'Tools', exact: true })
+  const count = await groups.count()
+  for (let index = 0; index < count; index += 1) {
+    const group = groups.nth(index)
+    if (await group.getAttribute('aria-expanded') === 'false') await group.click()
+  }
+}
+
 function assertCompleteCordisLifecycle(events: readonly SessionEvent[]): void {
   const turnEnd = events.findLast(
     (event): event is Extract<SessionEvent, { type: 'turn/end' }> => event.type === 'turn/end',
@@ -138,6 +149,10 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-cordis-rows'))
     await expect.poll(() => page.getByText('CORDIS_UI_DONE', { exact: true }).count(), { timeout: 30_000 })
       .toBeGreaterThanOrEqual(1)
+    // Completed tool telemetry is intentionally collapsed behind per-turn
+    // Tools disclosures. Open those user-visible groups before addressing the
+    // specialized Cordis cards inside them.
+    await expandToolsGroups(page)
 
     // The Host can finish the replay turn before the browser's optional
     // tool-presentation plugins finish hydrating under a contended CI runner.
@@ -172,6 +187,7 @@ describe('web e2e: Cordis tools use their owned cards', () => {
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-cordis-aria'))
+    await expandToolsGroups(page)
     // Keep the golden tied to the settled specialized presentation, not to a
     // transient generic block shown while optional client modules hydrate.
     await page.locator('[data-tool="cordis_stop"]').filter({ hasText: 'Stop Cordis Plugin' }).first()
