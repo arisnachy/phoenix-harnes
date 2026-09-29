@@ -26,7 +26,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { CredentialView, DiscoveredModelView, IApiClient, SettingsNamespaceView, SettingsPathOpView } from '@phoenix-ai/dsh-api-remotes/client'
+import type {
+  CredentialView,
+  DiscoveredModelView,
+  IApiClient,
+  SettingsNamespaceView,
+  SettingsPathOpView,
+} from '@phoenix-ai/dsh-api-remotes/client'
 import {
   DeepSeekModelsEditor, modelDrafts, validateDeepSeekModels,
 } from './DeepSeekModelsEditor.tsx'
