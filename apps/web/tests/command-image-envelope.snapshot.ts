@@ -28,15 +28,12 @@ async function freshComposer(): Promise<HTMLTextAreaElement> {
   return textarea
 }
 
-/** Paste one tiny PNG into the composer and wait for its rail thumbnail. */
-async function pasteImage(textarea: HTMLTextAreaElement, name: string): Promise<void> {
+/** Add one tiny PNG through the composer's native file-input seam and wait for its rail thumbnail. */
+async function addImage(textarea: HTMLTextAreaElement, name: string): Promise<void> {
   const image = new File([new Uint8Array([137, 80, 78, 71])], name, { type: 'image/png' })
-  fireEvent.paste(textarea, {
-    clipboardData: {
-      items: [{ kind: 'file', type: 'image/png', getAsFile: () => image }],
-      getData: () => '',
-    },
-  })
+  const picker = textarea.closest('[data-composer-card]')?.querySelector<HTMLInputElement>('input[type="file"]')
+  if (picker === null || picker === undefined) throw new Error('composer file picker missing')
+  fireEvent.change(picker, { target: { files: [image] } })
   await waitFor(() => {
     const rail = document.querySelector('[role="group"][aria-label="Pending images"]')
     if (rail === null) throw new Error('attachment rail missing')
@@ -47,7 +44,7 @@ async function pasteImage(textarea: HTMLTextAreaElement, name: string): Promise<
 it('refuses an image-carrying submit to a non-declaring command and keeps draft and images', async () => {
   mountAssembledApp()
   const textarea = await freshComposer()
-  await pasteImage(textarea, 'ref.png')
+  await addImage(textarea, 'ref.png')
 
   // /echo is a leadingInput fixture command without `input.images`.
   fireEvent.change(textarea, { target: { value: '/echo hello' } })
@@ -73,7 +70,7 @@ it('refuses an image-carrying submit to a non-declaring command and keeps draft 
 it('consumes images through a declaring command and clears the composer on success', async () => {
   mountAssembledApp()
   const textarea = await freshComposer()
-  await pasteImage(textarea, 'goal-ref.png')
+  await addImage(textarea, 'goal-ref.png')
 
   // /goal declares `input.images` in the fixture catalog; the claim submit
   // serializes the pasted bytes and the fixture executor admits them.
@@ -89,7 +86,7 @@ it('consumes images through a declaring command and clears the composer on succe
 it('submits a bare /plan with an image as an image-only plan request', async () => {
   mountAssembledApp()
   const textarea = await freshComposer()
-  await pasteImage(textarea, 'plan-task.png')
+  await addImage(textarea, 'plan-task.png')
 
   fireEvent.change(textarea, { target: { value: '/plan' } })
   fireEvent.keyDown(textarea, { key: 'Enter' })
