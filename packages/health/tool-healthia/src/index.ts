@@ -193,8 +193,8 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
       description: 'Read a bounded longitudinal snapshot for one patient: demographics, newest canonical health facts, and recent clinical episodes. Call before longitudinal clinical reasoning.',
       parameters: {
         patient_id: { type: 'string', required: true },
-        record_limit: { type: 'integer', minimum: 1, maximum: 500 },
-        episode_limit: { type: 'integer', minimum: 1, maximum: 100 },
+        record_limit: { type: 'integer', description: 'Optional 1..500 bound; invalid values are rejected by HealthIA.' },
+        episode_limit: { type: 'integer', description: 'Optional 1..100 bound; invalid values are rejected by HealthIA.' },
       },
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
@@ -225,7 +225,7 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
         source_kind: { type: 'string', required: true, enum: SOURCE_KINDS },
         source_id: { type: 'string' },
         source_ref: { type: 'string' },
-        confidence: { type: 'number', minimum: 0, maximum: 1 },
+        confidence: { type: 'number', description: 'Optional provenance confidence from 0 to 1; invalid values are rejected.' },
       },
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
@@ -263,7 +263,7 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
         categories: { type: 'array', items: { type: 'string', enum: HEALTH_CATEGORIES } },
         since: { type: 'string' },
         until: { type: 'string' },
-        limit: { type: 'integer', minimum: 1, maximum: 1000 },
+        limit: { type: 'integer', description: 'Optional 1..1000 result limit; invalid values are rejected by HealthIA.' },
       },
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
@@ -342,6 +342,12 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
 /** Register the tiny global activator; full clinical tools remain agent-scoped. */
 export function apply(ctx: Context): void {
   const activeAgents = new WeakSet<Agent>()
+
+  ctx.systemPrompt.section({
+    name: 'healthia:activation',
+    order: 117,
+    text: 'When a user presents a genuine health/medical context, call healthia_activate before substantive clinical reasoning so the longitudinal patient record and clinical tools are available.',
+  })
 
   ctx.tools.register(defineTool({
     name: 'healthia_activate',
