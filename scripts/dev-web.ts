@@ -194,10 +194,10 @@ async function spawnStage(
     settled = true
     resolveReady?.()
   }
-  child.stdout?.setEncoding('utf8')
-  child.stderr?.setEncoding('utf8')
-  child.stdout?.on('data', (chunk: string) => { observe(chunk, process.stdout) })
-  child.stderr?.on('data', (chunk: string) => { observe(chunk, process.stderr) })
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
+  child.stdout.on('data', (chunk: string) => { observe(chunk, process.stdout) })
+  child.stderr.on('data', (chunk: string) => { observe(chunk, process.stderr) })
 
   void child.then((result) => {
     if (!settled) {
