@@ -15,7 +15,7 @@ import type { ViewTab } from './contract/views.ts'
 import type {
   ApprovalWait, ChatNodeTurnDataInjected, ChatScrollPosition, ChatViewInjected, ComposerBarInjected,
   ComposerChainProps, ConversationInjected, ConversationSessionHeaderInjected, ConversationSessionInjected,
-  ConversationUserProfileState, DetailsInjected,
+  ConversationUserProfileState, DetailsInjected, ProactivityAttentionItem,
 } from './contract/slots.ts'
 import type { InputNotice } from './input/contract.ts'
 import { createChatStore } from './stores.ts'
@@ -34,6 +34,7 @@ import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
+import { refreshProactivityAttention } from './skeleton/ProactivityAttention.ts'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
 import { en, es, NS, zh, type ConversationKey } from './locales.ts'
@@ -165,6 +166,18 @@ export function apply(ctx: Context): void {
     'ui-conversation: hero preferred-name mirror',
   )
 
+  const proactivityAttention = createSnapshotStore<readonly ProactivityAttentionItem[]>([])
+  const refreshAttention = (): Promise<void> => refreshProactivityAttention(
+    ctx.get('connection') as ConnectionHandle | undefined,
+    proactivityAttention,
+  )
+  void refreshAttention()
+  ctx.effect(() => {
+    const timer = setInterval(() => { void refreshAttention() }, 60_000)
+    return () => { clearInterval(timer) }
+  }, 'ui-conversation: proactive attention poll')
+  ctx.on('connection/reset', () => { void refreshAttention() })
+
   ctx.slots.inject('settings.general.item', () => ctx.slots.register({
     name: 'settings.general.item',
     id: 'composer-enter',
@@ -245,6 +258,7 @@ export function apply(ctx: Context): void {
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
         userProfile,
+        proactivityAttention,
       },
       selectWorkspace: async (workspaceId) => {
         const nextId = await workspaces.connectWorkspace(workspaceId)
