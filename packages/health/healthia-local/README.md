@@ -18,13 +18,22 @@ Default key reference: `PHOENIX_HEALTHIA_DATA_KEY`.
 
 ## Model Experience
 
-None, as `@phoenix-ai/dsh-healthia-local` is a storage provider and contributes
-no model-visible prompt or tool surface.
+### Encrypted local provider
+
+#### What the model sees
+
+The provider registers `ctx.healthia` but renders no prompt or patient data;
+model-facing HealthIA consumers own every model-visible projection.
+
+#### Token effect
+
+Storage, encryption, locking, and credential resolution add no model tokens by
+themselves.
 
 #### KV Cache effect
 
-None. Reading or writing the encrypted record does not by itself alter a model
-request; a HealthIA consumer decides which bounded data enters context.
+The provider is cache-neutral. Reading or writing the encrypted record changes
+a model prefix only if a consumer later projects those bounded records.
 
 ## Known Limitations and Deferred Work
 
