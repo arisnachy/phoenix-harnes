@@ -213,7 +213,7 @@ export const longProbe = 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 + 1 +
       throw new Error('package.json must contain scripts and devDependencies objects')
     }
 
-    expect(packageJson.scripts['lint:contracts-ready']).toBe('tsx scripts/run-oxlint.ts .')
+    expect(packageJson.scripts['lint:contracts-ready']).toBe('tsx scripts/verify-oxlint-contracts.ts')
     expect(packageJson.scripts['lint:fix:contracts-ready']).toBe(
       'tsx scripts/run-oxlint.ts --config .oxlintrc.staged.json packages/typert/generator/tests/fixtures/type-model --fix && tsx scripts/run-oxlint.ts . --fix',
     )
