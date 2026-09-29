@@ -165,7 +165,7 @@ export function createXMcpActivateTool(
       }
       if (exec.agent === undefined) throw new Error('X MCP activation requires an active agent session')
       const identity = args.identity === 'phoenix' ? 'phoenix' : 'user'
-      const username = args.username?.trim()
+      const username = args.username?.trim() || undefined
       if (host?.enableXMcp === undefined || host.xMcpState === undefined) {
         throw new Error('Official X MCP host integration is unavailable in this Phoenix runtime')
       }
@@ -201,7 +201,7 @@ export function createXMcpActivateTool(
         exec.deferContext(createUserMessage({
           content: [{
             type: 'text',
-            text: 'Continue the approved Phoenix-owned X account onboarding now. Use the computer tool with browser_open to https://x.com/signup in the Phoenix embedded browser. Advance through the official signup flow using only information the user has already authorized. Stop and ask for human intervention when X requires email/SMS verification, CAPTCHA, MFA, acceptance of materially changed terms, or any other verification that must be completed by a person. After signup succeeds, inspect the resulting profile to determine the new X username, then call x_mcp_activate again with requestedByUser=true, identity="phoenix", and that username. Do not post, follow, DM, or perform any other X account action during setup.',
+            text: 'Continue the approved Phoenix-owned X account onboarding now. Use the computer tool with browser_open to https://x.com/signup in the Phoenix embedded browser. Advance through the official signup flow using only information the user has already authorized. Stop and ask for human intervention when X requires email/SMS verification, CAPTCHA, MFA, acceptance of materially changed terms, or any other verification that must be completed by a person. After signup succeeds, inspect the resulting profile to determine the new X username. If X exposes its automated-account transparency/label setup, stop for the human owner to complete or confirm that linkage before autonomous social actions. Then call x_mcp_activate again with requestedByUser=true, identity="phoenix", and that username. Do not post, follow, DM, or perform any other X account action during setup.',
           }],
           source: { kind: 'plugin', plugin: 'x-mcp' },
         }))
