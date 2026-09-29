@@ -27,6 +27,14 @@ For games, 3D, websites, and other visual deliverables the reviewer is instructe
 
 Full presets retain a hard ceiling of two delegated workflow agents. Their child routes keep `gpt-6-luna` as a compatibility fallback but inherit the live parent Luna id when it matches the Luna family, so a newly adopted Luna generation also propagates to subagent, fork, and workflow children.
 
+## Alternatives considered
+
+**Keep fixed `gpt-6-sol` and `gpt-6-luna` routes.** Rejected because every new Sol/Luna generation would require a manual router edit and release.
+
+**Let Luna both execute and make the final acceptance decision.** Rejected because the desired separation is an independent Luna review followed by Sol judging the evidence and deciding whether correction is required.
+
+**Use Astra as another planner/reviewer candidate.** Rejected because Phoenix Auto is intentionally a Sol/Luna route and must not introduce Astra cost or behavior.
+
 ## Consequences
 
 Phoenix Auto can adopt future Sol/Luna generations without manual router edits, while keeping Sol usage concentrated on planning, rescue, and final judgment. Luna handles execution and first-pass independent review, preserving the intended quality/cost balance. Existing direct model selections keep their previous behavior.
