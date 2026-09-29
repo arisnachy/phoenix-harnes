@@ -90,6 +90,13 @@ export function activityOf(summary: SessionSummary): SubagentActivityProjection 
   return summary.projectionValues?.subagentActivity
 }
 
+/** Only agents doing work or explicitly waiting on the user belong in the live dock. */
+export function isVisibleAgentSummary(summary: SessionSummary): boolean {
+  if (summary.pendingInteraction !== undefined) return true
+  if (!summary.running) return false
+  return activityOf(summary)?.phase !== 'idle'
+}
+
 function normalizedWorkText(summary: SessionSummary): string {
   return [
     summary.projectionValues?.subagent?.label ?? '',
@@ -277,7 +284,7 @@ export function lineageMembers(state: SessionListState): {
         if (summary.origin !== 'subagent' || summary.parentId !== parentId) continue
         if (depth.has(summary.id)) continue
         depth.set(summary.id, childDepth)
-        if (summary.running || summary.pendingInteraction !== undefined) {
+        if (isVisibleAgentSummary(summary)) {
           rows.push({ summary, depth: childDepth })
         }
         next.push(summary.id)
@@ -302,7 +309,7 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
 
   return (
     <>
-      <span className={css.agentTop}>
+      <span className={css.agentVisualRow}>
         <ModelActivityAvatar
           kind={card.kind}
           activity={activityOf(summary)}
@@ -310,16 +317,17 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
           pending={summary.pendingInteraction !== undefined}
           variant="card"
         />
-        <span className={css.agentIdentity}>
-          <span className={css.agentName}>{card.name}</span>
-          <span className={css.role}>{t(card.specialty)}</span>
-        </span>
-      </span>
-      <span className={css.agentAction}>
-        <span className={css.statusLine} data-activity={actionKey}>
+        <span className={css.statusBadge} data-activity={actionKey}>
           <span className={css.statusDot} aria-hidden="true" />
           <span className={css.activity}>{t(actionKey)}</span>
         </span>
+      </span>
+      <span className={css.agentIdentity}>
+        <span className={css.agentName}>{card.name}</span>
+        <span className={css.role}>{t(card.specialty)}</span>
+      </span>
+      <span className={css.agentAction}>
+        <span className={css.actionChevron} aria-hidden="true">›</span>
         <span className={css.tagline}>{t(performanceKey)}</span>
       </span>
     </>
@@ -392,7 +400,12 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
 
   const cards = liveCardsOf(rows)
   return (
-    <div className={css.root} data-kira-teams data-kira-layout="floating-live">
+    <div
+      className={css.root}
+      data-kira-teams
+      data-kira-layout="floating-live"
+      data-kira-count={cards.length}
+    >
       <section className={css.dock} aria-label={t('team.aria')}>
         <header className={css.header}>
           <button
