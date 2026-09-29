@@ -8,8 +8,7 @@
 import { useId } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import {
-  IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16, IconSparkle16,
-  IconWarningOutline16, PhoenixLogo,
+  IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16, PhoenixLogo,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import { workspaceTitleOf } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, ProactivityAttentionItem } from '../contract/slots.ts'
@@ -117,24 +116,32 @@ export function HeroGlow({ className }: { className?: string | undefined }) {
   )
 }
 
-/** Resolve concise fallback copy without exposing internal task mechanics. */
-export function heroAttentionDetail(item: ProactivityAttentionItem): string {
-  if (item.detail !== undefined && item.detail.trim().length > 0) return item.detail.trim()
-  if (item.kind === 'failure') return 'Phoenix no pudo completar esta tarea.'
-  if (item.kind === 'upcoming') return 'Se acerca esta tarea.'
-  return 'Hay un resultado nuevo.'
+/** Keep Home quiet: only task-specific detail is shown, never invented filler. */
+export function heroAttentionDetail(item: ProactivityAttentionItem): string | undefined {
+  const detail = item.detail?.trim()
+  return detail === undefined || detail.length === 0 ? undefined : detail
+}
+
+/** Compact visual source hint inferred from the safe title/detail projection. */
+export function heroAttentionSource(item: ProactivityAttentionItem): 'GH' | 'M' | 'CAL' | 'P' {
+  const text = `${item.title} ${item.detail ?? ''}`.toLocaleLowerCase()
+  if (/\b(github|pull request|\bpr\b|repository|repo|\bci\b|main guard)\b/u.test(text)) return 'GH'
+  if (/\b(gmail|email|mail|inbox|correo)\b/u.test(text)) return 'M'
+  if (/\b(calendar|agenda|meeting|event|cita|clase)\b/u.test(text)) return 'CAL'
+  return 'P'
 }
 
 /** Build the draft that opens one proactive signal into a normal Phoenix conversation. */
 export function heroAttentionPrompt(item: ProactivityAttentionItem): string {
   const detail = heroAttentionDetail(item)
+  const context = detail === undefined ? '' : ` Contexto: ${detail}`
   if (item.kind === 'failure') {
-    return `Revisa este asunto proactivo de Phoenix: ${item.title}. ${detail} Encuentra la causa y ayúdame a resolverlo.`
+    return `Revisa por qué falló "${item.title}", localiza el bloqueo actual y corrígelo.${context}`
   }
   if (item.kind === 'upcoming') {
-    return `Ayúdame a preparar este asunto que se aproxima: ${item.title}. ${detail}`
+    return `Ayúdame a preparar "${item.title}" y ejecuta lo que corresponda.${context}`
   }
-  return `Explícame este resultado proactivo de Phoenix y dime qué requiere mi atención: ${item.title}. ${detail}`
+  return `Revisa este hallazgo proactivo de Phoenix: "${item.title}" y dime qué acción conviene tomar.${context}`
 }
 
 /** Quiet, actionable attention feed rendered below the Hero composer. */
@@ -148,25 +155,25 @@ export function HeroAttentionList({
   if (attention.length === 0) return null
   return (
     <div className={css.attention} aria-label="Atención proactiva de Phoenix">
-      {attention.slice(0, 3).map(item => (
-        <button
-          type="button"
-          className={css.attentionRow}
-          key={item.id}
-          onClick={() => { onSelect?.(item) }}
-        >
-          <span className={css.attentionIconWrap} aria-hidden="true">
-            {item.kind === 'failure'
-              ? <IconWarningOutline16 className={css.attentionIcon} size={16} />
-              : <IconSparkle16 className={css.attentionIcon} size={16} />}
-          </span>
-          <span className={css.attentionCopy}>
-            <span className={css.attentionTitle}>{item.title}</span>
-            <span className={css.attentionDetail}>{heroAttentionDetail(item)}</span>
-          </span>
-          <IconChevronRightOutline14 className={css.attentionArrow} size={14} />
-        </button>
-      ))}
+      {attention.slice(0, 3).map((item) => {
+        const detail = heroAttentionDetail(item)
+        return (
+          <button
+            type="button"
+            className={css.attentionRow}
+            key={item.id}
+            aria-label={`Abrir acción proactiva: ${item.title}`}
+            onClick={() => { onSelect?.(item) }}
+          >
+            <span className={css.attentionSource} aria-hidden="true">{heroAttentionSource(item)}</span>
+            <span className={css.attentionCopy}>
+              <span className={css.attentionTitle}>{item.title}</span>
+              {detail === undefined ? null : <span className={css.attentionDetail}>{detail}</span>}
+            </span>
+            <IconChevronRightOutline14 className={css.attentionArrow} size={14} />
+          </button>
+        )
+      })}
     </div>
   )
 }
