@@ -91,6 +91,7 @@ export function isCodexPlannerModel(model: string): boolean {
 }
 
 function lunaWorkerFor(model: string): string | undefined {
+  if (model === PHOENIX_CODEX_AUTO_PLANNER_MODEL) return PHOENIX_CODEX_AUTO_WORKER_MODEL
   const plannerGeneration = codexPlannerGeneration(model)
   if (plannerGeneration !== undefined) return `gpt-${plannerGeneration}-luna`
   return codexLunaGeneration(model) === undefined ? undefined : model
