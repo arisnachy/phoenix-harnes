@@ -73,6 +73,7 @@ function uncoveredLocations(fc, rel) {
   for (const id of Object.keys(fc.statementMap)) {
     if (fc.s[id] !== 0) continue;
     const loc = fc.statementMap[id];
+    if (!usable(loc)) continue;
     add(loc, `${rel}:${pos(loc)} uncovered statement${endSuffix(loc)}`);
   }
 
@@ -80,6 +81,7 @@ function uncoveredLocations(fc, rel) {
     if (fc.f[id] !== 0) continue;
     const fn = fc.fnMap[id];
     const loc = usable(fn.decl) ? fn.decl : fn.loc;
+    if (!usable(loc)) continue;
     const name = fn.name ? ` ${fn.name}` : '';
     add(loc, `${rel}:${pos(loc)} uncovered function${name}`);
   }
@@ -90,6 +92,7 @@ function uncoveredLocations(fc, rel) {
     for (let i = 0; i < counts.length; i += 1) {
       if (counts[i] !== 0) continue;
       const loc = usable(branch.locations && branch.locations[i]) ? branch.locations[i] : branch.loc;
+      if (!usable(loc)) continue;
       add(loc, `${rel}:${pos(loc)} uncovered branch (${branch.type}, path ${i + 1}/${counts.length})`);
     }
   }
