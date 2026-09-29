@@ -2017,7 +2017,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     if ('error' in found) return { refused: err(request, found.error) }
     const agent = found.agent
     const selectionRef = selectionFor(agent)
-    await refreshPhoenixAutoRoute(agent, selectionRef)
+    try {
+      await refreshPhoenixAutoRoute(agent, selectionRef)
+    } catch (error: unknown) {
+      const selection = selectionRef.current
+      return {
+        refused: err(request, {
+          code: 'model-unavailable',
+          message: `Phoenix Auto could not refresh its live Sol/Luna routes: ${error instanceof Error ? error.message : String(error)}`,
+          details: { provider: selection.provider, model: selection.model },
+        }),
+      }
+    }
     const selection = selectionRef.current
     if (!routeServed(selection.provider)) {
       return {
