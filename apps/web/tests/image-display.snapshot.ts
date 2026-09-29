@@ -220,6 +220,12 @@ it('renders a host dimension rejection with the projected 2000px limit', async (
     expect((textarea as HTMLTextAreaElement).readOnly).toBe(false)
     expect(textarea.getAttribute('data-phase')).toBe('plain')
   }, { timeout: 10_000 })
+  // Text readiness and the optional attachment face settle on adjacent renders
+  // in the assembled graph; pin the actual intake capability before pasting.
+  await waitFor(() => {
+    const attachments = screen.getByRole('button', { name: 'Add files' }) as HTMLButtonElement
+    expect(attachments.disabled).toBe(false)
+  }, { timeout: 10_000 })
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'too-wide.png', { type: 'image/png' })
   fireEvent.paste(textarea, {
     clipboardData: {
