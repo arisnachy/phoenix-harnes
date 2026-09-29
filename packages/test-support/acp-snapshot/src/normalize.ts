@@ -41,14 +41,15 @@ function omitFixtureEnvelope(record: Record<string, unknown>): void {
  */
 function canonicalizeAuxiliarySnapshotContent(value: unknown): void {
   if (Array.isArray(value)) {
-    for (let index = value.length - 1; index >= 0; index--) {
-      const item = value[index]
+    const items: unknown[] = value
+    for (let index = items.length - 1; index >= 0; index--) {
+      const item = items[index]
       if (item !== null && typeof item === 'object') {
         const block = item as Record<string, unknown>
         if (block.type === 'text'
           && typeof block.text === 'string'
           && block.text.startsWith(LIVE_ACTIVITY_GUIDANCE_PREFIX)) {
-          value.splice(index, 1)
+          items.splice(index, 1)
           continue
         }
       }
