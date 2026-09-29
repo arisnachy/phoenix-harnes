@@ -20,7 +20,7 @@ import type {
   HealthiaService,
 } from '@phoenix-ai/dsh-healthia'
 import { defineTool } from '@phoenix-ai/dsh-tools'
-import type { GenericCallView } from '@phoenix-ai/dsh-tools'
+import type { GenericCallView, JsonValue } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 
 /** Cordis plugin identity. */
@@ -35,6 +35,12 @@ const HEALTH_CATEGORIES = [
 ] as const satisfies readonly HealthRecordCategory[]
 
 const SOURCE_KINDS = ['user', 'device', 'document', 'clinician', 'connector', 'system'] as const
+
+function toJson(value: unknown): JsonValue {
+  const encoded = JSON.stringify(value)
+  if (encoded === undefined) throw new HealthiaError('HealthIA tool output was not JSON-serializable', 'HEALTHIA_OUTPUT_INVALID')
+  return JSON.parse(encoded) as JsonValue
+}
 
 const HEALTHIA_ACTIVATE_DESCRIPTION =
   'Activate PHOENIX HealthIA for the current conversation whenever the user presents or discusses health, '
@@ -136,7 +142,7 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
       parameters: {},
       output: JSON_OBJECT_OUTPUT,
       async execute() {
-        return { patients: [...await healthia.listPatients()] }
+        return { patients: toJson([...await healthia.listPatients()]) }
       },
       presentCall: () => present('List health profiles', 'read'),
     }))
@@ -153,12 +159,12 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
         return {
-          patient: await healthia.createPatient({
+          patient: toJson(await healthia.createPatient({
             displayName: args.display_name,
             ...(args.birth_date === undefined || args.birth_date === '' ? {} : { birthDate: args.birth_date }),
             ...(args.sex_at_birth === undefined ? {} : { sexAtBirth: args.sex_at_birth }),
             ...(args.gender_identity === undefined || args.gender_identity === '' ? {} : { genderIdentity: args.gender_identity }),
-          }),
+          })),
         }
       },
       presentCall: args => present('Create health profile', 'execute', { display_name: args.display_name }),
@@ -177,12 +183,12 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
         return {
-          patient: await healthia.updatePatient(HealthPatientId(args.patient_id), {
+          patient: toJson(await healthia.updatePatient(HealthPatientId(args.patient_id), {
             ...(args.display_name === undefined || args.display_name === '' ? {} : { displayName: args.display_name }),
             ...(args.birth_date === undefined || args.birth_date === '' ? {} : { birthDate: args.birth_date }),
             ...(args.sex_at_birth === undefined ? {} : { sexAtBirth: args.sex_at_birth }),
             ...(args.gender_identity === undefined || args.gender_identity === '' ? {} : { genderIdentity: args.gender_identity }),
-          }),
+          })),
         }
       },
       presentCall: args => present('Update health profile', 'execute', { patient_id: args.patient_id }),
@@ -199,10 +205,10 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
         return {
-          snapshot: await healthia.snapshot(HealthPatientId(args.patient_id), {
+          snapshot: toJson(await healthia.snapshot(HealthPatientId(args.patient_id), {
             ...(args.record_limit === undefined ? {} : { recordLimit: args.record_limit }),
             ...(args.episode_limit === undefined ? {} : { episodeLimit: args.episode_limit }),
-          }),
+          })),
         }
       },
       presentCall: args => present('Read patient health snapshot', 'read', { patient_id: args.patient_id }),
@@ -230,7 +236,7 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
         return {
-          record: await healthia.addRecord({
+          record: toJson(await healthia.addRecord({
             patientId: args.patient_id,
             category: args.category,
             display: args.display,
@@ -245,7 +251,7 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
               ...(args.source_ref === undefined || args.source_ref === '' ? {} : { sourceRef: args.source_ref }),
               ...(args.confidence === undefined ? {} : { confidence: args.confidence }),
             },
-          }),
+          })),
         }
       },
       presentCall: args => present('Record patient health fact', 'execute', {
@@ -268,12 +274,12 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
         return {
-          records: [...await healthia.listRecords(HealthPatientId(args.patient_id), {
+          records: toJson([...await healthia.listRecords(HealthPatientId(args.patient_id), {
             ...(args.categories === undefined ? {} : { categories: args.categories }),
             ...(optionalDateRange(args.since) === undefined ? {} : { since: optionalDateRange(args.since)! }),
             ...(optionalDateRange(args.until) === undefined ? {} : { until: optionalDateRange(args.until)! }),
             ...(args.limit === undefined ? {} : { limit: args.limit }),
-          })],
+          })]),
         }
       },
       presentCall: args => present('Query patient health history', 'read', { patient_id: args.patient_id }),
@@ -292,13 +298,13 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
         return {
-          episode: await healthia.openEpisode({
+          episode: toJson(await healthia.openEpisode({
             patientId: args.patient_id,
             kind: args.kind,
             title: args.title,
             ...(args.opened_at === undefined || args.opened_at === '' ? {} : { openedAt: args.opened_at }),
             ...(args.summary === undefined || args.summary === '' ? {} : { summary: args.summary }),
-          }),
+          })),
         }
       },
       presentCall: args => present('Open health episode', 'execute', { patient_id: args.patient_id, title: args.title }),
@@ -315,10 +321,10 @@ function installHealthiaScope(agentCtx: Context, healthia: HealthiaService): () 
       output: JSON_OBJECT_OUTPUT,
       async execute(args) {
         return {
-          episode: await healthia.updateEpisode(HealthEpisodeId(args.episode_id), {
+          episode: toJson(await healthia.updateEpisode(HealthEpisodeId(args.episode_id), {
             ...(args.status === undefined ? {} : { status: args.status }),
             ...(args.summary === undefined || args.summary === '' ? {} : { summary: args.summary }),
-          }),
+          })),
         }
       },
       presentCall: args => present('Update health episode', 'execute', { episode_id: args.episode_id }),
@@ -369,7 +375,7 @@ export function apply(ctx: Context): void {
       return {
         active: true,
         alreadyActive,
-        patients: [...await ctx.healthia.listPatients()],
+        patients: toJson([...await ctx.healthia.listPatients()]),
         instruction: 'HealthIA clinical tools are active for this conversation. Identify the correct patient and read a snapshot before longitudinal reasoning.',
       }
     },
