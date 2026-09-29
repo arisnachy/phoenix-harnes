@@ -40,8 +40,8 @@ type ModelSelectionHandoffResolver = (selection: ModelSelection | undefined) => 
 
 /** Synthetic selector row that enables Phoenix's adaptive GPT-6 Codex router. */
 export const PHOENIX_CODEX_AUTO_MODEL = 'phoenix-auto'
-/** GPT-6 planner/rescue route used by Phoenix Auto. */
-export const PHOENIX_CODEX_AUTO_PLANNER_MODEL = 'gpt-6-sol'
+/** GPT-6.1 Sol planner/rescue route used by Phoenix Auto. */
+export const PHOENIX_CODEX_AUTO_PLANNER_MODEL = 'gpt-6.1-sol'
 /** GPT-6 execution route used by Phoenix Auto. */
 export const PHOENIX_CODEX_AUTO_WORKER_MODEL = 'gpt-6-luna'
 
