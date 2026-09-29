@@ -89,6 +89,15 @@ it('accepts pasted images into the composer rail in order and removes them', asy
   // Image-only send arming is pinned at package level (input-bar.spec.tsx);
   // this assembled lane pins the intake chain over the built graph.
   const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  await waitFor(() => {
+    expect((textarea as HTMLTextAreaElement).disabled).toBe(false)
+    expect((textarea as HTMLTextAreaElement).readOnly).toBe(false)
+    expect(textarea.getAttribute('data-phase')).toBe('plain')
+    const attachmentButton = textarea.closest('[data-composer-card]')
+      ?.querySelector<HTMLButtonElement>('button[aria-label="Attachments"]')
+    if (attachmentButton === null || attachmentButton === undefined) throw new Error('composer attachment button missing')
+    expect(attachmentButton.disabled).toBe(false)
+  }, { timeout: 10_000 })
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'pasted.png', { type: 'image/png' })
   fireEvent.paste(textarea, {
     clipboardData: {
@@ -134,20 +143,19 @@ it('accepts pasted images into the composer rail in order and removes them', asy
     expect(document.querySelector('[role="group"][aria-label="Pending images"]')).toBeNull()
   })
 
-  // An unsupported file announces a transient toast (the inline strip is
-  // gone) and the banner dismisses itself after its hold-and-fade lifetime.
+  // Generic files now share the composer attachment rail. A text file must
+  // remain a file attachment instead of being rejected by the image-only path.
   fireEvent.paste(textarea, {
     clipboardData: {
       items: [{ kind: 'file', type: 'text/plain', getAsFile: () => new File(['x'], 'notes.txt', { type: 'text/plain' }) }],
       getData: () => '',
     },
   })
-  const unsupportedMessage = 'Only PNG, JPG, WebP, and GIF images are supported'
-  const toast = await screen.findByText(unsupportedMessage)
-  expect(toast.closest('[role="alert"]')).not.toBeNull()
   await waitFor(() => {
-    expect(screen.queryByText(unsupportedMessage)).toBeNull()
-  }, { timeout: 6_000 })
+    const fileRail = document.querySelector('[role="group"][aria-label="Pending images"]')
+    if (fileRail === null) throw new Error('generic attachment rail missing')
+    expect(fileRail.textContent).toContain('notes.txt')
+  }, { timeout: 5_000 })
 })
 
 it('accepts a whole-page drop under the limits-labeled overlay and refuses an over-limit batch at intake', async () => {
@@ -158,6 +166,15 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
   if (start === null) throw new Error('fixture Workspace new-session action missing')
   fireEvent.click(start)
   const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  await waitFor(() => {
+    expect((textarea as HTMLTextAreaElement).disabled).toBe(false)
+    expect((textarea as HTMLTextAreaElement).readOnly).toBe(false)
+    expect(textarea.getAttribute('data-phase')).toBe('plain')
+    const attachmentButton = textarea.closest('[data-composer-card]')
+      ?.querySelector<HTMLButtonElement>('button[aria-label="Attachments"]')
+    if (attachmentButton === null || attachmentButton === undefined) throw new Error('composer attachment button missing')
+    expect(attachmentButton.disabled).toBe(false)
+  }, { timeout: 10_000 })
 
   // A file drag anywhere over the page raises the full-viewport overlay whose
   // desc line carries the projected limits — copy that can only render after
@@ -189,7 +206,7 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
     new File([new Uint8Array([137, 80, 78, 71])], `bulk-${String(i)}.png`, { type: 'image/png' }))
   fireEvent.paste(textarea, {
     clipboardData: {
-      items: batch.map(file => ({ kind: 'file', type: 'image/png', getAsFile: () => file })),
+      items: batch.map(file => ({ kind: 'file', type: file.type, getAsFile: () => file })),
       getData: () => '',
     },
   })
@@ -209,6 +226,15 @@ it('renders a host dimension rejection with the projected 2000px limit', async (
   fireEvent.click(start)
 
   const textarea = await screen.findByPlaceholderText('Describe what you want to build', {}, { timeout: 10_000 })
+  await waitFor(() => {
+    expect((textarea as HTMLTextAreaElement).disabled).toBe(false)
+    expect((textarea as HTMLTextAreaElement).readOnly).toBe(false)
+    expect(textarea.getAttribute('data-phase')).toBe('plain')
+    const attachmentButton = textarea.closest('[data-composer-card]')
+      ?.querySelector<HTMLButtonElement>('button[aria-label="Attachments"]')
+    if (attachmentButton === null || attachmentButton === undefined) throw new Error('composer attachment button missing')
+    expect(attachmentButton.disabled).toBe(false)
+  }, { timeout: 10_000 })
   const image = new File([new Uint8Array([137, 80, 78, 71])], 'too-wide.png', { type: 'image/png' })
   fireEvent.paste(textarea, {
     clipboardData: {
