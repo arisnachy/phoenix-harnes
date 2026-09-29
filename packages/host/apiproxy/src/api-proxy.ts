@@ -2641,7 +2641,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             }
             const selectionRef = selectionFor(found.agent)
             selectionRef.current = selected
-            selectionRef.phoenixAutoRoutes = autoRoutes
+            if (autoRoutes === undefined) delete selectionRef.phoenixAutoRoutes
+            else selectionRef.phoenixAutoRoutes = autoRoutes
             // Synchronize the live Agent route so delegators inherit a real
             // provider route. Phoenix Auto itself remains a selector-level
             // virtual model and resolves Sol/Luna immediately before requests.
