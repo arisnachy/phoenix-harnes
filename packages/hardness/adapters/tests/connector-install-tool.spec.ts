@@ -182,7 +182,6 @@ describe('x_mcp_activate', () => {
       callId: 'call-install',
       risk: 'medium',
       reversible: true,
-      signal: expect.any(AbortSignal),
     }))
     expect(host.enableXMcp).not.toHaveBeenCalled()
   })
@@ -251,10 +250,10 @@ describe('x_mcp_activate', () => {
       identity: 'phoenix',
       signupUrl: 'https://x.com/signup',
       requiresHumanVerification: true,
-      message: expect.stringContaining('official X signup flow'),
+      message: 'Phoenix-owned X account setup is ready. Phoenix will continue in the official X signup flow and stop only when X requires human verification.',
     })
     expect(approval.request).toHaveBeenCalledWith(expect.objectContaining({
-      reason: expect.stringContaining('Phoenix-owned X account'),
+      reason: 'Start one-time setup for a Phoenix-owned X account using the official X signup flow. Phoenix will use Computer Use and stop for any required human verification.',
       risk: 'medium',
     }))
     expect(host.enableXMcp).not.toHaveBeenCalled()
@@ -262,7 +261,7 @@ describe('x_mcp_activate', () => {
       source: { kind: 'plugin', plugin: 'x-mcp' },
       content: [expect.objectContaining({
         type: 'text',
-        text: expect.stringContaining('browser_open to https://x.com/signup'),
+        text: 'Continue the approved Phoenix-owned X account onboarding now. Use the computer tool with browser_open to https://x.com/signup in the Phoenix embedded browser. Advance through the official signup flow using only information the user has already authorized. Stop and ask for human intervention when X requires email/SMS verification, CAPTCHA, MFA, acceptance of materially changed terms, or any other verification that must be completed by a person. After signup succeeds, inspect the resulting profile to determine the new X username. If X exposes its automated-account transparency/label setup, stop for the human owner to complete or confirm that linkage before autonomous social actions. Then call x_mcp_activate again with requestedByUser=true, identity="phoenix", and that username. Do not post, follow, DM, or perform any other X account action during setup.',
       })],
     }))
   })
@@ -278,7 +277,7 @@ describe('x_mcp_activate', () => {
     }, exec())).resolves.toMatchObject({
       status: 'enabled',
       identity: 'phoenix',
-      message: expect.stringContaining('already configured'),
+      message: 'Phoenix-owned X identity is already configured as x-api-phoenix.',
     })
     expect(approval.request).not.toHaveBeenCalled()
     expect(host.enableXMcp).not.toHaveBeenCalled()
