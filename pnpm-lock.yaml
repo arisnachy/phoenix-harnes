@@ -1108,6 +1108,15 @@ importers:
       '@phoenix-ai/dsh-hardness-adapters':
         specifier: workspace:^
         version: link:../../hardness/adapters
+      '@phoenix-ai/dsh-healthia':
+        specifier: workspace:^
+        version: link:../../health/healthia
+      '@phoenix-ai/dsh-healthia-local':
+        specifier: workspace:^
+        version: link:../../health/healthia-local
+      '@phoenix-ai/dsh-tool-healthia':
+        specifier: workspace:^
+        version: link:../../health/tool-healthia
       '@phoenix-ai/dsh-home-gateway':
         specifier: workspace:^
         version: link:../../home/home-gateway
@@ -5222,6 +5231,49 @@ importers:
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+
+  packages/health/healthia:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+
+  packages/health/healthia-local:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: workspace:^
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-atomic-write':
+        specifier: workspace:^
+        version: link:../../util/atomic-write
+      '@phoenix-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@phoenix-ai/dsh-healthia':
+        specifier: workspace:^
+        version: link:../healthia
+
+  packages/health/tool-healthia:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@phoenix-ai/dsh-healthia':
+        specifier: workspace:^
+        version: link:../healthia
+      '@phoenix-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/home/home-gateway:
     dependencies:
@@ -9424,6 +9476,15 @@ importers:
       '@phoenix-ai/dsh-home-paths':
         specifier: workspace:^
         version: link:../../packages/util/home-paths
+      '@phoenix-ai/dsh-healthia':
+        specifier: workspace:^
+        version: link:../../packages/health/healthia
+      '@phoenix-ai/dsh-healthia-local':
+        specifier: workspace:^
+        version: link:../../packages/health/healthia-local
+      '@phoenix-ai/dsh-tool-healthia':
+        specifier: workspace:^
+        version: link:../../packages/health/tool-healthia
       '@phoenix-ai/dsh-hook-protocol':
         specifier: workspace:^
         version: link:../../packages/hooks/hook-protocol
