@@ -239,5 +239,5 @@ export const coverageDebtFiles = [
   'packages/web/web-search-openrouter/src/provider.ts',
   'packages/web/web/src/index.ts',
   'packages/workflow/workflow-worker-thread/src/host.ts',
-  'packages/workspace/workspace/src/index.ts'
+  'packages/workspace/workspace/src/index.ts',
 ] as const
