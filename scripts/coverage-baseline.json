@@ -1,0 +1,1416 @@
+{
+  "version": 1,
+  "policy": "Historical uncovered counts are ceilings. New debt or any per-file increase fails; improvements are allowed.",
+  "source": {
+    "branch": "repair/final-release-20260928",
+    "sha": "3ed0d3ffaa30247d3cd9e09aa6a499fbc6cde256",
+    "workflowJob": 109204081451,
+    "calibratedAgainstMainSha": "30ce76383ef3cc2eef5ae6a9de4b4f89de74512c"
+  },
+  "totals": {
+    "statements": 5047,
+    "functions": 1004,
+    "branches": 5325,
+    "lines": 4483
+  },
+  "files": {
+    "packages/api/gateway/src/hardness-rpc.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 2,
+      "lines": 1
+    },
+    "packages/attachment/attachment-local/src/index.ts": {
+      "statements": 12,
+      "functions": 5,
+      "branches": 2,
+      "lines": 10
+    },
+    "packages/attachment/attachment-local/src/store.ts": {
+      "statements": 14,
+      "functions": 0,
+      "branches": 14,
+      "lines": 11
+    },
+    "packages/attachment/attachment/src/admission.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/attachment/attachment/src/error.ts": {
+      "statements": 1,
+      "functions": 1,
+      "branches": 4,
+      "lines": 1
+    },
+    "packages/attachment/attachment/src/file-content.ts": {
+      "statements": 36,
+      "functions": 2,
+      "branches": 33,
+      "lines": 28
+    },
+    "packages/attachment/attachment/src/index.ts": {
+      "statements": 19,
+      "functions": 4,
+      "branches": 11,
+      "lines": 17
+    },
+    "packages/client/ui-attachment/src/AttachmentRail.tsx": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/client/ui-attachment/src/client/ComposerAttachments.tsx": {
+      "statements": 1,
+      "functions": 1,
+      "branches": 2,
+      "lines": 1
+    },
+    "packages/client/ui-attachment/src/client/labels.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 3,
+      "lines": 0
+    },
+    "packages/client/ui-deliverables/src/client/index.ts": {
+      "statements": 2,
+      "functions": 2,
+      "branches": 0,
+      "lines": 1
+    },
+    "packages/client/ui-deliverables/src/client/turn-deliverables.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 2,
+      "lines": 2
+    },
+    "packages/client/ui-jobs/src/client/index.ts": {
+      "statements": 2,
+      "functions": 1,
+      "branches": 1,
+      "lines": 2
+    },
+    "packages/client/ui-jobs/src/client/TaskListAction.tsx": {
+      "statements": 75,
+      "functions": 18,
+      "branches": 80,
+      "lines": 61
+    },
+    "packages/client/ui-kira-teams/src/client/KiraPortraitSheet.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 0,
+      "lines": 1
+    },
+    "packages/client/ui-kira-teams/src/client/KiraTeamsDock.tsx": {
+      "statements": 80,
+      "functions": 13,
+      "branches": 73,
+      "lines": 68
+    },
+    "packages/client/ui-kira-teams/src/client/ModelActivityAvatar.tsx": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 3,
+      "lines": 1
+    },
+    "packages/client/ui-model-selection/src/client/CodexQuotaRemaining.tsx": {
+      "statements": 16,
+      "functions": 2,
+      "branches": 23,
+      "lines": 15
+    },
+    "packages/client/ui-model-selection/src/client/presentation.ts": {
+      "statements": 10,
+      "functions": 0,
+      "branches": 17,
+      "lines": 10
+    },
+    "packages/client/ui-primitives/src/FishLogo.tsx": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/client/ui-settings-models/src/client/authorization-attempt.tsx": {
+      "statements": 58,
+      "functions": 16,
+      "branches": 51,
+      "lines": 50
+    },
+    "packages/client/ui-settings-models/src/client/AuthorizationPanel.tsx": {
+      "statements": 123,
+      "functions": 42,
+      "branches": 194,
+      "lines": 107
+    },
+    "packages/client/ui-settings-models/src/client/index.ts": {
+      "statements": 19,
+      "functions": 13,
+      "branches": 5,
+      "lines": 18
+    },
+    "packages/client/ui-settings-models/src/client/ModelListEditor.tsx": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 2,
+      "lines": 2
+    },
+    "packages/client/ui-settings-models/src/client/ModelsSection.tsx": {
+      "statements": 14,
+      "functions": 8,
+      "branches": 6,
+      "lines": 12
+    },
+    "packages/client/ui-settings-models/src/client/ModelsWithLocalSection.tsx": {
+      "statements": 2,
+      "functions": 1,
+      "branches": 4,
+      "lines": 2
+    },
+    "packages/client/ui-settings-models/src/client/PhoenixLocalPanel.tsx": {
+      "statements": 14,
+      "functions": 6,
+      "branches": 28,
+      "lines": 13
+    },
+    "packages/client/ui-settings-models/src/client/ProviderEditor.tsx": {
+      "statements": 3,
+      "functions": 2,
+      "branches": 2,
+      "lines": 2
+    },
+    "packages/client/ui-settings-models/src/client/store.ts": {
+      "statements": 5,
+      "functions": 0,
+      "branches": 6,
+      "lines": 5
+    },
+    "packages/client/ui-settings-plugin-inventory/src/client/UpdateFooterAction.tsx": {
+      "statements": 17,
+      "functions": 0,
+      "branches": 22,
+      "lines": 17
+    },
+    "packages/client/ui-settings-profile/src/client/index.ts": {
+      "statements": 14,
+      "functions": 6,
+      "branches": 0,
+      "lines": 10
+    },
+    "packages/client/ui-settings-profile/src/client/locales.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 0,
+      "lines": 3
+    },
+    "packages/client/ui-settings-profile/src/client/profile-controller.ts": {
+      "statements": 142,
+      "functions": 32,
+      "branches": 80,
+      "lines": 129
+    },
+    "packages/client/ui-settings-profile/src/client/UserProfileRow.tsx": {
+      "statements": 25,
+      "functions": 16,
+      "branches": 39,
+      "lines": 22
+    },
+    "packages/client/ui-settings-profile/src/index.ts": {
+      "statements": 0,
+      "functions": 1,
+      "branches": 0,
+      "lines": 0
+    },
+    "packages/client/ui-subagent/src/client/completion-verifier-visibility.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 3,
+      "lines": 3
+    },
+    "packages/client/ui-subagent/src/client/index.ts": {
+      "statements": 4,
+      "functions": 3,
+      "branches": 0,
+      "lines": 3
+    },
+    "packages/client/ui-user-questions/src/client/PlanReviewPanel.tsx": {
+      "statements": 2,
+      "functions": 2,
+      "branches": 3,
+      "lines": 1
+    },
+    "packages/client/ui-workspace/src/client/CapabilityArtifactPreview.tsx": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 7,
+      "lines": 2
+    },
+    "packages/client/ui-workspace/src/client/CapabilitySurfacePreview.tsx": {
+      "statements": 2,
+      "functions": 2,
+      "branches": 0,
+      "lines": 2
+    },
+    "packages/client/ui-workspace/src/client/generative-ui.ts": {
+      "statements": 6,
+      "functions": 0,
+      "branches": 6,
+      "lines": 6
+    },
+    "packages/client/ui-workspace/src/client/Rows.tsx": {
+      "statements": 1,
+      "functions": 1,
+      "branches": 2,
+      "lines": 1
+    },
+    "packages/code-runtime/code-runtime-python/src/index.ts": {
+      "statements": 47,
+      "functions": 10,
+      "branches": 44,
+      "lines": 41
+    },
+    "packages/core/agent-loop/src/agent.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 5,
+      "lines": 3
+    },
+    "packages/core/agent-loop/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/core/agent-loop/src/tool-calls.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 2,
+      "lines": 2
+    },
+    "packages/core/agent/src/model-selection.ts": {
+      "statements": 12,
+      "functions": 0,
+      "branches": 15,
+      "lines": 11
+    },
+    "packages/core/living-local/src/bridge.ts": {
+      "statements": 55,
+      "functions": 8,
+      "branches": 51,
+      "lines": 52
+    },
+    "packages/core/living-local/src/index.ts": {
+      "statements": 39,
+      "functions": 5,
+      "branches": 27,
+      "lines": 34
+    },
+    "packages/core/living/src/index.ts": {
+      "statements": 26,
+      "functions": 3,
+      "branches": 30,
+      "lines": 25
+    },
+    "packages/core/tool-living/src/index.ts": {
+      "statements": 31,
+      "functions": 22,
+      "branches": 7,
+      "lines": 31
+    },
+    "packages/core/tools/src/index.ts": {
+      "statements": 14,
+      "functions": 1,
+      "branches": 19,
+      "lines": 11
+    },
+    "packages/credentials/authorization/src/google-broker.ts": {
+      "statements": 62,
+      "functions": 8,
+      "branches": 56,
+      "lines": 59
+    },
+    "packages/credentials/authorization/src/index.ts": {
+      "statements": 14,
+      "functions": 1,
+      "branches": 14,
+      "lines": 13
+    },
+    "packages/credentials/credentials/src/index.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 1,
+      "lines": 2
+    },
+    "packages/credentials/secret-vault/src/index.ts": {
+      "statements": 7,
+      "functions": 0,
+      "branches": 7,
+      "lines": 7
+    },
+    "packages/examples/agent-spine-demo/src/index.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/fs/tool-fs-search/src/glob.ts": {
+      "statements": 1,
+      "functions": 1,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/fs/tool-fs-search/src/grep.ts": {
+      "statements": 1,
+      "functions": 1,
+      "branches": 0,
+      "lines": 1
+    },
+    "packages/fs/tool-fs/src/status.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 4,
+      "lines": 3
+    },
+    "packages/fs/tool-fs/src/write.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/goal/goal-round-driver/src/index.ts": {
+      "statements": 102,
+      "functions": 6,
+      "branches": 103,
+      "lines": 96
+    },
+    "packages/goal/goal-round-driver/src/strategy.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 4,
+      "lines": 2
+    },
+    "packages/goal/goal/src/fold.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/goal/goal/src/index.ts": {
+      "statements": 10,
+      "functions": 1,
+      "branches": 6,
+      "lines": 9
+    },
+    "packages/goal/goal/src/organization-forge.ts": {
+      "statements": 35,
+      "functions": 6,
+      "branches": 50,
+      "lines": 32
+    },
+    "packages/goal/goal/src/specialist.ts": {
+      "statements": 6,
+      "functions": 0,
+      "branches": 10,
+      "lines": 6
+    },
+    "packages/goal/tool-goal/src/completion-gate.ts": {
+      "statements": 33,
+      "functions": 4,
+      "branches": 61,
+      "lines": 32
+    },
+    "packages/goal/tool-goal/src/index.ts": {
+      "statements": 42,
+      "functions": 4,
+      "branches": 67,
+      "lines": 41
+    },
+    "packages/goal/tool-goal/src/judge-route.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 2,
+      "lines": 0
+    },
+    "packages/goal/tool-goal/src/judge.ts": {
+      "statements": 46,
+      "functions": 18,
+      "branches": 95,
+      "lines": 40
+    },
+    "packages/goal/tool-goal/src/verification-contract.ts": {
+      "statements": 5,
+      "functions": 0,
+      "branches": 9,
+      "lines": 5
+    },
+    "packages/goal/tool-goal/src/wrapup.ts": {
+      "statements": 10,
+      "functions": 2,
+      "branches": 6,
+      "lines": 8
+    },
+    "packages/guard/quality-policy/src/index.ts": {
+      "statements": 13,
+      "functions": 0,
+      "branches": 18,
+      "lines": 13
+    },
+    "packages/guard/timeout-policy/src/exec-policy.ts": {
+      "statements": 35,
+      "functions": 2,
+      "branches": 44,
+      "lines": 30
+    },
+    "packages/hardness/adapters/src/acquisition-registry.ts": {
+      "statements": 6,
+      "functions": 1,
+      "branches": 9,
+      "lines": 5
+    },
+    "packages/hardness/adapters/src/artifact-runtime.ts": {
+      "statements": 3,
+      "functions": 1,
+      "branches": 4,
+      "lines": 2
+    },
+    "packages/hardness/adapters/src/binance-paper.ts": {
+      "statements": 59,
+      "functions": 10,
+      "branches": 57,
+      "lines": 54
+    },
+    "packages/hardness/adapters/src/binance-trading-tools.ts": {
+      "statements": 24,
+      "functions": 20,
+      "branches": 34,
+      "lines": 24
+    },
+    "packages/hardness/adapters/src/cognitive-workflow-tool.ts": {
+      "statements": 1,
+      "functions": 1,
+      "branches": 0,
+      "lines": 1
+    },
+    "packages/hardness/adapters/src/connector-discover-tool.ts": {
+      "statements": 2,
+      "functions": 2,
+      "branches": 6,
+      "lines": 2
+    },
+    "packages/hardness/adapters/src/connector-install-tool.ts": {
+      "statements": 3,
+      "functions": 2,
+      "branches": 6,
+      "lines": 3
+    },
+    "packages/hardness/adapters/src/connector-list-tool.ts": {
+      "statements": 4,
+      "functions": 2,
+      "branches": 13,
+      "lines": 4
+    },
+    "packages/hardness/adapters/src/execution-bridge.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 3,
+      "lines": 3
+    },
+    "packages/hardness/adapters/src/hardness-tool.ts": {
+      "statements": 5,
+      "functions": 1,
+      "branches": 5,
+      "lines": 5
+    },
+    "packages/hardness/adapters/src/index.ts": {
+      "statements": 43,
+      "functions": 6,
+      "branches": 62,
+      "lines": 34
+    },
+    "packages/hardness/adapters/src/initiative-context.ts": {
+      "statements": 20,
+      "functions": 3,
+      "branches": 33,
+      "lines": 15
+    },
+    "packages/hardness/adapters/src/lab-mode.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 2,
+      "lines": 2
+    },
+    "packages/hardness/adapters/src/mission-judge.ts": {
+      "statements": 13,
+      "functions": 0,
+      "branches": 14,
+      "lines": 13
+    },
+    "packages/hardness/adapters/src/mission-kernel.ts": {
+      "statements": 22,
+      "functions": 5,
+      "branches": 25,
+      "lines": 20
+    },
+    "packages/hardness/adapters/src/mission-local-judge.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 3,
+      "lines": 1
+    },
+    "packages/hardness/adapters/src/mission-orchestrator.ts": {
+      "statements": 38,
+      "functions": 4,
+      "branches": 40,
+      "lines": 38
+    },
+    "packages/hardness/adapters/src/mission-runtime.ts": {
+      "statements": 12,
+      "functions": 1,
+      "branches": 20,
+      "lines": 12
+    },
+    "packages/hardness/adapters/src/openclaw-adapter.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 1,
+      "lines": 3
+    },
+    "packages/hardness/adapters/src/openclaw/broker.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 4,
+      "lines": 3
+    },
+    "packages/hardness/adapters/src/openclaw/manifest.ts": {
+      "statements": 3,
+      "functions": 1,
+      "branches": 4,
+      "lines": 3
+    },
+    "packages/hardness/adapters/src/openclaw/package-host.ts": {
+      "statements": 6,
+      "functions": 1,
+      "branches": 7,
+      "lines": 6
+    },
+    "packages/hardness/adapters/src/openclaw/runtime.ts": {
+      "statements": 4,
+      "functions": 0,
+      "branches": 5,
+      "lines": 4
+    },
+    "packages/hardness/adapters/src/ordinary-completion-judge.ts": {
+      "statements": 106,
+      "functions": 13,
+      "branches": 103,
+      "lines": 86
+    },
+    "packages/hardness/adapters/src/permission-broker.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/hardness/adapters/src/permission-gate.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/hardness/adapters/src/proactivity-engine.ts": {
+      "statements": 58,
+      "functions": 6,
+      "branches": 114,
+      "lines": 58
+    },
+    "packages/hardness/adapters/src/proactivity-registry.ts": {
+      "statements": 8,
+      "functions": 1,
+      "branches": 8,
+      "lines": 8
+    },
+    "packages/hardness/adapters/src/proactivity-retry.ts": {
+      "statements": 7,
+      "functions": 0,
+      "branches": 7,
+      "lines": 7
+    },
+    "packages/hardness/adapters/src/proactivity-runtime.ts": {
+      "statements": 32,
+      "functions": 7,
+      "branches": 42,
+      "lines": 31
+    },
+    "packages/hardness/adapters/src/proactivity-tools.ts": {
+      "statements": 24,
+      "functions": 13,
+      "branches": 26,
+      "lines": 23
+    },
+    "packages/hardness/adapters/src/quality-contract.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 1,
+      "lines": 2
+    },
+    "packages/hardness/adapters/src/reality-context.ts": {
+      "statements": 234,
+      "functions": 41,
+      "branches": 329,
+      "lines": 206
+    },
+    "packages/hardness/adapters/src/reality-registry.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 3,
+      "lines": 1
+    },
+    "packages/hardness/adapters/src/reality-tool.ts": {
+      "statements": 2,
+      "functions": 2,
+      "branches": 2,
+      "lines": 2
+    },
+    "packages/hardness/adapters/src/sandbox-guard.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 2,
+      "lines": 1
+    },
+    "packages/hardness/adapters/src/tool-adapter.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 5,
+      "lines": 2
+    },
+    "packages/hardness/adapters/src/user-approval-broker.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 3,
+      "lines": 1
+    },
+    "packages/hardness/adapters/src/visual-runtime.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/hardness/adapters/src/visualize-tool.ts": {
+      "statements": 3,
+      "functions": 2,
+      "branches": 1,
+      "lines": 3
+    },
+    "packages/hardness/adapters/src/wake-engine.ts": {
+      "statements": 88,
+      "functions": 20,
+      "branches": 117,
+      "lines": 72
+    },
+    "packages/hardness/adapters/src/wake-registry.ts": {
+      "statements": 8,
+      "functions": 1,
+      "branches": 8,
+      "lines": 7
+    },
+    "packages/hardness/adapters/src/wake-runtime.ts": {
+      "statements": 63,
+      "functions": 10,
+      "branches": 61,
+      "lines": 56
+    },
+    "packages/hardness/adapters/src/wake-tools.ts": {
+      "statements": 52,
+      "functions": 20,
+      "branches": 50,
+      "lines": 45
+    },
+    "packages/hardness/atlas-json/src/format.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 3,
+      "lines": 3
+    },
+    "packages/hardness/atlas-json/src/index.ts": {
+      "statements": 6,
+      "functions": 0,
+      "branches": 9,
+      "lines": 4
+    },
+    "packages/hardness/hardness/src/capability-router.ts": {
+      "statements": 3,
+      "functions": 1,
+      "branches": 4,
+      "lines": 3
+    },
+    "packages/hardness/hardness/src/evidence.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 3,
+      "lines": 3
+    },
+    "packages/hardness/hardness/src/index.ts": {
+      "statements": 8,
+      "functions": 0,
+      "branches": 10,
+      "lines": 8
+    },
+    "packages/hardness/hardness/src/operating-protocol.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 5,
+      "lines": 1
+    },
+    "packages/hardness/hardness/src/registry.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 8,
+      "lines": 3
+    },
+    "packages/hardness/hardness/src/resolver.ts": {
+      "statements": 6,
+      "functions": 2,
+      "branches": 5,
+      "lines": 5
+    },
+    "packages/home/home-gateway/src/index.ts": {
+      "statements": 13,
+      "functions": 3,
+      "branches": 19,
+      "lines": 13
+    },
+    "packages/home/tool-home-gateway/src/index.ts": {
+      "statements": 6,
+      "functions": 5,
+      "branches": 3,
+      "lines": 6
+    },
+    "packages/hooks/hooks-claude-code/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/hooks/hooks-codex/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/host/apiproxy/src/client-reality.ts": {
+      "statements": 5,
+      "functions": 1,
+      "branches": 4,
+      "lines": 4
+    },
+    "packages/host/apiproxy/src/fetch/client.ts": {
+      "statements": 7,
+      "functions": 7,
+      "branches": 0,
+      "lines": 7
+    },
+    "packages/host/apiproxy/src/fetch/handler.ts": {
+      "statements": 10,
+      "functions": 7,
+      "branches": 2,
+      "lines": 9
+    },
+    "packages/host/apiproxy/src/model-order.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/host/apiproxy/src/session-export.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 3,
+      "lines": 1
+    },
+    "packages/host/apiproxy/src/vision-fallback.ts": {
+      "statements": 28,
+      "functions": 3,
+      "branches": 24,
+      "lines": 25
+    },
+    "packages/host/plugin-inventory/src/chatgpt-web.ts": {
+      "statements": 129,
+      "functions": 20,
+      "branches": 148,
+      "lines": 113
+    },
+    "packages/host/plugin-inventory/src/index.ts": {
+      "statements": 42,
+      "functions": 24,
+      "branches": 19,
+      "lines": 38
+    },
+    "packages/host/plugin-inventory/src/local-model/download.ts": {
+      "statements": 16,
+      "functions": 0,
+      "branches": 21,
+      "lines": 14
+    },
+    "packages/host/plugin-inventory/src/local-model/extract.ts": {
+      "statements": 13,
+      "functions": 5,
+      "branches": 4,
+      "lines": 11
+    },
+    "packages/host/plugin-inventory/src/local-model/manager.ts": {
+      "statements": 47,
+      "functions": 7,
+      "branches": 57,
+      "lines": 39
+    },
+    "packages/host/plugin-inventory/src/local-model/node-runtime.ts": {
+      "statements": 55,
+      "functions": 17,
+      "branches": 24,
+      "lines": 48
+    },
+    "packages/host/plugin-inventory/src/local-model/paths.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/host/plugin-inventory/src/local-model/proxy.ts": {
+      "statements": 56,
+      "functions": 7,
+      "branches": 38,
+      "lines": 48
+    },
+    "packages/host/plugin-inventory/src/local-model/state.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 6,
+      "lines": 2
+    },
+    "packages/host/plugin-inventory/src/mcp-managed.ts": {
+      "statements": 13,
+      "functions": 0,
+      "branches": 10,
+      "lines": 13
+    },
+    "packages/host/plugin-inventory/src/mcp-registry.ts": {
+      "statements": 1,
+      "functions": 1,
+      "branches": 3,
+      "lines": 1
+    },
+    "packages/host/plugin-inventory/src/update-state.ts": {
+      "statements": 16,
+      "functions": 0,
+      "branches": 18,
+      "lines": 14
+    },
+    "packages/interaction/user-approval/src/index.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 3,
+      "lines": 2
+    },
+    "packages/interaction/user-questions/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 2,
+      "lines": 1
+    },
+    "packages/llm/llm-deepseek/src/adapter.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 4,
+      "lines": 2
+    },
+    "packages/llm/llm-deepseek/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/llm/llm-deepseek/src/serialize.ts": {
+      "statements": 5,
+      "functions": 0,
+      "branches": 7,
+      "lines": 5
+    },
+    "packages/llm/llm-pi-ai/src/adapter.ts": {
+      "statements": 7,
+      "functions": 0,
+      "branches": 18,
+      "lines": 7
+    },
+    "packages/llm/llm-pi-ai/src/catalog.ts": {
+      "statements": 3,
+      "functions": 1,
+      "branches": 3,
+      "lines": 3
+    },
+    "packages/llm/llm-pi-ai/src/codex-discovery.ts": {
+      "statements": 121,
+      "functions": 24,
+      "branches": 77,
+      "lines": 109
+    },
+    "packages/llm/llm-pi-ai/src/codex-live-catalog.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 6,
+      "lines": 0
+    },
+    "packages/llm/llm-pi-ai/src/codex-platform.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 2,
+      "lines": 2
+    },
+    "packages/llm/llm-pi-ai/src/codex-tool-schema.ts": {
+      "statements": 12,
+      "functions": 0,
+      "branches": 21,
+      "lines": 10
+    },
+    "packages/llm/llm-pi-ai/src/config.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 5,
+      "lines": 1
+    },
+    "packages/llm/llm-pi-ai/src/context.ts": {
+      "statements": 23,
+      "functions": 0,
+      "branches": 29,
+      "lines": 23
+    },
+    "packages/llm/llm-pi-ai/src/image-generation.ts": {
+      "statements": 206,
+      "functions": 18,
+      "branches": 221,
+      "lines": 189
+    },
+    "packages/llm/llm-pi-ai/src/index.ts": {
+      "statements": 7,
+      "functions": 3,
+      "branches": 4,
+      "lines": 7
+    },
+    "packages/llm/llm-pi-ai/src/login.ts": {
+      "statements": 4,
+      "functions": 0,
+      "branches": 4,
+      "lines": 4
+    },
+    "packages/llm/llm-pi-ai/src/opencode-free.ts": {
+      "statements": 55,
+      "functions": 7,
+      "branches": 29,
+      "lines": 50
+    },
+    "packages/llm/llm-pi-ai/src/provider.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 2,
+      "lines": 1
+    },
+    "packages/llm/llm-pi-ai/src/stream.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 3,
+      "lines": 1
+    },
+    "packages/mcp/chrome-connector/src/server.ts": {
+      "statements": 163,
+      "functions": 36,
+      "branches": 87,
+      "lines": 132
+    },
+    "packages/mcp/mcp-client/src/connection.ts": {
+      "statements": 5,
+      "functions": 0,
+      "branches": 5,
+      "lines": 5
+    },
+    "packages/mcp/mcp-client/src/index.ts": {
+      "statements": 35,
+      "functions": 10,
+      "branches": 23,
+      "lines": 29
+    },
+    "packages/mcp/mcp-client/src/oauth.ts": {
+      "statements": 49,
+      "functions": 16,
+      "branches": 28,
+      "lines": 45
+    },
+    "packages/mcp/mcp-client/src/platform.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/mcp/mcp-client/src/tools.ts": {
+      "statements": 11,
+      "functions": 0,
+      "branches": 16,
+      "lines": 9
+    },
+    "packages/mcp/mcp-client/src/transport.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 1,
+      "lines": 2
+    },
+    "packages/mcp/mcp-registry/src/index.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/profile/user-profile/src/index.ts": {
+      "statements": 103,
+      "functions": 23,
+      "branches": 104,
+      "lines": 79
+    },
+    "packages/profile/user-profile/src/inference.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 2,
+      "lines": 2
+    },
+    "packages/profile/user-profile/src/schema.ts": {
+      "statements": 44,
+      "functions": 1,
+      "branches": 46,
+      "lines": 32
+    },
+    "packages/sandbox/sandbox-policy/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/sdk/client/src/api.ts": {
+      "statements": 31,
+      "functions": 4,
+      "branches": 30,
+      "lines": 28
+    },
+    "packages/sdk/client/src/client.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/sdk/server/src/server.ts": {
+      "statements": 5,
+      "functions": 0,
+      "branches": 9,
+      "lines": 5
+    },
+    "packages/session-learning/tool-session-learning/src/adaptive.ts": {
+      "statements": 89,
+      "functions": 16,
+      "branches": 128,
+      "lines": 82
+    },
+    "packages/session-learning/tool-session-learning/src/autonomous-curator.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 3,
+      "lines": 1
+    },
+    "packages/session-learning/tool-session-learning/src/habit.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/session-learning/tool-session-learning/src/index.ts": {
+      "statements": 102,
+      "functions": 21,
+      "branches": 121,
+      "lines": 84
+    },
+    "packages/session-learning/tool-session-learning/src/presentation.ts": {
+      "statements": 9,
+      "functions": 4,
+      "branches": 6,
+      "lines": 7
+    },
+    "packages/session-learning/tool-session-learning/src/procedural-presentation.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/session-learning/tool-session-learning/src/procedural.ts": {
+      "statements": 56,
+      "functions": 8,
+      "branches": 82,
+      "lines": 54
+    },
+    "packages/session-learning/tool-session-learning/src/task-context.ts": {
+      "statements": 5,
+      "functions": 0,
+      "branches": 7,
+      "lines": 5
+    },
+    "packages/session-learning/tool-session-learning/src/task-reference.ts": {
+      "statements": 7,
+      "functions": 0,
+      "branches": 9,
+      "lines": 7
+    },
+    "packages/session/cognitive-runtime/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 1,
+      "lines": 1
+    },
+    "packages/session/session-checkpoint-policy/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 4,
+      "lines": 1
+    },
+    "packages/session/session-learning/src/cognitive.ts": {
+      "statements": 52,
+      "functions": 11,
+      "branches": 89,
+      "lines": 50
+    },
+    "packages/session/session-learning/src/index.ts": {
+      "statements": 35,
+      "functions": 14,
+      "branches": 52,
+      "lines": 32
+    },
+    "packages/session/session-learning/src/ledger.ts": {
+      "statements": 29,
+      "functions": 6,
+      "branches": 34,
+      "lines": 28
+    },
+    "packages/session/session-persistence-sqlite/src/index.ts": {
+      "statements": 1,
+      "functions": 1,
+      "branches": 0,
+      "lines": 1
+    },
+    "packages/session/session-persistence-sqlite/src/store.ts": {
+      "statements": 11,
+      "functions": 1,
+      "branches": 2,
+      "lines": 11
+    },
+    "packages/session/session-persistence/src/coordinator.ts": {
+      "statements": 3,
+      "functions": 1,
+      "branches": 3,
+      "lines": 3
+    },
+    "packages/session/session-persistence/src/index.ts": {
+      "statements": 2,
+      "functions": 1,
+      "branches": 0,
+      "lines": 2
+    },
+    "packages/shell/bash-local/src/index.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 1,
+      "lines": 3
+    },
+    "packages/shell/bash-local/src/resolve.ts": {
+      "statements": 3,
+      "functions": 1,
+      "branches": 9,
+      "lines": 3
+    },
+    "packages/shell/tool-pwsh/src/computer.ts": {
+      "statements": 248,
+      "functions": 32,
+      "branches": 221,
+      "lines": 222
+    },
+    "packages/shell/tool-pwsh/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 2,
+      "lines": 1
+    },
+    "packages/skill/skill/src/operational.ts": {
+      "statements": 3,
+      "functions": 2,
+      "branches": 6,
+      "lines": 3
+    },
+    "packages/skill/tool-skill/src/index.ts": {
+      "statements": 9,
+      "functions": 0,
+      "branches": 9,
+      "lines": 8
+    },
+    "packages/subagent/subagent-codex/src/account.ts": {
+      "statements": 211,
+      "functions": 49,
+      "branches": 140,
+      "lines": 190
+    },
+    "packages/subagent/subagent-codex/src/index.ts": {
+      "statements": 1,
+      "functions": 1,
+      "branches": 0,
+      "lines": 1
+    },
+    "packages/subagent/subagent-codex/src/run.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 6,
+      "lines": 0
+    },
+    "packages/subagent/subagent-fork-in-process/src/index.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/subagent/subagent-in-process-driver/src/index.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 2,
+      "lines": 1
+    },
+    "packages/subagent/subagent-in-process-driver/src/worktree.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 1,
+      "lines": 2
+    },
+    "packages/subagent/subagent-spawn-in-process/src/index.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/subagent/subagent/src/projection.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 7,
+      "lines": 0
+    },
+    "packages/subagent/tool-subagent/src/index.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 4,
+      "lines": 2
+    },
+    "packages/subprocess/subprocess-local/src/index.ts": {
+      "statements": 14,
+      "functions": 4,
+      "branches": 14,
+      "lines": 11
+    },
+    "packages/test-support/acp-snapshot/src/harness.ts": {
+      "statements": 2,
+      "functions": 0,
+      "branches": 3,
+      "lines": 2
+    },
+    "packages/test-support/acp-snapshot/src/normalize.ts": {
+      "statements": 1,
+      "functions": 0,
+      "branches": 7,
+      "lines": 1
+    },
+    "packages/test-support/client-runtime/src/sessions.ts": {
+      "statements": 2,
+      "functions": 1,
+      "branches": 0,
+      "lines": 2
+    },
+    "packages/test-support/loader-smoke/src/index.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/util/atomic-write/src/index.ts": {
+      "statements": 8,
+      "functions": 0,
+      "branches": 7,
+      "lines": 6
+    },
+    "packages/voice/voice-local/src/index.ts": {
+      "statements": 74,
+      "functions": 15,
+      "branches": 82,
+      "lines": 60
+    },
+    "packages/voice/voice-local/src/natural.ts": {
+      "statements": 114,
+      "functions": 24,
+      "branches": 61,
+      "lines": 97
+    },
+    "packages/voice/voice/src/index.ts": {
+      "statements": 99,
+      "functions": 18,
+      "branches": 88,
+      "lines": 88
+    },
+    "packages/web/web-fetch-http/src/policy.ts": {
+      "statements": 3,
+      "functions": 0,
+      "branches": 37,
+      "lines": 3
+    },
+    "packages/web/web-search-free/src/index.ts": {
+      "statements": 4,
+      "functions": 1,
+      "branches": 0,
+      "lines": 4
+    },
+    "packages/web/web-search-free/src/provider.ts": {
+      "statements": 11,
+      "functions": 2,
+      "branches": 20,
+      "lines": 10
+    },
+    "packages/web/web-search-openrouter/src/index.ts": {
+      "statements": 13,
+      "functions": 7,
+      "branches": 14,
+      "lines": 10
+    },
+    "packages/web/web-search-openrouter/src/provider.ts": {
+      "statements": 23,
+      "functions": 3,
+      "branches": 37,
+      "lines": 18
+    },
+    "packages/web/web/src/index.ts": {
+      "statements": 9,
+      "functions": 3,
+      "branches": 11,
+      "lines": 8
+    },
+    "packages/workflow/workflow-worker-thread/src/host.ts": {
+      "statements": 0,
+      "functions": 0,
+      "branches": 1,
+      "lines": 0
+    },
+    "packages/workspace/workspace/src/index.ts": {
+      "statements": 10,
+      "functions": 4,
+      "branches": 2,
+      "lines": 9
+    }
+  }
+}
