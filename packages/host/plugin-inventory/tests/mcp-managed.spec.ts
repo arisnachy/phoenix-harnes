@@ -224,11 +224,27 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenNthCalledWith(3, {
       name: '@phoenix-ai/dsh-mcp-client',
-      config: expect.objectContaining({
+      config: {
         transport: 'stdio',
         serverName: 'x-api-phoenix',
+        command: 'npx',
         args: ['-y', '@xdevplatform/xurl', 'mcp', '-u', 'PhoenixAI', 'https://api.x.com/mcp'],
-      }) as unknown as Record<string, unknown>,
+        env: {},
+        envCredentialRefs: {
+          CLIENT_ID: 'X_CLIENT_ID',
+          CLIENT_SECRET: 'X_CLIENT_SECRET',
+        },
+        cwd: '',
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 300_000,
+        failOnStartupError: false,
+        reconnect: {
+          enabled: true,
+          initialDelayMs: 1000,
+          maxDelayMs: 30_000,
+          maxAttempts: 10,
+        },
+      },
     })
     await expect(controller.installXMcp({ identity: 'phoenix' }))
       .rejects.toThrow('requires its X username')
