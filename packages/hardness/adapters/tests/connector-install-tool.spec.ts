@@ -63,7 +63,6 @@ describe('connector_install', () => {
       reason: 'Install registry-listed MCP io.example/calendar @ 1.0.0 into PHOENIX',
       risk: 'medium',
       reversible: true,
-      signal: expect.any(AbortSignal),
     }))
     expect(service.installMcpRegistryServer).not.toHaveBeenCalled()
   })
@@ -183,7 +182,6 @@ describe('x_mcp_activate', () => {
       callId: 'call-install',
       risk: 'medium',
       reversible: true,
-      signal: expect.any(AbortSignal),
     }))
     expect(host.enableXMcp).not.toHaveBeenCalled()
   })
@@ -199,7 +197,7 @@ describe('x_mcp_activate', () => {
       api: 'installed',
       docs: 'installed',
       credentialsReady: true,
-      message: expect.stringContaining('Complete the X browser authorization'),
+      message: 'Official X MCP is installed for the user identity. Complete the X browser authorization if xurl requests it; Phoenix can keep the user and Phoenix-owned accounts authorized separately.',
     })
 
     const missing = xHost({ credentials: false })
@@ -207,7 +205,7 @@ describe('x_mcp_activate', () => {
     await expect(missingTool.execute({ requestedByUser: true }, exec())).resolves.toMatchObject({
       status: 'enabled',
       credentialsReady: false,
-      message: expect.stringContaining('/secret'),
+      message: 'Official X MCP is installed. X Docs can work without credentials; X API needs X_CLIENT_ID and X_CLIENT_SECRET stored with the human-only /secret command before xurl can authorize.',
     })
     expect(ready.enableXMcp).toHaveBeenCalledWith({ identity: 'user' })
     expect(missing.enableXMcp).toHaveBeenCalledWith({ identity: 'user' })

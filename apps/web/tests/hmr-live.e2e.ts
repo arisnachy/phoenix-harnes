@@ -93,7 +93,7 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
   try {
     subprocessFiber = await subprocessCtx.plugin(LocalSubprocessRuntime)
     watcher = subprocessCtx.subprocess.spawn(spawnSpec(
-      ['pnpm', 'run', 'dev:web'],
+      ['pnpm', 'run', 'dev:web', '--', '--poll=100'],
       REPO_ROOT,
       { ...clientBuildEnvironment },
     ))
