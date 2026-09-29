@@ -5241,7 +5241,7 @@ importers:
   packages/health/healthia-local:
     dependencies:
       '@phoenix-ai/schemastery':
-        specifier: workspace:^
+        specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
     devDependencies:
       '@phoenix-ai/cordis':
