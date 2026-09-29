@@ -228,7 +228,7 @@ describe('ManagedMcpController', () => {
         transport: 'stdio',
         serverName: 'x-api-phoenix',
         args: ['-y', '@xdevplatform/xurl', 'mcp', '-u', 'PhoenixAI', 'https://api.x.com/mcp'],
-      }),
+      }) as unknown as Record<string, unknown>,
     })
     await expect(controller.installXMcp({ identity: 'phoenix' }))
       .rejects.toThrow('requires its X username')
