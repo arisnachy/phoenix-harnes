@@ -50,8 +50,12 @@ describe('assembled search card', () => {
 
     const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
     fireEvent.click(await within(tree).findByText('Fixture 历史会话'))
-    // Wait for chat content to reach the fixture's later turns (the bash sample
-    // is turn 66, the grep card turn 67).
+    // Settled tool telemetry is intentionally compacted behind Tools disclosures.
+    // Open them before asserting the individual keyed tool rows/cards.
+    const toolGroups = await screen.findAllByRole('button', { name: 'Tools' }, { timeout: 10_000 })
+    for (const group of toolGroups) {
+      if (group.getAttribute('aria-expanded') === 'false') fireEvent.click(group)
+    }
     await waitFor(() => {
       expect(document.querySelector('[data-sample="bash"]')).not.toBeNull()
     }, { timeout: 10_000 })
