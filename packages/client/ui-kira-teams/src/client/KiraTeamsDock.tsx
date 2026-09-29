@@ -106,11 +106,79 @@ function firstRuntimeString(record: Record<string, unknown> | undefined, keys: r
   return undefined
 }
 
-function compactRealText(value: string, maxLength: number): string {
+const FIRST_PERSON_FUTURE_VERBS: Readonly<Record<string, string>> = {
+  abre: 'Abriré',
+  abrir: 'Abriré',
+  revisa: 'Revisaré',
+  revisar: 'Revisaré',
+  verifica: 'Verificaré',
+  verificar: 'Verificaré',
+  comprueba: 'Comprobaré',
+  comprobar: 'Comprobaré',
+  prueba: 'Probaré',
+  probar: 'Probaré',
+  analiza: 'Analizaré',
+  analizar: 'Analizaré',
+  investiga: 'Investigaré',
+  investigar: 'Investigaré',
+  busca: 'Buscaré',
+  buscar: 'Buscaré',
+  corrige: 'Corregiré',
+  corregir: 'Corregiré',
+  arregla: 'Arreglaré',
+  arreglar: 'Arreglaré',
+  crea: 'Crearé',
+  crear: 'Crearé',
+  diseña: 'Diseñaré',
+  diseñar: 'Diseñaré',
+  optimiza: 'Optimizaré',
+  optimizar: 'Optimizaré',
+  ejecuta: 'Ejecutaré',
+  ejecutar: 'Ejecutaré',
+  conecta: 'Conectaré',
+  conectar: 'Conectaré',
+  integra: 'Integraré',
+  integrar: 'Integraré',
+  compara: 'Compararé',
+  comparar: 'Compararé',
+  documenta: 'Documentaré',
+  documentar: 'Documentaré',
+  actualiza: 'Actualizaré',
+  actualizar: 'Actualizaré',
+  valida: 'Validaré',
+  validar: 'Validaré',
+  carga: 'Cargaré',
+  cargar: 'Cargaré',
+  lee: 'Leeré',
+  leer: 'Leeré',
+  observa: 'Observaré',
+  observar: 'Observaré',
+  describe: 'Describiré',
+  describir: 'Describiré',
+}
+
+function firstPersonActivityText(value: string): string {
   const normalized = value
     .replace(/^\s*(?:orquestaci[oó]n|orchestration)\s*:\s*/iu, '')
     .replace(/\s+/gu, ' ')
     .trim()
+  if (normalized.length === 0) return ''
+
+  const gerund = normalized.match(/^(abriendo|revisando|verificando|comprobando|probando|analizando|investigando|buscando|corrigiendo|arreglando|creando|diseñando|optimizando|ejecutando|conectando|integrando|comparando|documentando|actualizando|validando|cargando|leyendo|observando|describiendo)\b(.*)$/iu)
+  if (gerund !== null) {
+    return `Estoy ${gerund[1]!.toLocaleLowerCase()}${gerund[2] ?? ''}`
+  }
+
+  const command = normalized.match(/^([^\s,.;:]+)(.*)$/u)
+  if (command === null) return normalized
+  const first = command[1]!.toLocaleLowerCase()
+  const future = FIRST_PERSON_FUTURE_VERBS[first]
+  if (future === undefined) return normalized
+  return `${future}${command[2] ?? ''}`
+}
+
+function compactRealText(value: string, maxLength: number): string {
+  const normalized = firstPersonActivityText(value)
   if (normalized.length <= maxLength) return normalized
   const slice = normalized.slice(0, Math.max(1, maxLength - 1))
   const boundary = slice.lastIndexOf(' ')
