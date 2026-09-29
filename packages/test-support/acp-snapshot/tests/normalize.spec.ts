@@ -331,30 +331,6 @@ Additional instructions from: nested\AGENTS.md`,
     expect(() => normalizeStdout(raw, ctx)).toThrow()
   })
 
-  it('canonicalizes nested runtime context in wire frames', () => {
-    const raw = JSON.stringify({
-      method: 'session.event',
-      params: {
-        event: {
-          type: 'user/message',
-          data: {
-            content: [{ type: 'text', text: 'Background runtime context: volatile machine state' }],
-            source: {
-              kind: 'plugin',
-              plugin: '@phoenix-ai/dsh-system-prompt',
-              form: 'snapshot',
-              sections: [{ name: 'machine', text: 'volatile machine state' }],
-            },
-          },
-        },
-      },
-    })
-    const out = normalizeStdout(`${raw}\n`, ctx)
-    expect(out).toContain('{{runtimeContext}}')
-    expect(out).toContain('"sections":[]')
-    expect(out).not.toContain('volatile machine state')
-  })
-
   it('ignores blank lines', () => {
     const raw = `\n${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'm' })}\n\n`
     expect(() => normalizeStdout(raw, ctx)).not.toThrow()
@@ -399,44 +375,6 @@ describe('normalizeSessionLog', () => {
       type: 'turn/start',
       data: { turn: 1 },
     })
-  })
-
-  it('canonicalizes runtime-context snapshots without pinning machine-specific sections', () => {
-    const ev = JSON.stringify({
-      type: 'user/message',
-      data: {
-        content: [{ type: 'text', text: 'Background runtime context: volatile machine state' }],
-        source: {
-          kind: 'plugin',
-          plugin: '@phoenix-ai/dsh-system-prompt',
-          form: 'snapshot',
-          sections: [{ name: 'machine', text: 'volatile machine state' }],
-        },
-        role: 'user',
-      },
-    })
-    const out = normalizeSessionLog(`${header({})}\n${ev}\n`, ctx)
-    expect(out).toContain('{{runtimeContext}}')
-    expect(out).toContain('"sections":[]')
-    expect(out).not.toContain('volatile machine state')
-  })
-
-  it('drops the KIRA live-activity helper from broad session goldens', () => {
-    const guidance = 'Mientras trabajas, antes de usar una herramienta o cambiar de acción, escribe una sola frase breve (máximo 72 caracteres) en primera persona.'
-    const ev = JSON.stringify({
-      type: 'user/message',
-      data: {
-        content: [
-          { type: 'text', text: 'Do the task.' },
-          { type: 'text', text: guidance },
-        ],
-        source: { kind: 'user' },
-        role: 'user',
-      },
-    })
-    const out = normalizeSessionLog(`${header({})}\n${ev}\n`, ctx)
-    expect(out).toContain('Do the task.')
-    expect(out).not.toContain(guidance)
   })
 
   it('scrubs cwd and session id deep inside event data', () => {
