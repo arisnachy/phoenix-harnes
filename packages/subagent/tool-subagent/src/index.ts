@@ -44,8 +44,9 @@ const ACTIVE_SUBAGENT_GUIDANCE =
 const LIVE_ACTIVITY_GUIDANCE =
   'Mientras trabajas, antes de usar una herramienta o cambiar de acción, escribe una sola frase breve ' +
   '(máximo 72 caracteres) en primera persona describiendo exactamente lo que vas a hacer o estás haciendo. ' +
-  'No uses una frase fija, no inventes actividad y no describas razonamiento interno. ' +
-  'Phoenix mostrará literalmente esa frase como actividad en vivo.'
+  'La frase debe mencionar una acción concreta y su objeto; no respondas solo con estados genéricos como ' +
+  '"Preparando", "Trabajando" o "Pensando". No uses una frase fija, no inventes actividad y no describas ' +
+  'razonamiento interno. Phoenix mostrará literalmente esa frase como actividad en vivo.'
 
 interface ActiveSubagentBudget {
   /** One runtime-wide count shared by every parent session and provider alias. */
