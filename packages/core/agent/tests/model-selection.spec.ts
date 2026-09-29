@@ -34,6 +34,30 @@ describe('installModelSelection()', () => {
     expect(latestPhoenixCodexAutoRoutes([{ id: 'gpt-6-sol' }])).toBeUndefined()
   })
 
+  it('injects the execution/review contract only when Phoenix Auto is selected', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+
+    const auto = await ctx.systemPrompt.assemble()
+    const autoSection = auto.sections.find(section => section.name === 'phoenix-auto:routing')
+    expect(autoSection?.text).toContain(PHOENIX_CODEX_AUTO_REVIEW_MARKER)
+    expect(autoSection?.text).toContain('fresh independent Luna reviewer')
+    expect(autoSection?.text).toContain('rendered screenshots or the running output')
+    expect(autoSection?.text).toContain('final acceptance decision')
+
+    selection.current = { provider: 'openai-codex', model: 'gpt-6-luna' }
+    const direct = await ctx.systemPrompt.assemble()
+    expect(direct.sections.some(section => section.name === 'phoenix-auto:routing')).toBe(false)
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('accepts only an explicit Jev choice from the supplied same-family candidates', () => {
     const candidates = ['gpt-5.6-sol', 'gpt-5.6-luna']
     expect(jevSelectedModelId({
