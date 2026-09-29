@@ -220,7 +220,7 @@ it('renders a host dimension rejection with the projected 2000px limit', async (
     expect((textarea as HTMLTextAreaElement).readOnly).toBe(false)
     expect(textarea.getAttribute('data-phase')).toBe('plain')
     const attachmentButton = textarea.closest('[data-composer-card]')
-      ?.querySelector<HTMLButtonElement>('button[aria-label="Attachments"]')
+      ?.querySelector<HTMLButtonElement>('button[aria-label="Add files"]')
     if (attachmentButton === null || attachmentButton === undefined) throw new Error('composer attachment button missing')
     expect(attachmentButton.disabled).toBe(false)
   }, { timeout: 10_000 })
