@@ -315,6 +315,15 @@ function makeHarness(init?: Partial<ConversationSnapshot>, inputInit?: Partial<I
   }
 }
 
+/** Expand settled tool/model activity exactly as the product UI requires before inspecting its rows. */
+function expandToolHistory(view: ReturnType<typeof render>): void {
+  for (const button of view.container.querySelectorAll<HTMLButtonElement>(
+    '[data-chat-flow-kind="tool-activity"] button[aria-expanded="false"]',
+  )) {
+    fireEvent.click(button)
+  }
+}
+
 /** Simulate reader input (any device): a delivered position that deviates
  * from the observed-top ledger of programmatic writes. */
 function readerScroll(element: HTMLElement, top: number): void {
@@ -533,6 +542,7 @@ describe('ChatView', () => {
       nodes: [{ ...toolResult(3, 'w1'), call: null }],
     })
     const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     expect(view.getByTestId('tool-seat-w1')).toBeTruthy()
     expect(h.toolOwners[0]).toMatchObject({ callId: 'w1', toolName: '' })
   })
@@ -576,6 +586,7 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     expect(view.getByText('do the thing')).toBeTruthy()
     expect(view.getByText('running tools')).toBeTruthy()
+    expandToolHistory(view)
     expect(view.getByTestId('tool-seat-a').textContent).toBe('bash:a')
     expect(view.getByTestId('tool-seat-b').textContent).toBe('bash:b')
     expect([...view.container.querySelectorAll('[data-chat-flow-key]')].map(row => ({
@@ -1049,6 +1060,7 @@ describe('ChatView', () => {
       nodes: [user(1, 'q'), assistant(2, 'old answer'), toolResult(3, 'a')],
     })
     const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     const tool = view.getByTestId('tool-seat-a')
     const beforeHtml = tool.innerHTML
     act(() => {
@@ -1076,6 +1088,7 @@ describe('ChatView', () => {
       return <div data-testid="counting-row" />
     })
     const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     expect(view.getByTestId('counting-row')).toBeTruthy()
     const afterMount = rowRenders
     act(() => {
@@ -1089,7 +1102,8 @@ describe('ChatView', () => {
 
   it('updates the selected call id handed to the Tool seat', () => {
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
-    render(<h.ChatView {...h.props} />)
+    const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     expect(h.toolOwners.at(-1)?.selectedCallId).toBeUndefined()
     act(() => { h.setSelection({ turnSeq: 3, callId: 'a', toolName: 'bash' }) })
     expect(h.toolOwners.at(-1)?.selectedCallId).toBe('a')
@@ -1171,7 +1185,7 @@ describe('ChatView', () => {
     const view = render(<h.ChatView {...h.props} />)
     // Freshly mounted (as after a reload) yet already past the 15s gate.
     const status = view.getByRole('status')
-    expect(status.textContent).toMatch(/^PHOENIX 正在准备任务…2分0\d秒$/)
+    expect(status.textContent).toMatch(/正在准备回复2分0\d秒$/)
     expect(status.querySelector('[aria-hidden="true"]')).not.toBeNull()
     act(() => {
       h.set({ queue: [{
@@ -1183,11 +1197,11 @@ describe('ChatView', () => {
         text: 'also',
       }] })
     })
-    expect(status.textContent).toMatch(/^PHOENIX 正在准备任务…2分0\d秒$/)
+    expect(status.textContent).toMatch(/正在准备回复2分0\d秒$/)
   })
 
   it('ignites the PHOENIX emblem while running and flashes it when the turn finishes', () => {
-    const h = makeHarness({ nodes: [user(1, 'go')], running: true })
+    const h = makeHarness({ nodes: [user(1, 'go')], runningCalls: [runningCall('live')], running: true })
     const view = render(<h.ChatView {...h.props} />)
     const activeLogo = view.getByRole('status').querySelector('img')
     expect(activeLogo?.getAttribute('src')).toBe('/phoenix-emblem.png')
@@ -1208,7 +1222,8 @@ describe('ChatView', () => {
       calls.push({ key, owner, ...(opts?.entryKey !== undefined ? { entryKey: opts.entryKey } : {}) })
       return opts?.fallback ?? null
     })
-    render(<h.ChatView {...h.props} />)
+    const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({
       key: 'conversation.chat.node',
@@ -1229,7 +1244,8 @@ describe('ChatView', () => {
       .mockResolvedValueOnce(undefined)
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
-    render(<h.ChatView {...h.props} />)
+    const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     await act(async () => { h.toolOwners[0]!.openFile('src/a.ts') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' })).toBeTruthy()
@@ -1249,7 +1265,8 @@ describe('ChatView', () => {
       .mockRejectedValueOnce('permission denied')
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
-    render(<h.ChatView {...h.props} />)
+    const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     await act(async () => { h.toolOwners[0]!.openFile('notes.md') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' }).textContent).toContain('permission denied')
@@ -1264,7 +1281,8 @@ describe('ChatView', () => {
       .mockRejectedValueOnce(new Error(''))
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
-    render(<h.ChatView {...h.props} />)
+    const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     await act(async () => { h.toolOwners[0]!.openFile('empty.ts') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' }).textContent).toContain('无法打开此文件')
@@ -1276,7 +1294,8 @@ describe('ChatView', () => {
       .mockRejectedValueOnce(new Error(''))
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
-    render(<h.ChatView {...h.props} />)
+    const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     await act(async () => { h.toolOwners[0]!.openFile('.') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件夹' }).textContent).toContain('无法打开此文件夹')
@@ -1292,7 +1311,8 @@ describe('ChatView', () => {
       }))
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
-    render(<h.ChatView {...h.props} />)
+    const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     await act(async () => { h.toolOwners[0]!.openFile('src/a.ts') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' }).textContent).toContain('first refusal')
@@ -1313,7 +1333,8 @@ describe('ChatView', () => {
       }))
     const h = makeHarness({ nodes: [toolResult(3, 'a')] })
     h.props.openFile = openFile
-    render(<h.ChatView {...h.props} />)
+    const view = render(<h.ChatView {...h.props} />)
+    expandToolHistory(view)
     await act(async () => { h.toolOwners[0]!.openFile('src/a.ts') })
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: '无法打开文件' }).textContent).toContain('first refusal')

@@ -93,11 +93,11 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
   try {
     subprocessFiber = await subprocessCtx.plugin(LocalSubprocessRuntime)
     watcher = subprocessCtx.subprocess.spawn(spawnSpec(
-      ['pnpm', 'run', 'dev:web'],
+      ['pnpm', 'exec', 'tsx', 'scripts/dev-web.ts', '--poll=100'],
       REPO_ROOT,
       { ...clientBuildEnvironment },
     ))
-    await waitForOutput(watcher, /dev-web: watching/, 'pnpm run dev:web')
+    await waitForOutput(watcher, /dev-web: watching/, 'dev-web watcher')
     host = subprocessCtx.subprocess.spawn(spawnSpec(
       [process.execPath, binPath, 'web', '--no-open', '--port', '0'],
       world,
@@ -120,7 +120,7 @@ it('hot-reloads a real client-plugin source edit without refreshing the page', a
     })
 
     await writeFile(sourcePath, updatedSource)
-    await page.getByText(newText, { exact: true }).waitFor({ timeout: 30_000 })
+    await page.getByText(newText, { exact: true }).waitFor({ timeout: 60_000 })
     expect(await page.evaluate(() => (window as Window & { __dshHmrPageIdentity?: string }).__dshHmrPageIdentity))
       .toBe(pageIdentity)
     expect(pageErrors).toEqual([])

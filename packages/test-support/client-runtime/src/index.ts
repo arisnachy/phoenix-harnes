@@ -223,6 +223,15 @@ export class SlotTestRuntime {
     this.workspaces = new TestWorkspaces(this.stabilizer)
     ctx.provide('sessions', this.sessions)
     ctx.provide('workspaces', this.workspaces)
+    // Client feature suites mount the real conversation plugin, whose generated
+    // Host voice namespace is required even when a test never enables speech.
+    // Keep the default namespace inert; voice-specific specs exercise their own
+    // adapter directly and suites can still replace the broader remote carrier.
+    ctx.provide('remote.voice', {
+      conversationStatus: () => Promise.resolve({ ok: true, value: { enabled: false, natural: false } }),
+      conversationSpeak: () => Promise.resolve({ ok: true, value: { accepted: false, reason: 'disabled' as const } }),
+      conversationCancel: () => Promise.resolve({ ok: true, value: { cancelled: 0 } }),
+    } as never)
     // Capturing install: the production renderer does the rendering; the
     // wrapper only takes the host face for storeOf (no machinery copied).
     const renderer = createSlotRenderer()
