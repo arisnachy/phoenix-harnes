@@ -167,12 +167,17 @@
 .row {
   appearance: none;
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-areas:
+    "portrait identity"
+    "status status"
+    "action action";
+  column-gap: 10px;
+  row-gap: 8px;
   min-width: 0;
-  min-height: 162px;
-  padding: 10px;
+  min-height: 148px;
+  padding: 11px;
   box-sizing: border-box;
   border: 1px solid color-mix(in srgb, #eac9b8 42%, var(--dsh-color-border, #d7dee8));
   border-radius: 18px;
@@ -188,10 +193,6 @@
     0 6px 18px rgb(44 54 74 / 4%),
     inset 0 1px 0 rgb(255 255 255 / 90%);
   transition: transform 150ms ease, border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
-}
-
-.root[data-kira-count='1'] .row {
-  min-height: 132px;
 }
 
 .row:hover,
@@ -218,19 +219,23 @@
   border-color: color-mix(in srgb, #8a5ad7 18%, var(--dsh-color-border, #d7dee8));
 }
 
-.agentVisualRow {
+.agentPortrait {
+  grid-area: portrait;
   min-width: 0;
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  padding: 1px 0 0 1px;
+  overflow: visible;
 }
 
 .agentIdentity {
+  grid-area: identity;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
+  align-self: center;
 }
 
 .agentName {
@@ -259,12 +264,14 @@
 
 .statusBadge {
   --status-color: #2f80ed;
+  grid-area: status;
+  justify-self: start;
   flex: none;
-  max-width: 92px;
+  max-width: 118px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 5px 7px;
+  padding: 5px 8px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--status-color) 10%, #fff);
   color: var(--status-color);
@@ -303,13 +310,13 @@
 }
 
 .agentAction {
+  grid-area: action;
   min-width: 0;
   display: grid;
   grid-template-columns: 12px minmax(0, 1fr);
   align-items: start;
   gap: 4px;
-  margin-top: auto;
-  color: color-mix(in srgb, var(--dsh-color-text, #101827) 56%, #6e8199);
+  color: color-mix(in srgb, var(--dsh-color-text, #101827) 60%, #6e8199);
 }
 
 .actionChevron {
@@ -330,44 +337,49 @@
   -webkit-line-clamp: 2;
   overflow: hidden;
   font-size: 10.8px;
-  line-height: 1.28;
+  line-height: 1.3;
 }
 
 .root[data-kira-count='1'] .row {
-  display: grid;
-  grid-template-columns: minmax(138px, 40%) minmax(0, 1fr);
-  grid-template-rows: auto 1fr;
+  min-height: 118px;
+  padding: 12px;
+}
+
+.root[data-kira-count='1'] .rowHasActivity {
+  grid-template-columns: 64px 118px minmax(0, 1fr);
+  grid-template-rows: auto auto;
   grid-template-areas:
-    "visual action"
-    "identity action";
-  column-gap: 14px;
-  row-gap: 7px;
+    "portrait identity action"
+    "status status action";
+  column-gap: 12px;
+  row-gap: 8px;
   align-items: start;
 }
 
-.root[data-kira-count='1'] .agentVisualRow {
-  grid-area: visual;
-  display: flex;
+.root[data-kira-count='1'] .rowNoActivity {
+  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "portrait identity"
+    "status status";
+  column-gap: 12px;
+  row-gap: 8px;
   align-items: center;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 7px;
 }
 
-.root[data-kira-count='1'] .statusBadge {
-  margin: 0;
-}
-
-.root[data-kira-count='1'] .agentIdentity {
-  grid-area: identity;
+.root[data-kira-count='1'] .agentPortrait {
   align-self: start;
 }
 
-.root[data-kira-count='1'] .agentAction {
-  grid-area: action;
+.root[data-kira-count='1'] .agentIdentity {
+  align-self: center;
+}
+
+.root[data-kira-count='1'] .rowHasActivity .agentAction {
   align-self: stretch;
+  min-height: 74px;
   margin: 0;
-  padding: 11px 12px;
+  padding: 10px 11px;
   border-left: 1px solid color-mix(in srgb, #ef7d45 16%, var(--dsh-color-border, #d7dee8));
   border-radius: 0 13px 13px 0;
   background:
@@ -377,8 +389,8 @@
 
 .root[data-kira-count='1'] .tagline {
   -webkit-line-clamp: 3;
-  font-size: 11.4px;
-  line-height: 1.38;
+  font-size: 11.2px;
+  line-height: 1.36;
   font-weight: 570;
   color: color-mix(in srgb, var(--dsh-color-text, #101827) 66%, #657a93);
 }
@@ -433,6 +445,11 @@
 
   .list { grid-template-columns: 1fr; }
 
+  .root[data-kira-count='1'] .rowHasActivity {
+    grid-template-columns: 58px 104px minmax(0, 1fr);
+    column-gap: 10px;
+  }
+
   .row:not(:only-child) {
     min-height: 116px;
   }
@@ -450,17 +467,24 @@
     max-width: 306px;
   }
 
-  .root[data-kira-count='1'] .row {
-    display: flex;
+  .root[data-kira-count='1'] .rowHasActivity,
+  .root[data-kira-count='1'] .rowNoActivity {
+    grid-template-columns: 58px minmax(0, 1fr);
+    grid-template-areas:
+      "portrait identity"
+      "status status"
+      "action action";
     min-height: 116px;
   }
 
-  .root[data-kira-count='1'] .agentVisualRow {
-    display: flex;
+  .root[data-kira-count='1'] .rowNoActivity {
+    grid-template-areas:
+      "portrait identity"
+      "status status";
   }
 
-  .root[data-kira-count='1'] .agentAction {
-    margin-top: 2px;
+  .root[data-kira-count='1'] .rowHasActivity .agentAction {
+    min-height: 0;
     padding: 0;
     border-left: 0;
     border-radius: 0;
