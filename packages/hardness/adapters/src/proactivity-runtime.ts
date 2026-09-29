@@ -52,6 +52,7 @@ export interface ProactivityAttentionItem {
   readonly score: number
 }
 
+/** Browser-safe projection of one visible durable proactive task. */
 export interface ProactivityTaskView {
   readonly id: string
   readonly title: string
