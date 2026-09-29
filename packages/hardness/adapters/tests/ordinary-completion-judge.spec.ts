@@ -7,6 +7,7 @@ import {
   isGameAssetProvenanceMutation,
   isSubstantiveMutation,
   needsGameAssetPipeline,
+  ordinaryCompletionReviewBudget,
   reviewOrdinaryCompletion,
   verificationKinds,
 } from '../src/ordinary-completion-judge.ts'
@@ -14,6 +15,38 @@ import {
 const parent = { id: 'parent' } as unknown as Agent
 
 describe('ordinary completion judge', () => {
+  it('skips the independent judge for bounded verified routine work', () => {
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Crea una mini app web en un solo archivo HTML con reloj, clima simulado y 3 tareas con localStorage.',
+      configuredMaxPasses: 2,
+      mutationCount: 3,
+      failureCount: 0,
+    })).toEqual({ mode: 'fast', maxPasses: 0 })
+  })
+
+  it('escalates semantic review only for material scope, risk, or failed attempts', () => {
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Refactor the Phoenix router across the project without changing behavior.',
+      configuredMaxPasses: 2,
+      mutationCount: 4,
+      failureCount: 0,
+    })).toEqual({ mode: 'standard', maxPasses: 1 })
+
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Prepare a production database migration with authentication and rollback.',
+      configuredMaxPasses: 2,
+      mutationCount: 4,
+      failureCount: 0,
+    })).toEqual({ mode: 'deep', maxPasses: 2 })
+
+    expect(ordinaryCompletionReviewBudget({
+      request: 'Fix this local helper.',
+      configuredMaxPasses: 2,
+      mutationCount: 2,
+      failureCount: 2,
+    })).toEqual({ mode: 'deep', maxPasses: 2 })
+  })
+
   it('reviews explicit error contracts and scaling with read-only tools', async () => {
     const dispose = vi.fn(async () => {})
     const start = vi.fn<SubagentRuntime['start']>(async () => ({
