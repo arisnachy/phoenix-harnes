@@ -4,12 +4,13 @@
   "source": {
     "branch": "repair/final-release-20260928",
     "sha": "3ed0d3ffaa30247d3cd9e09aa6a499fbc6cde256",
-    "workflowJob": 109204081451
+    "workflowJob": 109204081451,
+    "calibratedAgainstMainSha": "30ce76383ef3cc2eef5ae6a9de4b4f89de74512c"
   },
   "totals": {
-    "statements": 5043,
-    "functions": 1000,
-    "branches": 5319,
+    "statements": 5047,
+    "functions": 1004,
+    "branches": 5325,
     "lines": 4483
   },
   "files": {
@@ -104,8 +105,8 @@
       "lines": 1
     },
     "packages/client/ui-kira-teams/src/client/KiraTeamsDock.tsx": {
-      "statements": 77,
-      "functions": 9,
+      "statements": 80,
+      "functions": 13,
       "branches": 73,
       "lines": 68
     },
@@ -1298,9 +1299,9 @@
       "lines": 0
     },
     "packages/subagent/subagent/src/projection.ts": {
-      "statements": 0,
+      "statements": 1,
       "functions": 0,
-      "branches": 1,
+      "branches": 7,
       "lines": 0
     },
     "packages/subagent/tool-subagent/src/index.ts": {
