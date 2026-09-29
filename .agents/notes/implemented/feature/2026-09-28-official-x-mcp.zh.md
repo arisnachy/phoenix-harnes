@@ -14,9 +14,9 @@ X 提供两个官方 MCP surface，但认证模型不同。Docs MCP `https://doc
 
 MCP client 现在为 stdio server 支持 `envCredentialRefs`。映射中只保存子进程环境变量名与 Phoenix credential reference。每一代连接建立时，MCP client 从 `ctx.credentials` 解析这些引用，只把实际值注入该子进程环境；引用缺失时在 spawn 前直接标记为 `auth-required`。环境中其他 credential-shaped 变量仍会被清理。
 
-Host managed-MCP controller 只允许一个脱离通用 registry 路径的精确 stdio 配置：server `x-api`、command `npx`、参数 `-y @xdevplatform/xurl mcp https://api.x.com/mcp`、空字面环境，以及 `CLIENT_ID -> X_CLIENT_ID`、`CLIENT_SECRET -> X_CLIENT_SECRET` 两个 credential reference。启动预算为 300 秒，因为 X 文档说明首次授权可能打开浏览器并等待用户完成。Controller 还允许精确固定的免凭据 `x-docs` remote：`https://docs.x.com/mcp`。持久化 managed overlay 在接纳前会严格验证这两套配置。
+Host managed-MCP controller 允许固定的 X stdio 配置脱离通用 registry 路径。兼容/default server `x-api` 表示用户自己的 X 身份；第二个 server `x-api-phoenix` 表示 Phoenix 自己的 X 身份，并按照 X 文档的多账户模型使用 `-u <username>` 调用 xurl。两者都使用 `npx`、`@xdevplatform/xurl`、`https://api.x.com/mcp`、空字面环境，以及 `CLIENT_ID -> X_CLIENT_ID`、`CLIENT_SECRET -> X_CLIENT_SECRET` 两个 credential reference。Phoenix 自有身份必须显式提供 X username，避免静默复用用户当前账户。Controller 还允许精确固定的免凭据 `x-docs` remote：`https://docs.x.com/mcp`。
 
-完整 model-tool scope 会暴露 `x_mcp_activate`。它要求用户明确请求、存在 active agent，并完成一次中风险批准。激活只安装两个固定 connector，不执行任何 X 账户操作。返回值只报告 connector lifecycle 以及两个 credential reference 是否已配置。Settings → Connectors 目录中也会显示 X 这一 MCP integration。
+完整 model-tool scope 会暴露 `x_mcp_activate`。它要求用户明确请求、存在 active agent，并完成一次中风险批准。调用方选择 `user` 或 `phoenix`；Phoenix 自有身份还必须提供该账户的 X username。两个身份可以同时保持安装，并共享同一个 developer app credential，但不会共享 OAuth 用户选择。激活不会修改 X 账户，也不会创建 X 账户；账户注册仍属于单独的 provider/browser 流程，因为 MCP 的职责是操作已经完成认证的账户。
 
 ## Alternatives considered
 
@@ -30,4 +30,4 @@ Host managed-MCP controller 只允许一个脱离通用 registry 路径的精确
 
 ## Consequences
 
-Phoenix 可以无需凭据查询 X 文档，并可通过厂商支持的 xurl authorization bridge 激活官方 X API MCP。Developer credential 继续保存在现有 human-only Phoenix vault 中，不进入 model argument，也不写入 managed MCP persistence。首次 X API authorization 仍可能需要交互，并且耗时会长于普通 MCP startup。移除 managed X bundle 只会删除 Phoenix 的 connector row，不会声称撤销 X/xurl 持有的 credential 或 grant；provider 端 revoke 仍是独立操作。
+Phoenix 可以无需凭据查询 X 文档，并可通过厂商支持的 xurl authorization bridge，为用户自己的 X 身份或独立的 Phoenix 自有 X 身份激活官方 X API MCP。Developer credential 继续保存在现有 human-only Phoenix vault 中，不进入 model argument，也不写入 managed MCP persistence。首次 X API authorization 仍可能需要交互，并且耗时会长于普通 MCP startup。移除 managed X bundle 只会删除 Phoenix 的 connector row，不会声称撤销 X/xurl 持有的 credential 或 grant；provider 端 revoke 仍是独立操作。
