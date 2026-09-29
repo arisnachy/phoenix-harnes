@@ -127,11 +127,9 @@ function visibleLiveActivityTextOf(
 }
 
 function normalizedWorkText(summary: SessionSummary): string {
-  const projectionValues = summary.projectionValues as
-    | { subagent?: { label?: string } }
-    | undefined
+  const projectionValues = summary.projectionValues ?? {}
   return [
-    projectionValues?.subagent?.label ?? '',
+    projectionValues.subagent?.label ?? '',
     summary.displayTitle ?? '',
   ].join(' ').trim().toLocaleLowerCase()
 }
