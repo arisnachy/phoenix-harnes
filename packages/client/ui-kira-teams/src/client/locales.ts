@@ -5,12 +5,12 @@ export const NS = 'kira-teams'
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
-  'dock.title': 'KIRA · 团队',
+  'dock.title': 'KIRA · 活跃团队',
   'dock.expand': '展开团队面板',
   'dock.collapse': '收起团队面板',
   'dock.refresh': '刷新子代理列表',
-  'count.members.one': '{count} 个成员',
-  'count.members.other': '{count} 个成员',
+  'count.members.one': '{count} 个代理',
+  'count.members.other': '{count} 个代理',
   'count.running.one': '{count} 个运行中',
   'count.running.other': '{count} 个运行中',
   'status.running': '运行中',
@@ -87,12 +87,12 @@ export type KiraTeamsKey = keyof typeof zh
 
 /** English dictionary, key-identical to the Chinese source of truth. */
 export const en: Record<KiraTeamsKey, string> = {
-  'dock.title': 'KIRA · Teams',
+  'dock.title': 'KIRA · Active team',
   'dock.expand': 'Expand the teams dock',
   'dock.collapse': 'Collapse the teams dock',
   'dock.refresh': 'Refresh subagent list',
-  'count.members.one': '{count} member',
-  'count.members.other': '{count} members',
+  'count.members.one': '{count} agent',
+  'count.members.other': '{count} agents',
   'count.running.one': '{count} running',
   'count.running.other': '{count} running',
   'status.running': 'running',
@@ -166,12 +166,12 @@ export const en: Record<KiraTeamsKey, string> = {
 
 /** Spanish dictionary, key-identical to the Chinese source of truth. */
 export const es: Record<KiraTeamsKey, string> = {
-  'dock.title': 'KIRA · Equipos',
+  'dock.title': 'KIRA · Equipo activo',
   'dock.expand': 'Desplegar el panel de equipos',
   'dock.collapse': 'Plegar el panel de equipos',
   'dock.refresh': 'Actualizar lista de subagentes',
-  'count.members.one': '{count} miembro',
-  'count.members.other': '{count} miembros',
+  'count.members.one': '{count} agente',
+  'count.members.other': '{count} agentes',
   'count.running.one': '{count} en marcha',
   'count.running.other': '{count} en marcha',
   'status.running': 'en marcha',
