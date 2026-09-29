@@ -12,7 +12,8 @@
  */
 
 import { writeFileSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { FiberState, type Context } from '@phoenix-ai/cordis'
 import type { PatchOptions } from '@phoenix-ai/cordis-plugin-include'
@@ -33,6 +34,59 @@ import { resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 
 /** Shipped agent-preset root: beside this app's own config, in both source and built layouts. */
 const SHIPPED_PRESET_ROOT = fileURLToPath(new URL('../config/agent-presets/', import.meta.url))
+
+/**
+ * Published Chrome MCP entrypoint resolved through dsh-base, which owns the
+ * connector dependency. This is an installation fact, not a workspace path:
+ * profile working directories may be arbitrary user/temp directories.
+ */
+const APP_REQUIRE = createRequire(import.meta.url)
+const BASE_REQUIRE = createRequire(APP_REQUIRE.resolve('@phoenix-ai/dsh-base/package.json'))
+const SHIPPED_CHROME_CONNECTOR_BIN = join(
+  dirname(BASE_REQUIRE.resolve('@phoenix-ai/dsh-chrome-connector/package.json')),
+  'lib',
+  'bin.js',
+)
+
+const BUNDLED_BROWSER_CONNECTOR_IDS = ['phoenix-browser', 'chrome-browser-primary'] as const
+
+/**
+ * Replace only the legacy source/tsx launch shipped by PHOENIX with the
+ * published connector bin. A user overlay that supplies a different command
+ * remains authoritative.
+ * @param rows - Effective rows after bundle and user overlays are composed.
+ * @param connectorBin - Absolute published connector bin for this installation.
+ * @param nodeExecutable - Node executable that owns the installed PHOENIX app.
+ * @returns Assembly patches for legacy bundled browser connector rows.
+ */
+export function bundledBrowserConnectorPatches(
+  rows: ReadonlyMap<string, EntryOptions>,
+  connectorBin = SHIPPED_CHROME_CONNECTOR_BIN,
+  nodeExecutable = process.execPath,
+): PatchOptions[] {
+  const patches: PatchOptions[] = []
+  for (const id of BUNDLED_BROWSER_CONNECTOR_IDS) {
+    const row = rows.get(id)
+    const config = row?.config as Record<string, unknown> | undefined
+    const args = config?.args
+    if (config?.command !== 'node' || !Array.isArray(args)) continue
+    const legacySourceLaunch = args.includes('tsx/esm')
+      && args.some(argument =>
+        typeof argument === 'string'
+        && argument.replaceAll('\\', '/').includes('packages/mcp/chrome-connector/src/'))
+    if (!legacySourceLaunch) continue
+    patches.push({
+      id,
+      config: {
+        ...config,
+        command: nodeExecutable,
+        args: [connectorBin],
+        cwd: '',
+      },
+    })
+  }
+  return patches
+}
 
 import { DSH_LAUNCH_ENVIRONMENT_KEY, type LaunchEnvironmentSnapshot } from '@phoenix-ai/dsh-launch-environment'
 import { provideCmdline } from '@phoenix-ai/dsh-cmdline'
@@ -165,6 +219,12 @@ function composeProfile(
       },
     })
   }
+  // The shipped browser MCP rows historically launched TypeScript source with
+  // a bare tsx loader from process.cwd(). Profiles run from arbitrary user
+  // workspaces, so that made packaged/headless boots depend on the workspace
+  // having PHOENIX devDependencies. Pin only those legacy shipped launches to
+  // this installation's compiled connector artifact.
+  composedOverlays.push(...bundledBrowserConnectorPatches(rows))
   const telemetryPatch = resolveTelemetryPatch(process.env.DSH_TELEMETRY_DISABLED, rows.has(TELEMETRY_ROW_ID))
   if (telemetryPatch !== undefined) composedOverlays.push(telemetryPatch)
   return { profile, bundlePatches, homePatches, overlays: composedOverlays, rows }
