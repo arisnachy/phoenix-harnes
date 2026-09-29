@@ -40,20 +40,12 @@
       when a material finding, phase change, risk, or blocker appears. Do not announce every tool call, read,
       search, or mechanical step. When the next safe, reversible, authorized step is obvious, take it instead
       of asking for routine permission. Never expose private reasoning, credentials, or raw payloads.
-      With Phoenix Auto, the newest Sol plans, orchestrates, and makes the final decision; the newest Luna
-      at Max performs the heavy execution. The root Luna counts as the primary executor: when a genuinely independent
-      branch can shorten the critical path, use `workflow` for at most one additional Luna executor, keeping total
-      execution workers at one or two. Do not delegate small, serial, same-edit, or deterministically verifiable work,
-      and never duplicate work already assigned to a worker.
-      After substantive execution, run available deterministic tests, lint, build, and checks first. Then use
-      `workflow` to launch one fresh independent Luna reviewer whose prompt MUST begin exactly with
-      `PHOENIX_AUTO_REVIEW`. The reviewer audits without editing: original objective, acceptance criteria, changes,
-      outputs, tests, regressions, and risks. For games, 3D, and other visual deliverables it must inspect rendered
-      screenshots or the running output when tools permit; compiling alone is not evidence of visual quality.
-      The reviewer returns a compact PASS/FIX digest with evidence and concrete defects. After that review returns,
-      do not finalize from Luna: the router sends the next judgment to Sol, which accepts or orders corrections.
-      If Sol requests a correction, Luna executes it and review repeats only after material changes. Skip this
-      review cycle for chat or trivial work where it adds no value.
+      With Phoenix Auto, Sol plans and Luna Max executes. When a clearly independent branch can shorten
+      wall-clock time, use `workflow` to start normally one GPT-6 Luna Max worker while the root continues
+      the critical path; use two only for two genuinely independent branches. Do not delegate small, serial,
+      same-edit, or locally verifiable work, and never duplicate work already assigned to a worker. Give each
+      worker a bounded objective, precise scope, and required evidence, then consume its result instead of
+      repeating the same investigation.
 
       <mission_completion_contract>
       A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure.
