@@ -150,6 +150,15 @@ function contextFromLogs(contents: readonly string[]): NormalizeContext {
   }
 }
 
+const COMMITTED_CONTEXT: NormalizeContext = {
+  sessionIds: ['{{sessionId}}'],
+  cwd: '{{cwd}}',
+}
+
+function normalizeCommittedSession(content: string): string {
+  return normalizeSessionSnapshot(content, COMMITTED_CONTEXT)
+}
+
 function normalizeHeadlessStream(rawStdout: string, cwd: string): string {
   const records = parseJsonl(rawStdout)
   if (records.length === 0) throw new Error('headless snapshot emitted no stream-json records')
@@ -267,7 +276,8 @@ describe('headless stream-json snapshots', () => {
         const session = normalizeSessionSnapshot(actual.content, context)
           .replaceAll('"name":"pwsh"', '"name":"bash"')
         if (refreshing) await writeFile(headlessSessionExpected, session)
-        await expect(session).toMatchFileSnapshot(headlessSessionExpected)
+        const expectedSession = normalizeCommittedSession(await readFile(headlessSessionExpected, 'utf8'))
+        expect(session).toBe(expectedSession)
         expect(session).toContain(task)
         expect(session).toContain('CLI tool round trip complete: CLI_TOOL_ROUND_TRIP')
       },
@@ -938,7 +948,8 @@ describe('headless stream-json snapshots', () => {
         const context = contextFromLogs([parent.content, child.content])
         const normalizedChild = normalizeSessionSnapshot(child.content, context)
         if (refreshing) await writeFile(childExpected, normalizedChild)
-        await expect(normalizedChild).toMatchFileSnapshot(childExpected)
+        const expectedChild = normalizeCommittedSession(await readFile(childExpected, 'utf8'))
+        expect(normalizedChild).toBe(expectedChild)
         expect(normalizedChild).toContain('CHILD_RESULT')
         expect(normalizedChild).not.toContain('"name":"report"')
       },
@@ -1004,6 +1015,7 @@ describe('headless stream-json snapshots', () => {
     expect(result.stderr).toBe('')
     const normalized = normalizeHeadlessStream(result.stdout, runCwd)
     if (refreshing) await writeFile(ptyStreamExpected, normalized)
-    expect(normalized).toBe(await readFile(ptyStreamExpected, 'utf8'))
+    const expectedStream = normalizeHeadlessStream(await readFile(ptyStreamExpected, 'utf8'), '{{cwd}}')
+    expect(normalized).toBe(expectedStream)
   }, LOADER_SMOKE_TEST_TIMEOUT_MS)
 })
