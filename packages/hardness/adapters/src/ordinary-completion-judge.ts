@@ -490,9 +490,8 @@ export function installOrdinaryCompletionJudgeBridge(
     next,
   ): Promise<PostToolDecision> => {
     const downstream = await next()
-    if (exec.agent === undefined || downstream.kind === 'block') return downstream
-    const state = states.get(exec.agent)
-    if (state === undefined) return downstream
+    const state = exec.agent === undefined ? undefined : states.get(exec.agent)
+    if (downstream.kind === 'block' || state === undefined) return downstream
 
     if (result.isError) {
       if (isSubstantiveMutation(exec.name, exec.arguments) || verificationKinds(exec.name, exec.arguments).length > 0) {
