@@ -116,8 +116,7 @@ describe('dsh-tool-subagent', () => {
     expect(result.isError).toBe(false)
 
     const promptText = (seen?.prompt ?? [])
-      .filter((block): block is Extract<(typeof seen)['prompt'][number], { type: 'text' }> => block.type === 'text')
-      .map(block => block.text)
+      .map(block => block.type === 'text' ? block.text : '')
       .join('\n')
 
     expect(promptText).toContain('Abre lunaris-quest.html y verifica que cargue.')
