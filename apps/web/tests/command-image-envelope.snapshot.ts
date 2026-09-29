@@ -9,7 +9,7 @@
 // when the image is the whole `/plan` task.
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { expect, it } from 'vitest'
-import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
+import { installAssembledBootEnv, mountAssembledApp, waitForAssembledBoot } from './assembled-boot.ts'
 
 installAssembledBootEnv()
 
@@ -50,6 +50,7 @@ async function addImage(textarea: HTMLTextAreaElement, name: string): Promise<vo
 
 it('refuses an image-carrying submit to a non-declaring command and keeps draft and images', async () => {
   mountAssembledApp()
+  await waitForAssembledBoot()
   const textarea = await freshComposer()
   await addImage(textarea, 'ref.png')
 
@@ -76,6 +77,7 @@ it('refuses an image-carrying submit to a non-declaring command and keeps draft 
 
 it('consumes images through a declaring command and clears the composer on success', async () => {
   mountAssembledApp()
+  await waitForAssembledBoot()
   const textarea = await freshComposer()
   await addImage(textarea, 'goal-ref.png')
 
@@ -92,6 +94,7 @@ it('consumes images through a declaring command and clears the composer on succe
 
 it('submits a bare /plan with an image as an image-only plan request', async () => {
   mountAssembledApp()
+  await waitForAssembledBoot()
   const textarea = await freshComposer()
   await addImage(textarea, 'plan-task.png')
 

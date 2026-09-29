@@ -8,7 +8,7 @@
 // intake chain (paste → ordered thumbnail rail → image-only send enablement → remove).
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, it } from 'vitest'
-import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
+import { installAssembledBootEnv, mountAssembledApp, waitForAssembledBoot } from './assembled-boot.ts'
 
 installAssembledBootEnv()
 
@@ -208,6 +208,7 @@ it('accepts a whole-page drop under the limits-labeled overlay and refuses an ov
 
 it('renders a host dimension rejection with the projected 2000px limit', async () => {
   mountAssembledApp('?fixture&fixturePrompt=reject')
+  await waitForAssembledBoot()
 
   const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
   const start = tree.querySelector<HTMLButtonElement>('button[aria-label="New session in fixture"]')
