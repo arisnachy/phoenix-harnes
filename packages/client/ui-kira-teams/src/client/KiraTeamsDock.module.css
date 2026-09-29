@@ -214,6 +214,10 @@
     0 10px 26px rgb(44 54 74 / 6%);
 }
 
+.rowPending {
+  border-color: color-mix(in srgb, #8a5ad7 18%, var(--dsh-color-border, #d7dee8));
+}
+
 .agentVisualRow {
   min-width: 0;
   display: flex;
