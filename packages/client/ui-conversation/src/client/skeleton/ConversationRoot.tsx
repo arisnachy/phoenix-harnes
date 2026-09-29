@@ -6,7 +6,9 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import type { SessionId, WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
-import { HeroGlow, HeroShell, WorkspaceChip, workspaceLabel } from './EmptyHero.tsx'
+import {
+  HeroAttentionList, HeroGlow, HeroShell, WorkspaceChip, heroAttentionPrompt, workspaceLabel,
+} from './EmptyHero.tsx'
 import css from './ConversationRoot.module.css'
 
 /** Full props composed from the slot contract. */
@@ -39,8 +41,8 @@ const SessionBodyOutlet = memo(function SessionBodyOutlet({
 })
 
 export function ConversationRoot({
-  sessionId, useSession, useSessions, useWorkspaces, useInput, useComposerBlock, useUserProfile, useProactivityAttention,
-  renderSlot, renderSlotChain, selectWorkspace, t,
+  sessionId, useSession, useSessions, useWorkspaces, useInput, inputActions, useComposerBlock, useUserProfile,
+  useProactivityAttention, renderSlot, renderSlotChain, selectWorkspace, t,
 }: ConversationRootProps) {
   const openState = useSession(s => s.openState)
   const composerPhase = useSession(s => s.composerPhase)
@@ -59,6 +61,15 @@ export function ConversationRoot({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  const selectAttention = useCallback((item: (typeof proactiveAttention)[number]): void => {
+    if (inputActions === undefined) return
+    inputActions.setDraft(heroAttentionPrompt(item))
+    requestAnimationFrame(() => {
+      rootRef.current?.querySelector('textarea')?.focus()
+    })
+  }, [inputActions])
 
   // Publishes the seat's live height as --dsh-composer-height on the scroll
   // body so floating controls (ChatView back-to-bottom) clear the composer as
@@ -187,10 +198,11 @@ export function ConversationRoot({
   const composerBar = (
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
       {hero && <HeroGlow className={css.heroGlow} />}
-      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} attention={proactiveAttention} />}
+      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} />}
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
+      {hero && <HeroAttentionList attention={proactiveAttention} onSelect={selectAttention} />}
     </div>
   )
 
@@ -212,7 +224,7 @@ export function ConversationRoot({
   )
 
   return (
-    <div className={css.root} data-phase={phase}>
+    <div ref={rootRef} className={css.root} data-phase={phase}>
       <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
       <div className={css.scrollBody} data-conversation-scroll="">
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
