@@ -66,19 +66,32 @@ describe('proactivity home attention ranking', () => {
     expect(items[0]).toMatchObject({ kind: 'upcoming', detail: 'Conviene preparar la próxima clase.' })
   })
 
-  it('ranks recent failures and respects attention off', () => {
+  it('ranks actionable recent failures, suppresses contextless failures, and respects attention off', () => {
     const failure = task({
       id: 'failed', title: 'Inbox review', status: 'failed', delivery: 'chat',
+      attentionText: 'La revisión del correo no pudo completarse; revisa la conexión de Gmail.',
       history: [{
         phase: 'deliver', scheduledFor: '2026-09-29T15:00:00.000Z', idempotencyKey: 'f',
         startedAt: '2026-09-29T15:00:00.000Z', finishedAt: '2026-09-29T15:01:00.000Z',
         status: 'failed', error: 'connector unavailable',
       }],
     })
+    const contextless = task({
+      id: 'test-failure', title: 'Prueba realizada', status: 'failed', delivery: 'chat',
+      history: [{
+        phase: 'deliver', scheduledFor: '2026-09-29T15:00:00.000Z', idempotencyKey: 'x',
+        startedAt: '2026-09-29T15:00:00.000Z', finishedAt: '2026-09-29T15:01:00.000Z',
+        status: 'failed', error: 'test failure',
+      }],
+    })
     const hidden = task({ id: 'hidden', attentionMode: 'off', attentionPriority: 'high' })
 
-    expect(buildProactivityAttentionItems([hidden, failure], NOW)).toEqual([
-      expect.objectContaining({ taskId: 'failed', kind: 'failure' }),
+    expect(buildProactivityAttentionItems([hidden, contextless, failure], NOW)).toEqual([
+      expect.objectContaining({
+        taskId: 'failed',
+        kind: 'failure',
+        detail: 'La revisión del correo no pudo completarse; revisa la conexión de Gmail.',
+      }),
     ])
   })
 })
