@@ -172,9 +172,11 @@ export function enrichManualModels(
   models: unknown,
   discovered: readonly DiscoveredModelView[],
 ): unknown {
-  if (!Array.isArray(models) || models.length === 0 || discovered.length === 0) return models
+  if (!Array.isArray(models)) return models
+  const rows: readonly unknown[] = models
+  if (rows.length === 0 || discovered.length === 0) return rows
   const byId = new Map(discovered.map(model => [model.id, model]))
-  return models.map((model) => {
+  return rows.map(model => {
     if (typeof model !== 'object' || model === null || Array.isArray(model)) return model
     const row = model as Record<string, unknown>
     const id = typeof row.id === 'string' ? row.id : undefined
@@ -324,7 +326,7 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
     const shouldHydrateCodex = layout === 'pi-ai'
       && props.provider === 'openai-codex'
       && Array.isArray(manualModels)
-      && manualModels.some((model) =>
+      && manualModels.some(model =>
         typeof model === 'object' && model !== null && !Array.isArray(model)
         && (model as Record<string, unknown>).reasoningEfforts === undefined)
     if (shouldHydrateCodex) {
