@@ -16,6 +16,10 @@ const REALITY_TIME = '{{realityTime}}'
 const REALITY_CONTEXT_OPEN = '<phoenix_reality_context>'
 const REALITY_CONTEXT_CLOSE = '</phoenix_reality_context>'
 const PACKED_CHUNK_ROW_TYPES = new Set(['text-chunks', 'reasoning-chunks', 'tool-call-chunks'])
+const RUNTIME_CONTEXT_TOKEN = '{{runtimeContext}}'
+const RUNTIME_CONTEXT_PLUGIN = '@phoenix-ai/dsh-system-prompt'
+const LIVE_ACTIVITY_GUIDANCE_PREFIX =
+  'Mientras trabajas, antes de usar una herramienta o cambiar de acción, escribe una sola frase breve'
 
 function isPackedFixtureRow(record: Record<string, unknown>): boolean {
   return typeof record.type === 'string' && PACKED_CHUNK_ROW_TYPES.has(record.type)
@@ -26,6 +30,47 @@ function omitFixtureEnvelope(record: Record<string, unknown>): void {
   delete record.time
   delete record.seq0
   delete record.time0
+}
+
+/**
+ * Canonicalize model-visible runtime decorations that are intentionally
+ * covered by dedicated feature tests rather than every cross-product session
+ * golden. This keeps broad replay snapshots focused on durable session
+ * behavior instead of churning whenever machine context or KIRA live-activity
+ * wording evolves.
+ */
+function canonicalizeAuxiliarySnapshotContent(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (let index = value.length - 1; index >= 0; index--) {
+      const item = value[index]
+      if (item !== null && typeof item === 'object') {
+        const block = item as Record<string, unknown>
+        if (block.type === 'text'
+          && typeof block.text === 'string'
+          && block.text.startsWith(LIVE_ACTIVITY_GUIDANCE_PREFIX)) {
+          value.splice(index, 1)
+          continue
+        }
+      }
+      canonicalizeAuxiliarySnapshotContent(item)
+    }
+    return
+  }
+  if (value === null || typeof value !== 'object') return
+
+  const record = value as Record<string, unknown>
+  const source = record.source
+  if (source !== null && typeof source === 'object') {
+    const sourceRecord = source as Record<string, unknown>
+    if (sourceRecord.kind === 'plugin'
+      && sourceRecord.plugin === RUNTIME_CONTEXT_PLUGIN
+      && sourceRecord.form === 'snapshot'
+      && Array.isArray(record.content)) {
+      record.content = [{ type: 'text', text: RUNTIME_CONTEXT_TOKEN }]
+      if ('sections' in sourceRecord) sourceRecord.sections = []
+    }
+  }
+  for (const nested of Object.values(record)) canonicalizeAuxiliarySnapshotContent(nested)
 }
 
 /** A cwd-rooted path after volatile cwd replacement, through its last separator-delimited segment. */
@@ -414,6 +459,7 @@ export function normalizeSessionLog(
   const lines = rawLog.split('\n').filter(line => line.trim().length > 0)
   const records = lines.map((line) => {
     const record = JSON.parse(line) as Record<string, unknown>
+    canonicalizeAuxiliarySnapshotContent(record)
     if (record.type === 'session') {
       if ('createdAt' in record) record.createdAt = 0
     } else if (isPackedFixtureRow(record)) {
