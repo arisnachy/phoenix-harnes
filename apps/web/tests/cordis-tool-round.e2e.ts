@@ -136,18 +136,22 @@ describe('web e2e: Cordis tools use their owned cards', () => {
 
   it.skipIf(MODE === 'record')('renders localized Cordis lifecycle cards', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-cordis-rows'))
-    await expect.poll(() => page.getByText('CORDIS_UI_DONE', { exact: true }).count(), { timeout: 15_000 })
+    await expect.poll(() => page.getByText('CORDIS_UI_DONE', { exact: true }).count(), { timeout: 30_000 })
       .toBeGreaterThanOrEqual(1)
 
+    // The Host can finish the replay turn before the browser's optional
+    // tool-presentation plugins finish hydrating under a contended CI runner.
+    // Wait for the specialized Cordis row itself rather than treating the
+    // assistant text as proof that client presentation is settled.
     const inspectRow = page.locator('[data-tool="cordis_inspect_self"]').filter({ hasText: 'Inspect' }).first()
-    await inspectRow.waitFor({ timeout: 10_000 })
+    await inspectRow.waitFor({ timeout: 30_000 })
 
     // cordis_define does NOT go through the generic row: ui-cordis registers a
     // keyed toolview for it, and a keyed hit replaces the generic card. So the
     // title here is the CARD's ("Cordis Plugin"), and the expanded body is the
     // card's own two code sections rather than a generic args dump.
     const defineRow = page.locator('[data-tool="cordis_define"]').filter({ hasText: 'Cordis Plugin' }).first()
-    await defineRow.waitFor({ timeout: 10_000 })
+    await defineRow.waitFor({ timeout: 30_000 })
     // The whole summary row is the expand toggle (unified tool-row interaction).
     await defineRow.locator('[aria-expanded]').first().click()
     await expect.poll(() => defineRow.textContent(), { timeout: 10_000 }).toContain('data-snapshot-probe')
@@ -155,11 +159,11 @@ describe('web e2e: Cordis tools use their owned cards', () => {
     await expect.poll(() => defineRow.textContent()).toContain(PACKAGE_CODE)
 
     const runRow = page.locator('[data-tool="cordis_run"]').filter({ hasText: 'Run Cordis Plugin' }).first()
-    await runRow.waitFor({ timeout: 10_000 })
+    await runRow.waitFor({ timeout: 30_000 })
     await expect.poll(() => runRow.textContent()).toContain('snap-')
 
     const stopRow = page.locator('[data-tool="cordis_stop"]').filter({ hasText: 'Stop Cordis Plugin' }).first()
-    await stopRow.waitFor({ timeout: 10_000 })
+    await stopRow.waitFor({ timeout: 30_000 })
     await expect.poll(() => stopRow.textContent()).toContain('snap-')
     await expect(stopRow.getAttribute('data-state')).resolves.toBe('ok')
     // Stopping withdraws the browser half from every page, probe included.
@@ -168,6 +172,10 @@ describe('web e2e: Cordis tools use their owned cards', () => {
 
   it.skipIf(MODE === 'record')('matches the conversation aria golden', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-cordis-aria'))
+    // Keep the golden tied to the settled specialized presentation, not to a
+    // transient generic block shown while optional client modules hydrate.
+    await page.locator('[data-tool="cordis_stop"]').filter({ hasText: 'Stop Cordis Plugin' }).first()
+      .waitFor({ timeout: 30_000 })
     await page.locator('[data-conversation-scroll]').evaluate((host) => { host.scrollTop = host.scrollHeight })
     await expect.poll(
       async () => page.getByRole('button', { name: 'Back to bottom', exact: true }).count(),
