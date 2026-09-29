@@ -63,7 +63,7 @@ describe('connector_install', () => {
       reason: 'Install registry-listed MCP io.example/calendar @ 1.0.0 into PHOENIX',
       risk: 'medium',
       reversible: true,
-      signal: expect.any(AbortSignal),
+      signal: expect.any(AbortSignal) as unknown as AbortSignal,
     }))
     expect(service.installMcpRegistryServer).not.toHaveBeenCalled()
   })
@@ -183,7 +183,7 @@ describe('x_mcp_activate', () => {
       callId: 'call-install',
       risk: 'medium',
       reversible: true,
-      signal: expect.any(AbortSignal),
+      signal: expect.any(AbortSignal) as unknown as AbortSignal,
     }))
     expect(host.enableXMcp).not.toHaveBeenCalled()
   })
@@ -199,7 +199,7 @@ describe('x_mcp_activate', () => {
       api: 'installed',
       docs: 'installed',
       credentialsReady: true,
-      message: expect.stringContaining('Complete the X browser authorization'),
+      message: expect.stringContaining('Complete the X browser authorization') as unknown as string,
     })
 
     const missing = xHost({ credentials: false })
@@ -207,7 +207,7 @@ describe('x_mcp_activate', () => {
     await expect(missingTool.execute({ requestedByUser: true }, exec())).resolves.toMatchObject({
       status: 'enabled',
       credentialsReady: false,
-      message: expect.stringContaining('/secret'),
+      message: expect.stringContaining('/secret') as unknown as string,
     })
     expect(ready.enableXMcp).toHaveBeenCalledWith({ identity: 'user' })
     expect(missing.enableXMcp).toHaveBeenCalledWith({ identity: 'user' })
@@ -252,10 +252,10 @@ describe('x_mcp_activate', () => {
       identity: 'phoenix',
       signupUrl: 'https://x.com/signup',
       requiresHumanVerification: true,
-      message: expect.stringContaining('official X signup flow'),
+      message: expect.stringContaining('official X signup flow') as unknown as string,
     })
     expect(approval.request).toHaveBeenCalledWith(expect.objectContaining({
-      reason: expect.stringContaining('Phoenix-owned X account'),
+      reason: expect.stringContaining('Phoenix-owned X account') as unknown as string,
       risk: 'medium',
     }))
     expect(host.enableXMcp).not.toHaveBeenCalled()
@@ -263,7 +263,7 @@ describe('x_mcp_activate', () => {
       source: { kind: 'plugin', plugin: 'x-mcp' },
       content: [expect.objectContaining({
         type: 'text',
-        text: expect.stringContaining('browser_open to https://x.com/signup'),
+        text: expect.stringContaining('browser_open to https://x.com/signup') as unknown as string,
       })],
     }))
   })
@@ -279,7 +279,7 @@ describe('x_mcp_activate', () => {
     }, exec())).resolves.toMatchObject({
       status: 'enabled',
       identity: 'phoenix',
-      message: expect.stringContaining('already configured'),
+      message: expect.stringContaining('already configured') as unknown as string,
     })
     expect(approval.request).not.toHaveBeenCalled()
     expect(host.enableXMcp).not.toHaveBeenCalled()
