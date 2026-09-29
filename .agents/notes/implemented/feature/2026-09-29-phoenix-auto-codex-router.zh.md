@@ -10,15 +10,15 @@ Status: implemented
 
 ## Decision
 
-当 `openai-codex` 同时发布 `gpt-6-sol` 和 `gpt-6-luna` 时，在现有模型组内增加一个合成的 `Phoenix Auto` 选项。它在界面中表现为可选择的模型，但这个合成模型 id 永远不会发送给模型供应商。
+当 `openai-codex` 同时发布 `gpt-6.1-sol` 和 `gpt-6-luna` 时，在现有模型组内增加一个合成的 `Phoenix Auto` 选项。它在界面中表现为可选择的模型，但这个合成模型 id 永远不会发送给模型供应商。
 
 Phoenix Auto 使用确定性路由，不额外调用分类模型：
 
 - 简单对话回复使用 GPT-6 Luna Low；
 - 更深入但只需回答的问题使用 GPT-6 Luna Medium；
-- 可执行任务先使用一次 GPT-6 Sol Medium 做规划/诊断；
+- 可执行任务先使用一次 GPT-6.1 Sol Medium 做规划/诊断；
 - 后续执行使用 GPT-6 Luna Max；
-- 连续相同工具错误、最近三次相同工具调用或重复供应商重试会触发一次 GPT-6 Sol 救援步骤；
+- 连续相同工具错误、最近三次相同工具调用或重复供应商重试会触发一次 GPT-6.1 Sol 救援步骤；
 - 救援后立即返回 GPT-6 Luna Max；
 - 同一回合再次持续卡住时，第二次 Sol 救援可以从 Medium 提升到 High。
 

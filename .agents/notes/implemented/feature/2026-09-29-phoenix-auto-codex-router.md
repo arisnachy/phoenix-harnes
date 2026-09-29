@@ -10,15 +10,15 @@ A user who wants the best balance of GPT-6 quality, latency, and cost currently 
 
 ## Decision
 
-Expose a synthetic `Phoenix Auto` row inside the existing `openai-codex` model group whenever both `gpt-6-sol` and `gpt-6-luna` are advertised. It behaves like a selectable model in the UI but is never sent to the provider as a model id.
+Expose a synthetic `Phoenix Auto` row inside the existing `openai-codex` model group whenever both `gpt-6.1-sol` and `gpt-6-luna` are advertised. It behaves like a selectable model in the UI but is never sent to the provider as a model id.
 
 Phoenix Auto routes deterministically, without an extra classifier model call:
 
 - simple conversational replies use GPT-6 Luna at Low;
 - deeper answer-only prompts use GPT-6 Luna at Medium;
-- actionable tasks start with one GPT-6 Sol Medium planning/diagnosis step;
+- actionable tasks start with one GPT-6.1 Sol Medium planning/diagnosis step;
 - subsequent execution uses GPT-6 Luna Max;
-- repeated identical tool failures, three repeated identical tool calls, or repeated provider retries trigger one GPT-6 Sol rescue step;
+- repeated identical tool failures, three repeated identical tool calls, or repeated provider retries trigger one GPT-6.1 Sol rescue step;
 - execution returns to GPT-6 Luna Max immediately after the rescue;
 - a second persistent rescue within the same turn may raise Sol from Medium to High.
 

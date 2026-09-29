@@ -112,7 +112,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-sol',
+      model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('medium'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
@@ -212,7 +212,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-sol',
+      model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('medium'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
@@ -459,8 +459,9 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('uses premium Codex models as planners and the matching Luna generation at Max as worker', () => {
+  it('uses premium Codex models as planners and the active Luna worker at Max', () => {
     expect(isCodexPlannerModel('gpt-5.6-sol')).toBe(true)
+    expect(isCodexPlannerModel('gpt-6.1-sol')).toBe(true)
     expect(isCodexPlannerModel('gpt-6-astra')).toBe(true)
     expect(isCodexPlannerModel('gpt-6-luna')).toBe(false)
 
@@ -469,6 +470,14 @@ describe('installModelSelection()', () => {
       selection: {
         provider: 'openai-codex',
         model: 'gpt-5.6-luna',
+        reasoningEffort: ReasoningEffortId('max'),
+      },
+    })
+    expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-6.1-sol' })).toEqual({
+      afterStep: 1,
+      selection: {
+        provider: 'openai-codex',
+        model: 'gpt-6-luna',
         reasoningEffort: ReasoningEffortId('max'),
       },
     })
