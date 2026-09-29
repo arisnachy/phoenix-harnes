@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import LlmRuntime, { createUserMessage, CallId, LlmError, StreamChunk  } from '@phoenix-ai/dsh-llm'
 import SessionStore, { SessionId, TurnEndReason } from '@phoenix-ai/dsh-session'
-import SystemPrompt, { HARNESS_IDENTITY } from '@phoenix-ai/dsh-system-prompt'
+import SystemPrompt, { HARNESS_IDENTITY, RUNTIME_CONTEXT_HEADER } from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture } from '@phoenix-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@phoenix-ai/dsh-agent'
 
@@ -467,7 +467,7 @@ describe('agent loop', () => {
     expect(contextEvents()).toHaveLength(1)
     expect(contextEvents()[0]?.data.content).toEqual([{
       type: 'text',
-      text: 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nMode: read-only.',
+      text: `${RUNTIME_CONTEXT_HEADER}\n\nMode: read-only.`,
     }])
 
     send(agent, 'unchanged')
@@ -611,7 +611,7 @@ describe('agent loop', () => {
     expect(runtimeContexts).toHaveLength(2)
     expect(runtimeContexts[1]?.data.content).toEqual([{
       type: 'text',
-      text: 'Current runtime context. This snapshot supersedes earlier runtime-context snapshots.\n\nMode: read-only.',
+      text: `${RUNTIME_CONTEXT_HEADER}\n\nMode: read-only.`,
     }])
   })
 
