@@ -119,6 +119,8 @@ export interface ActivityState {
     turn: number
     sawTool: boolean
     pendingCalls: string[]
+    /** Raw text authored by the child model in the current step/turn. */
+    text?: string | undefined
   } | undefined
 }
 
@@ -134,6 +136,7 @@ const activityStateSchema: z.ZodType<ActivityState> = z.object({
     turn: z.number().int().nonnegative(),
     sawTool: z.boolean(),
     pendingCalls: z.array(z.string()),
+    text: z.string().optional(),
   }).strict().optional(),
 }).strict()
 
@@ -141,12 +144,28 @@ const activityProjectionSchema: z.ZodType<SubagentActivityProjection> = z.object
   provider: z.string().optional(),
   model: z.string().optional(),
   phase: z.enum(['preparing', 'running-tools', 'verifying', 'idle']),
+  text: z.string().optional(),
 }).strict() as z.ZodType<SubagentActivityProjection>
 
 function activityPhase(state: ActivityState): SubagentActivityPhase {
   if (state.openTurn === undefined) return 'idle'
   if (state.openTurn.pendingCalls.length > 0) return 'running-tools'
   return state.openTurn.sawTool ? 'verifying' : 'preparing'
+}
+
+const MAX_AGENT_LIVE_TEXT = 512
+
+function appendAgentText(current: string | undefined, delta: string): string | undefined {
+  if (delta.length === 0) return current
+  const next = `${current ?? ''}${delta}`.slice(0, MAX_AGENT_LIVE_TEXT)
+  return next.length === 0 ? undefined : next
+}
+
+function assembledAgentText(event: SessionEvent<'assistant/message'>): string | undefined {
+  const text = event.data.message.content
+    .map(block => block.type === 'text' ? block.text : '')
+    .join('')
+  return text.length === 0 ? undefined : text.slice(0, MAX_AGENT_LIVE_TEXT)
 }
 
 /** Durable model route and safe phase projection for the teams dock. */
@@ -165,6 +184,34 @@ export const subagentActivityProjectionDefinition = {
     }
     if (event.type === 'turn/start') {
       return { ...state, openTurn: { turn: event.data.turn, sawTool: false, pendingCalls: [] } }
+    }
+    if (event.type === 'step/start' && state.openTurn?.turn === event.data.turn) {
+      const { text: _previousText, ...openTurn } = state.openTurn
+      return { ...state, openTurn }
+    }
+    if (
+      event.type === 'assistant/chunk'
+      && state.openTurn?.turn === event.data.turn
+      && event.data.chunk.type === 'text-delta'
+    ) {
+      const text = appendAgentText(state.openTurn.text, event.data.chunk.text)
+      return {
+        ...state,
+        openTurn: {
+          ...state.openTurn,
+          ...text === undefined ? {} : { text },
+        },
+      }
+    }
+    if (event.type === 'assistant/message' && state.openTurn?.turn === event.data.turn) {
+      const text = assembledAgentText(event)
+      return {
+        ...state,
+        openTurn: {
+          ...state.openTurn,
+          ...text === undefined ? {} : { text },
+        },
+      }
     }
     if (event.type === 'tool/call' && state.openTurn?.turn === event.data.turn) {
       return {
@@ -198,9 +245,10 @@ export const subagentActivityProjectionDefinition = {
     view: state => ({
       ...(state.route === undefined ? {} : state.route),
       phase: activityPhase(state),
+      ...state.openTurn?.text === undefined ? {} : { text: state.openTurn.text },
     }),
   },
-  stateVersion: 1,
+  stateVersion: 2,
 } satisfies ProjectionDefinition<'subagentActivity', ActivityState>
 
 interface IdentityState {
