@@ -1,5 +1,7 @@
 # `@phoenix-ai/dsh-tool-healthia`
 
+[English](README.md) | [中文](README.zh.md)
+
 On-demand HealthIA model surface.
 
 PHOENIX keeps only one small global tool, `healthia_activate`. When the current
