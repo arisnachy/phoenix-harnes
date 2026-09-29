@@ -112,7 +112,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-sol',
+      model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('medium'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
@@ -212,7 +212,7 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-sol',
+      model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('medium'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
