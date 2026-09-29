@@ -147,10 +147,26 @@ describe('approved KIRA compact live-agent dock', () => {
     })
 
     const text = liveActivityTextOf(real, 58)
-    expect(text.startsWith('abre lunaris-quest.html')).toBe(true)
+    expect(text.startsWith('Abriré lunaris-quest.html')).toBe(true)
     expect(text.length).toBeLessThanOrEqual(58)
     expect(text).not.toContain('Preparando')
     expect(text).not.toContain('Supervisando misión')
+  })
+
+  it('uses first-person progressive wording for real runtime gerunds', () => {
+    const runtime = summary({
+      id: sid('runtime-action'),
+      running: true,
+      projectionValues: {
+        subagentActivity: {
+          model: 'gpt-5.6-luna',
+          phase: 'running-tools',
+          detail: 'Revisando la página cargada',
+        } as never,
+      },
+    })
+
+    expect(liveActivityTextOf(runtime)).toBe('Estoy revisando la página cargada')
   })
 
   it('describes what each running agent is actually doing', () => {
