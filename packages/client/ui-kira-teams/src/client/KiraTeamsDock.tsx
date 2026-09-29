@@ -97,6 +97,47 @@ export function isVisibleAgentSummary(summary: SessionSummary): boolean {
   return activityOf(summary)?.phase !== 'idle'
 }
 
+function firstRuntimeString(record: Record<string, unknown> | undefined, keys: readonly string[]): string | undefined {
+  if (record === undefined) return undefined
+  for (const key of keys) {
+    const value = record[key]
+    if (typeof value === 'string' && value.trim().length > 0) return value.trim()
+  }
+  return undefined
+}
+
+function compactRealText(value: string, maxLength: number): string {
+  const normalized = value
+    .replace(/^\s*(?:orquestaci[oó]n|orchestration)\s*:\s*/iu, '')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  if (normalized.length <= maxLength) return normalized
+  const slice = normalized.slice(0, Math.max(1, maxLength - 1))
+  const boundary = slice.lastIndexOf(' ')
+  const shortened = boundary >= Math.floor(maxLength * 0.58) ? slice.slice(0, boundary) : slice
+  return `${shortened.trimEnd()}…`
+}
+
+/**
+ * Short real activity text for the UI. Prefer live runtime detail when the
+ * projection provides it; otherwise use the actual assigned subagent task.
+ * Never substitutes a canned activity sentence.
+ */
+export function liveActivityTextOf(summary: SessionSummary, maxLength = 72): string {
+  const activity = activityOf(summary) as unknown as Record<string, unknown> | undefined
+  const tool = activity?.tool
+  const toolRecord = typeof tool === 'object' && tool !== null
+    ? tool as Record<string, unknown>
+    : undefined
+  const runtimeDetail = firstRuntimeString(activity, [
+    'detail', 'activity', 'action', 'currentAction', 'statusText', 'message', 'toolName',
+  ]) ?? firstRuntimeString(toolRecord, ['label', 'name', 'action'])
+  const assignedTask = summary.projectionValues?.subagent?.label?.trim()
+  const displayTitle = summary.displayTitle?.trim()
+  const realText = runtimeDetail ?? assignedTask ?? displayTitle ?? ''
+  return compactRealText(realText, maxLength)
+}
+
 function normalizedWorkText(summary: SessionSummary): string {
   return [
     summary.projectionValues?.subagent?.label ?? '',
@@ -305,7 +346,7 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
   if (summary === undefined) return null
 
   const actionKey = activityKeyOf(summary)
-  const performanceKey = performanceKeyOf(summary)
+  const liveActivity = liveActivityTextOf(summary)
 
   return (
     <>
@@ -326,10 +367,12 @@ function cardBody(card: KiraRosterCard, t: TranslateNS<typeof NS>): ReactNode {
         <span className={css.agentName}>{card.name}</span>
         <span className={css.role}>{t(card.specialty)}</span>
       </span>
-      <span className={css.agentAction}>
-        <span className={css.actionChevron} aria-hidden="true">›</span>
-        <span className={css.tagline}>{t(performanceKey)}</span>
-      </span>
+      {liveActivity.length > 0 && (
+        <span className={css.agentAction} title={liveActivity}>
+          <span className={css.actionChevron} aria-hidden="true">›</span>
+          <span className={css.tagline}>{liveActivity}</span>
+        </span>
+      )}
     </>
   )
 }
