@@ -233,7 +233,9 @@ describe('ManagedMcpController', () => {
     await expect(controller.installXMcp({ identity: 'phoenix' }))
       .rejects.toThrow('requires its X username')
     await expect(controller.installXMcp({ identity: 'phoenix', username: 'bad-name!' }))
-      .rejects.toThrow('letters, numbers, or underscores')
+      .rejects.toThrow('1-15 characters')
+    await expect(controller.installXMcp({ identity: 'phoenix', username: 'abcdefghijklmnop' }))
+      .rejects.toThrow('1-15 characters')
 
     await expect(controller.removeXMcp()).resolves.toBe(true)
     expect(live.remove).toHaveBeenCalledTimes(3)
