@@ -16,6 +16,14 @@ export interface ModelSelection {
   reasoningEffort?: ReasoningEffortId
 }
 
+/** Concrete OpenAI Codex routes currently backing the synthetic Phoenix Auto selector. */
+export interface PhoenixCodexAutoRoutes {
+  /** Newest advertised Sol route validated for planning and final review. */
+  planner: string
+  /** Newest advertised Luna route validated for execution and independent review. */
+  worker: string
+}
+
 /** Mutable model selection plus the value captured for the current step. */
 export interface ModelSelectionRef {
   /** Model selected for the next step that enters prompt assembly. */
@@ -24,6 +32,8 @@ export interface ModelSelectionRef {
   assembled: ModelSelection | undefined
   /** Number of model-facing tools captured with the same prompt assembly. */
   assembledToolCount?: number
+  /** Live concrete Sol/Luna routes behind Phoenix Auto, refreshed from the provider catalog. */
+  phoenixAutoRoutes?: PhoenixCodexAutoRoutes
 }
 
 /** Route used after the initial diagnosis/plan step of a turn. */
@@ -38,17 +48,21 @@ export interface ModelSelectionHandoff {
 type ModelSelectionHandoffResolver = (selection: ModelSelection | undefined) => ModelSelectionHandoff | undefined
 
 
-/** Synthetic selector row that enables Phoenix's adaptive GPT-6 Codex router. */
+/** Synthetic selector row that enables Phoenix's adaptive Codex router. */
 export const PHOENIX_CODEX_AUTO_MODEL = 'phoenix-auto'
-/** GPT-6 planner/rescue route used by Phoenix Auto. */
+/** Compatibility fallback when a caller has not yet supplied live catalog routes. */
 export const PHOENIX_CODEX_AUTO_PLANNER_MODEL = 'gpt-6-sol'
-/** GPT-6 execution route used by Phoenix Auto. */
+/** Compatibility fallback when a caller has not yet supplied live catalog routes. */
 export const PHOENIX_CODEX_AUTO_WORKER_MODEL = 'gpt-6-luna'
+/** Marker required at the start of the independent Luna review workflow prompt. */
+export const PHOENIX_CODEX_AUTO_REVIEW_MARKER = 'PHOENIX_AUTO_REVIEW'
 
 /** Premium Codex tiers that should spend one step planning before Luna executes. */
-const CODEX_PLANNER_MODEL = /^gpt-(\d+(?:\.\d+)?)-(?:sol|astra|terra)(?:$|-)/i
+const CODEX_PLANNER_MODEL = /^gpt-(\d+(?:\.\d+)*)-(?:sol|astra|terra)(?:$|-)/i
+/** Sol ids eligible to back Phoenix Auto's planner/reviewer role. */
+const CODEX_SOL_MODEL = /^gpt-(\d+(?:\.\d+)*)-sol(?:$|-)/i
 /** Luna worker ids, grouped by the same GPT generation as their planner. */
-const CODEX_LUNA_MODEL = /^gpt-(\d+(?:\.\d+)?)-luna(?:$|-)/i
+const CODEX_LUNA_MODEL = /^gpt-(\d+(?:\.\d+)*)-luna(?:$|-)/i
 
 /**
  * Whether the user selected Phoenix's synthetic OpenAI Codex router row.
@@ -57,6 +71,57 @@ const CODEX_LUNA_MODEL = /^gpt-(\d+(?:\.\d+)?)-luna(?:$|-)/i
  */
 export function isPhoenixCodexAutoSelection(selection: ModelSelection | undefined): boolean {
   return selection?.provider === 'openai-codex' && selection.model === PHOENIX_CODEX_AUTO_MODEL
+}
+
+function generationParts(value: string): readonly number[] {
+  return value.split('.').map(part => Number.parseInt(part, 10))
+}
+
+function compareGeneration(left: string, right: string): number {
+  const a = generationParts(left)
+  const b = generationParts(right)
+  const width = Math.max(a.length, b.length)
+  for (let index = 0; index < width; index += 1) {
+    const delta = (a[index] ?? 0) - (b[index] ?? 0)
+    if (delta !== 0) return delta
+  }
+  return 0
+}
+
+function latestFamilyModel(
+  models: readonly { readonly id: string }[],
+  pattern: RegExp,
+): string | undefined {
+  let best: { id: string; generation: string; exact: boolean } | undefined
+  for (const model of models) {
+    const match = pattern.exec(model.id)
+    const generation = match?.[1]
+    if (generation === undefined) continue
+    const exact = match?.[0]?.toLocaleLowerCase() === model.id.toLocaleLowerCase()
+    if (best === undefined
+      || compareGeneration(generation, best.generation) > 0
+      || (compareGeneration(generation, best.generation) === 0 && exact && !best.exact)) {
+      best = { id: model.id, generation, exact }
+    }
+  }
+  return best?.id
+}
+
+/**
+ * Pick the newest advertised Sol and Luna independently.
+ *
+ * A newly advertised family generation therefore becomes Phoenix Auto's next
+ * concrete route without a code change; an unsuffixed stable alias wins ties
+ * inside the same numeric generation.
+ * @param models - Provider-owned OpenAI Codex model metadata.
+ * @returns concrete planner and worker ids when both families are available.
+ */
+export function latestPhoenixCodexAutoRoutes(
+  models: readonly { readonly id: string }[],
+): PhoenixCodexAutoRoutes | undefined {
+  const planner = latestFamilyModel(models, CODEX_SOL_MODEL)
+  const worker = latestFamilyModel(models, CODEX_LUNA_MODEL)
+  return planner === undefined || worker === undefined ? undefined : { planner, worker }
 }
 
 function codexPlannerGeneration(model: string): string | undefined {
@@ -404,10 +469,30 @@ function phoenixAutoTaskRequest(text: string): boolean {
     || AUTO_TASK_ACTION.test(candidate)
 }
 
+function completedPhoenixAutoReviews(events: readonly PhoenixAutoEvent[]): number {
+  let awaitingReview = false
+  let completed = 0
+  for (const event of events) {
+    if (event.type === 'tool/call') {
+      const data = event.data as { readonly arguments?: string }
+      if (typeof data.arguments === 'string' && data.arguments.includes(PHOENIX_CODEX_AUTO_REVIEW_MARKER)) {
+        awaitingReview = true
+      }
+      continue
+    }
+    if (awaitingReview && event.type === 'tool/result') {
+      completed += 1
+      awaitingReview = false
+    }
+  }
+  return completed
+}
+
 interface PhoenixAutoRouterState {
   turn: number
   lastRescueStep: number
   rescueCount: number
+  reviewCompletions: number
 }
 
 function phoenixAutoRoute(
@@ -416,25 +501,26 @@ function phoenixAutoRoute(
   step: number,
   directText: string,
   state: PhoenixAutoRouterState,
+  routes: PhoenixCodexAutoRoutes,
 ): ModelSelection {
   if (step <= 1) {
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
       return {
         provider: 'openai-codex',
-        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        model: routes.worker,
         reasoningEffort: ReasoningEffortId('low'),
       }
     }
     if (phoenixAutoTaskRequest(directText)) {
       return {
         provider: 'openai-codex',
-        model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+        model: routes.planner,
         reasoningEffort: ReasoningEffortId('medium'),
       }
     }
     return {
       provider: 'openai-codex',
-      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      model: routes.worker,
       reasoningEffort: ReasoningEffortId(AUTO_DEEP_REPLY.test(directText) ? 'medium' : 'low'),
     }
   }
@@ -443,6 +529,17 @@ function phoenixAutoRoute(
     state.turn = turn
     state.lastRescueStep = 0
     state.rescueCount = 0
+    state.reviewCompletions = 0
+  }
+
+  const reviewCompletions = completedPhoenixAutoReviews(turnEvents(agent, turn))
+  if (reviewCompletions > state.reviewCompletions) {
+    state.reviewCompletions = reviewCompletions
+    return {
+      provider: 'openai-codex',
+      model: routes.planner,
+      reasoningEffort: ReasoningEffortId(reviewCompletions > 1 ? 'high' : 'medium'),
+    }
   }
 
   const repeatedStall = isPhoenixCodexAutoStalled(agent, turn)
@@ -453,14 +550,14 @@ function phoenixAutoRoute(
     state.rescueCount += 1
     return {
       provider: 'openai-codex',
-      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+      model: routes.planner,
       reasoningEffort: ReasoningEffortId(state.rescueCount > 1 ? 'high' : 'medium'),
     }
   }
 
   return {
     provider: 'openai-codex',
-    model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+    model: routes.worker,
     reasoningEffort: ReasoningEffortId('max'),
   }
 }
@@ -483,7 +580,12 @@ export function installModelSelection(
   selection: ModelSelectionRef,
   handoff?: ModelSelectionHandoff | ModelSelectionHandoffResolver,
 ): () => void {
-  const phoenixAutoState: PhoenixAutoRouterState = { turn: 0, lastRescueStep: 0, rescueCount: 0 }
+  const phoenixAutoState: PhoenixAutoRouterState = {
+    turn: 0,
+    lastRescueStep: 0,
+    rescueCount: 0,
+    reviewCompletions: 0,
+  }
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -514,6 +616,10 @@ export function installModelSelection(
           _payload.step,
           directText,
           phoenixAutoState,
+          selection.phoenixAutoRoutes ?? {
+            planner: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+            worker: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+          },
         )
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
