@@ -90,7 +90,7 @@ const CODEX_REASONING: LlmModelReasoningInfo = {
 
 function registerCodex6(ctx: Context): void {
   ctx.llm.registerAdapter(['openai-codex'], new CatalogAdapter('OpenAI Codex', [
-    { provider: 'openai-codex', id: PHOENIX_CODEX_AUTO_PLANNER_MODEL, name: 'GPT-6 Sol' },
+    { provider: 'openai-codex', id: PHOENIX_CODEX_AUTO_PLANNER_MODEL, name: 'GPT-6.1 Sol' },
     { provider: 'openai-codex', id: PHOENIX_CODEX_AUTO_WORKER_MODEL, name: 'GPT-6 Luna' },
   ], CODEX_REASONING))
 }
@@ -355,7 +355,7 @@ describe('Web session model selection', () => {
     expect(codex?.models[0]).toEqual({
       id: PHOENIX_CODEX_AUTO_MODEL,
       name: 'Phoenix Auto',
-      description: 'GPT-6 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
+      description: 'GPT-6.1 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
     })
 
     const selected = expectValue(await api.sessions.selectModel(request({

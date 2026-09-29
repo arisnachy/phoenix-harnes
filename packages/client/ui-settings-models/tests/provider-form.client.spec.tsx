@@ -12,6 +12,7 @@ import { formatCapacity, parseCapacity } from '../src/client/DeepSeekModelsEdito
 import { SettingsDescribeMirror } from '@phoenix-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { ModelsSettingsStore, deriveKeyRef, protocolChoices } from '../src/client/store.ts'
 import { en } from '../src/client/locales.ts'
+import { enrichManualModels } from '../src/client/ProviderEditor.tsx'
 import { settingsSchema } from './settings-schema.client.ts'
 
 afterEach(cleanup)
@@ -33,6 +34,7 @@ const PiAiConfig = Schema.object({
       name: Schema.string(),
       contextWindow: Schema.number(),
       maxTokens: Schema.number(),
+      reasoningEfforts: Schema.union([Schema.const(false), Schema.dict(Schema.string())]),
     })),
     reasoning: Schema.union(['off', 'high']),
   })),
@@ -215,6 +217,134 @@ describe('protocolChoices', () => {
     const plain = { ...namespace, schema: JSON.parse(JSON.stringify(Schema.object({}).toJSON())) as unknown }
     expect(protocolChoices(plain, settingsSchema)).toEqual([])
     await Promise.resolve()
+  })
+})
+
+describe('manual Codex model capability hydration', () => {
+  it('merges live reasoning metadata beneath user-authored row fields', () => {
+    expect(enrichManualModels([
+      { id: 'gpt-6.1-sol', name: 'My Sol' },
+      { id: 'private-model' },
+      { name: 'missing-id' },
+      'invalid-row',
+    ], [{
+      id: 'gpt-6.1-sol',
+      name: 'GPT-6.1 Sol',
+      contextWindow: 400_000,
+      maxTokens: 64_000,
+      reasoning: {
+        efforts: [
+          { id: 'low', name: 'Low' },
+          { id: 'high', name: 'High' },
+          { id: 'max', name: 'Max' },
+        ],
+        defaultEffort: 'high',
+      },
+    }])).toEqual([
+      {
+        id: 'gpt-6.1-sol',
+        name: 'My Sol',
+        contextWindow: 400_000,
+        maxTokens: 64_000,
+        reasoningEfforts: { low: 'low', high: 'high', max: 'max' },
+      },
+      { id: 'private-model' },
+      { name: 'missing-id' },
+      'invalid-row',
+    ])
+    expect(enrichManualModels(undefined, [])).toBeUndefined()
+    expect(enrichManualModels([], [])).toEqual([])
+    expect(enrichManualModels([{ id: 'unchanged' }], [])).toEqual([{ id: 'unchanged' }])
+  })
+
+  it('hydrates a manually typed Codex model before saving it', async () => {
+    const discover = vi.fn(() => Promise.resolve(ok({
+      models: [{
+        id: 'gpt-6.1-sol',
+        name: 'GPT-6.1 Sol',
+        contextWindow: 400_000,
+        maxTokens: 64_000,
+        reasoning: {
+          efforts: [
+            { id: 'low', name: 'Low' },
+            { id: 'medium', name: 'Medium' },
+            { id: 'high', name: 'High' },
+            { id: 'max', name: 'Max' },
+          ],
+          defaultEffort: 'high',
+        },
+      }],
+    })))
+    const { mutate } = await mountSection({
+      discover,
+      providers: { 'openai-codex': {} },
+    })
+    openEditor('openai-codex')
+
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'gpt-6.1-sol' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstProbe(discover)).toEqual({ settingsNs: 'llm-pi-ai', provider: 'openai-codex' })
+    expect(firstMutate(mutate).ops).toContainEqual({
+      op: 'set',
+      path: ['providers', 'openai-codex', 'models'],
+      value: [{
+        id: 'gpt-6.1-sol',
+        name: 'GPT-6.1 Sol',
+        contextWindow: 400_000,
+        maxTokens: 64_000,
+        reasoningEfforts: {
+          low: 'low',
+          medium: 'medium',
+          high: 'high',
+          max: 'max',
+        },
+      }],
+    })
+  })
+
+  it('still saves a manual Codex id when capability discovery returns a provider error', async () => {
+    const discover = vi.fn(() => Promise.resolve(
+      fail('Codex model metadata unavailable', 'model-discovery-failed'),
+    ))
+    const { mutate } = await mountSection({
+      discover,
+      providers: { 'openai-codex': {} },
+    })
+    openEditor('openai-codex')
+
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'private-codex-model' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops).toContainEqual({
+      op: 'set',
+      path: ['providers', 'openai-codex', 'models'],
+      value: [{ id: 'private-codex-model' }],
+    })
+  })
+
+  it('still saves a manual Codex id when capability discovery is unavailable', async () => {
+    const discover = vi.fn(() => Promise.reject(new Error('Codex discovery unavailable')))
+    const { mutate } = await mountSection({
+      discover,
+      providers: { 'openai-codex': {} },
+    })
+    openEditor('openai-codex')
+
+    fireEvent.click(screen.getByRole('button', { name: en.addModel }))
+    fireEvent.change(screen.getByLabelText(`${en.modelId} 1`), { target: { value: 'private-codex-model' } })
+    fireEvent.click(screen.getByText(en.apply))
+
+    await waitFor(() => { expect(mutate).toHaveBeenCalled() })
+    expect(firstMutate(mutate).ops).toContainEqual({
+      op: 'set',
+      path: ['providers', 'openai-codex', 'models'],
+      value: [{ id: 'private-codex-model' }],
+    })
   })
 })
 

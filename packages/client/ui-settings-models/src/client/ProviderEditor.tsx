@@ -26,14 +26,20 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { CredentialView, IApiClient, SettingsNamespaceView, SettingsPathOpView } from '@phoenix-ai/dsh-api-remotes/client'
+import type {
+  CredentialView,
+  DiscoveredModelView,
+  IApiClient,
+  SettingsNamespaceView,
+  SettingsPathOpView,
+} from '@phoenix-ai/dsh-api-remotes/client'
 import {
   DeepSeekModelsEditor, modelDrafts, validateDeepSeekModels,
 } from './DeepSeekModelsEditor.tsx'
 import { apiKeyFailure } from './apiKey.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
 import { EditorFooter } from './EditorFooter.tsx'
-import { ModelListEditor } from './ModelListEditor.tsx'
+import { adoptDiscoveredModel, ModelListEditor } from './ModelListEditor.tsx'
 import { deriveKeyRef, messageOf, protocolChoices } from './store.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import type { en } from './locales.ts'
@@ -155,6 +161,33 @@ function layoutOf(ns: string): EditorLayout {
   if (ns === 'llm-deepseek') return 'deepseek'
   if (ns === 'llm-pi-ai') return 'pi-ai'
   return 'unknown'
+}
+
+/**
+ * Merge authoritative discovery metadata into manually entered model rows.
+ * User-authored fields win; missing reasoning/capacity/name data is filled from
+ * the provider so a typed Codex id behaves like an auto-discovered model.
+ */
+export function enrichManualModels(
+  models: unknown,
+  discovered: readonly DiscoveredModelView[],
+): unknown {
+  if (!Array.isArray(models)) return models
+  const rows: readonly unknown[] = models
+  if (rows.length === 0 || discovered.length === 0) return rows
+  const byId = new Map(discovered.map(model => [model.id, model]))
+  return rows.map((model) => {
+    if (typeof model !== 'object' || model === null || Array.isArray(model)) return model
+    const row = model as Record<string, unknown>
+    const id = typeof row.id === 'string' ? row.id : undefined
+    if (id === undefined) return model
+    const candidate = byId.get(id)
+    if (candidate === undefined) return model
+    return {
+      ...adoptDiscoveredModel(candidate),
+      ...row,
+    }
+  })
 }
 
 /** The credential reference this profile resolves keys through. */
@@ -288,12 +321,38 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
    */
   const applyOnce = async (): Promise<string | undefined> => {
     const ns = namespace.ns
+    let hydratedDraft = draft
+    const manualModels = schema.getPath(draft, ['models'])
+    const shouldHydrateCodex = layout === 'pi-ai'
+      && props.provider === 'openai-codex'
+      && Array.isArray(manualModels)
+      && manualModels.some(model =>
+        typeof model === 'object' && model !== null && !Array.isArray(model)
+        && (model as Record<string, unknown>).reasoningEfforts === undefined)
+    if (shouldHydrateCodex) {
+      try {
+        const discovered = await api.llm.discoverModels({
+          settingsNs: namespace.ns,
+          provider: props.provider,
+        })
+        if (discovered.result.ok) {
+          hydratedDraft = schema.setPath(
+            draft,
+            ['models'],
+            enrichManualModels(manualModels, discovered.result.value.models),
+          )
+        }
+      } catch {
+        // Capability discovery is enrichment, never a prerequisite for saving.
+        // The Codex live catalog can still enrich the row at runtime later.
+      }
+    }
     // A pi-ai profile names the conventional reference only when this page is
     // about to store a key. Otherwise the provider keeps its native auth path.
-    const next = layout === 'pi-ai' && stringAt(draft, 'apiKeyEnv') === undefined
+    const next = layout === 'pi-ai' && stringAt(hydratedDraft, 'apiKeyEnv') === undefined
       && stringAt(fallback, 'apiKeyEnv') === undefined && keyValue.length > 0
-      ? schema.setPath(draft, ['apiKeyEnv'], keyRef)
-      : draft
+      ? schema.setPath(hydratedDraft, ['apiKeyEnv'], keyRef)
+      : hydratedDraft
     if (props.credentialOnly !== true) {
       // The same checker gates the submit button, so a card cannot reach this
       // with a bad row; it stays because the schema check below would refuse
