@@ -172,8 +172,8 @@ export function HeroShell({ renderSlot, preferredName, attention = [], children 
             {attention.slice(0, 2).map(item => (
               <div className={css.attentionRow} key={item.id}>
                 {item.kind === 'failure'
-                  ? <IconWarningOutline16 className={css.attentionIcon} size={15} aria-hidden="true" />
-                  : <IconSparkle16 className={css.attentionIcon} size={15} aria-hidden="true" />}
+                  ? <IconWarningOutline16 className={css.attentionIcon} size={15} />
+                  : <IconSparkle16 className={css.attentionIcon} size={15} />}
                 <span className={css.attentionTitle}>{item.title}</span>
                 <span className={css.attentionSeparator} aria-hidden="true">·</span>
                 <span className={css.attentionDetail}>{heroAttentionDetail(item)}</span>
