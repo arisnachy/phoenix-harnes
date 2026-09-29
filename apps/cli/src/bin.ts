@@ -155,7 +155,10 @@ switch (invocation.mode) {
     // A failed profile boot must leave no updater child behind holding the
     // launcher's inherited stdio open. Start update watching only once the
     // profile tree has successfully mounted and its lifecycle is established.
-    startPhoenixUpdateWatcher()
+    // Headless is a one-shot profile: spawning long-lived update helpers after
+    // its task has completed would keep inherited stdio/process handles alive
+    // and can prevent the published CLI invocation from terminating.
+    if (invocation.profile !== 'headless') startPhoenixUpdateWatcher()
     break
   }
   case 'plugin': {
