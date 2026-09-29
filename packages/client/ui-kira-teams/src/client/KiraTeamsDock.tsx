@@ -128,7 +128,7 @@ function visibleLiveActivityTextOf(
 
 function normalizedWorkText(summary: SessionSummary): string {
   return [
-    summary.projectionValues?.subagent?.label ?? '',
+    summary.projectionValues.subagent?.label ?? '',
     summary.displayTitle ?? '',
   ].join(' ').trim().toLocaleLowerCase()
 }
@@ -185,7 +185,9 @@ function specialistFor(summary: SessionSummary, occupied: ReadonlySet<ModelAvata
   for (const entry of KIRA_ROSTER) {
     if (!occupied.has(entry.kind)) return entry
   }
-  return KIRA_ROSTER[0]!
+  const fallback = KIRA_ROSTER[0]
+  if (fallback === undefined) throw new Error('KIRA roster must contain at least one specialist')
+  return fallback
 }
 
 export function agentNameOf(summary: SessionSummary): string {
