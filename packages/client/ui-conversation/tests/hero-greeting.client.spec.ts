@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { greetingForHour, preferredNameForHero } from '../src/client/skeleton/EmptyHero.tsx'
+import { greetingForHour, heroAttentionDetail, preferredNameForHero } from '../src/client/skeleton/EmptyHero.tsx'
 
 describe('greetingForHour', () => {
   it('uses the morning greeting before noon', () => {
@@ -28,5 +28,15 @@ describe('preferredNameForHero', () => {
   it('omits the name when the profile has none', () => {
     expect(preferredNameForHero(undefined)).toBeUndefined()
     expect(preferredNameForHero('   ')).toBeUndefined()
+  })
+})
+
+describe('heroAttentionDetail', () => {
+  it('prefers task-specific copy and keeps generic states concise', () => {
+    const base = { id: 'a', taskId: 't', title: 'Task', at: '2026-09-29T16:00:00.000Z', score: 1 } as const
+    expect(heroAttentionDetail({ ...base, kind: 'result', detail: '  Material change  ' })).toBe('Material change')
+    expect(heroAttentionDetail({ ...base, kind: 'failure' })).toBe('Necesita revisión.')
+    expect(heroAttentionDetail({ ...base, kind: 'upcoming' })).toBe('Phoenix lo está preparando.')
+    expect(heroAttentionDetail({ ...base, kind: 'result' })).toBe('Hay un resultado nuevo.')
   })
 })
