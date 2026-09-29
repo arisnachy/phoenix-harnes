@@ -135,7 +135,10 @@
 .phoenixActivity > img {
   position: relative;
   z-index: 2;
-  filter: drop-shadow(0 1px 2px rgb(30 64 175 / 28%)) drop-shadow(0 0 3px rgb(245 158 11 / 34%));
+  filter:
+    drop-shadow(0 1px 1.5px rgb(48 43 38 / 24%))
+    drop-shadow(0 0 2.5px rgb(217 119 6 / 24%))
+    drop-shadow(0 0 3px rgb(109 94 252 / 14%));
 }
 
 .phoenixActivity::before,
@@ -151,68 +154,70 @@
   border-radius: 50%;
   background: conic-gradient(
     from 20deg,
-    rgb(37 99 235 / 0%) 0deg,
-    rgb(37 99 235 / 92%) 62deg,
-    rgb(124 58 237 / 70%) 132deg,
-    rgb(245 158 11 / 94%) 218deg,
-    rgb(251 191 36 / 42%) 286deg,
-    rgb(37 99 235 / 0%) 360deg
+    rgb(217 119 6 / 0%) 0deg,
+    rgb(217 119 6 / 78%) 58deg,
+    rgb(245 158 11 / 58%) 116deg,
+    rgb(124 58 237 / 52%) 178deg,
+    rgb(99 102 241 / 48%) 242deg,
+    rgb(251 191 36 / 52%) 304deg,
+    rgb(217 119 6 / 0%) 360deg
   );
   -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
   mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
-  animation: phoenix-orbit 2.4s linear infinite;
+  animation: phoenix-orbit 3.15s linear infinite;
 }
 
 .phoenixActivity::after {
   z-index: 1;
   inset: 6px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgb(251 191 36 / 38%) 0%, rgb(59 130 246 / 18%) 48%, transparent 74%);
-  filter: blur(3px);
-  opacity: 0.46;
-  animation: phoenix-breathe 1.8s ease-in-out infinite alternate;
+  background:
+    radial-gradient(circle at 50% 60%, rgb(245 158 11 / 26%) 0%, rgb(124 58 237 / 11%) 48%, transparent 74%);
+  filter: blur(2.6px);
+  opacity: 0.4;
+  animation: phoenix-breathe 2.25s ease-in-out infinite alternate;
 }
 
 .phoenixActivity[data-activity='preparing']::before {
-  animation-duration: 3.8s;
+  animation-duration: 4.2s;
 }
 
 .phoenixActivity[data-activity='thinking']::before {
-  animation-duration: 3.1s;
+  animation-duration: 3.25s;
   animation-direction: reverse;
 }
 
 .phoenixActivity[data-activity='thinking']::after {
-  animation-duration: 1.25s;
+  animation-duration: 1.65s;
 }
 
 .phoenixActivity[data-activity='searching']::before,
 .phoenixActivity[data-activity='browsing']::before {
-  animation: phoenix-scan 1.55s ease-in-out infinite;
+  animation: phoenix-scan 1.85s ease-in-out infinite;
 }
 
 .phoenixActivity[data-activity='reading'] > img {
-  animation: phoenix-read 1.7s ease-in-out infinite;
+  animation: phoenix-read 2.05s ease-in-out infinite;
 }
 
 .phoenixActivity[data-activity='writing'] > img {
-  animation: phoenix-write 1.25s ease-in-out infinite;
+  animation: phoenix-write 1.65s ease-in-out infinite;
 }
 
 .phoenixActivity[data-activity='executing']::before {
-  animation-duration: 0.9s;
+  animation-duration: 1.15s;
 }
 
 .phoenixActivity[data-activity='executing']::after {
-  animation-duration: 0.72s;
+  animation-duration: 0.95s;
 }
 
 .phoenixActivity[data-activity='verifying']::before {
-  animation: phoenix-verify 1.35s ease-in-out infinite;
+  animation: phoenix-verify 1.65s ease-in-out infinite;
 }
 
 .phoenixActivity[data-activity='verifying']::after {
-  animation-duration: 1.05s;
+  animation-duration: 1.35s;
 }
 
 .phoenixCompletion {
@@ -229,19 +234,19 @@
 
 @keyframes phoenix-breathe {
   to {
-    opacity: 0.78;
-    transform: scale(1.08);
+    opacity: 0.66;
+    transform: scale(1.045);
   }
 }
 
 @keyframes phoenix-scan {
   0%,
   100% {
-    transform: rotate(-18deg) scale(0.96);
+    transform: rotate(-12deg) scale(0.985);
   }
 
   50% {
-    transform: rotate(198deg) scale(1.05);
+    transform: rotate(192deg) scale(1.02);
   }
 }
 
@@ -252,7 +257,7 @@
   }
 
   50% {
-    transform: translateY(-1px) scale(1.04);
+    transform: translateY(-0.45px) scale(1.012);
   }
 }
 
@@ -263,35 +268,35 @@
   }
 
   50% {
-    transform: translateX(1px) rotate(1.5deg);
+    transform: translateX(0.4px) rotate(0.6deg);
   }
 }
 
 @keyframes phoenix-verify {
   0%,
   100% {
-    transform: rotate(0deg) scale(0.96);
+    transform: rotate(0deg) scale(0.985);
   }
 
   55% {
-    transform: rotate(360deg) scale(1.08);
+    transform: rotate(360deg) scale(1.025);
   }
 }
 
 @keyframes phoenix-complete {
   0% {
     opacity: 0;
-    transform: scale(0.88);
+    transform: scale(0.94);
   }
 
   38% {
     opacity: 1;
-    transform: scale(1.06);
+    transform: scale(1.025);
   }
 
   100% {
     opacity: 0;
-    transform: scale(1.02);
+    transform: scale(1);
   }
 }
 
@@ -306,374 +311,6 @@
 @keyframes dsh-turn-status-shimmer {
   to {
     background-position: 0 0;
-  }
-}
-
-
-/* Phoenix Ember Motion+: warm, theme-aligned activity avatar.
-   The product emblem stays canonical; this layer gives the chat avatar
-   contextual motion without adding layout weight or distracting from text. */
-.turnStatusText {
-  background: linear-gradient(
-    100deg,
-    var(--dsw-alias-label-secondary) 0%,
-    var(--dsw-alias-label-secondary) 39%,
-    rgb(99 102 241 / 88%) 46%,
-    rgb(124 58 237 / 82%) 49%,
-    rgb(249 115 22 / 96%) 52%,
-    rgb(251 191 36 / 92%) 55%,
-    var(--dsw-alias-label-secondary) 62%,
-    var(--dsw-alias-label-secondary) 100%
-  );
-  background-size: 285% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation-duration: 2.55s;
-}
-
-.phoenixActivity {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  transform-origin: center;
-}
-
-.phoenixActivity > img {
-  filter:
-    drop-shadow(0 1px 2px rgb(55 48 42 / 18%))
-    drop-shadow(0 0 4px rgb(249 115 22 / 22%))
-    drop-shadow(0 0 5px rgb(99 102 241 / 14%));
-  transform-origin: 50% 58%;
-  will-change: transform, filter;
-}
-
-.phoenixActivity::before {
-  inset: 0;
-  background: conic-gradient(
-    from 18deg,
-    rgb(249 115 22 / 0%) 0deg,
-    rgb(249 115 22 / 92%) 54deg,
-    rgb(251 191 36 / 78%) 108deg,
-    rgb(124 58 237 / 72%) 170deg,
-    rgb(96 165 250 / 78%) 226deg,
-    rgb(99 102 241 / 42%) 282deg,
-    rgb(249 115 22 / 0%) 360deg
-  );
-  filter:
-    drop-shadow(0 0 2px rgb(249 115 22 / 28%))
-    drop-shadow(0 0 3px rgb(99 102 241 / 18%));
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.45px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.45px));
-  animation-duration: 2.75s;
-}
-
-.phoenixActivity::after {
-  inset: 5px;
-  background:
-    radial-gradient(circle at 50% 62%, rgb(251 191 36 / 32%) 0%, rgb(249 115 22 / 17%) 24%, transparent 57%),
-    radial-gradient(circle at 52% 44%, rgb(99 102 241 / 15%) 0%, transparent 66%);
-  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 44%);
-  filter: blur(2.6px);
-  opacity: 0.48;
-  animation: phoenix-ember-breathe 1.9s ease-in-out infinite alternate;
-}
-
-.phoenixActivity[data-activity='preparing']::before {
-  animation-duration: 3.5s;
-}
-
-.phoenixActivity[data-activity='preparing'] > img {
-  animation: phoenix-idle-float 2.8s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='thinking']::before {
-  animation-duration: 2.65s;
-  animation-direction: reverse;
-}
-
-.phoenixActivity[data-activity='thinking']::after {
-  animation-duration: 1.22s;
-}
-
-.phoenixActivity[data-activity='thinking'] > img {
-  animation: phoenix-thinking-drift 2.05s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='searching']::before,
-.phoenixActivity[data-activity='browsing']::before {
-  animation: phoenix-scan 1.42s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='searching']::after,
-.phoenixActivity[data-activity='browsing']::after {
-  animation: phoenix-scan-glow 1.42s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='searching'] > img,
-.phoenixActivity[data-activity='browsing'] > img {
-  animation: phoenix-search-focus 1.42s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='reading'] > img {
-  animation: phoenix-reading-float 1.62s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='writing']::after {
-  animation: phoenix-response-glow 1.18s ease-in-out infinite alternate;
-}
-
-.phoenixActivity[data-activity='writing'] > img {
-  animation: phoenix-writing-tilt 1.18s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='executing']::before {
-  animation-duration: 0.82s;
-}
-
-.phoenixActivity[data-activity='executing']::after {
-  animation: phoenix-tool-glow 0.82s ease-in-out infinite alternate;
-}
-
-.phoenixActivity[data-activity='executing'] > img {
-  animation: phoenix-tool-pulse 0.82s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='verifying']::before {
-  animation: phoenix-verify 1.2s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='verifying']::after {
-  animation: phoenix-verify-glow 1.2s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='verifying'] > img {
-  animation: phoenix-verify-lock 1.2s ease-in-out infinite;
-}
-
-.phoenixActivity[data-activity='done'] {
-  animation: phoenix-done-settle 1.18s cubic-bezier(0.2, 0.9, 0.3, 1) both;
-}
-
-.phoenixActivity[data-activity='done']::before {
-  animation: phoenix-done-ring 1.05s ease-out both;
-}
-
-.phoenixActivity[data-activity='done']::after {
-  animation: phoenix-done-glow 1.05s ease-out both;
-}
-
-.phoenixActivity[data-activity='done'] > img {
-  animation: phoenix-done-mark 1.05s cubic-bezier(0.2, 0.9, 0.25, 1) both;
-}
-
-@keyframes phoenix-ember-breathe {
-  0% {
-    opacity: 0.38;
-    transform: scale(0.94);
-  }
-
-  100% {
-    opacity: 0.72;
-    transform: scale(1.09);
-  }
-}
-
-@keyframes phoenix-idle-float {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-
-  50% {
-    transform: translateY(-0.7px) scale(1.025);
-  }
-}
-
-@keyframes phoenix-thinking-drift {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-0.7deg) scale(1);
-  }
-
-  50% {
-    transform: translateY(-1px) rotate(0.9deg) scale(1.035);
-  }
-}
-
-@keyframes phoenix-scan-glow {
-  0%,
-  100% {
-    opacity: 0.34;
-    transform: scale(0.93);
-  }
-
-  50% {
-    opacity: 0.8;
-    transform: scale(1.1);
-  }
-}
-
-@keyframes phoenix-search-focus {
-  0%,
-  100% {
-    filter:
-      drop-shadow(0 1px 2px rgb(55 48 42 / 18%))
-      drop-shadow(0 0 3px rgb(96 165 250 / 18%));
-    transform: scale(0.99);
-  }
-
-  50% {
-    filter:
-      drop-shadow(0 1px 2px rgb(55 48 42 / 18%))
-      drop-shadow(0 0 6px rgb(99 102 241 / 28%));
-    transform: scale(1.035);
-  }
-}
-
-@keyframes phoenix-reading-float {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-
-  50% {
-    transform: translateY(-1.1px) scale(1.028);
-  }
-}
-
-@keyframes phoenix-response-glow {
-  from {
-    opacity: 0.42;
-    transform: scale(0.96);
-  }
-
-  to {
-    opacity: 0.76;
-    transform: scale(1.08);
-  }
-}
-
-@keyframes phoenix-writing-tilt {
-  0%,
-  100% {
-    transform: translateX(0) rotate(-0.4deg);
-  }
-
-  50% {
-    transform: translateX(0.9px) rotate(1.1deg) scale(1.025);
-  }
-}
-
-@keyframes phoenix-tool-glow {
-  from {
-    opacity: 0.45;
-    transform: scale(0.94);
-  }
-
-  to {
-    opacity: 0.84;
-    transform: scale(1.11);
-  }
-}
-
-@keyframes phoenix-tool-pulse {
-  0%,
-  100% {
-    transform: scale(0.985);
-  }
-
-  45% {
-    transform: scale(1.045);
-  }
-}
-
-@keyframes phoenix-verify-glow {
-  0%,
-  100% {
-    opacity: 0.36;
-    transform: scale(0.94);
-  }
-
-  60% {
-    opacity: 0.82;
-    transform: scale(1.09);
-  }
-}
-
-@keyframes phoenix-verify-lock {
-  0%,
-  100% {
-    transform: scale(0.985);
-  }
-
-  58% {
-    transform: scale(1.045);
-  }
-}
-
-@keyframes phoenix-done-settle {
-  0% {
-    filter: brightness(1);
-    transform: scale(0.86);
-  }
-
-  36% {
-    filter: brightness(1.08);
-    transform: scale(1.08);
-  }
-
-  100% {
-    filter: brightness(1);
-    transform: scale(1);
-  }
-}
-
-@keyframes phoenix-done-ring {
-  0% {
-    opacity: 0;
-    transform: rotate(-18deg) scale(0.72);
-  }
-
-  38% {
-    opacity: 1;
-    transform: rotate(96deg) scale(1.08);
-  }
-
-  100% {
-    opacity: 0;
-    transform: rotate(165deg) scale(1.32);
-  }
-}
-
-@keyframes phoenix-done-glow {
-  0% {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-
-  42% {
-    opacity: 0.92;
-    transform: scale(1.18);
-  }
-
-  100% {
-    opacity: 0;
-    transform: scale(1.35);
-  }
-}
-
-@keyframes phoenix-done-mark {
-  0% {
-    transform: scale(0.88);
-  }
-
-  42% {
-    transform: scale(1.08);
-  }
-
-  100% {
-    transform: scale(1);
   }
 }
 
