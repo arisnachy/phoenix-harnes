@@ -130,7 +130,7 @@ function normalizedWorkText(summary: SessionSummary): string {
   return [
     // oxlint-disable-next-line typescript/no-unnecessary-condition -- SessionSummary.projectionValues is optional; tsc requires this guard.
     summary.projectionValues?.subagent?.label ?? '',
-    summary.displayTitle ?? '',
+    summary.displayTitle,
   ].join(' ').trim().toLocaleLowerCase()
 }
 
