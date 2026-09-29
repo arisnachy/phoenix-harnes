@@ -429,7 +429,7 @@ function attentionPriority(task: ProactivityTask): number {
 }
 
 /**
- * Rank task state into the two-line, non-intrusive Phoenix home feed.
+ * Rank task state into the quiet, non-intrusive Phoenix home feed.
  * @param tasks - Visible durable tasks; unrevealed surprises must already be filtered by the engine.
  * @param now - Ranking clock.
  * @returns At most eight browser-safe attention rows, highest-value first.
@@ -449,12 +449,14 @@ export function buildProactivityAttentionItems(
     if (mode === 'off') continue
     const priority = attentionPriority(task)
     const failed = [...task.history].reverse().find(row => row.status === 'failed')
-    if (failed !== undefined && Date.parse(failed.finishedAt) >= oldestResult) {
+    const failureDetail = compactAttentionText(task.attentionText)
+    if (failed !== undefined && failureDetail !== undefined && Date.parse(failed.finishedAt) >= oldestResult) {
       items.push({
         id: `${task.id}:failure:${failed.finishedAt}`,
         taskId: task.id,
         kind: 'failure',
         title: task.title,
+        detail: failureDetail,
         at: failed.finishedAt,
         score: 130 + priority,
       })
