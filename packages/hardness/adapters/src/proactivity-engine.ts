@@ -18,6 +18,10 @@ export type ProactivitySenderIdentity = 'user' | 'harness' | 'auto'
 export type ProactivityPhase = 'prepare' | 'deliver'
 /** Terminal status of one attempted phase. */
 export type ProactivityHistoryStatus = 'completed' | 'failed'
+/** How a task participates in Phoenix's quiet home attention feed. */
+export type ProactivityAttentionMode = 'auto' | 'result' | 'upcoming' | 'off'
+/** Relative ranking among otherwise comparable attention signals. */
+export type ProactivityAttentionPriority = 'low' | 'normal' | 'high'
 
 /** Supported recurrence forms. Interval schedules stay anchored; yearly schedules preserve local calendar time. */
 export type ProactivityRecurrence =
@@ -58,6 +62,12 @@ export interface ProactivityTask {
   readonly senderIdentity: ProactivitySenderIdentity
   readonly recipient?: string
   readonly targetAgentId?: string
+  /** Optional home-feed policy; omitted keeps the adaptive default. */
+  readonly attentionMode?: ProactivityAttentionMode
+  /** Optional home-feed priority; omitted ranks as normal. */
+  readonly attentionPriority?: ProactivityAttentionPriority
+  /** Optional concise copy for an upcoming occurrence. */
+  readonly attentionText?: string
   readonly status: ProactivityTaskStatus
   readonly history: readonly ProactivityHistoryEntry[]
 }
@@ -80,6 +90,12 @@ export interface CreateProactivityTaskInput {
   readonly senderIdentity?: ProactivitySenderIdentity
   readonly recipient?: string
   readonly targetAgentId?: string
+  /** Optional home-feed policy; omitted keeps the adaptive default. */
+  readonly attentionMode?: ProactivityAttentionMode
+  /** Optional home-feed priority; omitted ranks as normal. */
+  readonly attentionPriority?: ProactivityAttentionPriority
+  /** Optional concise copy for an upcoming occurrence. */
+  readonly attentionText?: string
 }
 
 /** Input delivered to the host executor for one phase of one occurrence. */
@@ -149,6 +165,12 @@ function nonEmpty(value: string, field: string): string {
   const trimmed = value.trim()
   if (trimmed.length === 0) throw new Error(`${field} must be a non-empty string`)
   return trimmed
+}
+
+function boundedNonEmpty(value: string, field: string, maxChars: number): string {
+  const normalized = nonEmpty(value, field)
+  if (normalized.length > maxChars) throw new Error(`${field} must be at most ${maxChars} characters`)
+  return normalized
 }
 
 function finitePositive(value: number, field: string): number {
@@ -332,6 +354,13 @@ function parseTask(raw: unknown): ProactivityTask {
   if (raw.condition !== undefined && typeof raw.condition !== 'string') throw new Error('invalid condition')
   if (raw.recipient !== undefined && typeof raw.recipient !== 'string') throw new Error('invalid recipient')
   if (raw.targetAgentId !== undefined && typeof raw.targetAgentId !== 'string') throw new Error('invalid targetAgentId')
+  if (raw.attentionMode !== undefined
+    && raw.attentionMode !== 'auto' && raw.attentionMode !== 'result'
+    && raw.attentionMode !== 'upcoming' && raw.attentionMode !== 'off') throw new Error('invalid attentionMode')
+  if (raw.attentionPriority !== undefined
+    && raw.attentionPriority !== 'low' && raw.attentionPriority !== 'normal'
+    && raw.attentionPriority !== 'high') throw new Error('invalid attentionPriority')
+  if (raw.attentionText !== undefined && typeof raw.attentionText !== 'string') throw new Error('invalid attentionText')
   return {
     id: nonEmpty(raw.id, 'id'),
     title: nonEmpty(raw.title, 'title'),
@@ -351,6 +380,9 @@ function parseTask(raw: unknown): ProactivityTask {
     senderIdentity: raw.senderIdentity,
     ...(raw.recipient === undefined ? {} : { recipient: nonEmpty(raw.recipient, 'recipient') }),
     ...(raw.targetAgentId === undefined ? {} : { targetAgentId: nonEmpty(raw.targetAgentId, 'targetAgentId') }),
+    ...(raw.attentionMode === undefined ? {} : { attentionMode: raw.attentionMode }),
+    ...(raw.attentionPriority === undefined ? {} : { attentionPriority: raw.attentionPriority }),
+    ...(raw.attentionText === undefined ? {} : { attentionText: boundedNonEmpty(raw.attentionText, 'attentionText', 320) }),
     status: raw.status,
     history: parseHistory(raw.history),
   }
@@ -514,6 +546,9 @@ export class ProactivityEngine {
         senderIdentity: input.senderIdentity ?? 'auto',
         ...(input.recipient === undefined ? {} : { recipient: nonEmpty(input.recipient, 'recipient') }),
         ...(input.targetAgentId === undefined ? {} : { targetAgentId: nonEmpty(input.targetAgentId, 'targetAgentId') }),
+        ...(input.attentionMode === undefined ? {} : { attentionMode: input.attentionMode }),
+        ...(input.attentionPriority === undefined ? {} : { attentionPriority: input.attentionPriority }),
+        ...(input.attentionText === undefined ? {} : { attentionText: boundedNonEmpty(input.attentionText, 'attentionText', 320) }),
         status: 'scheduled',
         history: [],
       }
