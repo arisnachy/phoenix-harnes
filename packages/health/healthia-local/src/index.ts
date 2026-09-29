@@ -90,11 +90,6 @@ function normalizedText(label: string, value: string, max = 2_000): string {
   return normalized
 }
 
-function optionalText(label: string, value: string | undefined, max = 4_000): string | undefined {
-  if (value === undefined) return undefined
-  return normalizedText(label, value, max)
-}
-
 function assertIso(label: string, value: string): string {
   if (!Number.isFinite(Date.parse(value))) {
     throw new HealthiaError(`${label} must be an ISO-compatible date/time`, 'HEALTHIA_INVALID_INPUT')
