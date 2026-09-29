@@ -238,6 +238,15 @@ describe('x_mcp_activate', () => {
     await expect(tool.execute({
       requestedByUser: true,
       identity: 'phoenix',
+      username: '   ',
+    }, context as never)).resolves.toMatchObject({
+      status: 'setup-required',
+      identity: 'phoenix',
+    })
+
+    await expect(tool.execute({
+      requestedByUser: true,
+      identity: 'phoenix',
     }, context as never)).resolves.toMatchObject({
       status: 'setup-required',
       identity: 'phoenix',
