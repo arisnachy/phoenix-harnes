@@ -25,6 +25,13 @@ async function freshComposer(): Promise<HTMLTextAreaElement> {
     expect(textarea.readOnly).toBe(false)
     expect(textarea.getAttribute('data-phase')).toBe('plain')
   }, { timeout: 10_000 })
+  // The resident composer can become text-ready one render before the
+  // session-scoped attachment face is injected. Wait for that capability too
+  // so a paste cannot race the built plugin graph and get dropped.
+  await waitFor(() => {
+    const attachments = screen.getByRole('button', { name: 'Add files' }) as HTMLButtonElement
+    expect(attachments.disabled).toBe(false)
+  }, { timeout: 10_000 })
   return textarea
 }
 
