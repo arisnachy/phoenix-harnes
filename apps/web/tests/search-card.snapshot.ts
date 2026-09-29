@@ -18,7 +18,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { hasClass, installAssembledBootEnv, mountAssembledApp, REFRESHING_GOLDEN } from './assembled-boot.ts'
+import { hasClass, installAssembledBootEnv, mountAssembledApp, REFRESHING_GOLDEN, waitForAssembledBoot } from './assembled-boot.ts'
 
 const EXPECTED = join(process.cwd(), 'apps/web/tests/snapshots/search-card/grep-card.expected.txt')
 
@@ -47,6 +47,7 @@ function cardShape(root: Element): string {
 describe('assembled search card', () => {
   it('renders the grep card, its truncation summary, and its capped head/tail slice from the built bundles', async () => {
     mountAssembledApp()
+    await waitForAssembledBoot()
 
     const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })
     fireEvent.click(await within(tree).findByText('Fixture 历史会话'))
