@@ -26,13 +26,22 @@ change.
 
 ## Model Experience
 
-Indirectly, through model-facing HealthIA consumers such as
-`@phoenix-ai/dsh-tool-healthia`.
+### Longitudinal health service
+
+#### What the model sees
+
+`ctx.healthia` contributes no prompt, tool schema, or patient data by itself;
+model-facing consumers decide which bounded patient projection enters a request.
+
+#### Token effect
+
+No model tokens are added by this service definition alone. HealthIA consumers
+pay only for the clinical context they explicitly project.
 
 #### KV Cache effect
 
-The service itself contributes no model tokens. Consumers decide when bounded
-patient context and health tools enter a request.
+The seam is prefix-neutral by itself. Cache behavior changes only when a
+model-facing HealthIA consumer mounts prompt content or patient-scoped tools.
 
 ## Known Limitations and Deferred Work
 
