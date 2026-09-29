@@ -9,7 +9,14 @@ import { homedir } from 'node:os'
 import { dirname } from 'node:path'
 import { z as zod } from 'zod'
 import type { Context } from '@phoenix-ai/cordis'
-import { defaultExecutionHandoff, installModelSelection } from '@phoenix-ai/dsh-agent'
+import {
+  defaultExecutionHandoff,
+  installModelSelection,
+  isPhoenixCodexAutoSelection,
+  PHOENIX_CODEX_AUTO_MODEL,
+  PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+  PHOENIX_CODEX_AUTO_WORKER_MODEL,
+} from '@phoenix-ai/dsh-agent'
 import type { Agent, ModelSelection, ModelSelectionRef, AgentOptions, AgentStatus } from '@phoenix-ai/dsh-agent'
 import type {} from '@phoenix-ai/dsh-agent-presets/types'
 import { AttachmentError, admitEncodedFiles, admitEncodedImages } from '@phoenix-ai/dsh-attachment'
@@ -360,10 +367,19 @@ async function buildModelCatalog(ctx: Context): Promise<{
           ...reasoning === undefined ? {} : { reasoning },
         }
       }))
+      const hasPhoenixAutoPair = provider.id === 'openai-codex'
+        && entries.some(model => model.id === PHOENIX_CODEX_AUTO_PLANNER_MODEL)
+        && entries.some(model => model.id === PHOENIX_CODEX_AUTO_WORKER_MODEL)
       const group: ModelProviderGroup = {
         id: provider.id,
         name: provider.name,
-        models: entries,
+        models: hasPhoenixAutoPair
+          ? [{
+            id: PHOENIX_CODEX_AUTO_MODEL,
+            name: 'Phoenix Auto',
+            description: 'GPT-6 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
+          }, ...entries]
+          : entries,
       }
       return { kind: 'group' as const, group }
     } catch (error: unknown) {
@@ -1152,8 +1168,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     ?? DEFAULT_COLD_BLANK_PROBE_MAX_BYTES
   /** The seed model each create/resume declares; re-read so it never goes stale. */
   const agentOptions = (): AgentOptions => {
-    const { provider, model } = defaults.defaultModelSelection()
-    return { provider, model }
+    const selected = defaults.defaultModelSelection()
+    if (isPhoenixCodexAutoSelection(selected)) {
+      // The synthetic selector row is never sent to a provider. Seed resumed
+      // Agents on the real worker route; installModelSelection preserves the
+      // synthetic selection and resolves Sol/Luna per step before dispatch.
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
+      }
+    }
+    return { provider: selected.provider, model: selected.model }
   }
   type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection }
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
@@ -2518,33 +2544,71 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         if ('error' in found) return err(request, found.error)
         return serializeImageAdmission(found.agent, async () => {
           try {
-            const resolved = await ctx.llm.resolveCallConfig({
+            const requested: ModelSelection = {
               provider,
               model,
               ...reasoningEffort === undefined
                 ? {}
                 : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
-            })
-            const selected: ModelSelection = {
-              provider: resolved.provider,
-              model: resolved.model,
-              ...resolved.reasoningEffort === undefined
-                ? {}
-                : { reasoningEffort: resolved.reasoningEffort },
+            }
+            let selected: ModelSelection
+            let liveRoute: ModelSelection
+            if (isPhoenixCodexAutoSelection(requested)) {
+              if (reasoningEffort !== undefined) {
+                throw new Error('Phoenix Auto manages reasoning effort automatically')
+              }
+              const [planner, worker] = await Promise.all([
+                ctx.llm.resolveCallConfig({
+                  provider: 'openai-codex',
+                  model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+                  reasoningEffort: ReasoningEffortId('medium'),
+                }),
+                ctx.llm.resolveCallConfig({
+                  provider: 'openai-codex',
+                  model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+                  reasoningEffort: ReasoningEffortId('max'),
+                }),
+              ])
+              if (planner.provider !== 'openai-codex' || worker.provider !== 'openai-codex') {
+                throw new Error('Phoenix Auto requires OpenAI Codex GPT-6 Sol and Luna routes')
+              }
+              selected = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
+              liveRoute = {
+                provider: worker.provider,
+                model: worker.model,
+                ...worker.reasoningEffort === undefined
+                  ? {}
+                  : { reasoningEffort: worker.reasoningEffort },
+              }
+            } else {
+              const resolved = await ctx.llm.resolveCallConfig(requested)
+              selected = {
+                provider: resolved.provider,
+                model: resolved.model,
+                ...resolved.reasoningEffort === undefined
+                  ? {}
+                  : { reasoningEffort: resolved.reasoningEffort },
+              }
+              liveRoute = selected
             }
             selectionFor(found.agent).current = selected
-            // Synchronize the live Agent route so delegators (subagent /
-            // workflow childRoute) inherit the newly selected provider/model
-            // instead of reading the stale options captured at agent creation.
-            found.agent.options.provider = selected.provider
-            found.agent.options.model = selected.model
-            if (selected.reasoningEffort === undefined) {
+            // Synchronize the live Agent route so delegators inherit a real
+            // provider route. Phoenix Auto itself remains a selector-level
+            // virtual model and resolves Sol/Luna immediately before requests.
+            found.agent.options.provider = liveRoute.provider
+            found.agent.options.model = liveRoute.model
+            if (liveRoute.reasoningEffort === undefined) {
               delete found.agent.options.reasoningEffort
             } else {
-              found.agent.options.reasoningEffort = selected.reasoningEffort
+              found.agent.options.reasoningEffort = liveRoute.reasoningEffort
             }
             try {
-              await defaults.saveDefaultModelSelection?.(selected)
+              // Keep deployment defaults provider-native. Phoenix Auto is a
+              // session-local virtual route; storing its Luna worker avoids
+              // leaking a synthetic model id into non-Web/headless entry points.
+              await defaults.saveDefaultModelSelection?.(
+                isPhoenixCodexAutoSelection(selected) ? liveRoute : selected,
+              )
             } catch (error: unknown) {
               ctx.logger.warn(
                 `api-proxy: the model switch applies to this session but was not saved as the default: ${String(error)}`,

@@ -32,6 +32,12 @@
       when a material finding, phase change, risk, or blocker appears. Do not announce every tool call, read,
       search, or mechanical step. When the next safe, reversible, authorized step is obvious, take it instead
       of asking for routine permission. Never expose private reasoning, credentials, or raw payloads.
+      With Phoenix Auto, Sol plans and Luna Max executes. When a clearly independent branch can shorten
+      wall-clock time, use `workflow` to start normally one GPT-6 Luna Max worker while the root continues
+      the critical path; use two only for two genuinely independent branches. Do not delegate small, serial,
+      same-edit, or locally verifiable work, and never duplicate work already assigned to a worker. Give each
+      worker a bounded objective, precise scope, and required evidence, then consume its result instead of
+      repeating the same investigation.
 
       <mission_completion_contract>
       A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure.
@@ -207,6 +213,11 @@
         provider: spawn
         toolName: subagent
         backgroundMode: continuable
+        childRoute:
+          whenProvider: openai-codex
+          provider: openai-codex
+          model: gpt-6-luna
+          reasoningEffort: max
 
     - id: tool-subagent-fork
       name: '@phoenix-ai/dsh-tool-subagent'
@@ -214,6 +225,11 @@
         provider: fork
         toolName: subagent_fork
         backgroundMode: continuable
+        childRoute:
+          whenProvider: openai-codex
+          provider: openai-codex
+          model: gpt-6-luna
+          reasoningEffort: max
 
     # Production dsh does not install these optional providers. Install the
     # matching Bundle in this Profile and restart the Host, then copy this
@@ -241,6 +257,13 @@
       name: '@phoenix-ai/dsh-workflow-worker-thread'
       config:
         provider: spawn
+        maxConcurrentAgents: 2
+        maxTotalAgents: 2
+        childRoute:
+          whenProvider: openai-codex
+          provider: openai-codex
+          model: gpt-6-luna
+          reasoningEffort: max
 
     - id: tool-workflow
       name: '@phoenix-ai/dsh-tool-workflow'
