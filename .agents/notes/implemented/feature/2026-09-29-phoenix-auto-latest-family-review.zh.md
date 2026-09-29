@@ -27,6 +27,14 @@ Phoenix Auto 现在从实时 OpenAI Codex 模型目录中分别解析最新发�
 
 完整 preset 继续把 delegated workflow agent 的上限保持为两个。child route 仍以 `gpt-6-luna` 作为兼容 fallback，但当父代理正在使用 Luna 家族时会继承父代理的实时 Luna id，因此新采用的 Luna 版本也会自动传播到 subagent、fork 和 workflow child。
 
+## Alternatives considered
+
+**继续固定使用 `gpt-6-sol` 和 `gpt-6-luna`。** 被拒绝，因为每次发布新的 Sol/Luna 版本都需要手工修改 router 并重新发布。
+
+**让 Luna 同时执行并做最终验收判断。** 被拒绝，因为目标架构要求先由独立 Luna 审查，再由 Sol 根据证据决定是否需要修正。
+
+**把 Astra 作为额外的规划/审查候选。** 被拒绝，因为 Phoenix Auto 被有意限定为 Sol/Luna 路由，不应引入 Astra 的额外成本或行为。
+
 ## Consequences
 
 Phoenix Auto 可以在无需手工修改 router 的情况下采用未来的 Sol/Luna 版本，同时把 Sol 的成本集中在规划、救援和最终判断。Luna 负责执行和第一层独立审查，从而保持质量、速度和成本之间的目标平衡。现有直接模型选择行为不变。
