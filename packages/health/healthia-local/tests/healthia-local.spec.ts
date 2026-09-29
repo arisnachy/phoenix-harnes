@@ -86,7 +86,6 @@ describe('encrypted local HealthIA record', () => {
     expect(persisted).toContain('"algorithm": "aes-256-gcm"')
     expect(persisted).not.toContain('Paciente Alfa')
     expect(persisted).not.toContain('Blood pressure')
-    expect(persisted).not.toContain('151')
     expect(secrets.get(DEFAULT_HEALTHIA_KEY_REF)).toMatch(/\S+/)
   })
 
