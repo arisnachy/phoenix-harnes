@@ -3126,8 +3126,10 @@ export interface Config {
     whenProvider: string
     /** Provider used for the child request. */
     provider: string
-    /** Model id used for the child request. */
+    /** Fallback model id used for the child request. */
     model: string
+    /** Reuse the parent's model when its id matches this regular expression. */
+    inheritParentModelPattern?: string
     /** Explicit adapter reasoning level for the child request. */
     reasoningEffort?: string
   }
@@ -3657,8 +3659,10 @@ export interface Config {
     whenProvider: string
     /** Provider used for child agents. */
     provider: string
-    /** Model id used for child agents. */
+    /** Fallback model id used for child agents. */
     model: string
+    /** Reuse the parent's model when its id matches this regular expression. */
+    inheritParentModelPattern?: string
     /** Explicit adapter reasoning level for child agents. */
     reasoningEffort?: string
   }
