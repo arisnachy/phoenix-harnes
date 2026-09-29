@@ -132,28 +132,41 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(agentRoleKeyOf(tester)).toBe('role.tester')
   })
 
-  it('shows short real task text instead of canned activity copy', () => {
-    const real = summary({
+  it('shows only the child model text and never falls back to parent-authored labels', () => {
+    const authored = summary({
       id: sid('real-task'),
       running: true,
       displayTitle: 'fallback title',
       projectionValues: {
         subagent: {
           mode: 'continuable',
-          label: 'ORQUESTACIÓN: abre lunaris-quest.html en el navegador solo para comprobar que carga y describir lo visible sin modificar archivos',
+          label: 'parent-authored delegation label',
           seq: 9,
+        },
+        subagentActivity: {
+          model: 'gpt-5.6-luna',
+          phase: 'running-tools',
+          text: 'Abriré lunaris-quest.html en el navegador para comprobar la carga.',
         },
       },
     })
+    const withoutAuthoredText = summary({
+      id: sid('no-agent-text'),
+      running: true,
+      displayTitle: 'fallback title',
+      projectionValues: {
+        subagent: { mode: 'continuable', label: 'parent-authored delegation label', seq: 10 },
+        subagentActivity: { model: 'gpt-5.6-luna', phase: 'preparing' },
+      },
+    })
 
-    const text = liveActivityTextOf(real, 58)
+    const text = liveActivityTextOf(authored, 58)
     expect(text.startsWith('Abriré lunaris-quest.html')).toBe(true)
     expect(text.length).toBeLessThanOrEqual(58)
-    expect(text).not.toContain('Preparando')
-    expect(text).not.toContain('Supervisando misión')
+    expect(liveActivityTextOf(withoutAuthoredText)).toBe('')
   })
 
-  it('uses first-person progressive wording for real runtime gerunds', () => {
+  it('does not rewrite grammar authored by the child', () => {
     const runtime = summary({
       id: sid('runtime-action'),
       running: true,
@@ -161,8 +174,8 @@ describe('approved KIRA compact live-agent dock', () => {
         subagentActivity: {
           model: 'gpt-5.6-luna',
           phase: 'running-tools',
-          detail: 'Revisando la página cargada',
-        } as never,
+          text: 'Estoy revisando la página cargada',
+        },
       },
     })
 
@@ -235,7 +248,11 @@ describe('approved KIRA compact live-agent dock', () => {
       id: sid('supervisor-live'), parentId: root.id, origin: 'subagent', running: true,
       projectionValues: {
         subagent: { mode: 'continuable', label: 'mission supervisor', seq: 1 },
-        subagentActivity: { model: 'gpt-5.6-luna', phase: 'preparing' },
+        subagentActivity: {
+          model: 'gpt-5.6-luna',
+          phase: 'preparing',
+          text: 'Coordinaré la revisión breve del agente.',
+        },
       },
     })
     const state = {
@@ -258,7 +275,7 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(container.querySelectorAll('[data-kira-agent-card]')).toHaveLength(1)
     expect(screen.getByText('Coordinación / orquestación')).toBeTruthy()
     expect(screen.getByText('Preparando')).toBeTruthy()
-    expect(screen.getByText('mission supervisor')).toBeTruthy()
+    expect(screen.getByText('Coordinaré la revisión breve del agente.')).toBeTruthy()
   })
 })
 
