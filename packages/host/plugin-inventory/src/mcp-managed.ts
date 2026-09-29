@@ -131,8 +131,8 @@ function xDocsMcpConfig(): ManagedStreamableHttpMcpConfig {
 
 function normalizeXUsername(username: string): string {
   const normalized = username.trim().replace(/^@/, '')
-  if (!/^[A-Za-z0-9_]{1,64}$/.test(normalized)) {
-    throw new Error('X username must contain only letters, numbers, or underscores')
+  if (!/^[A-Za-z0-9_]{1,15}$/.test(normalized)) {
+    throw new Error('X username must be 1-15 characters and contain only letters, numbers, or underscores')
   }
   return normalized
 }
