@@ -719,7 +719,7 @@
     # access, or can be enabled explicitly with PHOENIX_BROWSER_ALLOW_ACTIONS.
     - id: phoenix-browser
       name: '@phoenix-ai/dsh-mcp-client'
-      disabled: !!js "['replay', 'refresh'].includes(process.env.DSH_SNAPSHOT ?? '') || ['0', 'false', 'off'].includes((process.env.PHOENIX_BROWSER_CONNECTOR ?? '').trim().toLowerCase())"
+      disabled: !!js "['0', 'false', 'off'].includes((process.env.PHOENIX_BROWSER_CONNECTOR ?? '').trim().toLowerCase())"
       config:
         serverName: phoenix_browser
         transport: stdio
@@ -728,7 +728,7 @@
           - --import
           - tsx/esm
           - packages/mcp/chrome-connector/src/server.ts
-        cwd: !!js process.cwd()
+        cwd: !!js process.env.INIT_CWD ?? process.cwd()
         env:
           PHOENIX_BROWSER_CDP_URL: !!js process.env.PHOENIX_BROWSER_CDP_URL ?? ''
           PHOENIX_BROWSER_EXECUTABLE: !!js process.env.PHOENIX_BROWSER_EXECUTABLE ?? ''
