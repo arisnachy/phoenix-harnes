@@ -484,7 +484,7 @@ function phoenixAutoRoute(
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId('medium'),
+        reasoningEffort: ReasoningEffortId('xhigh'),
       }
     }
     return {
@@ -501,7 +501,7 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('xhigh'),
     }
   }
 
@@ -514,7 +514,7 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId(state.rescueCount > 1 ? 'high' : 'medium'),
+      reasoningEffort: ReasoningEffortId(state.rescueCount > 1 ? 'xhigh' : 'high'),
     }
   }
 
