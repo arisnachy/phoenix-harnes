@@ -6,7 +6,7 @@ English | [中文](2026-09-29-phoenix-auto-parallel-luna-worker.zh.md)
 
 ## Problem
 
-Phoenix Auto already chooses GPT-6 Sol for planning or rescue and GPT-6 Luna Max for execution, but a long task can still remain unnecessarily serial when one independent branch could run at the same time. Starting extra agents unconditionally would reduce latency in some cases while increasing token use, duplicated work, and coordination overhead in many others.
+Phoenix Auto already chooses GPT-6.1 Sol for planning or rescue and GPT-6 Luna Max for execution, but a long task can still remain unnecessarily serial when one independent branch could run at the same time. Starting extra agents unconditionally would reduce latency in some cases while increasing token use, duplicated work, and coordination overhead in many others.
 
 ## Decision
 
