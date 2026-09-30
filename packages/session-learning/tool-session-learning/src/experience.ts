@@ -248,6 +248,7 @@ export class ExperienceLearningEngine {
    */
   clear(sessionId: string): void {
     const root = this.rootSessionId(sessionId)
+    if (root !== sessionId) return
     this.active.delete(root)
     this.clearChildLinks(root)
   }
