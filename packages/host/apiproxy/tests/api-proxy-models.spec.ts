@@ -378,8 +378,7 @@ describe('Web session model selection', () => {
     })
     expect(saved).toEqual([{
       provider: 'openai-codex',
-      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-      reasoningEffort: ReasoningEffortId('max'),
+      model: PHOENIX_CODEX_AUTO_MODEL,
     }])
 
     const rejectedEffort = await api.sessions.selectModel(request({
@@ -394,6 +393,28 @@ describe('Web session model selection', () => {
         code: 'model-unavailable',
         message: 'Phoenix Auto manages reasoning effort automatically',
       },
+    })
+    await ctx.fiber.dispose()
+  })
+
+  it('restores Phoenix Auto from the saved default in a fresh blank session', async () => {
+    const { ctx, sessionId } = await harness()
+    registerCodex6(ctx)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_MODEL,
+      }),
+      cwd: '/tmp',
+    })
+
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
+    })
+    expect(expectValue(await api.host.describe(request({})))).toMatchObject({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
     })
     await ctx.fiber.dispose()
   })
