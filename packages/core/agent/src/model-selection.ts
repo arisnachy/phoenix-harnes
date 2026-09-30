@@ -178,6 +178,16 @@ function isToolAcquisitionRequest(text: string): boolean {
 const AUTO_TASK_ACTION = /\b(?:fix|repair|debug|implement|edit|modify|update|create|build|run|execute|test|inspect|review|audit|refactor|deploy|install|remove|delete|rename|commit|merge|revert|resolve|diagnose|search|research|investigate|browse|compare|fill|submit|schedule|automate|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*|busc\p{L}*|investig\p{L}*|compar\p{L}*|llen\p{L}*|envi\p{L}*|program\p{L}*|automatiz\p{L}*)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Compact reply-depth vocabulary is easier to audit in one literal.
 const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|deep|analiz\p{L}*|razon\p{L}*|explic\p{L}*\s+en\s+detalle|profund\p{L}*)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Risk vocabulary stays deterministic so routing itself consumes no model tokens.
+const AUTO_PLANNER_REQUIRED = /\b(?:security|secure|authentication|authorization|permissions?|credentials?|secrets?|encryption|payments?|billing|production|deploy(?:ment)?|release|migration|database|schema|transactions?|concurren|race\s+condition|thread(?:ing)?|sandbox|kernel|scheduler|architecture|architectural|framework|runtime|router|routing|orchestrat|multi-agent|distributed|whole\s+project|entire\s+project|across\s+the\s+project|system-wide|ci\b|main\b|stable\b|merge\b|rebase\b|seguridad|autenticaci[oó]n|autorizaci[oó]n|permisos?|credenciales?|secretos?|cifrado|pagos?|facturaci[oó]n|producci[oó]n|despliegue|migraci[oó]n|base\s+de\s+datos|transacciones?|concurrencia|arquitectura|framework|runtime|router|enrutamiento|orquest|multiagente|distribuid[oa]|todo\s+el\s+proyecto|proyecto\s+completo|sistema\s+completo|fusionar|rebase)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- This fast-path is intentionally narrow; ambiguous work still gets Sol planning.
+const AUTO_BOUNDED_TASK = /\b(?:typo|one[-\s]?line|single[-\s]?line|small\s+(?:change|fix|edit)|minor\s+(?:change|fix|edit)|rename\s+(?:this|one)|change\s+(?:this|one)\s+(?:label|text|copy)|fix\s+(?:this|one)\s+(?:label|text|typo)|error\s+tipogr[aá]fico|una\s+l[ií]nea|cambio\s+peque[nñ]o|arreglo\s+peque[nñ]o|cambia\s+(?:este|un)\s+(?:texto|label|nombre)|corrige\s+(?:este|un)\s+(?:texto|error\s+tipogr[aá]fico)|renombra\s+(?:esto|este|un))\b/iu
+
+function phoenixAutoNeedsPlanner(text: string): boolean {
+  const candidate = text.trim()
+  if (AUTO_PLANNER_REQUIRED.test(candidate)) return true
+  return !(candidate.length <= 220 && AUTO_BOUNDED_TASK.test(candidate))
+}
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
@@ -429,11 +439,17 @@ function phoenixAutoRoute(
       }
     }
     if (phoenixAutoTaskRequest(directText)) {
-      return {
-        provider: 'openai-codex',
-        model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId('medium'),
-      }
+      return phoenixAutoNeedsPlanner(directText)
+        ? {
+            provider: 'openai-codex',
+            model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+            reasoningEffort: ReasoningEffortId('medium'),
+          }
+        : {
+            provider: 'openai-codex',
+            model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+            reasoningEffort: ReasoningEffortId('max'),
+          }
     }
     return {
       provider: 'openai-codex',
