@@ -170,7 +170,7 @@ export class AgentDefaultModelConfig extends Service {
   })
 
   private source: () => AgentDefaultModelSettings
-  private uiFallback: UiModelSelectionSettings = { selections: [] }
+  private readonly uiFallback: UiModelSelectionSettings = { selections: [] }
   private uiSource: () => UiModelSelectionSettings = () => this.uiFallback
 
   constructor(ctx: Context, config: Config) {
@@ -266,7 +266,7 @@ export class AgentDefaultModelConfig extends Service {
       ...current.filter(record => record.sessionId !== sessionId),
       recordFor(sessionId, selected, runtime),
     ].slice(-UI_MODEL_SELECTION_HISTORY_LIMIT)
-    this.uiFallback = { selections: next }
+    this.uiFallback.selections = next
     await this.ctx.get('settings')?.replace(UI_MODEL_SELECTION_SETTINGS_NAMESPACE, {
       selections: next,
     })
