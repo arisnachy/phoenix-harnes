@@ -132,6 +132,7 @@ export class TeamMailbox {
         senderId: caller.id,
         senderName: membership.name,
         targetId: target.id,
+        targetName: target.name,
         delivery: request.delivery,
         content,
       }
