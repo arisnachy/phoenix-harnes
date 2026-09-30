@@ -12,10 +12,12 @@ updates:
       timezone: "Asia/Shanghai"
     cooldown:
       default-days: 30
+    # Codex is updated by PHOENIX Codex Runtime Update instead of the
+    # 30-day generic dependency cooldown. That workflow validates the package-local
+    # binary and Codex integration before a guarded PR can merge.
+    ignore:
+      - dependency-name: "@openai/codex"
     groups:
-      codex-runtime-quarantine:
-        patterns:
-          - "@openai/codex"
       claude-runtime-quarantine:
         patterns:
           - "@anthropic-ai/claude-agent-sdk"
