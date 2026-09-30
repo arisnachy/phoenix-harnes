@@ -53,7 +53,13 @@ describe('mission capsule', () => {
       artifactFingerprint: 'sha256:abc', findings: ['Adversarial test remains'], proceduralLessons: [],
     })
 
-    const capsule = JSON.parse(buildMissionCapsule(session.events, goal, plan)) as Record<string, any>
+    const capsule = JSON.parse(buildMissionCapsule(session.events, goal, plan)) as {
+      masterPlan: { revision: number }
+      strategy: { id: string }
+      independentReview: { requiredChanges: string[] }
+      verification: { artifactFingerprint: string }
+      recentHumanSteering: string[]
+    }
     expect(capsule.masterPlan.revision).toBe(1)
     expect(capsule.strategy.id).toBe('verification-first')
     expect(capsule.independentReview.requiredChanges).toEqual(['Add proof'])

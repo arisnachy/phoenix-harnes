@@ -6,13 +6,12 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
-import { GoalId } from '@phoenix-ai/dsh-goal'
+import { GoalId, nextGoalMissionPlan, nextOrganizationForgeAction, recordGoalMissionPlan, replayGoalMissionPlan } from '@phoenix-ai/dsh-goal'
 import type {
   ForgeCriterionStatus, ForgeDeliverableKind, ForgeDeliverableStatus, ForgeManagementMode, ForgePhase,
   ForgeResearchKind, ForgeRole, ForgeSourceAuditStatus, ForgeStrategyStatus, ForgeWorkStatus,
   GoalRef, GoalView, OrganizationForgeSnapshot,
 } from '@phoenix-ai/dsh-goal'
-import { nextGoalMissionPlan, nextOrganizationForgeAction, recordGoalMissionPlan, replayGoalMissionPlan } from '@phoenix-ai/dsh-goal'
 import { boundContextSummary, createUserMessage, HarnessError } from '@phoenix-ai/dsh-llm'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { GenericCallView, JsonValue } from '@phoenix-ai/dsh-tools'
@@ -295,14 +294,14 @@ function specialistReviewObjective(profile: {
   })}`.slice(0, 8_000)
 }
 
-/** Reusable canonical output declaration for all three goal controls. */
+/** Reusable canonical output declaration for the lifecycle goal controls. */
 const GOAL_OUTPUT = {
   schema: GOAL_VALUE_SCHEMA,
   render: (_args: unknown, value: GoalToolValue) => [{ type: 'text' as const, text: JSON.stringify(value) }],
 }
 
 
-
+/** JSON-string output used by compact mission state tools. */
 const MISSION_OUTPUT = {
   schema: { type: 'string' as const },
   render: (_args: unknown, value: string) => [{ type: 'text' as const, text: value }],
@@ -378,7 +377,7 @@ function present(title: string, kind: 'read' | 'other', rawInput?: unknown): Gen
   return { card: 'generic', title, kind, ...rawInput === undefined ? {} : { rawInput } }
 }
 
-/** Register the three Codex-shaped goal tools and their shared policy section. */
+/** Register lifecycle goal tools, mission-state tools, and their shared policy section. */
 export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
   ctx.systemPrompt.section({

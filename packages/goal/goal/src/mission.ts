@@ -82,8 +82,10 @@ function text(value: string, field: string, max = MAX_TEXT): string {
   return normalized
 }
 
-function stringList(values: readonly string[], field: string, maxItems: number): string[] {
-  if (values.length > maxItems) throw new TypeError(`mission plan ${field} exceeds ${String(maxItems)} items`)
+function stringList(values: readonly string[], field: string, maxItems: number, minItems = 0): string[] {
+  if (values.length < minItems || values.length > maxItems) {
+    throw new TypeError(`mission plan ${field} must contain ${String(minItems)}..${String(maxItems)} items`)
+  }
   return values.map((value, index) => text(value, `${field}[${String(index)}]`))
 }
 
@@ -144,7 +146,7 @@ export function nextGoalMissionPlan(
     goalRevision: goal.revision,
     planRevision: (previous?.planRevision ?? 0) + 1,
     objective: text(goal.objective, 'objective'),
-    acceptanceCriteria: stringList(request.acceptanceCriteria, 'acceptanceCriteria', MAX_CRITERIA),
+    acceptanceCriteria: stringList(request.acceptanceCriteria, 'acceptanceCriteria', MAX_CRITERIA, 1),
     steps: normalizedSteps(request.steps),
     decisions: stringList(request.decisions ?? [], 'decisions', MAX_DECISIONS),
     updatedAt: now,
@@ -190,6 +192,6 @@ export function recordGoalMissionPlan(session: Session, plan: GoalMissionPlan): 
   session.append('goal/mission-plan', {
     kind: 'goal/mission-plan',
     version: 1,
-    plan,
+    plan: validated,
   })
 }
