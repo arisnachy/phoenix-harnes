@@ -135,6 +135,27 @@ const CAPACITY_HINT: Readonly<Record<CapacityField, string>> = {
 /** Reasoning ids the current pi-ai configuration schema can materialize. */
 const PI_AI_REASONING_EFFORTS = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
 
+/** Reasoning capability persisted when a Codex model id is entered by hand. */
+const CODEX_MANUAL_REASONING_EFFORTS = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'xhigh',
+  max: 'max',
+} as const
+
+/**
+ * Create one blank manual model row without losing provider-owned capabilities.
+ * Codex model ids are often available on the account before the bundled pi-ai
+ * catalog learns them, so a hand-entered Codex row carries the standard effort
+ * declaration and immediately gets the composer reasoning selector after save.
+ */
+export function manualModelDraft(provider: string | undefined): ModelDraft {
+  return provider === 'openai-codex'
+    ? { id: '', reasoningEfforts: { ...CODEX_MANUAL_REASONING_EFFORTS } }
+    : { id: '' }
+}
+
 /**
  * Spell a stored count for a field that may be unset. The spelling itself is
  * {@link formatCapacity}, shared with the DeepSeek catalog editor so both
@@ -485,7 +506,7 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         type="button"
         className={styles['addModelButton']}
         disabled={disabled}
-        onClick={() => { onChange([...models, { id: '' }]) }}
+        onClick={() => { onChange([...models, manualModelDraft(probe.provider)]) }}
       >
         {t('addModel')}
       </button>
