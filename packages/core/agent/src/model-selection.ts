@@ -478,7 +478,9 @@ function phoenixAutoRoute(
  *
  * @param agentCtx - The selected Agent's scoped context.
  * @param selection - Mutable selection owned by the calling entry point.
- * @param handoff - Optional route for steps after the initial plan step.
+ * @param handoff - Optional adaptive route for internal callers. When omitted,
+ * an explicit user selection is dispatched exactly as selected; only Phoenix
+ * Auto may change models or reasoning effort on its own.
  * @returns Disposer for both scoped waterfall listeners.
  */
 export function installModelSelection(
@@ -508,7 +510,6 @@ export function installModelSelection(
       const resolved = await next()
       const selected = selection.assembled
       if (selected === undefined) return resolved
-      const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
       if (isPhoenixCodexAutoSelection(selected)) {
         const routed = phoenixAutoRoute(
@@ -528,6 +529,21 @@ export function installModelSelection(
             : { reasoningEffort: routed.reasoningEffort },
         }
       }
+      // No adaptive handoff means the picker is authoritative. Do not silently
+      // swap Sol/Astra/Terra for Luna, lower a social turn, or pin Luna to Max:
+      // provider, model, and effort must be exactly what the person selected.
+      if (handoff === undefined) {
+        const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
+        return {
+          ...withoutInheritedEffort,
+          provider: selected.provider,
+          model: selected.model,
+          ...selected.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: selected.reasoningEffort },
+        }
+      }
+      const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
       const conversation = _payload.step === 1
         && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
         ? defaultConversationalSelection(selected)
