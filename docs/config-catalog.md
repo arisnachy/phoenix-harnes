@@ -100,7 +100,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/agent-default-model/src/index.ts:41`](../packages/core/agent-default-model/src/index.ts)
+Source: [`packages/core/agent-default-model/src/index.ts:97`](../packages/core/agent-default-model/src/index.ts)
 
 <a id="phoenix-aidsh-agent-instructions"></a>
 

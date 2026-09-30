@@ -2,7 +2,10 @@
 
 import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
-import AgentDefaultModelConfig, { AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE } from '../src/index.ts'
+import AgentDefaultModelConfig, {
+  AGENT_DEFAULT_MODEL_SETTINGS_NAMESPACE,
+  UI_MODEL_SELECTION_SETTINGS_NAMESPACE,
+} from '../src/index.ts'
 import { SettingsProvider } from '@phoenix-ai/dsh-settings'
 import type { SettingsNamespace } from '@phoenix-ai/dsh-settings'
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
@@ -56,6 +59,73 @@ describe('AgentDefaultModelConfig', () => {
     await bench.ctx.fiber.dispose()
   })
 
+  it('persists virtual picker intent separately from the provider-native runtime default', async () => {
+    const bench = await boot()
+    const runtime = {
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    }
+    const selected = {
+      provider: 'openai-codex',
+      model: 'phoenix-auto',
+    }
+
+    await bench.defaultModel.saveSelection(runtime)
+    await bench.defaultModel.saveSessionSelection('session-auto', selected, runtime)
+
+    expect(bench.defaultModel.currentSelection()).toEqual(runtime)
+    expect(bench.defaultModel.preferredSelection()).toEqual(selected)
+    expect(bench.defaultModel.sessionSelection('session-auto')).toEqual({
+      selected,
+      runtime,
+    })
+    expect(bench.settingsFiber.ctx.settings.describe()
+      .find(view => String(view.ns) === UI_MODEL_SELECTION_SETTINGS_NAMESPACE)?.value)
+      .toEqual({
+        selections: [{
+          sessionId: 'session-auto',
+          provider: 'openai-codex',
+          model: 'phoenix-auto',
+          runtimeProvider: 'openai-codex',
+          runtimeModel: 'gpt-6-luna',
+          runtimeReasoningEffort: 'max',
+        }],
+      })
+    await bench.ctx.fiber.dispose()
+  })
+
+  it('keeps picker intent per session when another session changes the default', async () => {
+    const bench = await boot()
+    const autoRuntime = {
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    }
+    const autoSelected = { provider: 'openai-codex', model: 'phoenix-auto' }
+    await bench.defaultModel.saveSelection(autoRuntime)
+    await bench.defaultModel.saveSessionSelection('session-auto', autoSelected, autoRuntime)
+
+    const sol = {
+      provider: 'openai-codex',
+      model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('high'),
+    }
+    await bench.defaultModel.saveSelection(sol)
+    await bench.defaultModel.saveSessionSelection('session-sol', sol, sol)
+
+    expect(bench.defaultModel.preferredSelection()).toEqual(sol)
+    expect(bench.defaultModel.sessionSelection('session-auto')).toEqual({
+      selected: autoSelected,
+      runtime: autoRuntime,
+    })
+    expect(bench.defaultModel.sessionSelection('session-sol')).toEqual({
+      selected: sol,
+      runtime: sol,
+    })
+    await bench.ctx.fiber.dispose()
+  })
+
   it('clears a stored effort when the saved selection has none', async () => {
     const bench = await boot()
     await bench.defaultModel.saveSelection({
@@ -77,6 +147,24 @@ describe('AgentDefaultModelConfig', () => {
     await bench.ctx.fiber.dispose()
   })
 
+  it('retains picker intent in memory when the settings provider reloads or detaches', async () => {
+    const bench = await boot()
+    const selected = { provider: 'openai-codex', model: 'phoenix-auto' }
+    const runtime = {
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    }
+    await bench.defaultModel.saveSessionSelection('session-auto', selected, runtime)
+    await bench.settingsFiber.dispose()
+
+    expect(bench.defaultModel.sessionSelection('session-auto')).toEqual({
+      selected,
+      runtime,
+    })
+    await bench.ctx.fiber.dispose()
+  })
+
   it('falls back to the composition entry when the settings provider detaches', async () => {
     const bench = await boot()
     await bench.defaultModel.saveSelection({ provider: 'acme-gateway', model: 'acme-large' })
@@ -93,6 +181,15 @@ describe('AgentDefaultModelConfig', () => {
     await ctx.plugin(AgentDefaultModelConfig, { provider: 'p', model: 'm' })
     await ctx.agentDefaultModel.saveSelection({ provider: 'other', model: 'other' })
     expect(ctx.agentDefaultModel.currentSelection()).toEqual({ provider: 'p', model: 'm' })
+    await ctx.agentDefaultModel.saveSessionSelection(
+      's1',
+      { provider: 'openai-codex', model: 'phoenix-auto' },
+      { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') },
+    )
+    expect(ctx.agentDefaultModel.sessionSelection('s1')).toEqual({
+      selected: { provider: 'openai-codex', model: 'phoenix-auto' },
+      runtime: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+    })
     await ctx.fiber.dispose()
   })
 })

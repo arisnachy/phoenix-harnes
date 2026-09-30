@@ -341,10 +341,15 @@ describe('Web session model selection', () => {
     const { ctx, agent, sessionId } = await harness()
     registerCodex6(ctx)
     const saved: unknown[] = []
+    const savedSessions: unknown[] = []
     const api = createApiProxy(ctx, {
       defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
       saveDefaultModelSelection: (selection) => {
         saved.push(selection)
+        return Promise.resolve()
+      },
+      saveSessionModelSelection: (savedSessionId, selectedSelection, runtimeSelection) => {
+        savedSessions.push({ sessionId: savedSessionId, selected: selectedSelection, runtime: runtimeSelection })
         return Promise.resolve()
       },
       cwd: '/tmp',
@@ -381,6 +386,18 @@ describe('Web session model selection', () => {
       model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
       reasoningEffort: ReasoningEffortId('max'),
     }])
+    expect(savedSessions).toEqual([{
+      sessionId,
+      selected: {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_MODEL,
+      },
+      runtime: {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
+      },
+    }])
 
     const rejectedEffort = await api.sessions.selectModel(request({
       sessionId,
@@ -395,6 +412,66 @@ describe('Web session model selection', () => {
         message: 'Phoenix Auto manages reasoning effort automatically',
       },
     })
+    await ctx.fiber.dispose()
+  })
+
+  it('restores Phoenix Auto as the picker choice after reopening a session backed by Luna Max', async () => {
+    const { ctx, agent, sessionId } = await harness({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+    registerCodex6(ctx)
+    const selected = {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
+    }
+    const runtime = {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: ReasoningEffortId('max'),
+    }
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => runtime,
+      defaultDisplayModelSelection: () => selected,
+      restoreSessionModelSelection: id => id === sessionId ? { selected, runtime } : undefined,
+      cwd: '/tmp',
+    })
+
+    const catalog = expectValue(await api.sessions.models(request({ sessionId })))
+    expect(catalog.current).toEqual(selected)
+    expect(agent.options).toEqual(runtime)
+    await ctx.fiber.dispose()
+  })
+
+  it('pins an inherited virtual default to a blank session before its first request can collapse it', async () => {
+    const { ctx, sessionId } = await harness()
+    registerCodex6(ctx)
+    const selected = {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
+    }
+    const runtime = {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: ReasoningEffortId('max'),
+    }
+    const saved: unknown[] = []
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => runtime,
+      defaultDisplayModelSelection: () => selected,
+      saveSessionModelSelection: (id, selectedSelection, runtimeSelection) => {
+        saved.push({ id, selected: selectedSelection, runtime: runtimeSelection })
+        return Promise.resolve()
+      },
+      cwd: '/tmp',
+    })
+
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual(selected)
+    await vi.waitFor(() => {
+      expect(saved).toEqual([{ id: sessionId, selected, runtime }])
+    })
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual(selected)
     await ctx.fiber.dispose()
   })
 

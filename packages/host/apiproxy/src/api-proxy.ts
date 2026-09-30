@@ -671,6 +671,29 @@ export interface ApiProxyDefaults {
    * and undoing it because storage failed would be the worse outcome.
    */
   saveDefaultModelSelection?: (selection: ModelSelection) => Promise<void>
+  /**
+   * User-facing default shown by the Web picker. May be a virtual selector
+   * (for example Phoenix Auto) while {@link defaultModelSelection} remains a
+   * provider-native route safe for direct/headless entry points.
+   */
+  defaultDisplayModelSelection?: () => ModelSelection
+  /**
+   * Recover one session's exact picker intent plus the real runtime route that
+   * backs it. Used when a conversation is reopened after Host/browser restart.
+   */
+  restoreSessionModelSelection?: (sessionId: SessionId) => {
+    selected: ModelSelection
+    runtime: ModelSelection
+  } | undefined
+  /**
+   * Persist one session's explicit picker choice separately from the runtime
+   * default. Failure never rolls back the already-accepted live selection.
+   */
+  saveSessionModelSelection?: (
+    sessionId: SessionId,
+    selected: ModelSelection,
+    runtime: ModelSelection,
+  ) => Promise<void>
   /** Default project directory for new sessions whose create request carries no cwd. */
   cwd: string
   /** Native open-with-default-application; injectable for carrier tests. */
@@ -1208,29 +1231,81 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     return result
   }
 
+  /** Synchronize delegator-facing Agent options to one real provider route. */
+  function applyLiveModelRoute(agent: Agent, route: ModelSelection): void {
+    agent.options.provider = route.provider
+    agent.options.model = route.model
+    if (route.reasoningEffort === undefined) {
+      delete agent.options.reasoningEffort
+    } else {
+      agent.options.reasoningEffort = route.reasoningEffort
+    }
+  }
+
+  /** Exact equality for a detached picker/runtime selection. */
+  function sameModelSelection(left: ModelSelection, right: ModelSelection): boolean {
+    return left.provider === right.provider
+      && left.model === right.model
+      && String(left.reasoningEffort ?? '') === String(right.reasoningEffort ?? '')
+  }
+
   /**
    * Install or return the session-local model selection that prompt assembly snapshots.
    *
-   * Precedence, resolved on EVERY read rather than seeded once: a selection
-   * made in this process, else the session's own latest logged request/header,
-   * else the live Agent default. Re-reading keeps the two tiers exact in both
-   * directions: a session with a recorded request derives its selection from
-   * its log, while a blank session (New Session reuses one rather than minting
-   * another) reads any default saved after it was created. There is no create-time
-   * per-session override tier on this wire — if one returns (a create-options
-   * contribution), it must fold in between the selection and the log.
+   * Precedence: an in-process choice, then the durable per-session picker
+   * preference, then the session's logged provider route, then the user-facing
+   * default for a blank session. The picker preference is deliberately separate
+   * from request/header because virtual selectors such as Phoenix Auto dispatch
+   * real Sol/Luna routes that must remain provider-native in the model log.
    */
   function selectionFor(agent: Agent): WebModelSelectionRef {
     const installed = selections.get(agent)
     if (installed !== undefined) return installed
-    let picked: ModelSelection | undefined
+
+    const sessionId = agent.session.id
+    const restored = defaults.restoreSessionModelSelection?.(sessionId)
+    let picked: ModelSelection | undefined = restored?.selected
+    if (restored !== undefined) applyLiveModelRoute(agent, restored.runtime)
+
+    // A blank new session inherits the last user-facing picker choice. Persist
+    // the virtual-vs-runtime split immediately so the first real request cannot
+    // collapse Phoenix Auto into its Luna backing route on the next reload.
+    if (picked === undefined && agent.session.requestHeader() === undefined) {
+      const displayDefault = defaults.defaultDisplayModelSelection?.()
+      const runtimeDefault = defaults.defaultModelSelection()
+      if (displayDefault !== undefined && !sameModelSelection(displayDefault, runtimeDefault)) {
+        picked = displayDefault
+        applyLiveModelRoute(agent, runtimeDefault)
+        void defaults.saveSessionModelSelection?.(
+          sessionId,
+          displayDefault,
+          runtimeDefault,
+        ).catch((error: unknown) => {
+          ctx.logger.warn(
+            `api-proxy: inherited model picker choice for session "${sessionId}" could not be persisted: ${String(error)}`,
+          )
+        })
+      }
+    }
+
     const selection: WebModelSelectionRef = {
       get current(): ModelSelection {
         if (picked !== undefined) return picked
+
+        // A settings source may finish loading after this Agent was installed.
+        // Adopt a durable session picker record as soon as it becomes visible.
+        const remembered = defaults.restoreSessionModelSelection?.(sessionId)
+        if (remembered !== undefined) {
+          applyLiveModelRoute(agent, remembered.runtime)
+          return remembered.selected
+        }
+
         // Incrementally folded by the session, so a per-step read costs
         // O(new events) rather than a rescan.
         const logged = agent.session.requestHeader()?.config
-        if (logged === undefined) return defaults.defaultModelSelection()
+        if (logged === undefined) {
+          return defaults.defaultDisplayModelSelection?.() ?? defaults.defaultModelSelection()
+        }
         return {
           provider: logged.provider,
           model: logged.model,
@@ -2596,23 +2671,21 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             // Synchronize the live Agent route so delegators inherit a real
             // provider route. Phoenix Auto itself remains a selector-level
             // virtual model and resolves Sol/Luna immediately before requests.
-            found.agent.options.provider = liveRoute.provider
-            found.agent.options.model = liveRoute.model
-            if (liveRoute.reasoningEffort === undefined) {
-              delete found.agent.options.reasoningEffort
-            } else {
-              found.agent.options.reasoningEffort = liveRoute.reasoningEffort
-            }
+            applyLiveModelRoute(found.agent, liveRoute)
             try {
-              // Keep deployment defaults provider-native. Phoenix Auto is a
-              // session-local virtual route; storing its Luna worker avoids
-              // leaking a synthetic model id into non-Web/headless entry points.
-              await defaults.saveDefaultModelSelection?.(
-                isPhoenixCodexAutoSelection(selected) ? liveRoute : selected,
-              )
+              // Keep deployment defaults provider-native. The exact picker
+              // identity is persisted separately per Web session below.
+              await defaults.saveDefaultModelSelection?.(liveRoute)
             } catch (error: unknown) {
               ctx.logger.warn(
-                `api-proxy: the model switch applies to this session but was not saved as the default: ${String(error)}`,
+                `api-proxy: the model switch applies to this session but its runtime default was not saved: ${String(error)}`,
+              )
+            }
+            try {
+              await defaults.saveSessionModelSelection?.(sessionId, selected, liveRoute)
+            } catch (error: unknown) {
+              ctx.logger.warn(
+                `api-proxy: the model switch applies to this session but its picker choice was not saved: ${String(error)}`,
               )
             }
             return ok(request, { selected: { ...selected } })
