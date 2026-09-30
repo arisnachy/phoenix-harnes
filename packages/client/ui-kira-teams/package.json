@@ -53,8 +53,7 @@
     "@phoenix-ai/dsh-client-ui-layout": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
-    "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
-    "@phoenix-ai/dsh-client-ui-primitives": "workspace:^"
+    "@phoenix-ai/dsh-client-ui-conversation": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-subagent": "workspace:^",
