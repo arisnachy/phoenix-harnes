@@ -506,10 +506,10 @@ importers:
         version: link:../packages/e2b/e2b
       '@phoenix-ai/dsh-agent-team':
         specifier: workspace:*
-        version: link:../packages/experimental/agent-team
+        version: link:../packages/subagent/agent-team
       '@phoenix-ai/dsh-tool-agent-team':
         specifier: workspace:*
-        version: link:../packages/experimental/tool-agent-team
+        version: link:../packages/subagent/tool-agent-team
       '@phoenix-ai/dsh-fs-e2b':
         specifier: workspace:*
         version: link:../packages/e2b/fs-e2b
