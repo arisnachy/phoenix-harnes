@@ -496,7 +496,7 @@ function phoenixAutoRoute(
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId(phoenixAutoHardTaskRequest(directText) ? 'xhigh' : 'high'),
+        reasoningEffort: ReasoningEffortId('xhigh'),
       }
     }
     return {
