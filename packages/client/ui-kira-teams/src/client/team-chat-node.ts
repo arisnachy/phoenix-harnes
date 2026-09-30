@@ -57,7 +57,7 @@ function queued(match: ConversationMatch): KiraTeamMessageChatData | undefined {
     ...typeof message.targetName === 'string' ? { targetName: message.targetName } : {},
     ...typeof message.purpose === 'string'
       && ['assignment', 'question', 'blocker', 'result', 'review', 'decision', 'update'].includes(message.purpose)
-      ? { purpose: message.purpose as KiraTeamMessageChatData['purpose'] }
+      ? { purpose: message.purpose as NonNullable<KiraTeamMessageChatData['purpose']> }
       : {},
     content,
     time: match.event.time,
