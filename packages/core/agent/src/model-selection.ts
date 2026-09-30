@@ -649,9 +649,14 @@ export function installModelSelection(
     const latest = latestPhoenixAutoAssistantStop(agent, turn)
     if (latest === undefined || phoenixAutoState.lastContinuationStep === latest.step) return
     const events = turnEvents(agent, turn)
-    const plannerStoppedBeforeActing = latest.step === 1
-      && !events.some(event => event.type === 'tool/call' || event.type === 'tool/result')
-    const announcedNextAction = latest.text.length > 0 && AUTO_UNFINISHED_ACTION.test(latest.text)
+    const latestStepHasToolActivity = events.some((event) => {
+      if (event.type !== 'tool/call' && event.type !== 'tool/result') return false
+      return (event.data as { readonly step?: number }).step === latest.step
+    })
+    const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
+    const announcedNextAction = !latestStepHasToolActivity
+      && latest.text.length > 0
+      && AUTO_UNFINISHED_ACTION.test(latest.text)
     if (!plannerStoppedBeforeActing && !announcedNextAction) return
     if (phoenixAutoState.continuationCount >= AUTO_CONTINUATION_LIMIT) return
 
