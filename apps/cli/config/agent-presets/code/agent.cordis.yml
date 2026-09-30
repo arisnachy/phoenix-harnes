@@ -234,7 +234,7 @@
       name: '@phoenix-ai/dsh-tool-subagent-control/list-agents'
 
     - id: tool-agent-team
-      name: '@phoenix-ai/dsh-experimental-tool-agent-team'
+      name: '@phoenix-ai/dsh-tool-agent-team'
       config:
         freshProvider: spawn
         forkProvider: fork
