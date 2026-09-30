@@ -61,7 +61,11 @@ import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoen
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
-import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
+import {
+  CODEX_MODEL_REFRESH_INTERVAL_MS,
+  CODEX_PROVIDER,
+  CodexLiveCatalog,
+} from './codex-live-catalog.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -328,6 +332,30 @@ export function apply(ctx: Context, config: Config): void {
   }
   ensureRegistrationFacts()
 
+  /**
+   * Keep the ChatGPT-authenticated Codex catalog warm even when nobody opens
+   * the model picker. Previously Codex refreshed only on listModels() or on an
+   * exact-model miss, so a pinned/manual model could dispatch for hours with
+   * stale reasoning metadata. OpenCode already had a startup + interval loop;
+   * Codex now gets the same lifecycle guarantee.
+   */
+  const refreshCodexCatalog = async (force = false): Promise<void> => {
+    const profile = current().providers?.[CODEX_PROVIDER]
+    if (profile === undefined) return
+    const before = codexCatalog.revision
+    await codexCatalog.refresh(CODEX_PROVIDER, profile, force)
+    if (codexCatalog.revision === before) return
+    // Make the next adapter/model lookup resolve against the new account facts.
+    memoized = undefined
+  }
+
+  void ctx.effect(async () => {
+    await refreshCodexCatalog(true)
+    const timer = setInterval(() => { void refreshCodexCatalog() }, CODEX_MODEL_REFRESH_INTERVAL_MS)
+    timer.unref()
+    return () => { clearInterval(timer) }
+  }, 'Codex live model catalog')
+
   // The bridge is loopback-only. It gives pi-ai the local Authorization marker
   // it requires, then strips that marker before the request leaves Phoenix.
   // The same Cordis effect owns catalog refresh and port cleanup across reloads.
@@ -377,6 +405,9 @@ export function apply(ctx: Context, config: Config): void {
       current = source
     },
     onChange: () => {
+      // A newly pinned/manual Codex id must be enriched immediately rather than
+      // waiting for the next 60-second background tick.
+      void refreshCodexCatalog(true)
       try {
         ensureRegistrationFacts()
       } catch (error) {

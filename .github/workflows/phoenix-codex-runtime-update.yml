@@ -1,0 +1,325 @@
+name: PHOENIX Codex Runtime Update
+
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main, stable]
+    paths:
+      - '.github/workflows/phoenix-codex-runtime-update.yml'
+      - 'packages/subagent/subagent-codex/package.json'
+      - 'pnpm-lock.yaml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: phoenix-codex-runtime-update
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      current: ${{ steps.codex.outputs.current }}
+      latest: ${{ steps.codex.outputs.latest }}
+      newer: ${{ steps.codex.outputs.newer }}
+      base_sha: ${{ steps.codex.outputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Resolve pinned and latest stable Codex versions
+        id: codex
+        shell: bash
+        run: |
+          set -euo pipefail
+          base_sha="$(git rev-parse HEAD)"
+          current="$(node -e "const p=require('./packages/subagent/subagent-codex/package.json'); process.stdout.write(p.dependencies['@openai/codex'])")"
+          latest="$(npm view @openai/codex@latest version --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{process.stdout.write(String(JSON.parse(s)))})")"
+          if [[ ! "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Pinned @openai/codex version is not an exact stable semver: $current"
+            exit 1
+          fi
+          if [[ ! "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::npm latest tag is not a stable semver: $latest"
+            exit 1
+          fi
+          newer="$(node - "$current" "$latest" <<'NODE'
+          const [current, latest] = process.argv.slice(2).map(v => v.split('.').map(Number))
+          const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+          process.stdout.write(cmp(latest, current) > 0 ? 'true' : 'false')
+          NODE
+          )"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "newer=$newer" >> "$GITHUB_OUTPUT"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "Pinned Codex: $current"
+          echo "Latest stable Codex: $latest"
+
+      - name: Report current runtime
+        if: steps.codex.outputs.newer != 'true'
+        run: |
+          echo "### Codex runtime is current" >> "$GITHUB_STEP_SUMMARY"
+          echo "- pinned: `${{ steps.codex.outputs.current }}`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- npm latest: `${{ steps.codex.outputs.latest }}`" >> "$GITHUB_STEP_SUMMARY"
+
+  linux-smoke:
+    needs: prepare
+    if: needs.prepare.outputs.newer == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Materialize candidate Codex runtime
+        env:
+          LATEST: ${{ needs.prepare.outputs.latest }}
+        run: pnpm --filter @phoenix-ai/dsh-subagent-codex add "@openai/codex@$LATEST" --save-exact --lockfile-only
+
+      - name: Install immutable candidate
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify package-local Codex and focused integration
+        shell: bash
+        env:
+          LATEST: ${{ needs.prepare.outputs.latest }}
+        run: |
+          set -euo pipefail
+          version_output="$(pnpm --filter @phoenix-ai/dsh-subagent-codex exec codex --version)"
+          echo "$version_output"
+          grep -F "$LATEST" <<<"$version_output"
+          pnpm exec vitest run             packages/subagent/subagent-codex/tests/account-boundary.spec.ts             packages/subagent/subagent-codex/tests/subagent-codex.spec.ts             packages/llm/llm-pi-ai/tests/codex-auto-catalog.spec.ts             packages/llm/llm-pi-ai/tests/codex-live-discovery.spec.ts
+
+  windows-guard:
+    needs: prepare
+    if: needs.prepare.outputs.newer == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 120
+    env:
+      DSH_GATE_CONCURRENCY: '1'
+      DSH_PUBLINT_CONCURRENCY: '2'
+      DSH_TELEMETRY_DISABLED: '1'
+      PHOENIX_BUILD_TIMINGS: '1'
+      LATEST: ${{ needs.prepare.outputs.latest }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          persist-credentials: false
+
+      - name: Enable Developer Mode
+        shell: pwsh
+        run: >-
+          reg add "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\AppModelUnlock"
+          /t REG_DWORD /f /v "AllowDevelopmentWithoutDevLicense" /d "1"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Materialize candidate Codex runtime
+        shell: pwsh
+        run: pnpm --filter @phoenix-ai/dsh-subagent-codex add "@openai/codex@$env:LATEST" --save-exact --lockfile-only
+
+      - name: Install immutable candidate
+        shell: pwsh
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Windows package-local Codex
+        shell: pwsh
+        run: |
+          $versionOutput = pnpm --filter @phoenix-ai/dsh-subagent-codex exec codex --version
+          $versionOutput
+          if (-not ($versionOutput -match [regex]::Escape($env:LATEST))) {
+            throw "Expected Codex $env:LATEST but got: $versionOutput"
+          }
+
+      - name: Run focused Codex regressions
+        shell: pwsh
+        run: >-
+          pnpm exec vitest run
+          packages/subagent/subagent-codex/tests/account-boundary.spec.ts
+          packages/subagent/subagent-codex/tests/subagent-codex.spec.ts
+          packages/llm/llm-pi-ai/tests/codex-auto-catalog.spec.ts
+          packages/llm/llm-pi-ai/tests/codex-live-discovery.spec.ts
+
+      - name: Prove host and client contracts
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'phoenix-typecheck.log'
+          pnpm run typecheck 2>&1 | Tee-Object -FilePath $log
+          $commandExit = $LASTEXITCODE
+          if ($commandExit -ne 0) { exit $commandExit }
+          if (Select-String -Path $log -SimpleMatch '[PLUGIN_TIMINGS]' -Quiet) {
+            Write-Error 'PLUGIN_TIMINGS regression detected during Codex update typecheck.'
+            exit 1
+          }
+
+      - name: Build candidate runtime
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'phoenix-build.log'
+          pnpm run build 2>&1 | Tee-Object -FilePath $log
+          $commandExit = $LASTEXITCODE
+          if ($commandExit -ne 0) { exit $commandExit }
+          if (Select-String -Path $log -SimpleMatch '[PLUGIN_TIMINGS]' -Quiet) {
+            Write-Error 'PLUGIN_TIMINGS regression detected during Codex update build.'
+            exit 1
+          }
+
+      - name: Verify native Windows inventory
+        shell: pwsh
+        run: pnpm run check:ci:windows-blocking
+
+  publish:
+    needs: [prepare, linux-smoke, windows-guard]
+    if: >-
+      always()
+      && needs.prepare.outputs.newer == 'true'
+      && needs.linux-smoke.result == 'success'
+      && needs.windows-guard.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LATEST: ${{ needs.prepare.outputs.latest }}
+      BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Rebuild exact candidate diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm --filter @phoenix-ai/dsh-subagent-codex add "@openai/codex@$LATEST" --save-exact --lockfile-only
+          changed="$(git diff --name-only)"
+          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^(packages/subagent/subagent-codex/package\.json|pnpm-lock\.yaml)$' || true)"
+          if [[ -n "$unexpected" ]]; then
+            echo "::error::Codex update touched unexpected files:"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+
+      - name: Refuse stale main/stable publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main stable --quiet
+          main_sha="$(git rev-parse origin/main)"
+          stable_sha="$(git rev-parse origin/stable)"
+          if [[ "$main_sha" != "$BASE_SHA" ]]; then
+            echo "Main moved from $BASE_SHA to $main_sha while Codex was being verified; a later run will retry."
+            exit 1
+          fi
+          if [[ "$stable_sha" != "$BASE_SHA" ]]; then
+            echo "Stable ($stable_sha) is not identical to verified main ($BASE_SHA); refusing to jump the release gate."
+            exit 1
+          fi
+
+      - name: Atomically advance main and stable
+        id: publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "phoenix-codex-update-bot"
+          git config user.email "phoenix-codex-update-bot@users.noreply.github.com"
+          git add packages/subagent/subagent-codex/package.json pnpm-lock.yaml
+          git commit -m "chore(codex): update runtime to $LATEST"
+          target="$(git rev-parse HEAD)"
+          git push --atomic origin             "HEAD:refs/heads/main"             "HEAD:refs/heads/stable"
+          echo "sha=$target" >> "$GITHUB_OUTPUT"
+
+      - name: Verify updater contract
+        run: node scripts/phoenix-auto-update.mjs --self-test
+
+      - name: Publish stable channel manifest
+        shell: bash
+        env:
+          TARGET_SHA: ${{ steps.publish.outputs.sha }}
+        run: |
+          set -euo pipefail
+          git fetch origin phoenix/update-channel --quiet
+          channel_dir="$(mktemp -d)"
+          cleanup() {
+            git worktree remove --force "$channel_dir" >/dev/null 2>&1 || true
+            rm -rf "$channel_dir"
+          }
+          trap cleanup EXIT
+          git worktree add --detach "$channel_dir" origin/phoenix/update-channel
+          mkdir -p "$channel_dir/.phoenix/channel"
+          published_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          cat > "$channel_dir/.phoenix/channel/stable.json" <<JSON
+          {
+            "schema": 1,
+            "product": "PHOENIX",
+            "channel": "stable",
+            "sourceBranch": "main",
+            "sourceCommit": "$TARGET_SHA",
+            "publishedAt": "$published_at",
+            "minimumNode": "22.19.0",
+            "policy": {
+              "installMode": "auto",
+              "requireCleanWorktree": true,
+              "requireFastForward": true,
+              "preflightBuild": true,
+              "rollbackOnFailure": true
+            }
+          }
+          JSON
+          cd "$channel_dir"
+          if git diff --quiet -- .phoenix/channel/stable.json; then
+            exit 0
+          fi
+          git config user.name "phoenix-update-bot"
+          git config user.email "phoenix-update-bot@users.noreply.github.com"
+          git add .phoenix/channel/stable.json
+          git commit -m "chore(update): publish stable $TARGET_SHA"
+          git push origin HEAD:phoenix/update-channel
+
+      - name: Summary
+        run: |
+          echo "### Codex runtime updated safely" >> "$GITHUB_STEP_SUMMARY"
+          echo "- from: `${{ needs.prepare.outputs.current }}`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- to: `${{ needs.prepare.outputs.latest }}`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- main/stable: `${{ steps.publish.outputs.sha }}`" >> "$GITHUB_STEP_SUMMARY"

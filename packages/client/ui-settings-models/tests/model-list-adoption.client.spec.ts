@@ -37,17 +37,8 @@ describe('ModelListEditor discovery adoption', () => {
     })
   })
 
-  it('seeds a hand-entered Codex model with selectable reasoning efforts', () => {
-    expect(manualModelDraft('openai-codex')).toEqual({
-      id: '',
-      reasoningEfforts: {
-        low: 'low',
-        medium: 'medium',
-        high: 'high',
-        xhigh: 'xhigh',
-        max: 'max',
-      },
-    })
+  it('does not invent reasoning efforts for a hand-entered model', () => {
+    expect(manualModelDraft('openai-codex')).toEqual({ id: '' })
     expect(manualModelDraft('acme-gateway')).toEqual({ id: '' })
   })
 })

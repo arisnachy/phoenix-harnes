@@ -135,25 +135,16 @@ const CAPACITY_HINT: Readonly<Record<CapacityField, string>> = {
 /** Reasoning ids the current pi-ai configuration schema can materialize. */
 const PI_AI_REASONING_EFFORTS = new Set(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
 
-/** Reasoning capability persisted when a Codex model id is entered by hand. */
-const CODEX_MANUAL_REASONING_EFFORTS = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
-  xhigh: 'xhigh',
-  max: 'max',
-} as const
-
 /**
- * Create one blank manual model row without losing provider-owned capabilities.
- * Codex model ids are often available on the account before the bundled pi-ai
- * catalog learns them, so a hand-entered Codex row carries the standard effort
- * declaration and immediately gets the composer reasoning selector after save.
+ * Create one blank manual model row.
+ *
+ * Reasoning is intentionally not guessed here. For OpenAI Codex, the live
+ * app-server catalog enriches the saved id with the exact efforts the account
+ * actually supports; showing invented levels can make the picker submit an
+ * effort the provider rejects.
  */
-export function manualModelDraft(provider: string | undefined): ModelDraft {
-  return provider === 'openai-codex'
-    ? { id: '', reasoningEfforts: { ...CODEX_MANUAL_REASONING_EFFORTS } }
-    : { id: '' }
+export function manualModelDraft(_provider: string | undefined): ModelDraft {
+  return { id: '' }
 }
 
 /**

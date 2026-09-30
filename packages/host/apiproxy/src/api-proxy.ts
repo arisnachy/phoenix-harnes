@@ -2559,10 +2559,12 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
                 throw new Error('Phoenix Auto manages reasoning effort automatically')
               }
               const [planner, worker] = await Promise.all([
+                // Do not guess a Sol effort. Codex app-server is authoritative
+                // for this account/model and resolveCallConfig will materialize
+                // its advertised default when one exists.
                 ctx.llm.resolveCallConfig({
                   provider: 'openai-codex',
                   model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-                  reasoningEffort: ReasoningEffortId('medium'),
                 }),
                 ctx.llm.resolveCallConfig({
                   provider: 'openai-codex',

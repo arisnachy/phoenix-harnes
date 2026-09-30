@@ -398,6 +398,46 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('selects Phoenix Auto when Sol does not advertise medium reasoning', async () => {
+    const { ctx, sessionId } = await harness()
+    ctx.llm.registerAdapter(['openai-codex'], new class extends CatalogAdapter {
+      override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+        const reasoning: LlmModelReasoningInfo = model === PHOENIX_CODEX_AUTO_PLANNER_MODEL
+          ? {
+            efforts: [
+              { id: ReasoningEffortId('high'), name: 'High' },
+              { id: ReasoningEffortId('max'), name: 'Max' },
+            ],
+            defaultEffort: ReasoningEffortId('high'),
+          }
+          : {
+            efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
+            defaultEffort: ReasoningEffortId('max'),
+          }
+        return Promise.resolve({ provider, id: model, name: model, reasoning })
+      }
+    }('OpenAI Codex', [
+      { provider: 'openai-codex', id: PHOENIX_CODEX_AUTO_PLANNER_MODEL, name: 'GPT-6.1 Sol' },
+      { provider: 'openai-codex', id: PHOENIX_CODEX_AUTO_WORKER_MODEL, name: 'GPT-6 Luna' },
+    ]))
+
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+    const selected = expectValue(await api.sessions.selectModel(request({
+      sessionId,
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
+    })))
+
+    expect(selected.selected).toEqual({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_MODEL,
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('dispatches a concrete Codex picker choice exactly instead of handing it to Luna', async () => {
     const { ctx, agent, sessionId } = await harness()
     registerCodex6(ctx)
