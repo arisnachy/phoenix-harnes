@@ -207,6 +207,31 @@ describe('dsh-tool-subagent', () => {
   })
 
 
+  it('preserves legacy unscoped parallel siblings while scoped isolation stays opt-in', async () => {
+    const gate = Promise.withResolvers<undefined>()
+    const started: string[] = []
+    const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
+      onStart: (request: SubagentStartRequest) => {
+        started.push(request.label ?? '(unlabeled)')
+        return gate.promise
+      },
+    })
+
+    const first = callSubagent(ctx, { description: 'legacy first', prompt: 'p1' })
+    await vi.waitFor(() => { expect(started).toEqual(['legacy first']) })
+
+    const second = callSubagent(ctx, {
+      description: 'legacy second',
+      prompt: 'p2',
+      hard_parallelism: true,
+    })
+    await vi.waitFor(() => { expect(started).toEqual(['legacy first', 'legacy second']) })
+
+    gate.resolve(undefined)
+    const results = await Promise.all([first, second])
+    expect(results.every(result => !result.isError)).toBe(true)
+  })
+
   it('prevents overlapping parallel writers while allowing an independent read-only reviewer', async () => {
     const gate = Promise.withResolvers<undefined>()
     const started: string[] = []
