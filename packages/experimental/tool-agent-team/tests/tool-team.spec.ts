@@ -25,6 +25,7 @@ const TOOL_NAMES = [
   'spawn_teammate',
   'send_message',
   'followup_task',
+  'team_react',
   'list_agents',
   'wait_agent',
   'interrupt_agent',
@@ -121,12 +122,13 @@ describe('dsh-tool-team', () => {
     expect(leadAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
-    expect(leadPrompt).toContain('create teammates only when the user explicitly asks')
+    expect(leadPrompt).toContain('real shared work, not role-play')
     expect(leadPrompt).toContain('FS_STALE_VERSION')
     expect(leadPrompt).toContain('Bash, formatters, code generators, and scripts are not fully protected')
     expect(leadPrompt).toContain('Task readiness never starts an owner')
     expect(leadPrompt).toContain('returns noProgress immediately')
     expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
+    expect(leadPrompt).toContain('Use team_react for a lightweight acknowledgement')
     expect(leadPrompt).toContain('Your Team role is lead')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
@@ -153,19 +155,21 @@ describe('dsh-tool-team', () => {
 
   it('routes teammates through provider-neutral model profiles', async () => {
     const { ctx, lead } = await setup(['hang'], false, {
+      defaultModelProfile: 'judge',
       modelProfiles: {
-        judge: { provider: 'mock', model: 'independent-judge', maxTokens: 8192 },
+        judge: { provider: 'mock', model: 'independent-judge', maxTokens: 8192, reasoningEffort: 'high' },
       },
     })
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'judge',
       description: 'independent acceptance review',
       prompt: 'review the evidence',
-      model_profile: 'judge',
     })
     expect(spawned.isError).toBe(false)
     const child = await waitRunning(ctx, spawnedChildId(spawned))
-    expect(child.options).toMatchObject({ provider: 'mock', model: 'independent-judge', maxTokens: 8192 })
+    expect(child.options).toMatchObject({
+      provider: 'mock', model: 'independent-judge', maxTokens: 8192, reasoningEffort: 'high',
+    })
     const rosterMember: unknown = JSON.parse(text(spawned))
     expect(rosterMember).toMatchObject({ member: {
       modelProvider: 'mock',
@@ -232,6 +236,23 @@ describe('dsh-tool-team', () => {
     const peer = await execute(ctx, child, 'send_message', { target: 'lead', message: 'quiet report' })
     expect(peer.isError).toBe(false)
     expect(JSON.parse(text(peer))).toMatchObject({ status: 'accepted' })
+    const peerReceipt = JSON.parse(text(peer)) as { messageId: string }
+    const reacted = await execute(ctx, lead, 'team_react', {
+      message_id: peerReceipt.messageId,
+      reaction: 'ack',
+    })
+    expect(reacted.isError).toBe(false)
+    expect(JSON.parse(text(reacted))).toMatchObject({
+      messageId: peerReceipt.messageId,
+      reactorName: 'lead',
+      reaction: 'ack',
+    })
+    const duplicateReaction = await execute(ctx, lead, 'team_react', {
+      message_id: peerReceipt.messageId,
+      reaction: 'agree',
+    })
+    expect(duplicateReaction.isError).toBe(true)
+    expect(text(duplicateReaction)).toContain('only once')
     const waking = await execute(ctx, child, 'followup_task', { target: 'lead', message: 'review the report' })
     expect(waking.isError).toBe(false)
     expect(JSON.parse(text(waking))).toMatchObject({ status: 'accepted' })
