@@ -1,9 +1,12 @@
+import { existsSync } from 'node:fs'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 const URL = process.env.CANVAS_SCATTERPLOT_URL ?? 'http://127.0.0.1:3080/demos/canvas-scatterplot.html'
 
-describe('Canvas2D scatterplot live demo', () => {
+const hasPlaywrightChromium = existsSync(chromium.executablePath())
+
+describe.skipIf(!hasPlaywrightChromium)('Canvas2D scatterplot live demo', () => {
   let browser: Browser
   let page: Page
   const consoleErrors: string[] = []

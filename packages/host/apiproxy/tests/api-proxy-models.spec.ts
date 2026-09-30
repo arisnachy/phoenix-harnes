@@ -173,6 +173,7 @@ describe('Web session model selection', () => {
       ...input.name === undefined ? {} : { name: input.name },
     }))
     const attachments = {
+      fileLimits: { maxFilesPerMessage: 20 },
       imageLimits: {
         maxImageBytes: 4,
         maxImagesPerMessage: 2,

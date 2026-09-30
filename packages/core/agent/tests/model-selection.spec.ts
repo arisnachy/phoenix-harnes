@@ -997,7 +997,7 @@ describe('installModelSelection()', () => {
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = { current: undefined, assembled: undefined }
     const dispose = installModelSelection(ctx, selection)
-    const agent = {} as Agent
+    const agent = { session: { events: [] } } as unknown as Agent
     const seed: LlmCallConfig = { provider: 'seed', model: 'seed', temperature: 0.2 }
     const signal = new AbortController().signal
 

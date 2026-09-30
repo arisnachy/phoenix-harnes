@@ -169,8 +169,9 @@ function withCompaction(raw: string, meter: TokenMeter): string {
       sourceEventSeq: summarySeq,
     },
   })
-  // The persistence seed helper requires a terminal turn/end. Keep the manual
-  // command standalone, then add a closed zero-step turn after it.
+  // The persistence seed helper requires the final turn boundary to be closed.
+  // Keep the manual command standalone, then add a closed zero-step turn; host
+  // housekeeping may legitimately follow that boundary.
   const closureTurn = lastTurn + 1
   at({ type: 'turn/start', data: { turn: closureTurn } })
   at({ type: 'turn/end', data: { turn: closureTurn, reason: { kind: 'completed' } } })

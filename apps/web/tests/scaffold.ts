@@ -847,10 +847,16 @@ export async function seedSession(
   const decoded = parseSeedFixture(realizeSeedFixture(scaffold, fixtureText, id))
   const events = decoded.events
   if (events.length === 0) throw new Error('seed fixture has no events')
-  const last = events[events.length - 1]!
-  // An open final turn would be mutated by resume's crash repair on first
-  // open; a committed seed must be a closed recording.
-  if (last.type !== 'turn/end') throw new Error(`seed fixture must end in turn/end, got ${last.type}`)
+  // A recording is closed when its last turn boundary is turn/end. Host
+  // housekeeping (for example inbox cleanup) may legitimately follow it.
+  const lastTurnBoundary = events
+    .filter(event => event.type === 'turn/start' || event.type === 'turn/end')
+    .at(-1)
+  if (lastTurnBoundary?.type !== 'turn/end') {
+    throw new Error(
+      `seed fixture must end in a closed turn, got ${lastTurnBoundary?.type ?? 'no turn boundary'}`,
+    )
+  }
   const meta: SessionHeader = {
     version: SESSION_FORMAT_VERSION,
     id: SessionId(id),

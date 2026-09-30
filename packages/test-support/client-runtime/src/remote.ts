@@ -20,7 +20,19 @@ import type { Context } from '@phoenix-ai/cordis'
  * this double for the containment guarantee `$on` documents — assert that
  * against the real service.
  */
+export const TEST_VOICE_REMOTE = Object.freeze({
+  conversationStatus: () => Promise.resolve({ ok: true as const, value: { enabled: false, natural: false } }),
+  conversationSpeak: () => Promise.resolve({
+    ok: true as const,
+    value: { accepted: false, reason: 'disabled' as const },
+  }),
+  conversationCancel: () => Promise.resolve({ ok: true as const, value: { cancelled: 0 } }),
+})
+
+/** Test-owned Remote service with inert generated namespaces for client feature specs. */
 export class TestRemote {
+  /** Inert generated voice namespace: feature tests stay browser-fallback-only unless they replace it explicitly. */
+  readonly voice = TEST_VOICE_REMOTE
   private readonly subscriptions = new Map<string, Set<(...args: never[]) => void>>()
 
   /**

@@ -125,6 +125,7 @@ async function harness(options?: {
     ...input.name === undefined ? {} : { name: input.name },
   }))
   const attachments = {
+    fileLimits: { maxFilesPerMessage: 20 },
     imageLimits: {
       maxImageBytes: 64,
       maxImagesPerMessage: 2,

@@ -34,6 +34,7 @@ import type {
 import { registerDomSnapshotSerializer } from './snapshot.ts'
 import { TestSessions } from './sessions.ts'
 import { TestWorkspaces } from './workspaces.ts'
+import { TEST_VOICE_REMOTE } from './remote.ts'
 import type { Stabilizer } from './fixtures.ts'
 
 export type { UseSession } from '@phoenix-ai/dsh-client-ui-renderer/client'
@@ -260,6 +261,13 @@ export class SlotTestRuntime {
    * @param value - service implementation (test double).
    */
   provide<K extends string>(name: K, value: K extends keyof Context ? Partial<Context[K]> : unknown): void {
+    // ui-conversation's generated Host voice namespace is part of the normal
+    // Client assembly now. Older feature fakes intentionally stubbed only the
+    // Remote members they exercised; enrich those partial fakes centrally so
+    // every consumer test gets the same inert browser-fallback voice route.
+    if (name === 'remote' && typeof value === 'object' && value !== null && !('voice' in value)) {
+      Object.assign(value as object, { voice: TEST_VOICE_REMOTE })
+    }
     this.ctx.provide(name, value)
   }
 
