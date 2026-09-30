@@ -88,6 +88,8 @@ interface ActiveEpisode {
 export class ExperienceLearningEngine {
   private readonly active = new Map<string, ActiveEpisode>()
   private readonly aggregates = new Map<string, ExperienceAggregate>()
+  /** Child session -> top-level task session for resource attribution only. */
+  private readonly parentByChild = new Map<string, string>()
 
   /**
    * Restore durable experience aggregates without replacing newer in-memory evidence.
@@ -123,6 +125,7 @@ export class ExperienceLearningEngine {
       current.userInterventions += 1
       return
     }
+    this.clearChildLinks(input.sessionId)
     this.active.set(input.sessionId, {
       taskFingerprint,
       taskSummary: safeTaskSummary(input.text),
@@ -151,7 +154,7 @@ export class ExperienceLearningEngine {
     readonly cacheWriteTokens?: number
     readonly reasoningTokens?: number
   }): void {
-    const episode = this.active.get(sessionId)
+    const episode = this.episodeFor(sessionId)
     if (episode === undefined) return
     episode.totalTokens += nonNegative(usage.inputTokens)
       + nonNegative(usage.outputTokens)
@@ -168,7 +171,7 @@ export class ExperienceLearningEngine {
    * @param route - Effective provider/model pair recorded by the request header.
    */
   observeModelRoute(sessionId: string, route: { readonly provider: string; readonly model: string }): void {
-    const episode = this.active.get(sessionId)
+    const episode = this.episodeFor(sessionId)
     if (episode === undefined || route.provider !== 'openai-codex') return
     if (route.model === 'gpt-6.1-sol') episode.phoenixAutoPlannerPhases += 1
     else if (route.model === 'gpt-6-luna') episode.phoenixAutoWorkerPhases += 1
@@ -179,9 +182,14 @@ export class ExperienceLearningEngine {
    * labels, outputs, and identities never enter the learning aggregate.
    * @param sessionId - Active task session.
    */
-  observeWorkflowAgentStart(sessionId: string): void {
-    const episode = this.active.get(sessionId)
-    if (episode !== undefined) episode.phoenixAutoAgents += 1
+  observeWorkflowAgentStart(sessionId: string, childSessionId?: string): void {
+    const parentSessionId = this.rootSessionId(sessionId)
+    const episode = this.active.get(parentSessionId)
+    if (episode === undefined) return
+    episode.phoenixAutoAgents += 1
+    if (childSessionId !== undefined && childSessionId.length > 0 && childSessionId !== parentSessionId) {
+      this.parentByChild.set(childSessionId, parentSessionId)
+    }
   }
 
   /**
@@ -189,7 +197,7 @@ export class ExperienceLearningEngine {
    * @param sessionId - sessionId supplied to this public operation.
    */
   observeToolCall(sessionId: string): void {
-    const episode = this.active.get(sessionId)
+    const episode = this.episodeFor(sessionId)
     if (episode !== undefined) episode.toolCalls += 1
   }
 
@@ -199,7 +207,7 @@ export class ExperienceLearningEngine {
    * @param failed - failed supplied to this public operation.
    */
   observeToolResult(sessionId: string, failed: boolean): void {
-    const episode = this.active.get(sessionId)
+    const episode = this.episodeFor(sessionId)
     if (episode !== undefined && failed) episode.failedToolCalls += 1
   }
 
@@ -208,7 +216,7 @@ export class ExperienceLearningEngine {
    * @param sessionId - sessionId supplied to this public operation.
    */
   observeRetry(sessionId: string): void {
-    const episode = this.active.get(sessionId)
+    const episode = this.episodeFor(sessionId)
     if (episode !== undefined) episode.retries += 1
   }
 
@@ -226,7 +234,9 @@ export class ExperienceLearningEngine {
    * @param sessionId - sessionId supplied to this public operation.
    */
   clear(sessionId: string): void {
-    this.active.delete(sessionId)
+    const root = this.rootSessionId(sessionId)
+    this.active.delete(root)
+    this.clearChildLinks(root)
   }
 
   /**
@@ -238,9 +248,11 @@ export class ExperienceLearningEngine {
     * @returns Result produced by this public operation.
    */
   completeVerified(sessionId: string, occurredAt: number): ExperienceAggregate | undefined {
-    const episode = this.active.get(sessionId)
-    if (episode === undefined) return undefined
-    this.active.delete(sessionId)
+    const root = this.rootSessionId(sessionId)
+    const episode = this.active.get(root)
+    if (episode === undefined || root !== sessionId) return undefined
+    this.active.delete(root)
+    this.clearChildLinks(root)
 
     const previous = this.bestMatchingAggregate(episode.taskFingerprint, episode.projectId)
     const key = previous?.key ?? fingerprintKey(episode.taskFingerprint)
@@ -328,6 +340,28 @@ export class ExperienceLearningEngine {
   snapshot(key: string, projectId?: string): ExperienceAggregate | undefined {
     const state = this.aggregates.get(scopedKey(key, projectId))
     return state === undefined ? undefined : structuredClone(state)
+  }
+
+  private rootSessionId(sessionId: string): string {
+    let current = sessionId
+    const seen = new Set<string>()
+    while (!seen.has(current)) {
+      seen.add(current)
+      const parent = this.parentByChild.get(current)
+      if (parent === undefined) return current
+      current = parent
+    }
+    return sessionId
+  }
+
+  private episodeFor(sessionId: string): ActiveEpisode | undefined {
+    return this.active.get(this.rootSessionId(sessionId))
+  }
+
+  private clearChildLinks(parentSessionId: string): void {
+    for (const [child, parent] of this.parentByChild) {
+      if (parent === parentSessionId || child === parentSessionId) this.parentByChild.delete(child)
+    }
   }
 }
 
