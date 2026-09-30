@@ -1,7 +1,7 @@
 /** Conversation projection for real Agent Teams peer messages and reactions. */
 
 import type {
-  ConversationNodeContext, ConversationNodeDefinition,
+  ConversationMatch, ConversationNodeContext, ConversationNodeDefinition,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import type {
   ChatNode,
@@ -41,7 +41,7 @@ function record(value: unknown): Record<string, unknown> | undefined {
     : undefined
 }
 
-function queued(match: Parameters<ConversationNodeDefinition['start']>[1]): KiraTeamMessageChatData | undefined {
+function queued(match: ConversationMatch): KiraTeamMessageChatData | undefined {
   if ((match.event.type as string) !== 'team/message/queued') return undefined
   const data = record(match.event.data)
   const message = record(data?.message)
@@ -66,7 +66,7 @@ function queued(match: Parameters<ConversationNodeDefinition['start']>[1]): Kira
   }
 }
 
-function reaction(match: Parameters<ConversationNodeDefinition['update']>[1]): {
+function reaction(match: ConversationMatch): {
   readonly messageId: string
   readonly value: KiraTeamReactionChatData
 } | undefined {
@@ -133,9 +133,3 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
   buildViewNode: (context) => context.state === undefined ? null : viewNode(context, context.state),
 }
 
-/** Register the Team transcript projection in the shared conversation assembler. */
-export function registerKiraTeamConversationNode(
-  conversationEvents: { register(definition: ConversationNodeDefinition<KiraTeamMessageChatData>): () => void },
-): () => void {
-  return conversationEvents.register(kiraTeamMessageDefinition)
-}
