@@ -300,7 +300,7 @@ export function applyTeamEvent(state: TeamFoldState, event: SessionEvent): void 
       if (message === undefined) throw new Error(`team reaction references unknown message "${reaction.messageId}"`)
       if (message.senderId === reaction.reactorId) throw new Error('team members cannot react to their own message')
       const member = state.members.get(reaction.reactorId)
-      const expectedName = reaction.reactorId === state.id ? 'lead' : member?.name
+      const expectedName = TeamId(reaction.reactorId) === state.id ? 'lead' : member?.name
       if (expectedName === undefined || expectedName !== reaction.reactorName) {
         throw new Error(`team reaction reactor "${reaction.reactorName}" is not a known member`)
       }
