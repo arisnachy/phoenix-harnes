@@ -315,11 +315,12 @@ describe('HARDNESS ProactivityEngine', () => {
     const task = await restarted.get(created.id)
     expect(task?.status).toBe('failed')
     expect(task?.activeRun).toBeUndefined()
-    expect(task?.history.at(-1)).toMatchObject({
+    const lastHistory = task?.history.at(-1)
+    expect(lastHistory).toMatchObject({
       phase: 'deliver',
       status: 'failed',
-      error: expect.stringContaining('automatic retry suppressed'),
     })
+    expect(lastHistory?.error).toContain('automatic retry suppressed')
   })
 
   it('records failures and permits an explicit resume to retry the same occurrence', async () => {
