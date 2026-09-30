@@ -59,7 +59,7 @@ function comparePrerelease(left, right) {
     if (ln !== undefined && rn !== undefined) return Math.sign(ln - rn)
     if (ln !== undefined) return -1
     if (rn !== undefined) return 1
-    return l.localeCompare(r)
+    return Math.sign(l.localeCompare(r))
   }
   return 0
 }
