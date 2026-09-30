@@ -127,6 +127,49 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('starts clearly bounded Phoenix Auto edits directly on Luna Max', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'write', description: 'write a file', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const agent = {
+      session: {
+        events: [
+          { type: 'turn/start', data: { turn: 1 } },
+          {
+            type: 'user/message',
+            data: {
+              source: { kind: 'user' },
+              content: [{ type: 'text', text: 'Corrige este error tipográfico en README.md.' }],
+            },
+          },
+        ],
+      },
+    } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve({
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_MODEL,
+      }),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('uses Luna low for answer-only Phoenix Auto turns', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
