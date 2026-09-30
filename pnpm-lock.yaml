@@ -144,6 +144,9 @@ importers:
       '@phoenix-ai/dsh-agent-instructions':
         specifier: workspace:^
         version: link:../../packages/context/agent-instructions
+      '@phoenix-ai/dsh-agent-team':
+        specifier: workspace:^
+        version: link:../../packages/subagent/agent-team
       '@phoenix-ai/dsh-agent-tool-presentation':
         specifier: workspace:^
         version: link:../../packages/core/agent-tool-presentation
@@ -252,6 +255,9 @@ importers:
       '@phoenix-ai/dsh-tool-ask-user':
         specifier: workspace:^
         version: link:../../packages/interaction/tool-ask-user
+      '@phoenix-ai/dsh-tool-agent-team':
+        specifier: workspace:^
+        version: link:../../packages/subagent/tool-agent-team
       '@phoenix-ai/dsh-tool-bash':
         specifier: workspace:^
         version: link:../../packages/shell/tool-bash
@@ -498,10 +504,10 @@ importers:
       '@phoenix-ai/dsh-e2b':
         specifier: workspace:*
         version: link:../packages/e2b/e2b
-      '@phoenix-ai/dsh-experimental-agent-team':
+      '@phoenix-ai/dsh-agent-team':
         specifier: workspace:*
         version: link:../packages/experimental/agent-team
-      '@phoenix-ai/dsh-experimental-tool-agent-team':
+      '@phoenix-ai/dsh-tool-agent-team':
         specifier: workspace:*
         version: link:../packages/experimental/tool-agent-team
       '@phoenix-ai/dsh-fs-e2b':
@@ -1087,12 +1093,12 @@ importers:
       '@phoenix-ai/dsh-credentials-local':
         specifier: workspace:^
         version: link:../../credentials/credentials-local
-      '@phoenix-ai/dsh-experimental-agent-team':
+      '@phoenix-ai/dsh-agent-team':
         specifier: workspace:^
-        version: link:../../experimental/agent-team
-      '@phoenix-ai/dsh-experimental-tool-agent-team':
+        version: link:../../subagent/agent-team
+      '@phoenix-ai/dsh-tool-agent-team':
         specifier: workspace:^
-        version: link:../../experimental/tool-agent-team
+        version: link:../../subagent/tool-agent-team
       '@phoenix-ai/dsh-fs-local':
         specifier: workspace:^
         version: link:../../fs/fs-local
@@ -4380,7 +4386,7 @@ importers:
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
 
-  packages/experimental/agent-team:
+  packages/subagent/agent-team:
     dependencies:
       '@phoenix-ai/schemastery':
         specifier: link:../../../vendor/schemastery
@@ -4432,7 +4438,7 @@ importers:
         specifier: workspace:^
         version: link:../../subagent/subagent-spawn-in-process
 
-  packages/experimental/tool-agent-team:
+  packages/subagent/tool-agent-team:
     dependencies:
       '@phoenix-ai/schemastery':
         specifier: link:../../../vendor/schemastery
@@ -4450,7 +4456,7 @@ importers:
       '@phoenix-ai/dsh-agent-loop-testkit':
         specifier: workspace:^
         version: link:../../test-support/agent-loop-testkit
-      '@phoenix-ai/dsh-experimental-agent-team':
+      '@phoenix-ai/dsh-agent-team':
         specifier: workspace:^
         version: link:../agent-team
       '@phoenix-ai/dsh-invariants':
@@ -9358,6 +9364,9 @@ importers:
       '@phoenix-ai/dsh-agent-tool-presentation':
         specifier: workspace:^
         version: link:../../packages/core/agent-tool-presentation
+      '@phoenix-ai/dsh-agent-team':
+        specifier: workspace:^
+        version: link:../../packages/subagent/agent-team
       '@phoenix-ai/dsh-anonymous-user-id':
         specifier: workspace:^
         version: link:../../packages/identity/anonymous-user-id
@@ -9598,6 +9607,9 @@ importers:
       '@phoenix-ai/dsh-tool-ask-user':
         specifier: workspace:^
         version: link:../../packages/interaction/tool-ask-user
+      '@phoenix-ai/dsh-tool-agent-team':
+        specifier: workspace:^
+        version: link:../../packages/subagent/tool-agent-team
       '@phoenix-ai/dsh-tool-bash':
         specifier: workspace:^
         version: link:../../packages/shell/tool-bash
