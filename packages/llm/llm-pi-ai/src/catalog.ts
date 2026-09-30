@@ -234,6 +234,20 @@ export function catalogModels(provider: string): Map<string, Model<Api>> {
 export type PiAiReasoningEfforts = Partial<Record<ModelThinkingLevel, string | null>>
 
 /**
+ * Safe default capability for a Codex model typed by hand before its installed
+ * pi-ai catalog knows the id. The OpenAI Codex route is reasoning-native; this
+ * keeps the same selector vocabulary Phoenix already exposes for discovered
+ * Codex models. An explicit `reasoningEfforts: false` still disables it.
+ */
+const CODEX_MANUAL_REASONING_EFFORTS: PiAiReasoningEfforts = {
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+  xhigh: 'xhigh',
+  max: 'max',
+}
+
+/**
  * Whether one pi-ai compat field is configurable on a profile.
  *
  * `withhold` is the disposition for a field pi-ai's installed catalog already
@@ -686,6 +700,7 @@ function resolveModelReasoning(
   base: Model<Api> | undefined,
 ): ModelReasoning {
   const efforts = entry.reasoningEfforts
+    ?? (provider === 'openai-codex' && base === undefined ? CODEX_MANUAL_REASONING_EFFORTS : undefined)
   if (efforts === undefined) {
     // Reasoning rides the installed entry or is absent: a bare capability flag
     // would make pi-ai advertise effort levels with no `thinkingLevelMap` to
