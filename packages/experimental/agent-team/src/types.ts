@@ -109,6 +109,17 @@ export interface TeamMessageSnapshot {
   readonly content: ContentBlock[]
 }
 
+/** Compact semantic reactions that can acknowledge a real peer message without another prose turn. */
+export type TeamReactionKind = 'ack' | 'agree' | 'insight' | 'blocked' | 'done'
+
+/** One durable teammate reaction attached to a previously queued peer message. */
+export interface TeamReactionSnapshot {
+  readonly messageId: TeamMessageId
+  readonly reactorId: SessionId
+  readonly reactorName: string
+  readonly reaction: TeamReactionKind
+}
+
 /** Source retained by the target Session for durable mailbox de-duplication. */
 export interface TeamMessageSource {
   readonly kind: 'team-message'
@@ -169,6 +180,20 @@ export interface SendTeamMessageResult {
   readonly status: 'accepted' | 'queued'
 }
 
+/** Input for one durable semantic reaction to another Team member's message. */
+export interface ReactToTeamMessageRequest {
+  readonly messageId: TeamMessageId
+  readonly reaction: TeamReactionKind
+  readonly signal: AbortSignal
+}
+
+/** Result after a reaction is committed to the Team Lead journal. */
+export interface ReactToTeamMessageResult {
+  readonly messageId: TeamMessageId
+  readonly reactorName: string
+  readonly reaction: TeamReactionKind
+}
+
 /** Input for creating one shared task. */
 export interface CreateTeamTaskRequest {
   readonly subject: string
@@ -219,6 +244,12 @@ declare module '@phoenix-ai/dsh-session/types' {
       teamId: TeamId
       messageId: TeamMessageId
       targetId: SessionId
+    }
+    /** Lightweight semantic reaction to a real Team message; stored only in the Team Lead Session. */
+    'team/reaction': {
+      version: 1
+      teamId: TeamId
+      reaction: TeamReactionSnapshot
     }
   }
 }
