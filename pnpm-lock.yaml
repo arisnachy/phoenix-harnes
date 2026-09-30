@@ -1087,6 +1087,12 @@ importers:
       '@phoenix-ai/dsh-credentials-local':
         specifier: workspace:^
         version: link:../../credentials/credentials-local
+      '@phoenix-ai/dsh-experimental-agent-team':
+        specifier: workspace:^
+        version: link:../../experimental/agent-team
+      '@phoenix-ai/dsh-experimental-tool-agent-team':
+        specifier: workspace:^
+        version: link:../../experimental/tool-agent-team
       '@phoenix-ai/dsh-fs-local':
         specifier: workspace:^
         version: link:../../fs/fs-local
@@ -2317,6 +2323,9 @@ importers:
       '@phoenix-ai/dsh-client-ui-layout':
         specifier: workspace:^
         version: link:../ui-layout
+      '@phoenix-ai/dsh-client-ui-conversation':
+        specifier: workspace:^
+        version: link:../ui-conversation
       '@phoenix-ai/dsh-client-ui-primitives':
         specifier: workspace:^
         version: link:../ui-primitives
