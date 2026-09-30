@@ -48,7 +48,7 @@ function structuredGateResponse(label: unknown): unknown {
 }
 
 describe('goal completion judge', () => {
-  it('routes an OpenAI Codex parent to the Luna xhigh judge model', async () => {
+  it('routes an OpenAI Codex parent to the current Phoenix Luna Max judge model', async () => {
     await expect(resolveGoalJudgeAgentOptions({
       parent: {
         id: SessionId('codex-parent'),
@@ -57,8 +57,8 @@ describe('goal completion judge', () => {
       signal: new AbortController().signal,
     })).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: 'xhigh',
+      model: 'gpt-6-luna',
+      reasoningEffort: 'max',
     })
   })
 
@@ -127,7 +127,7 @@ describe('goal completion judge', () => {
       signal: new AbortController().signal,
     })
     expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
-      agentOptions: { provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'xhigh' },
+      agentOptions: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
     }))
   })
 
