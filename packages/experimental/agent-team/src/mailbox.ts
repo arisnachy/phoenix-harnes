@@ -133,6 +133,7 @@ export class TeamMailbox {
         senderName: membership.name,
         targetId: target.id,
         targetName: target.name,
+        purpose: request.purpose ?? 'update',
         delivery: request.delivery,
         content,
       }
@@ -237,6 +238,7 @@ export class TeamMailbox {
         messageId: message.id,
         senderId: message.senderId,
         senderName: message.senderName,
+        purpose: message.purpose,
       }
       const content = this.deliveryContent(message)
       if (message.targetId === root.id) {
@@ -315,7 +317,7 @@ export class TeamMailbox {
   /** Frame peer content with stable sender and message identity for the receiving model. */
   private deliveryContent(message: TeamMessageSnapshot): ContentBlock[] {
     return [
-      { type: 'text', text: `Team message ${message.id} from ${message.senderName}:` },
+      { type: 'text', text: `Team message ${message.id} from ${message.senderName} [${message.purpose ?? 'update'}]:` },
       ...structuredClone(message.content),
     ]
   }
