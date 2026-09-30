@@ -257,7 +257,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
               ...profile.maxTokens === undefined ? {} : { maxTokens: profile.maxTokens },
               ...profile.reasoningEffort === undefined
                 ? {}
-                : { reasoningEffort: profile.reasoningEffort as AgentOptions['reasoningEffort'] },
+                : { reasoningEffort: profile.reasoningEffort as NonNullable<AgentOptions['reasoningEffort']> },
             }
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: args.name,
