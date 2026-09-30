@@ -53,14 +53,14 @@ describe('PHOENIX Codex CLI updater', () => {
 
   it('chooses the sole matching package owner and uses command path to disambiguate', () => {
     const managers = [
-      { name: 'npm', version: '0.157.1', binDirs: ['C:\\Users\\a\\AppData\\Roaming\\npm'] },
-      { name: 'pnpm', version: '0.157.1', binDirs: ['C:\\Users\\a\\AppData\\Local\\pnpm'] },
+      { name: 'npm', version: '0.157.1', binDirs: ['/opt/npm/bin'] },
+      { name: 'pnpm', version: '0.157.1', binDirs: ['/opt/pnpm/bin'] },
     ]
     expect(chooseCodexPackageManager({
       currentVersion: '0.157.1',
-      codexPaths: ['C:\\Users\\a\\AppData\\Local\\pnpm\\codex.cmd'],
+      codexPaths: ['/opt/pnpm/bin/codex'],
       managers,
-    })).toBe(process.platform === 'win32' ? 'pnpm' : undefined)
+    })).toBe('pnpm')
 
     expect(chooseCodexPackageManager({
       currentVersion: '0.157.1',
