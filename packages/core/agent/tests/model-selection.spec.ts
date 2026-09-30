@@ -284,6 +284,68 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('does not override a same-step tool action that intentionally concludes the turn', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'browser_open', description: 'open a page', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Abre la interfaz y comprueba que cargue.' }],
+        },
+      },
+      {
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 1,
+          message: {
+            source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+            content: [
+              { type: 'text', text: 'Ahora comprobaré la interfaz.' },
+              { type: 'tool-call', id: 'call-1', name: 'browser_open', arguments: '{"url":"http://127.0.0.1:3080"}' },
+            ],
+          },
+        },
+      },
+      {
+        type: 'tool/call',
+        data: { turn: 1, step: 1, name: 'browser_open', arguments: '{"url":"http://127.0.0.1:3080"}' },
+      },
+      {
+        type: 'tool/result',
+        data: {
+          turn: 1,
+          step: 1,
+          message: { role: 'tool', content: [{ type: 'text', text: 'opened' }] },
+        },
+      },
+    ]
+    const steered: unknown[] = []
+    const agent = {
+      session: { events },
+      steer: (message: unknown) => { steered.push(message) },
+    } as unknown as Agent
+    const signal = new AbortController().signal
+
+    await ctx.systemPrompt.assemble()
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+    expect(steered).toEqual([])
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('does not extend a Phoenix Auto turn that reports concrete completion', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
