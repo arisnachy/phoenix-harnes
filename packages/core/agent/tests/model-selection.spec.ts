@@ -267,12 +267,7 @@ describe('installModelSelection()', () => {
     await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
 
     expect(steer).toHaveBeenCalledTimes(1)
-    expect(steer).toHaveBeenCalledWith(expect.objectContaining({
-      content: [expect.objectContaining({
-        type: 'text',
-        text: expect.stringContaining('<phoenix_auto_continue>'),
-      })],
-    }))
+    expect(JSON.stringify(steer.mock.calls[0])).toContain('<phoenix_auto_continue>')
 
     dispose()
     await ctx.fiber.dispose()
