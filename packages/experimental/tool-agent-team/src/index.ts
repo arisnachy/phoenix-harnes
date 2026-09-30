@@ -228,9 +228,15 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       async execute(args, exec) {
         const agent = callingAgent(exec.agent, 'spawn_teammate')
         const context = args.context ?? 'fresh'
-        const profileName = 'model_profile' in args && typeof args.model_profile === 'string'
+        const explicitProfile = 'model_profile' in args && typeof args.model_profile === 'string'
           ? args.model_profile
-          : config.defaultModelProfile || undefined
+          : undefined
+        const configuredDefault = config.defaultModelProfile || undefined
+        const defaultProfile = configuredDefault === undefined
+          ? undefined
+          : config.modelProfiles[configuredDefault]
+        const profileName = explicitProfile
+          ?? (defaultProfile?.provider === agent.options.provider ? configuredDefault : undefined)
         const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
         const agentOptions: AgentOptions | undefined = profile === undefined
           ? undefined
