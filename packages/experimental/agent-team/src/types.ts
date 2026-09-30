@@ -55,6 +55,15 @@ export interface TeamMemberSnapshot {
   readonly error?: string
 }
 
+/** Provider-reported live usage that lets the Lead detect expensive or stalled execution. */
+export interface TeamMemberUsage {
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadTokens: number
+  readonly cacheWriteTokens: number
+  readonly reasoningTokens: number
+}
+
 /** Current runtime-enriched roster row. */
 export interface TeamMemberView {
   readonly id: SessionId
@@ -67,6 +76,8 @@ export interface TeamMemberView {
   /** LLM provider route, distinct from the subagent transport provider. */
   readonly modelProvider?: string
   readonly model?: string
+  /** Available for live members; persisted inactive rows may omit runtime usage. */
+  readonly usage?: TeamMemberUsage
   readonly diagnostics: string[]
 }
 
