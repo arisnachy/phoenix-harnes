@@ -11,6 +11,7 @@ import {
   activityKeyOf, activityOf, agentNameOf, agentRoleKeyOf,
   KiraTeamsDock, lineageMembers, statusKeyOf,
 } from '../src/client/KiraTeamsDock.tsx'
+import { KiraTeamMessageView, teamIdentityOf } from '../src/client/TeamChatMessage.tsx'
 import { agentAvatarKind } from '../src/client/ModelActivityAvatar.tsx'
 import { apply, inject } from '../src/client/index.ts'
 
@@ -57,6 +58,7 @@ async function provideSlotFaces(ctx: Context): Promise<void> {
     children: {
       'shell.workspace': { kind: 'list', scope: 'root' },
       'shell.overlay': { kind: 'list', scope: 'root' },
+      'conversation.chat.node': { kind: 'keyed', scope: 'session' },
     },
   } as never, () => null)
 }
@@ -78,6 +80,7 @@ async function fullBench(sessions: SessionSummary[], current?: SessionId) {
     subscribeWorkspaceOccupancy: () => () => {},
   }
   ctx.provide('layout', layout as never)
+  ctx.provide('conversationEvents', { register: () => () => {} } as never)
   await provideSlotFaces(ctx)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
   await ctx.plugin({ inject: [...inject], apply }).await()
@@ -221,9 +224,18 @@ describe('lineageMembers', () => {
   })
 })
 
+describe('team chat identity', () => {
+  it('keeps Kira personas stable while models remain internal engines', () => {
+    expect(teamIdentityOf('lead', 'root')).toMatchObject({ name: 'Kira', role: 'Coordinación' })
+    expect(teamIdentityOf('la-forja', 'worker-a')).toMatchObject({ name: 'La Forja', role: 'Programación' })
+    expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Datos / análisis' })
+    expect(teamIdentityOf('gpt-6-luna', 'worker-c').name).not.toBe('GPT 6 Luna')
+  })
+})
+
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout'])
+    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout', 'conversationEvents'])
   })
 
   it('registers one shell.overlay entry so KIRA never reserves conversation width', async () => {
@@ -232,6 +244,8 @@ describe('apply', () => {
       .find(slotEntry => slotEntry.component === KiraTeamsDock)!
     expect(entry).toBeDefined()
     expect(ctx.slots.entries('shell.workspace').some(slotEntry => slotEntry.component === KiraTeamsDock)).toBe(false)
+    expect(ctx.slots.entries('conversation.chat.node')
+      .some(slotEntry => slotEntry.component === KiraTeamMessageView)).toBe(true)
     const injected = (entry.inject as unknown as () => {
       list: { getSnapshot(): SessionListState }
       layout: unknown
