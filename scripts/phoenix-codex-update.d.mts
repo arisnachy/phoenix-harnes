@@ -32,9 +32,12 @@ export declare function chooseCodexPackageManager(input: {
 }): string | undefined
 export declare function inspectCodexUpdate(home?: string): {
   status: string
+  managedStatus: string
   current?: string
+  managedCurrent?: string
   latest?: string
+  runtimeRoot: string
   manager?: string
-  codexPaths?: string[]
-  managers?: Array<{ name: string; version: string }>
+  codexPaths: string[]
+  managers: Array<{ name: string; version: string }>
 }
