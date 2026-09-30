@@ -4,7 +4,7 @@ import type {
   ConversationNodeContext, ConversationNodeDefinition,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import type {
-  ChatNode, ChatNodeDataMap,
+  ChatNode,
 } from '@phoenix-ai/dsh-client-ui-conversation/client'
 
 /** One lightweight reaction rendered under a real Team message. */
@@ -21,6 +21,7 @@ export interface KiraTeamMessageChatData {
   readonly senderName: string
   readonly targetId: string
   readonly targetName?: string
+  readonly purpose?: 'assignment' | 'question' | 'blocker' | 'result' | 'review' | 'decision' | 'update'
   readonly content: readonly unknown[]
   readonly time: number
   readonly seq: number
@@ -54,6 +55,10 @@ function queued(match: Parameters<ConversationNodeDefinition['start']>[1]): Kira
     senderName: message.senderName,
     targetId: message.targetId,
     ...typeof message.targetName === 'string' ? { targetName: message.targetName } : {},
+    ...typeof message.purpose === 'string'
+      && ['assignment', 'question', 'blocker', 'result', 'review', 'decision', 'update'].includes(message.purpose)
+      ? { purpose: message.purpose as KiraTeamMessageChatData['purpose'] }
+      : {},
     content,
     time: match.event.time,
     seq: match.event.seq,
