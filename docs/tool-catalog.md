@@ -27,7 +27,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-fs` | `edit`, `fs_status`, `read`, `read_image`, `write` | `ctx.tools`, `ctx.fs`, `ctx.systemPrompt`, `ctx.attachments (image-tool registration)`, `ctx.llm + an image-capable route (image-tool execution)` | `tool/call`, `fs/write-intent or fs/edit-intent for mutations`, `fs/observed after read presence/absence or successful file operation`, `durable attachment (read_image)`, `tool/result` | - | The read-before-write/edit policy is added by `@phoenix-ai/dsh-fs-observation-policy` (an `fs/*` event-gate plugin, no schema change); a deployment that loads these tools is expected to also load it. The image tool is not registered without `ctx.attachments`; its schema is route-independent, and execution refuses unless the exact routed model declares image input. |
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`, `grep` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments. |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`, `terminal_list`, `terminal_open`, `terminal_read`, `terminal_send`, `terminal_signal` | `ctx.tools`, `ctx.terminals`, `ctx.systemPrompt`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The six terminal tools are opt-in and complement one-shot shell/filesystem tools. `terminal_send(run_in_background: true)` registers with `ctx.jobs`; TUI, named key sequences, BEL, resize, auto-start, and cross-agent sharing are absent from the schema. |
-| `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `organization_forge`, `specialist_lab`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
+| `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `get_mission`, `organization_forge`, `specialist_lab`, `update_goal`, `update_mission_plan` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
 | `@phoenix-ai/dsh-tool-home-gateway` | `home_control`, `home_list_devices` | `ctx.tools`, `ctx.home`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `Home Assistant request at execution time` | - | The schema harvest uses a private fake endpoint and never performs a request. Live deployments remain disabled until the operator supplies a private endpoint, token variable, and both allowlists. |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
 | `@phoenix-ai/dsh-tool-living` | `living_act`, `living_forget_creation`, `living_get_connector_kit`, `living_inspect_creation`, `living_list_creations`, `living_read_state`, `living_register_creation`, `living_verify_creation` | `ctx.tools`, `ctx.living`, `ctx.systemPrompt` | `tool/call`, `durable living creation manifest`, `live creation state/actions/events through ctx.living`, `tool/result` | - | Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target. |
@@ -1044,6 +1044,19 @@ Read the current same-session goal, including its exact id/revision, objective, 
 
 Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
 
+### `get_mission`
+
+Read the durable master plan for the current goal together with a live/durable agent graph and recent direct-human steering. Use this after restart, context compaction, or before changing parallel worker assignments.
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
+
 ### `organization_forge`
 
 Build one organization, business, or system as a durable Organization Forge. Research comparable solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, and R&D roles active, prefer deterministic automation, and require functional, tested, secure, observable, maintainable, documented evidence plus an independent judge before delivery. Forge is a modular capability over the mission system, not a replacement for it. Start with research; a failed work item or judge result remains active and nextAction points to the next recovery step. The final handoff question is not a completion substitute.
@@ -1548,6 +1561,92 @@ Update the exact current goal revision. edit, pause, and resume require a direct
     "goal_id",
     "revision",
     "action"
+  ]
+}
+```
+
+Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
+
+### `update_mission_plan`
+
+Replace the compact durable master plan for the exact current goal revision. Keep one master plan, not per-round mini-plans. Update only on material evidence or human steering. Parallel writer steps must use explicit non-overlapping relative write_scope values.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "goal_id": {
+      "type": "string",
+      "description": "Exact current goal id from get_goal/get_mission."
+    },
+    "revision": {
+      "type": "number",
+      "description": "Exact current goal revision."
+    },
+    "plan_revision": {
+      "type": "number",
+      "description": "Current plan revision, or 0 when initializing the first plan."
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "description": "Bounded explicit conditions that define mission completion.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered master-plan steps. Write scopes are relative workspace files/directories owned by that worker.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "done",
+              "blocked"
+            ]
+          },
+          "owner_agent_id": {
+            "type": "string"
+          },
+          "write_scope": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status"
+        ]
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "Only material decisions that future rounds must preserve.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "goal_id",
+    "revision",
+    "plan_revision",
+    "acceptance_criteria",
+    "steps"
   ]
 }
 ```
@@ -2407,7 +2506,7 @@ The five read-only tools hide provider cursors and authorize every result from t
 
 ### `subagent`
 
-Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.
+Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Si ambos escriben, asigna write_scope no solapados; usa read_only=true para revisores. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.
 
 ```json
 {
@@ -2420,6 +2519,17 @@ Orquestar una tarea independiente con un subagente en contexto limpio para desca
     "prompt": {
       "type": "string",
       "description": "Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. Devuelve solo el resultado verificable."
+    },
+    "read_only": {
+      "type": "boolean",
+      "description": "Set true for an analysis/review worker that must not modify workspace files. Read-only workers may safely overlap writers."
+    },
+    "write_scope": {
+      "type": "array",
+      "description": "Relative workspace files/directories this worker may modify. Required to run multiple writer agents safely; sibling writer scopes must not overlap.",
+      "items": {
+        "type": "string"
+      }
     },
     "hard_parallelism": {
       "type": "boolean",

@@ -765,7 +765,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/goal/goal/src/index.ts:130`](../packages/goal/goal/src/index.ts)
+Source: [`packages/goal/goal/src/index.ts:132`](../packages/goal/goal/src/index.ts)
 
 <a id="phoenix-aidsh-hardness-adapters"></a>
 
@@ -3168,7 +3168,7 @@ type ConfiguredAgentOptions = Omit<AgentOptions, 'reasoningEffort'> & {
 
 Depends on: [`AgentOptions`](subsystems/core.md)
 
-Source: [`packages/subagent/tool-subagent/src/index.ts:116`](../packages/subagent/tool-subagent/src/index.ts)
+Source: [`packages/subagent/tool-subagent/src/index.ts:187`](../packages/subagent/tool-subagent/src/index.ts)
 
 <a id="phoenix-aidsh-tool-subagent-report"></a>
 
