@@ -92,6 +92,7 @@ const teamMessageSnapshotSchema = z.object({
   senderName: z.string(),
   targetId: sessionIdSchema,
   targetName: z.string().min(1).optional(),
+  purpose: z.enum(['assignment', 'question', 'blocker', 'result', 'review', 'decision', 'update']).optional(),
   delivery: z.enum(['quiet', 'wakeup']),
   content: z.array(contentBlockSchema),
 }).strict() as z.ZodType<TeamMessageSnapshot>
