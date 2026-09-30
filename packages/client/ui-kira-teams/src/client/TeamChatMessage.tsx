@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
-import type { ChatNodeViewProps } from '@phoenix-ai/dsh-client-ui-conversation/client'
+import type { PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import {
   KIRA_ROSTER,
 } from './KiraTeamsDock.tsx'
@@ -57,7 +57,7 @@ export function teamIdentityOf(name: string, id: string): TeamIdentity {
   if (roster !== undefined) {
     return {
       name: roster.name,
-      role: SKILL_ROLE[roster.skill] ?? 'Equipo Kira',
+      role: SKILL_ROLE[roster.skills[0] ?? 'general'] ?? 'Equipo Kira',
       kind: roster.kind,
     }
   }
@@ -65,7 +65,7 @@ export function teamIdentityOf(name: string, id: string): TeamIdentity {
   const stable = KIRA_ROSTER.find(agent => agent.kind === kind)
   return {
     name: stable?.name ?? 'Equipo Kira',
-    role: stable === undefined ? 'Equipo Kira' : (SKILL_ROLE[stable.skill] ?? 'Equipo Kira'),
+    role: stable === undefined ? 'Equipo Kira' : (SKILL_ROLE[stable.skills[0] ?? 'general'] ?? 'Equipo Kira'),
     kind,
   }
 }
@@ -115,9 +115,11 @@ function ReactionChip({ reaction }: { reaction: KiraTeamReactionChatData }) {
 }
 
 /** Render one actual Agent Teams peer message inside Phoenix's existing chat column. */
+type KiraTeamMessageViewProps = PropsRuntime<'conversation.chat.node', 'kira-team-message'>
+
 export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   node,
-}: ChatNodeViewProps<'kira-team-message'>) {
+}: KiraTeamMessageViewProps) {
   const data: KiraTeamMessageChatData = node.data
   const sender = teamIdentityOf(data.senderName, data.senderId)
   const target = data.targetName === undefined
