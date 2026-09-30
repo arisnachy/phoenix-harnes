@@ -228,6 +228,30 @@ describe('HARDNESS ProactivityEngine', () => {
     expect(task?.nextRunAt).toBe('2026-09-30T13:00:00.000Z')
   })
 
+  it('does not let catch-up all bypass the rolling delivery budget', async () => {
+    const execute = vi.fn(async () => ({ summary: 'ok' }))
+    const engine = new ProactivityEngine(new MemoryProactivityStore(), { execute }, {
+      id: fixedIds('budget-catch-up'),
+      maxCatchUpOccurrences: 10,
+    })
+    await engine.create({
+      title: 'Bounded catch-up',
+      instruction: 'Run.',
+      runAt: '2026-09-30T09:00:00.000Z',
+      createdBy: 'user',
+      recurrence: { kind: 'interval', everyMs: 3_600_000 },
+      catchUp: 'all',
+      maxRunsPerDay: 1,
+    })
+
+    await engine.runDue(new Date('2026-09-30T12:05:00.000Z'))
+
+    expect(execute).toHaveBeenCalledTimes(1)
+    const [task] = await engine.list({ includeHidden: true, now: new Date('2026-09-30T12:05:00.000Z') })
+    expect(task?.nextRunAt).toBe('2026-09-30T10:00:00.000Z')
+    expect(task?.history).toHaveLength(1)
+  })
+
   it('bounds retained execution history while preserving the newest receipts', async () => {
     const engine = new ProactivityEngine(
       new MemoryProactivityStore(),
