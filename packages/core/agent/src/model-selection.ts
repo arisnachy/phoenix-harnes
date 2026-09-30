@@ -178,9 +178,6 @@ function isToolAcquisitionRequest(text: string): boolean {
 const AUTO_TASK_ACTION = /\b(?:fix|repair|debug|implement|edit|modify|update|create|build|run|execute|test|inspect|review|audit|refactor|deploy|install|remove|delete|rename|commit|merge|revert|resolve|diagnose|search|research|investigate|browse|compare|fill|submit|schedule|automate|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*|busc\p{L}*|investig\p{L}*|compar\p{L}*|llen\p{L}*|envi\p{L}*|program\p{L}*|automatiz\p{L}*)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Compact reply-depth vocabulary is easier to audit in one literal.
 const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|deep|analiz\p{L}*|razon\p{L}*|explic\p{L}*\s+en\s+detalle|profund\p{L}*)\b/iu
-/** Strong local signals that the first Phoenix Auto plan deserves Sol xhigh without another classifier call. */
-// oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual high-complexity routing vocabulary auditable as one regex literal.
-const AUTO_HARD_TASK = /\b(?:complex(?:ity)?|difficult|hard|critical|high[-\s]?risk|architecture|architectural|migration|security|production|distributed|concurren\p{L}*|race\s+condition|performance|benchmark|full\s+ci|all\s+ci|entire\s+repo|whole\s+repo|cross[-\s]?package|multi[-\s]?package|multi[-\s]?step|complej\p{L}*|dif[ií]cil\p{L}*|cr[ií]tic\p{L}*|alto\s+riesgo|arquitectur\p{L}*|migraci[oó]n|seguridad|producci[oó]n|concurrenc\p{L}*|rendimiento|todo\s+el\s+repo|ci\s+completo|suite\s+completa|m[uú]ltiples?\s+paquetes|varios?\s+paquetes)\b/iu
 /** A stopped operational reply that still announces the next action rather than performing it. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual unfinished-action matcher auditable as one literal.
 const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate))/isu
@@ -446,15 +443,6 @@ function phoenixAutoTaskRequest(text: string): boolean {
   return CONTEXTUAL_CONTINUATION.test(candidate)
     || isToolAcquisitionRequest(candidate)
     || AUTO_TASK_ACTION.test(candidate)
-}
-
-/** Decide whether a real task needs the most expensive Sol planning tier without spending an extra model call. */
-function phoenixAutoHardTaskRequest(text: string): boolean {
-  const candidate = text.trim()
-  if (!phoenixAutoTaskRequest(candidate)) return false
-  return AUTO_HARD_TASK.test(candidate)
-    || candidate.length >= 700
-    || (candidate.length >= 240 && AUTO_DEEP_REPLY.test(candidate))
 }
 
 interface PhoenixAutoRouterState {
