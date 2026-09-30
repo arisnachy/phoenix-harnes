@@ -267,6 +267,17 @@ describe('ExperienceLearningEngine', () => {
     })
   })
 
+  it('attributes direct subagent resource use without calling it parallel Phoenix Auto', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 'parent', text: 'Inspect one isolated issue', occurredAt: 10 })
+    engine.linkChildSession('parent', 'child')
+    engine.observeUsage('child', { inputTokens: 30, outputTokens: 20 })
+    engine.observeToolCall('child')
+    const state = engine.completeVerified('parent', 20)
+    expect(state?.recentRuns.at(-1)).toMatchObject({ totalTokens: 50, toolCalls: 1 })
+    expect(state?.recentRuns.at(-1)?.phoenixAutoStrategy).toBeUndefined()
+  })
+
   it('does not label a single direct Codex route as Phoenix Auto', () => {
     const engine = new ExperienceLearningEngine()
     engine.beginTask({ sessionId: 's', text: 'Run one direct model task', occurredAt: 1 })
