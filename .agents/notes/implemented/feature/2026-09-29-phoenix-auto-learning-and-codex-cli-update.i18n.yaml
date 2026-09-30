@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-29-phoenix-auto-learning-and-codex-cli-update.md
-2026-09-29-phoenix-auto-learning-and-codex-cli-update.md: 81ac974fefc547d27e0545f89cd5ee0495372903
-2026-09-29-phoenix-auto-learning-and-codex-cli-update.zh.md: 7cc968687b9734d6369d9a7611468b1ae951f68d
+2026-09-29-phoenix-auto-learning-and-codex-cli-update.md: 135b835630cd66679e1a87d6a2ea392de08e0c13
+2026-09-29-phoenix-auto-learning-and-codex-cli-update.zh.md: 23898b743af2db558b75ed8ab87d6b2dd0bc82c8
