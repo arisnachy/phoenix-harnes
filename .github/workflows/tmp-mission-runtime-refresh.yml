@@ -45,10 +45,6 @@ jobs:
         run: pnpm run build
       - name: Refresh ACP/headless snapshots from replay fixtures
         run: pnpm run test:snapshot:refresh
-      - name: Install Playwright Chromium
-        run: pnpm --filter @phoenix-ai/dsh-web-frontend exec playwright install --with-deps chromium
-      - name: Refresh browser snapshots
-        run: pnpm run test:web:refresh
       - name: Commit refreshed contracts
         run: |
           if git diff --quiet; then
