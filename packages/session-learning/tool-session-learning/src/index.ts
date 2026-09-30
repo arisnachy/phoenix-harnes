@@ -130,12 +130,14 @@ export function apply(ctx: Context, config: Config): void {
       return
     }
 
-    if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
+    if (session.header.origin !== 'subagent'
+      && eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
       experience.clear(sessionId)
       return
     }
 
-    if (eventType === 'goal/change' && isRecord(data) && data.operation === 'complete') {
+    if (session.header.origin !== 'subagent'
+      && eventType === 'goal/change' && isRecord(data) && data.operation === 'complete') {
       tasks.complete(sessionId, occurredAt)
       const learned = experience.completeVerified(sessionId, occurredAt)
       if (learned !== undefined) {
