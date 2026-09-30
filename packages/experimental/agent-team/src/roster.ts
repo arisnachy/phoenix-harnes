@@ -152,6 +152,7 @@ export class TeamRoster {
   list(membership: TeamMembership): TeamMemberView[] {
     const { root } = membership
     const state = this.journal.state(root)
+    const rootUsage = liveUsage(root)
     const result: TeamMemberView[] = [{
       id: root.id,
       name: 'lead',
@@ -159,12 +160,13 @@ export class TeamRoster {
       status: root.status,
       ...root.options.provider === undefined ? {} : { modelProvider: root.options.provider },
       ...root.options.model === undefined ? {} : { model: root.options.model },
-      ...liveUsage(root) === undefined ? {} : { usage: liveUsage(root) },
+      ...rootUsage === undefined ? {} : { usage: rootUsage },
       diagnostics: [],
     }]
     for (const member of state.members.values()) {
       const live = this.ctx.agents.get(member.id)
       const model = live?.options.model ?? root.options.model
+      const usage = liveUsage(live)
       result.push({
         id: member.id,
         name: member.name,
@@ -179,7 +181,7 @@ export class TeamRoster {
         context: member.context,
         ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
         ...model === undefined ? {} : { model },
-        ...liveUsage(live) === undefined ? {} : { usage: liveUsage(live) },
+        ...usage === undefined ? {} : { usage },
         diagnostics: member.error === undefined ? [] : [member.error],
       })
     }
@@ -462,6 +464,7 @@ export class TeamRoster {
   /** Build one runtime member row after successful creation. */
   private memberView(member: TeamMemberSnapshot & { readonly phase: 'active' }): TeamMemberView {
     const live = this.ctx.agents.get(member.id)
+    const usage = liveUsage(live)
     return {
       id: member.id,
       name: member.name,
@@ -472,7 +475,7 @@ export class TeamRoster {
       context: member.context,
       ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
       ...live?.options.model === undefined ? {} : { model: live.options.model },
-      ...liveUsage(live) === undefined ? {} : { usage: liveUsage(live) },
+      ...usage === undefined ? {} : { usage },
       diagnostics: [],
     }
   }
