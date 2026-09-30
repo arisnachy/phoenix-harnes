@@ -171,6 +171,77 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('routes real Kira Team work to Luna Max and escalates a blocker to Sol xhigh once', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: {
+            kind: 'team-message',
+            messageId: 'team-result-1',
+            purpose: 'result',
+          },
+          content: [{ type: 'text', text: 'La Forja terminó el cambio y las pruebas focales pasan.' }],
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    events.push(
+      { type: 'turn/start', data: { turn: 2 } },
+      {
+        type: 'user/message',
+        data: {
+          source: {
+            kind: 'team-message',
+            messageId: 'team-blocker-1',
+            purpose: 'blocker',
+          },
+          content: [{ type: 'text', text: 'La Forja encontró dos estrategias incompatibles y necesita dirección.' }],
+        },
+      },
+    )
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 2, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('xhigh'),
+    })
+    // The same blocker must not hold Sol for the rest of the turn; Kira returns
+    // immediately to Luna Max after the one strategic intervention.
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 2, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('continues a Phoenix Auto task when the Sol planning step stops before executing tools', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
