@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { adoptDiscoveredModel } from '../src/client/ModelListEditor.tsx'
+import { adoptDiscoveredModel, manualModelDraft } from '../src/client/ModelListEditor.tsx'
 
 describe('ModelListEditor discovery adoption', () => {
   it('materializes executable Codex efforts and ignores unsupported future ids', () => {
@@ -35,5 +35,19 @@ describe('ModelListEditor discovery adoption', () => {
       id: 'plain-model',
       name: 'Plain',
     })
+  })
+
+  it('seeds a hand-entered Codex model with selectable reasoning efforts', () => {
+    expect(manualModelDraft('openai-codex')).toEqual({
+      id: '',
+      reasoningEfforts: {
+        low: 'low',
+        medium: 'medium',
+        high: 'high',
+        xhigh: 'xhigh',
+        max: 'max',
+      },
+    })
+    expect(manualModelDraft('acme-gateway')).toEqual({ id: '' })
   })
 })
