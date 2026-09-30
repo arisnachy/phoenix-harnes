@@ -63,13 +63,31 @@ describe('universal artifact surface', () => {
     click.mockRestore()
   })
 
+  it('loads remote images in static HTML preview without sending a referrer', () => {
+    const artifact = normalizeHardnessArtifact({
+      id: 'document',
+      title: 'Coffee document',
+      mime: 'text/html',
+      data: '<img src="https://images.example.test/coffee.jpg" alt="Coffee">',
+      executable: false,
+    })
+    render(<UniversalArtifactSurface artifact={artifact} onStop={() => {}} />)
+    const frame = screen.getByTitle('Coffee document')
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin')
+    expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(frame.getAttribute('srcdoc')).toContain('img-src data: blob: https: http:')
+  })
+
   it('runs executable HTML inside an isolated iframe and does not expose parent access', () => {
     render(<UniversalArtifactSurface artifact={normalizeHardnessArtifact({
       id: 'app', title: 'Mini app', mime: 'text/html', data: '<button>Ready</button>',
     })} onRun={() => {}} onStop={() => {}} />)
     const frame = screen.getByTitle('Mini app')
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer')
     expect(frame.getAttribute('srcdoc')).toContain('connect-src \'none\'')
+    expect(frame.getAttribute('srcdoc')).toContain('img-src data: blob:')
+    expect(frame.getAttribute('srcdoc')).not.toContain('img-src data: blob: https: http:')
     fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
     expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy()
   })
