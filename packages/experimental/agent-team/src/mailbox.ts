@@ -238,7 +238,7 @@ export class TeamMailbox {
         messageId: message.id,
         senderId: message.senderId,
         senderName: message.senderName,
-        purpose: message.purpose,
+        ...message.purpose === undefined ? {} : { purpose: message.purpose },
       }
       const content = this.deliveryContent(message)
       if (message.targetId === root.id) {
