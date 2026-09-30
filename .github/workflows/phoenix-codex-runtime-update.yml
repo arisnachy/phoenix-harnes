@@ -1,0 +1,180 @@
+name: PHOENIX Codex Runtime Update
+
+on:
+  schedule:
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/phoenix-codex-runtime-update.yml'
+      - 'packages/subagent/subagent-codex/package.json'
+      - 'pnpm-lock.yaml'
+  workflow_run:
+    workflows:
+      - CI
+      - Release (dsh)
+      - Release (vendor)
+      - PHOENIX CI diagnostics
+      - E2E (real DeepSeek API)
+      - PHOENIX main guard
+      - Issue policy
+      - Issue lifecycle
+      - PHOENIX Evolution Gate
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: phoenix-codex-runtime-update-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    if: github.event_name != 'workflow_run'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NODE_VERSION: '24'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Resolve pinned and latest stable Codex versions
+        id: codex
+        shell: bash
+        run: |
+          set -euo pipefail
+          current="$(node -e "const p=require('./packages/subagent/subagent-codex/package.json'); process.stdout.write(p.dependencies['@openai/codex'])")"
+          latest="$(npm view @openai/codex@latest version --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const v=JSON.parse(s);process.stdout.write(String(v))})")"
+          if [[ ! "$current" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Pinned @openai/codex version is not an exact stable semver: $current"
+            exit 1
+          fi
+          if [[ ! "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::npm latest tag is not a stable semver: $latest"
+            exit 1
+          fi
+          newer="$(node - "$current" "$latest" <<'NODE'
+          const [current, latest] = process.argv.slice(2).map(v => v.split('.').map(Number))
+          const cmp = (a, b) => a[0] - b[0] || a[1] - b[1] || a[2] - b[2]
+          process.stdout.write(cmp(latest, current) > 0 ? 'true' : 'false')
+          NODE
+          )"
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "latest=$latest" >> "$GITHUB_OUTPUT"
+          echo "newer=$newer" >> "$GITHUB_OUTPUT"
+          echo "Pinned Codex: $current"
+          echo "Latest stable Codex: $latest"
+
+      - name: No update needed
+        if: steps.codex.outputs.newer != 'true'
+        run: |
+          echo "### Codex runtime is current" >> "$GITHUB_STEP_SUMMARY"
+          echo "- pinned: `${{ steps.codex.outputs.current }}`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- npm latest: `${{ steps.codex.outputs.latest }}`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Update exact Codex runtime pin and lockfile
+        if: steps.codex.outputs.newer == 'true'
+        shell: bash
+        env:
+          LATEST: ${{ steps.codex.outputs.latest }}
+        run: |
+          set -euo pipefail
+          pnpm --filter @phoenix-ai/dsh-subagent-codex add "@openai/codex@$LATEST" --save-exact --lockfile-only
+          changed="$(git diff --name-only)"
+          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^(packages/subagent/subagent-codex/package\.json|pnpm-lock\.yaml)$' || true)"
+          if [[ -n "$unexpected" ]]; then
+            echo "::error::Codex update touched unexpected files:"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+
+      - name: Verify updated Codex package and focused integration
+        if: steps.codex.outputs.newer == 'true'
+        shell: bash
+        env:
+          LATEST: ${{ steps.codex.outputs.latest }}
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          version_output="$(pnpm --filter @phoenix-ai/dsh-subagent-codex exec codex --version)"
+          echo "$version_output"
+          grep -F "$LATEST" <<<"$version_output"
+          pnpm exec vitest run             packages/subagent/subagent-codex/tests/account-boundary.spec.ts             packages/subagent/subagent-codex/tests/subagent-codex.spec.ts             packages/llm/llm-pi-ai/tests/codex-auto-catalog.spec.ts             packages/llm/llm-pi-ai/tests/codex-live-discovery.spec.ts
+
+      - name: Publish guarded Codex update pull request
+        if: steps.codex.outputs.newer == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LATEST: ${{ steps.codex.outputs.latest }}
+        run: |
+          set -euo pipefail
+          git fetch origin main --quiet
+          branch="automation/codex-runtime-v${LATEST//./-}"
+          git config user.name "phoenix-codex-update-bot"
+          git config user.email "phoenix-codex-update-bot@users.noreply.github.com"
+          git checkout -B "$branch"
+          git add packages/subagent/subagent-codex/package.json pnpm-lock.yaml
+          git commit -m "chore(codex): update runtime to $LATEST"
+          git push origin "HEAD:refs/heads/$branch" --force-with-lease || git push origin "HEAD:refs/heads/$branch" --force
+
+          pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main --state open --json number --jq '.[0].number // empty')"
+          if [[ -z "$pr" ]]; then
+            gh pr create               --repo "$GITHUB_REPOSITORY"               --base main               --head "$branch"               --title "chore(codex): update runtime to $LATEST"               --body "Automated PHOENIX Codex runtime update. The updater verified the package-local Codex binary and focused Codex integration tests before opening this PR. Full repository CI remains authoritative before merge."
+          else
+            echo "Reused open Codex update PR #$pr"
+          fi
+          echo "### Codex runtime update prepared" >> "$GITHUB_STEP_SUMMARY"
+          echo "- from: `${{ steps.codex.outputs.current }}`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- to: `$LATEST`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- stable will move only after the merged main SHA passes PHOENIX main guard" >> "$GITHUB_STEP_SUMMARY"
+
+  promote:
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Merge a fully green generated Codex update PR
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          prs="$(gh api             -H 'Accept: application/vnd.github+json'             "/repos/$GITHUB_REPOSITORY/commits/$HEAD_SHA/pulls")"
+          pr="$(jq -r '[.[] | select(.state == "open" and .base.ref == "main" and (.head.ref | startswith("automation/codex-runtime-v")))] | .[0].number // empty' <<<"$prs")"
+          if [[ -z "$pr" ]]; then
+            echo "No open generated Codex update PR is associated with $HEAD_SHA"
+            exit 0
+          fi
+
+          files="$(gh api --paginate "/repos/$GITHUB_REPOSITORY/pulls/$pr/files" --jq '.[].filename')"
+          unexpected="$(printf '%s\n' "$files" | grep -Ev '^(packages/subagent/subagent-codex/package\.json|pnpm-lock\.yaml)$' || true)"
+          if [[ -n "$unexpected" ]]; then
+            echo "::error::Refusing generated PR #$pr because it changes unexpected files:"
+            printf '%s\n' "$unexpected"
+            exit 1
+          fi
+
+          state="$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json mergeStateStatus --jq .mergeStateStatus)"
+          if [[ "$state" != "CLEAN" ]]; then
+            echo "Generated Codex PR #$pr is not fully mergeable yet (mergeStateStatus=$state); a later check completion will retry."
+            exit 0
+          fi
+
+          gh pr merge "$pr"             --repo "$GITHUB_REPOSITORY"             --squash             --delete-branch             --match-head-commit "$HEAD_SHA"
