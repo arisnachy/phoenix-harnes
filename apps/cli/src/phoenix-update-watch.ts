@@ -9,7 +9,6 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-
 /** Process-level policy for independent updater workers. */
 export interface PhoenixUpdateWatcherPolicy {
   readonly supervised: boolean
