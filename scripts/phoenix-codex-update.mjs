@@ -202,8 +202,12 @@ function readState(home) {
   }
 }
 
+function packageCommand(bin, args, options = {}) {
+  return command(bin, args, { ...options, cwd: homedir() })
+}
+
 function activeCodexVersion() {
-  const result = command('codex', ['--version'])
+  const result = command('codex', ['--version'], { cwd: homedir() })
   if (!result.ok) return undefined
   return parseCodexVersion(result.stdout)?.raw
 }
@@ -217,20 +221,20 @@ function codexPaths() {
 }
 
 function npmBinDirs() {
-  const prefix = command('npm', ['prefix', '-g'])
+  const prefix = packageCommand('npm', ['prefix', '-g'])
   if (!prefix.ok || prefix.stdout.length === 0) return []
   const root = resolve(prefix.stdout)
   return process.platform === 'win32' ? [root] : [join(root, 'bin')]
 }
 
 function pnpmBinDirs() {
-  const bin = command('pnpm', ['bin', '-g'])
+  const bin = packageCommand('pnpm', ['bin', '-g'])
   if (!bin.ok || bin.stdout.length === 0) return []
   return [resolve(bin.stdout)]
 }
 
 function installedPackageVersion(manager) {
-  const result = command(manager, ['list', '-g', PACKAGE, '--depth=0', '--json'])
+  const result = packageCommand(manager, ['list', '-g', PACKAGE, '--depth=0', '--json'])
   if (!result.ok && result.stdout.length === 0) return undefined
   return packageVersionFromListJson(result.stdout)
 }
@@ -251,7 +255,7 @@ function inspectManager(currentVersion) {
 
 function latestStableVersion() {
   for (const manager of ['npm', 'pnpm']) {
-    const result = command(manager, ['view', PACKAGE, 'version', '--json'], { timeout: 45_000 })
+    const result = packageCommand(manager, ['view', PACKAGE, 'version', '--json'], { timeout: 45_000 })
     if (!result.ok || result.stdout.length === 0) continue
     let value = result.stdout
     try {
@@ -281,7 +285,7 @@ function updateCommand(manager) {
   return undefined
 }
 
-function publicInspection(home) {
+function publicInspection() {
   const current = activeCodexVersion()
   if (current === undefined) {
     return { status: 'not-installed', current: undefined, latest: undefined, manager: undefined }
@@ -304,17 +308,17 @@ function publicInspection(home) {
 
 /** Inspect Codex without mutating it. Exported for diagnostics/tests. */
 export function inspectCodexUpdate(home = safeHome()) {
-  const inspection = publicInspection(home)
+  const inspection = publicInspection()
   writeState(home, inspection)
   return inspection
 }
 
-async function cycle(home, mode, options = {}) {
+function cycle(home, mode, options = {}) {
   if (mode === 'off') {
     writeState(home, { mode, status: 'off' })
     return 0
   }
-  const inspection = publicInspection(home)
+  const inspection = publicInspection()
   writeState(home, { mode, ...inspection })
 
   if (inspection.status !== 'available') return inspection.status === 'invalid' ? 1 : 0
@@ -342,7 +346,7 @@ async function cycle(home, mode, options = {}) {
   if (update === undefined) return 0
   writeState(home, { mode, ...inspection, status: 'updating' })
   const [bin, args] = update
-  const result = command(bin, args, { timeout: 5 * 60 * 1000 })
+  const result = packageCommand(bin, args, { timeout: 5 * 60 * 1000 })
   if (!result.ok) {
     writeState(home, {
       mode,
@@ -411,7 +415,7 @@ async function watch(home, mode, parentPid) {
   }
 }
 
-async function doctor(home, mode) {
+function doctor(home, mode) {
   const state = readState(home)
   const current = activeCodexVersion()
   process.stdout.write(`PHOENIX Codex update mode: ${mode}\n`)
@@ -441,7 +445,7 @@ async function main() {
   }
   const mode = normalizeCodexUpdateMode(process.env.PHOENIX_CODEX_UPDATE_MODE ?? 'auto')
   const home = safeHome()
-  if (args.includes('--doctor')) return await doctor(home, mode)
+  if (args.includes('--doctor')) return doctor(home, mode)
   if (args.includes('--watch')) {
     const index = args.indexOf('--parent-pid')
     const parentPid = Number(index >= 0 ? args[index + 1] : NaN)
@@ -449,8 +453,8 @@ async function main() {
     await watch(home, mode, parentPid)
     return 0
   }
-  if (args.includes('--apply')) return await cycle(home, mode, { apply: true })
-  return await cycle(home, mode, { apply: false })
+  if (args.includes('--apply')) return cycle(home, mode, { apply: true })
+  return cycle(home, mode, { apply: false })
 }
 
 if (process.argv[1] !== undefined && isAbsolute(process.argv[1])
