@@ -100,10 +100,11 @@ function scopesOverlap(left: readonly string[] | undefined, right: readonly stri
 
 function accessClaim(readOnly: boolean, writeScope: readonly string[] | undefined): SubagentAccessClaim {
   if (readOnly && writeScope !== undefined) throw new Error('read_only cannot be combined with write_scope')
-  return {
-    readOnly,
-    ...readOnly ? {} : { writeScope: normalizeWriteScope(writeScope) },
-  }
+  if (readOnly) return { readOnly: true }
+  const normalized = normalizeWriteScope(writeScope)
+  return normalized === undefined
+    ? { readOnly: false }
+    : { readOnly: false, writeScope: normalized }
 }
 
 function accessInstruction(claim: SubagentAccessClaim): string {

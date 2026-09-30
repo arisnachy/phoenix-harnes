@@ -27,7 +27,7 @@ describe('mission capsule', () => {
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'Change course: keep the reviewer read-only.' }],
       source: { kind: 'user' },
-    }))
+    }), { surfaceOp: 'append' })
     session.append('goal/strategy', {
       goalId: goal.id, revision: goal.revision, round: 2,
       strategy: 'verification-first', reason: 'fresh evidence is required',
