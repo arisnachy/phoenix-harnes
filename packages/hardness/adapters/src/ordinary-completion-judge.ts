@@ -584,8 +584,9 @@ export function installOrdinaryCompletionJudgeBridge(
       signal,
     })
     state.judgedGeneration = state.generation
-    if (decision.verdict === 'needs_changes') agent.steer(judgeNotice(decision))
-    else if (decision.verdict === 'blocked' && !isJudgeInfrastructureBlock(decision)) agent.steer(judgeNotice(decision))
+    const shouldSteer = decision.verdict === 'needs_changes'
+      || (decision.verdict === 'blocked' && !isJudgeInfrastructureBlock(decision))
+    if (shouldSteer) agent.steer(judgeNotice(decision))
   }))
 
   disposers.push(ctx.on('agent/disposed', ({ agent }) => {
