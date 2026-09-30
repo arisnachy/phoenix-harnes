@@ -331,6 +331,35 @@ function turnEvents(
   return events.slice(start)
 }
 
+interface PhoenixAutoTeamSignal {
+  readonly messageId: string
+  readonly purpose: string
+}
+
+/** Read the newest real Team message admitted into this turn without another classifier call. */
+function phoenixAutoTeamSignalForTurn(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): PhoenixAutoTeamSignal | undefined {
+  const events = turnEvents(agent, turn)
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event?.type !== 'user/message') continue
+    const data = event.data as {
+      readonly source?: {
+        readonly kind?: string
+        readonly messageId?: string
+        readonly purpose?: string
+      }
+    }
+    if (data.source?.kind !== 'team-message'
+      || typeof data.source.messageId !== 'string'
+      || typeof data.source.purpose !== 'string') continue
+    return { messageId: data.source.messageId, purpose: data.source.purpose }
+  }
+  return undefined
+}
+
 function stableFingerprint(value: unknown): string {
   let serialized: string
   try {
@@ -452,6 +481,7 @@ interface PhoenixAutoRouterState {
   continuationCount: number
   lastContinuationStep: number
   forcePlannerNext: boolean
+  lastTeamEscalationMessageId: string | undefined
 }
 
 function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number): void {
@@ -462,6 +492,7 @@ function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number):
   state.continuationCount = 0
   state.lastContinuationStep = 0
   state.forcePlannerNext = false
+  state.lastTeamEscalationMessageId = undefined
 }
 
 function phoenixAutoRoute(
@@ -472,7 +503,27 @@ function phoenixAutoRoute(
   state: PhoenixAutoRouterState,
 ): ModelSelection {
   resetPhoenixAutoTurnState(state, turn)
+  const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
+  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
+    state.lastTeamEscalationMessageId = teamSignal.messageId
+    state.lastRescueStep = step
+    state.rescueCount += 1
+    return {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+      reasoningEffort: ReasoningEffortId('xhigh'),
+    }
+  }
   if (step <= 1) {
+    // A real Team wakeup belongs to Kira's operational loop. Never route peer
+    // results/questions through the low-effort social fast path.
+    if (teamSignal !== undefined) {
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
+      }
+    }
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
       return {
         provider: 'openai-codex',
@@ -552,6 +603,7 @@ export function installModelSelection(
     continuationCount: 0,
     lastContinuationStep: 0,
     forcePlannerNext: false,
+    lastTeamEscalationMessageId: undefined,
   }
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
