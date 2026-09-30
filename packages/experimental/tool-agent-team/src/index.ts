@@ -3,7 +3,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
-import { TeamTaskId } from '@phoenix-ai/dsh-experimental-agent-team'
+import { TeamMessageId, TeamTaskId } from '@phoenix-ai/dsh-experimental-agent-team'
 import type { TeamMemberView } from '@phoenix-ai/dsh-experimental-agent-team'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { InferValue, ValueSchemaSpec } from '@phoenix-ai/dsh-tools'
@@ -13,33 +13,47 @@ export const name = 'tool-agent-team'
 /** Services required by the Team tool plugin. */
 export const inject = ['agents', 'agentTeams', 'tools', 'systemPrompt']
 
+/** One deployment-owned LLM route for a teammate identity. */
+export interface TeamModelProfile {
+  readonly provider: string
+  readonly model: string
+  readonly maxTokens?: number
+  readonly reasoningEffort?: string
+}
+
 /** Tool routing configuration. */
 export interface Config {
   /** Continuable-subagent provider used for fresh teammates. */
   readonly freshProvider?: string
   /** Continuable-subagent provider used for completed-prefix fork teammates. */
   readonly forkProvider?: string
+  /** Profile automatically used when spawn_teammate omits model_profile. */
+  readonly defaultModelProfile?: string
   /** Named provider/model routes the Lead may assign; empty means inheritance only. */
-  readonly modelProfiles?: Record<string, AgentOptions>
+  readonly modelProfiles?: Record<string, TeamModelProfile>
 }
 
 /** Loader schema for the opt-in Team tool plugin. */
 export const Config: z<Config> = z.object({
   freshProvider: z.string().default('spawn'),
   forkProvider: z.string().default('fork'),
+  defaultModelProfile: z.string(),
   modelProfiles: z.dict(z.object({
     provider: z.string().required(),
     model: z.string().required(),
     maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
+    reasoningEffort: z.string(),
   })).default({}),
 })
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
-const POLICY = `Agent Teams is available in this session, but create teammates only when the user explicitly asks to use Agent Teams or teammates.
+const POLICY = `Agent Teams is real shared work, not role-play. Create teammates when the user explicitly asks for a Team, or when the surrounding agent policy explicitly authorizes adaptive Team use for independent work. Never spawn a teammate only to make the interface look busy.
 
-Model profiles are deployment-configured provider/model routes, not OpenAI-specific roles. A fresh JUDGE is cognitively independent only when its reported modelProvider or model differs from the Lead; when they match or are unknown, report operational independence only and record the correlated-model limitation. Never claim an independent review merely because the teammate has a different name.
+Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Use team_react for a lightweight acknowledgement when prose would add no new information.
 
-The Team Lead and all teammates share the same working directory and filesystem. Edits are immediately visible to every member. Split write work into disjoint scopes, record expected write scopes on shared tasks, and use task dependencies when work must be ordered. Write-scope overlap is advisory, not a lock.
+Model profiles are deployment-configured engines, not visible identities. The teammate name/persona remains stable even when its underlying model route changes. A fresh JUDGE is cognitively independent only when its reported modelProvider or model differs from the Lead; when they match or are unknown, report operational independence only and record the correlated-model limitation. Never claim an independent review merely because the teammate has a different name.
+
+Prefer fresh context and a bounded prompt containing only objective, scope, relevant decisions/evidence, and completion criteria. The Team Lead and all teammates share the same working directory and filesystem. Edits are immediately visible to every member. Split write work into disjoint scopes, record expected write scopes on shared tasks, and use task dependencies when work must be ordered. Write-scope overlap is advisory, not a lock.
 
 Prefer read/edit/write for file changes. If a file operation returns FS_STALE_VERSION, read the current file, rebase your intended change onto the new content, and retry. Bash, formatters, code generators, and scripts are not fully protected by the filesystem version guard; coordinate them explicitly and have the Lead review the final diff and run tests.
 
@@ -104,6 +118,16 @@ const SEND_VALUE_SCHEMA = {
   properties: {
     messageId: { type: 'string', required: true },
     status: { type: 'string', required: true, enum: ['accepted', 'queued'] },
+  },
+} as const
+
+const REACTION_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    messageId: { type: 'string', required: true },
+    reactorName: { type: 'string', required: true },
+    reaction: { type: 'string', required: true, enum: ['ack', 'agree', 'insight', 'blocked', 'done'] },
   },
 } as const
 
@@ -206,8 +230,18 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const context = args.context ?? 'fresh'
         const profileName = 'model_profile' in args && typeof args.model_profile === 'string'
           ? args.model_profile
-          : undefined
-        const agentOptions = profileName === undefined ? undefined : config.modelProfiles[profileName]
+          : config.defaultModelProfile || undefined
+        const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
+        const agentOptions: AgentOptions | undefined = profile === undefined
+          ? undefined
+          : {
+              provider: profile.provider,
+              model: profile.model,
+              ...profile.maxTokens === undefined ? {} : { maxTokens: profile.maxTokens },
+              ...profile.reasoningEffort === undefined
+                ? {}
+                : { reasoningEffort: profile.reasoningEffort as AgentOptions['reasoningEffort'] },
+            }
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: args.name,
           description: args.description,
@@ -243,6 +277,28 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
     }
     messageTool('send_message', 'quiet')
     messageTool('followup_task', 'wakeup')
+
+    register(scoped.tools.register(defineTool({
+      name: 'team_react',
+      description: 'React once to another Team member\'s durable message without generating a prose acknowledgement.',
+      parameters: {
+        message_id: { type: 'string', required: true, description: 'Stable Team message id from the delivered peer item.' },
+        reaction: {
+          type: 'string',
+          required: true,
+          enum: ['ack', 'agree', 'insight', 'blocked', 'done'],
+          description: 'Semantic reaction: acknowledged, agreed, useful insight, blocker, or completed.',
+        },
+      },
+      output: jsonOutput(REACTION_VALUE_SCHEMA),
+      execute(args, exec) {
+        return ctx.agentTeams.reactToMessage(callingAgent(exec.agent, 'team_react'), {
+          messageId: TeamMessageId(args.message_id),
+          reaction: args.reaction,
+          signal: exec.signal,
+        })
+      },
+    })))
 
     register(scoped.tools.register(defineTool({
       name: 'list_agents',
@@ -421,7 +477,11 @@ export function apply(ctx: Context, config: Config = {}): void {
   const resolved: Required<Config> = {
     freshProvider: config.freshProvider ?? 'spawn',
     forkProvider: config.forkProvider ?? 'fork',
+    defaultModelProfile: config.defaultModelProfile ?? '',
     modelProfiles: config.modelProfiles ?? {},
+  }
+  if (resolved.defaultModelProfile !== '' && resolved.modelProfiles[resolved.defaultModelProfile] === undefined) {
+    throw new Error(`defaultModelProfile "${resolved.defaultModelProfile}" is not declared in modelProfiles`)
   }
   const installed = new Map<Agent, () => void>()
   const maybeInstall = (agent: Agent): void => {
