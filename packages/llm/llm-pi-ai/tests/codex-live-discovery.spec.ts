@@ -1,6 +1,14 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import type { CodexModelListTransport } from '../src/codex-discovery.ts'
-import { codexDiscoveryArgs, encodeCodexWireFrame, readCodexModelPage } from '../src/codex-discovery.ts'
+import {
+  codexDiscoveryArgs,
+  codexDiscoveryCommand,
+  encodeCodexWireFrame,
+  readCodexModelPage,
+} from '../src/codex-discovery.ts'
 import { discoverModels } from '../src/discovery.ts'
 
 describe('openai-codex live model discovery', () => {
@@ -58,6 +66,54 @@ describe('Codex app-server wire protocol', () => {
       '--listen',
       'stdio://',
     ])
+  })
+
+  it('prefers the Phoenix-managed Codex runtime for model discovery', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-codex-discovery-'))
+    const packageRoot = join(root, 'node_modules', '@openai', 'codex')
+    const bin = join(packageRoot, 'bin', 'codex.js')
+    mkdirSync(join(packageRoot, 'bin'), { recursive: true })
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({
+      name: '@openai/codex',
+      version: '9.9.9',
+      bin: { codex: 'bin/codex.js' },
+    }))
+    writeFileSync(bin, '')
+    const previous = process.env.PHOENIX_CODEX_RUNTIME_ROOT
+    try {
+      process.env.PHOENIX_CODEX_RUNTIME_ROOT = root
+      expect(codexDiscoveryCommand()).toEqual({
+        source: 'managed',
+        command: process.execPath,
+        args: [bin, ...codexDiscoveryArgs()],
+      })
+    } finally {
+      if (previous === undefined) delete process.env.PHOENIX_CODEX_RUNTIME_ROOT
+      else process.env.PHOENIX_CODEX_RUNTIME_ROOT = previous
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('falls back to the PATH Codex command when the managed runtime is invalid', () => {
+    const root = mkdtempSync(join(tmpdir(), 'phoenix-codex-discovery-invalid-'))
+    const previous = process.env.PHOENIX_CODEX_RUNTIME_ROOT
+    try {
+      process.env.PHOENIX_CODEX_RUNTIME_ROOT = root
+      expect(codexDiscoveryCommand('linux')).toEqual({
+        source: 'path',
+        command: 'codex',
+        args: codexDiscoveryArgs(),
+      })
+      expect(codexDiscoveryCommand('win32')).toEqual({
+        source: 'path',
+        command: process.env.ComSpec ?? 'cmd.exe',
+        args: ['/d', '/s', '/c', `codex ${codexDiscoveryArgs().join(' ')}`],
+      })
+    } finally {
+      if (previous === undefined) delete process.env.PHOENIX_CODEX_RUNTIME_ROOT
+      else process.env.PHOENIX_CODEX_RUNTIME_ROOT = previous
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 
   it('writes JSONL requests without the jsonrpc member Codex omits on its wire', () => {
