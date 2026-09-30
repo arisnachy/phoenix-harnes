@@ -254,6 +254,7 @@ export class AgentDefaultModelConfig extends Service {
    * @param sessionId - Session whose picker changed.
    * @param selected - Exact choice shown to the user.
    * @param runtime - Real provider-native route used by the Agent.
+   * @returns fulfillment after the optional durable settings write settles.
    */
   async saveSessionSelection(
     sessionId: string,
