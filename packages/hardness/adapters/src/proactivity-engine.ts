@@ -435,6 +435,7 @@ function parseTask(raw: unknown): ProactivityTask {
   const delivery = raw.delivery
   const artifactDelivery = raw.artifactDelivery
     ?? (delivery === 'work' || delivery === 'email' ? 'auto' : 'inline')
+  const activeRun = parseActiveRun(raw.activeRun)
   return {
     id: nonEmpty(raw.id, 'id'),
     title: nonEmpty(raw.title, 'title'),
@@ -462,7 +463,7 @@ function parseTask(raw: unknown): ProactivityTask {
     artifactDelivery,
     sideEffectPolicy: raw.sideEffectPolicy
       ?? (delivery === 'email' || artifactDelivery !== 'inline' ? 'at-most-once' : 'retry-safe'),
-    ...(parseActiveRun(raw.activeRun) === undefined ? {} : { activeRun: parseActiveRun(raw.activeRun)! }),
+    ...(activeRun === undefined ? {} : { activeRun }),
     status: raw.status,
     history: parseHistory(raw.history),
   }
