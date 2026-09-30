@@ -80,6 +80,17 @@ const MEMBER_VIEW_SCHEMA = {
     context: { type: 'string', enum: ['fresh', 'fork'] },
     model: { type: 'string' },
     modelProvider: { type: 'string' },
+    usage: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        inputTokens: { type: 'integer', required: true },
+        outputTokens: { type: 'integer', required: true },
+        cacheReadTokens: { type: 'integer', required: true },
+        cacheWriteTokens: { type: 'integer', required: true },
+        reasoningTokens: { type: 'integer', required: true },
+      },
+    },
     diagnostics: { type: 'array', required: true, items: { type: 'string' } },
   },
 } as const
