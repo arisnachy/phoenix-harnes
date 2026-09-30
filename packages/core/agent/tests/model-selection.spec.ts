@@ -113,7 +113,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('xhigh'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
@@ -206,7 +206,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('xhigh'),
     })
     events.push({
       type: 'assistant/message',
@@ -535,7 +535,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('xhigh'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 1, step: 5, signal }, () => Promise.resolve(seed),
@@ -555,7 +555,7 @@ describe('installModelSelection()', () => {
     const selected = {
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('high'),
+      reasoningEffort: ReasoningEffortId('xhigh'),
     } as const
     const selection: ModelSelectionRef = { current: selected, assembled: undefined }
     const dispose = installModelSelection(ctx, selection)
