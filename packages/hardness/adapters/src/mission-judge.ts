@@ -1,7 +1,7 @@
 /** Independent, read-only structured judge for one HARDNESS mission result. */
 
-import type { Agent } from '@phoenix-ai/dsh-agent'
-import type { ContentBlock } from '@phoenix-ai/dsh-llm'
+import { PHOENIX_CODEX_AUTO_WORKER_MODEL, type Agent } from '@phoenix-ai/dsh-agent'
+import { ReasoningEffortId, type ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { ObjectJsonSchema, ToolRestriction } from '@phoenix-ai/dsh-tools'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { resolveStructuredProvider } from '@phoenix-ai/dsh-subagent'
@@ -178,6 +178,13 @@ export function createSubagentMissionJudge(input: {
     if (resolved === undefined) return unavailable()
     const parent: Agent | undefined = mission.context.agent
     if (parent === undefined) return unavailable()
+    const agentOptions = parent.options.provider === 'openai-codex'
+      ? {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
+      }
+      : undefined
     const toolFilter: ToolRestriction = { allow: [...MISSION_JUDGE_READ_ONLY_TOOLS] }
     let run: Awaited<ReturnType<typeof input.subagents.start>> | undefined
     try {
@@ -186,6 +193,7 @@ export function createSubagentMissionJudge(input: {
         prompt: prompt(mission),
         parent,
         signal: mission.context.signal,
+        ...(agentOptions === undefined ? {} : { agentOptions }),
         outputSchema: MISSION_JUDGE_OUTPUT_SCHEMA,
         toolFilter,
       })
