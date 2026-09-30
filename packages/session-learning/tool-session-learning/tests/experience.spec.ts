@@ -278,6 +278,15 @@ describe('ExperienceLearningEngine', () => {
     expect(state?.recentRuns.at(-1)?.phoenixAutoStrategy).toBeUndefined()
   })
 
+  it('does not let a child clear or complete the parent learning episode', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 'parent', text: 'Complete root mission', occurredAt: 1 })
+    engine.linkChildSession('parent', 'child')
+    engine.clear('child')
+    expect(engine.completeVerified('child', 2)).toBeUndefined()
+    expect(engine.completeVerified('parent', 3)).toBeDefined()
+  })
+
   it('does not label a single direct Codex route as Phoenix Auto', () => {
     const engine = new ExperienceLearningEngine()
     engine.beginTask({ sessionId: 's', text: 'Run one direct model task', occurredAt: 1 })
