@@ -145,6 +145,43 @@ describe('HARDNESS mission judges', () => {
     expect(prompt).toMatch(/meet or exceed strong current category references/i)
   })
 
+  it('routes Codex mission judging through the current Phoenix Luna Max worker', async () => {
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'codex-judge-run' as never,
+      localAgent: undefined,
+      result: Promise.resolve({
+        stopReason: 'completed' as const,
+        output: [],
+        structured: {
+          verdict: 'pass',
+          summary: 'verified',
+          evidence: ['evidence:forecast'],
+          required_changes: [],
+          criteria: [{ id: 'artifact', verdict: 'pass', evidence: ['evidence:forecast'], findings: [] }],
+          quality: { verdict: 'pass', summary: 'complete', evidence: ['evidence:forecast'], findings: [] },
+        },
+      }),
+      dispose: async () => {},
+    }))
+    const judge = createSubagentMissionJudge({
+      subagents: {
+        getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never,
+        start,
+      },
+      provider: 'spawn',
+    })
+    const candidate = input()
+    candidate.context.agent = {
+      id: 'codex-parent',
+      options: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+    } as never
+
+    await expect(judge(candidate)).resolves.toMatchObject({ verdict: 'pass' })
+    expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
+      agentOptions: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+    }))
+  })
+
   it('fails closed for unavailable or invalid judge output', async () => {
     const judge = createSubagentMissionJudge({
       subagents: { getProvider: () => undefined, start: vi.fn() },
