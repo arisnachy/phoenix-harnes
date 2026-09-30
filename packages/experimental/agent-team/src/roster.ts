@@ -53,6 +53,30 @@ export function resolveActiveMember(
   return { id: member.id, name }
 }
 
+/** Sum finalized provider usage for one live Agent without double-counting streaming usage chunks. */
+function liveUsage(agent: Agent | undefined) {
+  if (agent === undefined) return undefined
+  let inputTokens = 0
+  let outputTokens = 0
+  let cacheReadTokens = 0
+  let cacheWriteTokens = 0
+  let reasoningTokens = 0
+  let seen = false
+  for (const event of agent.session.events) {
+    if (event.type !== 'assistant/message' || event.data.usage === undefined) continue
+    const usage = event.data.usage
+    inputTokens += usage.inputTokens
+    outputTokens += usage.outputTokens
+    cacheReadTokens += usage.cacheReadTokens ?? 0
+    cacheWriteTokens += usage.cacheWriteTokens ?? 0
+    reasoningTokens += usage.reasoningTokens ?? 0
+    seen = true
+  }
+  return seen
+    ? { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, reasoningTokens }
+    : undefined
+}
+
 /** Owns Team identities and the lifecycle of rostered continuable children. */
 export class TeamRoster {
   private readonly inFlightCreations = new Set<Promise<unknown>>()
@@ -133,7 +157,9 @@ export class TeamRoster {
       name: 'lead',
       role: 'lead',
       status: root.status,
+      ...root.options.provider === undefined ? {} : { modelProvider: root.options.provider },
       ...root.options.model === undefined ? {} : { model: root.options.model },
+      ...liveUsage(root) === undefined ? {} : { usage: liveUsage(root) },
       diagnostics: [],
     }]
     for (const member of state.members.values()) {
@@ -151,7 +177,9 @@ export class TeamRoster {
         description: member.description,
         provider: member.provider,
         context: member.context,
+        ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
         ...model === undefined ? {} : { model },
+        ...liveUsage(live) === undefined ? {} : { usage: liveUsage(live) },
         diagnostics: member.error === undefined ? [] : [member.error],
       })
     }
@@ -444,6 +472,7 @@ export class TeamRoster {
       context: member.context,
       ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
       ...live?.options.model === undefined ? {} : { model: live.options.model },
+      ...liveUsage(live) === undefined ? {} : { usage: liveUsage(live) },
       diagnostics: [],
     }
   }
