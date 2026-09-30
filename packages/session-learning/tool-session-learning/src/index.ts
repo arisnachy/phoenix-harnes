@@ -102,7 +102,7 @@ export function apply(ctx: Context, config: Config): void {
     }
 
     if (eventType === 'tool-workflow/agent-start') {
-      experience.observeWorkflowAgentStart(sessionId)
+      experience.observeWorkflowAgentStart(sessionId, workflowChildSessionId(data))
       return
     }
 
@@ -366,6 +366,11 @@ function messageText(data: unknown): string | undefined {
 
 function isDirectUserMessage(data: unknown): boolean {
   return isRecord(data) && isRecord(data.source) && data.source.kind === 'user'
+}
+
+function workflowChildSessionId(data: unknown): string | undefined {
+  if (!isRecord(data) || typeof data.childId !== 'string' || data.childId.length === 0) return undefined
+  return data.childId
 }
 
 function requestRoute(data: unknown): { readonly provider: string; readonly model: string } | undefined {
