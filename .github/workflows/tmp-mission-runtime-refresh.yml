@@ -44,6 +44,7 @@ jobs:
           DSH_BUILD_CLIENT_PROFILE: official
         run: pnpm run build
       - name: Refresh ACP/headless snapshots from replay fixtures
+        continue-on-error: true
         run: pnpm run test:snapshot:refresh
       - name: Commit refreshed contracts
         run: |
