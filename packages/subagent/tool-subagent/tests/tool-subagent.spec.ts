@@ -123,6 +123,7 @@ describe('dsh-tool-subagent', () => {
     expect(promptText).toContain('primera persona')
     expect(promptText).toContain('máximo 72 caracteres')
     expect(promptText).toContain('Phoenix mostrará literalmente esa frase')
+    expect(promptText).not.toContain('Contrato de aislamiento Phoenix')
   })
 
   it('exposes description + prompt + run_in_background to the model (no provider/type parameter)', async () => {
