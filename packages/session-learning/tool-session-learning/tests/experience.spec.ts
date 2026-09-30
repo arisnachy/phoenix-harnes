@@ -226,6 +226,33 @@ describe('ExperienceLearningEngine', () => {
     })
   })
 
+  it('records Phoenix Auto routing shape without retaining worker content', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 's', text: 'Repair the router and run tests', occurredAt: 100 })
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6.1-sol' })
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6-luna' })
+    engine.observeWorkflowAgentStart('s')
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6.1-sol' })
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6-luna' })
+    const state = engine.completeVerified('s', 250)
+    expect(state?.recentRuns.at(-1)).toMatchObject({
+      phoenixAutoStrategy: 'parallel-1',
+      phoenixAutoPlannerPhases: 2,
+      phoenixAutoWorkerPhases: 2,
+      phoenixAutoRescues: 1,
+      phoenixAutoAgents: 1,
+    })
+  })
+
+  it('does not label a single direct Codex route as Phoenix Auto', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 's', text: 'Run one direct model task', occurredAt: 1 })
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6-luna' })
+    engine.observeWorkflowAgentStart('s')
+    const state = engine.completeVerified('s', 2)
+    expect(state?.recentRuns.at(-1)?.phoenixAutoStrategy).toBeUndefined()
+  })
+
   it('replaces an unrelated unfinished episode and never promotes it', () => {
     const engine = new ExperienceLearningEngine()
     engine.beginTask({ sessionId: 's', text: 'Fill monthly clinic survey', occurredAt: 100 })
