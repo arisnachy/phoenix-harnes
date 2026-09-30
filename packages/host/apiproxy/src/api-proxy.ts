@@ -671,6 +671,29 @@ export interface ApiProxyDefaults {
    * and undoing it because storage failed would be the worse outcome.
    */
   saveDefaultModelSelection?: (selection: ModelSelection) => Promise<void>
+  /**
+   * User-facing default shown by the Web picker. May be a virtual selector
+   * (for example Phoenix Auto) while {@link defaultModelSelection} remains a
+   * provider-native route safe for direct/headless entry points.
+   */
+  defaultDisplayModelSelection?: () => ModelSelection
+  /**
+   * Recover one session's exact picker intent plus the real runtime route that
+   * backs it. Used when a conversation is reopened after Host/browser restart.
+   */
+  restoreSessionModelSelection?: (sessionId: SessionId) => {
+    selected: ModelSelection
+    runtime: ModelSelection
+  } | undefined
+  /**
+   * Persist one session's explicit picker choice separately from the runtime
+   * default. Failure never rolls back the already-accepted live selection.
+   */
+  saveSessionModelSelection?: (
+    sessionId: SessionId,
+    selected: ModelSelection,
+    runtime: ModelSelection,
+  ) => Promise<void>
   /** Default project directory for new sessions whose create request carries no cwd. */
   cwd: string
   /** Native open-with-default-application; injectable for carrier tests. */
