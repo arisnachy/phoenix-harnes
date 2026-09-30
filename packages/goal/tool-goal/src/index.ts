@@ -6,17 +6,17 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
-import { GoalId } from '@phoenix-ai/dsh-goal'
+import { GoalId, nextGoalMissionPlan, nextOrganizationForgeAction, recordGoalMissionPlan, replayGoalMissionPlan } from '@phoenix-ai/dsh-goal'
 import type {
   ForgeCriterionStatus, ForgeDeliverableKind, ForgeDeliverableStatus, ForgeManagementMode, ForgePhase,
   ForgeResearchKind, ForgeRole, ForgeSourceAuditStatus, ForgeStrategyStatus, ForgeWorkStatus,
   GoalRef, GoalView, OrganizationForgeSnapshot,
 } from '@phoenix-ai/dsh-goal'
-import { nextOrganizationForgeAction } from '@phoenix-ai/dsh-goal'
 import { boundContextSummary, createUserMessage, HarnessError } from '@phoenix-ai/dsh-llm'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { GenericCallView, JsonValue } from '@phoenix-ai/dsh-tools'
 import type {} from '@phoenix-ai/dsh-system-prompt'
+import type {} from '@phoenix-ai/dsh-subagent'
 import { judgeGoalCompletion, recordGoalJudge } from './judge.ts'
 import type { GoalJudgeResult } from './judge.ts'
 import {
@@ -179,7 +179,7 @@ function guidance(blockedAfter: number, requireJudge: boolean): string {
     + `blocked only after the same blocking condition persists for at least ${blockedAfter} `
     + 'consecutive goal rounds, and report that concrete condition in blocked_reason; difficulty, uncertainty, '
     + 'or useful remaining work is not blocked. The goal domain independently rejects completion unless '
-    + 'a durable judge has passed the exact current goal revision.'
+    + 'a durable judge has passed the exact current goal revision. For a long-running goal, initialize one compact durable master plan with update_mission_plan before broad delegation, keep explicit acceptance criteria, record only material decisions, and assign non-overlapping write scopes to parallel workers. Use get_mission to recover the plan plus the live/durable agent graph after compaction, restart, or steering. Human steering supersedes stale worker assignments; relay or interrupt affected continuable children instead of duplicating them. '
     + (requireJudge
       ? ' Completion is gated by an independent read-only judge: a self-reported complete result '
         + 'remains active until the judge returns pass; use its required_changes as the next work list. '
@@ -294,10 +294,82 @@ function specialistReviewObjective(profile: {
   })}`.slice(0, 8_000)
 }
 
-/** Reusable canonical output declaration for all three goal controls. */
+/** Reusable canonical output declaration for the lifecycle goal controls. */
 const GOAL_OUTPUT = {
   schema: GOAL_VALUE_SCHEMA,
   render: (_args: unknown, value: GoalToolValue) => [{ type: 'text' as const, text: JSON.stringify(value) }],
+}
+
+
+/** JSON-string output used by compact mission state tools. */
+const MISSION_OUTPUT = {
+  schema: { type: 'string' as const },
+  render: (_args: unknown, value: string) => [{ type: 'text' as const, text: value }],
+}
+
+function missionText(data: unknown): string | undefined {
+  if (typeof data !== 'object' || data === null) return undefined
+  const value = data as {
+    readonly source?: { readonly kind?: string }
+    readonly content?: readonly { readonly type?: string; readonly text?: string }[]
+  }
+  if (value.source?.kind !== 'user') return undefined
+  const text = value.content
+    ?.filter(block => block.type === 'text' && typeof block.text === 'string')
+    .map(block => block.text as string)
+    .join(' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  return text === undefined || text.length === 0 ? undefined : text.slice(0, 700)
+}
+
+async function missionProjection(ctx: Context, agent: import('@phoenix-ai/dsh-agent').Agent, signal: AbortSignal): Promise<string> {
+  const goal = ctx.goals.get(agent)
+  if (goal === undefined) return JSON.stringify({ goal: null, plan: null, agents: [] })
+  const plan = replayGoalMissionPlan(agent.session.events, goal.id)
+  const subagents = ctx.get('subagents', false)
+  const descendants = subagents === undefined ? [] : await subagents.listDescendants(agent.id, signal)
+  const agents = [
+    { id: agent.id, kind: 'root', depth: 0, status: agent.status },
+    ...descendants.map((entry) => {
+      if (entry.kind === 'diagnostic') {
+        return {
+          id: entry.id,
+          kind: 'diagnostic',
+          parent: entry.parentId,
+          depth: entry.depth,
+          reason: entry.reason,
+        }
+      }
+      const live = ctx.agents.get(entry.id)
+      return {
+        id: entry.id,
+        kind: 'worker',
+        parent: entry.parentId,
+        depth: entry.depth,
+        label: entry.label,
+        status: live === undefined ? 'ready' : live.status,
+      }
+    }),
+  ]
+  const steering = agent.session.events
+    .filter(event => event.type === 'user/message')
+    .map(event => missionText(event.data))
+    .filter((value): value is string => value !== undefined)
+    .slice(-3)
+  return JSON.stringify({
+    goal: {
+      id: goal.id,
+      revision: goal.revision,
+      objective: goal.objective,
+      phase: goal.phase,
+      roundsStarted: goal.roundsStarted,
+      maxGoalRounds: goal.maxGoalRounds,
+    },
+    plan: plan ?? null,
+    agents,
+    recentHumanSteering: steering,
+  })
 }
 
 /** Generic, args-only pending presentation shared by the goal tools. */
@@ -305,7 +377,7 @@ function present(title: string, kind: 'read' | 'other', rawInput?: unknown): Gen
   return { card: 'generic', title, kind, ...rawInput === undefined ? {} : { rawInput } }
 }
 
-/** Register the three Codex-shaped goal tools and their shared policy section. */
+/** Register lifecycle goal tools, mission-state tools, and their shared policy section. */
 export function apply(ctx: Context, config: Config): void {
   const resolved = resolveConfig(config)
   ctx.systemPrompt.section({
@@ -324,6 +396,92 @@ export function apply(ctx: Context, config: Config): void {
       return Promise.resolve(goalValue(ctx.goals.get(execution.agent)))
     },
     presentCall: () => present('Read current goal', 'read'),
+  }))
+
+
+  ctx.tools.register(defineTool({
+    name: 'get_mission',
+    description:
+      'Read the durable master plan for the current goal together with a live/durable agent graph and recent direct-human steering. Use this after restart, context compaction, or before changing parallel worker assignments.',
+    parameters: {},
+    output: MISSION_OUTPUT,
+    async execute(_args, exec) {
+      const execution = goalToolExecution(ctx, exec)
+      return missionProjection(ctx, execution.agent, exec.signal)
+    },
+    presentCall: () => present('Read mission state', 'read'),
+  }))
+
+  ctx.tools.register(defineTool({
+    name: 'update_mission_plan',
+    description:
+      'Replace the compact durable master plan for the exact current goal revision. Keep one master plan, not per-round mini-plans. Update only on material evidence or human steering. Parallel writer steps must use explicit non-overlapping relative write_scope values.',
+    parameters: {
+      goal_id: { type: 'string', required: true, description: 'Exact current goal id from get_goal/get_mission.' },
+      revision: { type: 'number', required: true, description: 'Exact current goal revision.' },
+      plan_revision: { type: 'number', required: true, description: 'Current plan revision, or 0 when initializing the first plan.' },
+      acceptance_criteria: {
+        type: 'array',
+        required: true,
+        items: { type: 'string' },
+        description: 'Bounded explicit conditions that define mission completion.',
+      },
+      steps: {
+        type: 'array',
+        required: true,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            id: { type: 'string', required: true },
+            title: { type: 'string', required: true },
+            status: { type: 'string', required: true, enum: ['pending', 'active', 'done', 'blocked'] },
+            owner_agent_id: { type: 'string' },
+            write_scope: { type: 'array', items: { type: 'string' } },
+          },
+        },
+        description: 'Ordered master-plan steps. Write scopes are relative workspace files/directories owned by that worker.',
+      },
+      decisions: {
+        type: 'array',
+        items: { type: 'string' },
+        description: 'Only material decisions that future rounds must preserve.',
+      },
+    },
+    output: MISSION_OUTPUT,
+    execute(args, exec) {
+      const execution = goalToolExecution(ctx, exec)
+      const goal = ctx.goals.get(execution.agent)
+      if (goal === undefined) throw new HarnessError('mission plan requires a current goal', 'GOAL_TOOL_INVALID_UPDATE')
+      const ref = goalRef(args.goal_id, args.revision)
+      if (goal.id !== ref.id || goal.revision !== ref.revision) {
+        throw new HarnessError('mission plan requires the exact current goal revision', 'GOAL_TOOL_STALE_REVISION')
+      }
+      const previous = replayGoalMissionPlan(execution.agent.session.events, goal.id)
+      const expectedPlanRevision = previous?.planRevision ?? 0
+      if (!Number.isSafeInteger(args.plan_revision) || args.plan_revision !== expectedPlanRevision) {
+        throw new HarnessError(
+          `mission plan revision is stale: expected ${String(expectedPlanRevision)}`,
+          'GOAL_TOOL_STALE_REVISION',
+        )
+      }
+      const plan = nextGoalMissionPlan(goal, previous, {
+        acceptanceCriteria: args.acceptance_criteria,
+        steps: args.steps.map(step => ({
+          id: step.id,
+          title: step.title,
+          status: step.status,
+          ...step.owner_agent_id === undefined || step.owner_agent_id === ''
+            ? {}
+            : { ownerAgentId: step.owner_agent_id },
+          ...step.write_scope === undefined ? {} : { writeScope: step.write_scope },
+        })),
+        decisions: args.decisions ?? [],
+      }, Date.now())
+      recordGoalMissionPlan(execution.agent.session, plan)
+      return Promise.resolve(JSON.stringify(plan))
+    },
+    presentCall: args => present('Update mission plan', 'other', args.goal_id),
   }))
 
   ctx.tools.register(defineTool({

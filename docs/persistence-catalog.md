@@ -467,6 +467,17 @@ Source: [`packages/goal/goal/src/domain.ts:227`](../packages/goal/goal/src/domai
 
 Source: [`packages/goal/goal/src/domain.ts:223`](../packages/goal/goal/src/domain.ts)
 
+<a id="goalmission-plan--log-only"></a>
+
+#### `goal/mission-plan` — log-only
+
+```ts persistence-catalog
+/** Latest compact master plan for a long-running goal. */
+'goal/mission-plan': GoalMissionPlanChange
+```
+
+Source: [`packages/goal/goal/src/mission.ts:67`](../packages/goal/goal/src/mission.ts)
+
 <a id="goalstrategy--log-only"></a>
 
 #### `goal/strategy` — log-only

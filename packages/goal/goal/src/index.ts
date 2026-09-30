@@ -55,7 +55,9 @@ import { OrganizationForgeLedger } from './organization-forge.ts'
 // still receive the SessionProjectionMap merge.
 export type * from './types.ts'
 export type * from './domain.ts'
+export type * from './mission.ts'
 export type * from './organization-forge.ts'
+export { nextGoalMissionPlan, recordGoalMissionPlan, replayGoalMissionPlan } from './mission.ts'
 export { SpecialistLedger, foldSpecialists } from './specialist.ts'
 export { OrganizationForgeLedger, foldOrganizationForge, nextOrganizationForgeAction } from './organization-forge.ts'
 export type {

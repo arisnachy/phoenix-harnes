@@ -13,6 +13,7 @@ export type GoalRoundFeedback = Pick<GoalJudgeAuditEntry, 'verdict' | 'summary' 
  * @param round - next positive round number.
  * @param feedback - latest persisted non-passing judge result, when repair is required.
  * @param strategy - bounded recovery strategy selected for this round.
+ * @param missionCapsule - compact durable mission state reconstructed for this round.
  * @returns a fresh one-block prompt for `Agent.followup()`.
  */
 export function renderGoalRoundPrompt(
@@ -20,18 +21,20 @@ export function renderGoalRoundPrompt(
   round: number,
   feedback?: GoalRoundFeedback,
   strategy?: GoalStrategyId,
+  missionCapsule?: string,
 ): ContentBlock[] {
   return [{
     type: 'text',
     text: '<goal_round>\n'
       + `Objective: ${JSON.stringify(goal.objective)}\n`
       + `Round: ${round}/${goal.maxGoalRounds}\n\n`
+      + (missionCapsule === undefined ? '' : `<mission_capsule>\n${missionCapsule}\n</mission_capsule>\n\n`)
       + (strategy === undefined ? '' : `Selected strategy: ${strategy}\n\n`)
       + (feedback === undefined ? ''
         : `Prior independent judge: ${feedback.verdict}. ${feedback.summary}\n`
           + `Judge findings: ${JSON.stringify(feedback.findings)}\n`
           + `Required changes: ${JSON.stringify(feedback.requiredChanges)}\n\n`)
-      + 'Continue working toward the objective in this same session. Treat the current workspace, '
+      + 'Continue working toward the objective in this same session. The mission capsule is protected durable state reconstructed from the session log; use it as the compact source of truth after context compaction or restart. Human steering in the current turn overrides stale plan assignments. If steering materially invalidates a running child assignment, inspect the agent graph with list_agents and use send_message or interrupt_agent instead of silently spawning duplicates. Treat the current workspace, '
       + 'tool results, and durable session state as authoritative; inspect them instead of assuming '
       + 'earlier narration is still current. Make concrete progress and verify the result. This '
       + 'execution round is not plan mode: the mission has already been authorized. Do not call '
@@ -48,8 +51,8 @@ export function renderGoalRoundPrompt(
       + 'continue the mission and change strategy if that decision is not sufficient. '
       + 'Before '
       + (round === 1
-        ? 'starting execution, keep one complete master plan; do not split it into mini-plans or ask for routine step-by-step confirmation. '
-        : 'continue the existing master plan; do not replace it with mini-plans or pause for routine step-by-step confirmation. '
+        ? 'starting execution, keep one complete master plan in update_mission_plan with explicit acceptance criteria and bounded worker write scopes; do not split it into mini-plans or ask for routine step-by-step confirmation. '
+        : 'continue the existing durable master plan; update it only when evidence or human steering materially changes the route, and do not replace it with mini-plans or pause for routine step-by-step confirmation. '
           + 'Use the approval deadline policy for any later gated action. ')
       + (round === 1 ? '' : 'If independent verification has stalled, use a materially different strategy; if new verified evidence is still accumulating, keep the cheapest productive strategy rather than rotating just because another round began. ')
       + (feedback === undefined ? '' : 'Address every required change from the prior judge before requesting another review. ')

@@ -162,17 +162,18 @@ function resultGoal(result: ToolExecutionResult): Record<string, unknown> {
 }
 
 describe('goal tool registration and presentation', () => {
-  it('registers three exclusive tools plus configured guidance and disposes all contributions', async () => {
+  it('registers goal and mission tools plus configured guidance and disposes all contributions', async () => {
     const { ctx, fiber } = await harness({ blockedAfterConsecutiveRounds: 5 })
-    expect(['create_goal', 'get_goal', 'update_goal'].map(name => ctx.tools.get(name)?.name))
-      .toEqual(['create_goal', 'get_goal', 'update_goal'])
-    for (const name of ['create_goal', 'get_goal', 'update_goal']) {
+    expect(['create_goal', 'get_goal', 'get_mission', 'update_goal', 'update_mission_plan'].map(name => ctx.tools.get(name)?.name))
+      .toEqual(['create_goal', 'get_goal', 'get_mission', 'update_goal', 'update_mission_plan'])
+    for (const name of ['create_goal', 'get_goal', 'get_mission', 'update_goal', 'update_mission_plan']) {
       expect(ctx.tools.executionMode({ signal: testToolSignal, callId: CallId(name), name, arguments: {} }))
         .toEqual({ kind: 'exclusive' })
     }
     const section = (await ctx.systemPrompt.assemble()).sections.find(item => item.name === 'tool:goal')
     expect(section?.text).toContain('infer goal intent')
     expect(section?.text).toContain('at least 5 consecutive goal rounds')
+    expect(section?.text).toContain('update_mission_plan')
 
     await fiber.dispose()
     expect(ctx.tools.get('get_goal')).toBeUndefined()
@@ -689,5 +690,53 @@ describe('goal tool state transitions', () => {
     })
     expect(blocked.concludesTurn).toBeUndefined()
     expect(blocked.additionalContexts).toBeUndefined()
+  })
+})
+
+
+describe('mission runtime tools', () => {
+  it('persists a compare-and-set master plan and projects it after recovery', async () => {
+    const { ctx, root } = await harness({ requireJudge: false })
+    openTurn(root, { kind: 'user' }, 'Build and verify the feature without losing the plan.')
+    await execute(ctx, 'create_goal', { objective: 'Build and verify the feature', max_goal_rounds: 8 }, root.agent)
+    const goal = ctx.goals.get(root.agent)
+    if (goal === undefined) throw new Error('expected goal')
+
+    const written = await execute(ctx, 'update_mission_plan', {
+      goal_id: goal.id,
+      revision: goal.revision,
+      plan_revision: 0,
+      acceptance_criteria: ['Feature works', 'Tests pass'],
+      steps: [
+        { id: 'build', title: 'Implement the feature', status: 'active', write_scope: ['packages/feature'] },
+        { id: 'verify', title: 'Run deterministic verification', status: 'pending' },
+      ],
+      decisions: ['Use one writer and one read-only review path.'],
+    }, root.agent)
+    expect(written.isError).toBe(false)
+
+    const read = await execute(ctx, 'get_mission', {}, root.agent)
+    expect(read.isError).toBe(false)
+    const block = read.content[0]
+    if (block?.type !== 'text') throw new Error('expected text mission projection')
+    const projection = JSON.parse(block.text) as {
+      plan: { planRevision: number; acceptanceCriteria: string[]; steps: { id: string }[] }
+      agents: { kind: string }[]
+    }
+    expect(projection.plan.planRevision).toBe(1)
+    expect(projection.plan.acceptanceCriteria).toEqual(['Feature works', 'Tests pass'])
+    expect(projection.plan.steps.map(step => step.id)).toEqual(['build', 'verify'])
+    expect(projection.agents[0]?.kind).toBe('root')
+
+    const stale = await execute(ctx, 'update_mission_plan', {
+      goal_id: goal.id,
+      revision: goal.revision,
+      plan_revision: 0,
+      acceptance_criteria: ['Feature works'],
+      steps: [],
+      decisions: [],
+    }, root.agent)
+    expect(stale.isError).toBe(true)
+    expect(stale.error?.info?.code).toBe('GOAL_TOOL_STALE_REVISION')
   })
 })
