@@ -178,6 +178,21 @@ export class ExperienceLearningEngine {
   }
 
   /**
+   * Attribute one subagent session to the active top-level task without counting
+   * it as parallelism. This captures direct-subagent resource cost as well as
+   * workflow workers while keeping strategy classification tied to workflow
+   * agent-start evidence.
+   * @param parentSessionId - Durable parent session id.
+   * @param childSessionId - Durable child session id.
+   */
+  linkChildSession(parentSessionId: string, childSessionId: string): void {
+    if (childSessionId.length === 0 || childSessionId === parentSessionId) return
+    const root = this.rootSessionId(parentSessionId)
+    if (!this.active.has(root)) return
+    this.parentByChild.set(childSessionId, root)
+  }
+
+  /**
    * Observe one workflow child start. Only the count is retained; child prompts,
    * labels, outputs, and identities never enter the learning aggregate.
    * @param sessionId - Active task session.
@@ -187,9 +202,7 @@ export class ExperienceLearningEngine {
     const episode = this.active.get(parentSessionId)
     if (episode === undefined) return
     episode.phoenixAutoAgents += 1
-    if (childSessionId !== undefined && childSessionId.length > 0 && childSessionId !== parentSessionId) {
-      this.parentByChild.set(childSessionId, parentSessionId)
-    }
+    if (childSessionId !== undefined) this.linkChildSession(parentSessionId, childSessionId)
   }
 
   /**
