@@ -11,6 +11,9 @@ const MAX_TASK_SUMMARY = 512
 /** How far a repeated task has progressed from novel work toward a trusted habit. */
 export type ExperienceMaturity = 'novel' | 'repeated' | 'candidate' | 'validated' | 'habitual'
 
+/** Observed Phoenix Auto execution shape for one verified task. */
+export type PhoenixAutoExecutionStrategy = 'serial' | 'parallel-1' | 'parallel-2'
+
 /** Resource facts for one completed task episode. */
 export interface ExperienceRunMetrics {
   readonly occurredAt: number
@@ -22,6 +25,16 @@ export interface ExperienceRunMetrics {
   readonly userInterventions: number
   readonly verified: boolean
   readonly qualityPassed: boolean
+  /** Strategy is recorded only when a verified task actually used Sol 6.1 plus Luna. */
+  readonly phoenixAutoStrategy?: PhoenixAutoExecutionStrategy
+  /** Number of observed Sol 6.1 routing phases; phases after the first are rescue/replan phases. */
+  readonly phoenixAutoPlannerPhases?: number
+  /** Number of observed GPT-6 Luna routing phases. */
+  readonly phoenixAutoWorkerPhases?: number
+  /** Number of Sol phases beyond the initial plan. */
+  readonly phoenixAutoRescues?: number
+  /** Number of workflow child agents started during the episode. */
+  readonly phoenixAutoAgents?: number
 }
 
 /** Durable aggregate for one task fingerprint. */
@@ -63,6 +76,9 @@ interface ActiveEpisode {
   failedToolCalls: number
   retries: number
   userInterventions: number
+  phoenixAutoPlannerPhases: number
+  phoenixAutoWorkerPhases: number
+  phoenixAutoAgents: number
 }
 
 /**
@@ -116,6 +132,9 @@ export class ExperienceLearningEngine {
       failedToolCalls: 0,
       retries: 0,
       userInterventions: 0,
+      phoenixAutoPlannerPhases: 0,
+      phoenixAutoWorkerPhases: 0,
+      phoenixAutoAgents: 0,
       ...input.projectId === undefined ? {} : { projectId: input.projectId },
     })
   }
@@ -139,6 +158,30 @@ export class ExperienceLearningEngine {
       + nonNegative(usage.cacheReadTokens)
       + nonNegative(usage.cacheWriteTokens)
       + nonNegative(usage.reasoningTokens)
+  }
+
+  /**
+   * Observe the effective provider/model route without retaining prompts or outputs.
+   * Request headers are change snapshots, so these counters describe routing
+   * phases rather than billing/model-call counts.
+   * @param sessionId - Active task session.
+   * @param route - Effective provider/model pair recorded by the request header.
+   */
+  observeModelRoute(sessionId: string, route: { readonly provider: string; readonly model: string }): void {
+    const episode = this.active.get(sessionId)
+    if (episode === undefined || route.provider !== 'openai-codex') return
+    if (route.model === 'gpt-6.1-sol') episode.phoenixAutoPlannerPhases += 1
+    else if (route.model === 'gpt-6-luna') episode.phoenixAutoWorkerPhases += 1
+  }
+
+  /**
+   * Observe one workflow child start. Only the count is retained; child prompts,
+   * labels, outputs, and identities never enter the learning aggregate.
+   * @param sessionId - Active task session.
+   */
+  observeWorkflowAgentStart(sessionId: string): void {
+    const episode = this.active.get(sessionId)
+    if (episode !== undefined) episode.phoenixAutoAgents += 1
   }
 
   /**
@@ -202,6 +245,7 @@ export class ExperienceLearningEngine {
     const previous = this.bestMatchingAggregate(episode.taskFingerprint, episode.projectId)
     const key = previous?.key ?? fingerprintKey(episode.taskFingerprint)
     const aggregateKey = scopedKey(key, episode.projectId)
+    const phoenixAutoStrategy = executionStrategyFor(episode)
     const run: ExperienceRunMetrics = {
       occurredAt,
       wallTimeMs: Math.max(0, occurredAt - episode.startedAt),
@@ -212,6 +256,15 @@ export class ExperienceLearningEngine {
       userInterventions: episode.userInterventions,
       verified: true,
       qualityPassed: true,
+      ...phoenixAutoStrategy === undefined
+        ? {}
+        : {
+            phoenixAutoStrategy,
+            phoenixAutoPlannerPhases: episode.phoenixAutoPlannerPhases,
+            phoenixAutoWorkerPhases: episode.phoenixAutoWorkerPhases,
+            phoenixAutoRescues: Math.max(0, episode.phoenixAutoPlannerPhases - 1),
+            phoenixAutoAgents: episode.phoenixAutoAgents,
+          },
     }
     const runs = (previous?.runs ?? 0) + 1
     const verifiedSuccesses = (previous?.verifiedSuccesses ?? 0) + 1
@@ -372,6 +425,13 @@ export function fingerprintKey(fingerprint: TaskFingerprint): string {
   return hash.toString(16).padStart(8, '0')
 }
 
+function executionStrategyFor(episode: ActiveEpisode): PhoenixAutoExecutionStrategy | undefined {
+  if (episode.phoenixAutoPlannerPhases === 0 || episode.phoenixAutoWorkerPhases === 0) return undefined
+  if (episode.phoenixAutoAgents >= 2) return 'parallel-2'
+  if (episode.phoenixAutoAgents === 1) return 'parallel-1'
+  return 'serial'
+}
+
 function maturityFor(runs: number, verifiedSuccesses: number, failures: number): ExperienceMaturity {
   const successRate = verifiedSuccesses / Math.max(1, verifiedSuccesses + failures)
   if (verifiedSuccesses >= 5 && successRate >= 0.9) return 'habitual'
@@ -435,4 +495,13 @@ function isRunMetrics(value: unknown): value is ExperienceRunMetrics {
     && isCount(value.userInterventions)
     && value.verified === true
     && value.qualityPassed === true
+    && (value.phoenixAutoStrategy === undefined || isPhoenixAutoStrategy(value.phoenixAutoStrategy))
+    && (value.phoenixAutoPlannerPhases === undefined || isCount(value.phoenixAutoPlannerPhases))
+    && (value.phoenixAutoWorkerPhases === undefined || isCount(value.phoenixAutoWorkerPhases))
+    && (value.phoenixAutoRescues === undefined || isCount(value.phoenixAutoRescues))
+    && (value.phoenixAutoAgents === undefined || isCount(value.phoenixAutoAgents))
+}
+
+function isPhoenixAutoStrategy(value: unknown): value is PhoenixAutoExecutionStrategy {
+  return value === 'serial' || value === 'parallel-1' || value === 'parallel-2'
 }
