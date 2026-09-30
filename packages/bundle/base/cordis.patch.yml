@@ -103,6 +103,20 @@
     - id: secret-vault
       name: '@phoenix-ai/dsh-secret-vault'
 
+    # HealthIA is an additive PHOENIX capability, not a separate app or UI.
+    # Its canonical longitudinal record lives outside chat/session memory and
+    # is encrypted locally with a key resolved through the credential seam.
+    - id: healthia-local
+      name: '@phoenix-ai/dsh-healthia-local'
+      config:
+        path: !!js dshHomePath('health', 'healthia.enc.json')
+        keyRef: PHOENIX_HEALTHIA_DATA_KEY
+
+    # Keep only the tiny activator globally visible. Once a health context
+    # activates it, the richer clinical tools/prompt mount in that Agent scope.
+    - id: tool-healthia
+      name: '@phoenix-ai/dsh-tool-healthia'
+
     # Interactive provider sign-in (for example ChatGPT/Codex OAuth) is a
     # separate capability from API-key storage. The authorization service owns
     # the human conversation while each provider owns its protocol and writes
