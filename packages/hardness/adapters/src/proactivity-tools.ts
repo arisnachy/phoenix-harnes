@@ -169,7 +169,7 @@ export function createProactivityCreateTool(
       const prepareLeadMs = minutesToMs(args.prepareLeadMinutes, 'prepareLeadMinutes')
       const explicitMaxRunsPerDay = positiveInteger(args.maxRunsPerDay, 'maxRunsPerDay')
       const maxRunsPerDay = explicitMaxRunsPerDay
-        ?? (args.delivery === 'work' && schedule?.kind !== 'once' ? 12 : undefined)
+        ?? (args.delivery === 'work' && schedule !== undefined ? 12 : undefined)
       if ((args.preparationInstruction === undefined) !== (prepareLeadMs === undefined)) {
         throw new ToolArgsError(['preparationInstruction and prepareLeadMinutes must be supplied together'])
       }
