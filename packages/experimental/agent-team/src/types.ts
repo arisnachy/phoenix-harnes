@@ -105,6 +105,8 @@ export interface TeamMessageSnapshot {
   readonly senderId: SessionId
   readonly senderName: string
   readonly targetId: SessionId
+  /** Human-stable Team name captured at send time for transcript presentation. */
+  readonly targetName?: string
   readonly delivery: 'quiet' | 'wakeup'
   readonly content: ContentBlock[]
 }
