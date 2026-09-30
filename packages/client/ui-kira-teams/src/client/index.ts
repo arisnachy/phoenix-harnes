@@ -27,7 +27,6 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
     key: 'kira-team-message',
-    locale: NS,
   }, KiraTeamMessageView))
   const sessions = ctx.get('sessions') as unknown as ISessions
   const dockActions = () => ({
