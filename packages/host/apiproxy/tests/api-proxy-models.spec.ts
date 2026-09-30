@@ -398,6 +398,46 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
+  it('dispatches a concrete Codex picker choice exactly instead of handing it to Luna', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    registerCodex6(ctx)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      cwd: '/tmp',
+    })
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = { provider: 'seed', model: 'seed', reasoningEffort: ReasoningEffortId('max') }
+
+    const selected = expectValue(await api.sessions.selectModel(request({
+      sessionId,
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+      reasoningEffort: 'high',
+    })))
+    expect(selected.selected).toEqual({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+      reasoningEffort: 'high',
+    })
+
+    await ctx.systemPrompt.assemble()
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+      reasoningEffort: 'high',
+    })
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+      reasoningEffort: 'high',
+    })
+    await ctx.fiber.dispose()
+  })
+
   it('accepts an advisory-unlisted model, rejects an unavailable provider, and switches only after the next assembly', async () => {
     const { ctx, agent, sessionId } = await harness()
     const api = createApiProxy(ctx, { defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }), cwd: '/tmp' })
