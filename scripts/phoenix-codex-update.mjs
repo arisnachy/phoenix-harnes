@@ -400,7 +400,7 @@ const sleep = ms => new Promise(resolvePromise => setTimeout(resolvePromise, ms)
 async function watch(home, mode, parentPid) {
   while (parentAlive(parentPid)) {
     try {
-      await cycle(home, mode, { apply: mode === 'auto' })
+      cycle(home, mode, { apply: mode === 'auto' })
     } catch (error) {
       writeState(home, {
         mode,
