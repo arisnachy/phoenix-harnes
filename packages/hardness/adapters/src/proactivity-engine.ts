@@ -954,6 +954,7 @@ export class ProactivityEngine {
       for (const scheduledFor of due) {
         task = await this.get(id)
         if (task === undefined || task.status !== 'scheduled') break
+        if (this.deliveryBudgetExhausted(task, nowMs)) break
         task = await this.prepareIfDue(task, scheduledFor, nowMs)
         if (task.status !== 'scheduled') break
         task = await this.executePhase(id, 'deliver', scheduledFor)
