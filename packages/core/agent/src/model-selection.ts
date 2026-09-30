@@ -4,7 +4,7 @@
  */
 
 import type { Context } from '@phoenix-ai/cordis'
-import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
+import { createUserMessage, ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */
 export interface ModelSelection {
@@ -413,6 +413,92 @@ interface PhoenixAutoRouterState {
   rescueCount: number
 }
 
+interface PhoenixAutoContinuationState {
+  turn: number
+  nudges: number
+}
+
+const MAX_PHOENIX_AUTO_CONTINUATION_NUDGES = 2
+
+// A model that says what it will do next has not actually finished an action task.
+// This intentionally targets explicit first-person future work instead of vague
+// "next" wording so ordinary explanatory answers are not kept alive by accident.
+// oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual continuation detector auditable as one literal.
+const AUTO_PENDING_FUTURE = /\b(?:(?:ahora\s+)?(?:comprobar[eé]|revisar[eé]|probar[eé]|usar[eé]|har[eé]|intentar[eé]|continuar[eé]|seguir[eé]|abrir[eé]|ejecutar[eé]|verificar[eé]|inspeccionar[eé])|(?:voy|vamos)\s+a\s+(?:comprobar|revisar|probar|usar|hacer|intentar|continuar|seguir|abrir|ejecutar|verificar|inspeccionar)|a\s+continuaci[oó]n\s+(?:voy|vamos|comprobar[eé]|revisar[eé]|probar[eé]|har[eé]|ejecutar[eé]|verificar[eé])|(?:i(?:'|’)ll|i\s+will|we(?:'|’)ll|we\s+will|i(?:'|’)?m\s+going\s+to|we(?:'|’)?re\s+going\s+to)\s+(?:check|review|try|use|continue|open|run|verify|inspect|test))\b/iu
+
+function latestAssistantStepAndText(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): { readonly step: number; readonly text: string } | undefined {
+  const events = turnEvents(agent, turn)
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event?.type !== 'assistant/message') continue
+    const data = event.data as {
+      readonly step?: number
+      readonly message?: {
+        readonly content?: readonly { readonly type?: string; readonly text?: string }[]
+      }
+    }
+    const text = data.message?.content
+      ?.filter(block => block.type === 'text' && typeof block.text === 'string')
+      .map(block => block.text as string)
+      .join(' ')
+      .trim() ?? ''
+    if (typeof data.step === 'number') return { step: data.step, text }
+  }
+  return undefined
+}
+
+function phoenixAutoContinuationReason(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+  directText: string,
+  assembledToolCount: number,
+): 'planner-handoff' | 'announced-pending-work' | undefined {
+  if (!phoenixAutoTaskRequest(directText)) return undefined
+  const events = turnEvents(agent, turn)
+  const latest = latestAssistantStepAndText(agent, turn)
+  if (latest === undefined) return undefined
+
+  // Sol planning is useful only if the turn reaches Luna execution. A strong
+  // artifact/tool request that tries to close after step 1 without touching a
+  // tool is a planner handoff, not task completion.
+  const hasToolCall = events.some(event => event.type === 'tool/call')
+  if (assembledToolCount > 0
+    && isToolAcquisitionRequest(directText)
+    && latest.step <= 1
+    && !hasToolCall) return 'planner-handoff'
+
+  // This covers the observed failure mode after partial tooling too: Phoenix
+  // narrates "ahora comprobaré..." / "usaré..." and the core would otherwise
+  // accept that prose as the final assistant message and close the turn.
+  return AUTO_PENDING_FUTURE.test(latest.text) ? 'announced-pending-work' : undefined
+}
+
+function phoenixAutoContinuationNotice(reason: 'planner-handoff' | 'announced-pending-work') {
+  return createUserMessage({
+    content: [{
+      type: 'text',
+      text: '<phoenix_auto_continue>\n'
+        + (reason === 'planner-handoff'
+          ? 'La planificación inicial terminó, pero la ejecución real todavía no ocurrió. '
+          : 'Tu última respuesta anunció trabajo pendiente en vez de completarlo. ')
+        + 'Continúa ahora la misma misión con la vía disponible. Ejecuta el siguiente paso real en lugar de narrarlo; '
+        + 'si una herramienta o canal falla, cambia de estrategia y sigue con una alternativa segura. '
+        + 'No cierres el turno hasta completar y verificar el objetivo, o hasta demostrar un bloqueo externo concreto '
+        + 'que realmente requiera intervención del usuario.\n'
+        + '</phoenix_auto_continue>',
+    }],
+    source: {
+      kind: 'plugin',
+      plugin: 'phoenix-auto-continuation',
+      form: 'notice',
+      summary: 'continue unfinished Phoenix Auto action',
+    },
+  })
+}
+
 function phoenixAutoRoute(
   agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
   turn: number,
@@ -489,6 +575,7 @@ export function installModelSelection(
   handoff?: ModelSelectionHandoff | ModelSelectionHandoffResolver,
 ): () => void {
   const phoenixAutoState: PhoenixAutoRouterState = { turn: 0, lastRescueStep: 0, rescueCount: 0 }
+  const phoenixAutoContinuationState: PhoenixAutoContinuationState = { turn: 0, nudges: 0 }
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -573,8 +660,30 @@ export function installModelSelection(
       return nativeRoute
     },
   )
+  const disposeTurnStopping = agentCtx.on('agent/turn-stopping', ({ agent, turn }) => {
+    if (!isPhoenixCodexAutoSelection(selection.current)) return
+    if (phoenixAutoContinuationState.turn !== turn) {
+      phoenixAutoContinuationState.turn = turn
+      phoenixAutoContinuationState.nudges = 0
+    }
+    if (phoenixAutoContinuationState.nudges >= MAX_PHOENIX_AUTO_CONTINUATION_NUDGES) return
+
+    const directText = directUserTextForTurn(agent, turn)
+    const reason = phoenixAutoContinuationReason(
+      agent,
+      turn,
+      directText,
+      selection.assembledToolCount ?? 0,
+    )
+    if (reason === undefined) return
+
+    phoenixAutoContinuationState.nudges += 1
+    agent.steer(phoenixAutoContinuationNotice(reason))
+  })
+
   return () => {
     disposeAssembly()
     disposeRequest()
+    disposeTurnStopping()
   }
 }
