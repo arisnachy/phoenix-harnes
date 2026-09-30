@@ -135,7 +135,7 @@ async sendMessage(caller: Agent, request: SendTeamMessageRequest): Promise<SendT
  * @param request - target message, semantic reaction, and cancellation signal.
  * @returns the committed reaction receipt.
  */
-async reactToMessage(caller: Agent, request: ReactToTeamMessageRequest): Promise<ReactToTeamMessageResult>
+async reactToMessage( caller: Agent, request: ReactToTeamMessageRequest, ): Promise<ReactToTeamMessageResult>
 
 /**
  * Create one unowned pending task in the Team Lead log.

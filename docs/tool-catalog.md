@@ -40,7 +40,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-subagent-control` | `interrupt_agent`, `list_agents`, `send_message` | `ctx.tools`, `ctx.subagents`, `ctx.agents and ctx.sessionProjections (list_agents only)` | `tool/call`, `tool/result`, `child session events through ctx.subagents` | - | The globally named control tools over continuable background subagents: provider-bound `tool-subagent` instances register distinct delegation tools, while this package registers `send_message` and `interrupt_agent` once, plus `list_agents` from its separately loaded `/list-agents` plugin (whose catalog rows use the sessionProjections and live Agent registries). |
 | `@phoenix-ai/dsh-tool-subagent-report` | `report` | `ctx.subagents`, `ctx.systemPrompt`, `a live continuable in-process child Agent` | `tool/call`, `tool/result`, `a user-role message in the direct parent session` | - | Registered per continuable in-process child rather than globally, so this schema is visible only inside such a child and survives its global `toolFilter`. The same contribution installs the child-scoped `tool:report` prompt section, which this catalog does not render. The parent-facing `send_message` tool is installed independently. |
 | `@phoenix-ai/dsh-tool-jobs` | `job_kill`, `job_list`, `job_output` | `ctx.tools`, `ctx.jobs`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `user/message via agent.inject() for background completion notices` | - | The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`. |
-| `@phoenix-ai/dsh-experimental-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
+| `@phoenix-ai/dsh-tool-agent-team` | `followup_task`, `interrupt_agent`, `list_agents`, `send_message`, `spawn_teammate`, `team_react`, `team_task_create`, `team_task_get`, `team_task_list`, `team_task_update`, `wait_agent` | `ctx.tools`, `ctx.systemPrompt`, `ctx.agentTeams`, `an exact live Team member Agent` | `tool/call`, `team/member`, `team/message/queued`, `team/message/delivered`, `team/task`, `tool/result` | - | All ten tools are scoped to implicit Team Leads and durable teammates. The shipped dsh-base bundle keeps the package disabled; the documented Agent Teams profile patch enables it while disabling the legacy continuable-child control names. |
 | `@phoenix-ai/dsh-tool-todo` | `todo_write` | `ctx.tools`, `owning Agent session` | `tool/call`, `todo/write`, `tool/result` | - | todo_write is session-owned state; UIs render the latest todo/write event as a checklist. `allowParallelInProgress` is required with no default, so the catalog states its choice: `true`, whose description invites several `in_progress` items. A deployment choosing `false` receives the same tool with a description asking for exactly one active task. |
 | `@phoenix-ai/dsh-tool-workflow` | `workflow` | `ctx.tools`, `ctx.workflowEngine`, `ctx.systemPrompt`, `a calling Agent (exec.agent parents the script children)` | `tool/call`, `tool/result` | - | - |
 | `@phoenix-ai/dsh-tool-web` | `web_fetch`, `web_search` | `ctx.tools`, `ctx.web`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | web_search and web_fetch keep provider selection behind ctx.web so model-visible schemas stay stable across backend swaps. |
@@ -2620,9 +2620,9 @@ Source: [`packages/jobs/tool-jobs/src/index.ts`](../packages/jobs/tool-jobs/src/
 
 The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers' `ctx.jobs.start()`.
 
-<a id="phoenix-aidsh-experimental-tool-agent-team"></a>
+<a id="phoenix-aidsh-tool-agent-team"></a>
 
-## `@phoenix-ai/dsh-experimental-tool-agent-team`
+## `@phoenix-ai/dsh-tool-agent-team`
 
 ### `followup_task`
 
@@ -2636,6 +2636,19 @@ Send a durable follow-up task to another Team member and start a turn when neede
       "type": "string",
       "description": "Team member name, or lead."
     },
+    "purpose": {
+      "type": "string",
+      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "enum": [
+        "assignment",
+        "question",
+        "blocker",
+        "result",
+        "review",
+        "decision",
+        "update"
+      ]
+    },
     "message": {
       "type": "string",
       "description": "Self-contained message for the target."
@@ -2643,6 +2656,7 @@ Send a durable follow-up task to another Team member and start a turn when neede
   },
   "required": [
     "target",
+    "purpose",
     "message"
   ]
 }
@@ -2696,6 +2710,19 @@ Send durable information to another Team member without starting an idle member.
       "type": "string",
       "description": "Team member name, or lead."
     },
+    "purpose": {
+      "type": "string",
+      "description": "Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.",
+      "enum": [
+        "assignment",
+        "question",
+        "blocker",
+        "result",
+        "review",
+        "decision",
+        "update"
+      ]
+    },
     "message": {
       "type": "string",
       "description": "Self-contained message for the target."
@@ -2703,6 +2730,7 @@ Send durable information to another Team member without starting an idle member.
   },
   "required": [
     "target",
+    "purpose",
     "message"
   ]
 }
@@ -2743,6 +2771,39 @@ Create one named, durable teammate. Only the Team Lead may call this tool.
     "name",
     "description",
     "prompt"
+  ]
+}
+```
+
+Source: [`packages/experimental/tool-agent-team/src/index.ts`](../packages/experimental/tool-agent-team/src/index.ts)
+
+### `team_react`
+
+React once to another Team member's durable message without generating a prose acknowledgement.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "description": "Stable Team message id from the delivered peer item."
+    },
+    "reaction": {
+      "type": "string",
+      "description": "Semantic reaction: acknowledged, agreed, useful insight, blocker, or completed.",
+      "enum": [
+        "ack",
+        "agree",
+        "insight",
+        "blocked",
+        "done"
+      ]
+    }
+  },
+  "required": [
+    "message_id",
+    "reaction"
   ]
 }
 ```

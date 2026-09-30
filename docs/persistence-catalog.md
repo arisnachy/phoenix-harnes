@@ -869,6 +869,19 @@ Types: [TeamId](subsystems/agent-team.md) · [TeamMessageId](subsystems/agent-te
 
 Source: [`packages/subagent/agent-team/src/types.ts:263`](../packages/subagent/agent-team/src/types.ts)
 
+<a id="teammessagequeued--log-only"></a>
+
+#### `team/message/queued` — log-only
+
+```ts persistence-catalog
+/** Durable mailbox enqueue, stored before delivery is attempted. */
+'team/message/queued': { version: 1; teamId: TeamId; message: TeamMessageSnapshot }
+```
+
+Types: [TeamId](subsystems/agent-team.md) · [TeamMessageSnapshot](subsystems/agent-team.md)
+
+Source: [`packages/subagent/agent-team/src/types.ts:261`](../packages/subagent/agent-team/src/types.ts)
+
 <a id="teamreaction--log-only"></a>
 
 #### `team/reaction` — log-only
@@ -882,22 +895,9 @@ Source: [`packages/subagent/agent-team/src/types.ts:263`](../packages/subagent/a
 }
 ```
 
-Types: [TeamId](subsystems/agent-team.md) · [TeamReactionSnapshot](subsystems/agent-team.md)
+Types: [TeamId](subsystems/agent-team.md)
 
 Source: [`packages/subagent/agent-team/src/types.ts:270`](../packages/subagent/agent-team/src/types.ts)
-
-<a id="teammessagequeued--log-only"></a>
-
-#### `team/message/queued` — log-only
-
-```ts persistence-catalog
-/** Durable mailbox enqueue, stored before delivery is attempted. */
-'team/message/queued': { version: 1; teamId: TeamId; message: TeamMessageSnapshot }
-```
-
-Types: [TeamId](subsystems/agent-team.md) · [TeamMessageSnapshot](subsystems/agent-team.md)
-
-Source: [`packages/subagent/agent-team/src/types.ts:261`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teamtask--log-only"></a>
 
