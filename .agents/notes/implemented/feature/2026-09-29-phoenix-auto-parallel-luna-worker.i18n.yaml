@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-09-29-phoenix-auto-parallel-luna-worker.md
-2026-09-29-phoenix-auto-parallel-luna-worker.md: cc33698d68ea048e51f3d8166e0b4ded024e2314
-2026-09-29-phoenix-auto-parallel-luna-worker.zh.md: b7c2b4f8cc3977392b78a06e7ade6d26bd197d6d
+2026-09-29-phoenix-auto-parallel-luna-worker.md: 9b3b9dd983210e8d7e962b39621be486048571b3
+2026-09-29-phoenix-auto-parallel-luna-worker.zh.md: f95ffaac2fed0d880d8d3fe2838780a6921e2c29
