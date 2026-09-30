@@ -616,11 +616,14 @@ export function apply(ctx: Context, config: Config): void {
           }
         }
         const access = accessClaim(args.read_only === true, args.write_scope)
+        const isolationPrompt = args.read_only === true || args.write_scope !== undefined
+          ? [{ type: 'text' as const, text: accessInstruction(access) }]
+          : []
         const request = {
           label: args.description,
           prompt: [
             { type: 'text', text: args.prompt },
-            { type: 'text', text: accessInstruction(access) },
+            ...isolationPrompt,
             { type: 'text', text: LIVE_ACTIVITY_GUIDANCE },
           ] as ContentBlock[],
           parent,
