@@ -95,6 +95,17 @@ export function apply(ctx: Context, config: Config): void {
       return
     }
 
+    if (eventType === 'request/header') {
+      const route = requestRoute(data)
+      if (route !== undefined) experience.observeModelRoute(sessionId, route)
+      return
+    }
+
+    if (eventType === 'tool-workflow/agent-start') {
+      experience.observeWorkflowAgentStart(sessionId)
+      return
+    }
+
     if (eventType === 'assistant/message') {
       const usage = assistantUsage(data)
       if (usage !== undefined) experience.observeUsage(sessionId, usage)
@@ -355,6 +366,14 @@ function messageText(data: unknown): string | undefined {
 
 function isDirectUserMessage(data: unknown): boolean {
   return isRecord(data) && isRecord(data.source) && data.source.kind === 'user'
+}
+
+function requestRoute(data: unknown): { readonly provider: string; readonly model: string } | undefined {
+  if (!isRecord(data) || !isRecord(data.header) || !isRecord(data.header.config)) return undefined
+  const provider = data.header.config.provider
+  const model = data.header.config.model
+  if (typeof provider !== 'string' || typeof model !== 'string') return undefined
+  return { provider, model }
 }
 
 function assistantUsage(data: unknown): {
