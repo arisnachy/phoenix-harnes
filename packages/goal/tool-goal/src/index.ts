@@ -331,7 +331,7 @@ async function missionProjection(ctx: Context, agent: import('@phoenix-ai/dsh-ag
   const descendants = subagents === undefined ? [] : await subagents.listDescendants(agent.id, signal)
   const agents = [
     { id: agent.id, kind: 'root', depth: 0, status: agent.status },
-    ...descendants.map(entry => {
+    ...descendants.map((entry) => {
       if (entry.kind === 'diagnostic') {
         return {
           id: entry.id,

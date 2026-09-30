@@ -207,7 +207,7 @@ describe('dsh-tool-subagent', () => {
 
 
   it('prevents overlapping parallel writers while allowing an independent read-only reviewer', async () => {
-    const gate = Promise.withResolvers<void>()
+    const gate = Promise.withResolvers<undefined>()
     const started: string[] = []
     const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
       onStart: (request: SubagentStartRequest) => {
@@ -240,7 +240,7 @@ describe('dsh-tool-subagent', () => {
     })
     await vi.waitFor(() => { expect(started).toEqual(['writer core', 'review core']) })
 
-    gate.resolve()
+    gate.resolve(undefined)
     const results = await Promise.all([writer, reviewer])
     expect(results.every(result => !result.isError)).toBe(true)
   })

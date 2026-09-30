@@ -165,8 +165,6 @@ export function replayGoalMissionPlan(
 ): GoalMissionPlan | undefined {
   const event = events.findLast((candidate): candidate is SessionEvent<'goal/mission-plan'> =>
     candidate.type === 'goal/mission-plan'
-    && candidate.data.kind === 'goal/mission-plan'
-    && candidate.data.version === 1
     && candidate.data.plan.goalId === goalId)
   return event?.data.plan
 }
