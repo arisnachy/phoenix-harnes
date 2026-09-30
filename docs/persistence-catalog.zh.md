@@ -471,6 +471,17 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 <a id="goalstrategy--log-only"></a>
 
+<a id="goalmission-plan--log-only"></a>
+
+#### `goal/mission-plan` — log-only
+
+```ts persistence-catalog
+/** Latest compact master plan for a long-running goal. */
+'goal/mission-plan': GoalMissionPlanChange
+```
+
+来源：[`packages/goal/goal/src/mission.ts:67`](../packages/goal/goal/src/mission.ts)
+
 #### `goal/strategy` — log-only
 
 ```ts persistence-catalog
