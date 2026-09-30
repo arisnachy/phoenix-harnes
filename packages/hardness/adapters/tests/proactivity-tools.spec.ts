@@ -113,6 +113,69 @@ describe('phoenix_task_create timezone handling', () => {
   })
 })
 
+describe('phoenix_task_create autonomy budgets', () => {
+  it('defaults recurring background work to free-first with a bounded daily run budget', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async () => ({}) },
+      { id: () => 'bounded-background' },
+    )
+    const tool = createProactivityCreateTool(engine)
+
+    const result = await tool.execute({
+      title: 'Background research',
+      instruction: 'Re-check the evidence and report only material changes.',
+      runAt: '2026-09-30T12:00:00-04:00',
+      everyMinutes: 60,
+      requestedByUser: true,
+      delivery: 'work',
+    }, { agent: { id: 'agent-a' } } as never)
+
+    expect(result).toMatchObject({
+      resource_policy: 'free-first',
+      max_runs_per_day: 12,
+      artifact_delivery: 'auto',
+      side_effect_policy: 'at-most-once',
+    })
+    const [task] = await engine.list({ includeHidden: true })
+    expect(task).toMatchObject({
+      resourcePolicy: 'free-first',
+      maxRunsPerDay: 12,
+      artifactDelivery: 'auto',
+      sideEffectPolicy: 'at-most-once',
+    })
+  })
+
+  it('preserves an explicit higher cadence and delivery policy', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async () => ({}) },
+      { id: () => 'explicit-background' },
+    )
+    const tool = createProactivityCreateTool(engine)
+
+    const result = await tool.execute({
+      title: 'High-frequency requested monitor',
+      instruction: 'Run the explicitly requested cadence.',
+      runAt: '2026-09-30T12:00:00-04:00',
+      everyMinutes: 30,
+      requestedByUser: true,
+      delivery: 'work',
+      resourcePolicy: 'balanced',
+      maxRunsPerDay: 36,
+      artifactDelivery: 'inline',
+      sideEffectPolicy: 'retry-safe',
+    }, { agent: { id: 'agent-a' } } as never)
+
+    expect(result).toMatchObject({
+      resource_policy: 'balanced',
+      max_runs_per_day: 36,
+      artifact_delivery: 'inline',
+      side_effect_policy: 'retry-safe',
+    })
+  })
+})
+
 describe('phoenix_task_create home attention metadata', () => {
   it('persists presentation policy for recurring background intelligence', async () => {
     const engine = new ProactivityEngine(
