@@ -2604,12 +2604,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               found.agent.options.reasoningEffort = liveRoute.reasoningEffort
             }
             try {
-              // Keep deployment defaults provider-native. Phoenix Auto is a
-              // session-local virtual route; storing its Luna worker avoids
-              // leaking a synthetic model id into non-Web/headless entry points.
-              await defaults.saveDefaultModelSelection?.(
-                isPhoenixCodexAutoSelection(selected) ? liveRoute : selected,
-              )
+              // Persist the picker identity, not the provider-native execution route.
+              // Phoenix Auto is a durable user preference: agentOptions() seeds
+              // Agents on Luna Max so the synthetic id is still never sent to OpenAI,
+              // while selectionFor() preserves Phoenix Auto for new blank sessions.
+              await defaults.saveDefaultModelSelection?.(selected)
             } catch (error: unknown) {
               ctx.logger.warn(
                 `api-proxy: the model switch applies to this session but was not saved as the default: ${String(error)}`,
