@@ -186,6 +186,57 @@ function statePath(home) {
   return join(home, 'phoenix-codex-update.json')
 }
 
+function managedRuntimeRoot(home) {
+  const configured = process.env.PHOENIX_CODEX_RUNTIME_ROOT?.trim()
+  return configured ? resolve(configured) : join(home, 'codex-runtime')
+}
+
+function managedPackageVersion(root) {
+  const manifest = join(root, 'node_modules', '@openai', 'codex', 'package.json')
+  if (!existsSync(manifest)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(manifest, 'utf8'))
+    return typeof value?.version === 'string' ? parseCodexVersion(value.version)?.raw : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function ensureManagedRuntimeManifest(root) {
+  mkdirSync(root, { recursive: true })
+  const manifest = join(root, 'package.json')
+  if (existsSync(manifest)) return
+  writeFileSync(manifest, JSON.stringify({
+    name: 'phoenix-codex-runtime',
+    version: '0.0.0',
+    private: true,
+  }, null, 2) + '\n', 'utf8')
+}
+
+function managedRuntimeInstallCommand(root, version) {
+  if (packageCommand('npm', ['--version']).ok) {
+    return ['npm', ['install', '--prefix', root, '--no-save', `${PACKAGE}@${version}`]]
+  }
+  if (packageCommand('pnpm', ['--version']).ok) {
+    return ['pnpm', ['add', '--dir', root, '--save-exact', `${PACKAGE}@${version}`]]
+  }
+  return undefined
+}
+
+function installManagedRuntime(root, version) {
+  ensureManagedRuntimeManifest(root)
+  const update = managedRuntimeInstallCommand(root, version)
+  if (update === undefined) return { ok: false, detail: 'npm/pnpm is unavailable for the Phoenix-managed Codex runtime.' }
+  const [bin, args] = update
+  const result = packageCommand(bin, args, { timeout: 5 * 60 * 1000 })
+  if (!result.ok) return { ok: false, detail: `${bin} could not install ${PACKAGE}@${version} into the Phoenix-managed runtime.` }
+  const verified = managedPackageVersion(root)
+  if (verified === undefined || compareCodexVersions(verified, version) < 0) {
+    return { ok: false, detail: 'Managed Codex installation completed but did not resolve to the requested stable version.' }
+  }
+  return { ok: true, version: verified, manager: bin }
+}
+
 function writeState(home, value) {
   const path = statePath(home)
   mkdirSync(dirname(path), { recursive: true })
@@ -285,21 +336,31 @@ function updateCommand(manager) {
   return undefined
 }
 
-function publicInspection() {
-  const current = activeCodexVersion()
-  if (current === undefined) {
-    return { status: 'not-installed', current: undefined, latest: undefined, manager: undefined }
-  }
+function publicInspection(home) {
   const latest = latestStableVersion()
-  if (latest === undefined) {
-    return { status: 'unavailable', current, latest: undefined, manager: undefined }
-  }
-  const status = classifyCodexUpdate(current, latest)
-  const ownership = inspectManager(current)
+  const runtimeRoot = managedRuntimeRoot(home)
+  const managedCurrent = managedPackageVersion(runtimeRoot)
+  const current = activeCodexVersion()
+  const status = latest === undefined
+    ? 'unavailable'
+    : current === undefined
+      ? 'not-installed'
+      : classifyCodexUpdate(current, latest)
+  const managedStatus = latest === undefined
+    ? 'unavailable'
+    : managedCurrent === undefined
+      ? 'missing'
+      : classifyCodexUpdate(managedCurrent, latest)
+  const ownership = current === undefined
+    ? { manager: undefined, paths: codexPaths(), managers: [] }
+    : inspectManager(current)
   return {
     status,
+    managedStatus,
     current,
+    managedCurrent,
     latest,
+    runtimeRoot,
     manager: ownership.manager,
     codexPaths: ownership.paths,
     managers: ownership.managers.map(manager => ({ name: manager.name, version: manager.version })),
@@ -308,7 +369,7 @@ function publicInspection() {
 
 /** Inspect Codex without mutating it. Exported for diagnostics/tests. */
 export function inspectCodexUpdate(home = safeHome()) {
-  const inspection = publicInspection()
+  const inspection = publicInspection(home)
   writeState(home, inspection)
   return inspection
 }
@@ -318,18 +379,15 @@ function cycle(home, mode, options = {}) {
     writeState(home, { mode, status: 'off' })
     return 0
   }
-  const inspection = publicInspection()
+  const inspection = publicInspection(home)
   writeState(home, { mode, ...inspection })
 
-  if (inspection.status !== 'available') return inspection.status === 'invalid' ? 1 : 0
-  if (mode === 'notify' && options.apply !== true) return 0
-  if (inspection.manager === undefined) {
-    writeState(home, {
-      mode,
-      ...inspection,
-      status: 'available',
-      detail: 'Codex update is available, but its npm/pnpm owner is ambiguous or unsupported; automatic mutation was skipped.',
-    })
+  if (inspection.latest === undefined) return inspection.status === 'invalid' ? 1 : 0
+  const managedNeedsUpdate = inspection.managedStatus === 'missing' || inspection.managedStatus === 'available'
+  const globalNeedsUpdate = inspection.status === 'available'
+  if (!managedNeedsUpdate && !globalNeedsUpdate) return 0
+  if (mode === 'notify' && options.apply !== true) {
+    writeState(home, { mode, ...inspection, status: 'available' })
     return 0
   }
   if (codexBusy()) {
@@ -342,39 +400,79 @@ function cycle(home, mode, options = {}) {
     return 0
   }
 
-  const update = updateCommand(inspection.manager)
-  if (update === undefined) return 0
-  writeState(home, { mode, ...inspection, status: 'updating' })
-  const [bin, args] = update
-  const result = packageCommand(bin, args, { timeout: 5 * 60 * 1000 })
-  if (!result.ok) {
-    writeState(home, {
-      mode,
-      ...inspection,
-      status: 'blocked',
-      detail: `${inspection.manager} could not install ${PACKAGE}@latest; the existing Codex installation was left in place.`,
-    })
-    return 1
+  let managedCurrent = inspection.managedCurrent
+  let managedManager
+  if (managedNeedsUpdate) {
+    writeState(home, { mode, ...inspection, status: 'updating-managed' })
+    const managed = installManagedRuntime(inspection.runtimeRoot, inspection.latest)
+    if (!managed.ok) {
+      writeState(home, {
+        mode,
+        ...inspection,
+        status: 'blocked',
+        detail: managed.detail,
+      })
+      return 1
+    }
+    managedCurrent = managed.version
+    managedManager = managed.manager
   }
 
-  const verified = activeCodexVersion()
-  if (verified === undefined || compareCodexVersions(verified, inspection.latest) < 0) {
-    writeState(home, {
-      mode,
-      ...inspection,
-      status: 'blocked',
-      detail: 'Codex package update returned successfully but the active codex command did not resolve to the target stable version.',
-      verified,
-    })
-    return 1
+  let current = inspection.current
+  let globalDetail
+  if (globalNeedsUpdate) {
+    if (inspection.manager === undefined) {
+      globalDetail = 'The active global Codex installation is ambiguous or unsupported; Phoenix updated its managed runtime and left the global command unchanged.'
+    } else {
+      const update = updateCommand(inspection.manager)
+      if (update !== undefined) {
+        writeState(home, {
+          mode,
+          ...inspection,
+          managedCurrent,
+          status: 'updating-global',
+        })
+        const [bin, args] = update
+        const result = packageCommand(bin, args, { timeout: 5 * 60 * 1000 })
+        if (!result.ok) {
+          writeState(home, {
+            mode,
+            ...inspection,
+            managedCurrent,
+            status: managedNeedsUpdate ? 'partial' : 'blocked',
+            detail: `${inspection.manager} could not update the global ${PACKAGE} command; the Phoenix-managed runtime is ${managedCurrent ?? 'unchanged'}.`,
+          })
+          return 1
+        }
+        const verified = activeCodexVersion()
+        if (verified === undefined || compareCodexVersions(verified, inspection.latest) < 0) {
+          writeState(home, {
+            mode,
+            ...inspection,
+            managedCurrent,
+            status: managedNeedsUpdate ? 'partial' : 'blocked',
+            detail: 'Global Codex update completed but the active codex command did not resolve to the requested stable version.',
+            verified,
+          })
+          return 1
+        }
+        current = verified
+      }
+    }
   }
+
   writeState(home, {
     mode,
     status: 'applied',
     previous: inspection.current,
-    current: verified,
+    current,
+    managedPrevious: inspection.managedCurrent,
+    managedCurrent,
     latest: inspection.latest,
-    manager: inspection.manager,
+    runtimeRoot: inspection.runtimeRoot,
+    ...managedManager === undefined ? {} : { managedManager },
+    ...inspection.manager === undefined ? {} : { manager: inspection.manager },
+    ...globalDetail === undefined ? {} : { detail: globalDetail },
   })
   return 0
 }
