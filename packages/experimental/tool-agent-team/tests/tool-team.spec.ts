@@ -233,7 +233,9 @@ describe('dsh-tool-team', () => {
     // Every Team result reaches the model as compact JSON: indentation would
     // spend tokens on every roster, task, and receipt without adding meaning.
     expect(text(roster)).toBe(JSON.stringify(JSON.parse(text(roster))))
-    const peer = await execute(ctx, child, 'send_message', { target: 'lead', message: 'quiet report' })
+    const peer = await execute(ctx, child, 'send_message', {
+      target: 'lead', purpose: 'result', message: 'quiet report',
+    })
     expect(peer.isError).toBe(false)
     expect(JSON.parse(text(peer))).toMatchObject({ status: 'accepted' })
     const peerReceipt = JSON.parse(text(peer)) as { messageId: string }
@@ -253,7 +255,9 @@ describe('dsh-tool-team', () => {
     })
     expect(duplicateReaction.isError).toBe(true)
     expect(text(duplicateReaction)).toContain('only once')
-    const waking = await execute(ctx, child, 'followup_task', { target: 'lead', message: 'review the report' })
+    const waking = await execute(ctx, child, 'followup_task', {
+      target: 'lead', purpose: 'review', message: 'review the report',
+    })
     expect(waking.isError).toBe(false)
     expect(JSON.parse(text(waking))).toMatchObject({ status: 'accepted' })
     await lead.whenIdle()
@@ -404,6 +408,7 @@ describe('dsh-tool-team', () => {
     const { ctx, lead, fiber } = await setup([], true)
     const teamSchema = (await assembly(ctx, lead)).tools.find(schema => schema.name === 'send_message')
     expect(JSON.stringify(teamSchema)).toContain('target')
+    expect(JSON.stringify(teamSchema)).toContain('purpose')
     expect(JSON.stringify(teamSchema)).not.toContain('subagent_id')
 
     await fiber.dispose()
