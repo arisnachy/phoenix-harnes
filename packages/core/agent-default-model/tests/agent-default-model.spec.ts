@@ -147,6 +147,24 @@ describe('AgentDefaultModelConfig', () => {
     await bench.ctx.fiber.dispose()
   })
 
+  it('retains picker intent in memory when the settings provider reloads or detaches', async () => {
+    const bench = await boot()
+    const selected = { provider: 'openai-codex', model: 'phoenix-auto' }
+    const runtime = {
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    }
+    await bench.defaultModel.saveSessionSelection('session-auto', selected, runtime)
+    await bench.settingsFiber.dispose()
+
+    expect(bench.defaultModel.sessionSelection('session-auto')).toEqual({
+      selected,
+      runtime,
+    })
+    await bench.ctx.fiber.dispose()
+  })
+
   it('falls back to the composition entry when the settings provider detaches', async () => {
     const bench = await boot()
     await bench.defaultModel.saveSelection({ provider: 'acme-gateway', model: 'acme-large' })
