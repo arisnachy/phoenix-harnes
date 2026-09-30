@@ -90,6 +90,7 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
     averageTokens,
     averageToolCalls,
     averageFriction,
+    ...autoPreference,
     reason: 'repetition exists but has not accumulated enough verified evidence for habitual reuse',
   }
 }
