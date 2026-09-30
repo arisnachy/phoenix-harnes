@@ -130,6 +130,6 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
     if (context.state.reactions.some(item => item.reactorId === next.value.reactorId)) return context.state
     return { ...context.state, reactions: [...context.state.reactions, next.value] }
   },
-  buildViewNode: (context) => context.state === undefined ? null : viewNode(context, context.state),
+  buildViewNode: context => context.state === undefined ? null : viewNode(context, context.state),
 }
 
