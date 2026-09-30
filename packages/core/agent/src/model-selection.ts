@@ -4,7 +4,7 @@
  */
 
 import type { Context } from '@phoenix-ai/cordis'
-import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
+import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */
 export interface ModelSelection {
@@ -178,6 +178,12 @@ function isToolAcquisitionRequest(text: string): boolean {
 const AUTO_TASK_ACTION = /\b(?:fix|repair|debug|implement|edit|modify|update|create|build|run|execute|test|inspect|review|audit|refactor|deploy|install|remove|delete|rename|commit|merge|revert|resolve|diagnose|search|research|investigate|browse|compare|fill|submit|schedule|automate|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*|busc\p{L}*|investig\p{L}*|compar\p{L}*|llen\p{L}*|envi\p{L}*|program\p{L}*|automatiz\p{L}*)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Compact reply-depth vocabulary is easier to audit in one literal.
 const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|deep|analiz\p{L}*|razon\p{L}*|explic\p{L}*\s+en\s+detalle|profund\p{L}*)\b/iu
+/** A stopped operational reply that still announces the next action rather than performing it. */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual unfinished-action matcher auditable as one literal.
+const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate))/isu
+/** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
+const AUTO_CONTINUATION_LIMIT = 4
+const AUTO_EXECUTION_CONTINUATION = 'Planning or describing the next action is not task completion. Continue the current user request now with the available tools. Execute the next concrete action instead of only saying what you will do, and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
@@ -364,6 +370,38 @@ function toolCallFingerprint(event: PhoenixAutoEvent): string | undefined {
   return `${data.name}:${stableFingerprint(data.arguments ?? '')}`
 }
 
+interface PhoenixAutoAssistantStop {
+  readonly step: number
+  readonly text: string
+}
+
+/** Read the latest text-only stopping reply from the current turn. */
+function latestPhoenixAutoAssistantStop(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): PhoenixAutoAssistantStop | undefined {
+  const events = turnEvents(agent, turn)
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event?.type !== 'assistant/message') continue
+    const data = event.data as {
+      readonly turn?: number
+      readonly step?: number
+      readonly message?: {
+        readonly content?: readonly { readonly type?: string; readonly text?: string }[]
+      }
+    }
+    if (data.turn !== turn || typeof data.step !== 'number') continue
+    const text = data.message?.content
+      ?.filter(block => block.type === 'text' && typeof block.text === 'string')
+      .map(block => block.text as string)
+      .join(' ')
+      .trim() ?? ''
+    return { step: data.step, text }
+  }
+  return undefined
+}
+
 /**
  * Detect a genuine no-progress pattern without another model call.
  *
@@ -411,6 +449,19 @@ interface PhoenixAutoRouterState {
   turn: number
   lastRescueStep: number
   rescueCount: number
+  continuationCount: number
+  lastContinuationStep: number
+  forcePlannerNext: boolean
+}
+
+function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number): void {
+  if (state.turn === turn) return
+  state.turn = turn
+  state.lastRescueStep = 0
+  state.rescueCount = 0
+  state.continuationCount = 0
+  state.lastContinuationStep = 0
+  state.forcePlannerNext = false
 }
 
 function phoenixAutoRoute(
@@ -420,6 +471,7 @@ function phoenixAutoRoute(
   directText: string,
   state: PhoenixAutoRouterState,
 ): ModelSelection {
+  resetPhoenixAutoTurnState(state, turn)
   if (step <= 1) {
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
       return {
@@ -442,10 +494,15 @@ function phoenixAutoRoute(
     }
   }
 
-  if (state.turn !== turn) {
-    state.turn = turn
-    state.lastRescueStep = 0
-    state.rescueCount = 0
+  if (state.forcePlannerNext) {
+    state.forcePlannerNext = false
+    state.lastRescueStep = step
+    state.rescueCount += 1
+    return {
+      provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+      reasoningEffort: ReasoningEffortId('high'),
+    }
   }
 
   const repeatedStall = isPhoenixCodexAutoStalled(agent, turn)
@@ -488,7 +545,14 @@ export function installModelSelection(
   selection: ModelSelectionRef,
   handoff?: ModelSelectionHandoff | ModelSelectionHandoffResolver,
 ): () => void {
-  const phoenixAutoState: PhoenixAutoRouterState = { turn: 0, lastRescueStep: 0, rescueCount: 0 }
+  const phoenixAutoState: PhoenixAutoRouterState = {
+    turn: 0,
+    lastRescueStep: 0,
+    rescueCount: 0,
+    continuationCount: 0,
+    lastContinuationStep: 0,
+    forcePlannerNext: false,
+  }
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
@@ -573,8 +637,43 @@ export function installModelSelection(
       return nativeRoute
     },
   )
+  const disposeAutoContinuation = agentCtx.on('agent/turn-stopping', ({ agent, turn, signal }) => {
+    signal.throwIfAborted()
+    if (!isPhoenixCodexAutoSelection(selection.current)) return
+    if ((selection.assembledToolCount ?? 0) === 0) return
+
+    const directText = directUserTextForTurn(agent, turn)
+    if (!phoenixAutoTaskRequest(directText)) return
+    resetPhoenixAutoTurnState(phoenixAutoState, turn)
+
+    const latest = latestPhoenixAutoAssistantStop(agent, turn)
+    if (latest === undefined || phoenixAutoState.lastContinuationStep === latest.step) return
+    const events = turnEvents(agent, turn)
+    const plannerStoppedBeforeActing = latest.step === 1
+      && !events.some(event => event.type === 'tool/call' || event.type === 'tool/result')
+    const announcedNextAction = latest.text.length > 0 && AUTO_UNFINISHED_ACTION.test(latest.text)
+    if (!plannerStoppedBeforeActing && !announcedNextAction) return
+    if (phoenixAutoState.continuationCount >= AUTO_CONTINUATION_LIMIT) return
+
+    phoenixAutoState.continuationCount += 1
+    phoenixAutoState.lastContinuationStep = latest.step
+    // The normal Sol→Luna transition gets one chance to execute. If Luna then
+    // stops on another promise, make the next step a high-effort Sol rescue.
+    if (phoenixAutoState.continuationCount >= 2) phoenixAutoState.forcePlannerNext = true
+    agent.steer(createUserMessage({
+      content: [{ type: 'text', text: AUTO_EXECUTION_CONTINUATION }],
+      source: {
+        kind: 'plugin',
+        plugin: 'model-selection',
+        form: 'notice',
+        summary: 'Phoenix Auto execution continuation',
+      },
+    }))
+  })
+
   return () => {
     disposeAssembly()
     disposeRequest()
+    disposeAutoContinuation()
   }
 }
