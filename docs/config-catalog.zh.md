@@ -648,9 +648,9 @@ export type E2BRetention = 'kill' | 'pause' | 'retain'
 
 Source: [`packages/e2b/e2b/src/index.ts:49`](../packages/e2b/e2b/src/index.ts)
 
-<a id="phoenix-aidsh-experimental-agent-team"></a>
+<a id="phoenix-aidsh-agent-team"></a>
 
-## `@phoenix-ai/dsh-experimental-agent-team`
+## `@phoenix-ai/dsh-agent-team`
 
 Requires: `agents` · `sessions` · `sessionPersistence` · `subagents`
 
@@ -670,11 +670,11 @@ export interface Config {
 }
 ```
 
-Source: [`packages/experimental/agent-team/src/types.ts:128`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:159`](../packages/subagent/agent-team/src/types.ts)
 
-<a id="phoenix-aidsh-experimental-tool-agent-team"></a>
+<a id="phoenix-aidsh-tool-agent-team"></a>
 
-## `@phoenix-ai/dsh-experimental-tool-agent-team`
+## `@phoenix-ai/dsh-tool-agent-team`
 
 Requires: `agents` · `agentTeams` · `tools` · `systemPrompt`
 
@@ -685,14 +685,26 @@ export interface Config {
   readonly freshProvider?: string
   /** Continuable-subagent provider used for completed-prefix fork teammates. */
   readonly forkProvider?: string
+  /** Profile automatically used when spawn_teammate omits model_profile. */
+  readonly defaultModelProfile?: string
   /** Named provider/model routes the Lead may assign; empty means inheritance only. */
-  readonly modelProfiles?: Record<string, AgentOptions>
+  readonly modelProfiles?: Record<string, TeamModelProfile>
+}
+
+/** One deployment-owned LLM route for a teammate identity. */
+export interface TeamModelProfile {
+  /** Provider route used for this teammate profile. */
+  readonly provider: string
+  /** Provider-specific model identifier. */
+  readonly model: string
+  /** Optional maximum output-token budget for each request. */
+  readonly maxTokens?: number
+  /** Optional provider reasoning tier for the teammate. */
+  readonly reasoningEffort?: string
 }
 ```
 
-Depends on: [`AgentOptions`](subsystems/core.zh.md)
-
-Source: [`packages/experimental/tool-agent-team/src/index.ts:17`](../packages/experimental/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts:29`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-file-reference-local"></a>
 
