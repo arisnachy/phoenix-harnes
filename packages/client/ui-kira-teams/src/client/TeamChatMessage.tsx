@@ -48,10 +48,6 @@ const SKILL_ROLE: Readonly<Record<string, string>> = {
   runtime: 'Monitoreo',
 }
 
-function titleCase(value: string): string {
-  return value.split('-').filter(Boolean).map(part => part.charAt(0).toUpperCase() + part.slice(1)).join(' ')
-}
-
 /** Resolve durable Team names to stable KIRA personas; model ids never become visible identities. */
 export function teamIdentityOf(name: string, id: string): TeamIdentity {
   const key = slug(name)
@@ -65,10 +61,12 @@ export function teamIdentityOf(name: string, id: string): TeamIdentity {
       kind: roster.kind,
     }
   }
+  const kind = agentAvatarKind(id)
+  const stable = KIRA_ROSTER.find(agent => agent.kind === kind)
   return {
-    name: titleCase(key) || 'Equipo Kira',
-    role: 'Equipo Kira',
-    kind: agentAvatarKind(id),
+    name: stable?.name ?? 'Equipo Kira',
+    role: stable === undefined ? 'Equipo Kira' : (SKILL_ROLE[stable.skill] ?? 'Equipo Kira'),
+    kind,
   }
 }
 
