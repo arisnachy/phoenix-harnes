@@ -263,7 +263,7 @@ function defaultConversationalSelection(selection: ModelSelection | undefined): 
   if (selection?.provider !== 'openai-codex') return undefined
   return {
     provider: 'openai-codex',
-    model: lunaWorkerFor(selection.model) ?? 'gpt-5.6-luna',
+    model: lunaWorkerFor(selection.model) ?? PHOENIX_CODEX_AUTO_WORKER_MODEL,
     reasoningEffort: ReasoningEffortId('low'),
   }
 }
@@ -281,7 +281,7 @@ function defaultToolAcquisitionSelection(selection: ModelSelection | undefined):
   if (isCodexPlannerModel(selection.model)) return undefined
   return {
     provider: 'openai-codex',
-    model: lunaWorkerFor(selection.model) ?? 'gpt-5.6-luna',
+    model: lunaWorkerFor(selection.model) ?? PHOENIX_CODEX_AUTO_WORKER_MODEL,
     reasoningEffort: ReasoningEffortId('medium'),
   }
 }
