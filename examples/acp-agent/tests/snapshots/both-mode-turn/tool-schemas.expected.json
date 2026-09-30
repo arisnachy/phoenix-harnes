@@ -135,6 +135,14 @@
       }
     },
     {
+      "name": "get_mission",
+      "description": "Read the durable master plan for the current goal together with a live/durable agent graph and recent direct-human steering. Use this after restart, context compaction, or before changing parallel worker assignments.",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
       "name": "interrupt_agent",
       "description": "Request cancellation of a background agent's current turn by its agent id. The target may be your direct child or a deeper agent created under you. Only the current turn stops: messages already queued for the agent stay parked until a later send_message, agents it started keep running, and the agent itself stays available for follow-ups. This call returns as soon as the stop request is accepted, so the target may keep running briefly; interrupting an agent that already finished is an accepted no-op.",
       "parameters": {
@@ -773,7 +781,7 @@
     },
     {
       "name": "subagent",
-      "description": "Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.",
+      "description": "Orquestar una tarea independiente con un subagente en contexto limpio para descargar investigación, implementación o verificación acotada. No consume el contexto de esta conversación; el subagente devuelve el resultado final. Incluye una instrucción autónoma con alcance, límites y evidencia. No recibe esta conversación, así que escribe todo lo necesario en español. This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Si ambos escriben, asigna write_scope no solapados; usa read_only=true para revisores. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -784,6 +792,17 @@
           "prompt": {
             "type": "string",
             "description": "Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. Devuelve solo el resultado verificable."
+          },
+          "read_only": {
+            "type": "boolean",
+            "description": "Set true for an analysis/review worker that must not modify workspace files. Read-only workers may safely overlap writers."
+          },
+          "write_scope": {
+            "type": "array",
+            "description": "Relative workspace files/directories this worker may modify. Required to run multiple writer agents safely; sibling writer scopes must not overlap.",
+            "items": {
+              "type": "string"
+            }
           },
           "hard_parallelism": {
             "type": "boolean",
@@ -806,7 +825,7 @@
     },
     {
       "name": "subagent_fork",
-      "description": "Orquestar una tarea con un subagente que hereda esta conversación: recibe los turnos completados hasta ahora, pero no el turno actual en curso. Úsalo cuando la tarea dependa del contexto existente y pueda ejecutarse de forma independiente. Recibes su resultado, no sus pensamientos internos. This call waits for the subagent and returns its result. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.",
+      "description": "Orquestar una tarea con un subagente que hereda esta conversación: recibe los turnos completados hasta ahora, pero no el turno actual en curso. Úsalo cuando la tarea dependa del contexto existente y pueda ejecutarse de forma independiente. Recibes su resultado, no sus pensamientos internos. This call waits for the subagent and returns its result. Presupuesto Phoenix de subagentes: usa 1 como norma. Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, marcando hard_parallelism=true. Si ambos escriben, asigna write_scope no solapados; usa read_only=true para revisores. Abre un tercero solo en un caso extremo donde tres frentes independientes sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, el contexto, la identidad y la síntesis final en el agente principal.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -817,6 +836,17 @@
           "prompt": {
             "type": "string",
             "description": "Describe la tarea concreta para el subagente. Ya conoce los turnos completados; indica solo lo nuevo que debe investigar, construir o verificar y responde en español."
+          },
+          "read_only": {
+            "type": "boolean",
+            "description": "Set true for an analysis/review worker that must not modify workspace files. Read-only workers may safely overlap writers."
+          },
+          "write_scope": {
+            "type": "array",
+            "description": "Relative workspace files/directories this worker may modify. Required to run multiple writer agents safely; sibling writer scopes must not overlap.",
+            "items": {
+              "type": "string"
+            }
           },
           "hard_parallelism": {
             "type": "boolean",
@@ -914,6 +944,87 @@
           "goal_id",
           "revision",
           "action"
+        ]
+      }
+    },
+    {
+      "name": "update_mission_plan",
+      "description": "Replace the compact durable master plan for the exact current goal revision. Keep one master plan, not per-round mini-plans. Update only on material evidence or human steering. Parallel writer steps must use explicit non-overlapping relative write_scope values.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "goal_id": {
+            "type": "string",
+            "description": "Exact current goal id from get_goal/get_mission."
+          },
+          "revision": {
+            "type": "number",
+            "description": "Exact current goal revision."
+          },
+          "plan_revision": {
+            "type": "number",
+            "description": "Current plan revision, or 0 when initializing the first plan."
+          },
+          "acceptance_criteria": {
+            "type": "array",
+            "description": "Bounded explicit conditions that define mission completion.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "steps": {
+            "type": "array",
+            "description": "Ordered master-plan steps. Write scopes are relative workspace files/directories owned by that worker.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "pending",
+                    "active",
+                    "done",
+                    "blocked"
+                  ]
+                },
+                "owner_agent_id": {
+                  "type": "string"
+                },
+                "write_scope": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "status"
+              ]
+            }
+          },
+          "decisions": {
+            "type": "array",
+            "description": "Only material decisions that future rounds must preserve.",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "goal_id",
+          "revision",
+          "plan_revision",
+          "acceptance_criteria",
+          "steps"
         ]
       }
     },
