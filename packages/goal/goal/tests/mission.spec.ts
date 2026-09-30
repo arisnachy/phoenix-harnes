@@ -28,7 +28,7 @@ describe('goal mission plan', () => {
   it('rejects overlapping-dangerous absolute or parent scopes at the durable boundary', () => {
     const goal = { id: GoalId('goal-2'), revision: 1, objective: 'Safe plan' }
     expect(() => nextGoalMissionPlan(goal, undefined, {
-      acceptanceCriteria: [],
+      acceptanceCriteria: ['Workspace scope remains bounded'],
       steps: [{ id: 'bad', title: 'Bad scope', status: 'pending', writeScope: ['../outside'] }],
     }, 1)).toThrow('relative workspace scopes')
   })
