@@ -510,6 +510,20 @@ export function installModelSelection(
       const resolved = await next()
       const selected = selection.assembled
       if (selected === undefined) return resolved
+      // A concrete picker choice with no adaptive handoff is authoritative.
+      // Resolve this before reading turn text so an exact route is also the
+      // lowest-latency path; only Phoenix Auto needs to inspect the request.
+      if (!isPhoenixCodexAutoSelection(selected) && handoff === undefined) {
+        const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
+        return {
+          ...withoutInheritedEffort,
+          provider: selected.provider,
+          model: selected.model,
+          ...selected.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: selected.reasoningEffort },
+        }
+      }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
       if (isPhoenixCodexAutoSelection(selected)) {
         const routed = phoenixAutoRoute(
@@ -527,20 +541,6 @@ export function installModelSelection(
           ...routed.reasoningEffort === undefined
             ? {}
             : { reasoningEffort: routed.reasoningEffort },
-        }
-      }
-      // No adaptive handoff means the picker is authoritative. Do not silently
-      // swap Sol/Astra/Terra for Luna, lower a social turn, or pin Luna to Max:
-      // provider, model, and effort must be exactly what the person selected.
-      if (handoff === undefined) {
-        const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
-        return {
-          ...withoutInheritedEffort,
-          provider: selected.provider,
-          model: selected.model,
-          ...selected.reasoningEffort === undefined
-            ? {}
-            : { reasoningEffort: selected.reasoningEffort },
         }
       }
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
