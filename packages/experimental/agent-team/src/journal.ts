@@ -60,8 +60,10 @@ export class TeamJournal {
     type: T,
     data: SessionEventMap[T],
   ): Promise<void> {
-    // Team events never enter the conversation surface. This narrower local
-    // capability removes Session.append's conditional surface argument while
+    // Team events are not generic append-surface messages. They remain domain
+    // journal records; an optional KIRA UI Conversation Definition may project
+    // selected message/reaction records into chat without changing model history.
+    // This narrower local
     // preserving the event-key/payload correlation.
     const append = root.session.append.bind(root.session) as unknown as AppendTeamEvent
     append(type, data)
