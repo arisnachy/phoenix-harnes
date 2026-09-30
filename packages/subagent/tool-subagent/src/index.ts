@@ -32,7 +32,7 @@ const MAX_ACTIVE_SUBAGENTS_PER_PARENT = 3
 const ACTIVE_SUBAGENT_GUIDANCE =
   ' Presupuesto Phoenix de subagentes: usa 1 como norma. ' +
   'Abre un segundo solo si la tarea se volvió realmente difícil y hay dos líneas de trabajo independientes, ' +
-  'marcando hard_parallelism=true. Abre un tercero solo en un caso extremo donde tres frentes independientes ' +
+  'marcando hard_parallelism=true. Si ambos escriben, asigna write_scope no solapados; usa read_only=true para revisores. Abre un tercero solo en un caso extremo donde tres frentes independientes ' +
   'sean necesarios, marcando extreme_parallelism=true. Nunca intentes un cuarto. ' +
   'Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, ' +
   'el contexto, la identidad y la síntesis final en el agente principal.'
@@ -48,9 +48,18 @@ const LIVE_ACTIVITY_GUIDANCE =
   '"Preparando", "Trabajando" o "Pensando". No uses una frase fija, no inventes actividad y no describas ' +
   'razonamiento interno. Phoenix mostrará literalmente esa frase como actividad en vivo.'
 
+interface SubagentAccessClaim {
+  /** Read-only children never conflict with workspace writers. */
+  readonly readOnly: boolean
+  /** Undefined means the single writer owns the whole workspace. */
+  readonly writeScope?: readonly string[]
+}
+
 interface ActiveSubagentBudget {
   /** Active child count per parent session; aliases/providers share the same parent budget. */
   readonly activeByParent: Map<string, number>
+  /** Live workspace access contracts, used to prevent overlapping parallel writers. */
+  readonly accessByParent: Map<string, SubagentAccessClaim[]>
   readonly continuableReleases: Map<string, () => void>
 }
 
@@ -60,9 +69,53 @@ const ACTIVE_BUDGETS = new WeakMap<object, ActiveSubagentBudget>()
 function activeBudgetFor(runtime: object): ActiveSubagentBudget {
   let state = ACTIVE_BUDGETS.get(runtime)
   if (state !== undefined) return state
-  state = { activeByParent: new Map(), continuableReleases: new Map() }
+  state = { activeByParent: new Map(), accessByParent: new Map(), continuableReleases: new Map() }
   ACTIVE_BUDGETS.set(runtime, state)
   return state
+}
+
+const MAX_WRITE_SCOPES = 16
+const MAX_WRITE_SCOPE_LENGTH = 180
+
+function normalizeWriteScope(values: readonly string[] | undefined): readonly string[] | undefined {
+  if (values === undefined) return undefined
+  if (values.length === 0 || values.length > MAX_WRITE_SCOPES) {
+    throw new Error(`write_scope must contain 1..${String(MAX_WRITE_SCOPES)} relative workspace paths`)
+  }
+  const normalized = values.map((value) => {
+    const scope = value.replaceAll('\\\\', '/').replace(/^\.\//u, '').replace(/\/$/u, '').trim()
+    if (scope.length === 0 || scope.length > MAX_WRITE_SCOPE_LENGTH
+      || scope.startsWith('/') || /^[A-Za-z]:\//u.test(scope) || scope.split('/').includes('..')) {
+      throw new Error('write_scope entries must be bounded relative workspace paths')
+    }
+    return scope
+  })
+  return [...new Set(normalized)].sort()
+}
+
+function scopesOverlap(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
+  if (left === undefined || right === undefined) return true
+  return left.some(a => right.some(b => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)))
+}
+
+function accessClaim(readOnly: boolean, writeScope: readonly string[] | undefined): SubagentAccessClaim {
+  if (readOnly && writeScope !== undefined) throw new Error('read_only cannot be combined with write_scope')
+  return {
+    readOnly,
+    ...readOnly ? {} : { writeScope: normalizeWriteScope(writeScope) },
+  }
+}
+
+function accessInstruction(claim: SubagentAccessClaim): string {
+  if (claim.readOnly) {
+    return 'Contrato de aislamiento Phoenix: trabaja en modo solo lectura. No edites, crees, borres, renombres ni formatees archivos. Devuelve evidencia y recomendaciones al agente padre.'
+  }
+  if (claim.writeScope === undefined) {
+    return 'Contrato de aislamiento Phoenix: eres el único escritor general del workspace para esta asignación. No delegues escrituras paralelas sin dividir primero el trabajo en scopes no solapados.'
+  }
+  return 'Contrato de aislamiento Phoenix: puedes escribir únicamente dentro de estos scopes relativos del workspace: '
+    + JSON.stringify(claim.writeScope)
+    + '. No modifiques archivos fuera de esos scopes; coordina cualquier cruce con el agente padre.'
 }
 
 /** Reserve one active child synchronously, before any provider await can race a sibling start. */
@@ -70,6 +123,7 @@ function reserveActiveSubagent(
   state: ActiveSubagentBudget,
   parent: Agent,
   escalation: { readonly hard: boolean; readonly extreme: boolean },
+  access: SubagentAccessClaim,
 ): () => void {
   const parentId = String(parent.id)
   // The escalation ladder belongs to one parent task/conversation. Different
@@ -95,7 +149,19 @@ function reserveActiveSubagent(
     )
   }
 
+  const siblingAccess = state.accessByParent.get(parentId) ?? []
+  if (!access.readOnly) {
+    const conflict = siblingAccess.find(claim => !claim.readOnly && scopesOverlap(claim.writeScope, access.writeScope))
+    if (conflict !== undefined) {
+      throw new Error(
+        'Aislamiento Phoenix: dos subagentes escritores no pueden compartir el mismo workspace/scope en paralelo. '
+        + 'Usa read_only=true para revisión o asigna write_scope relativos que no se solapen.',
+      )
+    }
+  }
+
   state.activeByParent.set(parentId, active + 1)
+  state.accessByParent.set(parentId, [...siblingAccess, access])
   let released = false
   return () => {
     if (released) return
@@ -103,6 +169,10 @@ function reserveActiveSubagent(
     const current = state.activeByParent.get(parentId) ?? 0
     if (current <= 1) state.activeByParent.delete(parentId)
     else state.activeByParent.set(parentId, current - 1)
+    const claims = state.accessByParent.get(parentId) ?? []
+    const nextClaims = claims.filter(claim => claim !== access)
+    if (nextClaims.length === 0) state.accessByParent.delete(parentId)
+    else state.accessByParent.set(parentId, nextClaims)
   }
 }
 
@@ -443,6 +513,17 @@ export function apply(ctx: Context, config: Config): void {
           required: true,
           description: wording.promptDescription,
         },
+        read_only: {
+          type: 'boolean',
+          description:
+            'Set true for an analysis/review worker that must not modify workspace files. Read-only workers may safely overlap writers.',
+        },
+        write_scope: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Relative workspace files/directories this worker may modify. Required to run multiple writer agents safely; sibling writer scopes must not overlap.',
+        },
         hard_parallelism: {
           type: 'boolean',
           description:
@@ -533,10 +614,12 @@ export function apply(ctx: Context, config: Config): void {
             ...reasoningEffort === undefined ? {} : { reasoningEffort: ReasoningEffortId(reasoningEffort) },
           }
         }
+        const access = accessClaim(args.read_only === true, args.write_scope)
         const request = {
           label: args.description,
           prompt: [
             { type: 'text', text: args.prompt },
+            { type: 'text', text: accessInstruction(access) },
             { type: 'text', text: LIVE_ACTIVITY_GUIDANCE },
           ] as ContentBlock[],
           parent,
@@ -554,6 +637,7 @@ export function apply(ctx: Context, config: Config): void {
             hard: args.hard_parallelism === true,
             extreme: args.extreme_parallelism === true,
           },
+          access,
         )
 
         if (runSpec.runInBackground) {
