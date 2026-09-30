@@ -3,7 +3,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 
-const PACKAGE_NAME = '@phoenix-ai/dsh-experimental-tool-agent-team'
+const PACKAGE_NAME = '@phoenix-ai/dsh-tool-agent-team'
 
 /** Cordis companion plugin name. */
 export const name = 'tool-team-invariant'

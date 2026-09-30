@@ -5,7 +5,7 @@ import type { InvariantFailure, InvariantInstaller } from '@phoenix-ai/dsh-invar
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import { applyTeamEvent, foldTeam, isTeamEvent } from './fold.ts'
 
-const PACKAGE_NAME = '@phoenix-ai/dsh-experimental-agent-team'
+const PACKAGE_NAME = '@phoenix-ai/dsh-agent-team'
 
 /** Cordis companion plugin name. */
 export const name = 'team-invariant'

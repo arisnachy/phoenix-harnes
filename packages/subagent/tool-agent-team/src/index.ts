@@ -3,8 +3,8 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
-import { TeamMessageId, TeamTaskId } from '@phoenix-ai/dsh-experimental-agent-team'
-import type { TeamMemberView } from '@phoenix-ai/dsh-experimental-agent-team'
+import { TeamMessageId, TeamTaskId } from '@phoenix-ai/dsh-agent-team'
+import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { InferValue, ValueSchemaSpec } from '@phoenix-ai/dsh-tools'
 
@@ -15,9 +15,13 @@ export const inject = ['agents', 'agentTeams', 'tools', 'systemPrompt']
 
 /** One deployment-owned LLM route for a teammate identity. */
 export interface TeamModelProfile {
+  /** Provider route used for this teammate profile. */
   readonly provider: string
+  /** Provider-specific model identifier. */
   readonly model: string
+  /** Optional maximum output-token budget for each request. */
   readonly maxTokens?: number
+  /** Optional provider reasoning tier for the teammate. */
   readonly reasoningEffort?: string
 }
 
@@ -252,13 +256,13 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const agentOptions: AgentOptions | undefined = profile === undefined
           ? undefined
           : {
-              provider: profile.provider,
-              model: profile.model,
-              ...profile.maxTokens === undefined ? {} : { maxTokens: profile.maxTokens },
-              ...profile.reasoningEffort === undefined
-                ? {}
-                : { reasoningEffort: profile.reasoningEffort as NonNullable<AgentOptions['reasoningEffort']> },
-            }
+            provider: profile.provider,
+            model: profile.model,
+            ...profile.maxTokens === undefined ? {} : { maxTokens: profile.maxTokens },
+            ...profile.reasoningEffort === undefined
+              ? {}
+              : { reasoningEffort: profile.reasoningEffort as NonNullable<AgentOptions['reasoningEffort']> },
+          }
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: args.name,
           description: args.description,
