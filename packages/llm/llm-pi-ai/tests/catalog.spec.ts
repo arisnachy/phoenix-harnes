@@ -647,15 +647,12 @@ describe('per-model reasoning efforts', () => {
     return model
   }
 
-  it('exposes reasoning for a Codex model entered manually before the bundled catalog knows its id', () => {
+  it('does not invent reasoning for a Codex model absent from the bundled catalog', () => {
     const model = modelOf({
       'openai-codex': { models: [{ id: 'gpt-future-sol' }] },
     }, 'openai-codex')
 
-    expect(model.reasoning).toBe(true)
-    expect(new Set(getSupportedThinkingLevels(model))).toEqual(new Set([
-      'low', 'medium', 'high', 'xhigh', 'max',
-    ]))
+    expect(model.reasoning).toBe(false)
   })
 
   it('declares selectable levels with their wire spellings on a hand-declared model', () => {
