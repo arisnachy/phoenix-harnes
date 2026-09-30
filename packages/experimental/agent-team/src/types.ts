@@ -110,6 +110,9 @@ export interface TeamTaskView {
   readonly writeScopeWarnings: string[]
 }
 
+/** Semantic purpose of one real peer message; used by supervision, routing, and presentation. */
+export type TeamMessagePurpose = 'assignment' | 'question' | 'blocker' | 'result' | 'review' | 'decision' | 'update'
+
 /** One peer message retained until its target Session records it. */
 export interface TeamMessageSnapshot {
   readonly id: TeamMessageId
@@ -118,6 +121,8 @@ export interface TeamMessageSnapshot {
   readonly targetId: SessionId
   /** Human-stable Team name captured at send time for transcript presentation. */
   readonly targetName?: string
+  /** Optional for backward replay; all newly queued messages persist one semantic purpose. */
+  readonly purpose?: TeamMessagePurpose
   readonly delivery: 'quiet' | 'wakeup'
   readonly content: ContentBlock[]
 }
@@ -140,6 +145,8 @@ export interface TeamMessageSource {
   readonly messageId: TeamMessageId
   readonly senderId: SessionId
   readonly senderName: string
+  /** Semantic purpose survives delivery so Phoenix Auto can route Kira without another classifier call. */
+  readonly purpose?: TeamMessagePurpose
 }
 
 declare module '@phoenix-ai/dsh-llm' {
@@ -183,6 +190,7 @@ export interface SpawnTeammateResult {
 export interface SendTeamMessageRequest {
   readonly target: string
   readonly content: ContentBlock[]
+  readonly purpose?: TeamMessagePurpose
   readonly delivery: 'quiet' | 'wakeup'
   readonly signal: AbortSignal
 }
