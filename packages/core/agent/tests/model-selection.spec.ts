@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import {
@@ -222,6 +222,154 @@ describe('installModelSelection()', () => {
       model: 'gpt-6-luna',
       reasoningEffort: ReasoningEffortId('max'),
     })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('keeps Phoenix Auto alive when Sol stops after planning before execution', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'read', description: 'read a file', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const steer = vi.fn()
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Arregla router.ts y ejecuta los tests.' }],
+        },
+      },
+      {
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 1,
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Voy a revisar router.ts y después ejecutaré los tests.' }],
+          },
+        },
+      },
+    ]
+    const agent = { session: { events }, steer } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+
+    expect(steer).toHaveBeenCalledTimes(1)
+    expect(steer).toHaveBeenCalledWith(expect.objectContaining({
+      content: [expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('<phoenix_auto_continue>'),
+      })],
+    }))
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('continues Phoenix Auto when an intermediate report announces pending work, but bounds nudges', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const steer = vi.fn()
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Revisa Phoenix y arregla lo que falle.' }],
+        },
+      },
+      {
+        type: 'tool/call',
+        data: { turn: 1, step: 2, callId: 'call-1', name: 'read', arguments: '{}' },
+      },
+      {
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 2,
+          message: {
+            role: 'assistant',
+            content: [{
+              type: 'text',
+              text: 'Para ir más rápido, usaré la vía directa para cada tarea y haré pruebas focalizadas.',
+            }],
+          },
+        },
+      },
+    ]
+    const agent = { session: { events }, steer } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+
+    expect(steer).toHaveBeenCalledTimes(2)
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('lets a genuinely completed Phoenix Auto action turn close', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const steer = vi.fn()
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Arregla router.ts y ejecuta los tests.' }],
+        },
+      },
+      {
+        type: 'tool/call',
+        data: { turn: 1, step: 2, callId: 'call-1', name: 'bash', arguments: '{}' },
+      },
+      {
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 2,
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: 'Corregí router.ts y ejecuté los tests: 24/24 pasan.' }],
+          },
+        },
+      },
+    ]
+    const agent = { session: { events }, steer } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+
+    expect(steer).not.toHaveBeenCalled()
 
     dispose()
     await ctx.fiber.dispose()
