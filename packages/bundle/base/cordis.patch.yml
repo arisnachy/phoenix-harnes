@@ -446,7 +446,7 @@
     # Real KIRA Team state lives in the Lead Session. Phoenix constrains one
     # operational team to two specialist teammates; Kira remains the Lead.
     - id: agent-team
-      name: '@phoenix-ai/dsh-experimental-agent-team'
+      name: '@phoenix-ai/dsh-agent-team'
       config:
         maxMembers: 2
         maxTasks: 64
