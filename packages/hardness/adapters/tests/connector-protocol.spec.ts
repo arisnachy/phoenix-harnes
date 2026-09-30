@@ -27,6 +27,8 @@ describe('PHOENIX connector operating protocol', () => {
 
   it('pins connector selection, auth recovery, discovery, UX, privacy, and automation behavior', () => {
     expect(CONNECTOR_OPERATING_PROTOCOL).toContain('Do not use a connector merely because one exists')
+    expect(CONNECTOR_OPERATING_PROTOCOL).toContain('Creating or editing an artifact, HTML page, website, app, game, document, script, dashboard, or local system does NOT imply connector work')
+    expect(CONNECTOR_OPERATING_PROTOCOL).toContain('Default to zero connector creation for ordinary artifact/app/site generation')
     expect(CONNECTOR_OPERATING_PROTOCOL).toContain('If the matching connector tool is already available and healthy, call it directly')
     expect(CONNECTOR_OPERATING_PROTOCOL).toContain('Call connector_list once')
     expect(CONNECTOR_OPERATING_PROTOCOL).toContain('connect-or-reconnect')
