@@ -49,7 +49,7 @@ export const Config: z<Config> = z.object({
 /** Model-facing collaboration guidance shared by Lead and teammates. */
 const POLICY = `Agent Teams is real shared work, not role-play. Create teammates when the user explicitly asks for a Team, or when the surrounding agent policy explicitly authorizes adaptive Team use for independent work. Never spawn a teammate only to make the interface look busy.
 
-Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Use team_react for a lightweight acknowledgement when prose would add no new information.
+Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Use team_react for a lightweight acknowledgement when prose would add no new information. Set the message purpose truthfully on every send; `blocker` is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model.
 
 Model profiles are deployment-configured engines, not visible identities. The teammate name/persona remains stable even when its underlying model route changes. A fresh JUDGE is cognitively independent only when its reported modelProvider or model differs from the Lead; when they match or are unknown, report operational independence only and record the correlated-model limitation. Never claim an independent review merely because the teammate has a different name.
 
@@ -279,12 +279,19 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           : 'Send a durable follow-up task to another Team member and start a turn when needed.',
         parameters: {
           target: { type: 'string', required: true, description: 'Team member name, or lead.' },
+          purpose: {
+            type: 'string',
+            required: true,
+            enum: ['assignment', 'question', 'blocker', 'result', 'review', 'decision', 'update'],
+            description: 'Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.',
+          },
           message: { type: 'string', required: true, description: 'Self-contained message for the target.' },
         },
         output: jsonOutput(SEND_VALUE_SCHEMA),
         execute(args, exec) {
           return ctx.agentTeams.sendMessage(callingAgent(exec.agent, toolName), {
             target: args.target,
+            purpose: args.purpose,
             content: [{ type: 'text', text: args.message }],
             delivery,
             signal: exec.signal,
