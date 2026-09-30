@@ -94,6 +94,9 @@ function normalizeWriteScope(values: readonly string[] | undefined): readonly st
 }
 
 function scopesOverlap(left: readonly string[] | undefined, right: readonly string[] | undefined): boolean {
+  // Two legacy unscoped writers preserve the pre-isolation behavior. Mission
+  // Runtime opts into hard workspace isolation by assigning explicit scopes.
+  if (left === undefined && right === undefined) return false
   if (left === undefined || right === undefined) return true
   return left.some(a => right.some(b => a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`)))
 }
