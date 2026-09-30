@@ -10,7 +10,6 @@ import { dirname } from 'node:path'
 import { z as zod } from 'zod'
 import type { Context } from '@phoenix-ai/cordis'
 import {
-  defaultExecutionHandoff,
   installModelSelection,
   isPhoenixCodexAutoSelection,
   PHOENIX_CODEX_AUTO_MODEL,
@@ -1245,7 +1244,9 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
       assembled: undefined,
     }
-    installModelSelection(agent.ctx, selection, defaultExecutionHandoff)
+    // A concrete picker choice is authoritative. Adaptive Sol/Luna routing is
+    // reserved for the synthetic Phoenix Auto row handled inside the selector.
+    installModelSelection(agent.ctx, selection)
     selections.set(agent, selection)
     return selection
   }

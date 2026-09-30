@@ -227,6 +227,42 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('keeps an explicit selection exact when adaptive handoff is not installed', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selected = {
+      provider: 'openai-codex',
+      model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('high'),
+    } as const
+    const selection: ModelSelectionRef = { current: selected, assembled: undefined }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'hola' }],
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = { provider: 'seed', model: 'seed', reasoningEffort: ReasoningEffortId('max') }
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(selected)
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(selected)
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('routes trivial GPT-6 Codex conversation to Luna/low without spending Max reasoning', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)

@@ -478,7 +478,9 @@ function phoenixAutoRoute(
  *
  * @param agentCtx - The selected Agent's scoped context.
  * @param selection - Mutable selection owned by the calling entry point.
- * @param handoff - Optional route for steps after the initial plan step.
+ * @param handoff - Optional adaptive route for internal callers. When omitted,
+ * an explicit user selection is dispatched exactly as selected; only Phoenix
+ * Auto may change models or reasoning effort on its own.
  * @returns Disposer for both scoped waterfall listeners.
  */
 export function installModelSelection(
@@ -508,7 +510,20 @@ export function installModelSelection(
       const resolved = await next()
       const selected = selection.assembled
       if (selected === undefined) return resolved
-      const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
+      // A concrete picker choice with no adaptive handoff is authoritative.
+      // Resolve this before reading turn text so an exact route is also the
+      // lowest-latency path; only Phoenix Auto needs to inspect the request.
+      if (!isPhoenixCodexAutoSelection(selected) && handoff === undefined) {
+        const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
+        return {
+          ...withoutInheritedEffort,
+          provider: selected.provider,
+          model: selected.model,
+          ...selected.reasoningEffort === undefined
+            ? {}
+            : { reasoningEffort: selected.reasoningEffort },
+        }
+      }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
       if (isPhoenixCodexAutoSelection(selected)) {
         const routed = phoenixAutoRoute(
@@ -528,6 +543,7 @@ export function installModelSelection(
             : { reasoningEffort: routed.reasoningEffort },
         }
       }
+      const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
       const conversation = _payload.step === 1
         && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
         ? defaultConversationalSelection(selected)
