@@ -443,6 +443,16 @@
       config:
         providerName: fork
 
+    # Real KIRA Team state lives in the Lead Session. Phoenix constrains one
+    # operational team to two specialist teammates; Kira remains the Lead.
+    - id: agent-team
+      name: '@phoenix-ai/dsh-experimental-agent-team'
+      config:
+        maxMembers: 2
+        maxTasks: 64
+        maxPendingMessagesPerMember: 16
+        maxMessageBytes: 16384
+
     # Continuable background children are selected per delegation tool. The
     # separately loaded follow-up tool registers the one global `send_message`.
     - id: tool-subagent-control
