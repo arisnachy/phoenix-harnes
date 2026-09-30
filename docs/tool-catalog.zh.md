@@ -31,7 +31,7 @@
 | `@phoenix-ai/dsh-tool-fs` | `edit`、`fs_status`、`read`、`read_image`、`write` | `ctx.tools`、`ctx.fs`、`ctx.systemPrompt`、`ctx.attachments (image-tool registration)`、`ctx.llm + an image-capable route (image-tool execution)` | `tool/call`、`fs/write-intent or fs/edit-intent for mutations`、`fs/observed after read presence/absence or successful file operation`、`durable attachment (read_image)`、`tool/result` | - | 先读后写／编辑策略由 `@phoenix-ai/dsh-fs-observation-policy` 添加；它是一个 `fs/*` 事件门禁插件，不会改变 schema。加载这些工具的部署按预期也应加载该插件。没有 `ctx.attachments` 时图片工具不会注册；其 schema 与路由无关，执行时除非确切路由的模型声明图片输入，否则拒绝。 |
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`、`grep` | `ctx.tools`、`ctx.subprocess`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn 随包提供的 ripgrep 二进制文件（`@vscode/ripgrep`），并作为普通前台调用运行，绝不作为后台任务；无需在宿主机安装 `rg`，也不经过 shell 层。本目录使用 `sampleOverCapGlobResults: true`；部署必须显式选择该行为。结果超过上限时，会通过可选的 ctx.spillStore 后端保存完整的格式化列表；在共置部署中，如果后端公开本地路径，返回的定位信息可供后续读取／搜索。 |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`、`terminal_list`、`terminal_open`、`terminal_read`、`terminal_send`、`terminal_signal` | `ctx.tools`、`ctx.terminals`、`ctx.systemPrompt`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | 这 6 个终端工具需要选择启用，用于补充一次性 bash／文件系统工具。`terminal_send(run_in_background: true)` 会注册到 `ctx.jobs`；schema 不包含 TUI、具名按键序列、BEL、调整尺寸、自动启动和跨 agent 共享。 |
-| `@phoenix-ai/dsh-tool-goal` | `create_goal`、`get_goal`、`specialist_lab`、`update_goal` | `ctx.tools`、`ctx.agents`、`ctx.goals`、`ctx.systemPrompt`、`a calling Agent in an authorized open turn` | `tool/call`、`goal/change for mutations`、`tool/result` | - | create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。 |
+| `@phoenix-ai/dsh-tool-goal` | `create_goal`、`get_goal`、`get_mission`、`organization_forge`、`specialist_lab`、`update_goal`、`update_mission_plan` | `ctx.tools`、`ctx.agents`、`ctx.goals`、`ctx.systemPrompt`、`a calling Agent in an authorized open turn` | `tool/call`、`goal/change for mutations`、`tool/result` | - | create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。 |
 | `@phoenix-ai/dsh-tool-home-gateway` | `home_control`、`home_list_devices` | `ctx.tools`、`ctx.home`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`Home Assistant request at execution time` | - | schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在操作员提供私有 endpoint、token 变量和两个 allowlist 前保持禁用。 |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list` | `ctx.tools`、`ctx.sessions`、Session 持久化、未来创建的 live 根 Agent | `tool/call`、`schedule/change create or delete`、`tool/result` | - | 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。 |
 | `@phoenix-ai/dsh-tool-living` | `living_act`、`living_forget_creation`、`living_get_connector_kit`、`living_inspect_creation`、`living_list_creations`、`living_read_state`、`living_register_creation`、`living_verify_creation` | `ctx.tools`、`ctx.living`、`ctx.systemPrompt` | `tool/call`、`durable living creation manifest`、`live creation state/actions/events through ctx.living`、`tool/result` | - | 通用、领域无关的控制表面：任意未来创建物类型自行描述状态、动作、事件、资源、参与者及目标集成级别；低于目标级别时验证会拒绝交付。 |
@@ -1050,6 +1050,19 @@ glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn �
 
 来源：[`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
 
+### `get_mission`
+
+读取当前目标的持久主计划、实时/持久 Agent 图以及最近的直接人类 steering。重启、上下文压缩后，或调整并行 worker 分工前使用此工具。
+
+```json
+{
+  "type": "object",
+  "properties": {}
+}
+```
+
+来源：[`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
+
 ### `organization_forge`
 
 Build one organization, business, or system as a durable Organization Forge. Research comparable solutions first, audit every reused asset before and after modification, keep Phoenix IT, Security, and R&D roles active, prefer deterministic automation, and require functional, tested, secure, observable, maintainable, documented evidence plus an independent judge before delivery. Forge is a modular capability over the mission system, not a replacement for it. Start with research; a failed work item or judge result remains active and nextAction points to the next recovery step. The final handoff question is not a completion substitute.
@@ -1554,6 +1567,92 @@ Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/
     "goal_id",
     "revision",
     "action"
+  ]
+}
+```
+
+来源：[`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
+
+### `update_mission_plan`
+
+替换当前目标确切 revision 对应的紧凑持久主计划。保持一个主计划，而不是每个 Round 都创建小计划。仅在重要证据或人类 steering 改变路线时更新。并行写入 worker 必须使用明确且互不重叠的相对 `write_scope`。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "goal_id": {
+      "type": "string",
+      "description": "Exact current goal id from get_goal/get_mission."
+    },
+    "revision": {
+      "type": "number",
+      "description": "Exact current goal revision."
+    },
+    "plan_revision": {
+      "type": "number",
+      "description": "Current plan revision, or 0 when initializing the first plan."
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "description": "Bounded explicit conditions that define mission completion.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered master-plan steps. Write scopes are relative workspace files/directories owned by that worker.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "done",
+              "blocked"
+            ]
+          },
+          "owner_agent_id": {
+            "type": "string"
+          },
+          "write_scope": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "status"
+        ]
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "description": "Only material decisions that future rounds must preserve.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "goal_id",
+    "revision",
+    "plan_revision",
+    "acceptance_criteria",
+    "steps"
   ]
 }
 ```
@@ -2414,7 +2513,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 
 ### `subagent`
 
-在干净上下文中编排独立任务，用 subagent 分担研究、限定范围的实现或验证。它不会消耗当前对话的上下文；subagent 返回最终结果而不是中间步骤。请提供带有范围、限制和证据要求的完整提示词；它看不到当前对话，因此要把所需信息写在提示词中。此调用默认等待结果。设置 `run_in_background: true` 可返回 job id；使用 `job_output` 收集结果，使用 `job_kill` 停止任务。
+在干净上下文中编排独立任务，用 subagent 分担研究、限定范围的实现或验证。它不会消耗当前对话的上下文；subagent 返回最终结果而不是中间步骤。请提供带有范围、限制和证据要求的完整提示词；它看不到当前对话，因此要把所需信息写在提示词中。此调用默认等待结果。设置 `run_in_background: true` 可返回 job id；使用 `job_output` 收集结果，使用 `job_kill` 停止任务。Phoenix 默认只使用一个 subagent；第二个仅用于真正独立的困难工作流。若两个 worker 都写入文件，必须分配互不重叠的 `write_scope`；只读审查 worker 使用 `read_only=true`。
 
 ```json
 {
@@ -2427,6 +2526,17 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     "prompt": {
       "type": "string",
       "description": "Describe en español la tarea autónoma del subagente, con archivos relevantes, límites y evidencia esperada. Devuelve solo el resultado verificable."
+    },
+    "read_only": {
+      "type": "boolean",
+      "description": "Set true for an analysis/review worker that must not modify workspace files. Read-only workers may safely overlap writers."
+    },
+    "write_scope": {
+      "type": "array",
+      "description": "Relative workspace files/directories this worker may modify. Required to run multiple writer agents safely; sibling writer scopes must not overlap.",
+      "items": {
+        "type": "string"
+      }
     },
     "hard_parallelism": {
       "type": "boolean",
