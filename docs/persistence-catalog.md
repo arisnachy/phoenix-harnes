@@ -849,7 +849,7 @@ Source: [`packages/subagent/subagent/src/descriptor.ts:37`](../packages/subagent
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMemberSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/experimental/agent-team/src/types.ts:211`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:257`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagedelivered--log-only"></a>
 
@@ -867,7 +867,24 @@ Source: [`packages/experimental/agent-team/src/types.ts:211`](../packages/experi
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMessageId](subsystems/agent-team.md)
 
-Source: [`packages/experimental/agent-team/src/types.ts:217`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:263`](../packages/subagent/agent-team/src/types.ts)
+
+<a id="teamreaction--log-only"></a>
+
+#### `team/reaction` — log-only
+
+```ts persistence-catalog
+/** Lightweight semantic reaction to a real Team message; stored only in the Team Lead Session. */
+'team/reaction': {
+  version: 1
+  teamId: TeamId
+  reaction: TeamReactionSnapshot
+}
+```
+
+Types: [TeamId](subsystems/agent-team.md) · [TeamReactionSnapshot](subsystems/agent-team.md)
+
+Source: [`packages/subagent/agent-team/src/types.ts:270`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagequeued--log-only"></a>
 
@@ -880,7 +897,7 @@ Source: [`packages/experimental/agent-team/src/types.ts:217`](../packages/experi
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamMessageSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/experimental/agent-team/src/types.ts:215`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:261`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teamtask--log-only"></a>
 
@@ -893,7 +910,7 @@ Source: [`packages/experimental/agent-team/src/types.ts:215`](../packages/experi
 
 Types: [TeamId](subsystems/agent-team.md) · [TeamTaskSnapshot](subsystems/agent-team.md)
 
-Source: [`packages/experimental/agent-team/src/types.ts:213`](../packages/experimental/agent-team/src/types.ts)
+Source: [`packages/subagent/agent-team/src/types.ts:259`](../packages/subagent/agent-team/src/types.ts)
 
 ### `todo/*`
 
