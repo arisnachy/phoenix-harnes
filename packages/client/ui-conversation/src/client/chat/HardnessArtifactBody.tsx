@@ -203,10 +203,18 @@ function DeclarativeUi({ record }: { readonly record: JsonRecord }) {
   )
 }
 
-function sandboxDocument(html: string): string {
+function sandboxDocument(html: string, executable: boolean): string {
+  // Static HTML previews cannot execute script, so allowing image fetches gives
+  // them the same visual fidelity as opening the document directly without
+  // granting the document any parent/app authority. Executable mini-apps keep
+  // outbound image requests blocked because script-created <img> requests could
+  // otherwise become a network exfiltration channel around connect-src 'none'.
+  const imageSources = executable
+    ? 'img-src data: blob:'
+    : 'img-src data: blob: https: http:'
   const csp = [
     "default-src 'none'",
-    'img-src data: blob:',
+    imageSources,
     'media-src data: blob:',
     'font-src data:',
     "style-src 'unsafe-inline'",
@@ -233,7 +241,7 @@ interface MiniAppProps {
 function MiniApp({ html, title, executable = false }: MiniAppProps) {
   const [frameHeight, setFrameHeight] = useState(1)
   const frameRef = useRef<HTMLIFrameElement>(null)
-  const srcDoc = useMemo(() => sandboxDocument(html), [html])
+  const srcDoc = useMemo(() => sandboxDocument(html, executable), [html, executable])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -277,6 +285,7 @@ function MiniApp({ html, title, executable = false }: MiniAppProps) {
       title={title}
       srcDoc={srcDoc}
       sandbox={executable ? 'allow-scripts' : 'allow-same-origin'}
+      referrerPolicy="no-referrer"
       style={{ height: frameHeight }}
       onLoad={measureStaticDocument}
     />
