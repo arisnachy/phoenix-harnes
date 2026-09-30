@@ -439,17 +439,18 @@ function phoenixAutoRoute(
       }
     }
     if (phoenixAutoTaskRequest(directText)) {
-      return phoenixAutoNeedsPlanner(directText)
-        ? {
-            provider: 'openai-codex',
-            model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-            reasoningEffort: ReasoningEffortId('medium'),
-          }
-        : {
-            provider: 'openai-codex',
-            model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-            reasoningEffort: ReasoningEffortId('max'),
-          }
+      if (phoenixAutoNeedsPlanner(directText)) {
+        return {
+          provider: 'openai-codex',
+          model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+          reasoningEffort: ReasoningEffortId('medium'),
+        }
+      }
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
+      }
     }
     return {
       provider: 'openai-codex',
