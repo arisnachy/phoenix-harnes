@@ -67,6 +67,9 @@ export function apply(ctx: Context, config: Config): void {
     const occurredAt = typeof event.time === 'number' ? event.time : Date.now()
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
     const projectId = ctx.learningMemory.currentProjectId()
+    if (session.header.origin === 'subagent' && session.header.parentSession !== undefined) {
+      experience.linkChildSession(String(session.header.parentSession), sessionId)
+    }
 
     if (eventType === 'user/message') {
       const text = messageText(data)
@@ -75,7 +78,7 @@ export function apply(ctx: Context, config: Config): void {
         occurredAt,
         ...projectId === undefined ? {} : { projectId },
       })
-      if (isDirectUserMessage(data)) {
+      if (session.header.origin !== 'subagent' && isDirectUserMessage(data)) {
         experience.beginTask({
           sessionId,
           text,
