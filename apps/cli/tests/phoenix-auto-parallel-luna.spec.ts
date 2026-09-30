@@ -21,6 +21,8 @@ describe('Phoenix Auto parallel Luna delegation', () => {
       expect(content).toContain('maxTotalAgents: 2')
       expect(content).toContain('GPT-6 Luna Max')
       expect(content).toContain('workflow')
+      expect(content).toContain('<phoenix_auto_efficiency_contract>')
+      expect(content).not.toContain('Only close the mission after the independent judge returns PASS')
       expect(content).not.toContain('model: gpt-5.6-luna\n          reasoningEffort: xhigh')
     }
   })
