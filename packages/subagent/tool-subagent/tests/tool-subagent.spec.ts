@@ -1279,8 +1279,8 @@ describe('dsh-tool-subagent background mode', () => {
     // Direct apply preserves omitted agentOptions instead of applying schema defaults.
     tool.apply(ctx, { provider: 'hanging', toolName: 'subagent_hang' })
 
-    const startOne = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h1'), name: 'subagent_hang', arguments: { description: 'one', prompt: 'p', run_in_background: true }, agent: parent })
-    const startTwo = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h2'), name: 'subagent_hang', arguments: { description: 'two', prompt: 'p', run_in_background: true, hard_parallelism: true }, agent: parent })
+    const startOne = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h1'), name: 'subagent_hang', arguments: { description: 'one', prompt: 'p', run_in_background: true, read_only: true }, agent: parent })
+    const startTwo = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h2'), name: 'subagent_hang', arguments: { description: 'two', prompt: 'p', run_in_background: true, hard_parallelism: true, read_only: true }, agent: parent })
     expect(text(startOne)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-1)')
     expect(text(startTwo)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-2)')
 
@@ -1441,6 +1441,7 @@ describe('dsh-tool-subagent continuable background mode', () => {
         description,
         prompt: 'work',
         run_in_background: true,
+        read_only: true,
         ...(hardParallelism ? { hard_parallelism: true } : {}),
       },
       agent: parent,

@@ -83,7 +83,7 @@ function normalizeWriteScope(values: readonly string[] | undefined): readonly st
     throw new Error(`write_scope must contain 1..${String(MAX_WRITE_SCOPES)} relative workspace paths`)
   }
   const normalized = values.map((value) => {
-    const scope = value.replaceAll('\\\\', '/').replace(/^\.\//u, '').replace(/\/$/u, '').trim()
+    const scope = value.replaceAll('\\', '/').replace(/^\.\//u, '').replace(/\/$/u, '').trim()
     if (scope.length === 0 || scope.length > MAX_WRITE_SCOPE_LENGTH
       || scope.startsWith('/') || /^[A-Za-z]:\//u.test(scope) || scope.split('/').includes('..')) {
       throw new Error('write_scope entries must be bounded relative workspace paths')
