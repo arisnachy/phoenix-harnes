@@ -78,6 +78,16 @@ const REACTION_ICON: Readonly<Record<KiraTeamReactionChatData['reaction'], strin
   done: '✅',
 }
 
+const PURPOSE_LABEL: Readonly<Record<NonNullable<KiraTeamMessageChatData['purpose']>, string>> = {
+  assignment: 'Asignación',
+  question: 'Pregunta',
+  blocker: 'Bloqueo',
+  result: 'Resultado',
+  review: 'Revisión',
+  decision: 'Decisión',
+  update: 'Actualización',
+}
+
 function textOf(content: readonly unknown[]): string {
   return content.flatMap((block) => {
     if (typeof block !== 'object' || block === null || Array.isArray(block)) return []
@@ -132,6 +142,9 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
         <div className={css.meta}>
           <strong>{sender.name}</strong>
           <span>{sender.role}</span>
+          {data.purpose !== undefined && data.purpose !== 'update' && (
+            <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
+          )}
           {target !== undefined && <span className={css.target}>→ {target.name}</span>}
         </div>
         <div className={css.bubble}>
