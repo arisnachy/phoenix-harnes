@@ -124,6 +124,8 @@ describe('dsh-tool-team', () => {
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
     expect(leadPrompt).toContain('real shared work, not role-play')
+    expect(leadPrompt).toContain('Phoenix Auto is explicitly authorized to use this Team path')
+    expect(leadPrompt).toContain('prefer spawn_teammate over legacy subagent delegation')
     expect(leadPrompt).toContain('FS_STALE_VERSION')
     expect(leadPrompt).toContain('Bash, formatters, code generators, and scripts are not fully protected')
     expect(leadPrompt).toContain('Task readiness never starts an owner')
