@@ -215,10 +215,12 @@ describe('dsh-tool-team', () => {
   })
 
   it('rejects a dangling default model profile before touching Team runtime services', () => {
-    expect(() => toolTeam.apply(new Context(), {
-      defaultModelProfile: 'missing',
-      modelProfiles: {},
-    })).toThrow('defaultModelProfile "missing" is not declared in modelProfiles')
+    expect(() => {
+      toolTeam.apply(new Context(), {
+        defaultModelProfile: 'missing',
+        modelProfiles: {},
+      })
+    }).toThrow('defaultModelProfile "missing" is not declared in modelProfiles')
   })
 
   it('returns actionable no-progress output and renders structured wait cancellation', async () => {
