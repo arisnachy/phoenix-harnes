@@ -1,4 +1,4 @@
-/** Web KIRA teams overlay: fixed activity-strip and agent-rail registration. */
+/** Web KIRA teams overlay: center-column activity-strip and agent-rail registration. */
 import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@phoenix-ai/dsh-client-runtime/client'
 import { KiraTeamsDock } from './KiraTeamsDock.tsx'
 import { KiraTeamMessageView } from './TeamChatMessage.tsx'
@@ -19,7 +19,7 @@ export type { KiraTeamsDockProps, KiraTeamsInjected } from './KiraTeamsDock.tsx'
 /** Required services for the KIRA mission-control overlay contribution. */
 export const inject = ['sessions', 'slots', 'locale', 'layout']
 
-/** Register the KIRA activity strip and rail as an overlay so agents never consume chat width. */
+/** Register the KIRA activity strip and rail inside the center-column overlay so agents never consume chat width or cover the sidebar. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-kira-teams: dictionaries')
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
