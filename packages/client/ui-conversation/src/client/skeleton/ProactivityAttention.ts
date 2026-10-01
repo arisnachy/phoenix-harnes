@@ -68,6 +68,7 @@ function attentionStorage(): Storage | undefined {
  * Read durable acknowledgement ids for Hero attention rows.
  * A row id includes its occurrence timestamp, so acknowledging one result never
  * hides a later result from the same recurring task.
+ * @returns A detached set of reviewed attention-row ids.
  */
 export function acknowledgedProactivityAttentionIds(): ReadonlySet<string> {
   const storage = attentionStorage()
@@ -81,7 +82,10 @@ export function acknowledgedProactivityAttentionIds(): ReadonlySet<string> {
   }
 }
 
-/** Persist one Hero attention row as reviewed without mutating the underlying task. */
+/**
+ * Persist one Hero attention row as reviewed without mutating the underlying task.
+ * @param id - Stable occurrence-specific attention row id.
+ */
 export function acknowledgeProactivityAttention(id: string): void {
   const normalized = id.trim()
   if (normalized.length === 0) return
