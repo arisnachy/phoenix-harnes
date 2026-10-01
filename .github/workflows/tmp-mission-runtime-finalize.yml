@@ -106,3 +106,5 @@ jobs:
           git add -A
           git commit -m "test(mission): finalize generated Mission Runtime contracts"
           git push origin HEAD:feat/mission-runtime-final-20261001
+
+# Triggered after registration.
