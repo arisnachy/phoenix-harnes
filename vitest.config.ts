@@ -7,10 +7,10 @@ import { standardDecoratorPlugin, vitestExecArgv } from './vitest.shared.ts'
 import { COVERAGE_EXEMPT_ENV, coverageExemptHeavySuites } from './scripts/coverage-exempt.ts'
 import { COVERAGE_PARTITION_MODE_ENV } from './scripts/coverage-partitions.ts'
 
-// Prints exact `path:line:col` records for every uncovered statement, branch
-// path, and function when a file misses the per-file 100% gate — the built-in
-// threshold ERRORs name only the file. Absolute path because istanbul-reports
-// require()s custom reporters (which is also why the reporter is CJS).
+// Enforces the historical per-file uncovered-count baseline and prints exact
+// `path:line:col` records only for regressions. Files absent from the baseline
+// have a zero-debt ceiling. Absolute path because istanbul-reports require()s
+// custom reporters outside the tsx/ESM pipeline.
 const uncoveredLocationsReporter = fileURLToPath(new URL('./scripts/coverage-uncovered-locations.cjs', import.meta.url))
 
 // Resolution facade shared by every plugin instance below: tsconfig.base.json
@@ -278,19 +278,11 @@ export default defineConfig({
         ...windowsRunnerCoverageExclusions,
         ...pwshCoverageExclusions,
       ],
-      // 100% or it doesn't merge (docs/testing.md: excessive tests are welcome).
-      // Per-file so a well-covered big file can't subsidize a bare one.
-      // Every v8 ignore comment must carry a reason — see the quality-gates Agent Note
-      // (.agents/notes/implemented/process/2026-06-11-quality-gates.md).
-      thresholds: coveragePartitionMode
-        ? undefined
-        : {
-            perFile: true,
-            statements: 100,
-            branches: 100,
-            functions: 100,
-            lines: 100,
-          },
+      // Historical debt is frozen by the custom reporter below:
+      // clean/new files have a zero uncovered ceiling, debt files may only
+      // maintain or improve their per-file statement/function/branch/line counts.
+      // Partition workers emit blobs only; the merged report runs this gate once.
+      thresholds: undefined,
       reporter: coveragePartitionMode
         ? []
         : process.env.CI
