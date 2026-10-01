@@ -70,6 +70,20 @@ describe('Phoenix tsdown performance policy', () => {
     }
   })
 
+  it('does not crash when a stale workspace directory has no package.json', async () => {
+    const cwd = await mkdtemp(join(tmpdir(), 'phoenix-tsdown-orphan-'))
+    try {
+      const optimized = optimizePhoenixTsdownInput({
+        cwd,
+        plugins: [{ name: 'tsdown:deps' }, { name: 'keep-me' }],
+      })
+      expect(optimized.external).toBeUndefined()
+      expect(JSON.stringify(optimized.plugins)).toBe('[{"name":"keep-me"}]')
+    } finally {
+      await rm(cwd, { recursive: true, force: true })
+    }
+  })
+
   it('keeps browser bundles self-contained except for their explicit native externals', () => {
     const optimized = optimizePhoenixTsdownInput(
       { plugins: [{ name: 'tsdown:deps' }, { name: 'keep-me' }] },

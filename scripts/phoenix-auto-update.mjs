@@ -20,7 +20,7 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, unlinkSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
@@ -419,6 +419,29 @@ function sameRepositoryWorktree(root, stage) {
     : rootCommon === stageCommon
 }
 
+/**
+ * Remove package-shaped directories left behind by an older persistent staging
+ * build after the package itself moved or was deleted. git clean -fd preserves
+ * ignored descendants (for example lib/ or node_modules), so those orphaned
+ * directories can still match tsdown's packages/*/* workspace glob even though
+ * their package.json no longer exists.
+ */
+function pruneOrphanedPackageWorkspaces(root) {
+  const packagesRoot = join(root, 'packages')
+  if (!existsSync(packagesRoot)) return
+  for (const group of readdirSync(packagesRoot, { withFileTypes: true })) {
+    if (!group.isDirectory()) continue
+    const groupRoot = join(packagesRoot, group.name)
+    for (const leaf of readdirSync(groupRoot, { withFileTypes: true })) {
+      if (!leaf.isDirectory()) continue
+      const packageRoot = join(groupRoot, leaf.name)
+      if (existsSync(join(packageRoot, 'package.json'))) continue
+      rmSync(packageRoot, { recursive: true, force: true })
+      console.error(`[PHOENIX UPDATE] removed stale workspace residue ${packageRoot}`)
+    }
+  }
+}
+
 function ensureStagingWorktree(root, target) {
   const stage = stageDirectory(root)
   if (existsSync(stage)) {
@@ -428,6 +451,7 @@ function ensureStagingWorktree(root, target) {
     console.error(`[PHOENIX UPDATE] reusing persistent staging worktree ${stage}`)
     git(stage, ['reset', '--hard', target], { inherit: true })
     git(stage, ['clean', '-fd'], { allowFailure: true })
+    pruneOrphanedPackageWorkspaces(stage)
     return stage
   }
   console.error(`[PHOENIX UPDATE] creating persistent staging worktree ${stage}`)

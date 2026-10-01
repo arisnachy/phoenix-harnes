@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 interface PackageManifest {
@@ -45,7 +45,16 @@ function escapeSpecifier(value: string): string {
 function packageManifest(cwd: string): PackageManifest {
   const cached = manifestCache.get(cwd)
   if (cached !== undefined) return cached
-  const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as PackageManifest
+  const path = join(cwd, 'package.json')
+  // Persistent updater staging can briefly expose an orphaned workspace
+  // directory left by an older package location. Treat it as having no
+  // production dependencies instead of crashing the entire build.
+  if (!existsSync(path)) {
+    const manifest: PackageManifest = {}
+    manifestCache.set(cwd, manifest)
+    return manifest
+  }
+  const manifest = JSON.parse(readFileSync(path, 'utf8')) as PackageManifest
   manifestCache.set(cwd, manifest)
   return manifest
 }
