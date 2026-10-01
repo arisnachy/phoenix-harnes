@@ -133,7 +133,7 @@ export class TeamMailbox {
         senderName: membership.name,
         targetId: target.id,
         targetName: target.name,
-        purpose: request.purpose ?? 'update',
+        ...request.purpose === undefined ? {} : { purpose: request.purpose },
         delivery: request.delivery,
         content,
       }
@@ -317,7 +317,7 @@ export class TeamMailbox {
   /** Frame peer content with stable sender and message identity for the receiving model. */
   private deliveryContent(message: TeamMessageSnapshot): ContentBlock[] {
     return [
-      { type: 'text', text: `Team message ${message.id} from ${message.senderName} [${message.purpose ?? 'update'}]:` },
+      { type: 'text', text: `Team message ${message.id} from ${message.senderName}${message.purpose === undefined ? '' : ` [${message.purpose}]`}:` },
       ...structuredClone(message.content),
     ]
   }
