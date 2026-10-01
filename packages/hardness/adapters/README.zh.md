@@ -14,13 +14,15 @@ Phoenix 为每个持久 ledger 维护一个进程共享的 task engine。默认 
 
 `phoenix_task_create` 用于调度用户请求或 Phoenix 主动发起的未来工作。支持一次性任务、带锚点的 interval recurrence，以及 calendar-safe yearly recurrence。Yearly recurrence 可接受 IANA timezone，使生日和纪念日在闰年与时区变化下仍保持预期的本地日历日期。`phoenix_task_list`、`phoenix_task_pause`、`phoenix_task_resume` 与 `phoenix_task_cancel` 提供面向模型的管理界面。
 
-每个 occurrence 都具有稳定的 idempotency key 和不可变执行历史。重启后发现处于 `running` 状态的 task 会恢复为 `scheduled`。如果电脑在到期时间处于关机状态，catch-up policy 决定恢复方式：`latest` 只运行最新一次遗漏 occurrence，`all` 在有界范围内重放遗漏 occurrence，`skip` 跳过旧工作并推进调度。Recurrence 始终保持原始锚点，不会从 Phoenix 实际重启的时间开始漂移。
+每个 occurrence 都具有稳定的 idempotency key 和不可变执行历史。在模型或外部工作开始之前，Phoenix 会先持久化 active-run lease。重启后，retry-safe 工作会恢复为 `scheduled`；如果配置为 `at-most-once` 的 delivery 结果不确定，则会标记为 failed，避免盲目重复 email、Drive upload 或类似外部写操作。如果电脑在到期时间处于关机状态，catch-up policy 会在 Phoenix 再次启动后决定恢复方式：`latest` 只运行最新一次遗漏 occurrence，`all` 在有界范围内重放遗漏 occurrence，`skip` 跳过旧工作并推进调度。Recurrence 始终保持原始锚点，不会从 Phoenix 实际重启的时间开始漂移。持久的本地调度并不表示机器和 Phoenix 进程都停止时仍能远程执行。
 
 Task 可以使用 `visibility: surprise`。在 reveal time 之前，它不会出现在普通列表中；如果 recurring surprise 没有显式 reveal time，则直到当前 delivery occurrence 才显示。可选的私有 preparation 可以在 delivery 前按配置的 lead time 执行，其有界结果会传递给 reveal step。Surprise 内容仍保存在持久内部 ledger 中供 recovery 与 audit 使用；这是 presentation-private 功能，不是不可审计的秘密通道。
 
 Host 会轮询持久 engine，并在 agent 创建时主动 pump。Chat delivery 通过 proactive follow-up 唤醒在线目标 agent。私有 preparation、定时 office work 与 email 使用配置的一次性 subagent provider。若不存在在线 execution target，则 execution 会延后，不会消耗该 occurrence。
 
-循环 `delivery: work` 任务可以维护用户明确要求的持续目标，例如研究、课程准备、项目监控或体育分析。执行时会重新验证现实状态，并可使用已经授权的 MCP/connector；持久兴趣授权分析，而不是外部交易。实质结果会进入有界排序的 loopback attention 投影，没有变化的循环运行可以返回 `NO_MATERIAL_UPDATE`，浏览器只在空白会话 Hero 中显示价值最高的少量信息。可选的 task attention metadata 只控制结果或 upcoming occurrence 是否参与展示，不会改变任务执行。
+循环 `delivery: work` 任务可以维护用户明确要求的持续目标，例如研究、课程准备、项目监控或体育分析。执行时会重新验证现实状态，并可使用已经授权的 MCP/connector；持久兴趣授权分析，而不是外部交易。自主工作默认使用 `resourcePolicy: free-first`；通过模型工具创建的循环 background work 默认在滚动 24 小时内最多进行 12 次 delivery attempt；task history 也有上限，因此长期 mission 不会无限扩大 ledger。实质结果会进入有界排序的 loopback attention 投影，没有变化的循环运行可以返回 `NO_MATERIAL_UPDATE`，浏览器只在空白会话 Hero 中显示价值最高的少量信息。可选的 task attention metadata 只控制结果或 upcoming occurrence 是否参与展示，不会改变任务执行。
+
+Artifact delivery 同样由 policy 控制。`inline` 将结果保留在本地/当前输出中；`auto` 对小结果保持 inline，并可在文件型输出确实有用时使用已经授权的 Google Drive connector；`drive-link` 则明确优先创建一个 canonical Drive artifact 并返回其链接。这些模式都不会主动发起授权、购买 quota 或授予额外权限。能够产生外部写操作的 delivery 默认采用 `at-most-once` 重启处理；只有确认 replay 无害时，caller 才应选择 `retry-safe`。
 
 Email 有两个独立 identity reference。`userMailIdentity` 表示获授权的用户 mailbox，用于代表用户发送 office work；`harnessMailIdentity` 表示 Phoenix 自己的 mailbox，用于直接与用户通信。Task 可选择 `user`、`harness` 或 `auto`；`auto` 优先使用 Phoenix identity，并在不可用时回退到 user identity。这些 reference 不包含 credential，scheduled execution 也不会绕过正常的 mail-tool authorization 或 approval。
 

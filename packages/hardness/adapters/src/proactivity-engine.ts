@@ -22,6 +22,20 @@ export type ProactivityHistoryStatus = 'completed' | 'failed'
 export type ProactivityAttentionMode = 'auto' | 'result' | 'upcoming' | 'off'
 /** Relative ranking among otherwise comparable attention signals. */
 export type ProactivityAttentionPriority = 'low' | 'normal' | 'high'
+/** Cost posture for autonomous work. */
+export type ProactivityResourcePolicy = 'free-first' | 'balanced' | 'unrestricted'
+/** Where file-like results should be delivered when a task produces an artifact. */
+export type ProactivityArtifactDelivery = 'inline' | 'auto' | 'drive-link'
+/** Restart behavior for work that may have performed an external write before a crash. */
+export type ProactivitySideEffectPolicy = 'retry-safe' | 'at-most-once'
+
+/** Durable lease persisted before one occurrence starts external/model work. */
+export interface ProactivityActiveRun {
+  readonly phase: ProactivityPhase
+  readonly scheduledFor: string
+  readonly idempotencyKey: string
+  readonly startedAt: string
+}
 
 /** Supported recurrence forms. Interval schedules stay anchored; yearly schedules preserve local calendar time. */
 export type ProactivityRecurrence =
@@ -68,6 +82,16 @@ export interface ProactivityTask {
   readonly attentionPriority?: ProactivityAttentionPriority
   /** Optional concise copy for an upcoming occurrence. */
   readonly attentionText?: string
+  /** Autonomous resource posture. free-first never authorizes paid upgrades or purchases. */
+  readonly resourcePolicy: ProactivityResourcePolicy
+  /** Rolling 24-hour cap on delivery attempts. Omitted means no task-specific cap. */
+  readonly maxRunsPerDay?: number
+  /** Artifact delivery policy for file-like results. */
+  readonly artifactDelivery: ProactivityArtifactDelivery
+  /** Whether an interrupted external-write-capable occurrence may be retried automatically. */
+  readonly sideEffectPolicy: ProactivitySideEffectPolicy
+  /** Persisted in-flight lease used to avoid duplicate side effects after restart. */
+  readonly activeRun?: ProactivityActiveRun
   readonly status: ProactivityTaskStatus
   readonly history: readonly ProactivityHistoryEntry[]
 }
@@ -96,6 +120,14 @@ export interface CreateProactivityTaskInput {
   readonly attentionPriority?: ProactivityAttentionPriority
   /** Optional concise copy for an upcoming occurrence. */
   readonly attentionText?: string
+  /** Resource policy for scheduled autonomous work. */
+  readonly resourcePolicy?: ProactivityResourcePolicy
+  /** Rolling 24-hour cap on delivery attempts. */
+  readonly maxRunsPerDay?: number
+  /** Artifact delivery policy for file-like results. */
+  readonly artifactDelivery?: ProactivityArtifactDelivery
+  /** Restart policy for an occurrence that may already have performed an external write. */
+  readonly sideEffectPolicy?: ProactivitySideEffectPolicy
 }
 
 /** Input delivered to the host executor for one phase of one occurrence. */
@@ -136,6 +168,8 @@ export interface ProactivityStore {
 export interface ProactivityEngineOptions {
   readonly id?: () => string
   readonly maxCatchUpOccurrences?: number
+  /** Maximum retained immutable execution rows per task. */
+  readonly maxHistoryEntries?: number
 }
 
 /** Options for projecting tasks to a caller. */
@@ -279,7 +313,18 @@ function addYears(scheduledFor: string, everyYears: number, timezone?: string): 
 }
 
 function cloneTask(task: ProactivityTask): ProactivityTask {
-  return { ...task, recurrence: { ...task.recurrence }, history: task.history.map(entry => ({ ...entry })) }
+  return {
+    ...task,
+    recurrence: { ...task.recurrence },
+    ...(task.activeRun === undefined ? {} : { activeRun: { ...task.activeRun } }),
+    history: task.history.map(entry => ({ ...entry })),
+  }
+}
+
+function withoutActiveRun(task: ProactivityTask): ProactivityTask {
+  const clone = { ...task } as ProactivityTask & { activeRun?: ProactivityActiveRun }
+  delete clone.activeRun
+  return clone
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -311,6 +356,23 @@ function parseHistory(value: unknown): ProactivityHistoryEntry[] {
       ...(raw.error === undefined ? {} : { error: raw.error }),
     }
   })
+}
+
+function parseActiveRun(value: unknown): ProactivityActiveRun | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)
+    || (value.phase !== 'prepare' && value.phase !== 'deliver')
+    || typeof value.scheduledFor !== 'string'
+    || typeof value.idempotencyKey !== 'string'
+    || typeof value.startedAt !== 'string') {
+    throw new Error('invalid proactivity activeRun')
+  }
+  return {
+    phase: value.phase,
+    scheduledFor: iso(value.scheduledFor, 'activeRun.scheduledFor'),
+    idempotencyKey: nonEmpty(value.idempotencyKey, 'activeRun.idempotencyKey'),
+    startedAt: iso(value.startedAt, 'activeRun.startedAt'),
+  }
 }
 
 function parseRecurrence(raw: Record<string, unknown>): ProactivityRecurrence {
@@ -361,6 +423,19 @@ function parseTask(raw: unknown): ProactivityTask {
     && raw.attentionPriority !== 'low' && raw.attentionPriority !== 'normal'
     && raw.attentionPriority !== 'high') throw new Error('invalid attentionPriority')
   if (raw.attentionText !== undefined && typeof raw.attentionText !== 'string') throw new Error('invalid attentionText')
+  if (raw.resourcePolicy !== undefined
+    && raw.resourcePolicy !== 'free-first' && raw.resourcePolicy !== 'balanced'
+    && raw.resourcePolicy !== 'unrestricted') throw new Error('invalid resourcePolicy')
+  if (raw.maxRunsPerDay !== undefined && typeof raw.maxRunsPerDay !== 'number') throw new Error('invalid maxRunsPerDay')
+  if (raw.artifactDelivery !== undefined
+    && raw.artifactDelivery !== 'inline' && raw.artifactDelivery !== 'auto'
+    && raw.artifactDelivery !== 'drive-link') throw new Error('invalid artifactDelivery')
+  if (raw.sideEffectPolicy !== undefined
+    && raw.sideEffectPolicy !== 'retry-safe' && raw.sideEffectPolicy !== 'at-most-once') throw new Error('invalid sideEffectPolicy')
+  const delivery = raw.delivery
+  const artifactDelivery = raw.artifactDelivery
+    ?? (delivery === 'work' || delivery === 'email' ? 'auto' : 'inline')
+  const activeRun = parseActiveRun(raw.activeRun)
   return {
     id: nonEmpty(raw.id, 'id'),
     title: nonEmpty(raw.title, 'title'),
@@ -383,6 +458,12 @@ function parseTask(raw: unknown): ProactivityTask {
     ...(raw.attentionMode === undefined ? {} : { attentionMode: raw.attentionMode }),
     ...(raw.attentionPriority === undefined ? {} : { attentionPriority: raw.attentionPriority }),
     ...(raw.attentionText === undefined ? {} : { attentionText: boundedNonEmpty(raw.attentionText, 'attentionText', 320) }),
+    resourcePolicy: raw.resourcePolicy ?? 'free-first',
+    ...(raw.maxRunsPerDay === undefined ? {} : { maxRunsPerDay: finitePositive(raw.maxRunsPerDay, 'maxRunsPerDay') }),
+    artifactDelivery,
+    sideEffectPolicy: raw.sideEffectPolicy
+      ?? (delivery === 'email' || artifactDelivery !== 'inline' ? 'at-most-once' : 'retry-safe'),
+    ...(activeRun === undefined ? {} : { activeRun }),
     status: raw.status,
     history: parseHistory(raw.history),
   }
@@ -476,6 +557,7 @@ export class ProactivityEngine {
   private recovered = false
   private readonly id: () => string
   private readonly maxCatchUpOccurrences: number
+  private readonly maxHistoryEntries: number
 
   constructor(
     private readonly store: ProactivityStore,
@@ -484,6 +566,7 @@ export class ProactivityEngine {
   ) {
     this.id = options.id ?? randomUUID
     this.maxCatchUpOccurrences = finitePositive(options.maxCatchUpOccurrences ?? 32, 'maxCatchUpOccurrences')
+    this.maxHistoryEntries = finitePositive(options.maxHistoryEntries ?? 128, 'maxHistoryEntries')
   }
 
   private exclusive<T>(operation: () => Promise<T>): Promise<T> {
@@ -500,6 +583,20 @@ export class ProactivityEngine {
     const snapshot: ProactivitySnapshot = { version: 1, tasks: tasks.map(cloneTask) }
     await this.store.save(snapshot)
     this.state = snapshot
+  }
+
+  private retainHistory(history: readonly ProactivityHistoryEntry[]): readonly ProactivityHistoryEntry[] {
+    return history.length <= this.maxHistoryEntries
+      ? history
+      : history.slice(history.length - this.maxHistoryEntries)
+  }
+
+  private deliveryBudgetExhausted(task: ProactivityTask, nowMs: number): boolean {
+    if (task.maxRunsPerDay === undefined) return false
+    const cutoff = nowMs - 24 * 60 * 60 * 1000
+    const attempts = task.history.filter(row =>
+      row.phase === 'deliver' && Date.parse(row.startedAt) >= cutoff).length
+    return attempts >= task.maxRunsPerDay
   }
 
   /**
@@ -527,6 +624,12 @@ export class ProactivityEngine {
           ...(recurrence.timezone === undefined ? {} : { timezone: canonicalTimezone(recurrence.timezone, 'recurrence.timezone') }),
         }
         : { ...recurrence }
+      const delivery = input.delivery ?? 'chat'
+      const artifactDelivery = input.artifactDelivery
+        ?? (delivery === 'work' || delivery === 'email' ? 'auto' : 'inline')
+      const sideEffectPolicy = input.sideEffectPolicy
+        ?? (delivery === 'email' || artifactDelivery !== 'inline' ? 'at-most-once' : 'retry-safe')
+      if (input.maxRunsPerDay !== undefined) finitePositive(input.maxRunsPerDay, 'maxRunsPerDay')
       const task: ProactivityTask = {
         id: nonEmpty(this.id(), 'id'),
         title: nonEmpty(input.title, 'title'),
@@ -542,13 +645,17 @@ export class ProactivityEngine {
         ...(input.preparationInstruction === undefined ? {} : { preparationInstruction: nonEmpty(input.preparationInstruction, 'preparationInstruction') }),
         ...(input.prepareLeadMs === undefined ? {} : { prepareLeadMs: finitePositive(input.prepareLeadMs, 'prepareLeadMs') }),
         ...(input.condition === undefined ? {} : { condition: nonEmpty(input.condition, 'condition') }),
-        delivery: input.delivery ?? 'chat',
+        delivery,
         senderIdentity: input.senderIdentity ?? 'auto',
         ...(input.recipient === undefined ? {} : { recipient: nonEmpty(input.recipient, 'recipient') }),
         ...(input.targetAgentId === undefined ? {} : { targetAgentId: nonEmpty(input.targetAgentId, 'targetAgentId') }),
         ...(input.attentionMode === undefined ? {} : { attentionMode: input.attentionMode }),
         ...(input.attentionPriority === undefined ? {} : { attentionPriority: input.attentionPriority }),
         ...(input.attentionText === undefined ? {} : { attentionText: boundedNonEmpty(input.attentionText, 'attentionText', 320) }),
+        resourcePolicy: input.resourcePolicy ?? 'free-first',
+        ...(input.maxRunsPerDay === undefined ? {} : { maxRunsPerDay: input.maxRunsPerDay }),
+        artifactDelivery,
+        sideEffectPolicy,
         status: 'scheduled',
         history: [],
       }
@@ -674,9 +781,31 @@ export class ProactivityEngine {
     await this.exclusive(async () => {
       if (this.recovered) return
       const snapshot = await this.snapshot()
-      const recovered = snapshot.tasks.map(task => task.status === 'running'
-        ? { ...task, status: 'scheduled' as const, updatedAt: now.toISOString() }
-        : task)
+      const recovered = snapshot.tasks.map((task) => {
+        if (task.status !== 'running') return task
+        const activeRun = task.activeRun
+        const cleared = withoutActiveRun(task)
+        if (activeRun !== undefined
+          && activeRun.phase === 'deliver'
+          && task.sideEffectPolicy === 'at-most-once'
+          && !task.history.some(row => row.idempotencyKey === activeRun.idempotencyKey)) {
+          return {
+            ...cleared,
+            status: 'failed' as const,
+            updatedAt: now.toISOString(),
+            history: this.retainHistory([...task.history, {
+              phase: activeRun.phase,
+              scheduledFor: activeRun.scheduledFor,
+              idempotencyKey: activeRun.idempotencyKey,
+              startedAt: activeRun.startedAt,
+              finishedAt: now.toISOString(),
+              status: 'failed' as const,
+              error: 'execution outcome uncertain after restart; automatic retry suppressed to avoid duplicate external writes',
+            }]),
+          }
+        }
+        return { ...cleared, status: 'scheduled' as const, updatedAt: now.toISOString() }
+      })
       if (recovered.some((task, index) => task !== snapshot.tasks[index])) await this.commit(recovered)
       this.recovered = true
     })
@@ -690,7 +819,12 @@ export class ProactivityEngine {
       const current = state.tasks.find(task => task.id === taskId)
       if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)
       if (current.status !== 'scheduled' || hasCompleted(current, phase, scheduledFor)) return cloneTask(current)
-      const running: ProactivityTask = { ...current, status: 'running', updatedAt: startedAt }
+      const running: ProactivityTask = {
+        ...current,
+        status: 'running',
+        updatedAt: startedAt,
+        activeRun: { phase, scheduledFor, idempotencyKey, startedAt },
+      }
       await this.commit(state.tasks.map(item => item.id === taskId ? running : item))
       return cloneTask(running)
     })
@@ -713,14 +847,15 @@ export class ProactivityEngine {
         const current = state.tasks.find(task => task.id === taskId)
         if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)
         const externallyStopped = current.status === 'cancelled' || current.status === 'paused'
+        const base = withoutActiveRun(current)
         const next: ProactivityTask = {
-          ...current,
+          ...base,
           status: externallyStopped ? current.status : result.terminal === true ? 'completed' : 'scheduled',
           updatedAt: finishedAt,
-          history: [...current.history, {
+          history: this.retainHistory([...current.history, {
             phase, scheduledFor, idempotencyKey, startedAt, finishedAt, status: 'completed',
             ...(result.summary === undefined ? {} : { summary: result.summary }),
-          }],
+          }]),
         }
         await this.commit(state.tasks.map(item => item.id === taskId ? next : item))
         return cloneTask(next)
@@ -732,7 +867,11 @@ export class ProactivityEngine {
           const current = state.tasks.find(task => task.id === taskId)
           if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)
           if (current.status !== 'running') return cloneTask(current)
-          const next: ProactivityTask = { ...current, status: 'scheduled', updatedAt: new Date().toISOString() }
+          const next: ProactivityTask = {
+            ...withoutActiveRun(current),
+            status: 'scheduled',
+            updatedAt: new Date().toISOString(),
+          }
           await this.commit(state.tasks.map(item => item.id === taskId ? next : item))
           return cloneTask(next)
         })
@@ -745,12 +884,12 @@ export class ProactivityEngine {
         if (current === undefined) throw new Error(`unknown proactivity task: ${taskId}`)
         const externallyStopped = current.status === 'cancelled' || current.status === 'paused'
         const next: ProactivityTask = {
-          ...current,
+          ...withoutActiveRun(current),
           status: externallyStopped ? current.status : 'failed',
           updatedAt: finishedAt,
-          history: [...current.history, {
+          history: this.retainHistory([...current.history, {
             phase, scheduledFor, idempotencyKey, startedAt, finishedAt, status: 'failed', error: message,
-          }],
+          }]),
         }
         await this.commit(state.tasks.map(item => item.id === taskId ? next : item))
         return cloneTask(next)
@@ -798,6 +937,7 @@ export class ProactivityEngine {
     for (const id of ids) {
       let task = await this.get(id)
       if (task === undefined || task.status !== 'scheduled') continue
+      if (this.deliveryBudgetExhausted(task, nowMs)) continue
 
       const skipped = this.skippedNextRun(task, nowMs)
       if (skipped !== undefined) {
@@ -814,6 +954,7 @@ export class ProactivityEngine {
       for (const scheduledFor of due) {
         task = await this.get(id)
         if (task === undefined || task.status !== 'scheduled') break
+        if (this.deliveryBudgetExhausted(task, nowMs)) break
         task = await this.prepareIfDue(task, scheduledFor, nowMs)
         if (task.status !== 'scheduled') break
         task = await this.executePhase(id, 'deliver', scheduledFor)

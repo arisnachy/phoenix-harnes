@@ -66,6 +66,10 @@ export interface ProactivityTaskView {
   readonly attentionMode?: ProactivityTask['attentionMode']
   readonly attentionPriority?: ProactivityTask['attentionPriority']
   readonly attentionText?: string
+  readonly resourcePolicy: ProactivityTask['resourcePolicy']
+  readonly maxRunsPerDay?: number
+  readonly artifactDelivery: ProactivityTask['artifactDelivery']
+  readonly sideEffectPolicy: ProactivityTask['sideEffectPolicy']
   readonly recentHistory: readonly Pick<ProactivityTask['history'][number], 'phase' | 'scheduledFor' | 'finishedAt' | 'status' | 'summary' | 'error'>[]
 }
 
@@ -171,6 +175,11 @@ function proactivePrompt(
     `Instruction: ${input.instruction}`,
     'Execution-time reality: use the current Phoenix Reality Context. Re-check any stale or missing time, timezone, calendar, location, weather/daylight, network, device-resource, connector-auth, provider/quota, or update-state fact that materially affects this task before acting. When phoenix_reality_now is available, use it for synchronized refresh rather than guessing.',
     'Use relevant already-authorized MCP and connector tools when they provide fresher or more authoritative evidence. Do not install, connect, authenticate, or broaden permissions merely to complete background work.',
+    input.task.resourcePolicy === 'free-first'
+      ? 'Resource policy: free-first. Prefer local, already-included, cached, or free-tier routes. Do not buy credits, upgrade a plan, or intentionally enter paid usage. If a materially required provider is quota-exhausted, report the blocked dependency rather than silently spending.'
+      : input.task.resourcePolicy === 'balanced'
+        ? 'Resource policy: balanced. Prefer low-cost routes and reuse cached/current evidence; paid usage still requires the same explicit authorization that immediate work would require.'
+        : 'Resource policy: unrestricted by Phoenix cost preference. This does not override provider authorization, account limits, or approval requirements.',
   ]
   if (input.task.delivery === 'work') {
     const recent = input.task.history
@@ -187,6 +196,13 @@ function proactivePrompt(
   }
   if (input.preparationResult !== undefined) lines.push(`Prepared result: ${input.preparationResult}`)
   if (conditionEvidence !== undefined) lines.push(`Condition verified true: ${conditionEvidence}`)
+  if (input.task.artifactDelivery === 'drive-link') {
+    lines.push('Artifact delivery: when this occurrence produces a file-like artifact, use an already-authorized Google Drive connector when available, upload exactly one canonical result, and return its shareable link. Reuse the idempotency key as the delivery identity so retries do not create duplicate copies. If Drive is unavailable, keep the artifact local and report that delivery dependency instead of installing or authenticating anything.')
+  } else if (input.task.artifactDelivery === 'auto') {
+    lines.push('Artifact delivery: keep concise results inline. For large/file-like results, prefer one canonical local artifact and, when an already-authorized Google Drive connector is available and external delivery is useful, upload once and return the link. Do not create duplicate copies on retries.')
+  } else {
+    lines.push('Artifact delivery: keep results inline/local unless the task instruction explicitly requires a file destination.')
+  }
   if (input.task.delivery === 'email') {
     const identity = mailIdentity(input.task.senderIdentity, config)
     if (identity !== undefined) {
@@ -394,6 +410,10 @@ function taskView(task: ProactivityTask): ProactivityTaskView {
     ...(task.attentionMode === undefined ? {} : { attentionMode: task.attentionMode }),
     ...(task.attentionPriority === undefined ? {} : { attentionPriority: task.attentionPriority }),
     ...(task.attentionText === undefined ? {} : { attentionText: task.attentionText }),
+    resourcePolicy: task.resourcePolicy,
+    ...(task.maxRunsPerDay === undefined ? {} : { maxRunsPerDay: task.maxRunsPerDay }),
+    artifactDelivery: task.artifactDelivery,
+    sideEffectPolicy: task.sideEffectPolicy,
     recentHistory: task.history.slice(-10).map(row => ({
       phase: row.phase,
       scheduledFor: row.scheduledFor,

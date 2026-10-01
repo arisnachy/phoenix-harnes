@@ -52,6 +52,10 @@ function taskView(task: ProactivityTask): Record<string, JsonValue> {
     ...(task.attentionMode === undefined ? {} : { attention_mode: task.attentionMode }),
     ...(task.attentionPriority === undefined ? {} : { attention_priority: task.attentionPriority }),
     ...(task.attentionText === undefined ? {} : { attention_text: task.attentionText }),
+    resource_policy: task.resourcePolicy,
+    ...(task.maxRunsPerDay === undefined ? {} : { max_runs_per_day: task.maxRunsPerDay }),
+    artifact_delivery: task.artifactDelivery,
+    side_effect_policy: task.sideEffectPolicy,
     history: task.history.slice(-5).map(row => ({
       phase: row.phase,
       scheduled_for: row.scheduledFor,
@@ -126,7 +130,7 @@ export function createProactivityCreateTool(
 ): ToolDefinition {
   return defineTool({
     name: 'phoenix_task_create',
-    description: 'Create durable scheduled work for Phoenix. Use it for reminders, follow-ups, recurring background intelligence, future office tasks, annual dates such as birthdays, and private surprise preparation. delivery=work can maintain an ongoing user objective in the background. Tasks survive Phoenix restarts and catch up after the computer was off.',
+    description: 'Create durable scheduled work for Phoenix. Use it for reminders, follow-ups, recurring background intelligence, future office tasks, annual dates such as birthdays, and private surprise preparation. delivery=work can maintain an ongoing user objective in the background with explicit resource and run budgets. Tasks survive Phoenix restarts and catch up after the computer was off.',
     parameters: {
       title: { type: 'string', required: true },
       instruction: { type: 'string', required: true },
@@ -146,6 +150,10 @@ export function createProactivityCreateTool(
       attentionMode: { type: 'string', enum: ['auto', 'result', 'upcoming', 'off'], description: 'Controls the quiet Phoenix home feed. auto surfaces material background results and useful one-shot/upcoming context; off never surfaces this task there.' },
       attentionPriority: { type: 'string', enum: ['low', 'normal', 'high'], description: 'Relative ranking for useful home-feed signals. Do not mark routine work high.' },
       attentionText: { type: 'string', description: 'Optional concise user-facing reason an upcoming occurrence matters. Keep it short and specific.' },
+      resourcePolicy: { type: 'string', enum: ['free-first', 'balanced', 'unrestricted'], description: 'Autonomous cost posture. free-first prefers local, cached, bundled, or free-tier routes and never authorizes buying credits or plan upgrades.' },
+      maxRunsPerDay: { type: 'number', description: 'Optional positive integer cap on delivery attempts in any rolling 24-hour window. Recurring delivery=work defaults to 12 unless explicitly set.' },
+      artifactDelivery: { type: 'string', enum: ['inline', 'auto', 'drive-link'], description: 'Artifact destination policy. auto keeps concise results inline/local and may use an already-authorized Drive connector for useful file-like outputs.' },
+      sideEffectPolicy: { type: 'string', enum: ['retry-safe', 'at-most-once'], description: 'Restart policy for an interrupted occurrence. at-most-once suppresses automatic replay when the external-write outcome is uncertain.' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true },
@@ -159,6 +167,9 @@ export function createProactivityCreateTool(
     async execute(args, exec) {
       const schedule = recurrence(args)
       const prepareLeadMs = minutesToMs(args.prepareLeadMinutes, 'prepareLeadMinutes')
+      const explicitMaxRunsPerDay = positiveInteger(args.maxRunsPerDay, 'maxRunsPerDay')
+      const maxRunsPerDay = explicitMaxRunsPerDay
+        ?? (args.delivery === 'work' && schedule !== undefined ? 12 : undefined)
       if ((args.preparationInstruction === undefined) !== (prepareLeadMs === undefined)) {
         throw new ToolArgsError(['preparationInstruction and prepareLeadMinutes must be supplied together'])
       }
@@ -181,6 +192,10 @@ export function createProactivityCreateTool(
         ...(args.attentionMode === undefined ? {} : { attentionMode: args.attentionMode }),
         ...(args.attentionPriority === undefined ? {} : { attentionPriority: args.attentionPriority }),
         ...(args.attentionText === undefined ? {} : { attentionText: args.attentionText }),
+        ...(args.resourcePolicy === undefined ? {} : { resourcePolicy: args.resourcePolicy }),
+        ...(maxRunsPerDay === undefined ? {} : { maxRunsPerDay }),
+        ...(args.artifactDelivery === undefined ? {} : { artifactDelivery: args.artifactDelivery }),
+        ...(args.sideEffectPolicy === undefined ? {} : { sideEffectPolicy: args.sideEffectPolicy }),
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
       })
       return taskView(task)

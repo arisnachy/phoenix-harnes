@@ -4,6 +4,8 @@ import {
   ProactivityDeferredError,
   ProactivityEngine,
   type ProactivityExecution,
+  type ProactivitySnapshot,
+  type ProactivityStore,
 } from '../src/proactivity-engine.ts'
 
 function fixedIds(...ids: string[]) {
@@ -203,6 +205,122 @@ describe('HARDNESS ProactivityEngine', () => {
       '2026-09-18T12:00:00.000Z',
       '2026-09-18T13:00:00.000Z',
     ])
+  })
+
+  it('enforces a rolling delivery budget without consuming the next occurrence', async () => {
+    const execute = vi.fn(async () => ({ summary: 'ok' }))
+    const engine = new ProactivityEngine(new MemoryProactivityStore(), { execute }, { id: fixedIds('budget') })
+    await engine.create({
+      title: 'Bounded monitor',
+      instruction: 'Run.',
+      runAt: '2026-09-30T12:00:00.000Z',
+      createdBy: 'user',
+      recurrence: { kind: 'interval', everyMs: 3_600_000 },
+      maxRunsPerDay: 1,
+    })
+
+    await engine.runDue(new Date('2026-09-30T12:05:00.000Z'))
+    await engine.runDue(new Date('2026-09-30T13:05:00.000Z'))
+
+    expect(execute).toHaveBeenCalledTimes(1)
+    const [task] = await engine.list({ includeHidden: true, now: new Date('2026-09-30T13:05:00.000Z') })
+    expect(task?.status).toBe('scheduled')
+    expect(task?.nextRunAt).toBe('2026-09-30T13:00:00.000Z')
+  })
+
+  it('does not let catch-up all bypass the rolling delivery budget', async () => {
+    const execute = vi.fn(async () => ({ summary: 'ok' }))
+    const engine = new ProactivityEngine(new MemoryProactivityStore(), { execute }, {
+      id: fixedIds('budget-catch-up'),
+      maxCatchUpOccurrences: 10,
+    })
+    await engine.create({
+      title: 'Bounded catch-up',
+      instruction: 'Run.',
+      runAt: '2026-09-30T09:00:00.000Z',
+      createdBy: 'user',
+      recurrence: { kind: 'interval', everyMs: 3_600_000 },
+      catchUp: 'all',
+      maxRunsPerDay: 1,
+    })
+
+    await engine.runDue(new Date('2026-09-30T12:05:00.000Z'))
+
+    expect(execute).toHaveBeenCalledTimes(1)
+    const [task] = await engine.list({ includeHidden: true, now: new Date('2026-09-30T12:05:00.000Z') })
+    expect(task?.nextRunAt).toBe('2026-09-30T10:00:00.000Z')
+    expect(task?.history).toHaveLength(1)
+  })
+
+  it('bounds retained execution history while preserving the newest receipts', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async input => ({ summary: input.scheduledFor }) },
+      { id: fixedIds('retained'), maxCatchUpOccurrences: 10, maxHistoryEntries: 2 },
+    )
+    await engine.create({
+      title: 'Retained monitor',
+      instruction: 'Run.',
+      runAt: '2026-09-30T10:00:00.000Z',
+      createdBy: 'user',
+      recurrence: { kind: 'interval', everyMs: 3_600_000 },
+      catchUp: 'all',
+    })
+
+    await engine.runDue(new Date('2026-09-30T12:05:00.000Z'))
+    const [task] = await engine.list({ includeHidden: true, now: new Date('2026-09-30T12:05:00.000Z') })
+    expect(task?.history).toHaveLength(2)
+    expect(task?.history.map(row => row.scheduledFor)).toEqual([
+      '2026-09-30T11:00:00.000Z',
+      '2026-09-30T12:00:00.000Z',
+    ])
+  })
+
+  it('suppresses an uncertain external-write replay after restart', async () => {
+    class MutableStore implements ProactivityStore {
+      snapshot: ProactivitySnapshot = { version: 1, tasks: [] }
+      async load(): Promise<ProactivitySnapshot> { return structuredClone(this.snapshot) }
+      async save(snapshot: ProactivitySnapshot): Promise<void> { this.snapshot = structuredClone(snapshot) }
+    }
+
+    const store = new MutableStore()
+    const first = new ProactivityEngine(store, { execute: async () => ({}) }, { id: fixedIds('mail-crash') })
+    const created = await first.create({
+      title: 'Send report',
+      instruction: 'Send one report email.',
+      runAt: '2026-09-30T12:00:00.000Z',
+      createdBy: 'user',
+      delivery: 'email',
+      recipient: 'owner@example.com',
+    })
+    store.snapshot = {
+      version: 1,
+      tasks: [{
+        ...created,
+        status: 'running',
+        activeRun: {
+          phase: 'deliver',
+          scheduledFor: '2026-09-30T12:00:00.000Z',
+          idempotencyKey: 'mail-crash:deliver:2026-09-30T12:00:00.000Z',
+          startedAt: '2026-09-30T12:00:01.000Z',
+        },
+      }],
+    }
+
+    const execute = vi.fn(async () => ({ summary: 'duplicate' }))
+    const restarted = new ProactivityEngine(store, { execute })
+    await restarted.runDue(new Date('2026-09-30T12:10:00.000Z'))
+
+    expect(execute).not.toHaveBeenCalled()
+    const task = await restarted.get(created.id)
+    expect(task?.status).toBe('failed')
+    expect(task?.activeRun).toBeUndefined()
+    const lastHistory = task?.history.at(-1)
+    expect(lastHistory).toMatchObject({
+      phase: 'deliver',
+      status: 'failed',
+    })
+    expect(lastHistory?.error).toContain('automatic retry suppressed')
   })
 
   it('records failures and permits an explicit resume to retry the same occurrence', async () => {
