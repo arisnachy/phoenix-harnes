@@ -19,7 +19,8 @@ jobs:
     env:
       DSH_TELEMETRY_DISABLED: '1'
       DSH_EXAMPLE_MODE: lib
-      DSH_SNAPSHOT_MAX_CONCURRENCY: '4'
+      DSH_SNAPSHOT_MAX_CONCURRENCY: '2'
+      NODE_OPTIONS: --max-old-space-size=5120
     steps:
       - uses: actions/checkout@v6
         with:
