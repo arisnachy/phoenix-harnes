@@ -53,6 +53,48 @@ function sameAttention(
   })
 }
 
+const ATTENTION_ACK_STORAGE_KEY = 'phoenix.proactivity.attention.ack.v1'
+const ATTENTION_ACK_MAX = 256
+
+function attentionStorage(): Storage | undefined {
+  try {
+    return typeof globalThis.localStorage === 'undefined' ? undefined : globalThis.localStorage
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Read durable acknowledgement ids for Hero attention rows.
+ * A row id includes its occurrence timestamp, so acknowledging one result never
+ * hides a later result from the same recurring task.
+ */
+export function acknowledgedProactivityAttentionIds(): ReadonlySet<string> {
+  const storage = attentionStorage()
+  if (storage === undefined) return new Set()
+  try {
+    const parsed = JSON.parse(storage.getItem(ATTENTION_ACK_STORAGE_KEY) ?? '[]') as unknown
+    if (!Array.isArray(parsed)) return new Set()
+    return new Set(parsed.filter((value): value is string => typeof value === 'string' && value.length > 0))
+  } catch {
+    return new Set()
+  }
+}
+
+/** Persist one Hero attention row as reviewed without mutating the underlying task. */
+export function acknowledgeProactivityAttention(id: string): void {
+  const normalized = id.trim()
+  if (normalized.length === 0) return
+  const storage = attentionStorage()
+  if (storage === undefined) return
+  try {
+    const current = [...acknowledgedProactivityAttentionIds()].filter(value => value !== normalized)
+    storage.setItem(ATTENTION_ACK_STORAGE_KEY, JSON.stringify([normalized, ...current].slice(0, ATTENTION_ACK_MAX)))
+  } catch {
+    // Local acknowledgement is convenience chrome; quota/privacy failures must not affect chat.
+  }
+}
+
 /**
  * Pull the local Host's ranked proactive attention rows without disturbing chat when unavailable.
  * @param connection - Current loopback client connection.
@@ -66,8 +108,11 @@ export async function refreshProactivityAttention(
   try {
     const response = await connection.rpc.call('/phoenix-tasks', 'attention', {})
     if (!response.ok) return
-    const next = parseProactivityAttention(response.value)
-    if (next === undefined || sameAttention(store.getSnapshot(), next)) return
+    const parsed = parseProactivityAttention(response.value)
+    if (parsed === undefined) return
+    const acknowledged = acknowledgedProactivityAttentionIds()
+    const next = parsed.filter(item => !acknowledged.has(item.id))
+    if (sameAttention(store.getSnapshot(), next)) return
     store.set(next)
   } catch {
     // Hero attention is best-effort local chrome; reconnect/poll retries it without replacing healthy state.
