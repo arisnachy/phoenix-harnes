@@ -1,11 +1,13 @@
-/* KIRA mission-control overlay: fixed activity strip plus a compact right-side agent rail. */
+/* KIRA mission-control overlay: scoped to the center column so it can never
+   cover the sidebar. The shell.overlay host already owns the full center
+   viewport; this root stays inside that coordinate space. */
 
 .root {
-  position: fixed;
+  position: absolute;
   z-index: 80;
   top: 72px;
   right: 10px;
-  left: 78px;
+  left: 10px;
   height: 0;
   box-sizing: border-box;
   pointer-events: none;
@@ -448,7 +450,7 @@
 @media (max-width: 900px) {
   .root {
     right: 8px;
-    left: 68px;
+    left: 8px;
   }
 
   .strip {

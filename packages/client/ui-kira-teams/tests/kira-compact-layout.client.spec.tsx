@@ -19,7 +19,9 @@ const chatCss = readFileSync(
 
 describe('KIRA mission-control layout regression', () => {
   it('keeps one fixed-height activity strip and a narrow independent agent rail', () => {
-    expect(dockCss).toMatch(/\.root\s*{[^}]*position:\s*fixed/s)
+    expect(dockCss).toMatch(/\.root\s*{[^}]*position:\s*absolute/s)
+    expect(dockCss).not.toMatch(/\.root\s*{[^}]*position:\s*fixed/s)
+    expect(dockCss).toMatch(/\.root\s*{[^}]*left:\s*10px/s)
     expect(dockCss).toMatch(/\.strip\s*{[^}]*height:\s*44px/s)
     expect(dockCss).toMatch(/\.rail\s*{[^}]*width:\s*48px/s)
     expect(dockCss).toMatch(/\.avatarStack\s*{[^}]*display:\s*flex/s)
