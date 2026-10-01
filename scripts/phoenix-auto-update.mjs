@@ -20,10 +20,10 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, unlinkSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, join, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
@@ -419,6 +419,30 @@ function sameRepositoryWorktree(root, stage) {
     : rootCommon === stageCommon
 }
 
+function childDirectories(root) {
+  if (!existsSync(root)) return []
+  return readdirSync(root, { withFileTypes: true })
+    .filter(entry => entry.isDirectory())
+    .map(entry => join(root, entry.name))
+}
+
+function pruneStaleWorkspaceShells(stage) {
+  const candidates = [
+    ...childDirectories(join(stage, 'vendor')),
+    ...childDirectories(join(stage, 'packages')).flatMap(group => childDirectories(group)),
+    join(stage, 'apps', 'cli'),
+  ]
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate) || existsSync(join(candidate, 'package.json'))) continue
+    const relativePath = relative(stage, candidate).replace(/\\/gu, '/')
+    const tracked = git(stage, ['ls-files', '--', relativePath], { allowFailure: true })
+    if (!tracked.ok || tracked.stdout.length > 0) continue
+    rmSync(candidate, { recursive: true, force: true })
+    console.error(`[PHOENIX UPDATE] pruned stale staging workspace ${relativePath}`)
+  }
+}
+
 function ensureStagingWorktree(root, target) {
   const stage = stageDirectory(root)
   if (existsSync(stage)) {
@@ -428,6 +452,7 @@ function ensureStagingWorktree(root, target) {
     console.error(`[PHOENIX UPDATE] reusing persistent staging worktree ${stage}`)
     git(stage, ['reset', '--hard', target], { inherit: true })
     git(stage, ['clean', '-fd'], { allowFailure: true })
+    pruneStaleWorkspaceShells(stage)
     return stage
   }
   console.error(`[PHOENIX UPDATE] creating persistent staging worktree ${stage}`)
