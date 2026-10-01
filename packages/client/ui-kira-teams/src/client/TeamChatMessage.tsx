@@ -12,7 +12,7 @@ import {
 import type {
   KiraTeamMessageChatData,
   KiraTeamReactionChatData,
-} from './team-chat-node.ts'
+} from '@phoenix-ai/dsh-client-ui-conversation/client'
 import css from './TeamChatMessage.module.css'
 
 interface TeamIdentity {
