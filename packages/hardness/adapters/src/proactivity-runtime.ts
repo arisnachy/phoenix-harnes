@@ -405,7 +405,7 @@ function taskView(task: ProactivityTask): ProactivityTaskView {
   }
 }
 
-const ATTENTION_RESULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+const ATTENTION_RESULT_MAX_AGE_MS = 48 * 60 * 60 * 1000
 const ATTENTION_UPCOMING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 const MAX_ATTENTION_ITEMS = 8
 
@@ -420,6 +420,11 @@ function materialAttentionSummary(value: string | undefined): string | undefined
   const summary = compactAttentionText(value)
   if (summary === undefined || /^NO_MATERIAL_UPDATE[.!]?$/iu.test(summary)) return undefined
   return summary
+}
+
+function attentionSummaryFingerprint(value: string | undefined): string | undefined {
+  const summary = materialAttentionSummary(value)
+  return summary?.toLocaleLowerCase().replace(/[.!?]+$/u, '')
 }
 
 function attentionPriority(task: ProactivityTask): number {
@@ -463,11 +468,18 @@ export function buildProactivityAttentionItems(
       continue
     }
 
-    const latestDelivery = [...task.history].reverse().find(row =>
+    const deliveries = [...task.history].reverse().filter(row =>
       row.phase === 'deliver' && row.status === 'completed' && row.summary !== undefined)
+    const latestDelivery = deliveries[0]
     const summary = materialAttentionSummary(latestDelivery?.summary)
+    const fingerprint = attentionSummaryFingerprint(latestDelivery?.summary)
+    const previousFingerprint = deliveries
+      .slice(1)
+      .map(row => attentionSummaryFingerprint(row.summary))
+      .find(value => value !== undefined)
+    const repeatedResult = fingerprint !== undefined && fingerprint === previousFingerprint
     const canSurfaceResult = mode === 'result' || (mode === 'auto' && task.delivery === 'work')
-    if (canSurfaceResult && latestDelivery !== undefined && summary !== undefined
+    if (canSurfaceResult && latestDelivery !== undefined && summary !== undefined && !repeatedResult
       && Date.parse(latestDelivery.finishedAt) >= oldestResult) {
       const ageHours = Math.max(0, (nowMs - Date.parse(latestDelivery.finishedAt)) / 3_600_000)
       items.push({
