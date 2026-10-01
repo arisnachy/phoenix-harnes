@@ -72,6 +72,7 @@ jobs:
           pnpm run gen-tool-catalog
 
       - name: Refresh bilingual catalog pairing records
+        shell: bash
         run: |
           pnpm run verify-translation-pairing -- --write             docs/config-catalog.md             docs/persistence-catalog.md             docs/tool-catalog.md
           pnpm run verify-translation-pairing --             docs/config-catalog.md             docs/persistence-catalog.md             docs/tool-catalog.md
@@ -80,6 +81,7 @@ jobs:
         run: pnpm run test:snapshot:refresh
 
       - name: Verify Mission Runtime focused tests
+        shell: bash
         run: |
           pnpm exec vitest run --config vitest.config.ts             packages/goal/goal/tests/mission.spec.ts             packages/goal/goal-round-driver/tests/mission-capsule.spec.ts             packages/goal/tool-goal/tests/tool-goal.spec.ts             packages/subagent/tool-subagent/tests/tool-subagent.spec.ts
           pnpm exec vitest run --config vitest.e2e.config.ts             packages/subagent/subagent-codex/tests/loader-composition.e2e.ts             packages/subagent/subagent-claude-code/tests/loader-composition.e2e.ts
