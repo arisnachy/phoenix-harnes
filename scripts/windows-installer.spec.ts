@@ -19,14 +19,19 @@ describe('PHOENIX managed Windows installation', () => {
     expect(launcher).not.toMatch(/^pnpm\s/mu)
   })
 
-  it('always restores the native Phoenix desktop shortcut on install or upgrade', () => {
+  it('repairs the PHOENIX desktop shortcut through the normal browser launcher, never Phoenix.exe', () => {
     const iss = read('installer/windows/Phoenix.iss')
     const shortcut = read('scripts/phoenix-desktop-shortcut.ps1')
-    expect(iss).toContain('Name: "{autodesktop}\\Phoenix"; Filename: "{app}\\Phoenix.exe"')
-    expect(iss).not.toContain('Tasks: desktopicon')
-    expect(shortcut).toContain("'HKCU:\\Software\\Phoenix AI\\Phoenix'")
-    expect(shortcut).toContain('$nativeRegistration.ExecutablePath')
+    const launcher = read('scripts/phoenix-desktop-launch.ps1')
+    expect(iss).toContain('Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"')
+    expect(iss).toContain('Name: "{autodesktop}\\Phoenix"; Filename: "{app}\\Phoenix.exe"; Tasks: desktopicon')
     expect(shortcut).toContain("$shortcutPath = Join-Path $desktopPath 'PHOENIX.lnk'")
+    expect(shortcut).toContain('$targetPath = $powerShellExe')
+    expect(shortcut).toContain('$workingDirectory = $rootPath')
+    expect(shortcut).not.toContain('ExecutablePath')
+    expect(shortcut).not.toContain('Phoenix.exe')
+    expect(launcher).toContain('& $corepack.Source pnpm phoenix')
+    expect(launcher).toContain('& $pnpm.Source phoenix')
   })
 
   it('forces upgrade takeover from a stale tray instance before replacing the payload', () => {
