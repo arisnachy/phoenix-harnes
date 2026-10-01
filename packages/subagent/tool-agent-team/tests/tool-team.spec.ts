@@ -182,6 +182,45 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'judge' })
   })
 
+  it('inherits the Lead route when a default profile belongs to another provider and honors explicit profiles', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang'], false, {
+      defaultModelProfile: 'foreign',
+      modelProfiles: {
+        foreign: { provider: 'other-provider', model: 'foreign-model' },
+        explicit: { provider: 'mock', model: 'explicit-model' },
+      },
+    })
+
+    const inherited = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'inherited-worker',
+      description: 'inherit Lead route',
+      prompt: 'wait',
+    })
+    const inheritedChild = await waitRunning(ctx, spawnedChildId(inherited))
+    expect(inheritedChild.options).toMatchObject({ provider: 'mock', model: 'mock' })
+
+    const explicit = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'explicit-worker',
+      description: 'use explicit route',
+      prompt: 'wait',
+      model_profile: 'explicit',
+    })
+    const explicitChild = await waitRunning(ctx, spawnedChildId(explicit))
+    expect(explicitChild.options).toMatchObject({ provider: 'mock', model: 'explicit-model' })
+    expect(explicitChild.options.maxTokens).toBeUndefined()
+    expect(explicitChild.options.reasoningEffort).toBeUndefined()
+
+    await execute(ctx, lead, 'interrupt_agent', { target: 'inherited-worker' })
+    await execute(ctx, lead, 'interrupt_agent', { target: 'explicit-worker' })
+  })
+
+  it('rejects a dangling default model profile before touching Team runtime services', () => {
+    expect(() => toolTeam.apply(new Context(), {
+      defaultModelProfile: 'missing',
+      modelProfiles: {},
+    })).toThrow('defaultModelProfile "missing" is not declared in modelProfiles')
+  })
+
   it('returns actionable no-progress output and renders structured wait cancellation', async () => {
     const inactiveSetup = await setup([textResponse('worker done')])
     const inactiveSpawn = await execute(inactiveSetup.ctx, inactiveSetup.lead, 'spawn_teammate', {
