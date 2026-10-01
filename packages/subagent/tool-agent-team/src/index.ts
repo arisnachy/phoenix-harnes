@@ -51,7 +51,7 @@ export const Config: z<Config> = z.object({
 })
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
-const POLICY = `Agent Teams is real shared work, not role-play. Create teammates when the user explicitly asks for a Team, or when the surrounding agent policy explicitly authorizes adaptive Team use for independent work. Never spawn a teammate only to make the interface look busy.
+const POLICY = `Agent Teams is real shared work, not role-play. Create teammates when the user explicitly asks for a Team, or when the surrounding agent policy explicitly authorizes adaptive Team use for independent work. Phoenix Auto is explicitly authorized to use this Team path when independent specialist work materially improves quality or latency; in that mode prefer spawn_teammate over legacy subagent delegation. Never spawn a teammate only to make the interface look busy.
 
 Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Use team_react for a lightweight acknowledgement when prose would add no new information. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model. A teammate that reaches a material result must send it to lead with purpose result before ending its turn; use question or blocker instead when the Lead must respond first. spawn_teammate is itself the initial assignment, so do not send a duplicate assignment merely to narrate delegation.
 
