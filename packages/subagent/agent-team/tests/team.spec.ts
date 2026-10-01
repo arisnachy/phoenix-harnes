@@ -69,6 +69,9 @@ interface TeamServiceInternals {
     checkpointInitialPrompt(childId: SessionId, messageId: string, signal: AbortSignal): Promise<void>
     reconcileProvisioning(root: Agent, signal: AbortSignal): Promise<void>
     liveChildrenByRoot(): Map<Agent, SessionId[]>
+    memberView(member: TeamMemberSnapshot & { readonly phase: 'active' }): {
+      readonly usage?: { readonly inputTokens: number; readonly outputTokens: number }
+    }
   }
   readonly mailbox: {
     tryDispatch(root: Agent, message: TeamMessageSnapshot, signal: AbortSignal): Promise<boolean>
