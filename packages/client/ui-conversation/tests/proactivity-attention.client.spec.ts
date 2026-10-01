@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ProactivityAttentionItem } from '../src/client/contract/slots.ts'
 import {
@@ -17,7 +17,18 @@ const ROW = {
 } as const
 
 describe('proactivity attention client bridge', () => {
-  beforeEach(() => { globalThis.localStorage?.clear() })
+  beforeEach(() => {
+    const values = new Map<string, string>()
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value) },
+      removeItem: (key: string) => { values.delete(key) },
+      clear: () => { values.clear() },
+      key: (index: number) => [...values.keys()][index] ?? null,
+      get length() { return values.size },
+    } satisfies Storage)
+  })
+  afterEach(() => { vi.unstubAllGlobals() })
 
   it('validates, normalizes, and bounds host rows', () => {
     const rows = parseProactivityAttention(Array.from({ length: 10 }, (_, index) => ({
