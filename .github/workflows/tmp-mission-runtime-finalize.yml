@@ -42,7 +42,7 @@ jobs:
           git fetch origin feat/mission-runtime-codex-patterns-20260930
           BASE=507652368d4d71ad23e1ff8f6ac6e228925c9e47
           MISSION=61d9b8554ba5b688aad2f51eb01f7aa14131f3bb
-          for path in             docs/config-catalog.md docs/config-catalog.zh.md docs/config-catalog.i18n.yaml             docs/persistence-catalog.md docs/persistence-catalog.zh.md docs/persistence-catalog.i18n.yaml             docs/tool-catalog.md docs/tool-catalog.zh.md docs/tool-catalog.i18n.yaml
+          for path in             docs/config-catalog.md docs/config-catalog.zh.md             docs/persistence-catalog.md docs/persistence-catalog.zh.md             docs/tool-catalog.md docs/tool-catalog.zh.md
           do
             ours="$(mktemp)"
             base="$(mktemp)"
