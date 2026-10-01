@@ -48,6 +48,19 @@ export interface McpConnectorRegistrationInput {
   readonly reconnect?: () => void
 }
 
+/** Secret-free registry change kinds consumable by event bridges and UI. */
+export type McpConnectorChangeKind = 'registered' | 'status' | 'tools' | 'disposed'
+
+/** Detached lifecycle/tool change emitted by the registry. */
+export interface McpConnectorChange {
+  readonly kind: McpConnectorChangeKind
+  readonly serverName: string
+  readonly entry: McpConnectorEntry
+}
+
+/** Listener for secret-free connector lifecycle changes. */
+export type McpConnectorListener = (change: McpConnectorChange) => void
+
 interface MutableEntry {
   readonly serverName: string
   readonly transport: McpConnectorTransport
@@ -63,15 +76,58 @@ interface MutableEntry {
  */
 export class McpConnectorRegistry extends Service {
   private readonly entries = new Map<string, MutableEntry>()
+  private readonly listeners = new Set<McpConnectorListener>()
 
   constructor(ctx: Context) {
     super(ctx, 'mcpConnectors')
   }
 
+  /** Create one detached secret-free snapshot of a live mutable entry. */
+  private snapshot(entry: MutableEntry): McpConnectorEntry {
+    return {
+      serverName: entry.serverName,
+      transport: entry.transport,
+      status: entry.status,
+      toolNames: [...entry.toolNames],
+      ...(entry.reasonCode === undefined ? {} : { reasonCode: entry.reasonCode }),
+    }
+  }
+
+  private publish(kind: McpConnectorChangeKind, entry: MutableEntry): void {
+    const change: McpConnectorChange = {
+      kind,
+      serverName: entry.serverName,
+      entry: this.snapshot(entry),
+    }
+    for (const listener of this.listeners) {
+      try {
+        listener(change)
+      } catch (error: unknown) {
+        this.ctx.logger.warn(`mcp connector change listener failed: ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+  }
+
+  /**
+   * Subscribe to secret-free lifecycle/tool changes without exposing transport
+   * configuration, credentials, URLs, provider errors, or reconnect callbacks.
+   * @param listener - Synchronous observer removed by the returned disposer.
+   * @returns Idempotent disposer.
+   */
+  subscribe(listener: McpConnectorListener): () => void {
+    this.listeners.add(listener)
+    let disposed = false
+    return () => {
+      if (disposed) return
+      disposed = true
+      this.listeners.delete(listener)
+    }
+  }
+
   /**
    * Register one server identity in stable insertion order.
-   * @param input - secret-free server identity and transport.
-   * @returns a handle that publishes state and removes the entry.
+   * @param input - Secret-free server identity and transport.
+   * @returns A handle that publishes state and removes the entry.
    */
   register(input: McpConnectorRegistrationInput): McpConnectorRegistration {
     if (this.entries.has(input.serverName)) {
@@ -85,23 +141,32 @@ export class McpConnectorRegistry extends Service {
       toolNames: [],
     }
     this.entries.set(input.serverName, entry)
+    this.publish('registered', entry)
     let disposed = false
     const dispose = (): void => {
       if (disposed) return
       disposed = true
-      if (this.entries.get(input.serverName) === entry) this.entries.delete(input.serverName)
+      if (this.entries.get(input.serverName) === entry) {
+        this.entries.delete(input.serverName)
+        this.publish('disposed', entry)
+      }
     }
     this.ctx.effect(() => dispose, `mcpConnectors.${input.serverName}`)
     return {
       setStatus: (status, reasonCode): void => {
         if (disposed) return
+        const changed = entry.status !== status || entry.reasonCode !== reasonCode
         entry.status = status
         if (reasonCode === undefined) delete entry.reasonCode
         else entry.reasonCode = reasonCode
+        if (changed) this.publish('status', entry)
       },
       setTools: (toolNames): void => {
         if (disposed) return
-        entry.toolNames = [...new Set(toolNames)]
+        const next = [...new Set(toolNames)]
+        const changed = next.length !== entry.toolNames.length || next.some((name, index) => name !== entry.toolNames[index])
+        entry.toolNames = next
+        if (changed) this.publish('tools', entry)
       },
       dispose,
     }
@@ -126,13 +191,7 @@ export class McpConnectorRegistry extends Service {
    * @returns snapshots safe to pass to model-facing projection code.
    */
   list(): readonly McpConnectorEntry[] {
-    return [...this.entries.values()].map(entry => ({
-      serverName: entry.serverName,
-      transport: entry.transport,
-      status: entry.status,
-      toolNames: [...entry.toolNames],
-      ...(entry.reasonCode === undefined ? {} : { reasonCode: entry.reasonCode }),
-    }))
+    return [...this.entries.values()].map((entry) => this.snapshot(entry))
   }
 }
 

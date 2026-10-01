@@ -68,4 +68,87 @@ describe('McpConnectorRegistry', () => {
     registration.setTools(['secret-bearing-looking-name'])
     expect(registry.list()).toEqual([])
   })
+  it('isolates failing subscribers and suppresses unchanged tool/status updates', () => {
+    const ctx = new Context()
+    const registry = new McpConnectorRegistry(ctx)
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => {})
+    const healthy = vi.fn()
+    const stopBad = registry.subscribe(() => { throw new Error('observer boom') })
+    const nonError = new Proxy(new Error('observer proxy boom'), { getPrototypeOf: () => null })
+    const stopNonError = registry.subscribe(() => { throw nonError })
+    const stopHealthy = registry.subscribe(healthy)
+    const registration = registry.register({ serverName: 'github', transport: 'streamable-http' })
+
+    registration.setTools(['issues'])
+    registration.setTools(['issues'])
+    registration.setStatus('ready')
+    registration.setStatus('ready')
+
+    expect(healthy).toHaveBeenCalledTimes(3)
+    expect(warn).toHaveBeenCalled()
+    stopBad()
+    stopBad()
+    stopNonError()
+    stopHealthy()
+    stopHealthy()
+    registration.dispose()
+    warn.mockRestore()
+  })
+
+  it('publishes secret-free lifecycle changes to subscribers', () => {
+    const registry = new McpConnectorRegistry(new Context())
+    const changes: unknown[] = []
+    const unsubscribe = registry.subscribe((change) => { changes.push(change) })
+    const registration = registry.register({ serverName: 'github', transport: 'streamable-http' })
+
+    registration.setTools(['issues'])
+    registration.setStatus('ready')
+    registration.setStatus('ready')
+    registration.dispose()
+
+    expect(changes).toEqual([
+      {
+        kind: 'registered',
+        serverName: 'github',
+        entry: {
+          serverName: 'github',
+          transport: 'streamable-http',
+          status: 'starting',
+          toolNames: [],
+        },
+      },
+      {
+        kind: 'tools',
+        serverName: 'github',
+        entry: {
+          serverName: 'github',
+          transport: 'streamable-http',
+          status: 'starting',
+          toolNames: ['issues'],
+        },
+      },
+      {
+        kind: 'status',
+        serverName: 'github',
+        entry: {
+          serverName: 'github',
+          transport: 'streamable-http',
+          status: 'ready',
+          toolNames: ['issues'],
+        },
+      },
+      {
+        kind: 'disposed',
+        serverName: 'github',
+        entry: {
+          serverName: 'github',
+          transport: 'streamable-http',
+          status: 'ready',
+          toolNames: ['issues'],
+        },
+      },
+    ])
+    unsubscribe()
+  })
+
 })

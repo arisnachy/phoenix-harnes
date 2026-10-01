@@ -7,6 +7,7 @@ import { GOOGLE_ACCOUNT_KEY } from '@phoenix-ai/dsh-authorization/google'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import type { HardnessService } from '@phoenix-ai/dsh-hardness/src/types.ts'
 import type {} from '@phoenix-ai/dsh-mcp-registry'
+import type {} from '@phoenix-ai/dsh-mcp-connector-registry'
 import type { CodeRuntime } from '@phoenix-ai/dsh-code-runtime'
 import { indexSkills } from './skill-adapter.ts'
 import { indexTools } from './tool-adapter.ts'
@@ -37,6 +38,10 @@ import { createProactivityTools } from './proactivity-tools.ts'
 import { acquireWakeEngine } from './wake-registry.ts'
 import { createWakeExecutor, installWakeRuntime } from './wake-runtime.ts'
 import { createWakeTools } from './wake-tools.ts'
+import { createRoutineTools } from './routine-tools.ts'
+import { installRoutineProtocol } from './routine-protocol.ts'
+import { createLearnedSkillTool } from './learned-skill.ts'
+import { installConnectorEventBridge } from './connector-event-bridge.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
@@ -143,6 +148,11 @@ export { WakeEngine, JsonWakeStore, MemoryWakeStore, wakeEvent } from './wake-en
 export type { CreateWakeTriggerInput, WakeDispatchResult, WakeEvent, WakeEventAttribute, WakeExecution, WakeExecutionResult, WakeExecutor, WakeMatcher, WakeMode, WakeTrigger, WakeTriggerHistoryEntry, WakeTriggerStatus } from './wake-engine.ts'
 export { createWakeExecutor, installWakeRuntime } from './wake-runtime.ts'
 export { createWakeTools, createWakeTriggerTool, createWakeTriggerListTool } from './wake-tools.ts'
+export { createRoutineTools } from './routine-tools.ts'
+export { ROUTINE_PROTOCOL, installRoutineProtocol } from './routine-protocol.ts'
+export { LearnedSkillStore, createLearnedSkillTool } from './learned-skill.ts'
+export type { LearnedSkillInput, LearnedSkillReceipt } from './learned-skill.ts'
+export { installConnectorEventBridge } from './connector-event-bridge.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -309,6 +319,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     if (modelTools) {
       disposers.push(installRealityProtocol(systemPrompt))
       disposers.push(installProactivityProtocol(systemPrompt))
+      disposers.push(installRoutineProtocol(systemPrompt))
       disposers.push(installWakeProtocol(systemPrompt))
       disposers.push(installHumanPresenceProtocol(systemPrompt))
       disposers.push(installInitiativeContextProjection(
@@ -372,6 +383,10 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       for (const tool of createWakeTools(wake.engine)) {
         disposers.push(ctx.tools.register(tool))
       }
+      for (const tool of createRoutineTools(proactivity.engine, wake.engine)) {
+        disposers.push(ctx.tools.register(tool))
+      }
+      disposers.push(ctx.tools.register(createLearnedSkillTool()))
       const binancePaper = new BinancePaperBroker(binancePaperLedgerPath())
       for (const tool of createBinanceTradingTools({
         broker: binancePaper,
@@ -394,6 +409,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs))
       wake.bindExecutor(createWakeExecutor(agents))
       disposers.push(installWakeRuntime(ctx, wake.engine))
+      disposers.push(installConnectorEventBridge(ctx, mcpConnectors))
     }
 
     if (!modelTools) {
