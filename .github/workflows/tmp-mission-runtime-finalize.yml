@@ -75,8 +75,8 @@ jobs:
       - name: Refresh bilingual catalog pairing records
         shell: bash
         run: |
-          pnpm run verify-translation-pairing -- --write             docs/config-catalog.md             docs/persistence-catalog.md             docs/tool-catalog.md
-          pnpm run verify-translation-pairing --             docs/config-catalog.md             docs/persistence-catalog.md             docs/tool-catalog.md
+          pnpm run verify-translation-pairing --write docs/config-catalog.md docs/persistence-catalog.md docs/tool-catalog.md
+          pnpm run verify-translation-pairing docs/config-catalog.md docs/persistence-catalog.md docs/tool-catalog.md
 
       - name: Refresh contract snapshots
         run: pnpm run test:snapshot:refresh
