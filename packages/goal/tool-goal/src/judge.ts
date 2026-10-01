@@ -51,6 +51,7 @@ const MAX_TEXT = 2_000
 const MAX_ITEMS = 16
 const MAX_HISTORY_ROUNDS = 8
 const FINAL_JUDGE_TIMEOUT_MS = 10 * 60_000
+const FINAL_JUDGE_START_ATTEMPTS = 2
 const WAITING_SUMMARY = 'Independent verification is not ready yet; the mission remains active and will continue automatically.'
 type GoalJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
@@ -430,8 +431,6 @@ export async function judgeGoalCompletion(input: {
 
   const timeout = AbortSignal.timeout(FINAL_JUDGE_TIMEOUT_MS)
   const signal = AbortSignal.any([input.signal, timeout])
-  let run
-  let startPromise: ReturnType<GoalJudgeRuntime['start']> | undefined
   let judged: GoalJudgeResult = unavailable()
   const judgeIncidents: string[] = []
   try {
@@ -440,48 +439,64 @@ export async function judgeGoalCompletion(input: {
       ...input.llm === undefined ? {} : { llm: input.llm },
       signal,
     }), signal)
-    startPromise = subagents.start(provider, {
-      label: 'goal-completion-judge',
-      prompt,
-      parent: input.parent,
-      signal,
-      agentOptions,
-      outputSchema: GOAL_JUDGE_OUTPUT_SCHEMA,
-      toolFilter: { allow: [...READ_ONLY_TOOLS] },
-    })
-    run = await awaitAbortable(startPromise, signal)
-    const result = await awaitAbortable(run.result, signal)
-    if (result.stopReason === 'completed') {
-      const structured = readStructured(result.structured)
-      if (structured === undefined) {
-        judgeIncidents.push('goal-completion-judge:invalid-output')
-      } else {
-        judged = structured
+    for (let attempt = 1; attempt <= FINAL_JUDGE_START_ATTEMPTS; attempt += 1) {
+      let run
+      let startPromise: ReturnType<GoalJudgeRuntime['start']> | undefined
+      let retryStart = false
+      try {
+        startPromise = subagents.start(provider, {
+          label: 'goal-completion-judge',
+          prompt,
+          parent: input.parent,
+          signal,
+          agentOptions,
+          outputSchema: GOAL_JUDGE_OUTPUT_SCHEMA,
+          toolFilter: { allow: [...READ_ONLY_TOOLS] },
+        })
+        run = await awaitAbortable(startPromise, signal)
+        const result = await awaitAbortable(run.result, signal)
+        if (result.stopReason === 'completed') {
+          const structured = readStructured(result.structured)
+          if (structured === undefined) {
+            judgeIncidents.push('goal-completion-judge:invalid-output')
+          } else {
+            judged = structured
+          }
+        } else {
+          judgeIncidents.push(`goal-completion-judge:stop-${result.stopReason}`)
+        }
+      } catch (error) {
+        const phase = run === undefined ? 'start' : 'result'
+        if (run === undefined && signal.aborted && startPromise !== undefined) {
+          void startPromise.then(
+            lateRun => lateRun.dispose().catch(() => undefined),
+            () => undefined,
+          )
+        }
+        const kind = timeout.aborted && !input.signal.aborted
+          ? 'timeout'
+          : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+        judgeIncidents.push(`goal-completion-judge:${phase}-${kind}`)
+        retryStart = phase === 'start'
+          && !signal.aborted
+          && attempt < FINAL_JUDGE_START_ATTEMPTS
+      } finally {
+        if (run !== undefined) {
+          try {
+            await run.dispose()
+          } catch (error) {
+            const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+            judgeIncidents.push(`goal-completion-judge:dispose-${kind}`)
+          }
+        }
       }
-    } else {
-      judgeIncidents.push(`goal-completion-judge:stop-${result.stopReason}`)
+      if (!retryStart) break
     }
   } catch (error) {
-    const phase = run === undefined ? 'start' : 'result'
-    if (run === undefined && signal.aborted && startPromise !== undefined) {
-      void startPromise.then(
-        lateRun => lateRun.dispose().catch(() => undefined),
-        () => undefined,
-      )
-    }
     const kind = timeout.aborted && !input.signal.aborted
       ? 'timeout'
       : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
-    judgeIncidents.push(`goal-completion-judge:${phase}-${kind}`)
-  } finally {
-    if (run !== undefined) {
-      try {
-        await run.dispose()
-      } catch (error) {
-        const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
-        judgeIncidents.push(`goal-completion-judge:dispose-${kind}`)
-      }
-    }
+    judgeIncidents.push(`goal-completion-judge:route-${kind}`)
   }
   if (judged.verdict === 'blocked' && judgeIncidents.length > 0) {
     judged = unavailable(judgeIncidents)
