@@ -223,7 +223,7 @@ describe('KIRA Team conversation node', () => {
       version: 1,
       teamId: 'root',
       member: { id: 'worker-a', phase: 'active' },
-    }))).toEqual({ id: 'team-member:worker-a', role: 'start' })
+    }))).toBeNull()
 
     const malformedQueued = [
       null,
