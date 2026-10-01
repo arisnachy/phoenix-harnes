@@ -61,6 +61,7 @@ export const MISSION_JUDGE_READ_ONLY_TOOLS = [
 
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 8
+const MISSION_JUDGE_START_ATTEMPTS = 2
 type MissionJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
 
@@ -186,24 +187,34 @@ export function createSubagentMissionJudge(input: {
       }
       : undefined
     const toolFilter: ToolRestriction = { allow: [...MISSION_JUDGE_READ_ONLY_TOOLS] }
-    let run: Awaited<ReturnType<typeof input.subagents.start>> | undefined
-    try {
-      run = await input.subagents.start(resolved.name, {
-        label: 'hardness-mission-judge',
-        prompt: prompt(mission),
-        parent,
-        signal: mission.context.signal,
-        ...(agentOptions === undefined ? {} : { agentOptions }),
-        outputSchema: MISSION_JUDGE_OUTPUT_SCHEMA,
-        toolFilter,
-      })
-      const result = await run.result
-      if (result.stopReason !== 'completed') return unavailable()
-      return readDecision(result.structured) ?? unavailable()
-    } catch {
-      return unavailable()
-    } finally {
-      if (run !== undefined) await run.dispose()
+    for (let attempt = 1; attempt <= MISSION_JUDGE_START_ATTEMPTS; attempt += 1) {
+      let run: Awaited<ReturnType<typeof input.subagents.start>> | undefined
+      try {
+        run = await input.subagents.start(resolved.name, {
+          label: 'hardness-mission-judge',
+          prompt: prompt(mission),
+          parent,
+          signal: mission.context.signal,
+          ...(agentOptions === undefined ? {} : { agentOptions }),
+          outputSchema: MISSION_JUDGE_OUTPUT_SCHEMA,
+          toolFilter,
+        })
+        const result = await run.result
+        if (result.stopReason !== 'completed') return unavailable()
+        return readDecision(result.structured) ?? unavailable()
+      } catch {
+        if (mission.context.signal.aborted || attempt >= MISSION_JUDGE_START_ATTEMPTS) return unavailable()
+      } finally {
+        if (run !== undefined) {
+          try {
+            await run.dispose()
+          } catch {
+            // A completed semantic verdict remains authoritative even if the
+            // disposable child transport closes noisily during cleanup.
+          }
+        }
+      }
     }
+    return unavailable()
   }
 }
