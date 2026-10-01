@@ -80,7 +80,6 @@ async function fullBench(sessions: SessionSummary[], current?: SessionId) {
     subscribeWorkspaceOccupancy: () => () => {},
   }
   ctx.provide('layout', layout as never)
-  ctx.provide('conversationEvents', { register: () => () => {} } as never)
   await provideSlotFaces(ctx)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
   await ctx.plugin({ inject: [...inject], apply }).await()
@@ -235,7 +234,7 @@ describe('team chat identity', () => {
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout', 'conversationEvents'])
+    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout'])
   })
 
   it('registers one shell.overlay entry so KIRA never reserves conversation width', async () => {
