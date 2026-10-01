@@ -103,7 +103,9 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
     if ((event.type as string) === 'team/member') {
       const data = record(event.data)
       const member = record(data?.member)
-      return data?.version === 1 && member?.phase === 'active' && typeof member.id === 'string'
+      return data?.version === 1 && typeof data.teamId === 'string'
+        && member?.phase === 'active' && typeof member.id === 'string'
+        && typeof member.name === 'string' && typeof member.description === 'string'
         ? { id: `team-member:${member.id}`, role: 'start' }
         : null
     }
