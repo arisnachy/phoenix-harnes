@@ -10,9 +10,9 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Interface as ReadlineInterface } from 'node:readline'
 import { LlmError } from '@phoenix-ai/dsh-llm'
@@ -238,6 +238,64 @@ export function codexDiscoveryArgs(): string[] {
   ]
 }
 
+/** Process command chosen for a metadata-only Codex app-server probe. */
+export interface CodexDiscoveryCommand {
+  readonly source: 'managed' | 'path'
+  readonly command: string
+  readonly args: readonly string[]
+}
+
+function managedCodexRuntimeBin(): string | undefined {
+  const explicitRoot = process.env.PHOENIX_CODEX_RUNTIME_ROOT?.trim()
+  const dshHome = process.env.DSH_HOME?.trim()
+  const root = explicitRoot !== undefined && explicitRoot.length > 0
+    ? resolve(explicitRoot)
+    : join(
+        dshHome !== undefined && dshHome.length > 0 ? resolve(dshHome) : join(homedir(), '.dsh'),
+        'codex-runtime',
+      )
+  const packageJson = join(root, 'node_modules', '@openai', 'codex', 'package.json')
+  if (!existsSync(packageJson)) return undefined
+  try {
+    const manifest = JSON.parse(readFileSync(packageJson, 'utf8')) as {
+      readonly version?: unknown
+      readonly bin?: { readonly codex?: unknown }
+    }
+    if (typeof manifest.version !== 'string' || typeof manifest.bin?.codex !== 'string') return undefined
+    const bin = resolve(dirname(packageJson), manifest.bin.codex)
+    return existsSync(bin) ? bin : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Prefer Phoenix's verified managed Codex runtime for live model discovery.
+ * Fall back to the ambient PATH command so an updater failure can never remove
+ * the pre-existing discovery route.
+ *
+ * @param platform - injectable OS seam for deterministic tests.
+ * @returns executable plus fixed metadata-only arguments.
+ */
+export function codexDiscoveryCommand(platform: NodeJS.Platform = process.platform): CodexDiscoveryCommand {
+  const managed = managedCodexRuntimeBin()
+  if (managed !== undefined) {
+    return {
+      source: 'managed',
+      command: process.execPath,
+      args: [managed, ...codexDiscoveryArgs()],
+    }
+  }
+  if (platform === 'win32') {
+    return {
+      source: 'path',
+      command: process.env.ComSpec ?? 'cmd.exe',
+      args: ['/d', '/s', '/c', `codex ${codexDiscoveryArgs().join(' ')}`],
+    }
+  }
+  return { source: 'path', command: 'codex', args: codexDiscoveryArgs() }
+}
+
 function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   const common = {
     cwd: process.cwd(),
@@ -245,19 +303,10 @@ function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
     windowsHide: true,
     signal,
   }
-  if (process.platform === 'win32') {
-    const shell = process.env.ComSpec ?? 'cmd.exe'
-    // Fixed command text only: no user-controlled value crosses cmd.exe. This
-    // also handles npm's `codex.cmd` shim, which cannot be execFile'd directly.
-    return finishProcessSetup(spawn(
-      shell,
-      ['/d', '/s', '/c', `codex ${codexDiscoveryArgs().join(' ')}`],
-      common,
-    ))
-  }
+  const selected = codexDiscoveryCommand()
   return finishProcessSetup(spawn(
-    'codex',
-    codexDiscoveryArgs(),
+    selected.command,
+    [...selected.args],
     common,
   ))
 }
@@ -341,9 +390,9 @@ function terminate(child: ChildProcessWithoutNullStreams, lines: ReadlineInterfa
   }
   if (child.exitCode !== null || child.signalCode !== null) return
   if (process.platform === 'win32' && child.pid !== undefined) {
-    // Discovery is launched through cmd.exe on Windows. Killing only that shell
-    // can orphan the Codex app-server grandchild, which then keeps SQLite state
-    // and model-refresh workers alive. Terminate the complete process tree.
+    // Whether discovery uses the managed Node wrapper or the PATH cmd shim,
+    // terminate the complete Windows process tree so no app-server descendant
+    // keeps SQLite state or model-refresh workers alive.
     spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
       windowsHide: true,
       stdio: 'ignore',

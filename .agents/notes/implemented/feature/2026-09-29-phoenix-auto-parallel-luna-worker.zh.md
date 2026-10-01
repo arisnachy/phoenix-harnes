@@ -6,7 +6,7 @@ Status: implemented
 
 ## Problem
 
-Phoenix Auto 已经使用 GPT-6 Sol 进行规划或救援，并使用 GPT-6 Luna Max 执行，但长任务在存在独立分支时仍可能不必要地串行运行。若无条件启动额外代理，某些任务会更快，但许多任务反而会增加 token、重复工作和协调成本。
+Phoenix Auto 已经使用 GPT-6.1 Sol 进行规划或救援，并使用 GPT-6 Luna Max 执行，但长任务在存在独立分支时仍可能不必要地串行运行。若无条件启动额外代理，某些任务会更快，但许多任务反而会增加 token、重复工作和协调成本。
 
 ## Decision
 

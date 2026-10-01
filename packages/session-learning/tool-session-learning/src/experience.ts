@@ -11,6 +11,9 @@ const MAX_TASK_SUMMARY = 512
 /** How far a repeated task has progressed from novel work toward a trusted habit. */
 export type ExperienceMaturity = 'novel' | 'repeated' | 'candidate' | 'validated' | 'habitual'
 
+/** Observed Phoenix Auto execution shape for one verified task. */
+export type PhoenixAutoExecutionStrategy = 'serial' | 'parallel-1' | 'parallel-2'
+
 /** Resource facts for one completed task episode. */
 export interface ExperienceRunMetrics {
   readonly occurredAt: number
@@ -22,6 +25,16 @@ export interface ExperienceRunMetrics {
   readonly userInterventions: number
   readonly verified: boolean
   readonly qualityPassed: boolean
+  /** Strategy is recorded only when a verified task actually used Sol 6.1 plus Luna. */
+  readonly phoenixAutoStrategy?: PhoenixAutoExecutionStrategy
+  /** Number of observed Sol 6.1 routing phases; phases after the first are rescue/replan phases. */
+  readonly phoenixAutoPlannerPhases?: number
+  /** Number of observed GPT-6 Luna routing phases. */
+  readonly phoenixAutoWorkerPhases?: number
+  /** Number of Sol phases beyond the initial plan. */
+  readonly phoenixAutoRescues?: number
+  /** Number of workflow child agents started during the episode. */
+  readonly phoenixAutoAgents?: number
 }
 
 /** Durable aggregate for one task fingerprint. */
@@ -63,6 +76,9 @@ interface ActiveEpisode {
   failedToolCalls: number
   retries: number
   userInterventions: number
+  phoenixAutoPlannerPhases: number
+  phoenixAutoWorkerPhases: number
+  phoenixAutoAgents: number
 }
 
 /**
@@ -72,6 +88,8 @@ interface ActiveEpisode {
 export class ExperienceLearningEngine {
   private readonly active = new Map<string, ActiveEpisode>()
   private readonly aggregates = new Map<string, ExperienceAggregate>()
+  /** Child session -> top-level task session for resource attribution only. */
+  private readonly parentByChild = new Map<string, string>()
 
   /**
    * Restore durable experience aggregates without replacing newer in-memory evidence.
@@ -107,6 +125,7 @@ export class ExperienceLearningEngine {
       current.userInterventions += 1
       return
     }
+    this.clearChildLinks(input.sessionId)
     this.active.set(input.sessionId, {
       taskFingerprint,
       taskSummary: safeTaskSummary(input.text),
@@ -116,6 +135,9 @@ export class ExperienceLearningEngine {
       failedToolCalls: 0,
       retries: 0,
       userInterventions: 0,
+      phoenixAutoPlannerPhases: 0,
+      phoenixAutoWorkerPhases: 0,
+      phoenixAutoAgents: 0,
       ...input.projectId === undefined ? {} : { projectId: input.projectId },
     })
   }
@@ -132,7 +154,7 @@ export class ExperienceLearningEngine {
     readonly cacheWriteTokens?: number
     readonly reasoningTokens?: number
   }): void {
-    const episode = this.active.get(sessionId)
+    const episode = this.episodeFor(sessionId)
     if (episode === undefined) return
     episode.totalTokens += nonNegative(usage.inputTokens)
       + nonNegative(usage.outputTokens)
@@ -142,11 +164,53 @@ export class ExperienceLearningEngine {
   }
 
   /**
+   * Observe the effective provider/model route without retaining prompts or outputs.
+   * Request headers are change snapshots, so these counters describe routing
+   * phases rather than billing/model-call counts.
+   * @param sessionId - Active task session.
+   * @param route - Effective provider/model pair recorded by the request header.
+   */
+  observeModelRoute(sessionId: string, route: { readonly provider: string; readonly model: string }): void {
+    const episode = this.episodeFor(sessionId)
+    if (episode === undefined || route.provider !== 'openai-codex') return
+    if (route.model === 'gpt-6.1-sol') episode.phoenixAutoPlannerPhases += 1
+    else if (route.model === 'gpt-6-luna') episode.phoenixAutoWorkerPhases += 1
+  }
+
+  /**
+   * Attribute one subagent session to the active top-level task without counting
+   * it as parallelism. This captures direct-subagent resource cost as well as
+   * workflow workers while keeping strategy classification tied to workflow
+   * agent-start evidence.
+   * @param parentSessionId - Durable parent session id.
+   * @param childSessionId - Durable child session id.
+   */
+  linkChildSession(parentSessionId: string, childSessionId: string): void {
+    if (childSessionId.length === 0 || childSessionId === parentSessionId) return
+    const root = this.rootSessionId(parentSessionId)
+    if (!this.active.has(root)) return
+    this.parentByChild.set(childSessionId, root)
+  }
+
+  /**
+   * Observe one workflow child start. Only the count is retained; child prompts,
+   * labels, outputs, and identities never enter the learning aggregate.
+   * @param sessionId - Active task session.
+   */
+  observeWorkflowAgentStart(sessionId: string, childSessionId?: string): void {
+    const parentSessionId = this.rootSessionId(sessionId)
+    const episode = this.active.get(parentSessionId)
+    if (episode === undefined) return
+    episode.phoenixAutoAgents += 1
+    if (childSessionId !== undefined) this.linkChildSession(parentSessionId, childSessionId)
+  }
+
+  /**
    * Count a tool attempt. Raw arguments are deliberately not retained.
    * @param sessionId - sessionId supplied to this public operation.
    */
   observeToolCall(sessionId: string): void {
-    const episode = this.active.get(sessionId)
+    const episode = this.episodeFor(sessionId)
     if (episode !== undefined) episode.toolCalls += 1
   }
 
@@ -156,7 +220,7 @@ export class ExperienceLearningEngine {
    * @param failed - failed supplied to this public operation.
    */
   observeToolResult(sessionId: string, failed: boolean): void {
-    const episode = this.active.get(sessionId)
+    const episode = this.episodeFor(sessionId)
     if (episode !== undefined && failed) episode.failedToolCalls += 1
   }
 
@@ -165,7 +229,7 @@ export class ExperienceLearningEngine {
    * @param sessionId - sessionId supplied to this public operation.
    */
   observeRetry(sessionId: string): void {
-    const episode = this.active.get(sessionId)
+    const episode = this.episodeFor(sessionId)
     if (episode !== undefined) episode.retries += 1
   }
 
@@ -183,7 +247,10 @@ export class ExperienceLearningEngine {
    * @param sessionId - sessionId supplied to this public operation.
    */
   clear(sessionId: string): void {
-    this.active.delete(sessionId)
+    const root = this.rootSessionId(sessionId)
+    if (root !== sessionId) return
+    this.active.delete(root)
+    this.clearChildLinks(root)
   }
 
   /**
@@ -195,13 +262,16 @@ export class ExperienceLearningEngine {
     * @returns Result produced by this public operation.
    */
   completeVerified(sessionId: string, occurredAt: number): ExperienceAggregate | undefined {
-    const episode = this.active.get(sessionId)
-    if (episode === undefined) return undefined
-    this.active.delete(sessionId)
+    const root = this.rootSessionId(sessionId)
+    const episode = this.active.get(root)
+    if (episode === undefined || root !== sessionId) return undefined
+    this.active.delete(root)
+    this.clearChildLinks(root)
 
     const previous = this.bestMatchingAggregate(episode.taskFingerprint, episode.projectId)
     const key = previous?.key ?? fingerprintKey(episode.taskFingerprint)
     const aggregateKey = scopedKey(key, episode.projectId)
+    const phoenixAutoStrategy = executionStrategyFor(episode)
     const run: ExperienceRunMetrics = {
       occurredAt,
       wallTimeMs: Math.max(0, occurredAt - episode.startedAt),
@@ -212,6 +282,15 @@ export class ExperienceLearningEngine {
       userInterventions: episode.userInterventions,
       verified: true,
       qualityPassed: true,
+      ...phoenixAutoStrategy === undefined
+        ? {}
+        : {
+            phoenixAutoStrategy,
+            phoenixAutoPlannerPhases: episode.phoenixAutoPlannerPhases,
+            phoenixAutoWorkerPhases: episode.phoenixAutoWorkerPhases,
+            phoenixAutoRescues: Math.max(0, episode.phoenixAutoPlannerPhases - 1),
+            phoenixAutoAgents: episode.phoenixAutoAgents,
+          },
     }
     const runs = (previous?.runs ?? 0) + 1
     const verifiedSuccesses = (previous?.verifiedSuccesses ?? 0) + 1
@@ -275,6 +354,28 @@ export class ExperienceLearningEngine {
   snapshot(key: string, projectId?: string): ExperienceAggregate | undefined {
     const state = this.aggregates.get(scopedKey(key, projectId))
     return state === undefined ? undefined : structuredClone(state)
+  }
+
+  private rootSessionId(sessionId: string): string {
+    let current = sessionId
+    const seen = new Set<string>()
+    while (!seen.has(current)) {
+      seen.add(current)
+      const parent = this.parentByChild.get(current)
+      if (parent === undefined) return current
+      current = parent
+    }
+    return sessionId
+  }
+
+  private episodeFor(sessionId: string): ActiveEpisode | undefined {
+    return this.active.get(this.rootSessionId(sessionId))
+  }
+
+  private clearChildLinks(parentSessionId: string): void {
+    for (const [child, parent] of this.parentByChild) {
+      if (parent === parentSessionId || child === parentSessionId) this.parentByChild.delete(child)
+    }
   }
 }
 
@@ -372,6 +473,13 @@ export function fingerprintKey(fingerprint: TaskFingerprint): string {
   return hash.toString(16).padStart(8, '0')
 }
 
+function executionStrategyFor(episode: ActiveEpisode): PhoenixAutoExecutionStrategy | undefined {
+  if (episode.phoenixAutoPlannerPhases === 0 || episode.phoenixAutoWorkerPhases === 0) return undefined
+  if (episode.phoenixAutoAgents >= 2) return 'parallel-2'
+  if (episode.phoenixAutoAgents === 1) return 'parallel-1'
+  return 'serial'
+}
+
 function maturityFor(runs: number, verifiedSuccesses: number, failures: number): ExperienceMaturity {
   const successRate = verifiedSuccesses / Math.max(1, verifiedSuccesses + failures)
   if (verifiedSuccesses >= 5 && successRate >= 0.9) return 'habitual'
@@ -435,4 +543,13 @@ function isRunMetrics(value: unknown): value is ExperienceRunMetrics {
     && isCount(value.userInterventions)
     && value.verified === true
     && value.qualityPassed === true
+    && (value.phoenixAutoStrategy === undefined || isPhoenixAutoStrategy(value.phoenixAutoStrategy))
+    && (value.phoenixAutoPlannerPhases === undefined || isCount(value.phoenixAutoPlannerPhases))
+    && (value.phoenixAutoWorkerPhases === undefined || isCount(value.phoenixAutoWorkerPhases))
+    && (value.phoenixAutoRescues === undefined || isCount(value.phoenixAutoRescues))
+    && (value.phoenixAutoAgents === undefined || isCount(value.phoenixAutoAgents))
+}
+
+function isPhoenixAutoStrategy(value: unknown): value is PhoenixAutoExecutionStrategy {
+  return value === 'serial' || value === 'parallel-1' || value === 'parallel-2'
 }

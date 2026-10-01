@@ -1,6 +1,11 @@
 /** Deterministic repeated-task habit policy for Phoenix. */
 
-import type { ExperienceAggregate, ExperienceRunMetrics } from './experience.ts'
+import type {
+  ExperienceAggregate,
+  ExperienceRunMetrics,
+  PhoenixAutoExecutionStrategy,
+} from './experience.ts'
+import { paretoEfficientStrategies, type StrategyObservation } from './value-optimizer.ts'
 
 /** How Phoenix should treat a repeated task before invoking expensive reasoning. */
 export type HabitMode = 'observe' | 'reuse' | 'review'
@@ -16,6 +21,9 @@ export interface HabitAssessment {
   readonly averageTokens: number
   readonly averageToolCalls: number
   readonly averageFriction: number
+  readonly phoenixAutoComparedStrategies: number
+  readonly phoenixAutoEvidenceRuns: number
+  readonly phoenixAutoPreferredStrategy?: PhoenixAutoExecutionStrategy
   readonly reason: string
 }
 
@@ -38,6 +46,7 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
   const driftDetected = detectDrift(state.recentRuns)
   const successRate = state.verifiedSuccesses / Math.max(1, state.verifiedSuccesses + state.failures)
   const confidence = Math.max(0, Math.min(1, maturityConfidence(state.maturity) * successRate))
+  const autoPreference = phoenixAutoPreference(state.recentRuns)
 
   if (driftDetected) {
     return {
@@ -50,6 +59,7 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
       averageTokens,
       averageToolCalls,
       averageFriction,
+      ...autoPreference,
       reason: 'recent verified runs degraded relative to the earlier repeated-task baseline',
     }
   }
@@ -65,6 +75,7 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
       averageTokens,
       averageToolCalls,
       averageFriction,
+      ...autoPreference,
       reason: 'the task has enough verified repeated experience to avoid rediscovering the workflow from scratch',
     }
   }
@@ -79,6 +90,7 @@ export function assessHabitExperience(state: ExperienceAggregate): HabitAssessme
     averageTokens,
     averageToolCalls,
     averageFriction,
+    ...autoPreference,
     reason: 'repetition exists but has not accumulated enough verified evidence for habitual reuse',
   }
 }
@@ -98,6 +110,7 @@ export function formatHabitGuidance(assessment: HabitAssessment): string {
     `avg_tokens=${assessment.averageTokens}`,
     `avg_tool_calls=${assessment.averageToolCalls.toFixed(1)}`,
   ].join(' ')
+  const autoGuidance = phoenixAutoGuidance(assessment)
 
   if (assessment.mode === 'review') {
     return [
@@ -105,7 +118,8 @@ export function formatHabitGuidance(assessment: HabitAssessment): string {
       baseline,
       'Prior experience is showing drift. Do not blindly replay the old habit.',
       'Inspect the changed context, reason deliberately around the difference, preserve the quality floor, and only update the learned procedure after verified completion.',
-    ].join(' ')
+      autoGuidance,
+    ].filter(Boolean).join(' ')
   }
 
   return [
@@ -116,6 +130,70 @@ export function formatHabitGuidance(assessment: HabitAssessment): string {
     assessment.optimizationCandidate
       ? 'Repeated friction remains material, so a cheap optimization opportunity may be evaluated only if its expected total lifecycle value is positive.'
       : 'Do not add optimization analysis merely because the task is repeated.',
+    autoGuidance,
+  ].filter(Boolean).join(' ')
+}
+
+function phoenixAutoPreference(runs: readonly ExperienceRunMetrics[]): {
+  readonly phoenixAutoComparedStrategies: number
+  readonly phoenixAutoEvidenceRuns: number
+  readonly phoenixAutoPreferredStrategy?: PhoenixAutoExecutionStrategy
+} {
+  const grouped = new Map<PhoenixAutoExecutionStrategy, ExperienceRunMetrics[]>()
+  for (const run of runs) {
+    if (run.phoenixAutoStrategy === undefined || !run.qualityPassed || !run.verified) continue
+    const group = grouped.get(run.phoenixAutoStrategy) ?? []
+    group.push(run)
+    grouped.set(run.phoenixAutoStrategy, group)
+  }
+  const eligible = [...grouped.entries()].filter(([, values]) => values.length >= 2)
+  const evidenceRuns = eligible.reduce((sum, [, values]) => sum + values.length, 0)
+  if (eligible.length < 2) {
+    return {
+      phoenixAutoComparedStrategies: eligible.length,
+      phoenixAutoEvidenceRuns: evidenceRuns,
+    }
+  }
+
+  const observations: StrategyObservation[] = eligible.map(([strategy, values]) => ({
+    id: strategy,
+    qualityPassed: values.every(value => value.qualityPassed && value.verified),
+    totalTimeMs: average(values.map(value => value.wallTimeMs)),
+    totalTokens: average(values.map(value => value.totalTokens)),
+    toolCalls: average(values.map(value => value.toolCalls)),
+    retries: average(values.map(value =>
+      value.retries + value.failedToolCalls + (value.phoenixAutoRescues ?? 0))),
+    userInterventions: average(values.map(value => value.userInterventions)),
+  }))
+  const efficient = paretoEfficientStrategies(observations)
+  if (efficient.length !== 1) {
+    return {
+      phoenixAutoComparedStrategies: eligible.length,
+      phoenixAutoEvidenceRuns: evidenceRuns,
+    }
+  }
+  return {
+    phoenixAutoComparedStrategies: eligible.length,
+    phoenixAutoEvidenceRuns: evidenceRuns,
+    phoenixAutoPreferredStrategy: efficient[0]!.id as PhoenixAutoExecutionStrategy,
+  }
+}
+
+function phoenixAutoGuidance(assessment: HabitAssessment): string {
+  const strategy = assessment.phoenixAutoPreferredStrategy
+  if (strategy === undefined) return ''
+  const instruction = strategy === 'serial'
+    ? 'Prefer serial Luna Max execution; add a worker only if the current task contains a new material independent branch.'
+    : strategy === 'parallel-1'
+      ? 'Prefer one bounded Luna Max worker beside the Luna root when the same kind of independent branch is present.'
+      : 'Prefer up to two bounded Luna Max workers only when the current task still contains two genuinely independent branches.'
+  return [
+    'Phoenix Auto learned routing:',
+    `strategy=${strategy}`,
+    `evidence_runs=${assessment.phoenixAutoEvidenceRuns}`,
+    `compared_strategies=${assessment.phoenixAutoComparedStrategies}.`,
+    'This strategy uniquely dominated the compared verified alternatives on end-to-end value without lowering the verified quality floor.',
+    instruction,
   ].join(' ')
 }
 

@@ -8,7 +8,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -36,21 +36,66 @@ import {
 export const DEFAULT_DISPOSE_GRACE_MS = 3_000
 
 interface CodexPackageManifest {
-  readonly bin: {
-    readonly codex: string
+  readonly version?: unknown
+  readonly bin?: {
+    readonly codex?: unknown
   }
 }
 
-const codexPackageJsonPath = createRequire(import.meta.url).resolve('@openai/codex/package.json')
-const codexPackageManifest = JSON.parse(
-  readFileSync(codexPackageJsonPath, 'utf8'),
-) as CodexPackageManifest
+/** Resolved Codex package used for the next app-server spawn. */
+export interface CodexRuntimePackageInfo {
+  readonly source: 'managed' | 'bundled'
+  readonly version: string
+  readonly packageJson: string
+  readonly bin: string
+}
 
-/** Absolute package-local JavaScript wrapper selected by the package manifest. */
-const CODEX_PACKAGE_BIN = resolve(
-  dirname(codexPackageJsonPath),
-  codexPackageManifest.bin.codex,
-)
+const bundledCodexPackageJsonPath = createRequire(import.meta.url).resolve('@openai/codex/package.json')
+
+function managedCodexRuntimeRoot(): string {
+  const configured = process.env.PHOENIX_CODEX_RUNTIME_ROOT?.trim()
+  if (configured !== undefined && configured.length > 0) return resolve(configured)
+  const dshHome = process.env.DSH_HOME?.trim()
+  const home = dshHome !== undefined && dshHome.length > 0
+    ? resolve(dshHome)
+    : join(homedir(), '.dsh')
+  return join(home, 'codex-runtime')
+}
+
+function packageInfoAt(
+  packageJson: string,
+  source: CodexRuntimePackageInfo['source'],
+): CodexRuntimePackageInfo | undefined {
+  if (!existsSync(packageJson)) return undefined
+  try {
+    const manifest = JSON.parse(readFileSync(packageJson, 'utf8')) as CodexPackageManifest
+    if (typeof manifest.version !== 'string' || typeof manifest.bin?.codex !== 'string') return undefined
+    const bin = resolve(dirname(packageJson), manifest.bin.codex)
+    if (!existsSync(bin)) return undefined
+    return { source, version: manifest.version, packageJson, bin }
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Resolve the Codex package for one new app-server process.
+ *
+ * A verified Phoenix-managed runtime under DSH_HOME wins when present. The
+ * published package dependency remains the fail-safe fallback, so an updater
+ * failure can never make Codex unavailable to Phoenix.
+ * @returns the managed or bundled package selected for the next spawn.
+ */
+export function codexRuntimePackageInfo(): CodexRuntimePackageInfo {
+  const managed = packageInfoAt(
+    join(managedCodexRuntimeRoot(), 'node_modules', '@openai', 'codex', 'package.json'),
+    'managed',
+  )
+  const bundled = packageInfoAt(bundledCodexPackageJsonPath, 'bundled')
+  if (managed !== undefined) return managed
+  if (bundled !== undefined) return bundled
+  throw new Error('subagent-codex: bundled @openai/codex package is unavailable')
+}
 
 /** Profile-selectable non-interactive Codex permission mode. */
 export type CodexPermissionMode =
@@ -131,7 +176,7 @@ export function codexStartupFailure(cause: unknown): Error {
  * @returns Node, the official wrapper, and the fixed app-server arguments.
  */
 export function codexAppServerArgv(): string[] {
-  return [process.execPath, CODEX_PACKAGE_BIN, 'app-server', '--stdio']
+  return [process.execPath, codexRuntimePackageInfo().bin, 'app-server', '--stdio']
 }
 
 /**
@@ -147,7 +192,7 @@ export function codexAppServerArgv(): string[] {
 export function codexMetadataAppServerArgv(sqliteHome?: string): string[] {
   return [
     process.execPath,
-    CODEX_PACKAGE_BIN,
+    codexRuntimePackageInfo().bin,
     '-c',
     'features.plugins=false',
     '-c',

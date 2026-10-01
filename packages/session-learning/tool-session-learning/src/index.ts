@@ -67,6 +67,9 @@ export function apply(ctx: Context, config: Config): void {
     const occurredAt = typeof event.time === 'number' ? event.time : Date.now()
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
     const projectId = ctx.learningMemory.currentProjectId()
+    if (session.header.origin === 'subagent' && session.header.parentSession !== undefined) {
+      experience.linkChildSession(String(session.header.parentSession), sessionId)
+    }
 
     if (eventType === 'user/message') {
       const text = messageText(data)
@@ -75,7 +78,7 @@ export function apply(ctx: Context, config: Config): void {
         occurredAt,
         ...projectId === undefined ? {} : { projectId },
       })
-      if (isDirectUserMessage(data)) {
+      if (session.header.origin !== 'subagent' && isDirectUserMessage(data)) {
         experience.beginTask({
           sessionId,
           text,
@@ -92,6 +95,17 @@ export function apply(ctx: Context, config: Config): void {
       }).catch((error: unknown) => {
         ctx.logger.warn(`autonomous-memory: ignored user message in ${sessionId}: ${String(error)}`)
       })
+      return
+    }
+
+    if (eventType === 'request/header') {
+      const route = requestRoute(data)
+      if (route !== undefined) experience.observeModelRoute(sessionId, route)
+      return
+    }
+
+    if (eventType === 'tool-workflow/agent-start') {
+      experience.observeWorkflowAgentStart(sessionId, workflowChildSessionId(data))
       return
     }
 
@@ -116,12 +130,14 @@ export function apply(ctx: Context, config: Config): void {
       return
     }
 
-    if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
+    if (session.header.origin !== 'subagent'
+      && eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
       experience.clear(sessionId)
       return
     }
 
-    if (eventType === 'goal/change' && isRecord(data) && data.operation === 'complete') {
+    if (session.header.origin !== 'subagent'
+      && eventType === 'goal/change' && isRecord(data) && data.operation === 'complete') {
       tasks.complete(sessionId, occurredAt)
       const learned = experience.completeVerified(sessionId, occurredAt)
       if (learned !== undefined) {
@@ -355,6 +371,19 @@ function messageText(data: unknown): string | undefined {
 
 function isDirectUserMessage(data: unknown): boolean {
   return isRecord(data) && isRecord(data.source) && data.source.kind === 'user'
+}
+
+function workflowChildSessionId(data: unknown): string | undefined {
+  if (!isRecord(data) || typeof data.childId !== 'string' || data.childId.length === 0) return undefined
+  return data.childId
+}
+
+function requestRoute(data: unknown): { readonly provider: string; readonly model: string } | undefined {
+  if (!isRecord(data) || !isRecord(data.header) || !isRecord(data.header.config)) return undefined
+  const provider = data.header.config.provider
+  const model = data.header.config.model
+  if (typeof provider !== 'string' || typeof model !== 'string') return undefined
+  return { provider, model }
 }
 
 function assistantUsage(data: unknown): {

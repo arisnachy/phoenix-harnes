@@ -86,6 +86,39 @@ describe('habit learning policy', () => {
     expect(formatHabitGuidance(assessment)).toContain('total lifecycle value')
   })
 
+  it('learns a uniquely dominant Phoenix Auto execution strategy from verified telemetry', () => {
+    const recentRuns = [
+      run({ phoenixAutoStrategy: 'serial', wallTimeMs: 2_000, totalTokens: 220, toolCalls: 6 }),
+      run({ phoenixAutoStrategy: 'parallel-1', wallTimeMs: 1_000, totalTokens: 140, toolCalls: 4 }),
+      run({ phoenixAutoStrategy: 'parallel-2', wallTimeMs: 1_300, totalTokens: 180, toolCalls: 5 }),
+      run({ phoenixAutoStrategy: 'serial', wallTimeMs: 2_100, totalTokens: 230, toolCalls: 6 }),
+      run({ phoenixAutoStrategy: 'parallel-1', wallTimeMs: 1_050, totalTokens: 145, toolCalls: 4 }),
+      run({ phoenixAutoStrategy: 'parallel-2', wallTimeMs: 1_350, totalTokens: 185, toolCalls: 5 }),
+    ]
+    const assessment = assessHabitExperience(aggregate('habitual', { recentRuns }))
+    expect(assessment.phoenixAutoPreferredStrategy).toBe('parallel-1')
+    expect(assessment.phoenixAutoComparedStrategies).toBe(3)
+    expect(assessment.phoenixAutoEvidenceRuns).toBe(6)
+    const guidance = formatHabitGuidance(assessment)
+    expect(guidance).toContain('Phoenix Auto learned routing')
+    expect(guidance).toContain('strategy=parallel-1')
+    expect(guidance).toContain('one bounded Luna Max worker')
+  })
+
+  it('keeps exploring when verified strategies trade time against tokens instead of dominating', () => {
+    const recentRuns = [
+      run({ phoenixAutoStrategy: 'serial', wallTimeMs: 900, totalTokens: 240 }),
+      run({ phoenixAutoStrategy: 'parallel-1', wallTimeMs: 1_200, totalTokens: 120 }),
+      run({ phoenixAutoStrategy: 'serial', wallTimeMs: 900, totalTokens: 240 }),
+      run({ phoenixAutoStrategy: 'parallel-1', wallTimeMs: 1_200, totalTokens: 120 }),
+    ]
+    const assessment = assessHabitExperience(aggregate('validated', { recentRuns }))
+    expect(assessment.phoenixAutoComparedStrategies).toBe(2)
+    expect(assessment.phoenixAutoEvidenceRuns).toBe(4)
+    expect(assessment.phoenixAutoPreferredStrategy).toBeUndefined()
+    expect(formatHabitGuidance(assessment)).not.toContain('Phoenix Auto learned routing')
+  })
+
   it('drops back to deliberate review when latency drifts', () => {
     const assessment = assessHabitExperience(aggregate('habitual', {
       recentRuns: [

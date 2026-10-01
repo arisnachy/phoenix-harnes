@@ -1,5 +1,6 @@
-import { readFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@phoenix-ai/cordis'
@@ -25,6 +26,7 @@ import {
   codexAccountEnvironment,
   codexAppServerArgv,
   codexMetadataAppServerArgv,
+  codexRuntimePackageInfo,
   DEFAULT_DISPOSE_GRACE_MS,
   disposeCodexChild,
   startCodexRun,
@@ -360,6 +362,34 @@ function expectedFailureDiagnostic(
 }
 
 describe('task admission and package contracts', () => {
+  it('prefers a valid Phoenix-managed Codex runtime and falls back dynamically', () => {
+    const runtimeRoot = mkdtempSync(join(tmpdir(), 'phoenix-codex-runtime-'))
+    const packageRoot = join(runtimeRoot, 'node_modules', '@openai', 'codex')
+    const bin = join(packageRoot, 'bin', 'codex.js')
+    mkdirSync(join(packageRoot, 'bin'), { recursive: true })
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({
+      name: '@openai/codex',
+      version: '9.9.9',
+      bin: { codex: 'bin/codex.js' },
+    }))
+    writeFileSync(bin, '')
+    const previous = process.env.PHOENIX_CODEX_RUNTIME_ROOT
+    try {
+      process.env.PHOENIX_CODEX_RUNTIME_ROOT = runtimeRoot
+      expect(codexRuntimePackageInfo()).toEqual({
+        source: 'managed',
+        version: '9.9.9',
+        packageJson: join(packageRoot, 'package.json'),
+        bin,
+      })
+      expect(codexAppServerArgv()[1]).toBe(bin)
+    } finally {
+      if (previous === undefined) delete process.env.PHOENIX_CODEX_RUNTIME_ROOT
+      else process.env.PHOENIX_CODEX_RUNTIME_ROOT = previous
+      rmSync(runtimeRoot, { recursive: true, force: true })
+    }
+  })
+
   it('ships one independently installable provider-only Bundle patch', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
@@ -390,16 +420,17 @@ describe('task admission and package contracts', () => {
         `npm:@openai/codex@${CODEX_VERSION}-${packageName.slice('@openai/codex-'.length)}`,
       ]),
     ))
+    const runtimePackage = codexRuntimePackageInfo()
     expect(codexAppServerArgv()).toEqual([
       process.execPath,
-      resolve(dirname(codexPackageJson), codexManifest.bin.codex),
+      runtimePackage.bin,
       'app-server',
       '--stdio',
     ])
 
     expect(codexMetadataAppServerArgv()).toEqual([
       process.execPath,
-      resolve(dirname(codexPackageJson), codexManifest.bin.codex),
+      runtimePackage.bin,
       '-c',
       'features.plugins=false',
       '-c',
@@ -410,7 +441,7 @@ describe('task admission and package contracts', () => {
     const metadataHome = resolve('test-codex-metadata-home')
     expect(codexMetadataAppServerArgv(metadataHome)).toEqual([
       process.execPath,
-      resolve(dirname(codexPackageJson), codexManifest.bin.codex),
+      runtimePackage.bin,
       '-c',
       'features.plugins=false',
       '-c',

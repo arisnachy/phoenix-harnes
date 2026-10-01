@@ -226,6 +226,76 @@ describe('ExperienceLearningEngine', () => {
     })
   })
 
+  it('records Phoenix Auto routing shape without retaining worker content', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 's', text: 'Repair the router and run tests', occurredAt: 100 })
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6.1-sol' })
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6-luna' })
+    engine.observeWorkflowAgentStart('s')
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6.1-sol' })
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6-luna' })
+    const state = engine.completeVerified('s', 250)
+    expect(state?.recentRuns.at(-1)).toMatchObject({
+      phoenixAutoStrategy: 'parallel-1',
+      phoenixAutoPlannerPhases: 2,
+      phoenixAutoWorkerPhases: 2,
+      phoenixAutoRescues: 1,
+      phoenixAutoAgents: 1,
+    })
+  })
+
+  it('charges Luna worker tokens, tools, failures, and retries to the parent mission', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 'parent', text: 'Repair router with one independent test worker', occurredAt: 100 })
+    engine.observeModelRoute('parent', { provider: 'openai-codex', model: 'gpt-6.1-sol' })
+    engine.observeModelRoute('parent', { provider: 'openai-codex', model: 'gpt-6-luna' })
+    engine.observeWorkflowAgentStart('parent', 'child-1')
+    engine.observeUsage('parent', { inputTokens: 20, outputTokens: 10 })
+    engine.observeUsage('child-1', { inputTokens: 100, outputTokens: 40, reasoningTokens: 20 })
+    engine.observeToolCall('child-1')
+    engine.observeToolResult('child-1', true)
+    engine.observeRetry('child-1')
+    expect(engine.completeVerified('child-1', 200)).toBeUndefined()
+    const state = engine.completeVerified('parent', 300)
+    expect(state?.recentRuns.at(-1)).toMatchObject({
+      totalTokens: 190,
+      toolCalls: 1,
+      failedToolCalls: 1,
+      retries: 1,
+      phoenixAutoStrategy: 'parallel-1',
+      phoenixAutoAgents: 1,
+    })
+  })
+
+  it('attributes direct subagent resource use without calling it parallel Phoenix Auto', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 'parent', text: 'Inspect one isolated issue', occurredAt: 10 })
+    engine.linkChildSession('parent', 'child')
+    engine.observeUsage('child', { inputTokens: 30, outputTokens: 20 })
+    engine.observeToolCall('child')
+    const state = engine.completeVerified('parent', 20)
+    expect(state?.recentRuns.at(-1)).toMatchObject({ totalTokens: 50, toolCalls: 1 })
+    expect(state?.recentRuns.at(-1)?.phoenixAutoStrategy).toBeUndefined()
+  })
+
+  it('does not let a child clear or complete the parent learning episode', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 'parent', text: 'Complete root mission', occurredAt: 1 })
+    engine.linkChildSession('parent', 'child')
+    engine.clear('child')
+    expect(engine.completeVerified('child', 2)).toBeUndefined()
+    expect(engine.completeVerified('parent', 3)).toBeDefined()
+  })
+
+  it('does not label a single direct Codex route as Phoenix Auto', () => {
+    const engine = new ExperienceLearningEngine()
+    engine.beginTask({ sessionId: 's', text: 'Run one direct model task', occurredAt: 1 })
+    engine.observeModelRoute('s', { provider: 'openai-codex', model: 'gpt-6-luna' })
+    engine.observeWorkflowAgentStart('s')
+    const state = engine.completeVerified('s', 2)
+    expect(state?.recentRuns.at(-1)?.phoenixAutoStrategy).toBeUndefined()
+  })
+
   it('replaces an unrelated unfinished episode and never promotes it', () => {
     const engine = new ExperienceLearningEngine()
     engine.beginTask({ sessionId: 's', text: 'Fill monthly clinic survey', occurredAt: 100 })
