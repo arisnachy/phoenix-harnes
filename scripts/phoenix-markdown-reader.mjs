@@ -225,6 +225,11 @@ function main() {
   process.stdout.write(outputPath)
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname.replace(/^\/(?=[A-Za-z]:)/u, ''))) {
-  main()
+if (process.argv[1]) {
+  const invokedPath = resolve(process.argv[1])
+  const modulePath = resolve(fileURLToPath(import.meta.url))
+  const sameModule = process.platform === 'win32'
+    ? invokedPath.toLowerCase() === modulePath.toLowerCase()
+    : invokedPath === modulePath
+  if (sameModule) main()
 }
