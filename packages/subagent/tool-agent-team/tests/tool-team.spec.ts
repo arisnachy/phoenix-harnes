@@ -130,6 +130,8 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('returns noProgress immediately')
     expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
     expect(leadPrompt).toContain('Use team_react for a lightweight acknowledgement')
+    expect(leadPrompt).toContain('must send it to lead with purpose result before ending its turn')
+    expect(leadPrompt).toContain('spawn_teammate is itself the initial assignment')
     expect(leadPrompt).toContain('Your Team role is lead')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
