@@ -83,6 +83,8 @@ interface Config {
 - 持久化：`session/event` 发生后立即安排延后写入；`session/flush` 是显式观测屏障
 - UI：`session/event`（assistant token 流、边界、工具活动）+ `agent/*` 控制事件（`agent/status`、`agent/created`/`agent/disposed`）
 
+社交和元对话步骤在 `step/start` 中记录可选的 `historyProjection`。请求构建器和重建不变量对该日志投影采用相同处理，因此简短的引导回复可以省略工具历史，同时保留严格的持久化请求校验。
+
 ## 模型体验
 
 ### 完整对话请求

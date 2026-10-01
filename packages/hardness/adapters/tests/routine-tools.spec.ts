@@ -238,7 +238,7 @@ describe('Phoenix Routine facade', () => {
     await expect(found.execute({ ...base, trigger: 'interval', runAt: '2026-10-01T12:00:00.000Z' }, {} as never))
       .rejects.toThrow(/greater than/)
     await expect(found.execute({ ...base, trigger: 'interval', runAt: '2026-10-01T12:00:00.000Z', everyMinutes: Number.POSITIVE_INFINITY }, {} as never))
-      .rejects.toThrow(/greater than/)
+      .rejects.toThrow('invalid arguments: "everyMinutes" must be a finite JSON number')
     await expect(found.execute({ ...base, trigger: 'interval', runAt: '2026-10-01T12:00:00.000Z', everyMinutes: -1 }, {} as never))
       .rejects.toThrow(/greater than/)
     await expect(found.execute({ ...base, trigger: 'interval', runAt: '2026-10-01T12:00:00.000Z', everyMinutes: 1e20 }, {} as never))

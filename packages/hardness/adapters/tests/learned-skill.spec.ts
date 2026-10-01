@@ -80,6 +80,7 @@ describe('learned Phoenix skills', () => {
 
     await expect(store.learn({
       name: 'broken-write',
+      replace: true,
       description: 'Description',
       whenToUse: 'When useful',
       instructions: 'Do it.',

@@ -33,6 +33,10 @@ Model-facing presets expose `hardness_workflow.executionMode` so Phoenix can dis
 The same policy is reinforced in active goal rounds. An already-authorized mission continues through recoverable tool and verification failures using repair, alternate routes, capability acquisition/building, or a materially different strategy. Internal retry/round limits cannot complete or cancel the mission. Permission, credentials, safety policy, provider quota, explicit denial, and genuinely unsatisfied external dependencies remain hard boundaries and are never bypassed by the fast path.
 
 
+## Runtime validation
+
+Paper candle reads clamp both the provider request and returned rows to 1–1000. Shell mutation classification reads the command argument. Runtime-service telemetry performs an immediate first probe and then reuses observations until their TTL expires.
+
 ## Model Experience
 
 ### Projected capability metadata and operating protocol

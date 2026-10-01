@@ -16,7 +16,7 @@ function input() {
     artifactMime: 'text/plain',
     rendered: { kind: 'text', artifactId: 'forecast' },
     evidenceId: 'evidence:forecast',
-    context: { callId: 'mission-1' as never, signal: new AbortController().signal, agent: { id: 'parent' } as never },
+    context: { callId: 'mission-1' as never, signal: new AbortController().signal, agent: { id: 'parent', options: { provider: 'mock', model: 'mock' } } as never },
   }
 }
 

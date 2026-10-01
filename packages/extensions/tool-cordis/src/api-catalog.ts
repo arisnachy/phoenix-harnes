@@ -1360,10 +1360,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Process-local MCP lifecycle registry. It stores no connection settings, credentials, URLs, headers, environment variables, or provider errors.',
     methods: [
       {
+        signature: 'subscribe(listener: McpConnectorListener): () => void',
+        description: 'Subscribe to secret-free lifecycle/tool changes without exposing transport configuration, credentials, URLs, provider errors, or reconnect callbacks.',
+        parameters: [{ name: 'listener', description: 'Synchronous observer removed by the returned disposer.' }],
+        returns: 'Idempotent disposer.',
+      },
+      {
         signature: 'register(input: McpConnectorRegistrationInput): McpConnectorRegistration',
         description: 'Register one server identity in stable insertion order.',
-        parameters: [{ name: 'input', description: 'secret-free server identity and transport.' }],
-        returns: 'a handle that publishes state and removes the entry.',
+        parameters: [{ name: 'input', description: 'Secret-free server identity and transport.' }],
+        returns: 'A handle that publishes state and removes the entry.',
       },
       {
         signature: 'reconnect(serverName: string): boolean',
@@ -4407,8 +4413,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
   },
   {
+    name: 'McpConnectorChange',
+    declaration: 'export interface McpConnectorChange {\n    readonly kind: McpConnectorChangeKind;\n    readonly serverName: string;\n    readonly entry: McpConnectorEntry;\n}',
+  },
+  {
+    name: 'McpConnectorChangeKind',
+    declaration: 'export type McpConnectorChangeKind = \'registered\' | \'status\' | \'tools\' | \'disposed\';',
+  },
+  {
     name: 'McpConnectorEntry',
     declaration: 'export interface McpConnectorEntry {\n    readonly serverName: string;\n    readonly transport: McpConnectorTransport;\n    readonly status: McpConnectorStatus;\n    readonly toolNames: readonly string[];\n    readonly reasonCode?: McpConnectorReasonCode;\n}',
+  },
+  {
+    name: 'McpConnectorListener',
+    declaration: 'export type McpConnectorListener = (change: McpConnectorChange) => void;',
   },
   {
     name: 'McpConnectorReasonCode',
@@ -4920,7 +4938,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': {\n        turn: number;\n        step: number;\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n        historyProjection?: {\n            kind: \'conversational-tail\';\n            maxMessages: number;\n            maxChars: number;\n        };\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': {\n        turn: number;\n        step: number;\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
   },
   {
     name: 'SessionEventMetadataFilter',

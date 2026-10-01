@@ -601,6 +601,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   VoiceConversationSpeakRequest: 'conversation voice speak request is owned by packages/voice/voice/src/types.ts',
   VoiceConversationCancelReceipt: 'conversation voice cancel receipt is owned by packages/voice/voice/src/types.ts',
   VoiceConversationCancelRequest: 'conversation voice cancel request is owned by packages/voice/voice/src/types.ts',
+  McpConnectorListener: 'runtime connector subscription callbacks are owned by packages/mcp/mcp-registry/src/index.ts',
   McpConnectorEntry: 'MCP connector lifecycle snapshot is owned by packages/mcp/mcp-registry/README.md',
   McpConnectorRegistration: 'MCP connector registration handle is owned by packages/mcp/mcp-registry/README.md',
   McpConnectorRegistrationInput: 'MCP connector registration input is owned by packages/mcp/mcp-registry/README.md',

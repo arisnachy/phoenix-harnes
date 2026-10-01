@@ -290,9 +290,17 @@ Process-local MCP lifecycle registry. It stores no connection settings, credenti
 
 ```ts cordis-catalog
 /**
+ * Subscribe to secret-free lifecycle/tool changes without exposing transport
+ * configuration, credentials, URLs, provider errors, or reconnect callbacks.
+ * @param listener - Synchronous observer removed by the returned disposer.
+ * @returns Idempotent disposer.
+ */
+subscribe(listener: McpConnectorListener): () => void
+
+/**
  * Register one server identity in stable insertion order.
- * @param input - secret-free server identity and transport.
- * @returns a handle that publishes state and removes the entry.
+ * @param input - Secret-free server identity and transport.
+ * @returns A handle that publishes state and removes the entry.
  */
 register(input: McpConnectorRegistrationInput): McpConnectorRegistration
 

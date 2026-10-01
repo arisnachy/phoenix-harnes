@@ -168,6 +168,14 @@ function operationName(toolName: string): string {
   return normalized.split(/(?:__|[.:/])/).at(-1) || normalized
 }
 
+function shellMutationText(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value !== null && typeof value === 'object' && 'command' in value && typeof value.command === 'string') {
+    return value.command
+  }
+  return ''
+}
+
 function argumentText(value: unknown): string {
   try { return JSON.stringify(value) ?? 'null' } catch { return String(value) }
 }
@@ -187,7 +195,7 @@ export function isSubstantiveMutation(name: string, args: unknown): boolean {
   if (op === 'hardness_run' && GAME_NEED.test(text)) return true
   if (GAME_EDITOR_NAMESPACE.test(normalizedName) && !GAME_EDITOR_READ_ONLY.test(op)) return true
   if (MUTATION.test(op)) return SUBSTANTIVE.test(text)
-  return SHELL.test(op) && SHELL_MUTATE.test(text) && SUBSTANTIVE.test(text)
+  return SHELL.test(op) && SHELL_MUTATE.test(shellMutationText(args)) && SUBSTANTIVE.test(text)
 }
 
 /**
@@ -219,7 +227,7 @@ export function isGameAssetProduction(name: string, args: unknown): boolean {
     && !GAME_EDITOR_READ_ONLY.test(op)
     && /\b(?:asset|sprite|tile|texture|material|model|mesh|rig|anim|audio|sound|music|vfx|particle|shader|import)\b/i.test(op + ' ' + text)) return true
   if (MUTATION.test(op) && GAME_ASSET_PATH.test(text)) return true
-  if (SHELL.test(op) && SHELL_MUTATE.test(text) && GAME_ASSET_PATH.test(text)) return true
+  if (SHELL.test(op) && SHELL_MUTATE.test(shellMutationText(args)) && GAME_ASSET_PATH.test(text)) return true
   return false
 }
 
@@ -234,7 +242,7 @@ export function isGameAssetProvenanceMutation(name: string, args: unknown): bool
   const op = operationName(name)
   const text = argumentText(args)
   if (MUTATION.test(op)) return GAME_ASSET_PROVENANCE.test(text)
-  return SHELL.test(op) && SHELL_MUTATE.test(text) && GAME_ASSET_PROVENANCE.test(text)
+  return SHELL.test(op) && SHELL_MUTATE.test(shellMutationText(args)) && GAME_ASSET_PROVENANCE.test(text)
 }
 
 /**

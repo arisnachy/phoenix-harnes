@@ -3,8 +3,7 @@ import { MemoryProactivityStore, ProactivityEngine } from '../src/proactivity-en
 
 describe('HARDNESS proactivity concurrency', () => {
   it('releases the ledger mutex while scheduled work is executing', async () => {
-    let engine!: ProactivityEngine
-    engine = new ProactivityEngine(new MemoryProactivityStore(), {
+    const engine = new ProactivityEngine(new MemoryProactivityStore(), {
       execute: async () => {
         const visible = await Promise.race([
           engine.list({ includeHidden: true }),

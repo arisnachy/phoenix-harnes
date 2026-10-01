@@ -191,7 +191,7 @@ export class McpConnectorRegistry extends Service {
    * @returns snapshots safe to pass to model-facing projection code.
    */
   list(): readonly McpConnectorEntry[] {
-    return [...this.entries.values()].map((entry) => this.snapshot(entry))
+    return [...this.entries.values()].map(entry => this.snapshot(entry))
   }
 }
 

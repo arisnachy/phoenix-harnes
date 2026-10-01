@@ -84,6 +84,7 @@ interface SdkScenario {
 }
 
 const SCENARIOS: SdkScenario[] = [
+  { name: 'casual-turn', prompt: 'hello', sessionId: 'sdk-snapshot-casual', children: 0 },
   {
     name: 'text-turn',
     prompt: 'Reply with exactly: SDK snapshot OK',

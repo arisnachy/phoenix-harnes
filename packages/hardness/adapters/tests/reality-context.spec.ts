@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   RealityContextEngine,
   realityConfigFromEnvironment,
 } from '../src/reality-context.ts'
+
+afterEach(() => vi.restoreAllMocks())
 
 describe('Phoenix reality context', () => {
   it('does not accept partial or invalid coordinates as precise location', () => {
@@ -114,6 +116,7 @@ describe('Phoenix reality context', () => {
   })
 
   it('projects sanitized authorization, MCP, active-model, and provider quota telemetry', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-20T15:00:00.000Z'))
     const engine = new RealityContextEngine({ refreshMs: 30_000 })
     const fakeContext = {
       get(name: string) {
@@ -313,7 +316,36 @@ describe('Phoenix reality context', () => {
     })
   })
 
+  it('probes fresh runtime services immediately and reuses telemetry until the TTL expires', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-10-01T15:00:00.000Z'))
+    const list = vi.fn(() => [])
+    const ctx = { get: (name: string) => name === 'authorization' ? { list } : undefined } as never
+    const engine = new RealityContextEngine({ refreshMs: 30_000 })
+
+    await engine.refreshRuntimeServices(ctx)
+    expect(list).toHaveBeenCalledTimes(1)
+    await engine.refreshRuntimeServices(ctx)
+    expect(list).toHaveBeenCalledTimes(1)
+    clock.mockReturnValue(Date.parse('2026-10-01T15:00:30.001Z'))
+    await engine.refreshRuntimeServices(ctx)
+    expect(list).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([-1, 0, 1])('expires browser location exactly at its deadline (offset %s ms)', (offset) => {
+    const now = Date.parse('2026-10-01T15:00:00.000Z')
+    vi.spyOn(Date, 'now').mockReturnValue(now)
+    const engine = new RealityContextEngine({ refreshMs: 30_000 })
+    const ctx = {
+      get: (name: string) => name === 'clientReality' ? {
+        locationFor: () => ({ latitude: 19.451, longitude: -70.697, accuracyMeters: 24, observedAt: now - 1000, expiresAt: now + offset }),
+      } : undefined,
+    } as never
+    const result = engine.snapshot(ctx, new Date(now), { agent: { id: 'geo', options: {}, session: {} } })
+    expect(result.location.status).toBe(offset > 0 ? 'authorized-browser' : 'unknown')
+  })
+
   it('uses non-expired browser geolocation without inventing civic labels', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-09-20T15:00:00.000Z'))
     const now = Date.parse('2026-09-20T15:00:00.000Z')
     const engine = new RealityContextEngine({ refreshMs: 30_000 })
     const fakeContext = {

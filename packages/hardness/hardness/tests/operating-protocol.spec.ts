@@ -120,7 +120,7 @@ describe('HARDNESS model operating protocol', () => {
     expect(spanish).toContain('Para HTML, webs, landing pages y dashboards exige calidad de producción')
     expect(rendered).toContain('only pass with a passing quality gate may enter DONE')
     expect(spanish).toContain('clasifica la misión y selecciona o adapta el workflow cognitivo HARDNESS')
-    expect(spanish).toContain('usa hardness_workflow')
+    expect(spanish).toContain('Usa hardness_workflow')
     expect(spanish).toContain('nunca concede autoridad de ejecución')
     expect(rendered).not.toContain('function')
     expect(rendered).not.toContain('credential')

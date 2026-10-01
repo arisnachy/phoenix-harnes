@@ -39,6 +39,7 @@ import { canonicalHeader, headerEquals } from '@phoenix-ai/dsh-session'
 import { joinContextSections, renderContextSections, renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@phoenix-ai/dsh-system-prompt'
 import type { Context } from '@phoenix-ai/cordis'
+import { projectRequestHistory } from './request-history.ts'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
 import { DEFAULT_MAX_STEPS_PER_TURN } from './constants.ts'
@@ -86,31 +87,6 @@ function isTextOnlyHumanBatch(messages: readonly UserMessage[]): boolean {
     message.source.kind === 'user'
     && message.content.length > 0
     && message.content.every(block => block.type === 'text'))
-}
-
-/**
- * Keep only a tiny, tool-free conversational tail for social/meta reactions.
- * This prevents a one-line steering comment from replaying megabytes of tool
- * calls/results accumulated by the task it interrupted.
- */
-function fastConversationHistory(messages: Message[]): Message[] {
-  const selected: Message[] = []
-  let chars = 0
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index]
-    if (message === undefined) continue
-    const safe = message.source.kind === 'user'
-      || (message.source.kind === 'model'
-        && message.content.length > 0
-        && message.content.every(block => block.type === 'text'))
-    if (!safe || !message.content.every(block => block.type === 'text')) continue
-    const size = message.content.reduce((sum, block) => sum + (block.type === 'text' ? block.text.length : 0), 0)
-    if (selected.length > 0 && chars + size > FAST_CONVERSATION_HISTORY_MAX_CHARS) continue
-    selected.push(message)
-    chars += size
-    if (selected.length >= FAST_CONVERSATION_HISTORY_MAX_MESSAGES) break
-  }
-  return selected.reverse()
 }
 
 /** Remove adapter-derived values before plugins propose the next request config. */
@@ -402,7 +378,14 @@ export class ReactLoopAgent implements Agent {
           return false
         }
         signal.throwIfAborted()
-        this.session.append('step/start', { turn, step })
+        this.session.append('step/start', {
+          turn, step,
+          ...(decision.fastConversation ? { historyProjection: {
+            kind: 'conversational-tail' as const,
+            maxMessages: FAST_CONVERSATION_HISTORY_MAX_MESSAGES,
+            maxChars: FAST_CONVERSATION_HISTORY_MAX_CHARS,
+          } } : {}),
+        })
         phase.step = step
         try {
           for (const message of decision.messages) {
@@ -410,7 +393,7 @@ export class ReactLoopAgent implements Agent {
           }
           // max-tokens is sticky: once any step hits the ceiling, later steps
           // that complete normally must not downgrade the turn outcome.
-          const stepEnd = await this.step(decision.assembly, decision.fastConversation)
+          const stepEnd = await this.step(decision.assembly)
           // max-tokens stays sticky: a later completed step must not
           // downgrade the turn outcome.
           if (turnEnds === null || turnEnds.kind !== 'max-tokens') turnEnds = stepEnd
@@ -455,7 +438,7 @@ export class ReactLoopAgent implements Agent {
     return true
   }
 
-  private async step(assembly: PromptAssembly, fastConversation = false): Promise<StepEndReason | null> {
+  private async step(assembly: PromptAssembly): Promise<StepEndReason | null> {
     /* v8 ignore next -- private callers establish the running phase before executing a step */
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": step outside running phase`)
     const { turn, step, abort: { signal } } = this.phase
@@ -464,7 +447,7 @@ export class ReactLoopAgent implements Agent {
 
     while (true) {
       const derived = this.session.deriveMessages()
-      const boundaryMessages = fastConversation ? fastConversationHistory(derived) : derived
+      const boundaryMessages = projectRequestHistory(derived, this.session.events.findLast(event => event.type === 'step/start')?.data.historyProjection)
       const { request, preparedCall } = await this.buildRequest(
         turn, step, assembly.tools, system, boundaryMessages, signal,
       )

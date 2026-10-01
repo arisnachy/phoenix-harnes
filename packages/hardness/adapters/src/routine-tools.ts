@@ -27,7 +27,7 @@ function requiredText(value: string | undefined, field: string): string {
 
 function checkedMinutes(value: number | undefined, minimum: number): number {
   if (value === undefined || !Number.isFinite(value) || value <= 0) {
-    throw new ToolArgsError([`everyMinutes must be greater than zero`])
+    throw new ToolArgsError(['everyMinutes must be greater than zero'])
   }
   if (value < minimum) throw new ToolArgsError([`everyMinutes must be greater than or equal to ${minimum}`])
   const milliseconds = Math.round(value * 60_000)
@@ -38,8 +38,9 @@ function checkedMinutes(value: number | undefined, minimum: number): number {
 }
 
 function tagged(prefix: RoutinePrefix, kind: RoutineKind, value: unknown): Record<string, JsonValue> {
-  const row = value as Record<string, JsonValue>
-  const nativeId = String(row.id)
+  // Task and wake provider views own string identifiers.
+  const row = value as Record<string, JsonValue> & { id: string }
+  const nativeId = row.id
   return { ...row, id: `${prefix}:${nativeId}`, native_id: nativeId, kind }
 }
 
@@ -185,8 +186,8 @@ export function createRoutineTools(
         wakeList.execute({}, exec) as Promise<Record<string, JsonValue>[]>,
       ])
       return [
-        ...tasks.map((row) => tagged('task', taskViewKind(row), row)),
-        ...events.map((row) => tagged('event', 'event', row)),
+        ...tasks.map(row => tagged('task', taskViewKind(row), row)),
+        ...events.map(row => tagged('event', 'event', row)),
       ]
     },
     presentCall() {
@@ -215,8 +216,8 @@ export function createRoutineTools(
   return [
     create,
     list,
-    management('phoenix_routine_pause', 'Pause a Phoenix Routine regardless of whether it is time/condition/event driven.', 'Pause', (id) => proactivity.pause(id), (id) => wake.pause(id)),
-    management('phoenix_routine_resume', 'Resume a paused Phoenix Routine.', 'Resume', (id) => proactivity.resume(id), (id) => wake.resume(id)),
-    management('phoenix_routine_cancel', 'Permanently cancel a Phoenix Routine.', 'Cancel', (id) => proactivity.cancel(id), (id) => wake.cancel(id)),
+    management('phoenix_routine_pause', 'Pause a Phoenix Routine regardless of whether it is time/condition/event driven.', 'Pause', id => proactivity.pause(id), id => wake.pause(id)),
+    management('phoenix_routine_resume', 'Resume a paused Phoenix Routine.', 'Resume', id => proactivity.resume(id), id => wake.resume(id)),
+    management('phoenix_routine_cancel', 'Permanently cancel a Phoenix Routine.', 'Cancel', id => proactivity.cancel(id), id => wake.cancel(id)),
   ]
 }
