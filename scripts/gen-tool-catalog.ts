@@ -579,7 +579,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
   {
     pkg: '@phoenix-ai/dsh-tool-agent-team',
     dir: 'tool-agent-team',
-    source: 'packages/experimental/tool-agent-team/src/index.ts',
+    source: 'packages/subagent/tool-agent-team/src/index.ts',
     requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.agentTeams', 'an exact live Team member Agent'],
     writes: ['tool/call', 'team/member', 'team/message/queued', 'team/message/delivered', 'team/task', 'tool/result'],
     async mount(ctx) {
