@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-01-stdio-child-pipe-resilience.md
+2026-10-01-stdio-child-pipe-resilience.md: b213d6a6c5e7a5619bb4697156a6790aad3f9267
+2026-10-01-stdio-child-pipe-resilience.zh.md: ebecab3731f06593594833c795d44be5ca21b34d

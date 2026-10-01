@@ -196,13 +196,29 @@ export function codexEnvironment(): NodeJS.ProcessEnv {
   return env
 }
 
-function finishProcessSetup(child: ChildProcessWithoutNullStreams): ChildProcessWithoutNullStreams {
+/**
+ * Own the writable-side error event for one Codex metadata subprocess.
+ *
+ * Node can emit EPIPE/ERR_STREAM_DESTROYED on child.stdin when Codex exits
+ * between a JSONL request and the corresponding write/end. The request write
+ * callback remains authoritative for active RPC failure; this listener prevents
+ * the duplicate stream event from becoming an uncaught Host-fatal exception.
+ *
+ * @param child - Spawned Codex app-server child with piped stdio.
+ * @returns The same child after its diagnostic and stream guards are installed.
+ */
+export function finishProcessSetup(child: ChildProcessWithoutNullStreams): ChildProcessWithoutNullStreams {
   // Codex diagnostics are not part of model discovery, but stderr must still be
   // drained or a chatty app-server could fill its pipe and block stdout.
   child.stderr.resume()
   // Spawn failures are observed through stdout closure/timeout below; owning an
   // error listener prevents Node from treating ENOENT/EACCES as an uncaught event.
   child.on('error', () => {})
+  // A failed/finished Codex process may close stdin while Phoenix is writing or
+  // disposing it. writeFrame receives the active write error via its callback;
+  // teardown owns end-of-stream, so the EventEmitter error is intentionally
+  // contained here instead of escaping as an uncaught EPIPE.
+  child.stdin.on('error', () => {})
   return child
 }
 
@@ -314,7 +330,15 @@ async function readResponse(
 
 function terminate(child: ChildProcessWithoutNullStreams, lines: ReadlineInterface): void {
   lines.close()
-  child.stdin.end()
+  // Avoid scheduling a final write on a pipe Codex already closed. The stdin
+  // error guard above still owns the unavoidable close/write race.
+  if (!child.stdin.destroyed && !child.stdin.writableEnded) {
+    try {
+      child.stdin.end()
+    } catch {
+      // The child won the race and closed its pipe synchronously.
+    }
+  }
   if (child.exitCode !== null || child.signalCode !== null) return
   if (process.platform === 'win32' && child.pid !== undefined) {
     // Discovery is launched through cmd.exe on Windows. Killing only that shell

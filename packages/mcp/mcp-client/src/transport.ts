@@ -25,6 +25,41 @@ function buildChildEnv(extra: Record<string, string>): Record<string, string> {
   return { ...scrubbedParentEnv(), ...extra }
 }
 
+type SdkStdioChild = {
+  stdin?: {
+    on(event: 'error', listener: (error: NodeJS.ErrnoException) => void): unknown
+  } | null
+}
+
+function isExpectedStdioPipeClose(error: NodeJS.ErrnoException): boolean {
+  return error.code === 'EPIPE' || error.code === 'ERR_STREAM_DESTROYED'
+}
+
+/**
+ * MCP SDK stdio transport with a parent-side writable error owner.
+ *
+ * A short-lived server can exit after the SDK spawns it but before or during
+ * the first JSON-RPC write. On Node/Windows that broken child stdin is a Socket
+ * whose unhandled `error` event would otherwise terminate the whole PHOENIX
+ * Host. The SDK still owns protocol failure/close; this shim only contains the
+ * stream event and forwards unexpected pipe errors through Transport.onerror.
+ */
+class PhoenixStdioClientTransport extends StdioClientTransport {
+  override start(): Promise<void> {
+    const started = super.start()
+    // @modelcontextprotocol/sdk currently stores the spawned child on
+    // `_process`. Attach immediately after synchronous spawn, before the
+    // Client can send initialize. The cast is intentionally isolated here so a
+    // future SDK layout change fails the focused regression test, not silently.
+    const child = (this as unknown as { _process?: SdkStdioChild })._process
+    child?.stdin?.on('error', (error) => {
+      if (isExpectedStdioPipeClose(error)) return
+      this.onerror?.(error)
+    })
+    return started
+  }
+}
+
 const CURRENT_PHOENIX_STDIO_PROXY = fileURLToPath(
   new URL('../../../../scripts/mcp-stdio-proxy.mjs', import.meta.url),
 )
@@ -129,7 +164,7 @@ function credentialRequired(ref: string): Error & { status: number } {
 export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
     case 'stdio':
-      return new StdioClientTransport({
+      return new PhoenixStdioClientTransport({
         command: config.command,
         args: repairPhoenixStdioProxyArgs(config.args),
         env: buildChildEnv({ ...config.env, ...options.stdioCredentialEnv }),
