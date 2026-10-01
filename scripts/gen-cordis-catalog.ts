@@ -604,6 +604,7 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   McpConnectorEntry: 'MCP connector lifecycle snapshot is owned by packages/mcp/mcp-registry/README.md',
   McpConnectorRegistration: 'MCP connector registration handle is owned by packages/mcp/mcp-registry/README.md',
   McpConnectorRegistrationInput: 'MCP connector registration input is owned by packages/mcp/mcp-registry/README.md',
+  McpConnectorListener: 'MCP connector lifecycle listener is owned by packages/mcp/mcp-registry/README.md',
   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   ConsumeTokenRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',

@@ -38,6 +38,27 @@ function queued(match: ConversationMatch): KiraTeamMessageChatData | undefined {
   }
 }
 
+function delegated(match: ConversationMatch): KiraTeamMessageChatData | undefined {
+  if ((match.event.type as string) !== 'team/member') return undefined
+  const data = record(match.event.data)
+  const member = record(data?.member)
+  if (data?.version !== 1 || typeof data.teamId !== 'string'
+    || typeof member?.id !== 'string' || typeof member.name !== 'string'
+    || typeof member.description !== 'string' || member.phase !== 'active') return undefined
+  return {
+    messageId: `team-member:${member.id}`,
+    senderId: data.teamId,
+    senderName: 'lead',
+    targetId: member.id,
+    targetName: member.name,
+    purpose: 'assignment',
+    content: [{ type: 'text', text: member.description }],
+    time: match.event.time,
+    seq: match.event.seq,
+    reactions: [],
+  }
+}
+
 function reaction(match: ConversationMatch): {
   readonly messageId: string
   readonly value: KiraTeamReactionChatData
@@ -79,6 +100,15 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
   kind: 'kira-team-message',
   target: 'chat',
   match: (event) => {
+    if ((event.type as string) === 'team/member') {
+      const data = record(event.data)
+      const member = record(data?.member)
+      return data?.version === 1 && typeof data.teamId === 'string'
+        && member?.phase === 'active' && typeof member.id === 'string'
+        && typeof member.name === 'string' && typeof member.description === 'string'
+        ? { id: `team-member:${member.id}`, role: 'start' }
+        : null
+    }
     if ((event.type as string) === 'team/message/queued') {
       const data = record(event.data)
       const message = record(data?.message)
@@ -92,7 +122,7 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
     return null
   },
   start: (_context, match) => {
-    const data = queued(match)
+    const data = queued(match) ?? delegated(match)
     if (data === undefined) throw new Error('kira-team-message start requires a valid team/message/queued event')
     return data
   },

@@ -609,10 +609,15 @@ export function installModelSelection(
     const selected = selection.current
     const assembled = await next()
     selection.assembled = selected
-    selection.assembledToolCount = assembled.tools.length
+    const hasKiraTeam = assembled.tools.some(tool => tool.name === 'spawn_teammate')
+    const tools = isPhoenixCodexAutoSelection(selected) && hasKiraTeam
+      ? assembled.tools.filter(tool => tool.name !== 'subagent' && tool.name !== 'subagent_fork')
+      : assembled.tools
+    selection.assembledToolCount = tools.length
     if (selected === undefined) return assembled
     return {
       ...assembled,
+      tools,
       variables: {
         ...assembled.variables,
         provider: selected.provider,
