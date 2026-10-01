@@ -7,6 +7,7 @@ $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $marker = Join-Path $root '.phoenix-managed-install'
 $managedUpdater = Join-Path $root 'scripts\phoenix-managed-update.mjs'
 $fallbackUpdater = Join-Path $root 'scripts\phoenix-auto-update.mjs'
+$shortcutRepair = Join-Path $root 'scripts\phoenix-windows-shortcut.mjs'
 
 if (-not (Test-Path -LiteralPath $marker)) { return }
 if ($env:PHOENIX_AUTO_UPDATE -eq '0') { return }
@@ -38,6 +39,14 @@ try {
   }
 } finally {
   Pop-Location
+}
+
+if (($null -eq $code -or $code -eq 0) -and (Test-Path -LiteralPath $shortcutRepair)) {
+  try {
+    & node $shortcutRepair --install
+  } catch {
+    Write-Warning "PHOENIX updated successfully, but the desktop shortcut could not be repaired: $($_.Exception.Message)"
+  }
 }
 
 # Preserve the semantic exit code from the Node updater. The desktop launcher
