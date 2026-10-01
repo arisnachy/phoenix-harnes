@@ -42,16 +42,27 @@ function escapeSpecifier(value: string): string {
   return value.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&')
 }
 
-function packageManifest(cwd: string): PackageManifest {
+function packageManifest(cwd: string): PackageManifest | undefined {
   const cached = manifestCache.get(cwd)
   if (cached !== undefined) return cached
-  const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as PackageManifest
-  manifestCache.set(cwd, manifest)
-  return manifest
+  try {
+    const manifest = JSON.parse(readFileSync(join(cwd, 'package.json'), 'utf8')) as PackageManifest
+    manifestCache.set(cwd, manifest)
+    return manifest
+  } catch (error) {
+    if (
+      error !== null
+      && typeof error === 'object'
+      && 'code' in error
+      && (error as { code?: unknown }).code === 'ENOENT'
+    ) return undefined
+    throw error
+  }
 }
 
 function productionExternalPattern(cwd: string): RegExp | undefined {
   const manifest = packageManifest(cwd)
+  if (manifest === undefined) return undefined
   const forced = manifest.name === undefined ? undefined : FORCED_BUNDLES.get(manifest.name)
   const names = new Set([
     ...Object.keys(manifest.dependencies ?? {}),
