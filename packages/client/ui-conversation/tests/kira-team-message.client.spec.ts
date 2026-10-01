@@ -43,6 +43,13 @@ function context(
   } as unknown as ConversationNodeContext<KiraTeamMessageChatData>
 }
 
+function stateContext(
+  state: KiraTeamMessageChatData,
+): ConversationNodeContext<KiraTeamMessageChatData> & { readonly state: KiraTeamMessageChatData } {
+  return context(state) as ConversationNodeContext<KiraTeamMessageChatData>
+    & { readonly state: KiraTeamMessageChatData }
+}
+
 const queuedData = {
   version: 1,
   teamId: 'root',
@@ -89,15 +96,15 @@ describe('KIRA Team conversation node', () => {
       id: 'message-1',
       role: 'update',
     })
-    const reacted = kiraTeamMessageDefinition.update(context(state), reaction)
+    const reacted = kiraTeamMessageDefinition.update(stateContext(state), reaction)
     expect(reacted.reactions).toEqual([{
       reactorId: 'root',
       reactorName: 'lead',
       reaction: 'ack',
     }])
 
-    expect(kiraTeamMessageDefinition.update(context(reacted), reaction)).toBe(reacted)
-    expect(kiraTeamMessageDefinition.update(context(reacted), match('team/reaction', {
+    expect(kiraTeamMessageDefinition.update(stateContext(reacted), reaction)).toBe(reacted)
+    expect(kiraTeamMessageDefinition.update(stateContext(reacted), match('team/reaction', {
       version: 1,
       reaction: {
         messageId: 'another-message',
@@ -106,7 +113,7 @@ describe('KIRA Team conversation node', () => {
         reaction: 'done',
       },
     }))).toBe(reacted)
-    expect(kiraTeamMessageDefinition.update(context(reacted), match('other', {}))).toBe(reacted)
+    expect(kiraTeamMessageDefinition.update(stateContext(reacted), match('other', {}))).toBe(reacted)
 
     const view = kiraTeamMessageDefinition.buildViewNode?.(context(reacted, [start], start))
     expect(view).toMatchObject({
@@ -202,7 +209,7 @@ describe('KIRA Team conversation node', () => {
     ]
     for (const data of malformedReactions) {
       expect(kiraTeamMessageDefinition.update(
-        context(baseState),
+        stateContext(baseState),
         match('team/reaction', data),
       )).toBe(baseState)
     }
