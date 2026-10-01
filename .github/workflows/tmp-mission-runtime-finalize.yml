@@ -15,7 +15,7 @@ concurrency:
 jobs:
   finalize:
     if: github.actor != 'github-actions[bot]'
-    runs-on: windows-latest
+    runs-on: macos-latest
     env:
       DSH_TELEMETRY_DISABLED: '1'
       DSH_EXAMPLE_MODE: lib
