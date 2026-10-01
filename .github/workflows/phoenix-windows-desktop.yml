@@ -15,6 +15,9 @@ on:
       - 'scripts/phoenix-windows-shortcut.d.mts'
       - 'scripts/phoenix-desktop-shortcut.ps1'
       - 'scripts/phoenix-desktop-launch.ps1'
+      - 'scripts/phoenix-markdown-open.ps1'
+      - 'scripts/phoenix-markdown-reader.mjs'
+      - 'scripts/phoenix-markdown-reader.spec.ts'
       - 'scripts/build-windows-runtime-seed.mjs'
       - 'apps/web/public/favicon.png'
       - 'apps/web/public/favicon.svg'
@@ -32,6 +35,9 @@ on:
       - 'scripts/phoenix-windows-shortcut.d.mts'
       - 'scripts/phoenix-desktop-shortcut.ps1'
       - 'scripts/phoenix-desktop-launch.ps1'
+      - 'scripts/phoenix-markdown-open.ps1'
+      - 'scripts/phoenix-markdown-reader.mjs'
+      - 'scripts/phoenix-markdown-reader.spec.ts'
       - 'scripts/build-windows-runtime-seed.mjs'
       - '.github/workflows/phoenix-windows-desktop.yml'
   workflow_dispatch:
@@ -84,7 +90,8 @@ jobs:
           $scripts = @(
             'installer/windows/bootstrap-runtime.ps1',
             'scripts/phoenix-desktop-shortcut.ps1',
-            'scripts/phoenix-desktop-launch.ps1'
+            'scripts/phoenix-desktop-launch.ps1',
+            'scripts/phoenix-markdown-open.ps1'
           )
           foreach ($script in $scripts) {
             $source = Get-Content $script -Raw
@@ -115,6 +122,260 @@ jobs:
           if ($shortcut.WorkingDirectory -ne (Resolve-Path .).Path) {
             throw "PHOENIX shortcut working directory is wrong: $($shortcut.WorkingDirectory)"
           }
+          if ($shortcut.IconLocation -match 'powershell\.exe') {
+            throw "PHOENIX shortcut is still using the generic PowerShell icon: $($shortcut.IconLocation)"
+          }
+          $iconFile = ($shortcut.IconLocation -replace ',0
+        shell: pwsh
+        run: |
+          dotnet run --project apps/desktop-windows/Phoenix.Desktop.Tests/Phoenix.Desktop.Tests.csproj -c Release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Prepare Phoenix icon
+        shell: pwsh
+        run: |
+          if (-not (Get-Command magick.exe -ErrorAction SilentlyContinue)) {
+            choco install imagemagick.app -y --no-progress
+          }
+          magick apps/web/public/favicon.png -define icon:auto-resize=256,128,64,48,32,16 apps/desktop-windows/phoenix.ico
+          if (-not (Test-Path apps/desktop-windows/phoenix.ico)) { throw 'Phoenix icon generation failed' }
+
+      - name: Publish native launcher
+        shell: pwsh
+        run: |
+          dotnet publish apps/desktop-windows/Phoenix.Desktop.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -o dist/phoenix-desktop
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Copy-Item apps/desktop-windows/phoenix.ico dist/phoenix-desktop/phoenix.ico
+          Copy-Item installer/windows/bootstrap-runtime.ps1 dist/phoenix-desktop/bootstrap-runtime.ps1
+
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $seed = (Resolve-Path dist/windows-runtime-seed).Path
+          $seedZip = Join-Path (Resolve-Path dist/phoenix-desktop).Path 'runtime-seed.zip'
+          Remove-Item $seedZip -Force -ErrorAction SilentlyContinue
+          [System.IO.Compression.ZipFile]::CreateFromDirectory(
+            $seed,
+            $seedZip,
+            [System.IO.Compression.CompressionLevel]::Optimal,
+            $false)
+          if (-not (Test-Path $seedZip)) { throw 'Prebuilt Phoenix runtime seed archive is missing' }
+
+      - name: Bundle managed runtime toolchain
+        shell: pwsh
+        run: |
+          $nodeVersion = '22.19.0'
+          $gitRelease = 'v2.55.0.windows.5'
+          $gitVersion = '2.55.0.5'
+          $toolRoot = Join-Path (Resolve-Path dist/phoenix-desktop).Path 'runtime-tools'
+          $nodeRoot = Join-Path $toolRoot 'node'
+          $gitRoot = Join-Path $toolRoot 'git'
+          New-Item -ItemType Directory -Force $toolRoot | Out-Null
+
+          $nodeZip = Join-Path $env:RUNNER_TEMP "node-v$nodeVersion-win-x64.zip"
+          Invoke-WebRequest -Uri "https://nodejs.org/dist/v$nodeVersion/node-v$nodeVersion-win-x64.zip" -OutFile $nodeZip
+          $nodeExtract = Join-Path $env:RUNNER_TEMP "phoenix-node-$nodeVersion"
+          Remove-Item $nodeExtract -Recurse -Force -ErrorAction SilentlyContinue
+          Expand-Archive -Path $nodeZip -DestinationPath $nodeExtract -Force
+          $nodeSource = Join-Path $nodeExtract "node-v$nodeVersion-win-x64"
+          Move-Item -Path $nodeSource -Destination $nodeRoot
+
+          $gitZip = Join-Path $env:RUNNER_TEMP "MinGit-$gitVersion-64-bit.zip"
+          Invoke-WebRequest -Uri "https://github.com/git-for-windows/git/releases/download/$gitRelease/MinGit-$gitVersion-64-bit.zip" -OutFile $gitZip
+          Expand-Archive -Path $gitZip -DestinationPath $gitRoot -Force
+
+          if (-not (Test-Path (Join-Path $nodeRoot 'node.exe'))) { throw 'Bundled node.exe is missing' }
+          if (-not (Test-Path (Join-Path $nodeRoot 'corepack.cmd'))) { throw 'Bundled corepack.cmd is missing' }
+          if (-not (Test-Path (Join-Path $gitRoot 'cmd\git.exe'))) { throw 'Bundled git.exe is missing' }
+
+          & (Join-Path $nodeRoot 'node.exe') --version
+          & (Join-Path $nodeRoot 'corepack.cmd') --version
+          & (Join-Path $gitRoot 'cmd\git.exe') --version
+
+      - name: Verify WebView2 deployment payload
+        shell: pwsh
+        run: |
+          $loader = Get-ChildItem dist/phoenix-desktop -Recurse -Filter WebView2Loader.dll -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $loader) { throw 'WebView2Loader.dll is missing from the desktop publish payload' }
+
+      - name: Verify installer packages full desktop payload
+        shell: pwsh
+        run: |
+          $iss = Get-Content installer/windows/Phoenix.iss -Raw
+          if (-not $iss.Contains('Source: "{#SourceDir}\*"')) {
+            throw 'Installer does not package the complete desktop publish directory'
+          }
+          if (-not $iss.Contains('recursesubdirs')) {
+            throw 'Installer does not recursively include WebView2 runtime payload'
+          }
+          if (-not ($iss -match '(?m)^CloseApplications=force\s*$')) {
+            throw 'Installer must force-close a running Phoenix before replacing Phoenix.exe/WebView2Loader.dll'
+          }
+          if (-not (Test-Path dist/phoenix-desktop/runtime-tools/node/node.exe)) {
+            throw 'Installer payload is missing bundled Node.js'
+          }
+          if (-not (Test-Path dist/phoenix-desktop/runtime-tools/node/corepack.cmd)) {
+            throw 'Installer payload is missing bundled Corepack'
+          }
+          if (-not (Test-Path dist/phoenix-desktop/runtime-tools/git/cmd/git.exe)) {
+            throw 'Installer payload is missing bundled MinGit'
+          }
+          if (-not (Test-Path dist/phoenix-desktop/runtime-seed.zip)) {
+            throw 'Installer payload is missing the prebuilt production runtime seed'
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $seedArchive = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path dist/phoenix-desktop/runtime-seed.zip).Path)
+          try {
+            $seedEntries = @($seedArchive.Entries | ForEach-Object { $_.FullName.Replace('\\', '/') })
+            if (-not ($seedEntries -contains 'runtime-app/lib/bin.js')) {
+              throw 'Runtime seed is missing compiled runtime-app/lib/bin.js'
+            }
+            if (-not ($seedEntries -contains '.phoenix-managed-install')) {
+              throw 'Runtime seed is missing managed-ready marker'
+            }
+            if (-not ($seedEntries -contains '.git/HEAD')) {
+              throw 'Runtime seed is missing Git metadata required by the safe stable updater'
+            }
+          } finally {
+            $seedArchive.Dispose()
+          }
+          if ($iss -match '(?m)^Filename:\s*"powershell\.exe".*bootstrap-runtime\.ps1') {
+            throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap now'
+          }
+
+      - name: Launcher command smoke test
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--disable-autostart' -PassThru -Wait
+          if ($process.ExitCode -ne 0) { throw "Phoenix launcher command smoke test failed: $($process.ExitCode)" }
+
+      - name: Visible desktop window smoke test
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:LOCALAPPDATA 'Phoenix\logs\desktop.log'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--smoke-window' -PassThru
+          if (-not $process.WaitForExit(15000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Write-Host '--- Phoenix desktop.log ---'
+            if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } } else { Write-Host '(desktop.log missing)' }
+            throw 'Phoenix desktop window did not reach Shown state and exit within 15 seconds'
+          }
+          Write-Host '--- Phoenix desktop.log ---'
+          if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }
+          if ($process.ExitCode -ne 0) { throw "Phoenix visible-window smoke test failed: $($process.ExitCode)" }
+          $smokeLog = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+          if (-not $smokeLog.Contains('Visible smoke: Shown.')) { throw 'Phoenix process exited but native window never reached Shown state' }
+          if (-not $smokeLog.Contains('Visible smoke: BrowserCollapsed=True.')) { throw 'Phoenix EXE opened with the embedded browser pane visible instead of chat-first' }
+          if (-not $smokeLog.Contains('Visible desktop window smoke test passed')) { throw 'Phoenix native window did not complete its visible smoke lifecycle' }
+
+      - name: Pre-warm WebView2 shell profile smoke test
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:LOCALAPPDATA 'Phoenix\logs\desktop.log'
+          $profile = Join-Path $env:LOCALAPPDATA 'Phoenix\webview\shell-v2'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          Remove-Item $profile -Recurse -Force -ErrorAction SilentlyContinue
+          $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--prepare-webview' -PassThru
+          if (-not $process.WaitForExit(45000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Write-Host '--- Phoenix desktop.log ---'
+            if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } } else { Write-Host '(desktop.log missing)' }
+            throw 'Phoenix WebView2 profile pre-warm did not finish within 45 seconds'
+          }
+          Write-Host '--- Phoenix desktop.log ---'
+          if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }
+          if ($process.ExitCode -ne 0) { throw "Phoenix WebView2 profile pre-warm failed: $($process.ExitCode)" }
+          $prewarmLog = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+          if (-not $prewarmLog.Contains('profile pre-warm completed=True')) {
+            throw 'Phoenix WebView2 profile was not verified as initialized'
+          }
+
+      - name: Loopback WebView2 navigation smoke test
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:LOCALAPPDATA 'Phoenix\logs\desktop.log'
+          Remove-Item $log -Force -ErrorAction SilentlyContinue
+          $process = Start-Process -FilePath dist/phoenix-desktop/Phoenix.exe -ArgumentList '--smoke-webview-loopback' -PassThru
+          if (-not $process.WaitForExit(20000)) {
+            Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
+            Write-Host '--- Phoenix desktop.log ---'
+            if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } } else { Write-Host '(desktop.log missing)' }
+            throw 'Phoenix WebView2 loopback smoke did not finish within 20 seconds'
+          }
+          Write-Host '--- Phoenix desktop.log ---'
+          if (Test-Path $log) { Get-Content $log | ForEach-Object { Write-Host $_ } }
+          if ($process.ExitCode -ne 0) { throw "Phoenix WebView2 loopback smoke failed: $($process.ExitCode)" }
+          $smokeLog = if (Test-Path $log) { Get-Content $log -Raw } else { '' }
+          if (-not $smokeLog.Contains('Loopback WebView smoke passed')) {
+            throw 'Phoenix native shell did not prove a successful WebView2 navigation to loopback'
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw 'Inno Setup compiler was not found' }
+          New-Item -ItemType Directory -Force dist/installer | Out-Null
+          $source = (Resolve-Path dist/phoenix-desktop).Path
+          $output = (Resolve-Path dist/installer).Path
+          & $iscc "/DSourceDir=$source" "/DOutputDir=$output" installer/windows/Phoenix.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path dist/installer/Phoenix-Windows-Setup.exe)) { throw 'Installer artifact missing' }
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Phoenix-Windows-Desktop-${{ github.sha }}
+          path: |
+            dist/installer/Phoenix-Windows-Setup.exe
+            dist/phoenix-desktop/Phoenix.exe
+          if-no-files-found: error
+          retention-days: 30
+,'')
+          if (-not (Test-Path $iconFile)) { throw "PHOENIX icon file is missing: $iconFile" }
+          $iconBytes = [IO.File]::ReadAllBytes($iconFile)
+          if ($iconBytes.Length -lt 24 -or $iconBytes[2] -ne 1 -or $iconBytes[4] -ne 1) {
+            throw 'PHOENIX icon is not a valid single-image ICO container'
+          }
+
+          $taskbarPath = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\PHOENIX.lnk'
+          if (-not (Test-Path $taskbarPath)) { throw 'PHOENIX taskbar shortcut was not prepared' }
+
+          $mdProgId = (Get-Item 'HKCU:\Software\Classes\.md').GetValue('')
+          if ($mdProgId -ne 'Phoenix.Markdown') { throw "Markdown association is wrong: $mdProgId" }
+          $mdCommand = (Get-Item 'HKCU:\Software\Classes\Phoenix.Markdown\shell\open\command').GetValue('')
+          if (-not $mdCommand.Contains('phoenix-markdown-open.ps1')) {
+            throw "Markdown open command does not use Phoenix reader: $mdCommand"
+          }
+          if ($mdCommand -match '(?i:vscode|Code\.exe)') {
+            throw "Markdown open command still targets VS Code: $mdCommand"
+          }
+
+      - name: Phoenix shell integration tests
+        shell: pwsh
+        run: |
+          pnpm exec vitest run scripts/phoenix-windows-shortcut.spec.ts scripts/windows-installer.spec.ts scripts/phoenix-markdown-reader.spec.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Markdown reader smoke test
+        shell: pwsh
+        run: |
+          $sample = Join-Path $env:RUNNER_TEMP 'phoenix-reader-smoke.md'
+          Set-Content -LiteralPath $sample -Encoding UTF8 -Value "# Phoenix reader`n`n**Markdown OK**"
+          $html = (& node scripts/phoenix-markdown-reader.mjs $sample | Out-String).Trim()
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path $html)) { throw "Markdown reader did not create HTML: $html" }
+          $rendered = Get-Content -LiteralPath $html -Raw
+          if (-not $rendered.Contains('<h1>Phoenix reader</h1>')) { throw 'Markdown heading was not rendered' }
+          if (-not $rendered.Contains('<strong>Markdown OK</strong>')) { throw 'Markdown strong text was not rendered' }
 
       - name: Desktop contract tests
         shell: pwsh
