@@ -474,16 +474,19 @@ async function runStructured(
   for (let attempt = 1; attempt <= VERIFIER_START_ATTEMPTS; attempt += 1) {
     let run
     let startPromise: ReturnType<CompletionRuntime['start']> | undefined
+    let completed = false
+    let structured: unknown
+    let retryStart = false
     try {
       startPromise = runtime.start(provider, { ...request, signal })
       run = await awaitAbortable(startPromise, signal)
       const result = await awaitAbortable(run.result, signal)
-      return result.stopReason === 'completed'
-        ? {
-          structured: result.structured,
-          ...(incidents.length === 0 ? {} : { incident: incidents.join(';') }),
-        }
-        : { incident: [...incidents, `${label}:stop-${result.stopReason}`].join(';') }
+      if (result.stopReason === 'completed') {
+        completed = true
+        structured = result.structured
+      } else {
+        incidents.push(`${label}:stop-${result.stopReason}`)
+      }
     } catch (error) {
       const phase = run === undefined ? 'start' : 'result'
       if (run === undefined && signal.aborted && startPromise !== undefined) {
@@ -496,10 +499,9 @@ async function runStructured(
         ? 'timeout'
         : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
       incidents.push(`${label}:${phase}-${kind}`)
-      const retryStart = phase === 'start'
+      retryStart = phase === 'start'
         && !signal.aborted
         && attempt < VERIFIER_START_ATTEMPTS
-      if (!retryStart) return { incident: incidents.join(';') }
     } finally {
       if (run !== undefined) {
         try {
@@ -510,6 +512,13 @@ async function runStructured(
         }
       }
     }
+    if (completed) {
+      return {
+        structured,
+        ...(incidents.length === 0 ? {} : { incident: incidents.join(';') }),
+      }
+    }
+    if (!retryStart) return { incident: incidents.join(';') }
   }
   return { incident: incidents.join(';') }
 }
