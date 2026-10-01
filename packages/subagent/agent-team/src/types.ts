@@ -121,7 +121,7 @@ export interface TeamMessageSnapshot {
   readonly targetId: SessionId
   /** Human-stable Team name captured at send time for transcript presentation. */
   readonly targetName?: string
-  /** Optional for backward replay; all newly queued messages persist one semantic purpose. */
+  /** Optional for backward replay and direct API callers; model-facing Team tools always persist one semantic purpose. */
   readonly purpose?: TeamMessagePurpose
   readonly delivery: 'quiet' | 'wakeup'
   readonly content: ContentBlock[]
