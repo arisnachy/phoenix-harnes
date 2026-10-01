@@ -94,4 +94,37 @@ describe('proactivity home attention ranking', () => {
       }),
     ])
   })
+
+  it('suppresses a repeated background conclusion even when the worker forgot the sentinel', () => {
+    const repeated = task({
+      id: 'repeat',
+      history: [
+        {
+          phase: 'deliver', scheduledFor: '2026-09-29T09:00:00.000Z', idempotencyKey: 'old',
+          startedAt: '2026-09-29T09:00:00.000Z', finishedAt: '2026-09-29T09:02:00.000Z',
+          status: 'completed', summary: 'No urgent mail; reply to the same pending message.',
+        },
+        {
+          phase: 'deliver', scheduledFor: '2026-09-29T15:00:00.000Z', idempotencyKey: 'new',
+          startedAt: '2026-09-29T15:00:00.000Z', finishedAt: '2026-09-29T15:02:00.000Z',
+          status: 'completed', summary: '  No urgent mail; reply to the same pending message.  ',
+        },
+      ],
+    })
+
+    expect(buildProactivityAttentionItems([repeated], NOW)).toEqual([])
+  })
+
+  it('does not keep old completed work on the Hero for days', () => {
+    const stale = task({
+      id: 'stale',
+      history: [{
+        phase: 'deliver', scheduledFor: '2026-09-27T13:00:00.000Z', idempotencyKey: 'stale',
+        startedAt: '2026-09-27T13:00:00.000Z', finishedAt: '2026-09-27T13:02:00.000Z',
+        status: 'completed', summary: 'A once-useful recommendation.',
+      }],
+    })
+
+    expect(buildProactivityAttentionItems([stale], NOW)).toEqual([])
+  })
 })
