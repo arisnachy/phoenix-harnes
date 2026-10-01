@@ -7,10 +7,12 @@ import { isDeepStrictEqual } from 'node:util'
 import { FiberState } from '@phoenix-ai/cordis'
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, PreStepDecision } from '@phoenix-ai/dsh-agent'
+import { replayGoalMissionPlan } from '@phoenix-ai/dsh-goal'
 import type { GoalJudgeAuditEntry, GoalMessageSource, GoalRef, GoalView } from '@phoenix-ai/dsh-goal'
 import { createUserMessage, isHarnessError, QUOTA_EXCEEDED_CODE } from '@phoenix-ai/dsh-llm'
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@phoenix-ai/dsh-session'
+import { buildMissionCapsule } from './mission-capsule.ts'
 import { renderGoalRoundPrompt } from './prompt.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
 import { measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
@@ -272,7 +274,9 @@ export function apply(ctx: Context): void {
           ? `verification stalled for ${progress.stagnantRounds} gate round(s); rotate strategy`
           : `verification evidence is still increasing (${progress.verifiedCriteria} criteria, ${progress.passedChecks} checks); keep the productive strategy`,
     })
-    const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal), strategy)
+    const plan = replayGoalMissionPlan(state.agent.session.events, goal.id)
+    const missionCapsule = buildMissionCapsule(state.agent.session.events, goal, plan)
+    const content = renderGoalRoundPrompt(goal, round, latestJudge(state, goal), strategy, missionCapsule)
     const message = createUserMessage({
       content,
       source: { kind: 'goal', goalId: goal.id, revision: goal.revision, round },

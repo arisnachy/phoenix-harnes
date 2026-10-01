@@ -86,22 +86,22 @@ describe('product-provider public Loader composition', () => {
       tools: [
         {
           name: 'subagent_codex',
-          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'],
+          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'read_only', 'run_in_background', 'write_scope'],
           required: ['description', 'prompt'],
         },
         {
           name: 'subagent_claude_code',
-          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'],
+          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'read_only', 'run_in_background', 'write_scope'],
           required: ['description', 'prompt'],
         },
         {
           name: 'subagent_claude_primary',
-          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'],
+          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'read_only', 'run_in_background', 'write_scope'],
           required: ['description', 'prompt'],
         },
         {
           name: 'subagent_claude_secondary',
-          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'],
+          parameterNames: ['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'read_only', 'run_in_background', 'write_scope'],
           required: ['description', 'prompt'],
         },
       ],

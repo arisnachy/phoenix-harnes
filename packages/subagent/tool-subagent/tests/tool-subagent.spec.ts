@@ -123,6 +123,7 @@ describe('dsh-tool-subagent', () => {
     expect(promptText).toContain('primera persona')
     expect(promptText).toContain('máximo 72 caracteres')
     expect(promptText).toContain('Phoenix mostrará literalmente esa frase')
+    expect(promptText).not.toContain('Contrato de aislamiento Phoenix')
   })
 
   it('exposes description + prompt + run_in_background to the model (no provider/type parameter)', async () => {
@@ -130,7 +131,7 @@ describe('dsh-tool-subagent', () => {
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
     expect(schema).toBeDefined()
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
-    expect(Object.keys(props).sort()).toEqual(['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'])
+    expect(Object.keys(props).sort()).toEqual(['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'read_only', 'run_in_background', 'write_scope'])
     expect(schema!.description).toContain('job_output')
   })
 
@@ -138,7 +139,7 @@ describe('dsh-tool-subagent', () => {
     const ctx = await setup({ provider: 'mock', enableRunInBackground: false })
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
-    expect(Object.keys(props).sort()).toEqual(['description', 'extreme_parallelism', 'hard_parallelism', 'prompt'])
+    expect(Object.keys(props).sort()).toEqual(['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'read_only', 'write_scope'])
     expect(schema!.description).not.toContain('job_output')
   })
 
@@ -198,11 +199,76 @@ describe('dsh-tool-subagent', () => {
       },
     })
     const results = await Promise.all([
-      callSubagent(ctx, { description: 'first', prompt: 'p1' }),
-      callSubagent(ctx, { description: 'second', prompt: 'p2', hard_parallelism: true }),
+      callSubagent(ctx, { description: 'first', prompt: 'p1', write_scope: ['packages/a'] }),
+      callSubagent(ctx, { description: 'second', prompt: 'p2', hard_parallelism: true, write_scope: ['packages/b'] }),
     ])
     expect(started.sort()).toEqual(['first', 'second'])
     for (const result of results) expect(result.isError).toBe(false)
+  })
+
+
+  it('preserves legacy unscoped parallel siblings while scoped isolation stays opt-in', async () => {
+    const gate = Promise.withResolvers<undefined>()
+    const started: string[] = []
+    const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
+      onStart: (request: SubagentStartRequest) => {
+        started.push(request.label ?? '(unlabeled)')
+        return gate.promise
+      },
+    })
+
+    const first = callSubagent(ctx, { description: 'legacy first', prompt: 'p1' })
+    await vi.waitFor(() => { expect(started).toEqual(['legacy first']) })
+
+    const second = callSubagent(ctx, {
+      description: 'legacy second',
+      prompt: 'p2',
+      hard_parallelism: true,
+    })
+    await vi.waitFor(() => { expect(started).toEqual(['legacy first', 'legacy second']) })
+
+    gate.resolve(undefined)
+    const results = await Promise.all([first, second])
+    expect(results.every(result => !result.isError)).toBe(true)
+  })
+
+  it('prevents overlapping parallel writers while allowing an independent read-only reviewer', async () => {
+    const gate = Promise.withResolvers<undefined>()
+    const started: string[] = []
+    const ctx = await setup({ provider: 'mock', enableRunInBackground: false }, {
+      onStart: (request: SubagentStartRequest) => {
+        started.push(request.label ?? '(unlabeled)')
+        return gate.promise
+      },
+    })
+
+    const writer = callSubagent(ctx, {
+      description: 'writer core',
+      prompt: 'Implement core changes',
+      write_scope: ['packages/core'],
+    })
+    await vi.waitFor(() => { expect(started).toEqual(['writer core']) })
+
+    const overlapping = await callSubagent(ctx, {
+      description: 'writer overlap',
+      prompt: 'Edit nested core files',
+      hard_parallelism: true,
+      write_scope: ['packages/core/agent'],
+    })
+    expect(overlapping.isError).toBe(true)
+    expect(text(overlapping)).toContain('no pueden compartir el mismo workspace/scope')
+
+    const reviewer = callSubagent(ctx, {
+      description: 'review core',
+      prompt: 'Review the writer output without modifying files',
+      hard_parallelism: true,
+      read_only: true,
+    })
+    await vi.waitFor(() => { expect(started).toEqual(['writer core', 'review core']) })
+
+    gate.resolve(undefined)
+    const results = await Promise.all([writer, reviewer])
+    expect(results.every(result => !result.isError)).toBe(true)
   })
 
   it('enforces the Phoenix 1 -> 2 hard -> 3 extreme escalation ladder and releases slots', async () => {
@@ -215,7 +281,7 @@ describe('dsh-tool-subagent', () => {
       },
     })
 
-    const first = callSubagent(ctx, { description: 'first', prompt: 'p1' })
+    const first = callSubagent(ctx, { description: 'first', prompt: 'p1', write_scope: ['packages/a'] })
     await vi.waitFor(() => { expect(started).toEqual(['first']) })
 
     const secondWithoutEscalation = await callSubagent(ctx, { description: 'second blocked', prompt: 'p2' })
@@ -227,6 +293,7 @@ describe('dsh-tool-subagent', () => {
       description: 'second hard',
       prompt: 'p2',
       hard_parallelism: true,
+      write_scope: ['packages/b'],
     })
     await vi.waitFor(() => { expect(started).toEqual(['first', 'second hard']) })
 
@@ -243,6 +310,7 @@ describe('dsh-tool-subagent', () => {
       description: 'third extreme',
       prompt: 'p3',
       extreme_parallelism: true,
+      read_only: true,
     })
     await vi.waitFor(() => { expect(started).toHaveLength(3) })
 
@@ -1237,8 +1305,8 @@ describe('dsh-tool-subagent background mode', () => {
     // Direct apply preserves omitted agentOptions instead of applying schema defaults.
     tool.apply(ctx, { provider: 'hanging', toolName: 'subagent_hang' })
 
-    const startOne = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h1'), name: 'subagent_hang', arguments: { description: 'one', prompt: 'p', run_in_background: true }, agent: parent })
-    const startTwo = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h2'), name: 'subagent_hang', arguments: { description: 'two', prompt: 'p', run_in_background: true, hard_parallelism: true }, agent: parent })
+    const startOne = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h1'), name: 'subagent_hang', arguments: { description: 'one', prompt: 'p', run_in_background: true, read_only: true }, agent: parent })
+    const startTwo = await ctx.tools.execute({ signal: testToolSignal, callId: CallId('h2'), name: 'subagent_hang', arguments: { description: 'two', prompt: 'p', run_in_background: true, hard_parallelism: true, read_only: true }, agent: parent })
     expect(text(startOne)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-1)')
     expect(text(startTwo)).toBe('Orquestación: tarea en segundo plano iniciada (subagent-2)')
 
@@ -1399,6 +1467,7 @@ describe('dsh-tool-subagent continuable background mode', () => {
         description,
         prompt: 'work',
         run_in_background: true,
+        read_only: true,
         ...(hardParallelism ? { hard_parallelism: true } : {}),
       },
       agent: parent,
