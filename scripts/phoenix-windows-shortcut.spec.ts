@@ -47,7 +47,7 @@ describe('PHOENIX Windows desktop shortcut', () => {
       { windowsHide: boolean },
     ]
     expect(binary).toMatch(/powershell\.exe$/u)
-    expect(args).toContain('-WindowStyle').not
+    expect(args).not.toContain('-WindowStyle')
     expect(args).toContain('-File')
     expect(args).toContain('-Root')
     expect(options.windowsHide).toBe(true)
