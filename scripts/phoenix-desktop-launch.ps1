@@ -16,7 +16,7 @@ function Write-LaunchFailure([string]$Message) {
   try {
     Add-Type -AssemblyName PresentationFramework
     [System.Windows.MessageBox]::Show(
-      "PHOENIX no pudo iniciarse.\n\n$Message\n\nRegistro: $logPath",
+      "PHOENIX no pudo iniciarse.`n`n$Message`n`nRegistro: $logPath",
       'PHOENIX',
       [System.Windows.MessageBoxButton]::OK,
       [System.Windows.MessageBoxImage]::Error
