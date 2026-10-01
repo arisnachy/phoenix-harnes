@@ -422,7 +422,7 @@ function sameRepositoryWorktree(root, stage) {
 function childDirectories(root) {
   if (!existsSync(root)) return []
   return readdirSync(root, { withFileTypes: true })
-    .filter(entry => entry.isDirectory())
+    .filter(entry => entry.isDirectory() && entry.name !== 'node_modules' && !entry.name.startsWith('.'))
     .map(entry => join(root, entry.name))
 }
 
@@ -434,7 +434,7 @@ function pruneStaleWorkspaceShells(stage) {
   ]
 
   for (const candidate of candidates) {
-    if (!existsSync(candidate) || existsSync(join(candidate, 'package.json'))) continue
+    if (!existsSync(candidate)) continue
     const relativePath = relative(stage, candidate).replace(/\\/gu, '/')
     const tracked = git(stage, ['ls-files', '--', relativePath], { allowFailure: true })
     if (!tracked.ok || tracked.stdout.length > 0) continue
