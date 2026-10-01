@@ -67,7 +67,7 @@ export function ConversationRoot({
 
   const selectAttention = useCallback((item: (typeof proactiveAttention)[number]): void => {
     acknowledgeProactivityAttention(item.id)
-    setReviewedAttentionIds(current => {
+    setReviewedAttentionIds((current) => {
       const next = new Set(current)
       next.add(item.id)
       return next
