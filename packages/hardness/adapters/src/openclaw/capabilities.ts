@@ -34,12 +34,13 @@ const FAMILY_MEMBERS: Readonly<Record<Exclude<PhoenixOpenClawCapabilityKind, 'ex
   device: ['device-pair', 'geolocation', 'linux-node'],
   'computer-use': ['browser', 'cua-computer'],
   secrets: ['onepassword', 'vault'],
-  work: ['workboard'],
-  integration: ['admin-http-rpc', 'file-transfer', 'webhooks'],
+  work: ['session-share', 'team-reports', 'workboard'],
+  integration: ['admin-http-rpc', 'file-transfer', 'github', 'visitor-access', 'webhooks'],
   'web-search': ['brave', 'duckduckgo', 'exa', 'firecrawl', 'perplexity', 'searxng', 'tavily'],
   document: ['document-extract', 'web-readability'],
   voice: [
     'azure-speech',
+    'facetime',
     'deepgram',
     'elevenlabs',
     'fish-audio-speech',
@@ -50,9 +51,10 @@ const FAMILY_MEMBERS: Readonly<Record<Exclude<PhoenixOpenClawCapabilityKind, 'ex
     'tts-local-cli',
     'voice-call',
   ],
-  media: ['comfy', 'fal', 'image-generation-core', 'pixverse', 'runway'],
+  media: ['comfy', 'fal', 'pixverse', 'runway'],
   observability: ['diagnostics-otel', 'diagnostics-prometheus'],
   coding: [
+    'code-mode-quickjs',
     'codex',
     'copilot',
     'copilot-proxy',
@@ -96,6 +98,7 @@ const FAMILY_MEMBERS: Readonly<Record<Exclude<PhoenixOpenClawCapabilityKind, 'ex
     'anthropic',
     'anthropic-vertex',
     'arcee',
+    'radius',
     'baseten',
     'beam',
     'byteplus',
@@ -138,7 +141,7 @@ const FAMILY_MEMBERS: Readonly<Record<Exclude<PhoenixOpenClawCapabilityKind, 'ex
     'xiaomi',
     'zai',
   ],
-  'local-inference': ['llama-cpp', 'lmstudio', 'ollama', 'sglang', 'vllm'],
+  'local-inference': ['apple-fm', 'llama-cpp', 'lmstudio', 'ollama', 'onnx', 'sglang', 'vllm'],
 }
 
 const KIND_BY_EXTENSION = new Map<string, PhoenixOpenClawCapabilityKind>()
