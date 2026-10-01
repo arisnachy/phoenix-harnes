@@ -218,6 +218,17 @@ Set-Item -Path $defaultIconPath -Value "$iconPath,0"
 $openCommand = "`"$powerShellExe`" -NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$markdownOpenPath`" `"%1`""
 Set-Item -Path $openCommandPath -Value $openCommand
 
+$capabilitiesPath = 'HKCU:\Software\Phoenix AI\Phoenix\Capabilities'
+$fileAssociationsPath = Join-Path $capabilitiesPath 'FileAssociations'
+New-Item -Path $fileAssociationsPath -Force | Out-Null
+Set-ItemProperty -Path $capabilitiesPath -Name 'ApplicationName' -Value 'Phoenix Markdown'
+Set-ItemProperty -Path $capabilitiesPath -Name 'ApplicationDescription' -Value 'Lector Markdown de Phoenix'
+Set-ItemProperty -Path $fileAssociationsPath -Name '.md' -Value $markdownProgId
+Set-ItemProperty -Path $fileAssociationsPath -Name '.markdown' -Value $markdownProgId
+$registeredApplications = 'HKCU:\Software\RegisteredApplications'
+New-Item -Path $registeredApplications -Force | Out-Null
+Set-ItemProperty -Path $registeredApplications -Name 'Phoenix Markdown' -Value 'Software\Phoenix AI\Phoenix\Capabilities'
+
 foreach ($extension in @('.md', '.markdown')) {
   $extensionPath = Join-Path $classesRoot $extension
   New-Item -Path $extensionPath -Force | Out-Null
