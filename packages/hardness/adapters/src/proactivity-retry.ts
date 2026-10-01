@@ -65,7 +65,7 @@ export async function retryFailedProactivityTasks(
   const nowMs = now.getTime()
   if (!Number.isFinite(nowMs)) throw new Error('now must be a valid date')
   const policy = validatedPolicy(requestedPolicy)
-  const tasks = await engine.list({ includeHidden: true, now })
+  const tasks = await engine.list({ includeHidden: true, includeSystem: true, now })
   let resumed = 0
 
   for (const task of tasks) {
