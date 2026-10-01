@@ -17,7 +17,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
-import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
+import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'\nimport { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
 
 const root = resolve(process.cwd())
 let runtimeRoot = root
@@ -43,6 +43,19 @@ const CRITICAL_CONFIG_PATHS = [
   'profiles/web/cordis.patch.yml',
   'codex/enabled.patch.yml',
 ]
+
+function repairDesktopShortcut() {
+  if (process.platform !== 'win32') return
+  try {
+    const result = ensurePhoenixDesktopShortcut(root)
+    if (result.status === 'ready' && result.shortcut !== undefined) {
+      console.error(`[PHOENIX] desktop shortcut ready: ${result.shortcut}`)
+    }
+  } catch (error) {
+    // Desktop integration is convenience, never a boot/update dependency.
+    console.error(`[PHOENIX] warning: desktop shortcut repair failed: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
 
 function gitValue(cwd, args) {
   const result = spawnSync('git', args, {
