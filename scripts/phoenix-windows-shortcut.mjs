@@ -21,7 +21,7 @@ export function phoenixDesktopShortcutSpec(root, env = process.env) {
     root: resolvedRoot,
     setupScript: join(resolvedRoot, 'scripts', 'phoenix-desktop-shortcut.ps1'),
     launchScript: join(resolvedRoot, 'scripts', 'phoenix-desktop-launch.ps1'),
-    iconSource: join(resolvedRoot, 'apps', 'web', 'public', 'favicon.png'),
+    iconSource: join(resolvedRoot, 'scripts', 'phoenix-windows-icon.ico.b64'),
     powershell: systemRoot === undefined || systemRoot.trim().length === 0
       ? 'powershell.exe'
       : join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
@@ -48,6 +48,9 @@ export function ensurePhoenixDesktopShortcut(root, options = {}) {
   }
   if (!existsSync(spec.launchScript)) {
     throw new Error(`desktop launcher script is missing: ${spec.launchScript}`)
+  }
+  if (!existsSync(spec.iconSource)) {
+    throw new Error(`desktop icon asset is missing: ${spec.iconSource}`)
   }
 
   const result = spawnSync(spec.powershell, [
