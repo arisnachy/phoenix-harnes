@@ -396,7 +396,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // for external writes. Seed one low-frequency read-only briefing so the
       // home can surface fresh recommendations without manufacturing test noise.
       void connectedGoogleEmail(authorization)
-        .then(async email => {
+        .then(async (email) => {
           if (email !== undefined) await ensureAmbientBriefingTask(proactivity.engine)
         })
         .catch((error: unknown) => {
