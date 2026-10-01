@@ -43,6 +43,8 @@ describe('PHOENIX managed Windows installation', () => {
     expect(updater).toContain("'.phoenix-managed-install'")
     expect(updater).toContain('phoenix-managed-update.mjs')
     expect(updater).toContain('PHOENIX_AUTO_UPDATE')
+    expect(updater).toContain("'scripts\\phoenix-windows-shortcut.mjs'")
+    expect(updater).toContain('& node $shortcutRepair --install')
     expect(updater).toContain('if ($null -ne $code -and $code -ne 0) { exit $code }')
     expect(updater).toContain('$code -eq 13')
     expect(updater).not.toContain('git reset --hard')
