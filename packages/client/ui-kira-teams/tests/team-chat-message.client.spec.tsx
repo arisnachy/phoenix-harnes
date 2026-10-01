@@ -33,7 +33,7 @@ function node(data: Partial<KiraTeamMessageChatData> = {}): ChatNode<'kira-team-
       reactions: [],
       ...data,
     },
-  } as ChatNode<'kira-team-message'>
+  }
 }
 
 describe('KIRA Team chat message', () => {
