@@ -12,7 +12,7 @@ An experimental directory without a current package previously imposed placement
 
 ## Decision
 
-`packages/experimental/agent-team` and `packages/experimental/tool-agent-team` are private workspace packages. The [experimental package naming decision](2026-08-19-experimental-package-name-prefix.md) owns their npm names and promotion rename; this note owns their placement, release exclusion, and dependency isolation.
+`packages/subagent/agent-team` and `packages/subagent/tool-agent-team` are private workspace packages. The [experimental package naming decision](2026-08-19-experimental-package-name-prefix.md) owns their npm names and promotion rename; this note owns their placement, release exclusion, and dependency isolation.
 
 The dsh pack and publish set and the local baseline publisher exclude every manifest below `packages/experimental/`. `release:dsh` still advances their manifest versions with the shared dsh version without creating release tags. Workspace constraints require each experimental package to set `private: true` and omit `publishConfig`. The same top-level check rejects `dependencies`, `optionalDependencies`, and `peerDependencies` from release packages, release apps, or the Python runtime to an experimental package. Experimental packages may depend on release packages and each other; tests may use them through `devDependencies`, and examples may load them explicitly.
 

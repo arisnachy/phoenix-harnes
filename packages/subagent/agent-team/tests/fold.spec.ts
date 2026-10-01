@@ -228,6 +228,103 @@ describe('Agent Teams fold', () => {
     expect(() => foldTeam(ROOT, [queued, delivered, { ...delivered, seq: 2 }])).toThrow(/delivered twice/)
   })
 
+  it('validates durable reactions against the real message sender and Team roster', () => {
+    const childProvisioning = event('team/member', {
+      version: 1, teamId: TEAM, member: member(),
+    }, 0)
+    const childActive = event('team/member', {
+      version: 1, teamId: TEAM, member: member({ phase: 'active' }),
+    }, 1)
+    const leadMessage = event('team/message/queued', {
+      version: 1, teamId: TEAM, message: message(),
+    }, 2)
+    const childReaction = event('team/reaction', {
+      version: 1,
+      teamId: TEAM,
+      reaction: {
+        messageId: TeamMessageId('message-1'),
+        reactorId: CHILD,
+        reactorName: 'worker-a',
+        reaction: 'ack',
+      },
+    }, 3)
+    const childMessage = event('team/message/queued', {
+      version: 1,
+      teamId: TEAM,
+      message: message({
+        id: TeamMessageId('message-2'),
+        senderId: CHILD,
+        senderName: 'worker-a',
+        targetId: ROOT,
+      }),
+    }, 4)
+    const leadReaction = event('team/reaction', {
+      version: 1,
+      teamId: TEAM,
+      reaction: {
+        messageId: TeamMessageId('message-2'),
+        reactorId: ROOT,
+        reactorName: 'lead',
+        reaction: 'done',
+      },
+    }, 5)
+
+    const valid = foldTeam(ROOT, [
+      childProvisioning, childActive, leadMessage, childReaction, childMessage, leadReaction,
+    ])
+    expect(valid.reactions.get(TeamMessageId('message-1'))).toHaveLength(1)
+    expect(valid.reactions.get(TeamMessageId('message-2'))).toHaveLength(1)
+
+    expect(() => foldTeam(ROOT, [childProvisioning, childActive, event('team/reaction', {
+      version: 1,
+      teamId: TEAM,
+      reaction: {
+        messageId: TeamMessageId('missing'),
+        reactorId: CHILD,
+        reactorName: 'worker-a',
+        reaction: 'ack',
+      },
+    }, 2)])).toThrow(/references unknown message/)
+
+    expect(() => foldTeam(ROOT, [childProvisioning, childActive, leadMessage, event('team/reaction', {
+      version: 1,
+      teamId: TEAM,
+      reaction: {
+        messageId: TeamMessageId('message-1'),
+        reactorId: ROOT,
+        reactorName: 'lead',
+        reaction: 'ack',
+      },
+    }, 3)])).toThrow(/cannot react to their own message/)
+
+    expect(() => foldTeam(ROOT, [childProvisioning, childActive, leadMessage, event('team/reaction', {
+      version: 1,
+      teamId: TEAM,
+      reaction: {
+        messageId: TeamMessageId('message-1'),
+        reactorId: SessionId('unknown'),
+        reactorName: 'ghost',
+        reaction: 'ack',
+      },
+    }, 3)])).toThrow(/not a known member/)
+
+    expect(() => foldTeam(ROOT, [childProvisioning, childActive, leadMessage, event('team/reaction', {
+      version: 1,
+      teamId: TEAM,
+      reaction: {
+        messageId: TeamMessageId('message-1'),
+        reactorId: CHILD,
+        reactorName: 'wrong-name',
+        reaction: 'ack',
+      },
+    }, 3)])).toThrow(/not a known member/)
+
+    expect(() => foldTeam(ROOT, [
+      childProvisioning, childActive, leadMessage, childReaction,
+      { ...childReaction, seq: 4 },
+    ])).toThrow(/reacted to message .* twice/)
+  })
+
   it('validates every current-version persisted payload before folding it', () => {
     const malformed = [
       {

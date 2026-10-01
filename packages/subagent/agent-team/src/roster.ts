@@ -53,6 +53,30 @@ export function resolveActiveMember(
   return { id: member.id, name }
 }
 
+/** Sum finalized provider usage for one live Agent without double-counting streaming usage chunks. */
+function liveUsage(agent: Agent | undefined) {
+  if (agent === undefined) return undefined
+  let inputTokens = 0
+  let outputTokens = 0
+  let cacheReadTokens = 0
+  let cacheWriteTokens = 0
+  let reasoningTokens = 0
+  let seen = false
+  for (const event of agent.session.events) {
+    if (event.type !== 'assistant/message' || event.data.usage === undefined) continue
+    const usage = event.data.usage
+    inputTokens += usage.inputTokens
+    outputTokens += usage.outputTokens
+    cacheReadTokens += usage.cacheReadTokens ?? 0
+    cacheWriteTokens += usage.cacheWriteTokens ?? 0
+    reasoningTokens += usage.reasoningTokens ?? 0
+    seen = true
+  }
+  return seen
+    ? { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, reasoningTokens }
+    : undefined
+}
+
 /** Owns Team identities and the lifecycle of rostered continuable children. */
 export class TeamRoster {
   private readonly inFlightCreations = new Set<Promise<unknown>>()
@@ -128,17 +152,21 @@ export class TeamRoster {
   list(membership: TeamMembership): TeamMemberView[] {
     const { root } = membership
     const state = this.journal.state(root)
+    const rootUsage = liveUsage(root)
     const result: TeamMemberView[] = [{
       id: root.id,
       name: 'lead',
       role: 'lead',
       status: root.status,
+      ...root.options.provider === undefined ? {} : { modelProvider: root.options.provider },
       ...root.options.model === undefined ? {} : { model: root.options.model },
+      ...rootUsage === undefined ? {} : { usage: rootUsage },
       diagnostics: [],
     }]
     for (const member of state.members.values()) {
       const live = this.ctx.agents.get(member.id)
       const model = live?.options.model ?? root.options.model
+      const usage = liveUsage(live)
       result.push({
         id: member.id,
         name: member.name,
@@ -151,7 +179,9 @@ export class TeamRoster {
         description: member.description,
         provider: member.provider,
         context: member.context,
+        ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
         ...model === undefined ? {} : { model },
+        ...usage === undefined ? {} : { usage },
         diagnostics: member.error === undefined ? [] : [member.error],
       })
     }
@@ -434,6 +464,7 @@ export class TeamRoster {
   /** Build one runtime member row after successful creation. */
   private memberView(member: TeamMemberSnapshot & { readonly phase: 'active' }): TeamMemberView {
     const live = this.ctx.agents.get(member.id)
+    const usage = liveUsage(live)
     return {
       id: member.id,
       name: member.name,
@@ -444,6 +475,7 @@ export class TeamRoster {
       context: member.context,
       ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
       ...live?.options.model === undefined ? {} : { model: live.options.model },
+      ...usage === undefined ? {} : { usage },
       diagnostics: [],
     }
   }

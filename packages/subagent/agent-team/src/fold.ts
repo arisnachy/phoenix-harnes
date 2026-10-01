@@ -9,6 +9,7 @@ import type {
   TeamMemberSnapshot,
   TeamMessageId,
   TeamMessageSnapshot,
+  TeamReactionSnapshot,
   TeamTaskId,
   TeamTaskSnapshot,
 } from './types.ts'
@@ -90,6 +91,8 @@ const teamMessageSnapshotSchema = z.object({
   senderId: sessionIdSchema,
   senderName: z.string(),
   targetId: sessionIdSchema,
+  targetName: z.string().min(1).optional(),
+  purpose: z.enum(['assignment', 'question', 'blocker', 'result', 'review', 'decision', 'update']).optional(),
   delivery: z.enum(['quiet', 'wakeup']),
   content: z.array(contentBlockSchema),
 }).strict() as z.ZodType<TeamMessageSnapshot>
@@ -124,6 +127,19 @@ const teamMessageDeliveredEventSchema = z.object({
   targetId: sessionIdSchema,
 }).strict() as z.ZodType<SessionEventMap['team/message/delivered']>
 
+const teamReactionSnapshotSchema = z.object({
+  messageId: teamMessageIdSchema,
+  reactorId: sessionIdSchema,
+  reactorName: z.string().min(1),
+  reaction: z.enum(['ack', 'agree', 'insight', 'blocked', 'done']),
+}).strict() as z.ZodType<TeamReactionSnapshot>
+
+const teamReactionEventSchema = z.object({
+  version: z.literal(1),
+  teamId: teamIdSchema,
+  reaction: teamReactionSnapshotSchema,
+}).strict() as z.ZodType<SessionEventMap['team/reaction']>
+
 /** Mutable internal replay state. */
 export interface TeamFoldState {
   readonly id: TeamId
@@ -132,6 +148,7 @@ export interface TeamFoldState {
   readonly tasks: Map<TeamTaskId, TeamTaskSnapshot>
   readonly messages: Map<TeamMessageId, TeamMessageSnapshot>
   readonly delivered: Set<TeamMessageId>
+  readonly reactions: Map<TeamMessageId, TeamReactionSnapshot[]>
   nextTaskNumber: number
 }
 
@@ -148,6 +165,7 @@ export function emptyTeamFoldState(rootId: SessionId): TeamFoldState {
     tasks: new Map(),
     messages: new Map(),
     delivered: new Set(),
+    reactions: new Map(),
     nextTaskNumber: 1,
   }
 }
@@ -158,6 +176,7 @@ export type TeamEventType =
   | 'team/task'
   | 'team/message/queued'
   | 'team/message/delivered'
+  | 'team/reaction'
 
 /** One event owned by the Team domain. */
 export type TeamSessionEvent = SessionEvent<TeamEventType>
@@ -172,6 +191,7 @@ export function isTeamEvent(event: SessionEvent): event is TeamSessionEvent {
     || event.type === 'team/task'
     || event.type === 'team/message/queued'
     || event.type === 'team/message/delivered'
+    || event.type === 'team/reaction'
 }
 
 /** Decode one persisted Team value and retain the schema failure as its cause. */
@@ -194,6 +214,8 @@ function parseCurrentTeamEvent(event: TeamSessionEvent): TeamSessionEvent {
       return { ...event, data: parsePersisted(event.type, teamMessageQueuedEventSchema, event.data) }
     case 'team/message/delivered':
       return { ...event, data: parsePersisted(event.type, teamMessageDeliveredEventSchema, event.data) }
+    case 'team/reaction':
+      return { ...event, data: parsePersisted(event.type, teamReactionEventSchema, event.data) }
     /* v8 ignore next 2 -- TeamEventType is closed and every member is handled above. */
     default:
       return event
@@ -270,6 +292,23 @@ export function applyTeamEvent(state: TeamFoldState, event: SessionEvent): void 
       if (queued.targetId !== decoded.data.targetId) throw new Error(`team message "${decoded.data.messageId}" target changed`)
       if (state.delivered.has(decoded.data.messageId)) throw new Error(`team message "${decoded.data.messageId}" was delivered twice`)
       state.delivered.add(decoded.data.messageId)
+      break
+    }
+    case 'team/reaction': {
+      const reaction = decoded.data.reaction
+      const message = state.messages.get(reaction.messageId)
+      if (message === undefined) throw new Error(`team reaction references unknown message "${reaction.messageId}"`)
+      if (message.senderId === reaction.reactorId) throw new Error('team members cannot react to their own message')
+      const member = state.members.get(reaction.reactorId)
+      const expectedName = toTeamId(reaction.reactorId) === state.id ? 'lead' : member?.name
+      if (expectedName === undefined || expectedName !== reaction.reactorName) {
+        throw new Error(`team reaction reactor "${reaction.reactorName}" is not a known member`)
+      }
+      const prior = state.reactions.get(reaction.messageId) ?? []
+      if (prior.some(item => item.reactorId === reaction.reactorId)) {
+        throw new Error(`team member "${reaction.reactorName}" reacted to message "${reaction.messageId}" twice`)
+      }
+      state.reactions.set(reaction.messageId, [...prior, reaction])
       break
     }
     /* v8 ignore next 2 -- TeamEventType is closed and every member is handled above. */

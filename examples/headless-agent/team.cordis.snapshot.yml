@@ -29,8 +29,8 @@
           maxDepth: 1
       - insert:
           - id: agent-team
-            name: '@phoenix-ai/dsh-experimental-agent-team'
+            name: '@phoenix-ai/dsh-agent-team'
           - id: tool-agent-team
-            name: '@phoenix-ai/dsh-experimental-tool-agent-team'
+            name: '@phoenix-ai/dsh-tool-agent-team'
           - id: team-fixture-llm
             name: './tests/fixtures/team-llm.mjs'

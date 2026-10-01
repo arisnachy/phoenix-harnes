@@ -6,7 +6,7 @@ import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
-import { CallId } from '@phoenix-ai/dsh-llm'
+import { CallId, ReasoningEffortId, type LlmModelReasoningInfo } from '@phoenix-ai/dsh-llm'
 import { scopeOf } from '@phoenix-ai/dsh-scope'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
@@ -25,6 +25,7 @@ const TOOL_NAMES = [
   'spawn_teammate',
   'send_message',
   'followup_task',
+  'team_react',
   'list_agents',
   'wait_agent',
   'interrupt_agent',
@@ -45,6 +46,7 @@ async function setup(
   script: ConstructorParameters<typeof MockAdapter>[0],
   legacyControl = false,
   config: toolTeam.Config = {},
+  reasoning?: LlmModelReasoningInfo,
 ) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
@@ -58,7 +60,7 @@ async function setup(
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
   await ctx.plugin(TeamService)
   const fiber = await ctx.plugin(toolTeam, config)
-  const adapter = new MockAdapter(script)
+  const adapter = new MockAdapter(script, reasoning)
   ctx.llm.registerAdapter(['mock'], adapter)
   const lead = ctx.agentLoop.create(SessionId('tool-team-lead'), { provider: 'mock', model: 'mock' })
   return { ctx, lead, fiber }
@@ -121,12 +123,13 @@ describe('dsh-tool-team', () => {
     expect(leadAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
-    expect(leadPrompt).toContain('create teammates only when the user explicitly asks')
+    expect(leadPrompt).toContain('real shared work, not role-play')
     expect(leadPrompt).toContain('FS_STALE_VERSION')
     expect(leadPrompt).toContain('Bash, formatters, code generators, and scripts are not fully protected')
     expect(leadPrompt).toContain('Task readiness never starts an owner')
     expect(leadPrompt).toContain('returns noProgress immediately')
     expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
+    expect(leadPrompt).toContain('Use team_react for a lightweight acknowledgement')
     expect(leadPrompt).toContain('Your Team role is lead')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
@@ -153,25 +156,71 @@ describe('dsh-tool-team', () => {
 
   it('routes teammates through provider-neutral model profiles', async () => {
     const { ctx, lead } = await setup(['hang'], false, {
+      defaultModelProfile: 'judge',
       modelProfiles: {
-        judge: { provider: 'mock', model: 'independent-judge', maxTokens: 8192 },
+        judge: { provider: 'mock', model: 'independent-judge', maxTokens: 8192, reasoningEffort: 'high' },
       },
+    }, {
+      efforts: [{ id: ReasoningEffortId('high'), name: 'High' }],
+      defaultEffort: ReasoningEffortId('high'),
     })
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'judge',
       description: 'independent acceptance review',
       prompt: 'review the evidence',
-      model_profile: 'judge',
     })
     expect(spawned.isError).toBe(false)
     const child = await waitRunning(ctx, spawnedChildId(spawned))
-    expect(child.options).toMatchObject({ provider: 'mock', model: 'independent-judge', maxTokens: 8192 })
+    expect(child.options).toMatchObject({
+      provider: 'mock', model: 'independent-judge', maxTokens: 8192, reasoningEffort: 'high',
+    })
     const rosterMember: unknown = JSON.parse(text(spawned))
     expect(rosterMember).toMatchObject({ member: {
       modelProvider: 'mock',
       model: 'independent-judge',
     } })
     await execute(ctx, lead, 'interrupt_agent', { target: 'judge' })
+  })
+
+  it('inherits the Lead route when a default profile belongs to another provider and honors explicit profiles', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang'], false, {
+      defaultModelProfile: 'foreign',
+      modelProfiles: {
+        foreign: { provider: 'other-provider', model: 'foreign-model' },
+        explicit: { provider: 'mock', model: 'explicit-model' },
+      },
+    })
+
+    const inherited = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'inherited-worker',
+      description: 'inherit Lead route',
+      prompt: 'wait',
+    })
+    const inheritedChild = await waitRunning(ctx, spawnedChildId(inherited))
+    expect(inheritedChild.options).toMatchObject({ provider: 'mock', model: 'mock' })
+
+    const explicit = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'explicit-worker',
+      description: 'use explicit route',
+      prompt: 'wait',
+      model_profile: 'explicit',
+    })
+    const explicitChild = await waitRunning(ctx, spawnedChildId(explicit))
+    expect(explicitChild.options).toMatchObject({ provider: 'mock', model: 'explicit-model' })
+    expect(explicitChild.options.maxTokens).toBeUndefined()
+    expect(explicitChild.options.reasoningEffort).toBeUndefined()
+
+    await execute(ctx, lead, 'interrupt_agent', { target: 'inherited-worker' })
+    await execute(ctx, lead, 'interrupt_agent', { target: 'explicit-worker' })
+  })
+
+  it('rejects a dangling default model profile before touching Team runtime services', () => {
+    expect(() => {
+      toolTeam.apply(new Context(), {
+        defaultModelProfile: 'missing',
+        modelProfiles: {},
+      })
+    }).toThrow('defaultModelProfile "missing" is not declared in modelProfiles')
   })
 
   it('returns actionable no-progress output and renders structured wait cancellation', async () => {
@@ -229,10 +278,31 @@ describe('dsh-tool-team', () => {
     // Every Team result reaches the model as compact JSON: indentation would
     // spend tokens on every roster, task, and receipt without adding meaning.
     expect(text(roster)).toBe(JSON.stringify(JSON.parse(text(roster))))
-    const peer = await execute(ctx, child, 'send_message', { target: 'lead', message: 'quiet report' })
+    const peer = await execute(ctx, child, 'send_message', {
+      target: 'lead', purpose: 'result', message: 'quiet report',
+    })
     expect(peer.isError).toBe(false)
     expect(JSON.parse(text(peer))).toMatchObject({ status: 'accepted' })
-    const waking = await execute(ctx, child, 'followup_task', { target: 'lead', message: 'review the report' })
+    const peerReceipt = JSON.parse(text(peer)) as { messageId: string }
+    const reacted = await execute(ctx, lead, 'team_react', {
+      message_id: peerReceipt.messageId,
+      reaction: 'ack',
+    })
+    expect(reacted.isError).toBe(false)
+    expect(JSON.parse(text(reacted))).toMatchObject({
+      messageId: peerReceipt.messageId,
+      reactorName: 'lead',
+      reaction: 'ack',
+    })
+    const duplicateReaction = await execute(ctx, lead, 'team_react', {
+      message_id: peerReceipt.messageId,
+      reaction: 'agree',
+    })
+    expect(duplicateReaction.isError).toBe(true)
+    expect(text(duplicateReaction)).toContain('only once')
+    const waking = await execute(ctx, child, 'followup_task', {
+      target: 'lead', purpose: 'review', message: 'review the report',
+    })
     expect(waking.isError).toBe(false)
     expect(JSON.parse(text(waking))).toMatchObject({ status: 'accepted' })
     await lead.whenIdle()
@@ -383,6 +453,7 @@ describe('dsh-tool-team', () => {
     const { ctx, lead, fiber } = await setup([], true)
     const teamSchema = (await assembly(ctx, lead)).tools.find(schema => schema.name === 'send_message')
     expect(JSON.stringify(teamSchema)).toContain('target')
+    expect(JSON.stringify(teamSchema)).toContain('purpose')
     expect(JSON.stringify(teamSchema)).not.toContain('subagent_id')
 
     await fiber.dispose()

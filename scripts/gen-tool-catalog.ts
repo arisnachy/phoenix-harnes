@@ -64,8 +64,8 @@ import * as ToolSessionQuery from '@phoenix-ai/dsh-tool-session-query'
 import * as ToolSessionLearning from '@phoenix-ai/dsh-tool-session-learning'
 import LearningMemoryService from '@phoenix-ai/dsh-session-learning'
 import * as ToolTasks from '@phoenix-ai/dsh-tool-jobs'
-import type TeamService from '@phoenix-ai/dsh-experimental-agent-team'
-import * as ToolTeam from '@phoenix-ai/dsh-experimental-tool-agent-team'
+import type TeamService from '@phoenix-ai/dsh-agent-team'
+import * as ToolTeam from '@phoenix-ai/dsh-tool-agent-team'
 import * as ToolTodo from '@phoenix-ai/dsh-tool-todo'
 import * as ToolSubagent from '@phoenix-ai/dsh-tool-subagent'
 import * as ToolWeb from '@phoenix-ai/dsh-tool-web'
@@ -577,9 +577,9 @@ const TOOL_PACKAGES: ToolPackage[] = [
       'The kind-agnostic background-job controller: background bash commands, PTY sends, and subagents are read, listed, and killed through the same three tools. Loading the plugin attaches the controller that arms producers\' `ctx.jobs.start()`.',
   },
   {
-    pkg: '@phoenix-ai/dsh-experimental-tool-agent-team',
+    pkg: '@phoenix-ai/dsh-tool-agent-team',
     dir: 'tool-agent-team',
-    source: 'packages/experimental/tool-agent-team/src/index.ts',
+    source: 'packages/subagent/tool-agent-team/src/index.ts',
     requires: ['ctx.tools', 'ctx.systemPrompt', 'ctx.agentTeams', 'an exact live Team member Agent'],
     writes: ['tool/call', 'team/member', 'team/message/queued', 'team/message/delivered', 'team/task', 'tool/result'],
     async mount(ctx) {

@@ -69,6 +69,9 @@ interface TeamServiceInternals {
     checkpointInitialPrompt(childId: SessionId, messageId: string, signal: AbortSignal): Promise<void>
     reconcileProvisioning(root: Agent, signal: AbortSignal): Promise<void>
     liveChildrenByRoot(): Map<Agent, SessionId[]>
+    memberView(member: TeamMemberSnapshot & { readonly phase: 'active' }): {
+      readonly usage?: { readonly inputTokens: number; readonly outputTokens: number }
+    }
   }
   readonly mailbox: {
     tryDispatch(root: Agent, message: TeamMessageSnapshot, signal: AbortSignal): Promise<boolean>
@@ -1195,6 +1198,61 @@ describe('Team mailbox and waiting', () => {
 
     ctx.agentTeams.interrupt(lead, 'alpha')
     await waitNoAgent(ctx, alpha.id)
+  })
+
+  it('rejects invalid reactions and exposes live usage so the Lead can supervise cost', async () => {
+    const { ctx, lead } = await setup([textResponse('first turn'), 'hang'])
+    const worker = await spawn(ctx, lead, 'usage-worker')
+    await waitNoAgent(ctx, worker.member.id)
+
+    await expect(ctx.agentTeams.reactToMessage(lead, {
+      messageId: TeamMessageId('missing'),
+      reaction: 'ack',
+      signal: SIGNAL,
+    })).rejects.toMatchObject({ code: 'TEAM_MESSAGE_NOT_FOUND' })
+
+    const own = await ctx.agentTeams.sendMessage(lead, {
+      target: 'usage-worker',
+      purpose: 'assignment',
+      content: content('wake and continue'),
+      delivery: 'wakeup',
+      signal: SIGNAL,
+    })
+    await expect(ctx.agentTeams.reactToMessage(lead, {
+      messageId: own.messageId,
+      reaction: 'ack',
+      signal: SIGNAL,
+    })).rejects.toMatchObject({ code: 'TEAM_SELF_REACTION' })
+
+    const live = await waitRunning(ctx, worker.member.id)
+    const peer = await ctx.agentTeams.sendMessage(live, {
+      target: 'lead',
+      purpose: 'result',
+      content: content('evidence'),
+      delivery: 'quiet',
+      signal: SIGNAL,
+    })
+    await expect(ctx.agentTeams.reactToMessage(lead, {
+      messageId: peer.messageId,
+      reaction: 'ack',
+      signal: SIGNAL,
+    })).resolves.toMatchObject({ reactorName: 'lead', reaction: 'ack' })
+    await expect(ctx.agentTeams.reactToMessage(lead, {
+      messageId: peer.messageId,
+      reaction: 'agree',
+      signal: SIGNAL,
+    })).rejects.toMatchObject({ code: 'TEAM_REACTION_EXISTS' })
+
+    const listed = ctx.agentTeams.listMembers(lead).find(item => item.name === 'usage-worker')
+    expect(listed?.usage).toMatchObject({ inputTokens: 10, outputTokens: 'first turn'.length })
+
+    const active = foldTeam(lead.id, lead.session.events).members.get(worker.member.id)
+    expect(active?.phase).toBe('active')
+    const directView = teamInternals(ctx).roster.memberView(active as TeamMemberSnapshot & { phase: 'active' })
+    expect(directView.usage).toMatchObject({ inputTokens: 10, outputTokens: 'first turn'.length })
+
+    ctx.agentTeams.interrupt(lead, 'usage-worker')
+    await waitNoAgent(ctx, worker.member.id)
   })
 
   it('enforces message byte and pending-count limits without encouraging retry after enqueue', async () => {

@@ -1,8 +1,10 @@
 /** Web KIRA teams overlay: fixed activity-strip and agent-rail registration. */
 import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@phoenix-ai/dsh-client-runtime/client'
 import { KiraTeamsDock } from './KiraTeamsDock.tsx'
+import { KiraTeamMessageView } from './TeamChatMessage.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
+import type {} from '@phoenix-ai/dsh-client-ui-conversation/client'
 import { en, es, NS, zh, type KiraTeamsKey } from './locales.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {
@@ -20,6 +22,10 @@ export const inject = ['sessions', 'slots', 'locale', 'layout']
 /** Register the KIRA activity strip and rail as an overlay so agents never consume chat width. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-kira-teams: dictionaries')
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+    name: 'conversation.chat.node',
+    key: 'kira-team-message',
+  }, KiraTeamMessageView))
   const sessions = ctx.get('sessions') as unknown as ISessions
   const dockActions = () => ({
     list: sessions.list,

@@ -334,6 +334,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'durable message identity and immediate-delivery observation.',
       },
       {
+        signature: 'async reactToMessage( caller: Agent, request: ReactToTeamMessageRequest, ): Promise<ReactToTeamMessageResult>',
+        description: 'Attach one lightweight semantic reaction to another member\'s durable message. A reaction is journal state, not a generated assistant turn, so acknowledgement does not consume an extra prose response.',
+        parameters: [{ name: 'caller', description: 'exact live Team member reacting.' }, { name: 'request', description: 'target message, semantic reaction, and cancellation signal.' }],
+        returns: 'the committed reaction receipt.',
+      },
+      {
         signature: 'async createTask(caller: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskView>',
         description: 'Create one unowned pending task in the Team Lead log.',
         parameters: [{ name: 'caller', description: 'exact live Team member creating the task.' }, { name: 'request', description: 'task text, blockers, and advisory write scopes.' }],
@@ -4705,6 +4711,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface QuestionDeadline {\n    readonly requestedAt: number;\n    readonly expiresAt: number;\n}',
   },
   {
+    name: 'ReactToTeamMessageRequest',
+    declaration: 'export interface ReactToTeamMessageRequest {\n    readonly messageId: TeamMessageId;\n    readonly reaction: TeamReactionKind;\n    readonly signal: AbortSignal;\n}',
+  },
+  {
+    name: 'ReactToTeamMessageResult',
+    declaration: 'export interface ReactToTeamMessageResult {\n    readonly messageId: TeamMessageId;\n    readonly reactorName: string;\n    readonly reaction: TeamReactionKind;\n}',
+  },
+  {
     name: 'ReadFileLine',
     declaration: 'export interface ReadFileLine {\n    number: number;\n    text: string;\n}',
   },
@@ -4886,7 +4900,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SendTeamMessageRequest',
-    declaration: 'export interface SendTeamMessageRequest {\n    readonly target: string;\n    readonly content: ContentBlock[];\n    readonly delivery: \'quiet\' | \'wakeup\';\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SendTeamMessageRequest {\n    readonly target: string;\n    readonly content: ContentBlock[];\n    readonly purpose?: TeamMessagePurpose;\n    readonly delivery: \'quiet\' | \'wakeup\';\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SendTeamMessageResult',
@@ -5501,12 +5515,24 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface TeamMembership {\n    readonly root: Agent;\n    readonly id: TeamId;\n    readonly role: \'lead\' | \'teammate\';\n    readonly name: string;\n}',
   },
   {
+    name: 'TeamMemberUsage',
+    declaration: 'export interface TeamMemberUsage {\n    readonly inputTokens: number;\n    readonly outputTokens: number;\n    readonly cacheReadTokens: number;\n    readonly cacheWriteTokens: number;\n    readonly reasoningTokens: number;\n}',
+  },
+  {
     name: 'TeamMemberView',
-    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly modelProvider?: string;\n    readonly model?: string;\n    readonly diagnostics: string[];\n}',
+    declaration: 'export interface TeamMemberView {\n    readonly id: SessionId;\n    readonly name: string;\n    readonly role: \'lead\' | \'teammate\';\n    readonly status: \'running\' | \'idle\' | \'inactive\' | \'provisioning\' | \'failed\';\n    readonly description?: string;\n    readonly provider?: string;\n    readonly context?: \'fresh\' | \'fork\';\n    readonly modelProvider?: string;\n    readonly model?: string;\n    readonly usage?: TeamMemberUsage;\n    readonly diagnostics: string[];\n}',
   },
   {
     name: 'TeamMessageId',
     declaration: 'export type TeamMessageId = Branded<\'TeamMessageId\'>;',
+  },
+  {
+    name: 'TeamMessagePurpose',
+    declaration: 'export type TeamMessagePurpose = \'assignment\' | \'question\' | \'blocker\' | \'result\' | \'review\' | \'decision\' | \'update\';',
+  },
+  {
+    name: 'TeamReactionKind',
+    declaration: 'export type TeamReactionKind = \'ack\' | \'agree\' | \'insight\' | \'blocked\' | \'done\';',
   },
   {
     name: 'TeamTaskAction',

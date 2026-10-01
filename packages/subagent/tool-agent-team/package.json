@@ -1,12 +1,11 @@
 {
-  "name": "@phoenix-ai/dsh-experimental-agent-team",
-  "description": "Implicit-root Agent Teams roster, durable peer mailbox, and shared task DAG",
+  "name": "@phoenix-ai/dsh-tool-agent-team",
+  "description": "Scoped model-facing Agent Teams tools over ctx.agentTeams",
   "version": "0.1.1-rc.2",
-  "private": true,
   "repository": {
     "type": "git",
     "url": "git+https://github.com/arisnachy/phoenix-harnes.git",
-    "directory": "packages/experimental/agent-team"
+    "directory": "packages/subagent/tool-agent-team"
   },
   "type": "module",
   "main": "lib/index.js",
@@ -30,33 +29,35 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@phoenix-ai/schemastery": "workspace:^",
-    "zod": "^4.4.3"
+    "@phoenix-ai/schemastery": "workspace:^"
   },
   "peerDependencies": {
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
-    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-agent-team": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@phoenix-ai/dsh-llm": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
-    "@phoenix-ai/dsh-session-persistence": "workspace:^",
-    "@phoenix-ai/dsh-subagent": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/dsh-system-prompt": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^"
   },
   "devDependencies": {
+    "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-agent": "workspace:^",
     "@phoenix-ai/dsh-agent-loop": "workspace:^",
     "@phoenix-ai/dsh-agent-loop-testkit": "workspace:^",
-    "@phoenix-ai/dsh-brand": "workspace:^",
+    "@phoenix-ai/dsh-agent-team": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
-    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-scope": "workspace:^",
     "@phoenix-ai/dsh-session": "workspace:^",
-    "@phoenix-ai/dsh-session-persistence": "workspace:^",
     "@phoenix-ai/dsh-session-persistence-jsonl": "workspace:^",
-    "@phoenix-ai/dsh-session-persistence-sqlite": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/dsh-subagent-fork-in-process": "workspace:^",
     "@phoenix-ai/dsh-subagent-spawn-in-process": "workspace:^",
-    "@phoenix-ai/cordis": "workspace:^"
+    "@phoenix-ai/dsh-system-prompt": "workspace:^",
+    "@phoenix-ai/dsh-tool-subagent-control": "workspace:^",
+    "@phoenix-ai/dsh-tools": "workspace:^"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

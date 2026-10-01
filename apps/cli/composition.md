@@ -134,6 +134,8 @@ flowchart LR
   cfg --> plugin_dsh_base_subagent_spawn_in_process
   plugin_dsh_base_subagent_fork_in_process["subagent-fork-in-process<br/>@phoenix-ai/dsh-subagent-fork-in-process"]
   cfg --> plugin_dsh_base_subagent_fork_in_process
+  plugin_dsh_base_agent_team["agent-team<br/>@phoenix-ai/dsh-agent-team"]
+  cfg --> plugin_dsh_base_agent_team
   plugin_dsh_base_tool_subagent_control["tool-subagent-control<br/>@phoenix-ai/dsh-tool-subagent-control"]
   cfg --> plugin_dsh_base_tool_subagent_control
   plugin_dsh_base_tool_subagent_list_agents["tool-subagent-list-agents<br/>@phoenix-ai/dsh-tool-subagent-control/list-agents"]
@@ -277,6 +279,7 @@ flowchart LR
 | `subagent` | `@phoenix-ai/dsh-subagent` |
 | `subagent-spawn-in-process` | `@phoenix-ai/dsh-subagent-spawn-in-process` |
 | `subagent-fork-in-process` | `@phoenix-ai/dsh-subagent-fork-in-process` |
+| `agent-team` | `@phoenix-ai/dsh-agent-team` |
 | `tool-subagent-control` | `@phoenix-ai/dsh-tool-subagent-control` |
 | `tool-subagent-list-agents` | `@phoenix-ai/dsh-tool-subagent-control/list-agents` |
 | `tool-subagent` | `@phoenix-ai/dsh-tool-subagent` |

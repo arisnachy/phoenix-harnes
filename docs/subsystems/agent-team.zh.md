@@ -2,7 +2,7 @@
 
 [English](agent-team.md) | 中文
 
-实验性隐式 Root Team 领域、模型工具与宿主适配器共享的类型。[Agent Teams Agent Note](../../.agents/notes/implemented/feature/2026-08-05-agent-teams.zh.md)负责身份、mailbox、task 与共享 checkout 决策；本页记录 [`packages/experimental/agent-team/src/types.ts`](../../packages/experimental/agent-team/src/types.ts) 中的字面持久形式。
+稳定的隐式 Root Team 领域、模型工具与宿主适配器共享的类型。[Agent Teams Agent Note](../../.agents/notes/implemented/feature/2026-08-05-agent-teams.zh.md)负责身份、mailbox、task 与共享 checkout 决策；本页记录 [`packages/subagent/agent-team/src/types.ts`](../../packages/subagent/agent-team/src/types.ts) 中的字面持久形式。
 
 ## 身份与 roster
 
@@ -34,6 +34,10 @@ interface TeamMessageSnapshot {
   readonly senderId: SessionId
   readonly senderName: string
   readonly targetId: SessionId
+  /** Human-stable Team name captured at send time for transcript presentation. */
+  readonly targetName?: string
+  /** Optional for backward replay and direct API callers; model-facing Team tools always persist one semantic purpose. */
+  readonly purpose?: TeamMessagePurpose
   readonly delivery: 'quiet' | 'wakeup'
   readonly content: ContentBlock[]
 }
@@ -49,6 +53,8 @@ interface TeamMessageSource {
   readonly messageId: TeamMessageId
   readonly senderId: SessionId
   readonly senderName: string
+  /** Semantic purpose survives delivery so Phoenix Auto can route Kira without another classifier call. */
+  readonly purpose?: TeamMessagePurpose
 }
 ```
 
@@ -74,7 +80,7 @@ interface TeamTaskSnapshot {
 
 ## 回放
 
-`foldTeam()` 把一个 Root Session 回放成每个 Team 操作所读取的 roster、任务板与 queued-minus-delivered mailbox。它按 `TeamId` 选取记录，因此普通 fork 继承的 event 保留 ancestor id，绝不会进入新 Root 的状态。Session event 的 `seq` 与 `time` 继续负责顺序和时间记录，Team snapshot 不再重复保存它们。roster 与 task 读取以 view 形式到达调用方，附带 owner name、readiness 与 write-scope 警告，而 pending 邮件仅供投递与恢复内部使用。包 [README](../../packages/experimental/agent-team/README.zh.md)负责 operation、authorization、recovery 和限制行为。
+`foldTeam()` 把一个 Root Session 回放成每个 Team 操作所读取的 roster、任务板与 queued-minus-delivered mailbox。它按 `TeamId` 选取记录，因此普通 fork 继承的 event 保留 ancestor id，绝不会进入新 Root 的状态。Session event 的 `seq` 与 `time` 继续负责顺序和时间记录，Team snapshot 不再重复保存它们。roster 与 task 读取以 view 形式到达调用方，附带 owner name、readiness 与 write-scope 警告，而 pending 邮件仅供投递与恢复内部使用。包 [README](../../packages/subagent/agent-team/README.zh.md)负责 operation、authorization、recovery 和限制行为。
 
 <!-- BEGIN GENERATED cordis-surface (gen-cordis-catalog.ts) — do not edit between markers -->
 
@@ -120,6 +126,16 @@ async spawnTeammate(caller: Agent, request: SpawnTeammateRequest): Promise<Spawn
  * @returns durable message identity and immediate-delivery observation.
  */
 async sendMessage(caller: Agent, request: SendTeamMessageRequest): Promise<SendTeamMessageResult>
+
+/**
+ * Attach one lightweight semantic reaction to another member's durable message.
+ * A reaction is journal state, not a generated assistant turn, so acknowledgement
+ * does not consume an extra prose response.
+ * @param caller - exact live Team member reacting.
+ * @param request - target message, semantic reaction, and cancellation signal.
+ * @returns the committed reaction receipt.
+ */
+async reactToMessage( caller: Agent, request: ReactToTeamMessageRequest, ): Promise<ReactToTeamMessageResult>
 
 /**
  * Create one unowned pending task in the Team Lead log.
@@ -179,5 +195,5 @@ tryMembership(agent: Agent): TeamMembership | undefined
 
 Types: [Agent](core.zh.md)
 
-Source: [`packages/experimental/agent-team/src/index.ts`](../../packages/experimental/agent-team/src/index.ts)
+Source: [`packages/subagent/agent-team/src/index.ts`](../../packages/subagent/agent-team/src/index.ts)
 <!-- END GENERATED cordis-surface -->

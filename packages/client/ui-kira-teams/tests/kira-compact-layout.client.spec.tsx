@@ -6,6 +6,7 @@ import { ModelActivityAvatar, portraitSrcForKind } from '../src/client/ModelActi
 
 const dockCss = readFileSync(new URL('../src/client/KiraTeamsDock.module.css', import.meta.url), 'utf8')
 const avatarCss = readFileSync(new URL('../src/client/ModelActivityAvatar.module.css', import.meta.url), 'utf8')
+const teamChatCss = readFileSync(new URL('../src/client/TeamChatMessage.module.css', import.meta.url), 'utf8')
 const frameCss = readFileSync(new URL('../../ui-layout/src/client/AppFrame.module.css', import.meta.url), 'utf8')
 const conversationCss = readFileSync(
   new URL('../../ui-conversation/src/client/skeleton/ConversationRoot.module.css', import.meta.url),
@@ -40,6 +41,9 @@ describe('KIRA mission-control layout regression', () => {
       /\.composerSeat\s*{[^}]*translateX\(calc\(0px - var\(--dsh-chat-floating-overlay-axis-shift, 0px\)\)\)/s,
     )
     expect(chatCss).toMatch(/\.column\s*{[^}]*translateX\(calc\(0px - var\(--dsh-chat-floating-overlay-axis-shift, 0px\)\)\)/s)
+    expect(teamChatCss).toMatch(/\.row\s*{[^}]*width:\s*100%/s)
+    expect(teamChatCss).not.toMatch(/position:\s*(?:fixed|absolute)/s)
+    expect(teamChatCss).not.toMatch(/width:\s*(?:100vw|calc\(100vw)/s)
   })
 
   it('renders each persona from bundled portrait pixels while keeping phase data for animation', () => {

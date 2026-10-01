@@ -15,11 +15,13 @@ describe('Phoenix Auto parallel Luna delegation', () => {
 
     for (const { name, content } of presets) {
       const lunaRoutes = content.match(/model: gpt-6-luna\n\s+reasoningEffort: max/gu) ?? []
-      expect(lunaRoutes, `${name} should pin subagent, fork, and workflow children to GPT-6 Luna Max`)
-        .toHaveLength(3)
+      expect(lunaRoutes, `${name} should pin subagent, fork, workflow, and Kira Team children to GPT-6 Luna Max`)
+        .toHaveLength(4)
       expect(content).toContain('maxConcurrentAgents: 2')
       expect(content).toContain('maxTotalAgents: 2')
       expect(content).toContain('GPT-6 Luna Max')
+      expect(content).toContain('@phoenix-ai/dsh-tool-agent-team')
+      expect(content).toContain('defaultModelProfile: luna-max')
       expect(content).toContain('workflow')
       expect(content).not.toContain('model: gpt-5.6-luna\n          reasoningEffort: xhigh')
     }

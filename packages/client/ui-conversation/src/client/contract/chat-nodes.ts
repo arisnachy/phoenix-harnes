@@ -3,8 +3,32 @@ import type {
   CompactionSummaryNode, ModelRetryNode, RunningToolCall, ToolCallBlock,
 } from '@phoenix-ai/dsh-client-runtime/client'
 
+/** One lightweight reaction rendered under a real KIRA Team message. */
+export interface KiraTeamReactionChatData {
+  readonly reactorId: string
+  readonly reactorName: string
+  readonly reaction: 'ack' | 'agree' | 'insight' | 'blocked' | 'done'
+}
+
+/** Durable KIRA Team message projected into the ordinary Phoenix chat stream. */
+export interface KiraTeamMessageChatData {
+  readonly messageId: string
+  readonly senderId: string
+  readonly senderName: string
+  readonly targetId: string
+  readonly targetName?: string
+  readonly purpose?: 'assignment' | 'question' | 'blocker' | 'result' | 'review' | 'decision' | 'update'
+  readonly content: readonly unknown[]
+  readonly time: number
+  readonly seq: number
+  readonly reactions: readonly KiraTeamReactionChatData[]
+}
+
 /** Merge-extensible payload registry keyed by final Chat renderer kind. */
-export interface ChatNodeDataMap {}
+export interface ChatNodeDataMap {
+  /** Real peer-to-peer KIRA Team collaboration, never synthetic role-play. */
+  'kira-team-message': KiraTeamMessageChatData
+}
 
 /** Renderer kinds contributed by the currently installed Chat business modules. */
 export type ChatNodeKind = Extract<keyof ChatNodeDataMap, string>

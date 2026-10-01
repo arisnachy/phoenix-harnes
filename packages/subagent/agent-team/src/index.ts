@@ -16,6 +16,8 @@ import { TeamId, TeamTaskId } from './types.ts'
 import type {
   Config,
   CreateTeamTaskRequest,
+  ReactToTeamMessageRequest,
+  ReactToTeamMessageResult,
   SendTeamMessageRequest,
   SendTeamMessageResult,
   SpawnTeammateRequest,
@@ -150,6 +152,53 @@ export class TeamService extends Service {
    */
   async sendMessage(caller: Agent, request: SendTeamMessageRequest): Promise<SendTeamMessageResult> {
     return await this.mailbox.send(caller, request)
+  }
+
+  /**
+   * Attach one lightweight semantic reaction to another member's durable message.
+   * A reaction is journal state, not a generated assistant turn, so acknowledgement
+   * does not consume an extra prose response.
+   * @param caller - exact live Team member reacting.
+   * @param request - target message, semantic reaction, and cancellation signal.
+   * @returns the committed reaction receipt.
+   */
+  async reactToMessage(
+    caller: Agent,
+    request: ReactToTeamMessageRequest,
+  ): Promise<ReactToTeamMessageResult> {
+    const membership = this.roster.membership(caller)
+    request.signal.throwIfAborted()
+    return await this.journal.transact(membership.root.id, async () => {
+      request.signal.throwIfAborted()
+      const state = this.journal.state(membership.root)
+      const message = state.messages.get(request.messageId)
+      if (message === undefined) {
+        throw new TeamError(`team message "${request.messageId}" not found`, 'TEAM_MESSAGE_NOT_FOUND')
+      }
+      if (message.senderId === caller.id) {
+        throw new TeamError('a Team member cannot react to its own message', 'TEAM_SELF_REACTION')
+      }
+      const prior = state.reactions.get(request.messageId) ?? []
+      if (prior.some(item => item.reactorId === caller.id)) {
+        throw new TeamError('a Team member may react to a message only once', 'TEAM_REACTION_EXISTS')
+      }
+      const reaction = {
+        messageId: request.messageId,
+        reactorId: caller.id,
+        reactorName: membership.name,
+        reaction: request.reaction,
+      } as const
+      await this.journal.appendAndFlush(membership.root, 'team/reaction', {
+        version: 1,
+        teamId: membership.id,
+        reaction,
+      })
+      return {
+        messageId: reaction.messageId,
+        reactorName: reaction.reactorName,
+        reaction: reaction.reaction,
+      }
+    })
   }
 
   /**

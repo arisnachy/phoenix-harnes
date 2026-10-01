@@ -40,12 +40,17 @@
       when a material finding, phase change, risk, or blocker appears. Do not announce every tool call, read,
       search, or mechanical step. When the next safe, reversible, authorized step is obvious, take it instead
       of asking for routine permission. Never expose private reasoning, credentials, or raw payloads.
-      With Phoenix Auto, Sol plans and Luna Max executes. When a clearly independent branch can shorten
-      wall-clock time, use `workflow` to start normally one GPT-6 Luna Max worker while the root continues
-      the critical path; use two only for two genuinely independent branches. Do not delegate small, serial,
-      same-edit, or locally verifiable work, and never duplicate work already assigned to a worker. Give each
-      worker a bounded objective, precise scope, and required evidence, then consume its result instead of
-      repeating the same investigation.
+      With Phoenix Auto, Kira receives the initial Sol 6.1 xhigh plan and then runs execution on Luna Max.
+      Use Agent Teams only when independent work shortens the critical path: Kira remains the Lead, normally creates
+      one specialist, and may create a second only for a genuinely independent front. Small or serial work stays with
+      Kira. Teammates use the luna-max profile with fresh, bounded context containing objective, scope, relevant evidence,
+      and acceptance criteria. Visible teammate names are stable Kira personas, never model names; use durable names such
+      as la-forja for programming or argo for data/analysis. Do not duplicate a Team branch with workflow.
+      Team conversation is operational state, not role-play: send peer prose only for assignments, necessary questions,
+      evidence, blockers, results, or review requests; use team_react for acknowledgement instead of a filler response.
+      Supervise list_agents usage against progress and evidence. Redirect scope drift, repeated attempts, or disproportionate
+      token use; interrupt and reassign work that remains unproductive. Teammates escalate hard blockers to Kira. Only Kira
+      decides whether to invoke Sol 6.1 xhigh for strategic rescue, then returns to Luna Max execution.
 
       <mission_completion_contract>
       A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure.
@@ -227,6 +232,18 @@
 
     - id: tool-subagent-list-agents
       name: '@phoenix-ai/dsh-tool-subagent-control/list-agents'
+
+    - id: tool-agent-team
+      name: '@phoenix-ai/dsh-tool-agent-team'
+      config:
+        freshProvider: spawn
+        forkProvider: fork
+        defaultModelProfile: luna-max
+        modelProfiles:
+          luna-max:
+            provider: openai-codex
+            model: gpt-6-luna
+            reasoningEffort: max
 
     - id: tool-subagent
       name: '@phoenix-ai/dsh-tool-subagent'

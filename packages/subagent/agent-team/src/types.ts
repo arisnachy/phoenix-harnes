@@ -55,6 +55,15 @@ export interface TeamMemberSnapshot {
   readonly error?: string
 }
 
+/** Provider-reported live usage that lets the Lead detect expensive or stalled execution. */
+export interface TeamMemberUsage {
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadTokens: number
+  readonly cacheWriteTokens: number
+  readonly reasoningTokens: number
+}
+
 /** Current runtime-enriched roster row. */
 export interface TeamMemberView {
   readonly id: SessionId
@@ -67,6 +76,8 @@ export interface TeamMemberView {
   /** LLM provider route, distinct from the subagent transport provider. */
   readonly modelProvider?: string
   readonly model?: string
+  /** Available for live members; persisted inactive rows may omit runtime usage. */
+  readonly usage?: TeamMemberUsage
   readonly diagnostics: string[]
 }
 
@@ -99,14 +110,32 @@ export interface TeamTaskView {
   readonly writeScopeWarnings: string[]
 }
 
+/** Semantic purpose of one real peer message; used by supervision, routing, and presentation. */
+export type TeamMessagePurpose = 'assignment' | 'question' | 'blocker' | 'result' | 'review' | 'decision' | 'update'
+
 /** One peer message retained until its target Session records it. */
 export interface TeamMessageSnapshot {
   readonly id: TeamMessageId
   readonly senderId: SessionId
   readonly senderName: string
   readonly targetId: SessionId
+  /** Human-stable Team name captured at send time for transcript presentation. */
+  readonly targetName?: string
+  /** Optional for backward replay and direct API callers; model-facing Team tools always persist one semantic purpose. */
+  readonly purpose?: TeamMessagePurpose
   readonly delivery: 'quiet' | 'wakeup'
   readonly content: ContentBlock[]
+}
+
+/** Compact semantic reactions that can acknowledge a real peer message without another prose turn. */
+export type TeamReactionKind = 'ack' | 'agree' | 'insight' | 'blocked' | 'done'
+
+/** One durable teammate reaction attached to a previously queued peer message. */
+export interface TeamReactionSnapshot {
+  readonly messageId: TeamMessageId
+  readonly reactorId: SessionId
+  readonly reactorName: string
+  readonly reaction: TeamReactionKind
 }
 
 /** Source retained by the target Session for durable mailbox de-duplication. */
@@ -116,6 +145,8 @@ export interface TeamMessageSource {
   readonly messageId: TeamMessageId
   readonly senderId: SessionId
   readonly senderName: string
+  /** Semantic purpose survives delivery so Phoenix Auto can route Kira without another classifier call. */
+  readonly purpose?: TeamMessagePurpose
 }
 
 declare module '@phoenix-ai/dsh-llm' {
@@ -159,6 +190,7 @@ export interface SpawnTeammateResult {
 export interface SendTeamMessageRequest {
   readonly target: string
   readonly content: ContentBlock[]
+  readonly purpose?: TeamMessagePurpose
   readonly delivery: 'quiet' | 'wakeup'
   readonly signal: AbortSignal
 }
@@ -167,6 +199,20 @@ export interface SendTeamMessageRequest {
 export interface SendTeamMessageResult {
   readonly messageId: TeamMessageId
   readonly status: 'accepted' | 'queued'
+}
+
+/** Input for one durable semantic reaction to another Team member's message. */
+export interface ReactToTeamMessageRequest {
+  readonly messageId: TeamMessageId
+  readonly reaction: TeamReactionKind
+  readonly signal: AbortSignal
+}
+
+/** Result after a reaction is committed to the Team Lead journal. */
+export interface ReactToTeamMessageResult {
+  readonly messageId: TeamMessageId
+  readonly reactorName: string
+  readonly reaction: TeamReactionKind
 }
 
 /** Input for creating one shared task. */
@@ -219,6 +265,12 @@ declare module '@phoenix-ai/dsh-session/types' {
       teamId: TeamId
       messageId: TeamMessageId
       targetId: SessionId
+    }
+    /** Lightweight semantic reaction to a real Team message; stored only in the Team Lead Session. */
+    'team/reaction': {
+      version: 1
+      teamId: TeamId
+      reaction: TeamReactionSnapshot
     }
   }
 }

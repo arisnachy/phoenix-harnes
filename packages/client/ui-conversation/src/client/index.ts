@@ -9,6 +9,7 @@ export type {} from './conversation-nodes/compaction.ts'
 export type {} from './conversation-nodes/fallback.ts'
 export type {} from './conversation-nodes/hardness-artifact.ts'
 export type {} from './conversation-nodes/message.ts'
+export type {} from './conversation-nodes/kira-team-message.ts'
 export type {} from './conversation-nodes/retry.ts'
 export type {} from './conversation-nodes/tool.ts'
 export type {} from './conversation-nodes/turn-error.ts'
@@ -26,7 +27,7 @@ export type {
 } from './contract/views.ts'
 export type { ConversationKey } from './locales.ts'
 export type {
-  AssistantChatData, ChatNode, ChatNodeDataMap, ChatNodeKind, ManualCompactionChatData,
+  AssistantChatData, ChatNode, ChatNodeDataMap, ChatNodeKind, KiraTeamMessageChatData, KiraTeamReactionChatData, ManualCompactionChatData,
   RetryChatData, ToolChatData, TurnTailChatData,
 } from './contract/chat-nodes.ts'
 export type {

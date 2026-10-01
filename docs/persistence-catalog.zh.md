@@ -852,7 +852,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMemberSnapshot](subsystems/agent-team.zh.md)
 
-来源：[`packages/experimental/agent-team/src/types.ts:211`](../packages/experimental/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:257`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagedelivered--log-only"></a>
 
@@ -870,7 +870,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMessageId](subsystems/agent-team.zh.md)
 
-来源：[`packages/experimental/agent-team/src/types.ts:217`](../packages/experimental/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:263`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teammessagequeued--log-only"></a>
 
@@ -883,7 +883,24 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamMessageSnapshot](subsystems/agent-team.zh.md)
 
-来源：[`packages/experimental/agent-team/src/types.ts:215`](../packages/experimental/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:261`](../packages/subagent/agent-team/src/types.ts)
+
+<a id="teamreaction--log-only"></a>
+
+#### `team/reaction` — log-only
+
+```ts persistence-catalog
+/** Lightweight semantic reaction to a real Team message; stored only in the Team Lead Session. */
+'team/reaction': {
+  version: 1
+  teamId: TeamId
+  reaction: TeamReactionSnapshot
+}
+```
+
+类型：[TeamId](subsystems/agent-team.zh.md)
+
+来源：[`packages/subagent/agent-team/src/types.ts:270`](../packages/subagent/agent-team/src/types.ts)
 
 <a id="teamtask--log-only"></a>
 
@@ -896,7 +913,7 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 类型：[TeamId](subsystems/agent-team.zh.md) · [TeamTaskSnapshot](subsystems/agent-team.zh.md)
 
-来源：[`packages/experimental/agent-team/src/types.ts:213`](../packages/experimental/agent-team/src/types.ts)
+来源：[`packages/subagent/agent-team/src/types.ts:259`](../packages/subagent/agent-team/src/types.ts)
 
 ### `todo/*`
 
