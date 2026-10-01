@@ -31,13 +31,9 @@ RestartApplications=no
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-[Tasks]
-Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: checkedonce
-Name: "autostart"; Description: "Iniciar Phoenix con Windows"; GroupDescription: "Inicio:"; Flags: checkedonce
-
-[Icons]
-Name: "{group}\Phoenix"; Filename: "{app}\Phoenix.exe"
-Name: "{autodesktop}\Phoenix"; Filename: "{app}\Phoenix.exe"; Tasks: desktopicon
+; The native shell is retained for compatibility/testing only.
+; User-facing Desktop/Start/taskbar entries are owned by the normal browser launcher.
+; Do not create shortcuts that target Phoenix.exe.
 
 [Registry]
 Root: HKCU; Subkey: "Software\Phoenix AI\Phoenix"; ValueType: string; ValueName: "InstallLocation"; ValueData: "{app}"; Flags: uninsdeletekeyifempty
@@ -50,10 +46,6 @@ Filename: "{app}\Phoenix.exe"; Parameters: "--prepare-runtime"; Flags: runhidden
 ; Pre-warm the dedicated Phoenix WebView2 shell profile during installation. This keeps the first
 ; interactive double-click out of Chromium's cold profile-creation path.
 Filename: "{app}\Phoenix.exe"; Parameters: "--prepare-webview"; Flags: runhidden waituntilterminated skipifsilent
-; Runtime ownership belongs to Phoenix.exe; Node.js, Corepack and MinGit are bundled.
-Filename: "{app}\Phoenix.exe"; Parameters: "--enable-autostart"; Flags: runhidden waituntilterminated skipifsilent; Tasks: autostart
-Filename: "{app}\Phoenix.exe"; Description: "Abrir Phoenix"; Flags: nowait postinstall skipifsilent
-
 [UninstallRun]
 Filename: "{app}\Phoenix.exe"; Parameters: "--disable-autostart"; Flags: runhidden waituntilterminated skipifdoesntexist
 

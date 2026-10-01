@@ -13,6 +13,7 @@ on:
       - 'scripts/phoenix-windows-supervisor.mjs'
       - 'scripts/phoenix-windows-shortcut.mjs'
       - 'scripts/phoenix-windows-shortcut.d.mts'
+      - 'scripts/phoenix-windows-icon.ico.b64'
       - 'scripts/phoenix-desktop-shortcut.ps1'
       - 'scripts/phoenix-desktop-launch.ps1'
       - 'scripts/phoenix-markdown-open.ps1'
@@ -34,6 +35,7 @@ on:
       - 'scripts/windows-installer.spec.ts'
       - 'scripts/phoenix-windows-shortcut.mjs'
       - 'scripts/phoenix-windows-shortcut.d.mts'
+      - 'scripts/phoenix-windows-icon.ico.b64'
       - 'scripts/phoenix-desktop-shortcut.ps1'
       - 'scripts/phoenix-desktop-launch.ps1'
       - 'scripts/phoenix-markdown-open.ps1'
@@ -103,39 +105,67 @@ jobs:
       - name: Verify desktop shortcut repair
         shell: pwsh
         run: |
+          $desktop = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
+          $shortcutPath = Join-Path $desktop 'Phoenix.lnk'
+          $hardnessPath = Join-Path $desktop 'PHOENIX HARDNESS.lnk'
+          $shell = New-Object -ComObject WScript.Shell
+
+          # Reproduce the user's broken state: old native Phoenix.exe shortcut +
+          # generic managed-install shortcut. The repair must replace/remove both.
+          $legacyExe = Join-Path $env:RUNNER_TEMP 'Phoenix.exe'
+          Set-Content -LiteralPath $legacyExe -Value 'legacy-placeholder'
+          $legacy = $shell.CreateShortcut($shortcutPath)
+          $legacy.TargetPath = $legacyExe
+          $legacy.IconLocation = "$env:SystemRoot\System32\shell32.dll,14"
+          $legacy.Save()
+
+          $hardness = $shell.CreateShortcut($hardnessPath)
+          $hardness.TargetPath = (Join-Path (Resolve-Path .).Path 'phoenix-windows.cmd')
+          $hardness.IconLocation = "$env:SystemRoot\System32\shell32.dll,14"
+          $hardness.Save()
+
           & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/phoenix-desktop-shortcut.ps1 -Root (Resolve-Path .).Path
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $desktop = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
-          $shortcutPath = Join-Path $desktop 'PHOENIX.lnk'
-          if (-not (Test-Path $shortcutPath)) { throw 'PHOENIX desktop shortcut was not created' }
-          $shell = New-Object -ComObject WScript.Shell
+
+          if (-not (Test-Path $shortcutPath)) { throw 'Phoenix desktop shortcut was not created' }
+          if (Test-Path $hardnessPath) { throw 'Legacy PHOENIX HARDNESS shortcut was not removed' }
+
           $shortcut = $shell.CreateShortcut($shortcutPath)
-          if ([string]::IsNullOrWhiteSpace($shortcut.TargetPath)) { throw 'PHOENIX shortcut target is empty' }
-          if (-not (Test-Path $shortcut.TargetPath)) { throw "PHOENIX shortcut target is missing: $($shortcut.TargetPath)" }
+          if ([string]::IsNullOrWhiteSpace($shortcut.TargetPath)) { throw 'Phoenix shortcut target is empty' }
           if ([IO.Path]::GetFileName($shortcut.TargetPath) -ne 'powershell.exe') {
-            throw "PHOENIX shortcut must launch normal Web Phoenix through PowerShell, not $($shortcut.TargetPath)"
+            throw "Phoenix shortcut still targets the wrong launcher: $($shortcut.TargetPath)"
           }
           if (-not $shortcut.Arguments.Contains('phoenix-desktop-launch.ps1')) {
-            throw "PHOENIX shortcut does not call the normal desktop launch script: $($shortcut.Arguments)"
+            throw "Phoenix shortcut does not call the normal browser launch script: $($shortcut.Arguments)"
           }
-          if ($shortcut.Arguments.Contains('Phoenix.exe')) {
-            throw 'PHOENIX shortcut must never target the legacy/native Phoenix.exe'
+          if ($shortcut.Arguments.Contains('Phoenix.exe') -or $shortcut.TargetPath.Contains('Phoenix.exe')) {
+            throw 'Phoenix shortcut still references legacy Phoenix.exe'
           }
           if ($shortcut.WorkingDirectory -ne (Resolve-Path .).Path) {
-            throw "PHOENIX shortcut working directory is wrong: $($shortcut.WorkingDirectory)"
+            throw "Phoenix shortcut working directory is wrong: $($shortcut.WorkingDirectory)"
           }
-          if ($shortcut.IconLocation -match 'powershell\.exe') {
-            throw "PHOENIX shortcut is still using the generic PowerShell icon: $($shortcut.IconLocation)"
+          if ($shortcut.IconLocation -match '(?i:powershell\.exe|shell32\.dll)') {
+            throw "Phoenix shortcut still uses a generic Windows icon: $($shortcut.IconLocation)"
           }
           $iconFile = ($shortcut.IconLocation -replace ',0$','')
-          if (-not (Test-Path $iconFile)) { throw "PHOENIX icon file is missing: $iconFile" }
+          if (-not (Test-Path $iconFile)) { throw "Phoenix icon file is missing: $iconFile" }
           $iconBytes = [IO.File]::ReadAllBytes($iconFile)
-          if ($iconBytes.Length -lt 24 -or $iconBytes[2] -ne 1 -or $iconBytes[4] -ne 1) {
-            throw 'PHOENIX icon is not a valid single-image ICO container'
+          if (
+            $iconBytes.Length -lt 64 -or
+            $iconBytes[0] -ne 0 -or
+            $iconBytes[1] -ne 0 -or
+            $iconBytes[2] -ne 1 -or
+            $iconBytes[3] -ne 0
+          ) {
+            throw 'Phoenix shortcut icon is not a valid ICO file'
           }
 
-          $taskbarPath = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\PHOENIX.lnk'
-          if (-not (Test-Path $taskbarPath)) { throw 'PHOENIX taskbar shortcut was not prepared' }
+          $taskbarPath = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Phoenix.lnk'
+          if (-not (Test-Path $taskbarPath)) { throw 'Phoenix taskbar shortcut was not prepared' }
+          $taskbar = $shell.CreateShortcut($taskbarPath)
+          if ($taskbar.TargetPath -ne $shortcut.TargetPath -or $taskbar.Arguments -ne $shortcut.Arguments) {
+            throw 'Taskbar shortcut does not match canonical Phoenix browser launcher'
+          }
 
           $mdProgId = (Get-Item 'HKCU:\Software\Classes\.md').GetValue('')
           if ($mdProgId -ne 'Phoenix.Markdown') { throw "Markdown association is wrong: $mdProgId" }
@@ -146,7 +176,6 @@ jobs:
           if ($mdCommand -match '(?i:vscode|Code\.exe)') {
             throw "Markdown open command still targets VS Code: $mdCommand"
           }
-
 
       - name: Phoenix shell integration tests
         shell: pwsh
@@ -285,6 +314,12 @@ jobs:
           }
           if ($iss -match '(?m)^Filename:\s*"powershell\.exe".*bootstrap-runtime\.ps1') {
             throw 'Installer must not hide first-run runtime bootstrap; Phoenix.exe owns visible bootstrap now'
+          }
+          if ($iss.Contains('{autodesktop}\Phoenix') -or $iss.Contains('Name: "{group}\Phoenix"')) {
+            throw 'Native installer must not recreate Phoenix.exe shell shortcuts'
+          }
+          if ($iss.Contains('Description: "Abrir Phoenix"')) {
+            throw 'Native installer must not launch legacy Phoenix.exe as the post-install user entry'
           }
 
       - name: Launcher command smoke test

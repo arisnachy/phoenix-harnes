@@ -10,7 +10,7 @@ describe('PHOENIX Windows desktop shortcut', () => {
     expect(resolved.root).toContain('Phoenix')
     expect(resolved.setupScript).toMatch(/phoenix-desktop-shortcut\.ps1$/u)
     expect(resolved.launchScript).toMatch(/phoenix-desktop-launch\.ps1$/u)
-    expect(resolved.iconSource).toMatch(/favicon\.png$/u)
+    expect(resolved.iconSource).toMatch(/phoenix-windows-icon\.ico\.b64$/u)
     expect(resolved.powershell).toMatch(/WindowsPowerShell.*powershell\.exe$/u)
   })
 
@@ -23,7 +23,7 @@ describe('PHOENIX Windows desktop shortcut', () => {
   it('invokes the setup script without exposing a console window', () => {
     const spawnSync = vi.fn(() => ({
       status: 0,
-      stdout: 'C:\\Users\\tester\\Desktop\\PHOENIX.lnk\n',
+      stdout: 'C:\\Users\\tester\\Desktop\\Phoenix.lnk\n',
       stderr: '',
       pid: 1,
       output: [],
@@ -38,7 +38,7 @@ describe('PHOENIX Windows desktop shortcut', () => {
 
     expect(result).toEqual({
       status: 'ready',
-      shortcut: 'C:\\Users\\tester\\Desktop\\PHOENIX.lnk',
+      shortcut: 'C:\\Users\\tester\\Desktop\\Phoenix.lnk',
     })
     expect(spawnSync).toHaveBeenCalledOnce()
     const [binary, args, options] = spawnSync.mock.calls[0] as unknown as [
