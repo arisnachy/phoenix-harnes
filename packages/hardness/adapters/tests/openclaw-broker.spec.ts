@@ -9,7 +9,7 @@ function openclawSurface(id: string): CapabilitySurface {
     id: `${id}:native`,
     need: { kind: 'web-search' },
     capabilityId: id as never,
-    capabilityVersion: '2026.8.1',
+    capabilityVersion: '2026.9.6',
     modality: 'native',
     inputs: [],
     outputs: ['web-search'],
