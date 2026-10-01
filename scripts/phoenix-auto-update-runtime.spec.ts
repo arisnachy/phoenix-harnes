@@ -82,6 +82,13 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
 
+  it('prunes ignored stale workspace shells before reusing persistent staging', () => {
+    expect(updater).toContain('function pruneStaleWorkspaceShells(stage)')
+    expect(updater).toContain("git(stage, ['ls-files', '--', relativePath]")
+    expect(updater).toContain('rmSync(candidate, { recursive: true, force: true })')
+    expect(updater).toContain('pruneStaleWorkspaceShells(stage)')
+  })
+
   it('pins updater and nested builds to the pnpm version declared by the project', () => {
     expect(updater).toContain('function projectPnpmSpecifier(root)')
     expect(updater).toContain('[projectPnpmSpecifier(root), ...args.slice(1)]')
