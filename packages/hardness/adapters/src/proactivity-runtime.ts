@@ -424,7 +424,7 @@ function materialAttentionSummary(value: string | undefined): string | undefined
 
 function attentionSummaryFingerprint(value: string | undefined): string | undefined {
   const summary = materialAttentionSummary(value)
-  return summary?.toLocaleLowerCase().replace(/[.!?]+$/u, '')
+  return summary?.toLowerCase().replace(/[.!?]+$/u, '')
 }
 
 function attentionPriority(task: ProactivityTask): number {
@@ -517,6 +517,37 @@ export function buildProactivityAttentionItems(
   return items
     .sort((left, right) => right.score - left.score || Date.parse(right.at) - Date.parse(left.at) || left.id.localeCompare(right.id))
     .slice(0, MAX_ATTENTION_ITEMS)
+}
+
+const AMBIENT_BRIEFING_MARKER = '[phoenix:ambient-briefing:v1]'
+const AMBIENT_BRIEFING_INTERVAL_MS = 6 * 60 * 60 * 1000
+const AMBIENT_BRIEFING_INITIAL_DELAY_MS = 10 * 60 * 1000
+
+/**
+ * Ensure Phoenix has one quiet read-only personal briefing loop.
+ * This is called only when the host has already verified an authorized Google
+ * account. A cancelled/paused briefing is deliberately not recreated.
+ */
+export async function ensureAmbientBriefingTask(
+  engine: ProactivityEngine,
+  now = new Date(),
+): Promise<ProactivityTask | undefined> {
+  const nowMs = now.getTime()
+  if (!Number.isFinite(nowMs)) throw new Error('now must be a valid date')
+  const tasks = await engine.list({ includeHidden: true, now })
+  if (tasks.some(task => task.instruction.includes(AMBIENT_BRIEFING_MARKER))) return undefined
+
+  return engine.create({
+    title: 'Pulso de Phoenix',
+    instruction: `${AMBIENT_BRIEFING_MARKER} Act as Phoenix's quiet background personal briefing. Use only already-authorized read-only connectors and current Phoenix state. Check for genuinely actionable changes in important/unread email, near-term calendar, connected Drive/project work, pending follow-ups, deadlines, conflicts, or stalled tasks. Ignore routine promotions/newsletters unless they are materially urgent. Never install or authenticate a connector and never send, archive, edit, book, buy, trade, or otherwise mutate external state. Compare the recent background summaries supplied by the scheduler. If there is no materially new information, return exactly NO_MATERIAL_UPDATE. Otherwise return at most three concise user-facing items in the user's active language; each item should say what changed and the recommended next action. Do not repeat unchanged advice.`,
+    runAt: new Date(nowMs + AMBIENT_BRIEFING_INITIAL_DELAY_MS).toISOString(),
+    createdBy: 'system',
+    recurrence: { kind: 'interval', everyMs: AMBIENT_BRIEFING_INTERVAL_MS },
+    catchUp: 'latest',
+    delivery: 'work',
+    attentionMode: 'auto',
+    attentionPriority: 'normal',
+  })
 }
 
 function rpcFailure(message: string): RpcResult<never> {
