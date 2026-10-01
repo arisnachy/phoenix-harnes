@@ -64,6 +64,59 @@ const queuedData = {
 }
 
 describe('KIRA Team conversation node', () => {
+  it('projects an active real teammate as Kira\'s visible assignment in chat', () => {
+    const provisioning = event('team/member', {
+      version: 1,
+      teamId: 'root',
+      member: {
+        id: 'worker-a',
+        name: 'la-forja',
+        description: 'Revisar el flujo de delegación.',
+        provider: 'spawn',
+        context: 'fresh',
+        phase: 'provisioning',
+      },
+    })
+    expect(kiraTeamMessageDefinition.match(provisioning)).toBeNull()
+
+    const active = match('team/member', {
+      version: 1,
+      teamId: 'root',
+      member: {
+        id: 'worker-a',
+        name: 'la-forja',
+        description: 'Revisar el flujo de delegación.',
+        provider: 'spawn',
+        context: 'fresh',
+        phase: 'active',
+      },
+    }, 7, { kind: 'turn', turn: 1 })
+    expect(kiraTeamMessageDefinition.match(active.event)).toEqual({
+      id: 'team-member:worker-a',
+      role: 'start',
+    })
+
+    const state = kiraTeamMessageDefinition.start(context(undefined), active, {} as never)
+    expect(state).toMatchObject({
+      messageId: 'team-member:worker-a',
+      senderId: 'root',
+      senderName: 'lead',
+      targetId: 'worker-a',
+      targetName: 'la-forja',
+      purpose: 'assignment',
+      content: [{ type: 'text', text: 'Revisar el flujo de delegación.' }],
+      seq: 7,
+      reactions: [],
+    })
+    expect(kiraTeamMessageDefinition.buildViewNode?.(context(state, [active], active))).toMatchObject({
+      kind: 'kira-team-message',
+      id: 'message-1',
+      anchorSeq: 7,
+      location: { kind: 'turn', turn: 1 },
+      data: state,
+    })
+  })
+
   it('projects one durable peer message and folds real reactions onto the same chat row', () => {
     expect(kiraTeamMessageDefinition.match(event('team/message/queued', queuedData))).toEqual({
       id: 'message-1',
@@ -166,6 +219,11 @@ describe('KIRA Team conversation node', () => {
     expect(kiraTeamMessageDefinition.match(event('other', {}))).toBeNull()
     expect(kiraTeamMessageDefinition.match(event('team/message/queued', { version: 1, message: {} }))).toBeNull()
     expect(kiraTeamMessageDefinition.match(event('team/reaction', { version: 1, reaction: {} }))).toBeNull()
+    expect(kiraTeamMessageDefinition.match(event('team/member', {
+      version: 1,
+      teamId: 'root',
+      member: { id: 'worker-a', phase: 'active' },
+    }))).toEqual({ id: 'team-member:worker-a', role: 'start' })
 
     const malformedQueued = [
       null,
