@@ -34,6 +34,24 @@ describe('PHOENIX managed Windows installation', () => {
     expect(launcher).toContain('& $pnpm.Source phoenix')
   })
 
+  it('installs Phoenix shell integration with a real icon, taskbar entry, and Markdown reader', () => {
+    const shortcut = read('scripts/phoenix-desktop-shortcut.ps1')
+    const markdownOpen = read('scripts/phoenix-markdown-open.ps1')
+    const markdownReader = read('scripts/phoenix-markdown-reader.mjs')
+    expect(shortcut).toContain("Join-Path $phoenixState 'phoenix.ico'")
+    expect(shortcut).toContain('New-Object IO.BinaryWriter')
+    expect(shortcut).toContain("$taskbarDirectory = Join-Path $env:APPDATA")
+    expect(shortcut).toContain("'PHOENIX.lnk'")
+    expect(shortcut).toContain("'Phoenix.Markdown'")
+    expect(shortcut).toContain("'OpenWithProgids'")
+    expect(shortcut).toContain('phoenix-markdown-open.ps1')
+    expect(shortcut).toContain('VisualStudioCode|VSCode|Code\\.exe')
+    expect(markdownOpen).toContain('phoenix-markdown-reader.mjs')
+    expect(markdownOpen).toContain('Start-Process -FilePath $htmlPath')
+    expect(markdownReader).toContain('Phoenix Markdown')
+    expect(markdownReader).toContain('mdast-util-from-markdown')
+  })
+
   it('forces upgrade takeover from a stale tray instance before replacing the payload', () => {
     const iss = read('installer/windows/Phoenix.iss')
     expect(iss).toContain('CloseApplications=force')
