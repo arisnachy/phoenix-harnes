@@ -65,14 +65,34 @@ if (Test-Path -LiteralPath $iconSourcePath -PathType Leaf) {
 }
 
 $powerShellExe = Join-Path $PSHOME 'powershell.exe'
+$targetPath = $powerShellExe
 $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`""
-$shortcutPath = Join-Path $desktopPath 'PHOENIX.lnk'
+$workingDirectory = $rootPath
 $iconLocation = if (Test-Path -LiteralPath $iconPath -PathType Leaf) {
   "$iconPath,0"
 }
 else {
   "$powerShellExe,0"
 }
+
+# Prefer the native installed shell when it exists. This keeps one canonical
+# desktop entry: Phoenix.exe owns WebView2, the bundled toolchain and updates.
+try {
+  $nativeRegistration = Get-ItemProperty -Path 'HKCU:\Software\Phoenix AI\Phoenix' -ErrorAction Stop
+  $nativeExecutable = [string]$nativeRegistration.ExecutablePath
+  if (-not [string]::IsNullOrWhiteSpace($nativeExecutable) -and
+      (Test-Path -LiteralPath $nativeExecutable -PathType Leaf)) {
+    $targetPath = $nativeExecutable
+    $arguments = ''
+    $workingDirectory = Split-Path -Parent $nativeExecutable
+    $iconLocation = "$nativeExecutable,0"
+  }
+}
+catch {
+  # Source/managed checkouts use the PowerShell fallback above.
+}
+
+$shortcutPath = Join-Path $desktopPath 'PHOENIX.lnk'
 
 $shell = New-Object -ComObject WScript.Shell
 $needsWrite = $true
@@ -81,9 +101,9 @@ if (Test-Path -LiteralPath $shortcutPath -PathType Leaf) {
   try {
     $existing = $shell.CreateShortcut($shortcutPath)
     $needsWrite = (
-      $existing.TargetPath -ne $powerShellExe -or
+      $existing.TargetPath -ne $targetPath -or
       $existing.Arguments -ne $arguments -or
-      $existing.WorkingDirectory -ne $rootPath -or
+      $existing.WorkingDirectory -ne $workingDirectory -or
       $existing.IconLocation -ne $iconLocation
     )
   }
@@ -94,9 +114,9 @@ if (Test-Path -LiteralPath $shortcutPath -PathType Leaf) {
 
 if ($needsWrite) {
   $shortcut = $shell.CreateShortcut($shortcutPath)
-  $shortcut.TargetPath = $powerShellExe
+  $shortcut.TargetPath = $targetPath
   $shortcut.Arguments = $arguments
-  $shortcut.WorkingDirectory = $rootPath
+  $shortcut.WorkingDirectory = $workingDirectory
   $shortcut.Description = 'PHOENIX AI'
   $shortcut.IconLocation = $iconLocation
   $shortcut.WindowStyle = 7
