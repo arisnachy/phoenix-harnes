@@ -78,7 +78,7 @@ function researcher(messages) {
   if (!names.includes('send_message')) {
     return toolChunks([
       { name: 'team_task_update', args: { task_id: 'task-1', expected_revision: 2, action: 'complete' } },
-      { name: 'send_message', args: { target: 'implementer', message: 'Research complete: use the deterministic finding.' } },
+      { name: 'send_message', args: { target: 'implementer', purpose: 'result', message: 'Research complete: use the deterministic finding.' } },
     ])
   }
   return textChunks('Research teammate complete.')
@@ -119,7 +119,7 @@ function implementer(messages) {
   if (!names.includes('send_message')) {
     return toolChunks([
       { name: 'team_task_update', args: { task_id: 'task-2', expected_revision: 2, action: 'complete' } },
-      { name: 'send_message', args: { target: 'lead', message: 'Implementation complete and verified.' } },
+      { name: 'send_message', args: { target: 'lead', purpose: 'result', message: 'Implementation complete and verified.' } },
     ])
   }
   return textChunks('Implementation teammate complete.')
