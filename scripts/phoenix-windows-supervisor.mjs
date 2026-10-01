@@ -17,7 +17,8 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
-import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'\nimport { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
+import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
+import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
 
 const root = resolve(process.cwd())
 let runtimeRoot = root
@@ -849,6 +850,7 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
         )
         const runtime = activatePreparedRuntime(updateTarget)
         runtimeRoot = runtime.path
+        repairDesktopShortcut()
         clearPreparedRecord()
         clearRestartRequest()
         // Older prepared bridges also emitted a generic Host restart marker.
@@ -894,6 +896,7 @@ function requestShutdown() {
 process.once('SIGINT', requestShutdown)
 process.once('SIGTERM', requestShutdown)
 
+repairDesktopShortcut()
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
 recoverConfigurationBeforeFirstBoot()
@@ -990,6 +993,7 @@ while (true) {
       try {
         const runtime = activatePreparedRuntime(requestedTarget)
         runtimeRoot = runtime.path
+        repairDesktopShortcut()
         clearPreparedRecord()
         clearRestartRequest()
         console.error(`[PHOENIX UPDATE] isolated runtime ${runtime.target.slice(0, 12)} activated; relaunching PHOENIX without touching the source checkout.`)
@@ -1034,6 +1038,7 @@ while (true) {
 
     runtimeRoot = root
     clearActiveRuntime()
+    repairDesktopShortcut()
     console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
     continue
   }
