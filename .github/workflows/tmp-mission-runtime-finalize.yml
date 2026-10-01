@@ -1,0 +1,108 @@
+name: Mission Runtime finalizer
+
+on:
+  push:
+    branches:
+      - feat/mission-runtime-final-20261001
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mission-runtime-finalizer
+  cancel-in-progress: true
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      DSH_TELEMETRY_DISABLED: '1'
+      DSH_EXAMPLE_MODE: lib
+      DSH_SNAPSHOT_MAX_CONCURRENCY: '4'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/mission-runtime-final-20261001
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+        with:
+          dest: ${{ runner.temp }}/setup-pnpm
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+
+      - name: Merge Mission Runtime catalog deltas onto current catalogs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin feat/mission-runtime-codex-patterns-20260930
+          BASE=507652368d4d71ad23e1ff8f6ac6e228925c9e47
+          MISSION=61d9b8554ba5b688aad2f51eb01f7aa14131f3bb
+          for path in             docs/config-catalog.md docs/config-catalog.zh.md docs/config-catalog.i18n.yaml             docs/persistence-catalog.md docs/persistence-catalog.zh.md docs/persistence-catalog.i18n.yaml             docs/tool-catalog.md docs/tool-catalog.zh.md docs/tool-catalog.i18n.yaml
+          do
+            ours="$(mktemp)"
+            base="$(mktemp)"
+            theirs="$(mktemp)"
+            git show "HEAD:$path" > "$ours"
+            git show "$BASE:$path" > "$base"
+            git show "$MISSION:$path" > "$theirs"
+            if ! git merge-file -p "$ours" "$base" "$theirs" > "$path.merged"; then
+              echo "::error file=$path::3-way catalog merge produced a conflict"
+              cat "$path.merged"
+              exit 1
+            fi
+            mv "$path.merged" "$path"
+            rm -f "$ours" "$base" "$theirs"
+          done
+
+      - name: Install immutable workspace
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare sandbox
+        run: bash scripts/prepare-ci-bubblewrap.sh
+
+      - name: Build libraries
+        run: pnpm run build:lib
+
+      - name: Regenerate authoritative catalogs
+        run: |
+          pnpm run gen-config-catalog
+          pnpm run gen-persistence-catalog
+          pnpm run gen-tool-catalog
+
+      - name: Refresh bilingual catalog pairing records
+        run: |
+          pnpm run verify-translation-pairing -- --write             docs/config-catalog.md             docs/persistence-catalog.md             docs/tool-catalog.md
+          pnpm run verify-translation-pairing --             docs/config-catalog.md             docs/persistence-catalog.md             docs/tool-catalog.md
+
+      - name: Refresh contract snapshots
+        run: pnpm run test:snapshot:refresh
+
+      - name: Verify Mission Runtime focused tests
+        run: |
+          pnpm exec vitest run --config vitest.config.ts             packages/goal/goal/tests/mission.spec.ts             packages/goal/goal-round-driver/tests/mission-capsule.spec.ts             packages/goal/tool-goal/tests/tool-goal.spec.ts             packages/subagent/tool-subagent/tests/tool-subagent.spec.ts
+          pnpm exec vitest run --config vitest.e2e.config.ts             packages/subagent/subagent-codex/tests/loader-composition.e2e.ts             packages/subagent/subagent-claude-code/tests/loader-composition.e2e.ts
+
+      - name: Verify generated contracts
+        run: |
+          pnpm run verify-config-catalog
+          pnpm run verify-persistence-catalog
+          pnpm run verify-tool-catalog
+
+      - name: Commit finalized contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet; then
+            echo "No generated changes."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test(mission): finalize generated Mission Runtime contracts"
+          git push origin HEAD:feat/mission-runtime-final-20261001
