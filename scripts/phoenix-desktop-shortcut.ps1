@@ -68,6 +68,7 @@ $powerShellExe = Join-Path $PSHOME 'powershell.exe'
 $targetPath = $powerShellExe
 $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`""
 $workingDirectory = $rootPath
+$windowStyle = 7
 $iconLocation = if (Test-Path -LiteralPath $iconPath -PathType Leaf) {
   "$iconPath,0"
 }
@@ -85,6 +86,7 @@ try {
     $targetPath = $nativeExecutable
     $arguments = ''
     $workingDirectory = Split-Path -Parent $nativeExecutable
+    $windowStyle = 1
     $iconLocation = "$nativeExecutable,0"
   }
 }
@@ -104,7 +106,8 @@ if (Test-Path -LiteralPath $shortcutPath -PathType Leaf) {
       $existing.TargetPath -ne $targetPath -or
       $existing.Arguments -ne $arguments -or
       $existing.WorkingDirectory -ne $workingDirectory -or
-      $existing.IconLocation -ne $iconLocation
+      $existing.IconLocation -ne $iconLocation -or
+      $existing.WindowStyle -ne $windowStyle
     )
   }
   catch {
@@ -119,7 +122,7 @@ if ($needsWrite) {
   $shortcut.WorkingDirectory = $workingDirectory
   $shortcut.Description = 'PHOENIX AI'
   $shortcut.IconLocation = $iconLocation
-  $shortcut.WindowStyle = 7
+  $shortcut.WindowStyle = $windowStyle
   $shortcut.Save()
 }
 
