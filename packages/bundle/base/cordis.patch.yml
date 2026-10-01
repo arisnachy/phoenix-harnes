@@ -774,6 +774,10 @@
       config:
         judgeProvider: spawn
         modelTools: false
+        # KIRA stays alive without a resident model: Wake handles real events
+        # immediately, while this bounded pulse catches cross-source context.
+        assistantPulseEnabled: true
+        assistantPulseEveryMinutes: 30
 
     # The deployment persona is a deployment choice; plan-mode and tool plugins own
     # their own prompt sections.
