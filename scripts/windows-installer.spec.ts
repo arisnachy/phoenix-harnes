@@ -19,6 +19,16 @@ describe('PHOENIX managed Windows installation', () => {
     expect(launcher).not.toMatch(/^pnpm\s/mu)
   })
 
+  it('always restores the native Phoenix desktop shortcut on install or upgrade', () => {
+    const iss = read('installer/windows/Phoenix.iss')
+    const shortcut = read('scripts/phoenix-desktop-shortcut.ps1')
+    expect(iss).toContain('Name: "{autodesktop}\\Phoenix"; Filename: "{app}\\Phoenix.exe"')
+    expect(iss).not.toContain('Tasks: desktopicon')
+    expect(shortcut).toContain("'HKCU:\\Software\\Phoenix AI\\Phoenix'")
+    expect(shortcut).toContain('$nativeRegistration.ExecutablePath')
+    expect(shortcut).toContain("$shortcutPath = Join-Path $desktopPath 'PHOENIX.lnk'")
+  })
+
   it('forces upgrade takeover from a stale tray instance before replacing the payload', () => {
     const iss = read('installer/windows/Phoenix.iss')
     expect(iss).toContain('CloseApplications=force')
@@ -33,6 +43,8 @@ describe('PHOENIX managed Windows installation', () => {
     expect(updater).toContain("'.phoenix-managed-install'")
     expect(updater).toContain('phoenix-managed-update.mjs')
     expect(updater).toContain('PHOENIX_AUTO_UPDATE')
+    expect(updater).toContain("'scripts\\phoenix-windows-shortcut.mjs'")
+    expect(updater).toContain('& node $shortcutRepair --install')
     expect(updater).toContain('if ($null -ne $code -and $code -ne 0) { exit $code }')
     expect(updater).toContain('$code -eq 13')
     expect(updater).not.toContain('git reset --hard')

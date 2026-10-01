@@ -32,12 +32,12 @@ RestartApplications=no
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Tasks]
-Name: "desktopicon"; Description: "Crear acceso directo en el escritorio"; GroupDescription: "Accesos directos:"; Flags: checkedonce
 Name: "autostart"; Description: "Iniciar Phoenix con Windows"; GroupDescription: "Inicio:"; Flags: checkedonce
 
 [Icons]
 Name: "{group}\Phoenix"; Filename: "{app}\Phoenix.exe"
-Name: "{autodesktop}\Phoenix"; Filename: "{app}\Phoenix.exe"; Tasks: desktopicon
+; Recreate on every install/upgrade so a missing desktop entry self-heals.
+Name: "{autodesktop}\Phoenix"; Filename: "{app}\Phoenix.exe"
 
 [Registry]
 Root: HKCU; Subkey: "Software\Phoenix AI\Phoenix"; ValueType: string; ValueName: "InstallLocation"; ValueData: "{app}"; Flags: uninsdeletekeyifempty
