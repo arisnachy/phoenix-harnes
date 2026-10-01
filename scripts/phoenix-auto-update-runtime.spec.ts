@@ -77,7 +77,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain("git(stage, ['clean', '-fd']")
     expect(updater).toContain('pruneOrphanedPackageWorkspaces(stage)')
     expect(updater).toContain('existsSync(join(packageRoot, \'package.json\'))')
-    expect(updater).toContain("rmSync(packageRoot, { recursive: true, force: true })")
+    expect(updater).toContain('rmSync(packageRoot, { recursive: true, force: true })')
   })
 
   it('namespaces persistent updater worktrees per checkout so stale clones cannot block updates', () => {
