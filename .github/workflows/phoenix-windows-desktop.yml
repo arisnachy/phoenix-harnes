@@ -11,6 +11,10 @@ on:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'scripts/phoenix-windows-shortcut.mjs'
+      - 'scripts/phoenix-windows-shortcut.d.mts'
+      - 'scripts/phoenix-desktop-shortcut.ps1'
+      - 'scripts/phoenix-desktop-launch.ps1'
       - 'scripts/build-windows-runtime-seed.mjs'
       - 'apps/web/public/favicon.png'
       - 'apps/web/public/favicon.svg'
@@ -21,6 +25,10 @@ on:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'scripts/phoenix-windows-shortcut.mjs'
+      - 'scripts/phoenix-windows-shortcut.d.mts'
+      - 'scripts/phoenix-desktop-shortcut.ps1'
+      - 'scripts/phoenix-desktop-launch.ps1'
       - 'scripts/build-windows-runtime-seed.mjs'
       - '.github/workflows/phoenix-windows-desktop.yml'
   workflow_dispatch:
@@ -70,8 +78,29 @@ jobs:
       - name: Validate bootstrap syntax
         shell: pwsh
         run: |
-          $source = Get-Content installer/windows/bootstrap-runtime.ps1 -Raw
-          [void][scriptblock]::Create($source)
+          $scripts = @(
+            'installer/windows/bootstrap-runtime.ps1',
+            'scripts/phoenix-desktop-shortcut.ps1',
+            'scripts/phoenix-desktop-launch.ps1'
+          )
+          foreach ($script in $scripts) {
+            $source = Get-Content $script -Raw
+            [void][scriptblock]::Create($source)
+          }
+
+      - name: Verify desktop shortcut repair
+        shell: pwsh
+        run: |
+          & powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/phoenix-desktop-shortcut.ps1 -Root (Resolve-Path .).Path
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $desktop = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
+          $shortcutPath = Join-Path $desktop 'PHOENIX.lnk'
+          if (-not (Test-Path $shortcutPath)) { throw 'PHOENIX desktop shortcut was not created' }
+          $shell = New-Object -ComObject WScript.Shell
+          $shortcut = $shell.CreateShortcut($shortcutPath)
+          if ([string]::IsNullOrWhiteSpace($shortcut.TargetPath)) { throw 'PHOENIX shortcut target is empty' }
+          if (-not (Test-Path $shortcut.TargetPath)) { throw "PHOENIX shortcut target is missing: $($shortcut.TargetPath)" }
+
 
       - name: Desktop contract tests
         shell: pwsh
