@@ -115,6 +115,23 @@ describe('proactivity home attention ranking', () => {
     expect(buildProactivityAttentionItems([repeated], NOW)).toEqual([])
   })
 
+  it('does not surface completed email/chat receipts as proactive intelligence', () => {
+    const sentMail = task({
+      id: 'mail-receipt',
+      title: 'Enviar correo de prueba',
+      delivery: 'email',
+      attentionMode: 'result',
+      recurrence: { kind: 'once' },
+      history: [{
+        phase: 'deliver', scheduledFor: '2026-09-29T15:00:00.000Z', idempotencyKey: 'mail',
+        startedAt: '2026-09-29T15:00:00.000Z', finishedAt: '2026-09-29T15:02:00.000Z',
+        status: 'completed', summary: 'Correo de prueba enviado correctamente.',
+      }],
+    })
+
+    expect(buildProactivityAttentionItems([sentMail], NOW)).toEqual([])
+  })
+
   it('does not keep old completed work on the Hero for days', () => {
     const stale = task({
       id: 'stale',
