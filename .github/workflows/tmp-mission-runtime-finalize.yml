@@ -15,7 +15,7 @@ concurrency:
 jobs:
   finalize:
     if: github.actor != 'github-actions[bot]'
-    runs-on: ubuntu-latest
+    runs-on: windows-latest
     env:
       DSH_TELEMETRY_DISABLED: '1'
       DSH_EXAMPLE_MODE: lib
@@ -61,9 +61,6 @@ jobs:
 
       - name: Install immutable workspace
         run: pnpm install --frozen-lockfile
-
-      - name: Prepare sandbox
-        run: bash scripts/prepare-ci-bubblewrap.sh
 
       - name: Build libraries
         run: pnpm run build:lib
