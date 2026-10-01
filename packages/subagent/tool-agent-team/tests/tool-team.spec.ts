@@ -124,12 +124,16 @@ describe('dsh-tool-team', () => {
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
     expect(leadPrompt).toContain('real shared work, not role-play')
+    expect(leadPrompt).toContain('Phoenix Auto is explicitly authorized to use this Team path')
+    expect(leadPrompt).toContain('prefer spawn_teammate over legacy subagent delegation')
     expect(leadPrompt).toContain('FS_STALE_VERSION')
     expect(leadPrompt).toContain('Bash, formatters, code generators, and scripts are not fully protected')
     expect(leadPrompt).toContain('Task readiness never starts an owner')
     expect(leadPrompt).toContain('returns noProgress immediately')
     expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
     expect(leadPrompt).toContain('Use team_react for a lightweight acknowledgement')
+    expect(leadPrompt).toContain('must send it to lead with purpose result before ending its turn')
+    expect(leadPrompt).toContain('spawn_teammate is itself the initial assignment')
     expect(leadPrompt).toContain('Your Team role is lead')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
