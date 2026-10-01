@@ -527,6 +527,9 @@ const AMBIENT_BRIEFING_INITIAL_DELAY_MS = 10 * 60 * 1000
  * Ensure Phoenix has one quiet read-only personal briefing loop.
  * This is called only when the host has already verified an authorized Google
  * account. A cancelled/paused briefing is deliberately not recreated.
+ * @param engine - Durable proactivity engine that owns the global task ledger.
+ * @param now - Clock used to anchor the first briefing occurrence.
+ * @returns The newly created briefing, or undefined when one already exists.
  */
 export async function ensureAmbientBriefingTask(
   engine: ProactivityEngine,
