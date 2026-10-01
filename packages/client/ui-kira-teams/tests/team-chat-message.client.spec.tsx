@@ -84,7 +84,6 @@ describe('KIRA Team chat message', () => {
   it('keeps ordinary updates visually quiet and omits empty synthetic rows', () => {
     const update = render(<View node={node({
       purpose: 'update',
-      targetName: undefined,
       reactions: [],
     })} />)
     expect(update.queryByText('Actualización')).toBeNull()
