@@ -12,7 +12,7 @@ function childDirectories(root: string): string[] {
  * Resolve only real package directories for the root tsdown workspace build.
  *
  * Persistent updater worktrees can retain ignored lib/node_modules artifacts
- * after a package is removed from Git. Raw globs such as packages/*/* would
+ * after a package is removed from Git. Broad two-level package globs would
  * make tsdown treat those stale shells as live workspaces and build their old
  * lib output. Requiring a current package.json keeps the build aligned with
  * the checked-out source tree.
