@@ -46,8 +46,7 @@ function context(
 function stateContext(
   state: KiraTeamMessageChatData,
 ): ConversationNodeContext<KiraTeamMessageChatData> & { readonly state: KiraTeamMessageChatData } {
-  return context(state) as ConversationNodeContext<KiraTeamMessageChatData>
-    & { readonly state: KiraTeamMessageChatData }
+  return { ...context(state), state }
 }
 
 const queuedData = {
