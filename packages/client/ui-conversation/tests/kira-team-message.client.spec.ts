@@ -65,7 +65,7 @@ describe('KIRA Team conversation node', () => {
     })
 
     const start = match('team/message/queued', queuedData, 10, { kind: 'turn', turn: 2 })
-    const state = kiraTeamMessageDefinition.start(context(undefined), start)
+    const state = kiraTeamMessageDefinition.start(context(undefined), start, {} as never)
     expect(state).toMatchObject({
       messageId: 'message-1',
       senderName: 'la-forja',
@@ -133,7 +133,7 @@ describe('KIRA Team conversation node', () => {
         content: [],
       },
     }, 20, { kind: 'step', turn: 3, step: 1 })
-    const state = kiraTeamMessageDefinition.start(context(undefined), legacy)
+    const state = kiraTeamMessageDefinition.start(context(undefined), legacy, {} as never)
     expect(state.targetName).toBeUndefined()
     expect(state.purpose).toBeUndefined()
 
@@ -152,7 +152,7 @@ describe('KIRA Team conversation node', () => {
         purpose: 'chatty-filler',
         content: [],
       },
-    }))
+    }), {} as never)
     expect(invalidPurpose.purpose).toBeUndefined()
   })
 
@@ -204,7 +204,6 @@ describe('KIRA Team conversation node', () => {
       expect(kiraTeamMessageDefinition.update(
         context(baseState),
         match('team/reaction', data),
-        {} as never,
       )).toBe(baseState)
     }
   })
