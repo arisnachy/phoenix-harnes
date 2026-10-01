@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  greetingForHour, heroAttentionDetail, heroAttentionPrompt, preferredNameForHero,
+  greetingForHour, heroAttentionDetail, heroAttentionPrompt, heroAttentionSource, preferredNameForHero,
 } from '../src/client/skeleton/EmptyHero.tsx'
 
 describe('greetingForHour', () => {
@@ -33,26 +33,27 @@ describe('preferredNameForHero', () => {
   })
 })
 
-describe('heroAttentionDetail', () => {
-  it('prefers task-specific copy and keeps generic states useful', () => {
-    const base = { id: 'a', taskId: 't', title: 'Task', at: '2026-09-29T16:00:00.000Z', score: 1 } as const
+describe('hero proactive attention', () => {
+  const base = { id: 'a', taskId: 't', title: 'Task', at: '2026-09-29T16:00:00.000Z', score: 1 } as const
+
+  it('shows task-specific detail only and never invents generic filler', () => {
     expect(heroAttentionDetail({ ...base, kind: 'result', detail: '  Material change  ' })).toBe('Material change')
-    expect(heroAttentionDetail({ ...base, kind: 'failure' })).toBe('Phoenix no pudo completar esta tarea.')
-    expect(heroAttentionDetail({ ...base, kind: 'upcoming' })).toBe('Se acerca esta tarea.')
-    expect(heroAttentionDetail({ ...base, kind: 'result' })).toBe('Hay un resultado nuevo.')
+    expect(heroAttentionDetail({ ...base, kind: 'failure' })).toBeUndefined()
+    expect(heroAttentionDetail({ ...base, kind: 'upcoming' })).toBeUndefined()
+    expect(heroAttentionDetail({ ...base, kind: 'result' })).toBeUndefined()
   })
 
-  it('turns a clicked signal into an actionable Phoenix draft', () => {
-    const base = { id: 'a', taskId: 't', title: 'PHOENIX main guard', at: '2026-09-29T16:00:00.000Z', score: 1 } as const
-    expect(heroAttentionPrompt({
+  it('infers compact source hints and turns a click into an actionable draft', () => {
+    const github = {
       ...base,
-      kind: 'failure',
+      kind: 'failure' as const,
+      title: 'PHOENIX main guard',
       detail: 'Falló en CI; localiza el bloqueo actual.',
-    })).toContain('Encuentra la causa y ayúdame a resolverlo.')
-    expect(heroAttentionPrompt({
-      ...base,
-      kind: 'result',
-      detail: 'Hay un resultado nuevo.',
-    })).toContain('qué requiere mi atención')
+    }
+    expect(heroAttentionSource(github)).toBe('GH')
+    expect(heroAttentionSource({ ...base, kind: 'result', title: 'Inbox review' })).toBe('M')
+    expect(heroAttentionSource({ ...base, kind: 'upcoming', title: 'Agenda de hoy' })).toBe('CAL')
+    expect(heroAttentionPrompt(github)).toContain('localiza el bloqueo actual y corrígelo')
+    expect(heroAttentionPrompt(github)).toContain('Falló en CI')
   })
 })
