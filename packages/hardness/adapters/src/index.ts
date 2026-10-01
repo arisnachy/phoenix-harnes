@@ -32,9 +32,7 @@ import { acquireRealityContext } from './reality-registry.ts'
 import { installRealityProtocol } from './reality-protocol.ts'
 import { installRealityContextProjection, realityConfigFromEnvironment, type RealityPromptRegistrar } from './reality-context.ts'
 import { createRealitySnapshotTool } from './reality-tool.ts'
-import {
-  createProactivityExecutor, ensureAmbientBriefingTask, installProactivityRuntime,
-} from './proactivity-runtime.ts'
+import { createProactivityExecutor, ensureAmbientBriefingTask, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
 import { acquireWakeEngine } from './wake-registry.ts'
 import { createWakeExecutor, installWakeRuntime } from './wake-runtime.ts'
