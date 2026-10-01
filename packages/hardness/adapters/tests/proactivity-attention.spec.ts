@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { ProactivityTask } from '../src/proactivity-engine.ts'
-import { buildProactivityAttentionItems } from '../src/proactivity-runtime.ts'
+import { MemoryProactivityStore, ProactivityEngine, type ProactivityTask } from '../src/proactivity-engine.ts'
+import { buildProactivityAttentionItems, ensureAmbientBriefingTask } from '../src/proactivity-runtime.ts'
 
 const NOW = new Date('2026-09-29T16:00:00.000Z')
 
@@ -25,6 +25,29 @@ function task(overrides: Partial<ProactivityTask>): ProactivityTask {
 }
 
 describe('proactivity home attention ranking', () => {
+  it('creates one quiet ambient briefing and respects later cancellation', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async () => ({ summary: 'NO_MATERIAL_UPDATE' }) },
+      { id: () => 'ambient-briefing' },
+    )
+
+    const created = await ensureAmbientBriefingTask(engine, NOW)
+    expect(created).toMatchObject({
+      id: 'ambient-briefing',
+      title: 'Pulso de Phoenix',
+      createdBy: 'system',
+      delivery: 'work',
+      attentionMode: 'auto',
+      recurrence: { kind: 'interval', everyMs: 21_600_000 },
+    })
+    expect(await ensureAmbientBriefingTask(engine, NOW)).toBeUndefined()
+
+    await engine.cancel('ambient-briefing')
+    expect(await ensureAmbientBriefingTask(engine, NOW)).toBeUndefined()
+    expect((await engine.list({ includeHidden: true })).map(item => item.status)).toEqual(['cancelled'])
+  })
+
   it('surfaces a material recurring background result and suppresses unchanged checks', () => {
     const material = task({
       history: [{
