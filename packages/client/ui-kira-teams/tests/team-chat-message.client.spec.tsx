@@ -46,6 +46,24 @@ describe('KIRA Team chat message', () => {
     expect(teamIdentityOf('gpt-6-luna', 'worker-c').name).not.toContain('GPT')
   })
 
+  it('shows Kira with her avatar when a real teammate delegation enters chat', () => {
+    const view = render(<View node={node({
+      senderId: 'root',
+      senderName: 'lead',
+      targetId: 'worker-a',
+      targetName: 'la-forja',
+      purpose: 'assignment',
+      content: [{ type: 'text', text: 'Revisar el flujo de delegación.' }],
+    })} />)
+
+    expect(view.getByText('Kira')).toBeTruthy()
+    expect(view.getByText('Coordinación')).toBeTruthy()
+    expect(view.getByText('Asignación')).toBeTruthy()
+    expect(view.getByText('→ La Forja')).toBeTruthy()
+    expect(view.container.querySelector('[data-avatar="aurora"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-agent-portrait-image]')).toBeTruthy()
+  })
+
   it('renders one real team bubble with recipient, purpose and compact reactions', () => {
     const reactions: KiraTeamMessageChatData['reactions'] = [
       { reactorId: 'root', reactorName: 'lead', reaction: 'ack' },
