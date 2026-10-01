@@ -300,6 +300,30 @@ Depends on: [`AgentLoopConfig`](#phoenix-aidsh-agent-loop) · [`GoalDomainConfig
 
 Source: [`packages/examples/agent-spine-demo/src/index.ts:92`](../packages/examples/agent-spine-demo/src/index.ts)
 
+<a id="phoenix-aidsh-agent-team"></a>
+
+## `@phoenix-ai/dsh-agent-team`
+
+Requires: `agents` · `sessions` · `sessionPersistence` · `subagents`
+
+```ts config-catalog
+/** Team-service deployment limits. */
+export interface Config {
+  /** Maximum immutable teammate names retained by one Team. */
+  readonly maxMembers?: number
+  /** Maximum non-deleted tasks retained by one Team. */
+  readonly maxTasks?: number
+  /** Maximum queued-minus-delivered messages for one target member. */
+  readonly maxPendingMessagesPerMember?: number
+  /** Maximum UTF-8 bytes in one complete sender-framed delivery. */
+  readonly maxMessageBytes?: number
+  /** Maximum milliseconds allowed for Team-owned runtime disposal. */
+  readonly disposalTimeoutMs?: number
+}
+```
+
+Source: [`packages/subagent/agent-team/src/types.ts:159`](../packages/subagent/agent-team/src/types.ts)
+
 <a id="phoenix-aidsh-agent-tool-presentation"></a>
 
 ## `@phoenix-ai/dsh-agent-tool-presentation`
@@ -647,64 +671,6 @@ export type E2BRetention = 'kill' | 'pause' | 'retain'
 ```
 
 Source: [`packages/e2b/e2b/src/index.ts:49`](../packages/e2b/e2b/src/index.ts)
-
-<a id="phoenix-aidsh-agent-team"></a>
-
-## `@phoenix-ai/dsh-agent-team`
-
-Requires: `agents` · `sessions` · `sessionPersistence` · `subagents`
-
-```ts config-catalog
-/** Team-service deployment limits. */
-export interface Config {
-  /** Maximum immutable teammate names retained by one Team. */
-  readonly maxMembers?: number
-  /** Maximum non-deleted tasks retained by one Team. */
-  readonly maxTasks?: number
-  /** Maximum queued-minus-delivered messages for one target member. */
-  readonly maxPendingMessagesPerMember?: number
-  /** Maximum UTF-8 bytes in one complete sender-framed delivery. */
-  readonly maxMessageBytes?: number
-  /** Maximum milliseconds allowed for Team-owned runtime disposal. */
-  readonly disposalTimeoutMs?: number
-}
-```
-
-Source: [`packages/subagent/agent-team/src/types.ts:159`](../packages/subagent/agent-team/src/types.ts)
-
-<a id="phoenix-aidsh-tool-agent-team"></a>
-
-## `@phoenix-ai/dsh-tool-agent-team`
-
-Requires: `agents` · `agentTeams` · `tools` · `systemPrompt`
-
-```ts config-catalog
-/** Tool routing configuration. */
-export interface Config {
-  /** Continuable-subagent provider used for fresh teammates. */
-  readonly freshProvider?: string
-  /** Continuable-subagent provider used for completed-prefix fork teammates. */
-  readonly forkProvider?: string
-  /** Profile automatically used when spawn_teammate omits model_profile. */
-  readonly defaultModelProfile?: string
-  /** Named provider/model routes the Lead may assign; empty means inheritance only. */
-  readonly modelProfiles?: Record<string, TeamModelProfile>
-}
-
-/** One deployment-owned LLM route for a teammate identity. */
-export interface TeamModelProfile {
-  /** Provider route used for this teammate profile. */
-  readonly provider: string
-  /** Provider-specific model identifier. */
-  readonly model: string
-  /** Optional maximum output-token budget for each request. */
-  readonly maxTokens?: number
-  /** Optional provider reasoning tier for the teammate. */
-  readonly reasoningEffort?: string
-}
-```
-
-Source: [`packages/subagent/tool-agent-team/src/index.ts:29`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-file-reference-local"></a>
 
@@ -2746,6 +2712,40 @@ export type TokenMeterConfig = Record<string, never>
 ```
 
 Source: [`packages/llm/token-meter/src/types.ts:12`](../packages/llm/token-meter/src/types.ts)
+
+<a id="phoenix-aidsh-tool-agent-team"></a>
+
+## `@phoenix-ai/dsh-tool-agent-team`
+
+Requires: `agents` · `agentTeams` · `tools` · `systemPrompt`
+
+```ts config-catalog
+/** Tool routing configuration. */
+export interface Config {
+  /** Continuable-subagent provider used for fresh teammates. */
+  readonly freshProvider?: string
+  /** Continuable-subagent provider used for completed-prefix fork teammates. */
+  readonly forkProvider?: string
+  /** Profile automatically used when spawn_teammate omits model_profile. */
+  readonly defaultModelProfile?: string
+  /** Named provider/model routes the Lead may assign; empty means inheritance only. */
+  readonly modelProfiles?: Record<string, TeamModelProfile>
+}
+
+/** One deployment-owned LLM route for a teammate identity. */
+export interface TeamModelProfile {
+  /** Provider route used for this teammate profile. */
+  readonly provider: string
+  /** Provider-specific model identifier. */
+  readonly model: string
+  /** Optional maximum output-token budget for each request. */
+  readonly maxTokens?: number
+  /** Optional provider reasoning tier for the teammate. */
+  readonly reasoningEffort?: string
+}
+```
+
+Source: [`packages/subagent/tool-agent-team/src/index.ts:29`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-tool-bash"></a>
 
