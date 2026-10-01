@@ -65,7 +65,7 @@ describe('KIRA Team conversation node', () => {
     })
 
     const start = match('team/message/queued', queuedData, 10, { kind: 'turn', turn: 2 })
-    const state = kiraTeamMessageDefinition.start(context(undefined), start, {} as never)
+    const state = kiraTeamMessageDefinition.start(context(undefined), start)
     expect(state).toMatchObject({
       messageId: 'message-1',
       senderName: 'la-forja',
@@ -89,14 +89,14 @@ describe('KIRA Team conversation node', () => {
       id: 'message-1',
       role: 'update',
     })
-    const reacted = kiraTeamMessageDefinition.update(context(state), reaction, {} as never)
+    const reacted = kiraTeamMessageDefinition.update(context(state), reaction)
     expect(reacted.reactions).toEqual([{
       reactorId: 'root',
       reactorName: 'lead',
       reaction: 'ack',
     }])
 
-    expect(kiraTeamMessageDefinition.update(context(reacted), reaction, {} as never)).toBe(reacted)
+    expect(kiraTeamMessageDefinition.update(context(reacted), reaction)).toBe(reacted)
     expect(kiraTeamMessageDefinition.update(context(reacted), match('team/reaction', {
       version: 1,
       reaction: {
@@ -105,8 +105,8 @@ describe('KIRA Team conversation node', () => {
         reactorName: 'argo',
         reaction: 'done',
       },
-    }), {} as never)).toBe(reacted)
-    expect(kiraTeamMessageDefinition.update(context(reacted), match('other', {}), {} as never)).toBe(reacted)
+    }))).toBe(reacted)
+    expect(kiraTeamMessageDefinition.update(context(reacted), match('other', {}))).toBe(reacted)
 
     const view = kiraTeamMessageDefinition.buildViewNode?.(context(reacted, [start], start))
     expect(view).toMatchObject({
@@ -133,14 +133,14 @@ describe('KIRA Team conversation node', () => {
         content: [],
       },
     }, 20, { kind: 'step', turn: 3, step: 1 })
-    const state = kiraTeamMessageDefinition.start(context(undefined), legacy, {} as never)
+    const state = kiraTeamMessageDefinition.start(context(undefined), legacy)
     expect(state.targetName).toBeUndefined()
     expect(state.purpose).toBeUndefined()
 
     const fromMatch = kiraTeamMessageDefinition.buildViewNode?.(context(state, [legacy]))
-    expect(fromMatch?.location).toEqual({ kind: 'step', turn: 3, step: 1 })
+    expect(fromMatch).toMatchObject({ location: { kind: 'step', turn: 3, step: 1 } })
     const unresolved = kiraTeamMessageDefinition.buildViewNode?.(context(state))
-    expect(unresolved?.location).toEqual({ kind: 'unresolved' })
+    expect(unresolved).toMatchObject({ location: { kind: 'unresolved' } })
 
     const invalidPurpose = kiraTeamMessageDefinition.start(context(undefined), match('team/message/queued', {
       version: 1,
@@ -152,7 +152,7 @@ describe('KIRA Team conversation node', () => {
         purpose: 'chatty-filler',
         content: [],
       },
-    }), {} as never)
+    }))
     expect(invalidPurpose.purpose).toBeUndefined()
   })
 
