@@ -76,24 +76,7 @@ else {
   "$powerShellExe,0"
 }
 
-# Prefer the native installed shell when it exists. This keeps one canonical
-# desktop entry: Phoenix.exe owns WebView2, the bundled toolchain and updates.
-try {
-  $nativeRegistration = Get-ItemProperty -Path 'HKCU:\Software\Phoenix AI\Phoenix' -ErrorAction Stop
-  $nativeExecutable = [string]$nativeRegistration.ExecutablePath
-  if (-not [string]::IsNullOrWhiteSpace($nativeExecutable) -and
-      (Test-Path -LiteralPath $nativeExecutable -PathType Leaf)) {
-    $targetPath = $nativeExecutable
-    $arguments = ''
-    $workingDirectory = Split-Path -Parent $nativeExecutable
-    $windowStyle = 1
-    $iconLocation = "$nativeExecutable,0"
-  }
-}
-catch {
-  # Source/managed checkouts use the PowerShell fallback above.
-}
-
+# Always use the normal PHOENIX Web launcher. The shortcut must never target Phoenix.exe.
 $shortcutPath = Join-Path $desktopPath 'PHOENIX.lnk'
 
 $shell = New-Object -ComObject WScript.Shell

@@ -103,7 +103,18 @@ jobs:
           $shortcut = $shell.CreateShortcut($shortcutPath)
           if ([string]::IsNullOrWhiteSpace($shortcut.TargetPath)) { throw 'PHOENIX shortcut target is empty' }
           if (-not (Test-Path $shortcut.TargetPath)) { throw "PHOENIX shortcut target is missing: $($shortcut.TargetPath)" }
-
+          if ([IO.Path]::GetFileName($shortcut.TargetPath) -ne 'powershell.exe') {
+            throw "PHOENIX shortcut must launch normal Web Phoenix through PowerShell, not $($shortcut.TargetPath)"
+          }
+          if (-not $shortcut.Arguments.Contains('phoenix-desktop-launch.ps1')) {
+            throw "PHOENIX shortcut does not call the normal desktop launch script: $($shortcut.Arguments)"
+          }
+          if ($shortcut.Arguments.Contains('Phoenix.exe')) {
+            throw 'PHOENIX shortcut must never target the legacy/native Phoenix.exe'
+          }
+          if ($shortcut.WorkingDirectory -ne (Resolve-Path .).Path) {
+            throw "PHOENIX shortcut working directory is wrong: $($shortcut.WorkingDirectory)"
+          }
 
       - name: Desktop contract tests
         shell: pwsh
