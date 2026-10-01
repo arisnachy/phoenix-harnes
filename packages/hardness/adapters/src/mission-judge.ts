@@ -203,7 +203,9 @@ export function createSubagentMissionJudge(input: {
         if (result.stopReason !== 'completed') return unavailable()
         return readDecision(result.structured) ?? unavailable()
       } catch {
-        if (mission.context.signal.aborted || attempt >= MISSION_JUDGE_START_ATTEMPTS) return unavailable()
+        if (mission.context.signal.aborted || run !== undefined || attempt >= MISSION_JUDGE_START_ATTEMPTS) {
+          return unavailable()
+        }
       } finally {
         if (run !== undefined) {
           try {
