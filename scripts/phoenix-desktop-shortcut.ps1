@@ -98,8 +98,31 @@ function Write-PhoenixIcon([string]$SourcePath, [string]$DestinationPath) {
   }
 }
 
+function Test-PhoenixIcon([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+  try {
+    $bytes = [IO.File]::ReadAllBytes($Path)
+    return (
+      $bytes.Length -gt 30 -and
+      $bytes[0] -eq 0 -and
+      $bytes[1] -eq 0 -and
+      $bytes[2] -eq 1 -and
+      $bytes[3] -eq 0 -and
+      $bytes[4] -eq 1 -and
+      $bytes[5] -eq 0 -and
+      $bytes[22] -eq 0x89 -and
+      $bytes[23] -eq 0x50 -and
+      $bytes[24] -eq 0x4E -and
+      $bytes[25] -eq 0x47
+    )
+  }
+  catch {
+    return $false
+  }
+}
+
 $iconPath = Join-Path $phoenixState 'phoenix.ico'
-$refreshIcon = -not (Test-Path -LiteralPath $iconPath -PathType Leaf)
+$refreshIcon = -not (Test-PhoenixIcon $iconPath)
 if (-not $refreshIcon) {
   $refreshIcon = (Get-Item -LiteralPath $iconSourcePath).LastWriteTimeUtc -gt
     (Get-Item -LiteralPath $iconPath).LastWriteTimeUtc
