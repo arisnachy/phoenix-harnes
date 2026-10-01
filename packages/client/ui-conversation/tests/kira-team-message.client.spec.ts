@@ -40,7 +40,7 @@ function context(
     start,
     state,
     current: new Map(),
-  } as unknown as ConversationNodeContext<KiraTeamMessageChatData>
+  }
 }
 
 function stateContext(
