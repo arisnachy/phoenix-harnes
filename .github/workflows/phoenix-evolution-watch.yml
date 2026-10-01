@@ -21,7 +21,7 @@ jobs:
   observe-contracts:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: phoenix/evolution-inbox
           fetch-depth: 0
@@ -66,7 +66,7 @@ jobs:
     needs: observe-contracts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: phoenix/evolution-inbox
           fetch-depth: 0
