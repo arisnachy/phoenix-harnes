@@ -137,6 +137,29 @@ function plainOutput(content: readonly ContentBlock[], limit: number): string {
   return `${text.slice(0, Math.max(0, limit - 1))}…`
 }
 
+function comparableWorkSummary(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim().toLocaleLowerCase()
+}
+
+/**
+ * Recurring office/assistant work should not create a fresh attention card
+ * merely because the worker repeated its previous wording. This deterministic
+ * exact-summary fence complements the model instruction to report
+ * NO_MATERIAL_UPDATE when nothing changed.
+ */
+function quietRepeatedWorkSummary(input: ProactivityExecution, summary: string): string {
+  if (input.phase !== 'deliver' || input.task.delivery !== 'work' || input.task.recurrence.kind === 'once') {
+    return summary
+  }
+  if (/^NO_MATERIAL_UPDATE[.!]?$/iu.test(summary.trim())) return 'NO_MATERIAL_UPDATE'
+  const normalized = comparableWorkSummary(summary)
+  const repeated = input.task.history
+    .filter(row => row.phase === 'deliver' && row.status === 'completed')
+    .slice(-3)
+    .some(row => row.summary !== undefined && comparableWorkSummary(row.summary) === normalized)
+  return repeated ? 'NO_MATERIAL_UPDATE' : summary
+}
+
 function mailIdentity(sender: ProactivitySenderIdentity, config: ProactivityRuntimeConfig): string | undefined {
   if (sender === 'user') return config.userMailIdentity
   if (sender === 'harness') return config.harnessMailIdentity ?? config.userMailIdentity
@@ -369,7 +392,8 @@ export function createProactivityExecutor(
           if (result.stopReason !== 'completed') {
             throw new Error(result.diagnostic ?? `private proactive work ended with ${result.stopReason}`)
           }
-          return { summary: plainOutput(result.output, config.privateWorkResultChars) }
+          const summary = plainOutput(result.output, config.privateWorkResultChars)
+          return { summary: quietRepeatedWorkSummary(input, summary) }
         } finally {
           await run.dispose()
         }
@@ -513,11 +537,16 @@ function rpcFailure(message: string): RpcResult<never> {
 function installProactivityRpc(connection: HostConnectionHandle, engine: ProactivityEngine): () => Promise<void> {
   return connection.rpc.handle('/phoenix-tasks', async (endpoint): Promise<RpcResult<readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[]>> => {
     try {
-      // `list()` intentionally omits surprises until reveal time. Hidden task
-      // content therefore never crosses the browser transport ahead of time.
-      const tasks = await engine.list()
-      if (endpoint === 'list') return { ok: true, value: tasks.map(taskView) }
-      if (endpoint === 'attention') return { ok: true, value: buildProactivityAttentionItems(tasks) }
+      // Ordinary task listings hide unrevealed surprises and host-owned
+      // maintenance tasks. Attention may consume system tasks because only
+      // their already-sanitized material result is projected to the browser.
+      if (endpoint === 'list') {
+        return { ok: true, value: (await engine.list()).map(taskView) }
+      }
+      if (endpoint === 'attention') {
+        const attentionTasks = await engine.list({ includeSystem: true })
+        return { ok: true, value: buildProactivityAttentionItems(attentionTasks) }
+      }
       return rpcFailure(`unknown Phoenix tasks endpoint: ${endpoint}`)
     } catch (error: unknown) {
       return rpcFailure(error instanceof Error ? error.message : String(error))
