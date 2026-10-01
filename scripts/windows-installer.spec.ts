@@ -19,6 +19,16 @@ describe('PHOENIX managed Windows installation', () => {
     expect(launcher).not.toMatch(/^pnpm\s/mu)
   })
 
+  it('always restores the native Phoenix desktop shortcut on install or upgrade', () => {
+    const iss = read('installer/windows/Phoenix.iss')
+    const shortcut = read('scripts/phoenix-desktop-shortcut.ps1')
+    expect(iss).toContain('Name: "{autodesktop}\\Phoenix"; Filename: "{app}\\Phoenix.exe"')
+    expect(iss).not.toContain('Tasks: desktopicon')
+    expect(shortcut).toContain("'HKCU:\\Software\\Phoenix AI\\Phoenix'")
+    expect(shortcut).toContain('$nativeRegistration.ExecutablePath')
+    expect(shortcut).toContain("$shortcutPath = Join-Path $desktopPath 'PHOENIX.lnk'")
+  })
+
   it('forces upgrade takeover from a stale tray instance before replacing the payload', () => {
     const iss = read('installer/windows/Phoenix.iss')
     expect(iss).toContain('CloseApplications=force')
