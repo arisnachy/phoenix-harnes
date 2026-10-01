@@ -6,7 +6,7 @@ import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
-import { CallId } from '@phoenix-ai/dsh-llm'
+import { CallId, ReasoningEffortId, type LlmModelReasoningInfo } from '@phoenix-ai/dsh-llm'
 import { scopeOf } from '@phoenix-ai/dsh-scope'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
@@ -46,6 +46,7 @@ async function setup(
   script: ConstructorParameters<typeof MockAdapter>[0],
   legacyControl = false,
   config: toolTeam.Config = {},
+  reasoning?: LlmModelReasoningInfo,
 ) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
@@ -59,7 +60,7 @@ async function setup(
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
   await ctx.plugin(TeamService)
   const fiber = await ctx.plugin(toolTeam, config)
-  const adapter = new MockAdapter(script)
+  const adapter = new MockAdapter(script, reasoning)
   ctx.llm.registerAdapter(['mock'], adapter)
   const lead = ctx.agentLoop.create(SessionId('tool-team-lead'), { provider: 'mock', model: 'mock' })
   return { ctx, lead, fiber }
@@ -159,6 +160,9 @@ describe('dsh-tool-team', () => {
       modelProfiles: {
         judge: { provider: 'mock', model: 'independent-judge', maxTokens: 8192, reasoningEffort: 'high' },
       },
+    }, {
+      efforts: [{ id: ReasoningEffortId('high'), name: 'High' }],
+      defaultEffort: ReasoningEffortId('high'),
     })
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'judge',
