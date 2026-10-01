@@ -61,6 +61,7 @@ const MAX_TEXT = 2_000
 const MAX_ITEMS = 32
 const VERIFIER_DESIGN_TIMEOUT_MS = 5 * 60_000
 const VERIFIER_EXECUTION_TIMEOUT_MS = 40 * 60_000
+const VERIFIER_START_ATTEMPTS = 2
 const EXECUTION_TOOLS = ['bash', 'read', 'read_image', 'glob', 'grep'] as const
 const EVIDENCE_STATUSES = ['pending', 'implemented', 'tested', 'verified', 'failed', 'blocked_external'] as const
 const EXPECTED_SOURCES = ['specification', 'reference_oracle', 'standard', 'mathematical_invariant', 'metamorphic_property', 'fixture_or_external_evidence', 'implementation_observed', 'unknown'] as const
@@ -469,43 +470,48 @@ async function runStructured(
     : VERIFIER_EXECUTION_TIMEOUT_MS
   const timeout = AbortSignal.timeout(timeoutMs)
   const signal = AbortSignal.any([request.signal, timeout])
-  let run
-  let startPromise: ReturnType<CompletionRuntime['start']> | undefined
-  let outcome: StructuredRunOutcome = {}
-  try {
-    startPromise = runtime.start(provider, { ...request, signal })
-    run = await awaitAbortable(startPromise, signal)
-    const result = await awaitAbortable(run.result, signal)
-    outcome = result.stopReason === 'completed'
-      ? { structured: result.structured }
-      : { incident: `${label}:stop-${result.stopReason}` }
-  } catch (error) {
-    const phase = run === undefined ? 'start' : 'result'
-    if (run === undefined && signal.aborted && startPromise !== undefined) {
-      void startPromise.then(
-        lateRun => lateRun.dispose().catch(() => undefined),
-        () => undefined,
-      )
-    }
-    const kind = timeout.aborted && !request.signal.aborted
-      ? 'timeout'
-      : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
-    outcome = { incident: `${label}:${phase}-${kind}` }
-  } finally {
-    if (run !== undefined) {
-      try {
-        await run.dispose()
-      } catch (error) {
-        const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
-        const disposal = `${label}:dispose-${kind}`
-        outcome = {
-          ...outcome,
-          incident: outcome.incident === undefined ? disposal : `${outcome.incident};${disposal}`,
+  const incidents: string[] = []
+  for (let attempt = 1; attempt <= VERIFIER_START_ATTEMPTS; attempt += 1) {
+    let run
+    let startPromise: ReturnType<CompletionRuntime['start']> | undefined
+    try {
+      startPromise = runtime.start(provider, { ...request, signal })
+      run = await awaitAbortable(startPromise, signal)
+      const result = await awaitAbortable(run.result, signal)
+      return result.stopReason === 'completed'
+        ? {
+          structured: result.structured,
+          ...(incidents.length === 0 ? {} : { incident: incidents.join(';') }),
+        }
+        : { incident: [...incidents, `${label}:stop-${result.stopReason}`].join(';') }
+    } catch (error) {
+      const phase = run === undefined ? 'start' : 'result'
+      if (run === undefined && signal.aborted && startPromise !== undefined) {
+        void startPromise.then(
+          lateRun => lateRun.dispose().catch(() => undefined),
+          () => undefined,
+        )
+      }
+      const kind = timeout.aborted && !request.signal.aborted
+        ? 'timeout'
+        : error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+      incidents.push(`${label}:${phase}-${kind}`)
+      const retryStart = phase === 'start'
+        && !signal.aborted
+        && attempt < VERIFIER_START_ATTEMPTS
+      if (!retryStart) return { incident: incidents.join(';') }
+    } finally {
+      if (run !== undefined) {
+        try {
+          await run.dispose()
+        } catch (error) {
+          const kind = error instanceof Error && error.name.length > 0 ? error.name : 'runtime-error'
+          incidents.push(`${label}:dispose-${kind}`)
         }
       }
     }
   }
-  return outcome
+  return { incident: incidents.join(';') }
 }
 
 /**
