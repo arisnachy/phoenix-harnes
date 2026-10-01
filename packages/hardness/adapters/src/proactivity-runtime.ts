@@ -478,7 +478,9 @@ export function buildProactivityAttentionItems(
       .map(row => attentionSummaryFingerprint(row.summary))
       .find(value => value !== undefined)
     const repeatedResult = fingerprint !== undefined && fingerprint === previousFingerprint
-    const canSurfaceResult = mode === 'result' || (mode === 'auto' && task.delivery === 'work')
+    // The Hero is for background intelligence, not receipts for chat/email work the
+    // user already received. Even explicit result mode stays scoped to delivery=work.
+    const canSurfaceResult = task.delivery === 'work' && (mode === 'result' || mode === 'auto')
     if (canSurfaceResult && latestDelivery !== undefined && summary !== undefined && !repeatedResult
       && Date.parse(latestDelivery.finishedAt) >= oldestResult) {
       const ageHours = Math.max(0, (nowMs - Date.parse(latestDelivery.finishedAt)) / 3_600_000)
