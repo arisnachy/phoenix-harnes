@@ -1,7 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ProactivityAttentionItem } from '../src/client/contract/slots.ts'
-import { parseProactivityAttention, refreshProactivityAttention } from '../src/client/skeleton/ProactivityAttention.ts'
+import {
+  acknowledgeProactivityAttention, acknowledgedProactivityAttentionIds,
+  parseProactivityAttention, refreshProactivityAttention,
+} from '../src/client/skeleton/ProactivityAttention.ts'
 
 const ROW = {
   id: 't:result:1',
@@ -14,6 +17,8 @@ const ROW = {
 } as const
 
 describe('proactivity attention client bridge', () => {
+  beforeEach(() => { globalThis.localStorage?.clear() })
+
   it('validates, normalizes, and bounds host rows', () => {
     const rows = parseProactivityAttention(Array.from({ length: 10 }, (_, index) => ({
       ...ROW, id: `row-${index}`, taskId: `task-${index}`, detail: index === 0 ? ' ' : ROW.detail,
@@ -48,5 +53,18 @@ describe('proactivity attention client bridge', () => {
     await refreshProactivityAttention(connection, store)
     await refreshProactivityAttention(undefined, store)
     expect(store.getSnapshot()).toHaveLength(1)
+  })
+
+  it('persists reviewed rows and does not return them on later polls', async () => {
+    const store = createSnapshotStore<readonly ProactivityAttentionItem[]>([])
+    acknowledgeProactivityAttention(ROW.id)
+    acknowledgeProactivityAttention(ROW.id)
+
+    expect([...acknowledgedProactivityAttentionIds()]).toEqual([ROW.id])
+
+    const call = vi.fn().mockResolvedValue({ ok: true, value: [ROW, { ...ROW, id: 'fresh' }] })
+    await refreshProactivityAttention({ rpc: { call } } as never, store)
+
+    expect(store.getSnapshot().map(item => item.id)).toEqual(['fresh'])
   })
 })
