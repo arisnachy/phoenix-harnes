@@ -1,7 +1,7 @@
 import { OPENCLAW_EXTENSION_IDS } from './catalog.generated.ts'
 
-/** Immutable OpenClaw donor revision used to build the compatibility catalog. */
-export const OPENCLAW_DONOR_COMMIT = '515c3d8ff3fce77838d69d1da838ad691c18d755' as const
+/** Immutable OpenClaw stable-release donor revision used to build the compatibility catalog. */
+export const OPENCLAW_DONOR_COMMIT = 'eb377ac59e6c9fd6c7705028034812becf00271b' as const
 
 /** Metadata-only locator for one extension in the pinned OpenClaw donor tree. */
 export interface OpenClawExtensionCatalogEntry {
