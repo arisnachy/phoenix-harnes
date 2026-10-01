@@ -134,6 +134,8 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('Use team_react for a lightweight acknowledgement')
     expect(leadPrompt).toContain('must send it to lead with purpose result before ending its turn')
     expect(leadPrompt).toContain('spawn_teammate is itself the initial assignment')
+    expect(leadPrompt).toContain('root Phoenix chat is the shared Team room')
+    expect(leadPrompt).toContain('route the substantive request with followup_task')
     expect(leadPrompt).toContain('Your Team role is lead')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
