@@ -145,6 +145,82 @@ describe('HARDNESS mission judges', () => {
     expect(prompt).toMatch(/meet or exceed strong current category references/i)
   })
 
+  it('routes Codex mission judging through the current Phoenix Luna Max worker', async () => {
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'codex-judge-run' as never,
+      localAgent: undefined,
+      result: Promise.resolve({
+        stopReason: 'completed' as const,
+        output: [],
+        structured: {
+          verdict: 'pass',
+          summary: 'verified',
+          evidence: ['evidence:forecast'],
+          required_changes: [],
+          criteria: [{ id: 'artifact', verdict: 'pass', evidence: ['evidence:forecast'], findings: [] }],
+          quality: { verdict: 'pass', summary: 'complete', evidence: ['evidence:forecast'], findings: [] },
+        },
+      }),
+      dispose: async () => {},
+    }))
+    const judge = createSubagentMissionJudge({
+      subagents: {
+        getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never,
+        start,
+      },
+      provider: 'spawn',
+    })
+    const candidate = input()
+    candidate.context.agent = {
+      id: 'codex-parent',
+      options: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+    } as never
+
+    await expect(judge(candidate)).resolves.toMatchObject({ verdict: 'pass' })
+    expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
+      agentOptions: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+    }))
+  })
+
+  it('retries one transient semantic judge startup failure', async () => {
+    let attempts = 0
+    const start = vi.fn<SubagentRuntime['start']>(async () => {
+      attempts += 1
+      if (attempts === 1) {
+        const error = new Error('transient mission judge transport failure')
+        error.name = 'TransportError'
+        throw error
+      }
+      return {
+        id: 'retry-judge-run' as never,
+        localAgent: undefined,
+        result: Promise.resolve({
+          stopReason: 'completed' as const,
+          output: [],
+          structured: {
+            verdict: 'pass',
+            summary: 'verified after retry',
+            evidence: ['evidence:forecast'],
+            required_changes: [],
+            criteria: [{ id: 'artifact', verdict: 'pass', evidence: ['evidence:forecast'], findings: [] }],
+            quality: { verdict: 'pass', summary: 'complete', evidence: ['evidence:forecast'], findings: [] },
+          },
+        }),
+        dispose: async () => {},
+      }
+    })
+    const judge = createSubagentMissionJudge({
+      subagents: {
+        getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never,
+        start,
+      },
+      provider: 'spawn',
+    })
+
+    await expect(judge(input())).resolves.toMatchObject({ verdict: 'pass' })
+    expect(attempts).toBe(2)
+  })
+
   it('fails closed for unavailable or invalid judge output', async () => {
     const judge = createSubagentMissionJudge({
       subagents: { getProvider: () => undefined, start: vi.fn() },

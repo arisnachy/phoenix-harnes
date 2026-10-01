@@ -1,7 +1,7 @@
 /** Independent, read-only structured judge for one HARDNESS mission result. */
 
-import type { Agent } from '@phoenix-ai/dsh-agent'
-import type { ContentBlock } from '@phoenix-ai/dsh-llm'
+import { PHOENIX_CODEX_AUTO_WORKER_MODEL, type Agent } from '@phoenix-ai/dsh-agent'
+import { ReasoningEffortId, type ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { ObjectJsonSchema, ToolRestriction } from '@phoenix-ai/dsh-tools'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { resolveStructuredProvider } from '@phoenix-ai/dsh-subagent'
@@ -61,6 +61,7 @@ export const MISSION_JUDGE_READ_ONLY_TOOLS = [
 
 const MAX_TEXT = 2_000
 const MAX_ITEMS = 8
+const MISSION_JUDGE_START_ATTEMPTS = 2
 type MissionJudgeRuntime = Pick<SubagentRuntime, 'getProvider' | 'start'>
   & Partial<Pick<SubagentRuntime, 'list'>>
 
@@ -178,24 +179,44 @@ export function createSubagentMissionJudge(input: {
     if (resolved === undefined) return unavailable()
     const parent: Agent | undefined = mission.context.agent
     if (parent === undefined) return unavailable()
+    const agentOptions = parent.options.provider === 'openai-codex'
+      ? {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
+      }
+      : undefined
     const toolFilter: ToolRestriction = { allow: [...MISSION_JUDGE_READ_ONLY_TOOLS] }
-    let run: Awaited<ReturnType<typeof input.subagents.start>> | undefined
-    try {
-      run = await input.subagents.start(resolved.name, {
-        label: 'hardness-mission-judge',
-        prompt: prompt(mission),
-        parent,
-        signal: mission.context.signal,
-        outputSchema: MISSION_JUDGE_OUTPUT_SCHEMA,
-        toolFilter,
-      })
-      const result = await run.result
-      if (result.stopReason !== 'completed') return unavailable()
-      return readDecision(result.structured) ?? unavailable()
-    } catch {
-      return unavailable()
-    } finally {
-      if (run !== undefined) await run.dispose()
+    for (let attempt = 1; attempt <= MISSION_JUDGE_START_ATTEMPTS; attempt += 1) {
+      let run: Awaited<ReturnType<typeof input.subagents.start>> | undefined
+      try {
+        run = await input.subagents.start(resolved.name, {
+          label: 'hardness-mission-judge',
+          prompt: prompt(mission),
+          parent,
+          signal: mission.context.signal,
+          ...(agentOptions === undefined ? {} : { agentOptions }),
+          outputSchema: MISSION_JUDGE_OUTPUT_SCHEMA,
+          toolFilter,
+        })
+        const result = await run.result
+        if (result.stopReason !== 'completed') return unavailable()
+        return readDecision(result.structured) ?? unavailable()
+      } catch {
+        if (mission.context.signal.aborted || run !== undefined || attempt >= MISSION_JUDGE_START_ATTEMPTS) {
+          return unavailable()
+        }
+      } finally {
+        if (run !== undefined) {
+          try {
+            await run.dispose()
+          } catch {
+            // A completed semantic verdict remains authoritative even if the
+            // disposable child transport closes noisily during cleanup.
+          }
+        }
+      }
     }
+    return unavailable()
   }
 }

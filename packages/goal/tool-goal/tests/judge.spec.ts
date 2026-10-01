@@ -48,7 +48,7 @@ function structuredGateResponse(label: unknown): unknown {
 }
 
 describe('goal completion judge', () => {
-  it('routes an OpenAI Codex parent to the Luna xhigh judge model', async () => {
+  it('routes an OpenAI Codex parent to the current Phoenix Luna Max judge model', async () => {
     await expect(resolveGoalJudgeAgentOptions({
       parent: {
         id: SessionId('codex-parent'),
@@ -57,8 +57,8 @@ describe('goal completion judge', () => {
       signal: new AbortController().signal,
     })).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
-      reasoningEffort: 'xhigh',
+      model: 'gpt-6-luna',
+      reasoningEffort: 'max',
     })
   })
 
@@ -127,7 +127,7 @@ describe('goal completion judge', () => {
       signal: new AbortController().signal,
     })
     expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
-      agentOptions: { provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'xhigh' },
+      agentOptions: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
     }))
   })
 
@@ -231,6 +231,50 @@ describe('goal completion judge', () => {
 
     expect(result.verdict).toBe('pass')
     expect(start).toHaveBeenCalledWith('luna', expect.anything())
+  })
+
+  it('retries one transient final-judge startup failure and still completes', async () => {
+    let finalJudgeAttempts = 0
+    const start = vi.fn(async (_name: string, request: Record<string, unknown>) => {
+      const gateStructured = structuredGateResponse(request.label)
+      if (gateStructured !== undefined) {
+        return {
+          result: Promise.resolve({ output: [], stopReason: 'completed' as const, structured: gateStructured }),
+          dispose: async () => {},
+        }
+      }
+      finalJudgeAttempts += 1
+      if (finalJudgeAttempts === 1) {
+        const error = new Error('transient final judge launch failure')
+        error.name = 'TransportError'
+        throw error
+      }
+      return {
+        result: Promise.resolve({
+          output: [],
+          stopReason: 'completed' as const,
+          structured: { verdict: 'pass', summary: 'Verified after retry.', findings: [], required_changes: [] },
+        }),
+        dispose: async () => {},
+      }
+    })
+
+    const result = await judgeGoalCompletion({
+      subagents: { getProvider: () => provider() as never, start: start as never },
+      provider: 'spawn',
+      parent: {
+        id: SessionId('judge-transient-start'),
+        session: Session.create(SessionId('judge-transient-start-session')),
+        options: {},
+      } as never,
+      objective: 'Finish the feature',
+      round: 1,
+      signal: new AbortController().signal,
+    })
+
+    expect(result.verdict).toBe('pass')
+    expect(finalJudgeAttempts).toBe(2)
+    expect(result.verificationIncidents).toContain('goal-completion-judge:start-TransportError')
   })
 
   it('distinguishes a judge that never started from one that stopped after launch', async () => {
