@@ -209,6 +209,21 @@ function callingAgent(agent: Agent | undefined, toolName: string): Agent {
   return agent
 }
 
+/** Capture the exact model route executing the Lead's current request, falling back before the first request. */
+function effectiveLeadAgentOptions(agent: Agent): AgentOptions {
+  const active = agent.session.requestHeader()?.config
+  const provider = active?.provider ?? agent.options.provider
+  const model = active?.model ?? agent.options.model
+  const maxTokens = active?.maxTokens ?? agent.options.maxTokens
+  const reasoningEffort = active?.reasoningEffort ?? agent.options.reasoningEffort
+  return {
+    ...provider === undefined ? {} : { provider },
+    ...model === undefined ? {} : { model },
+    ...maxTokens === undefined ? {} : { maxTokens },
+    ...reasoningEffort === undefined ? {} : { reasoningEffort },
+  }
+}
+
 /** Register the complete Team tool set in one exact Agent scope. */
 function install(agent: Agent, ctx: Context, config: Required<Config>): () => void {
   const scoped = agent.ctx
@@ -251,15 +266,16 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const explicitProfile = 'model_profile' in args && typeof args.model_profile === 'string'
           ? args.model_profile
           : undefined
+        const leadOptions = effectiveLeadAgentOptions(agent)
         const configuredDefault = config.defaultModelProfile || undefined
         const defaultProfile = configuredDefault === undefined
           ? undefined
           : config.modelProfiles[configuredDefault]
         const profileName = explicitProfile
-          ?? (defaultProfile?.provider === agent.options.provider ? configuredDefault : undefined)
+          ?? (defaultProfile?.provider === leadOptions.provider ? configuredDefault : undefined)
         const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
-        const agentOptions: AgentOptions | undefined = profile === undefined
-          ? undefined
+        const agentOptions: AgentOptions = profile === undefined
+          ? leadOptions
           : {
             provider: profile.provider,
             model: profile.model,
@@ -274,7 +290,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           prompt: [{ type: 'text', text: args.prompt }],
           context,
           provider: context === 'fork' ? config.forkProvider : config.freshProvider,
-          ...agentOptions === undefined ? {} : { agentOptions },
+          agentOptions,
           signal: exec.signal,
         })
       },
