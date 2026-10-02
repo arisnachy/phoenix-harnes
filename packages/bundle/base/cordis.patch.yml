@@ -188,6 +188,9 @@
         # Prefer the resident zero-cost neural engine. VoiceRuntime now walks
         # available fallbacks if a configured engine fails during synthesis.
         ttsProvider: phoenix-natural
+        # Kira Live prefers the authenticated Codex realtime bridge while
+        # preserving PHOENIX Natural and browser speech as transparent fallbacks.
+        realtimeProvider: codex-realtime
     - id: voice-local
       name: '@phoenix-ai/dsh-voice-local'
       config:
@@ -209,6 +212,19 @@
         sttCommand: !!js process.env.PHOENIX_STT_COMMAND
         sttArgs: []
         systemTts: true
+
+    # Kira Live: Codex CLI is only a realtime speech renderer. The ordinary
+    # Phoenix session remains the brain (Phoenix Auto / Sol / Luna); this
+    # adapter receives approved assistant prose and negotiates audio with the
+    # browser through WebRTC. No API key or Codex credential crosses the BFF.
+    - id: voice-codex
+      name: '@phoenix-ai/dsh-voice-codex'
+      config:
+        enabled: !!js process.env.PHOENIX_CODEX_VOICE !== '0'
+        command: !!js process.env.PHOENIX_CODEX_COMMAND ?? 'codex'
+        model: !!js process.env.PHOENIX_CODEX_REALTIME_MODEL
+        voice: !!js process.env.PHOENIX_CODEX_VOICE_NAME
+        requestTimeoutMs: 15000
 
     # Durable image bytes live outside the append-only session log. Messages
     # keep content-addressed references that this shared backend resolves for
