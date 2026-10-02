@@ -56,6 +56,40 @@ const LIVE_ACTIVITY_GUIDANCE =
   '"Preparando", "Trabajando" o "Pensando". No uses una frase fija, no inventes actividad y no describas ' +
   'razonamiento interno. Phoenix mostrará literalmente esa frase como actividad en vivo.'
 
+
+function latestUserRequestText(parent: Agent): string {
+  const events = parent.session?.events ?? []
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]
+    if (event?.type !== 'user/message') continue
+    const message = event.data
+    if (message.source.kind !== 'user') continue
+    return message.content
+      .flatMap(block => block.type === 'text' ? [block.text] : [])
+      .join('\n')
+  }
+  return ''
+}
+
+function requestsVisibleKiraTeam(text: string): boolean {
+  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLocaleLowerCase()
+  return normalized.includes('equipo de kira')
+    || normalized.includes('kira team')
+    || normalized.includes('dinamica de agentes')
+    || normalized.includes('dinamica del equipo')
+    || normalized.includes('dinamica de equipo')
+    || normalized.includes('avatares')
+    || normalized.includes('avatar de agentes')
+    || normalized.includes('interaccion visible')
+    || normalized.includes('interactuando con kira')
+    || normalized.includes('interactuar con kira')
+}
+
+function shouldRedirectToKiraTeam(ctx: Context, parent: Agent): boolean {
+  if (!requestsVisibleKiraTeam(latestUserRequestText(parent))) return false
+  return ctx.tools.get('spawn_teammate', parent) !== undefined
+}
+
 interface ActiveSubagentBudget {
   /** Active child count per parent session; aliases/providers share the same parent budget. */
   readonly activeByParent: Map<string, number>
@@ -519,6 +553,12 @@ export function apply(ctx: Context, config: Config): void {
         if (!parent) {
           // Non-agent callers provide no parent for delegation ownership.
           throw new Error('subagent tool requires a calling agent (exec.agent was undefined)')
+        }
+        if (shouldRedirectToKiraTeam(ctx, parent)) {
+          throw new Error(
+            'Esta solicitud pide una dinámica visible de Kira Team. Usa spawn_teammate y Agent Teams; '
+            + 'no uses el subagente genérico porque no produce mensajes, reacciones ni avatares Team reales.',
+          )
         }
 
         const maxDepth = typeof config.maxDepth === 'number' ? config.maxDepth : undefined
