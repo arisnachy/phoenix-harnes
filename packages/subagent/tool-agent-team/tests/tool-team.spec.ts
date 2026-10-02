@@ -227,6 +227,25 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'explicit-worker' })
   })
 
+  it('forbids a non-Codex Lead from crossing to the Luna Max profile', async () => {
+    const { ctx, lead } = await setup(['hang'], false, {
+      defaultModelProfile: 'luna-max',
+      modelProfiles: {
+        'luna-max': { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      },
+    })
+
+    const crossed = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'crossed-worker',
+      description: 'must remain on the external Lead route',
+      prompt: 'wait',
+      model_profile: 'luna-max',
+    })
+    expect(crossed.isError).toBe(true)
+    expect(text(crossed)).toContain('must inherit that exact provider/model')
+    expect(ctx.agentTeams.listMembers(lead)).toHaveLength(1)
+  })
+
   it('inherits the Lead live selected route instead of the session creation model', async () => {
     const { ctx, lead } = await setup(['hang'], false, {
       defaultModelProfile: 'foreign',
