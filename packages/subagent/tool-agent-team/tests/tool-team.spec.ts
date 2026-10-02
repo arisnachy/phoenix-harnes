@@ -166,6 +166,21 @@ describe('dsh-tool-team', () => {
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
   })
 
+  it.each(['luna-1', 'luna-max', 'gpt-6-luna', 'sol', 'codex-worker'])(
+    'rejects model/provider label %s as a visible Kira teammate name',
+    async (name) => {
+      const { ctx, lead } = await setup([])
+      const result = await execute(ctx, lead, 'spawn_teammate', {
+        name,
+        description: 'visible specialist',
+        prompt: 'stay available',
+      })
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('stable Kira persona name')
+      expect(ctx.agentTeams.listMembers(lead)).toHaveLength(1)
+    },
+  )
+
   it('routes teammates through provider-neutral model profiles', async () => {
     const { ctx, lead } = await setup(['hang'], false, {
       defaultModelProfile: 'judge',
