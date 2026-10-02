@@ -164,6 +164,28 @@
   content: '';
 }
 
+.avatar[data-avatar='kira'] {
+  --avatar-accent: #a76516;
+  --avatar-accent-2: #ffd28a;
+}
+
+.avatar[data-avatar='kira'] .ring {
+  border-width: 2px;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--avatar-accent-2) 28%, transparent),
+    0 6px 18px rgb(15 23 42 / 16%),
+    inset 0 0 0 2px color-mix(in srgb, #fff 76%, transparent);
+}
+
+.avatar[data-avatar='kira'][data-state] .badge {
+  background: var(--avatar-accent);
+}
+
+.avatar[data-avatar='kira'][data-state] .badge::after {
+  content: 'K';
+  font-size: 6px;
+}
+
 .avatar[data-avatar='vega'],
 .avatar[data-avatar='aurora'] { --avatar-accent: #16a7c7; --avatar-accent-2: #74e4f3; }
 .avatar[data-avatar='atlas'],

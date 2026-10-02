@@ -2,10 +2,9 @@ import { memo } from 'react'
 import { MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import {
-  KIRA_ROSTER,
+  kiraTeamSpecialistOf,
 } from './KiraTeamsDock.tsx'
 import {
-  agentAvatarKind,
   ModelActivityAvatar,
   type ModelAvatarKind,
 } from './ModelActivityAvatar.tsx'
@@ -21,52 +20,39 @@ interface TeamIdentity {
   readonly kind: ModelAvatarKind
 }
 
-function slug(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '')
+const PERSONA_ROLE: Readonly<Partial<Record<ModelAvatarKind, string>>> = {
+  vortice: 'Rendimiento',
+  aurora: 'Producto / UX',
+  atlas: 'Programación',
+  nova: 'Investigación',
+  lumen: 'Conocimiento',
+  helix: 'Integración',
+  prisma: 'Datos / análisis',
+  orion: 'QA / pruebas',
+  vega: 'Diseño',
+  eclipse: 'Riesgo / revisión',
+  argo: 'Recuperación / soporte',
+  solaria: 'Automatización',
+  nexo: 'Coordinación',
+  astra: 'Planificación',
+  lyra: 'Documentación',
+  zenith: 'Calidad / revisión',
+  cobalto: 'Seguridad',
+  quasar: 'Análisis',
+  senda: 'Navegación / búsqueda',
+  orbita: 'Monitoreo',
 }
 
-const SKILL_ROLE: Readonly<Record<string, string>> = {
-  design: 'Diseño',
-  product: 'Producto / UX',
-  engineering: 'Programación',
-  research: 'Investigación',
-  knowledge: 'Conocimiento',
-  integration: 'Integración',
-  data: 'Datos / análisis',
-  testing: 'QA / pruebas',
-  risk: 'Riesgo / revisión',
-  recovery: 'Recuperación / soporte',
-  automation: 'Automatización',
-  orchestration: 'Coordinación',
-  planning: 'Planificación',
-  writing: 'Documentación',
-  quality: 'Calidad / revisión',
-  security: 'Seguridad',
-  analysis: 'Análisis',
-  browser: 'Navegación / búsqueda',
-  performance: 'Rendimiento',
-  runtime: 'Monitoreo',
-}
-
-/** Resolve durable Team names to stable KIRA personas; model ids never become visible identities. */
+/** Resolve durable Team names to one stable visible KIRA persona. */
 export function teamIdentityOf(name: string, id: string): TeamIdentity {
-  const key = slug(name)
-  if (key === 'lead' || key === 'kira') return { name: 'Kira', role: 'Coordinación', kind: 'aurora' }
-  if (key === 'la-forja' || key === 'forja') return { name: 'La Forja', role: 'Programación', kind: 'atlas' }
-  const roster = KIRA_ROSTER.find(agent => slug(agent.name) === key || slug(agent.kind) === key)
-  if (roster !== undefined) {
-    return {
-      name: roster.name,
-      role: SKILL_ROLE[roster.skills[0] ?? 'general'] ?? 'Equipo Kira',
-      kind: roster.kind,
-    }
-  }
-  const kind = agentAvatarKind(id)
-  const stable = KIRA_ROSTER.find(agent => agent.kind === kind)
+  const stableName = name.trim().length === 0 ? id : name
+  const key = stableName.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  if (key === 'lead' || key === 'kira') return { name: 'Kira', role: 'Coordinación', kind: 'kira' }
+  const specialist = kiraTeamSpecialistOf(stableName)
   return {
-    name: stable?.name ?? 'Equipo Kira',
-    role: stable === undefined ? 'Equipo Kira' : (SKILL_ROLE[stable.skills[0] ?? 'general'] ?? 'Equipo Kira'),
-    kind,
+    name: specialist.name,
+    role: PERSONA_ROLE[specialist.kind] ?? 'Equipo Kira',
+    kind: specialist.kind,
   }
 }
 

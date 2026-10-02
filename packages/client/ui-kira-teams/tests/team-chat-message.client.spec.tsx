@@ -38,12 +38,16 @@ function node(data: Partial<KiraTeamMessageChatData> = {}): ChatNode<'kira-team-
 
 describe('KIRA Team chat message', () => {
   it('resolves stable personas without exposing model ids', () => {
-    expect(teamIdentityOf('lead', 'root')).toMatchObject({ name: 'Kira', role: 'Coordinación', kind: 'aurora' })
-    expect(teamIdentityOf('KÍRA', 'root')).toMatchObject({ name: 'Kira' })
-    expect(teamIdentityOf('forja', 'worker-a')).toMatchObject({ name: 'La Forja', role: 'Programación' })
-    expect(teamIdentityOf('la-forja', 'worker-a')).toMatchObject({ name: 'La Forja' })
-    expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Datos / análisis' })
+    expect(teamIdentityOf('lead', 'root')).toMatchObject({ name: 'Kira', role: 'Coordinación', kind: 'kira' })
+    expect(teamIdentityOf('KÍRA', 'root')).toMatchObject({ name: 'Kira', kind: 'kira' })
+    expect(teamIdentityOf('forja', 'worker-a')).toMatchObject({ name: 'La Forja', role: 'Programación', kind: 'atlas' })
+    expect(teamIdentityOf('la-forja', 'worker-a')).toMatchObject({ name: 'La Forja', kind: 'atlas' })
+    expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Recuperación / soporte', kind: 'argo' })
     expect(teamIdentityOf('gpt-6-luna', 'worker-c').name).not.toContain('GPT')
+
+    const first = teamIdentityOf('worker-a', 'session-a')
+    const resumed = teamIdentityOf('worker-a', 'session-b')
+    expect(resumed).toEqual(first)
   })
 
   it('shows Kira with her avatar when a real teammate delegation enters chat', () => {
@@ -60,7 +64,7 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('Coordinación')).toBeTruthy()
     expect(view.getByText('Asignación')).toBeTruthy()
     expect(view.getByText('→ La Forja')).toBeTruthy()
-    expect(view.container.querySelector('[data-avatar="aurora"]')).toBeTruthy()
+    expect(view.container.querySelector('[data-avatar="kira"]')).toBeTruthy()
     expect(view.container.querySelector('[data-agent-portrait-image]')).toBeTruthy()
   })
 

@@ -4,7 +4,7 @@ import css from './ModelActivityAvatar.module.css'
 
 /** Exact visible identities from the user-approved 20-avatar KIRA reference. */
 export type ModelAvatarKind =
-  | 'sol' | 'luna' | 'terra' | 'generic'
+  | 'kira' | 'sol' | 'luna' | 'terra' | 'generic'
   | 'vortice' | 'aurora' | 'atlas' | 'nova' | 'lumen'
   | 'helix' | 'prisma' | 'orion' | 'vega' | 'eclipse'
   | 'argo' | 'solaria' | 'nexo' | 'astra' | 'lyra'
@@ -21,6 +21,7 @@ const AGENT_AVATAR_KINDS: readonly PortraitKey[] = [
 ]
 
 const PORTRAIT_ALIAS: Record<ModelAvatarKind, PortraitKey> = {
+  kira: 'aurora',
   sol: 'solaria',
   luna: 'eclipse',
   terra: 'senda',

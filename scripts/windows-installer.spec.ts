@@ -52,7 +52,7 @@ describe('PHOENIX managed Windows installation', () => {
     expect(shortcut).toContain('phoenix-windows-icon.ico.b64')
     expect(shortcut).toContain('[Convert]::FromBase64String')
     expect(shortcut).toContain('phoenix-browser-$iconHash.ico')
-    expect(shortcut).toContain("$taskbarDirectory = Join-Path $env:APPDATA")
+    expect(shortcut).toContain('$taskbarDirectory = Join-Path $env:APPDATA')
     expect(shortcut).toContain("'Phoenix.lnk'")
     expect(shortcut).toContain("'Phoenix.Markdown'")
     expect(shortcut).toContain("'OpenWithProgids'")

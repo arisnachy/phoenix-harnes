@@ -310,7 +310,7 @@ export class TeamRoster {
       started = await this.ctx.subagents.startContinuable({
         childId,
         provider: request.provider,
-        label: description,
+        label: `KIRA:${name} · ${description}`,
         request: {
           prompt: request.prompt,
           parent: root,
