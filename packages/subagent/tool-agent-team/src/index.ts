@@ -223,7 +223,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       name: 'spawn_teammate',
       description: 'Create one named, durable teammate. Only the Team Lead may call this tool.',
       parameters: {
-        name: { type: 'string', required: true, description: 'Unique lower-kebab-case teammate name. In Phoenix Auto prefer an unused KIRA codename matching the duty.' },
+        name: { type: 'string', required: true, description: 'Unique lower-kebab-case teammate name.' },
         description: { type: 'string', required: true, description: 'Short description of the delegated responsibility.' },
         prompt: { type: 'string', required: true, description: 'Complete initial task for the teammate.' },
         context: {
