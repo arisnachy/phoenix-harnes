@@ -11,6 +11,7 @@
  */
 
 import type { Context } from '@phoenix-ai/cordis'
+import type { Agent } from '@phoenix-ai/dsh-agent'
 import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { ToolCallView, ToolResultView } from '@phoenix-ai/dsh-tools'
@@ -147,7 +148,44 @@ Funciones disponibles en el script:
 
 Las funciones mal usadas (argumentos inválidos, opciones desconocidas, esquemas no compatibles o límites superados) lanzan errores que SIEMPRE detienen el script; nunca se convierten en \`null\` por elemento.
 
-Límites: se aplican topes de concurrencia y de agentes totales; no hay acceso a sistema de archivos, red, temporizadores ni APIs de Node.js. Los agentes hacen el trabajo y el script solo coordina. La ejecución es en primer plano y esta llamada termina cuando concluye el script.`
+Límites: se aplican topes de concurrencia y de agentes totales; no hay acceso a sistema de archivos, red, temporizadores ni APIs de Node.js. Los agentes hacen el trabajo y el script solo coordina. La ejecución es en primer plano y esta llamada termina cuando concluye el script.
+
+No uses workflow para una solicitud visible de Kira Team, equipo de Kira, dinámica de agentes, avatares o interacción entre Kira y especialistas cuando spawn_teammate esté disponible. Esa colaboración debe usar Agent Teams para producir identidades, mensajes y reacciones reales en el chat.`
+
+/* jscpd:ignore-start -- the workflow and generic-subagent exits independently enforce the same visible-Team boundary. */
+function latestUserRequestText(parent: Agent): string {
+  const events = parent.session?.events ?? []
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index]
+    if (event?.type !== 'user/message') continue
+    const message = event.data
+    if (message.source.kind !== 'user') continue
+    return message.content
+      .flatMap(block => block.type === 'text' ? [block.text] : [])
+      .join('\n')
+  }
+  return ''
+}
+
+function requestsVisibleKiraTeam(text: string): boolean {
+  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLocaleLowerCase()
+  return normalized.includes('equipo de kira')
+    || normalized.includes('kira team')
+    || normalized.includes('dinamica de agentes')
+    || normalized.includes('dinamica del equipo')
+    || normalized.includes('dinamica de equipo')
+    || normalized.includes('avatares')
+    || normalized.includes('avatar de agentes')
+    || normalized.includes('interaccion visible')
+    || normalized.includes('interactuando con kira')
+    || normalized.includes('interactuar con kira')
+}
+
+function shouldRedirectToKiraTeam(ctx: Context, parent: Agent): boolean {
+  return requestsVisibleKiraTeam(latestUserRequestText(parent))
+    && ctx.tools.get('spawn_teammate', parent) !== undefined
+}
+/* jscpd:ignore-end */
 
 type WorkflowCallArgs = {
   script: string
@@ -212,7 +250,7 @@ export function apply(ctx: Context, config: Config): void {
   ctx.systemPrompt.section({
     name: `tool:${toolName}`,
     order: 115,
-    text: `Usa ${toolName} SOLO cuando la persona pida explícitamente un workflow o una orquestación grande: escribe un script JavaScript con fases y resultados estructurados. Respeta el límite de 2 subagentes concurrentes y 2 totales. Para una o dos delegaciones, usa llamadas directas seriales. Antes de delegar muestra ORQUESTACION; después resume RESULTADO y EVIDENCIA en español.`,
+    text: `Usa ${toolName} SOLO cuando la persona pida explícitamente un workflow o una orquestación grande: escribe un script JavaScript con fases y resultados estructurados. Respeta el límite de 2 subagentes concurrentes y 2 totales. Para una o dos delegaciones, usa llamadas directas seriales. Si pide Kira Team, equipo de Kira, dinámica de agentes, avatares o interacción visible y spawn_teammate está disponible, NO uses workflow: usa Agent Teams. Antes de delegar muestra ORQUESTACION; después resume RESULTADO y EVIDENCIA en español.`,
   })
   ctx.tools.register(defineTool({
     name: toolName,
@@ -276,6 +314,12 @@ export function apply(ctx: Context, config: Config): void {
         // means a non-agent caller invoked the tool directly, which has no
         // parent to attribute the children to. Fail loud rather than guess.
         throw new Error('workflow tool requires a calling agent (exec.agent was undefined)')
+      }
+      if (shouldRedirectToKiraTeam(ctx, parent)) {
+        throw new Error(
+          'Esta solicitud pide una dinámica visible de Kira Team. Usa spawn_teammate y Agent Teams; '
+          + 'workflow no produce las identidades, mensajes ni reacciones Team solicitadas.',
+        )
       }
 
       // Meta/body validation failures (META_INVALID/SCRIPT_PARSE) throw
