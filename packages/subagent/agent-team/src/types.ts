@@ -76,6 +76,8 @@ export interface TeamMemberView {
   /** LLM provider route, distinct from the subagent transport provider. */
   readonly modelProvider?: string
   readonly model?: string
+  /** Live session age in milliseconds; for spawned teammates this closely tracks delegated wall-clock time. */
+  readonly elapsedMs?: number
   /** Available for live members; persisted inactive rows may omit runtime usage. */
   readonly usage?: TeamMemberUsage
   readonly diagnostics: string[]
