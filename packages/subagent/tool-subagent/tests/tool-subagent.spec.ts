@@ -148,6 +148,7 @@ describe('dsh-tool-subagent', () => {
           additionalProperties: false,
           properties: {},
         },
+        render: () => [],
       },
       async execute() {
         throw new Error('unused test-only Team route')
