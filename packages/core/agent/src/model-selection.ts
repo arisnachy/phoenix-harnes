@@ -610,7 +610,7 @@ export function installModelSelection(
     const assembled = await next()
     selection.assembled = selected
     const hasKiraTeam = assembled.tools.some(tool => tool.name === 'spawn_teammate')
-    const tools = isPhoenixCodexAutoSelection(selected) && hasKiraTeam
+    const tools = selected !== undefined && hasKiraTeam
       ? assembled.tools.filter(tool => tool.name !== 'subagent' && tool.name !== 'subagent_fork')
       : assembled.tools
     selection.assembledToolCount = tools.length
