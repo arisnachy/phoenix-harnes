@@ -45,8 +45,8 @@ describe('KIRA Team chat message', () => {
     expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Recuperación / soporte', kind: 'argo' })
     expect(teamIdentityOf('gpt-6-luna', 'worker-c').name).not.toContain('GPT')
 
-    const first = teamIdentityOf('worker-a', 'session-a', 'typescript engineer fixing code')
-    const resumed = teamIdentityOf('worker-a', 'session-b', 'typescript engineer fixing code')
+    const first = teamIdentityOf('worker-a', 'session-a')
+    const resumed = teamIdentityOf('worker-a', 'session-b')
     expect(resumed).toEqual(first)
   })
 
@@ -56,7 +56,6 @@ describe('KIRA Team chat message', () => {
       senderName: 'lead',
       targetId: 'worker-a',
       targetName: 'la-forja',
-      targetDescription: 'typescript engineer fixing code',
       purpose: 'assignment',
       content: [{ type: 'text', text: 'Revisar el flujo de delegación.' }],
     })} />)
