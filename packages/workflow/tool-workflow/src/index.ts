@@ -154,7 +154,7 @@ No uses workflow para una solicitud visible de Kira Team, equipo de Kira, dinám
 
 /* jscpd:ignore-start -- the workflow and generic-subagent exits independently enforce the same visible-Team boundary. */
 function latestUserRequestText(parent: Agent): string {
-  const events = parent.session?.events ?? []
+  const events = parent.session.events
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
     if (event?.type !== 'user/message') continue
