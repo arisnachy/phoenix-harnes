@@ -177,11 +177,11 @@
     inset 0 0 0 2px color-mix(in srgb, #fff 76%, transparent);
 }
 
-.avatar[data-avatar='kira'] .badge {
+.avatar[data-avatar='kira'][data-state] .badge {
   background: var(--avatar-accent);
 }
 
-.avatar[data-avatar='kira'] .badge::after {
+.avatar[data-avatar='kira'][data-state] .badge::after {
   content: 'K';
   font-size: 6px;
 }
