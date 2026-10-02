@@ -275,6 +275,57 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('returns a direct Codex Team blocker to the selected Lead before Luna Max execution resumes', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: {
+        provider: 'openai-codex',
+        model: 'gpt-6-astra',
+        reasoningEffort: ReasoningEffortId('high'),
+      },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: {
+            kind: 'team-message',
+            messageId: 'team-blocker-direct-1',
+            purpose: 'blocker',
+          },
+          content: [{ type: 'text', text: 'Atlas needs the Lead to choose between two incompatible fixes.' }],
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = {
+      provider: 'openai-codex',
+      model: 'gpt-6-astra',
+      reasoningEffort: ReasoningEffortId('high'),
+    }
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('continues a Phoenix Auto task when the Sol planning step stops before executing tools', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
