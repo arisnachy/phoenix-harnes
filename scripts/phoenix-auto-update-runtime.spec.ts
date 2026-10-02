@@ -89,6 +89,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain('/^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu')
     expect(supervisor).toContain('function runtimeProtectedByOwningCheckout(path)')
     expect(supervisor).toContain('managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS')
+    expect(supervisor).toContain('STAGE_STORAGE_RETENTION_MS = Math.max(7 * 24 * 60 * 60 * 1000, UPDATE_STORAGE_RETENTION_MS)')
     expect(supervisor).toContain('function staleStageDirectoriesForCleanup()')
     expect(supervisor).toContain('/^phoenix-stage-[0-9a-f]{10}$/iu')
     expect(supervisor).toContain('removed stale updater staging worktree')
