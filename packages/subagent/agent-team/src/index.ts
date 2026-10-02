@@ -182,10 +182,14 @@ export class TeamService extends Service {
       if (prior.some(item => item.reactorId === caller.id)) {
         throw new TeamError('a Team member may react to a message only once', 'TEAM_REACTION_EXISTS')
       }
+      const reactorDescription = membership.role === 'lead'
+        ? undefined
+        : state.members.get(caller.id)?.description
       const reaction = {
         messageId: request.messageId,
         reactorId: caller.id,
         reactorName: membership.name,
+        ...(reactorDescription === undefined ? {} : { reactorDescription }),
         reaction: request.reaction,
       } as const
       await this.journal.appendAndFlush(membership.root, 'team/reaction', {
