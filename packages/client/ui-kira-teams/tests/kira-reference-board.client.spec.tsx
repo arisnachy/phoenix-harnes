@@ -82,9 +82,9 @@ describe('approved KIRA compact live-agent dock', () => {
     })
     const [card] = liveCardsOf([{ summary: teammate, depth: 1 }])
     expect(card).toMatchObject({ name: 'La Forja', kind: 'atlas' })
-    expect(kiraTeamSpecialistOf('la-forja', 'typescript engineer fixing code'))
+    expect(kiraTeamSpecialistOf('la-forja'))
       .toMatchObject({ name: 'La Forja', kind: 'atlas' })
-    expect(kiraTeamSpecialistOf('nova', 'typescript engineer fixing code'))
+    expect(kiraTeamSpecialistOf('nova'))
       .toMatchObject({ name: 'Nova', kind: 'nova' })
   })
 
