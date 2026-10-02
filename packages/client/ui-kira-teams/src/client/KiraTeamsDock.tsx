@@ -136,9 +136,9 @@ function normalizedWorkText(summary: SessionSummary): string {
   ].join(' ').trim().toLocaleLowerCase()
 }
 
-/** Infer the capability the task actually needs from its explicit subagent label/title. */
-export function skillOf(summary: SessionSummary): AgentSkill {
-  const text = normalizedWorkText(summary)
+/** Infer a capability from explicit delegated work text. */
+export function skillOfText(value: string): AgentSkill {
+  const text = value.trim().toLocaleLowerCase()
   if (/\b(playtest|play-test|qa|tester|testing|tests?|pruebas?|probar|validaci[oó]n|gameplay test)\b/u.test(text)) return 'testing'
   if (/\b(design|designer|creative|creatividad|diseñ|disen|ui|ux|visual|art|artist|asset|sprite|avatar|animation|animaci[oó]n|layout)\b/u.test(text)) return 'design'
   if (/\b(security|secure|vulnerab|threat|risk|riesgo|seguridad|permission|authz|hardening|attack)\b/u.test(text)) return 'security'
@@ -154,6 +154,11 @@ export function skillOf(summary: SessionSummary): AgentSkill {
   if (/\b(code|coding|coder|developer|engineer|debug|fix|repair|implement|programmer|programador|desarrollador|c[oó]digo|arreglar|reparar|depurar|implementar|typescript|javascript|python)\b/u.test(text)) return 'engineering'
   if (/\b(investig|research|researcher|referencia|references|evidence|evidencia|literature|benchmark)\b/u.test(text)) return 'research'
   return 'general'
+}
+
+/** Infer the capability the task actually needs from its explicit subagent label/title. */
+export function skillOf(summary: SessionSummary): AgentSkill {
+  return skillOfText(normalizedWorkText(summary))
 }
 
 const SKILL_POOLS: Readonly<Record<AgentSkill, readonly ModelAvatarKind[]>> = {
@@ -175,8 +180,57 @@ const SKILL_POOLS: Readonly<Record<AgentSkill, readonly ModelAvatarKind[]>> = {
 }
 
 const ROSTER_BY_KIND = new Map(KIRA_ROSTER.map(entry => [entry.kind, entry] as const))
+const ROSTER_BY_SLUG = new Map(KIRA_ROSTER.map(entry => [
+  entry.name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase(),
+  entry,
+] as const))
+const TEAM_LABEL = /^KIRA:([a-z0-9]+(?:-[a-z0-9]+)*)\s+·\s+/u
+const TEAM_ALIASES: Readonly<Record<string, ModelAvatarKind>> = {
+  'la-forja': 'atlas',
+  forja: 'atlas',
+}
+
+function stablePersonaIndex(value: string, length: number): number {
+  if (length <= 0) return 0
+  let hash = 2_166_136_261
+  for (const character of value) {
+    hash ^= character.codePointAt(0) ?? 0
+    hash = Math.imul(hash, 16_777_619)
+  }
+  return (hash >>> 0) % length
+}
+
+/** Resolve one Team member name + immutable duty to the same visible KIRA persona everywhere. */
+export function kiraTeamSpecialistOf(name: string, description: string): KiraRosterEntry {
+  const key = name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  const direct = ROSTER_BY_SLUG.get(key)
+  if (direct !== undefined) return direct
+  const aliasKind = TEAM_ALIASES[key]
+  if (aliasKind !== undefined) {
+    const alias = ROSTER_BY_KIND.get(aliasKind)
+    if (alias !== undefined) return alias
+  }
+  const skill = skillOfText(description)
+  const pool = SKILL_POOLS[skill]
+  const kind = pool[stablePersonaIndex(key, pool.length)]
+  const specialist = kind === undefined ? undefined : ROSTER_BY_KIND.get(kind)
+  if (specialist !== undefined) return specialist
+  const fallback = KIRA_ROSTER[stablePersonaIndex(key, KIRA_ROSTER.length)] ?? KIRA_ROSTER[0]
+  if (fallback === undefined) throw new Error('KIRA roster must contain at least one specialist')
+  return fallback
+}
+
+function teamNameOf(summary: SessionSummary): string | undefined {
+  // oxlint-disable typescript/no-unnecessary-condition -- projectionValues remains optional in the public SessionSummary contract.
+  const label = summary.projectionValues?.subagent?.label
+  // oxlint-enable typescript/no-unnecessary-condition
+  if (label === undefined) return undefined
+  return TEAM_LABEL.exec(label)?.[1]
+}
 
 function specialistFor(summary: SessionSummary, occupied: ReadonlySet<ModelAvatarKind>): KiraRosterEntry {
+  const teamName = teamNameOf(summary)
+  if (teamName !== undefined) return kiraTeamSpecialistOf(teamName, normalizedWorkText(summary))
   const skill = skillOf(summary)
   for (const kind of SKILL_POOLS[skill]) {
     const entry = ROSTER_BY_KIND.get(kind)
