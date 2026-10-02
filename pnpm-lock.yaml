@@ -1315,6 +1315,9 @@ importers:
       '@phoenix-ai/dsh-voice':
         specifier: workspace:^
         version: link:../../voice/voice
+      '@phoenix-ai/dsh-voice-codex':
+        specifier: workspace:^
+        version: link:../../voice/voice-codex
       '@phoenix-ai/dsh-voice-local':
         specifier: workspace:^
         version: link:../../voice/voice-local
@@ -8914,6 +8917,22 @@ importers:
       '@phoenix-ai/dsh-typert-protocol':
         specifier: workspace:^
         version: link:../../typert/protocol
+
+  packages/voice/voice-codex:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: workspace:^
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-voice':
+        specifier: workspace:^
+        version: link:../voice
 
   packages/voice/voice-local:
     dependencies:
