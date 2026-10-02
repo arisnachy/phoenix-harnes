@@ -97,11 +97,11 @@ class CodexWireClient {
     this.child = child
     this.timeoutMs = timeoutMs
     const lines = createInterface({ input: child.stdout, crlfDelay: Number.POSITIVE_INFINITY })
-    lines.on('line', line => { this.acceptLine(line) })
+    lines.on('line', (line) => { this.acceptLine(line) })
     child.stderr.resume()
-    child.stdin.on('error', error => { this.fail(error) })
-    child.on('error', error => { this.fail(error) })
-    child.once('close', code => {
+    child.stdin.on('error', (error) => { this.fail(error) })
+    child.on('error', (error) => { this.fail(error) })
+    child.once('close', (code) => {
       lines.close()
       if (!this.failed) this.fail(new Error(`voice-codex: app-server exited with ${String(code)}`))
     })
@@ -189,7 +189,7 @@ class CodexWireClient {
   }
 
   private write(frame: Readonly<Record<string, unknown>>, done?: (error?: Error) => void): void {
-    this.child.stdin.write(`${JSON.stringify(frame)}\n`, error => {
+    this.child.stdin.write(`${JSON.stringify(frame)}\n`, (error) => {
       if (done !== undefined) done(error === null || error === undefined ? undefined : error)
     })
   }
@@ -212,7 +212,7 @@ class CodexWireClient {
       if (message.error !== undefined && message.error !== null) {
         const detail = typeof message.error.message === 'string'
           ? message.error.message
-          : `RPC error ${String(message.error.code ?? 'unknown')}`
+          : `RPC error ${typeof message.error.code === 'string' || typeof message.error.code === 'number' ? message.error.code : 'unknown'}`
         pending.reject(new Error(`voice-codex: ${detail}`))
       } else {
         pending.resolve(message.result)
@@ -432,6 +432,7 @@ function spawnCodex(command: string): ChildProcessWithoutNullStreams {
   return spawn(command, args, common)
 }
 
+/* jscpd:ignore-start -- package boundary intentionally mirrors the sanitized Codex child environment. */
 function codexEnvironment(): NodeJS.ProcessEnv {
   const names = [
     'PATH', 'Path', 'PATHEXT', 'HOME', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA',
@@ -455,7 +456,7 @@ function codexEnvironment(): NodeJS.ProcessEnv {
   env.CODEX_SQLITE_HOME = sqliteHome
   return env
 }
-
+/* jscpd:ignore-end */
 function clean(value: string | undefined): string | undefined {
   const cleaned = value?.trim()
   return cleaned === undefined || cleaned === '' ? undefined : cleaned
