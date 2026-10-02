@@ -8,16 +8,16 @@
  * @module dsh-llm-pi-ai/codex-auth
  */
 
-import { spawn, spawnSync } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import { createInterface } from 'node:readline'
-import type { Interface as ReadlineInterface } from 'node:readline'
 import { LlmError } from '@phoenix-ai/dsh-llm'
 import {
   codexDiscoveryArgs,
   codexEnvironment,
   encodeCodexWireFrame,
   finishProcessSetup,
+  terminateCodexProcess,
 } from './codex-discovery.ts'
 import { isChatGptAccountJwt } from './codex-platform.ts'
 
@@ -129,36 +129,16 @@ async function nextResponse(
     if (message.id === undefined) continue
     if (message.id !== expectedId) {
       throw new LlmError(
-        `Codex auth response id mismatch: expected ${expectedId}, received ${String(message.id)}`,
+        `Codex auth response id mismatch: expected ${expectedId}, received ${typeof message.id === 'string' || typeof message.id === 'number' ? message.id : 'unknown'}`,
         'MISSING_CREDENTIAL',
       )
     }
     if (message.error !== undefined && message.error !== null) {
-      const detail = text(message.error.message) ?? `RPC error ${String(message.error.code ?? 'unknown')}`
+      const detail = text(message.error.message) ?? `RPC error ${typeof message.error.code === 'string' || typeof message.error.code === 'number' ? message.error.code : 'unknown'}`
       throw new LlmError(`Codex native authentication failed: ${detail}`, 'MISSING_CREDENTIAL')
     }
     return message.result
   }
-}
-
-function terminate(child: ChildProcessWithoutNullStreams, lines: ReadlineInterface): void {
-  lines.close()
-  if (!child.stdin.destroyed && !child.stdin.writableEnded) {
-    try {
-      child.stdin.end()
-    } catch {
-      // Child won the close race.
-    }
-  }
-  if (child.exitCode !== null || child.signalCode !== null) return
-  if (process.platform === 'win32' && child.pid !== undefined) {
-    spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
-      windowsHide: true,
-      stdio: 'ignore',
-    })
-    return
-  }
-  child.kill()
 }
 
 async function readFromCodex(): Promise<string> {
@@ -183,7 +163,7 @@ async function readFromCodex(): Promise<string> {
     }))
     return readCodexNativeAuthStatus(await nextResponse(iterator, 2))
   } finally {
-    terminate(child, lines)
+    terminateCodexProcess(child, lines)
   }
 }
 
