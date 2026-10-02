@@ -24,6 +24,8 @@ export interface ModelSelectionRef {
   assembled: ModelSelection | undefined
   /** Number of model-facing tools captured with the same prompt assembly. */
   assembledToolCount?: number
+  /** Whether the assembled surface exposes the real Kira Team engine. */
+  assembledHasKiraTeam?: boolean
 }
 
 /** Route used after the initial diagnosis/plan step of a turn. */
@@ -484,6 +486,39 @@ interface PhoenixAutoRouterState {
   lastTeamEscalationMessageId: string | undefined
 }
 
+interface DirectCodexTeamState {
+  turn: number
+  lastRescueStep: number
+  lastTeamEscalationMessageId: string | undefined
+}
+
+function resetDirectCodexTeamState(state: DirectCodexTeamState, turn: number): void {
+  if (state.turn === turn) return
+  state.turn = turn
+  state.lastRescueStep = 0
+  state.lastTeamEscalationMessageId = undefined
+}
+
+function directCodexTeamNeedsLead(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+  step: number,
+  state: DirectCodexTeamState,
+): boolean {
+  resetDirectCodexTeamState(state, turn)
+  const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
+  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
+    state.lastTeamEscalationMessageId = teamSignal.messageId
+    state.lastRescueStep = step
+    return true
+  }
+  const stalled = isPhoenixCodexAutoStalled(agent, turn)
+  if (!stalled) return false
+  if (state.lastRescueStep !== 0 && step - state.lastRescueStep < 2) return false
+  state.lastRescueStep = step
+  return true
+}
+
 function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number): void {
   if (state.turn === turn) return
   state.turn = turn
@@ -605,11 +640,17 @@ export function installModelSelection(
     forcePlannerNext: false,
     lastTeamEscalationMessageId: undefined,
   }
+  const directCodexTeamState: DirectCodexTeamState = {
+    turn: 0,
+    lastRescueStep: 0,
+    lastTeamEscalationMessageId: undefined,
+  }
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
     const assembled = await next()
     selection.assembled = selected
     const hasKiraTeam = assembled.tools.some(tool => tool.name === 'spawn_teammate')
+    selection.assembledHasKiraTeam = hasKiraTeam
     const tools = selected !== undefined && hasKiraTeam
       ? assembled.tools.filter(tool => tool.name !== 'subagent' && tool.name !== 'subagent_fork')
       : assembled.tools
@@ -631,10 +672,14 @@ export function installModelSelection(
       const resolved = await next()
       const selected = selection.assembled
       if (selected === undefined) return resolved
-      // A concrete picker choice with no adaptive handoff is authoritative.
-      // Resolve this before reading turn text so an exact route is also the
-      // lowest-latency path; only Phoenix Auto needs to inspect the request.
-      if (!isPhoenixCodexAutoSelection(selected) && handoff === undefined) {
+      // Outside the real Team engine, a concrete picker choice with no adaptive
+      // handoff remains authoritative. When Team is mounted, a direct Codex
+      // planner selection intentionally becomes Lead + Luna Max execution.
+      const directCodexTeam = selection.assembledHasKiraTeam === true
+        && selected.provider === 'openai-codex'
+        && isCodexPlannerModel(selected.model)
+        && !isPhoenixCodexAutoSelection(selected)
+      if (!isPhoenixCodexAutoSelection(selected) && handoff === undefined && !directCodexTeam) {
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
@@ -664,7 +709,17 @@ export function installModelSelection(
             : { reasoningEffort: routed.reasoningEffort },
         }
       }
-      const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff
+      const resolvedHandoff = handoff === undefined
+        ? (directCodexTeam ? defaultExecutionHandoff(selected) : undefined)
+        : typeof handoff === 'function' ? handoff(selected) : handoff
+      const directLeadRescue = directCodexTeam
+        && _payload.step > 1
+        && directCodexTeamNeedsLead(
+          _payload.agent,
+          _payload.turn,
+          _payload.step,
+          directCodexTeamState,
+        )
       const conversation = _payload.step === 1
         && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
         ? defaultConversationalSelection(selected)
@@ -674,11 +729,13 @@ export function installModelSelection(
         && isToolAcquisitionRequest(directText)
         ? defaultToolAcquisitionSelection(selected)
         : undefined
-      const candidateRoute = conversation
-        ?? acquisition
-        ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
-          ? resolvedHandoff.selection
-          : selected)
+      const candidateRoute = directLeadRescue
+        ? selected
+        : conversation
+          ?? acquisition
+          ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
+            ? resolvedHandoff.selection
+            : selected)
       // The social fast path deliberately trades unnecessary reasoning for
       // latency. Do not let GPT-6 Luna's substantive-task Max pin overwrite it.
       const routed = conversation ?? pinGpt6LunaMax(candidateRoute)
