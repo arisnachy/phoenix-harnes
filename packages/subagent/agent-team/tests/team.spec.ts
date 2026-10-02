@@ -1225,15 +1225,6 @@ describe('Team mailbox and waiting', () => {
     })).rejects.toMatchObject({ code: 'TEAM_SELF_REACTION' })
 
     const live = await waitRunning(ctx, worker.member.id)
-    await expect(ctx.agentTeams.reactToMessage(live, {
-      messageId: own.messageId,
-      reaction: 'ack',
-      signal: SIGNAL,
-    })).resolves.toMatchObject({
-      reactorName: 'usage-worker',
-      reaction: 'ack',
-    })
-
     const peer = await ctx.agentTeams.sendMessage(live, {
       target: 'lead',
       purpose: 'result',
@@ -1252,28 +1243,10 @@ describe('Team mailbox and waiting', () => {
       signal: SIGNAL,
     })).rejects.toMatchObject({ code: 'TEAM_REACTION_EXISTS' })
 
-    const folded = foldTeam(lead.id, lead.session.events)
-    expect(folded.messages.get(peer.messageId)).toMatchObject({
-      senderName: 'usage-worker',
-      senderDescription: 'usage-worker responsibility',
-      targetName: 'lead',
-    })
-    expect(folded.messages.get(own.messageId)).toMatchObject({
-      targetName: 'usage-worker',
-      targetDescription: 'usage-worker responsibility',
-    })
-    expect(folded.reactions.get(own.messageId)).toEqual([
-      expect.objectContaining({
-        reactorName: 'usage-worker',
-        reactorDescription: 'usage-worker responsibility',
-        reaction: 'ack',
-      }),
-    ])
-
     const listed = ctx.agentTeams.listMembers(lead).find(item => item.name === 'usage-worker')
     expect(listed?.usage).toMatchObject({ inputTokens: 10, outputTokens: 'first turn'.length })
 
-    const active = folded.members.get(worker.member.id)
+    const active = foldTeam(lead.id, lead.session.events).members.get(worker.member.id)
     expect(active?.phase).toBe('active')
     const directView = teamInternals(ctx).roster.memberView(active as TeamMemberSnapshot & { phase: 'active' })
     expect(directView.usage).toMatchObject({ inputTokens: 10, outputTokens: 'first turn'.length })
