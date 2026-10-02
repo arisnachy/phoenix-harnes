@@ -119,12 +119,6 @@ export class TeamMailbox {
       const state = this.journal.state(root)
       const target = resolveActiveMember(root, state, request.target)
       if (target.id === caller.id) throw new TeamError('a Team member cannot message itself', 'TEAM_SELF_MESSAGE')
-      const senderDescription = membership.role === 'lead'
-        ? undefined
-        : state.members.get(caller.id)?.description
-      const targetDescription = target.id === root.id
-        ? undefined
-        : state.members.get(target.id)?.description
       const pendingForTarget = [...state.messages.values()].filter(candidate =>
         candidate.targetId === target.id && !state.delivered.has(candidate.id)).length
       if (pendingForTarget >= this.maxPendingMessagesPerMember) {
@@ -137,10 +131,8 @@ export class TeamMailbox {
         id: TeamMessageId(`team-message-${randomUUID()}`),
         senderId: caller.id,
         senderName: membership.name,
-        ...(senderDescription === undefined ? {} : { senderDescription }),
         targetId: target.id,
         targetName: target.name,
-        ...(targetDescription === undefined ? {} : { targetDescription }),
         ...request.purpose === undefined ? {} : { purpose: request.purpose },
         delivery: request.delivery,
         content,
