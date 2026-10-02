@@ -20,6 +20,30 @@ interface TeamIdentity {
   readonly kind: ModelAvatarKind
 }
 
+
+const SKILL_ROLE: Readonly<Record<string, string>> = {
+  design: 'Diseño',
+  product: 'Producto / UX',
+  engineering: 'Programación',
+  research: 'Investigación',
+  knowledge: 'Conocimiento',
+  integration: 'Integración',
+  data: 'Datos / análisis',
+  testing: 'QA / pruebas',
+  risk: 'Riesgo / revisión',
+  recovery: 'Recuperación / soporte',
+  automation: 'Automatización',
+  orchestration: 'Coordinación',
+  planning: 'Planificación',
+  writing: 'Documentación',
+  quality: 'Calidad / revisión',
+  security: 'Seguridad',
+  analysis: 'Análisis',
+  browser: 'Navegación / búsqueda',
+  performance: 'Rendimiento',
+  runtime: 'Monitoreo',
+}
+
 /** Resolve durable Team names and duties to one stable visible KIRA persona. */
 export function teamIdentityOf(name: string, id: string, description = ''): TeamIdentity {
   const key = name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
