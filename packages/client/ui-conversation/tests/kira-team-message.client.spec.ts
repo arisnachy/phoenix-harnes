@@ -56,6 +56,7 @@ const queuedData = {
     id: 'message-1',
     senderId: 'worker-a',
     senderName: 'la-forja',
+    senderDescription: 'typescript engineer fixing code',
     targetId: 'root',
     targetName: 'lead',
     purpose: 'blocker',
@@ -103,6 +104,7 @@ describe('KIRA Team conversation node', () => {
       senderName: 'lead',
       targetId: 'worker-a',
       targetName: 'la-forja',
+      targetDescription: 'Revisar el flujo de delegación.',
       purpose: 'assignment',
       content: [{ type: 'text', text: 'Revisar el flujo de delegación.' }],
       seq: 7,
@@ -128,6 +130,7 @@ describe('KIRA Team conversation node', () => {
     expect(state).toMatchObject({
       messageId: 'message-1',
       senderName: 'la-forja',
+      senderDescription: 'typescript engineer fixing code',
       targetName: 'lead',
       purpose: 'blocker',
       seq: 10,
