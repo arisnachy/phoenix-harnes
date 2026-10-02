@@ -185,9 +185,9 @@ const ROSTER_BY_SLUG = new Map(KIRA_ROSTER.map(entry => [
   entry,
 ] as const))
 const TEAM_LABEL = /^KIRA:([a-z0-9]+(?:-[a-z0-9]+)*)\s+·\s+/u
-const TEAM_ALIASES: Readonly<Record<string, ModelAvatarKind>> = {
-  'la-forja': 'atlas',
-  forja: 'atlas',
+const TEAM_ALIASES: Readonly<Record<string, { readonly kind: ModelAvatarKind; readonly name: string }>> = {
+  'la-forja': { kind: 'atlas', name: 'La Forja' },
+  forja: { kind: 'atlas', name: 'La Forja' },
 }
 
 function stablePersonaIndex(value: string, length: number): number {
@@ -205,10 +205,10 @@ export function kiraTeamSpecialistOf(name: string, description: string): KiraRos
   const key = name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   const direct = ROSTER_BY_SLUG.get(key)
   if (direct !== undefined) return direct
-  const aliasKind = TEAM_ALIASES[key]
-  if (aliasKind !== undefined) {
-    const alias = ROSTER_BY_KIND.get(aliasKind)
-    if (alias !== undefined) return alias
+  const aliasIdentity = TEAM_ALIASES[key]
+  if (aliasIdentity !== undefined) {
+    const alias = ROSTER_BY_KIND.get(aliasIdentity.kind)
+    if (alias !== undefined) return { ...alias, name: aliasIdentity.name }
   }
   const skill = skillOfText(description)
   const pool = SKILL_POOLS[skill]
