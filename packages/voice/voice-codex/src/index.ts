@@ -396,11 +396,11 @@ export function createCodexRealtimeProvider(options: CodexRealtimeProviderOption
 /** Mount the Codex realtime transport behind the provider-neutral voice service. */
 export function apply(ctx: Context, config: Config): void {
   const provider = createCodexRealtimeProvider({
-    enabled: config.enabled,
-    command: config.command,
-    model: config.model,
-    voice: config.voice,
-    requestTimeoutMs: config.requestTimeoutMs,
+    ...config.enabled === undefined ? {} : { enabled: config.enabled },
+    ...config.command === undefined ? {} : { command: config.command },
+    ...config.model === undefined ? {} : { model: config.model },
+    ...config.voice === undefined ? {} : { voice: config.voice },
+    ...config.requestTimeoutMs === undefined ? {} : { requestTimeoutMs: config.requestTimeoutMs },
   })
   ctx.voice.registerRealtimeProvider(provider)
   ctx.effect(() => () => { void provider.closeAll() }, 'Codex realtime voice teardown')
