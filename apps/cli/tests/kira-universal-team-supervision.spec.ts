@@ -3,6 +3,10 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const PRESET_ROOT = fileURLToPath(new URL('../config/agent-presets/', import.meta.url))
+const SELECTED_LEAD = new RegExp([
+  'selected model remains the Team Lead',
+  'modelo que el usuario seleccionó conserva el mando como Lead',
+].join('|'), 'u')
 
 describe('universal Kira Team supervision', () => {
   it('keeps the selected model as Lead while exposing bounded Team execution in every full preset', async () => {
@@ -19,7 +23,7 @@ describe('universal Kira Team supervision', () => {
       expect(content, name).toContain('provider: openai-codex')
       expect(content, name).toContain('model: gpt-6-luna')
       expect(content, name).toContain('reasoningEffort: max')
-      expect(content, name).toMatch(/selected model remains the Team Lead|modelo que el usuario seleccionó conserva el mando como Lead/u)
+      expect(content, name).toMatch(SELECTED_LEAD)
       expect(content, name).toMatch(/elapsedMs/u)
       expect(content, name).toMatch(/not theater|no teatro/u)
       expect(content, name).toMatch(/never cross providers silently|nunca cruces proveedores silenciosamente/u)
