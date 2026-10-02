@@ -1334,6 +1334,31 @@ describe('dsh-tool-subagent continuable background mode', () => {
     expect(loaded.events.some(event => event.type === 'assistant/message')).toBe(true)
   })
 
+  it('releases the Phoenix budget slot when a continuable child leaves residency', async () => {
+    const { ctx, parent } = await continuableSetup()
+
+    const first = await callSubagent(
+      ctx,
+      { description: 'first resident', prompt: 'finish first' },
+      { agent: parent },
+    )
+    expect(first.isError).toBe(false)
+    const firstMatch = /^Orquestación: subagente iniciado \(([^)]+)\)$/.exec(text(first))
+    expect(firstMatch).not.toBeNull()
+    const firstId = SessionId(firstMatch?.[1] ?? '')
+    await vi.waitFor(() => { expect(ctx.agents.get(firstId)).toBeUndefined() }, { timeout: 5_000 })
+
+    // A vanished child must not leave a phantom reservation that forces
+    // hard_parallelism for the next, actually first-active child.
+    const second = await callSubagent(
+      ctx,
+      { description: 'second resident', prompt: 'finish second' },
+      { agent: parent },
+    )
+    expect(second.isError).toBe(false)
+    expect(text(second)).toMatch(/^Orquestación: subagente iniciado \([^)]+\)$/u)
+  })
+
   it('hides continuable guidance when the current agent cannot see the tool', async () => {
     const { ctx, parent } = await continuableSetup()
     parent.ctx.tools.restrict({ deny: ['subagent'] })
