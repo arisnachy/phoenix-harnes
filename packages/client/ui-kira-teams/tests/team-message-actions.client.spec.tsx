@@ -4,7 +4,7 @@ import type { ComponentType } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { TeamMessageActions } from '../src/client/TeamMessageActions.tsx'
 import type { TeamChatReaction } from '@phoenix-ai/dsh-agent-team/chat-types'
-afterEach(cleanup)
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const View = TeamMessageActions as unknown as ComponentType<Record<string, unknown>>
 it('groups actual participants and removes only the user reaction from the selected message', async () => {
   const reactions: TeamChatReaction[] = ['user', 'kira', 'agent'].map((kind, index) => ({
@@ -42,4 +42,27 @@ it('keeps inherited team messages readable without exposing actions for another 
   expect(action.hasAttribute('disabled')).toBe(true)
   fireEvent.click(action)
   expect(react).not.toHaveBeenCalled()
+})
+
+it('pulses only a newly received real reaction and respects reduced motion', () => {
+  const first: TeamChatReaction = { id: 'kira-like', messageId: 'human-message', reactorId: 'kira', reactorName: 'Kira',
+    reactorKind: 'kira', emoji: '👍', createdAt: 1 }
+  const incoming: TeamChatReaction = { ...first, id: 'argo-like', reactorId: 'argo', reactorName: 'Argo', reactorKind: 'agent' }
+  const projection = (reactions: TeamChatReaction[]) => (key: string) => key === 'teamChatReactions' ? { 'human-message': reactions } : {}
+  vi.stubGlobal('matchMedia', () => ({ matches: false }))
+  const props = { messageId: 'human-message', authorId: 'user', authorKind: 'user', react: vi.fn(), reply: vi.fn(), t: (key: string) => key }
+  const view = render(<View {...props} useProjection={projection([first])} />)
+  const button = screen.getByRole('button', { name: '👍 1' })
+  const animate = vi.fn()
+  button.animate = animate
+  view.rerender(<View {...props} useProjection={projection([first])} />)
+  expect(animate).not.toHaveBeenCalled()
+  view.rerender(<View {...props} useProjection={projection([first, incoming])} />)
+  expect(animate).toHaveBeenCalledTimes(1)
+  view.rerender(<View {...props} useProjection={projection([first, incoming])} />)
+  expect(animate).toHaveBeenCalledTimes(1)
+  vi.stubGlobal('matchMedia', () => ({ matches: true }))
+  view.rerender(<View {...props} useProjection={projection([first, incoming, { ...incoming, id: 'another-real-reaction' }])} />)
+  expect(animate).toHaveBeenCalledTimes(1)
+  vi.unstubAllGlobals()
 })

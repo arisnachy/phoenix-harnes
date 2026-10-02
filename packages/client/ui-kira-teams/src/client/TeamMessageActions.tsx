@@ -1,5 +1,5 @@
 /** Emoji reactions for every ordinary or team message in the same transcript. */
-import { lazy, Suspense, useState, type ComponentProps } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type ComponentProps } from 'react'
 import type { PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import type {} from '@phoenix-ai/dsh-agent-team/chat-types'
 import { KIRA_ROSTER } from './KiraTeamsDock.tsx'
@@ -26,7 +26,22 @@ type Props = PropsRuntime<'conversation.chat.message-actions'> & TeamMessageActi
 export function TeamMessageActions({
   messageId, authorId, authorKind, authorName, replyPreview, originMissionId, sessionId, useProjection, react, reply, t,
 }: Props) {
-  const reactions = useProjection('teamChatReactions')?.[messageId] ?? []
+  const reactionProjection = useProjection('teamChatReactions')
+  const reactions = reactionProjection?.[messageId] ?? []
+  const previous = useRef<Set<string> | undefined>(undefined)
+  const buttons = useRef(new Map<string, HTMLButtonElement>())
+  useEffect(() => {
+    if (reactionProjection === undefined) return
+    const received = new Set(reactions.map(item => item.id))
+    const earlier = previous.current
+    previous.current = received
+    if (earlier === undefined) return
+    const added = new Set(reactions.filter(item => !earlier.has(item.id)).map(item => item.emoji))
+    if (added.size === 0 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    for (const emoji of added) buttons.current.get(emoji)?.animate([
+      { transform: 'scale(1)' }, { transform: 'scale(1.14)', offset: .4 }, { transform: 'scale(1)' },
+    ], { duration: 420, easing: 'ease-out' })
+  }, [reactionProjection, reactions])
   const participants = useProjection('teamChatParticipants') ?? {}
   const [open, setOpen] = useState(false)
   const [full, setFull] = useState(false)
@@ -45,11 +60,14 @@ export function TeamMessageActions({
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Error') }
     finally { setPending(false) }
   }
-  return <div className={css.reactions} data-team-reactions={messageId}>
-    {[...groups].map(([emoji, people]) => <button key={emoji} className={css.reaction} disabled={pending || historical}
-      title={people.map(item => item.reactorKind === 'user' ? item.reactorName
-        : participants[item.reactorId]?.name ?? teamIdentityOf(item.reactorName, item.reactorId).name).join(', ')}
-      aria-pressed={people.some(item => item.reactorKind === 'user')} onClick={() => { void toggle(emoji) }}>
+  return <div className={css.reactions} data-team-reactions={messageId} data-author-kind={authorKind}>
+    {[...groups].map(([emoji, people]) => <button key={emoji} ref={(element) => {
+      if (element === null) buttons.current.delete(emoji)
+      else buttons.current.set(emoji, element)
+    }} className={css.reaction} disabled={pending || historical}
+    title={people.map(item => item.reactorKind === 'user' ? item.reactorName
+      : participants[item.reactorId]?.name ?? teamIdentityOf(item.reactorName, item.reactorId).name).join(', ')}
+    aria-pressed={people.some(item => item.reactorKind === 'user')} onClick={() => { void toggle(emoji) }}>
       {people.filter(item => item.reactorKind !== 'user').slice(0, 3).map(item => <span className={css.reactionAvatar} key={item.reactorId}>
         <ModelActivityAvatar
           kind={KIRA_ROSTER.find(person => person.kind === participants[item.reactorId]?.avatar)?.kind

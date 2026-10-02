@@ -8,7 +8,7 @@ The overlay never reserves conversation width. Selecting an avatar changes the a
 
 ## Main conversation
 
-Real child outputs carry their durable name, avatar and role in the main transcript. Message actions provide grouped Unicode reactions, a searchable native emoji picker and removal of the user’s own reactions. Reply selects quoted context above the existing composer; `@Name` or `@"Name with spaces"` addresses one or several existing continuable agents. A retained request identity prevents duplicate admission after a lost RPC response, and reconnect retries pending submissions. Pending delivery remains visible in the original row. One-shot children retain readable history but cannot be resumed through these replies.
+Kira and real child outputs display complete portraits at their actual chat size, with durable names and roles. Reactions belong to individual messages: Kira and teammates can react to user messages or to one another. Newly received reactions pulse briefly, respect reduced-motion preferences and do not replay the initial history. Reaction portraits remain fully visible, and user-message reactions align beneath the user message. Message actions provide grouped Unicode reactions, a searchable native emoji picker and removal of the user’s own reactions. Reply selects quoted context above the existing composer; `@Name` or `@"Name with spaces"` addresses one or several existing continuable agents. A retained request identity prevents duplicate admission after a lost RPC response, and reconnect retries pending submissions. Pending delivery remains visible in the original row. One-shot children retain readable history but cannot be resumed through these replies.
 ## Model Experience
 
 ### Team activity state
