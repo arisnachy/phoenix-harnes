@@ -43,7 +43,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const [busy, setBusy] = useState(false)
   useEffect(() => {
     let stopped = false
-    void client.call('status').then((value) => { if (!stopped) { setSnapshot(value); setOwner(value.account.ownerEmail ?? ''); setContacts(value.account.contacts.join(', ')) } }, () => { if (!stopped) setFailure('El correo local no está disponible en este host.') })
+    void client.call('status').then((value) => { if (!stopped) {
+      setSnapshot(value)
+      // Initial host hydration must never erase text the owner already entered
+      // while the asynchronous status request was in flight.
+      setOwner(current => current.trim().length > 0 ? current : value.account.ownerEmail ?? '')
+      setContacts(current => current.trim().length > 0 ? current : value.account.contacts.join(', '))
+    } }, () => { if (!stopped) setFailure('El correo local no está disponible en este host.') })
     return () => { stopped = true }
   }, [client])
   const operate = async (action: string, input?: Record<string, unknown>): Promise<void> => {
