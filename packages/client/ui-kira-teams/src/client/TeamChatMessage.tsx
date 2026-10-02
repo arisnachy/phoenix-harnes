@@ -2,10 +2,9 @@ import { memo } from 'react'
 import { MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import {
-  KIRA_ROSTER,
+  kiraTeamSpecialistOf,
 } from './KiraTeamsDock.tsx'
 import {
-  agentAvatarKind,
   ModelActivityAvatar,
   type ModelAvatarKind,
 } from './ModelActivityAvatar.tsx'
@@ -21,52 +20,15 @@ interface TeamIdentity {
   readonly kind: ModelAvatarKind
 }
 
-function slug(value: string): string {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().replace(/[^a-z0-9]+/gu, '-').replace(/^-|-$/gu, '')
-}
-
-const SKILL_ROLE: Readonly<Record<string, string>> = {
-  design: 'Diseño',
-  product: 'Producto / UX',
-  engineering: 'Programación',
-  research: 'Investigación',
-  knowledge: 'Conocimiento',
-  integration: 'Integración',
-  data: 'Datos / análisis',
-  testing: 'QA / pruebas',
-  risk: 'Riesgo / revisión',
-  recovery: 'Recuperación / soporte',
-  automation: 'Automatización',
-  orchestration: 'Coordinación',
-  planning: 'Planificación',
-  writing: 'Documentación',
-  quality: 'Calidad / revisión',
-  security: 'Seguridad',
-  analysis: 'Análisis',
-  browser: 'Navegación / búsqueda',
-  performance: 'Rendimiento',
-  runtime: 'Monitoreo',
-}
-
-/** Resolve durable Team names to stable KIRA personas; model ids never become visible identities. */
-export function teamIdentityOf(name: string, id: string): TeamIdentity {
-  const key = slug(name)
+/** Resolve durable Team names and duties to one stable visible KIRA persona. */
+export function teamIdentityOf(name: string, id: string, description = ''): TeamIdentity {
+  const key = name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (key === 'lead' || key === 'kira') return { name: 'Kira', role: 'Coordinación', kind: 'aurora' }
-  if (key === 'la-forja' || key === 'forja') return { name: 'La Forja', role: 'Programación', kind: 'atlas' }
-  const roster = KIRA_ROSTER.find(agent => slug(agent.name) === key || slug(agent.kind) === key)
-  if (roster !== undefined) {
-    return {
-      name: roster.name,
-      role: SKILL_ROLE[roster.skills[0] ?? 'general'] ?? 'Equipo Kira',
-      kind: roster.kind,
-    }
-  }
-  const kind = agentAvatarKind(id)
-  const stable = KIRA_ROSTER.find(agent => agent.kind === kind)
+  const specialist = kiraTeamSpecialistOf(name, description || id)
   return {
-    name: stable?.name ?? 'Equipo Kira',
-    role: stable === undefined ? 'Equipo Kira' : (SKILL_ROLE[stable.skills[0] ?? 'general'] ?? 'Equipo Kira'),
-    kind,
+    name: specialist.name,
+    role: SKILL_ROLE[specialist.skills[0] ?? 'general'] ?? 'Equipo Kira',
+    kind: specialist.kind,
   }
 }
 
@@ -97,7 +59,11 @@ function textOf(content: readonly unknown[]): string {
 }
 
 function ReactionChip({ reaction }: { reaction: KiraTeamReactionChatData }) {
-  const identity = teamIdentityOf(reaction.reactorName, reaction.reactorId)
+  const identity = teamIdentityOf(
+    reaction.reactorName,
+    reaction.reactorId,
+    reaction.reactorDescription,
+  )
   return (
     <span className={css.reaction} title={`${identity.name}: ${reaction.reaction}`}>
       <span className={css.reactionAvatar}>
@@ -121,10 +87,10 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   node,
 }: KiraTeamMessageViewProps) {
   const data: KiraTeamMessageChatData = node.data
-  const sender = teamIdentityOf(data.senderName, data.senderId)
+  const sender = teamIdentityOf(data.senderName, data.senderId, data.senderDescription)
   const target = data.targetName === undefined
     ? undefined
-    : teamIdentityOf(data.targetName, data.targetId)
+    : teamIdentityOf(data.targetName, data.targetId, data.targetDescription)
   const text = textOf(data.content)
   if (text.trim() === '') return null
 
