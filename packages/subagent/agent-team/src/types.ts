@@ -118,13 +118,9 @@ export interface TeamMessageSnapshot {
   readonly id: TeamMessageId
   readonly senderId: SessionId
   readonly senderName: string
-  /** Immutable delegated responsibility captured for stable KIRA identity rendering. */
-  readonly senderDescription?: string
   readonly targetId: SessionId
   /** Human-stable Team name captured at send time for transcript presentation. */
   readonly targetName?: string
-  /** Immutable delegated responsibility captured for stable KIRA identity rendering. */
-  readonly targetDescription?: string
   /** Optional for backward replay and direct API callers; model-facing Team tools always persist one semantic purpose. */
   readonly purpose?: TeamMessagePurpose
   readonly delivery: 'quiet' | 'wakeup'
@@ -139,8 +135,6 @@ export interface TeamReactionSnapshot {
   readonly messageId: TeamMessageId
   readonly reactorId: SessionId
   readonly reactorName: string
-  /** Immutable delegated responsibility used to preserve the reactor's visible KIRA persona. */
-  readonly reactorDescription?: string
   readonly reaction: TeamReactionKind
 }
 
