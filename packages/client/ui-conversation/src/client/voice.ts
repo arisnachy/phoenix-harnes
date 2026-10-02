@@ -5,6 +5,12 @@ import type {
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
+  VoiceRealtimeCloseReceipt,
+  VoiceRealtimeOpenReceipt,
+  VoiceRealtimeOpenRequest,
+  VoiceRealtimeSpeakReceipt,
+  VoiceRealtimeSpeakRequest,
+  VoiceRealtimeStatus,
 } from '@phoenix-ai/dsh-api-remotes/client'
 import {
   conversationalSpeechText, createSpeechOutput, hasSpeechOutput, nextStreamingSpeechSegment,
@@ -36,6 +42,17 @@ export interface VoiceAssistantRemote {
   conversationStatus(): Promise<VoiceRemoteResult<VoiceConversationStatus>>
   conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceRemoteResult<VoiceConversationSpeakReceipt>>
   conversationCancel(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationCancelReceipt>>
+  realtimeStatus?(): Promise<VoiceRemoteResult<VoiceRealtimeStatus>>
+  realtimeOpen?(request: VoiceRealtimeOpenRequest): Promise<VoiceRemoteResult<VoiceRealtimeOpenReceipt>>
+  realtimeSpeak?(request: VoiceRealtimeSpeakRequest): Promise<VoiceRemoteResult<VoiceRealtimeSpeakReceipt>>
+  realtimeClose?(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceRealtimeCloseReceipt>>
+}
+
+interface BrowserRealtimeSession {
+  readonly key: string
+  readonly peer: RTCPeerConnection
+  readonly audio: HTMLAudioElement
+  ready: boolean
 }
 
 interface RemoteSpeechState {
@@ -62,7 +79,11 @@ let voiceAssistantMicListening = false
 let voiceAssistantSpokenText = ''
 let voiceAssistantRemote: VoiceAssistantRemote | undefined
 let voiceAssistantRemoteNatural = false
+let voiceAssistantRemoteRealtime = false
 let voiceAssistantRemoteEpoch = 0
+let voiceAssistantRealtimeEpoch = 0
+let voiceAssistantRealtimeSession: BrowserRealtimeSession | undefined
+let voiceAssistantRealtimeOpening: Promise<boolean> | undefined
 let remoteSpeech: RemoteSpeechState | undefined
 
 function publishVoiceAssistant(next: VoiceAssistantSnapshot): void {
@@ -85,6 +106,103 @@ function resetRemoteSpeech(cancel = false): void {
   if (cancel && current !== undefined && voiceAssistantRemote !== undefined) {
     void voiceAssistantRemote.conversationCancel({ key: current.key }).catch(() => {})
   }
+}
+
+function browserRealtimeSupported(): boolean {
+  return typeof RTCPeerConnection === 'function' && typeof document !== 'undefined'
+}
+
+function disposeBrowserRealtimeSession(session: BrowserRealtimeSession): void {
+  session.peer.ontrack = null
+  session.audio.pause()
+  session.audio.srcObject = null
+  session.peer.close()
+}
+
+function closeVoiceRealtimeSession(): boolean {
+  voiceAssistantRealtimeEpoch += 1
+  voiceAssistantRealtimeOpening = undefined
+  const session = voiceAssistantRealtimeSession
+  voiceAssistantRealtimeSession = undefined
+  if (session === undefined) return false
+  disposeBrowserRealtimeSession(session)
+  const remote = voiceAssistantRemote
+  if (remote?.realtimeClose !== undefined) {
+    void remote.realtimeClose({ key: session.key }).catch(() => {})
+  }
+  return true
+}
+
+async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
+  if (peer.iceGatheringState === 'complete') return
+  await new Promise<void>((resolve) => {
+    let timer = 0
+    const finish = (): void => {
+      window.clearTimeout(timer)
+      peer.removeEventListener('icegatheringstatechange', changed)
+      resolve()
+    }
+    const changed = (): void => {
+      if (peer.iceGatheringState === 'complete') finish()
+    }
+    timer = window.setTimeout(finish, 3_000)
+    peer.addEventListener('icegatheringstatechange', changed)
+  })
+}
+
+async function ensureVoiceRealtimeSession(): Promise<boolean> {
+  const remote = voiceAssistantRemote
+  if (!voiceAssistantSnapshot.active || !voiceAssistantRemoteRealtime || !browserRealtimeSupported()
+    || remote?.realtimeOpen === undefined) return false
+  if (voiceAssistantRealtimeSession?.ready === true) return true
+  if (voiceAssistantRealtimeOpening !== undefined) return voiceAssistantRealtimeOpening
+
+  const generation = voiceAssistantRealtimeEpoch
+  const opening = (async () => {
+    const key = `kira-live:${crypto.randomUUID()}`
+    const peer = new RTCPeerConnection()
+    const audio = document.createElement('audio')
+    audio.autoplay = true
+    audio.setAttribute('playsinline', '')
+    peer.addTransceiver('audio', { direction: 'recvonly' })
+    peer.createDataChannel('oai-events', { ordered: true })
+    const session: BrowserRealtimeSession = { key, peer, audio, ready: false }
+    peer.ontrack = (event) => {
+      audio.srcObject = event.streams[0] ?? new MediaStream([event.track])
+      void audio.play().catch(() => {
+        // Browser autoplay policy may require the next explicit microphone gesture.
+      })
+    }
+
+    try {
+      const offer = await peer.createOffer()
+      await peer.setLocalDescription(offer)
+      await waitForIceGathering(peer)
+      const sdp = peer.localDescription?.sdp
+      if (sdp === undefined || sdp === '') throw new Error('Kira Live could not create a WebRTC offer')
+      const result = await remote.realtimeOpen?.({ key, sdp })
+      if (result === undefined || !result.ok || !result.value.accepted || result.value.sdp === undefined) {
+        throw new Error('Kira Live realtime negotiation was not accepted')
+      }
+      if (generation !== voiceAssistantRealtimeEpoch || !voiceAssistantSnapshot.active) {
+        disposeBrowserRealtimeSession(session)
+        void remote.realtimeClose?.({ key }).catch(() => {})
+        return false
+      }
+      await peer.setRemoteDescription({ type: 'answer', sdp: result.value.sdp })
+      session.ready = true
+      voiceAssistantRealtimeSession = session
+      return true
+    } catch {
+      disposeBrowserRealtimeSession(session)
+      if (generation === voiceAssistantRealtimeEpoch) voiceAssistantRemoteRealtime = false
+      return false
+    }
+  })().finally(() => {
+    if (voiceAssistantRealtimeOpening === opening) voiceAssistantRealtimeOpening = undefined
+  })
+  voiceAssistantRealtimeOpening = opening
+  return opening
 }
 
 function browserSpeech(messageKey: string, text: string, final: boolean): void {
@@ -112,7 +230,11 @@ function remoteSpeechFinished(state: RemoteSpeechState, generation: number): voi
 
 function streamRemoteSpeech(messageKey: string, text: string, final: boolean): boolean {
   const remote = voiceAssistantRemote
-  if (!voiceAssistantRemoteNatural || remote === undefined) return false
+  const realtime = voiceAssistantRemoteRealtime
+    && voiceAssistantRealtimeSession?.ready === true
+    && remote?.realtimeSpeak !== undefined
+  const natural = voiceAssistantRemoteNatural && remote !== undefined
+  if (!realtime && !natural) return false
   const transcript = conversationalSpeechText(text)
   if (transcript === '') return true
 
@@ -144,17 +266,25 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
     state.pending += 1
     queued = true
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
-    void remote.conversationSpeak({
-      key: messageKey,
-      sequence,
-      text: planned.text,
-      final: isFinalSegment,
-    }).then((result) => {
+
+    const request = realtime && remote.realtimeSpeak !== undefined && voiceAssistantRealtimeSession !== undefined
+      ? remote.realtimeSpeak({ key: voiceAssistantRealtimeSession.key, text: planned.text })
+      : remote.conversationSpeak({
+        key: messageKey,
+        sequence,
+        text: planned.text,
+        final: isFinalSegment,
+      })
+
+    void request.then((result) => {
       if (remoteSpeech !== state || state.generation !== generation) return
       if (!result.ok || !result.value.accepted) {
-        // Host lost the neural route after the capability probe. Disable it
-        // until the next explicit refresh and preserve audible output locally.
-        voiceAssistantRemoteNatural = false
+        if (realtime) {
+          voiceAssistantRemoteRealtime = false
+          closeVoiceRealtimeSession()
+        } else {
+          voiceAssistantRemoteNatural = false
+        }
         resetRemoteSpeech(true)
         browserSpeech(messageKey, text, final)
         return
@@ -162,7 +292,12 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
       remoteSpeechFinished(state, generation)
     }, () => {
       if (remoteSpeech !== state || state.generation !== generation) return
-      voiceAssistantRemoteNatural = false
+      if (realtime) {
+        voiceAssistantRemoteRealtime = false
+        closeVoiceRealtimeSession()
+      } else {
+        voiceAssistantRemoteNatural = false
+      }
       resetRemoteSpeech(true)
       browserSpeech(messageKey, text, final)
     })
@@ -188,8 +323,10 @@ export function configureVoiceAssistantRemote(remote: VoiceAssistantRemote): () 
   return () => {
     if (voiceAssistantRemote !== remote || epoch !== voiceAssistantRemoteEpoch) return
     resetRemoteSpeech(true)
+    closeVoiceRealtimeSession()
     voiceAssistantRemote = undefined
     voiceAssistantRemoteNatural = false
+    voiceAssistantRemoteRealtime = false
     voiceAssistantRemoteEpoch += 1
   }
 }
@@ -202,20 +339,33 @@ export async function refreshVoiceAssistantRemote(): Promise<boolean> {
   const remote = voiceAssistantRemote
   if (remote === undefined) {
     voiceAssistantRemoteNatural = false
+    voiceAssistantRemoteRealtime = false
+    closeVoiceRealtimeSession()
     return false
   }
   const epoch = voiceAssistantRemoteEpoch
+  let natural = false
+  let realtime = false
   try {
     const result = await remote.conversationStatus()
-    if (epoch !== voiceAssistantRemoteEpoch || voiceAssistantRemote !== remote) return false
-    voiceAssistantRemoteNatural = result.ok && result.value.enabled && result.value.natural
-    return voiceAssistantRemoteNatural
+    natural = result.ok && result.value.enabled && result.value.natural
   } catch {
-    if (epoch === voiceAssistantRemoteEpoch && voiceAssistantRemote === remote) {
-      voiceAssistantRemoteNatural = false
-    }
-    return false
+    natural = false
   }
+  if (remote.realtimeStatus !== undefined && browserRealtimeSupported()) {
+    try {
+      const result = await remote.realtimeStatus()
+      realtime = result.ok && result.value.enabled && result.value.available
+    } catch {
+      realtime = false
+    }
+  }
+  if (epoch !== voiceAssistantRemoteEpoch || voiceAssistantRemote !== remote) return false
+  voiceAssistantRemoteNatural = natural
+  voiceAssistantRemoteRealtime = realtime
+  if (!realtime) closeVoiceRealtimeSession()
+  else if (voiceAssistantSnapshot.active) void ensureVoiceRealtimeSession()
+  return realtime || natural
 }
 
 /**
@@ -246,6 +396,7 @@ export function setVoiceAssistantActive(active: boolean): void {
     voiceAssistantSpeech = undefined
     voiceAssistantSpeechKey = undefined
     resetRemoteSpeech(true)
+    closeVoiceRealtimeSession()
     voiceAssistantMicListening = false
     voiceAssistantSpokenText = ''
     spokenAssistantMessages.clear()
@@ -255,6 +406,7 @@ export function setVoiceAssistantActive(active: boolean): void {
   if (voiceAssistantSnapshot.active) return
   spokenAssistantMessages.clear()
   publishVoiceAssistant({ active: true, phase: 'paused', activatedAt: Date.now() })
+  void ensureVoiceRealtimeSession()
 }
 
 /**
@@ -278,12 +430,16 @@ export function interruptVoiceAssistantSpeech(): boolean {
   if (!voiceAssistantSnapshot.active) return false
   const hadBrowserSpeech = voiceAssistantSpeech !== undefined
   const hadRemoteSpeech = remoteSpeech !== undefined
+  const hadRealtimeSpeech = voiceAssistantRealtimeSession?.ready === true
+    && voiceAssistantSnapshot.phase === 'speaking'
   voiceAssistantSpeech?.dispose()
   voiceAssistantSpeech = undefined
   voiceAssistantSpeechKey = undefined
   resetRemoteSpeech(true)
-  if (hadBrowserSpeech || hadRemoteSpeech) publishVoiceIdle()
-  return hadBrowserSpeech || hadRemoteSpeech
+  if (hadRealtimeSpeech) closeVoiceRealtimeSession()
+  if (hadBrowserSpeech || hadRemoteSpeech || hadRealtimeSpeech) publishVoiceIdle()
+  if (hadRealtimeSpeech && voiceAssistantRemoteRealtime) void ensureVoiceRealtimeSession()
+  return hadBrowserSpeech || hadRemoteSpeech || hadRealtimeSpeech
 }
 
 /**

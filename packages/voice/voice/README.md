@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Provider-neutral asynchronous voice for PHOENIX. The service accepts only explicit important events: verified mission completion, relevant discoveries, real blocks, help requests, and authorization requests. Ordinary turns, tools, and progress remain silent.
+Provider-neutral asynchronous voice for PHOENIX. The service accepts explicit important events and also exposes the browser-negotiated realtime speech seam used by Kira Live. Ordinary turns, tools, and progress remain silent unless a client explicitly enables hands-free conversation.
 
 ## Config
 
@@ -14,16 +14,19 @@ Provider-neutral asynchronous voice for PHOENIX. The service accepts only explic
     language: es-DO
     maxQueue: 3
     maxChars: 480
-    ttsProvider: kokoro
+    ttsProvider: phoenix-natural
+    realtimeProvider: codex-realtime
 ```
 
-`announce()` returns a receipt immediately and drains audio asynchronously. The queue is bounded, duplicate keys are suppressed, and `cancel()` or `stop()` aborts active and pending speech. Provider failures are contained and do not reject the execution loop. `transcribe()` uses the selected STT provider but never enters the TTS queue.
+`announce()` returns a receipt immediately and drains important-event audio asynchronously. The queue is bounded, duplicate keys are suppressed, and `cancel()` or `stop()` aborts active and pending speech. Provider failures are contained and do not reject the execution loop. `transcribe()` uses the selected STT provider but never enters the TTS queue.
+
+Kira Live uses `realtimeStatus`, `realtimeOpen`, `realtimeSpeak`, and `realtimeClose`. The browser supplies a WebRTC offer; the selected realtime provider returns an answer and receives only normalized assistant prose. This seam never changes the active PHOENIX model, session, tools, or completion decision.
 
 `displayOutputToVoiceText()` is the separation point between `display_output` and `voice_output`. It removes code blocks, Markdown, URLs, HTML, emoji, visual symbols, and secret-looking values before synthesis, then applies a sentence-aware length cap.
 
 ## Providers
 
-Providers implement `VoiceTextToSpeechProvider` or `VoiceSpeechToTextProvider` and register through the service. A configured provider id wins when available; otherwise the highest-priority available provider wins. The local provider package registers Kokoro when `PHOENIX_KOKORO_COMMAND` is configured and a platform speech fallback when enabled.
+Providers implement `VoiceTextToSpeechProvider`, `VoiceSpeechToTextProvider`, or `VoiceRealtimeProvider` and register through the service. A configured provider id wins when available; otherwise the highest-priority available provider wins. Realtime failure falls back independently to host TTS and then the browser speech adapter.
 
 ## Model Experience
 
@@ -31,18 +34,18 @@ Providers implement `VoiceTextToSpeechProvider` or `VoiceSpeechToTextProvider` a
 
 #### What the model sees
 
-The model sees no automatic voice context. An explicit consumer may emit `voice/important` with `VoiceImportantEvent`; audio is not added to prompt context.
+The primary PHOENIX model sees no automatic voice context. Explicit realtime providers may receive already-approved assistant prose for speech rendering, but microphone audio and provider state are not injected into the main prompt by this service.
 
 #### Token effect
 
-Voice adds zero model tokens because normalization, event gating, and playback run off-loop.
+The main PHOENIX request gains zero tokens. A remote realtime speech provider can have its own provider-side usage, independent of the main reasoning turn.
 
 #### KV Cache effect
 
-There is no cache effect; queue state and provider availability remain host runtime state outside model requests.
+There is no main-session cache effect; queue state, WebRTC state, and provider availability remain host/client runtime state outside model requests.
 
 ## Known Limitations and Deferred Work
 
-- The service does not ship model weights or a universal Kokoro command; deployment supplies a local command and its arguments.
-- Browser microphone capture remains an independent client adapter; host STT is available when a local command is configured.
+- Browser microphone recognition is still a client adapter; the provider-neutral service does not choose capture hardware.
+- Realtime transport availability depends on the configured provider and browser WebRTC support.
 - Voice is AI-generated audio and must be disclosed by the product surface that enables it.

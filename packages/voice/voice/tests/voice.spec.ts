@@ -4,6 +4,7 @@ import VoiceRuntime, {
   displayOutputToVoiceText,
   sessionEventToVoiceEvent,
   type VoiceImportantEvent,
+  type VoiceRealtimeProvider,
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
 
@@ -122,3 +123,42 @@ describe('session-event voice mapping', () => {
     expect(sessionEventToVoiceEvent({ type: 'tool/result', data: { ok: false } })).toBeUndefined()
   })
 })
+
+describe('VoiceRuntime realtime provider bridge', () => {
+  it('negotiates, speaks, and closes without changing the ordinary TTS path', async () => {
+    const { voice } = await mountVoice({ realtimeProvider: 'codex-realtime' })
+    const spoken: string[] = []
+    const provider: VoiceRealtimeProvider = {
+      id: 'codex-realtime',
+      priority: 500,
+      available: () => true,
+      status: async () => ({ voices: ['marin', 'cedar'], defaultVoice: 'marin' }),
+      open: async request => ({ sdp: `answer:${request.sdp}`, voice: request.voice ?? 'marin' }),
+      speak: async (_key, text) => { spoken.push(text) },
+      close: async key => key === 'live-1',
+      closeAll: async () => {},
+    }
+    voice.registerRealtimeProvider(provider)
+
+    await expect(voice.realtimeStatus()).resolves.toMatchObject({
+      enabled: true,
+      available: true,
+      provider: 'codex-realtime',
+      voices: ['marin', 'cedar'],
+      defaultVoice: 'marin',
+    })
+    await expect(voice.realtimeOpen({ key: 'live-1', sdp: 'offer', voice: 'cedar' })).resolves.toMatchObject({
+      accepted: true,
+      provider: 'codex-realtime',
+      sdp: 'answer:offer',
+      voice: 'cedar',
+    })
+    await expect(voice.realtimeSpeak({ key: 'live-1', text: '**Hola** Kira.' })).resolves.toMatchObject({
+      accepted: true,
+      provider: 'codex-realtime',
+    })
+    expect(spoken).toEqual(['Hola Kira.'])
+    await expect(voice.realtimeClose({ key: 'live-1' })).resolves.toEqual({ closed: true })
+  })
+})
+

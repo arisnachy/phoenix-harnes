@@ -107,6 +107,13 @@ export type {
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
+  VoiceRealtimeCloseReceipt,
+  VoiceRealtimeCloseRequest,
+  VoiceRealtimeOpenReceipt,
+  VoiceRealtimeOpenRequest,
+  VoiceRealtimeSpeakReceipt,
+  VoiceRealtimeSpeakRequest,
+  VoiceRealtimeStatus,
 } from '@phoenix-ai/dsh-voice/types'
 
 declare module '@phoenix-ai/cordis' {

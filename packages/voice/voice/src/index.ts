@@ -16,6 +16,13 @@ import type {
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
+  VoiceRealtimeCloseReceipt,
+  VoiceRealtimeCloseRequest,
+  VoiceRealtimeOpenReceipt,
+  VoiceRealtimeOpenRequest,
+  VoiceRealtimeSpeakReceipt,
+  VoiceRealtimeSpeakRequest,
+  VoiceRealtimeStatus,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -91,6 +98,37 @@ export interface VoiceSpeechToTextProvider {
   transcribe(request: VoiceTranscriptionRequest): Promise<VoiceTranscript>
 }
 
+/** Provider-side capability snapshot for browser-negotiated realtime speech. */
+export interface VoiceRealtimeProviderStatus {
+  readonly voices?: readonly string[]
+  readonly defaultVoice?: string
+}
+
+/** Provider-side WebRTC negotiation request. */
+export interface VoiceRealtimeProviderOpenRequest {
+  readonly key: string
+  readonly sdp: string
+  readonly voice?: string
+}
+
+/** Provider-side WebRTC negotiation answer. */
+export interface VoiceRealtimeProviderOpenResult {
+  readonly sdp: string
+  readonly voice?: string
+}
+
+/** Optional realtime speech transport, normally backed by the authenticated Codex CLI. */
+export interface VoiceRealtimeProvider {
+  readonly id: string
+  readonly priority: number
+  available(): boolean
+  status(): Promise<VoiceRealtimeProviderStatus>
+  open(request: VoiceRealtimeProviderOpenRequest): Promise<VoiceRealtimeProviderOpenResult>
+  speak(key: string, text: string): Promise<void>
+  close(key: string): Promise<boolean>
+  closeAll(): Promise<void> | void
+}
+
 /** Branded id for one queued spoken announcement. */
 export type VoiceAnnouncementId = string & { readonly __voiceAnnouncementId: unique symbol }
 
@@ -118,6 +156,8 @@ export interface VoiceRuntimeStatus {
   readonly ttsProvider?: string
   /** Selected STT provider id, when currently available. */
   readonly sttProvider?: string
+  /** Selected realtime provider id, when currently available. */
+  readonly realtimeProvider?: string
 }
 
 /** Configurable limits and provider preference for one host. */
@@ -134,6 +174,8 @@ export interface VoiceRuntimeConfig {
   readonly ttsProvider?: string
   /** Preferred STT provider. */
   readonly sttProvider?: string
+  /** Preferred realtime speech provider. */
+  readonly realtimeProvider?: string
 }
 
 interface ResolvedVoiceRuntimeConfig {
@@ -143,6 +185,7 @@ interface ResolvedVoiceRuntimeConfig {
   readonly maxChars: number
   readonly ttsProvider?: string
   readonly sttProvider?: string
+  readonly realtimeProvider?: string
 }
 
 interface QueuedAnnouncement {
@@ -250,11 +293,13 @@ export class VoiceRuntime extends TypertRemoteService {
     maxChars: z.number().default(480),
     ttsProvider: z.string(),
     sttProvider: z.string(),
+    realtimeProvider: z.string(),
   })
 
   private readonly config: ResolvedVoiceRuntimeConfig
   private readonly ttsProviders = new Map<string, VoiceTextToSpeechProvider>()
   private readonly sttProviders = new Map<string, VoiceSpeechToTextProvider>()
+  private readonly realtimeProviders = new Map<string, VoiceRealtimeProvider>()
   private readonly queue: QueuedAnnouncement[] = []
   private readonly pendingKeys = new Set<string>()
   private current: QueuedAnnouncement | undefined
@@ -270,6 +315,7 @@ export class VoiceRuntime extends TypertRemoteService {
       maxChars: positiveInteger(config.maxChars ?? 480, 'maxChars'),
       ...config.ttsProvider?.trim() ? { ttsProvider: config.ttsProvider.trim() } : {},
       ...config.sttProvider?.trim() ? { sttProvider: config.sttProvider.trim() } : {},
+      ...config.realtimeProvider?.trim() ? { realtimeProvider: config.realtimeProvider.trim() } : {},
     }
     ctx.on('voice/important', (event) => { void this.announce(event) })
     ctx.on('session/event', (_session, event) => {
@@ -290,6 +336,103 @@ export class VoiceRuntime extends TypertRemoteService {
       enabled: this.config.enabled,
       natural: this.config.enabled && provider?.id === 'phoenix-natural',
       ...(provider === undefined ? {} : { provider: provider.id }),
+    }
+  }
+
+  /**
+   * Probe the preferred browser-negotiated realtime speech route.
+   * @returns Availability plus the provider-advertised voice catalog when reachable.
+   */
+  @Remote('realtimeStatus')
+  async realtimeStatus(): Promise<VoiceRealtimeStatus> {
+    if (!this.config.enabled) return { enabled: false, available: false, reason: 'disabled' }
+    const provider = this.selectRealtimeProvider()
+    if (provider === undefined) return { enabled: true, available: false, reason: 'no-provider' }
+    try {
+      const status = await provider.status()
+      return {
+        enabled: true,
+        available: true,
+        provider: provider.id,
+        ...status.voices === undefined ? {} : { voices: status.voices },
+        ...status.defaultVoice === undefined ? {} : { defaultVoice: status.defaultVoice },
+      }
+    } catch (error: unknown) {
+      this.ctx.logger('voice').warn(`realtime voice probe failed for "${provider.id}": ${String(error)}`)
+      return { enabled: true, available: false, provider: provider.id, reason: 'unavailable' }
+    }
+  }
+
+  /**
+   * Negotiate a browser WebRTC receive-only audio session through the realtime provider.
+   * @param request - Stable browser key, SDP offer, and optional provider voice.
+   * @returns The provider's SDP answer or a non-throwing availability reason.
+   */
+  @Remote('realtimeOpen')
+  async realtimeOpen(request: VoiceRealtimeOpenRequest): Promise<VoiceRealtimeOpenReceipt> {
+    if (!this.config.enabled) return { accepted: false, reason: 'disabled' }
+    const provider = this.selectRealtimeProvider()
+    if (provider === undefined) return { accepted: false, reason: 'no-provider' }
+    const key = request.key.trim()
+    const sdp = request.sdp.trim()
+    if (key === '' || key.length > 256 || sdp === '' || sdp.length > 1_000_000) {
+      return { accepted: false, reason: 'invalid', provider: provider.id }
+    }
+    try {
+      const opened = await provider.open({
+        key,
+        sdp,
+        ...request.voice?.trim() ? { voice: request.voice.trim() } : {},
+      })
+      return {
+        accepted: true,
+        provider: provider.id,
+        sdp: opened.sdp,
+        ...opened.voice === undefined ? {} : { voice: opened.voice },
+      }
+    } catch (error: unknown) {
+      this.ctx.logger('voice').warn(`realtime voice negotiation failed for "${provider.id}": ${String(error)}`)
+      return { accepted: false, reason: 'negotiation-failed', provider: provider.id }
+    }
+  }
+
+  /**
+   * Append already-approved assistant prose to an open realtime speech session.
+   * @param request - Stable session key and text to render as speech.
+   * @returns Admission result without exposing provider failures to the conversation loop.
+   */
+  @Remote('realtimeSpeak')
+  async realtimeSpeak(request: VoiceRealtimeSpeakRequest): Promise<VoiceRealtimeSpeakReceipt> {
+    if (!this.config.enabled) return { accepted: false, reason: 'disabled' }
+    const provider = this.selectRealtimeProvider()
+    if (provider === undefined) return { accepted: false, reason: 'no-provider' }
+    const key = request.key.trim()
+    const text = displayOutputToVoiceText(request.text, Math.min(this.config.maxChars, 360))
+    if (key === '') return { accepted: false, reason: 'not-open', provider: provider.id }
+    if (text === '') return { accepted: false, reason: 'empty', provider: provider.id }
+    try {
+      await provider.speak(key, text)
+      return { accepted: true, provider: provider.id }
+    } catch (error: unknown) {
+      this.ctx.logger('voice').warn(`realtime voice append failed for "${provider.id}": ${String(error)}`)
+      return { accepted: false, reason: 'unavailable', provider: provider.id }
+    }
+  }
+
+  /**
+   * Close one browser realtime speech session; interruption must not stop Phoenix work.
+   * @param request - Stable browser realtime key.
+   * @returns Whether the provider had an open session for the key.
+   */
+  @Remote('realtimeClose')
+  async realtimeClose(request: VoiceRealtimeCloseRequest): Promise<VoiceRealtimeCloseReceipt> {
+    const provider = this.selectRealtimeProvider()
+    if (provider === undefined) return { closed: false }
+    try {
+      return { closed: await provider.close(request.key.trim()) }
+    } catch (error: unknown) {
+      this.ctx.logger('voice').warn(`realtime voice close failed for "${provider.id}": ${String(error)}`)
+      return { closed: false }
     }
   }
 
@@ -386,6 +529,15 @@ export class VoiceRuntime extends TypertRemoteService {
   }
 
   /**
+   * Register a realtime speech provider and dispose it with its contributing fiber.
+   * @param provider - Browser-negotiated realtime provider with a unique id.
+   * @returns A synchronous disposer for the registration.
+   */
+  registerRealtimeProvider(provider: VoiceRealtimeProvider): () => void {
+    return this.registerProvider(this.realtimeProviders, provider)
+  }
+
+  /**
    * Queue one important event and return immediately; provider work is detached.
    * @param event - Important event with display-formatted output.
    * @returns Immediate queue receipt; it never waits for audio.
@@ -445,6 +597,7 @@ export class VoiceRuntime extends TypertRemoteService {
       for (const controller of channel.controllers) controller.abort('voice stopped')
     }
     this.conversationSpeech.clear()
+    for (const provider of this.realtimeProviders.values()) void provider.closeAll()
   }
 
   /**
@@ -465,6 +618,7 @@ export class VoiceRuntime extends TypertRemoteService {
   status(): VoiceRuntimeStatus {
     const ttsProvider = this.selectTtsProvider()
     const sttProvider = this.selectSttProvider()
+    const realtimeProvider = this.selectRealtimeProvider()
     return {
       enabled: this.config.enabled,
       queued: this.queue.length,
@@ -472,6 +626,7 @@ export class VoiceRuntime extends TypertRemoteService {
         || [...this.conversationSpeech.values()].some(channel => channel.controllers.size > 0),
       ...ttsProvider === undefined ? {} : { ttsProvider: ttsProvider.id },
       ...sttProvider === undefined ? {} : { sttProvider: sttProvider.id },
+      ...realtimeProvider === undefined ? {} : { realtimeProvider: realtimeProvider.id },
     }
   }
 
@@ -491,6 +646,10 @@ export class VoiceRuntime extends TypertRemoteService {
 
   private selectSttProvider(): VoiceSpeechToTextProvider | undefined {
     return selectProvider(this.sttProviders, this.config.sttProvider)
+  }
+
+  private selectRealtimeProvider(): VoiceRealtimeProvider | undefined {
+    return selectProvider(this.realtimeProviders, this.config.realtimeProvider)
   }
 
   private async drain(): Promise<void> {

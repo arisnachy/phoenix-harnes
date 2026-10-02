@@ -132,6 +132,7 @@
     "@phoenix-ai/dsh-user-profile": "workspace:^",
     "@phoenix-ai/dsh-user-questions": "workspace:^",
     "@phoenix-ai/dsh-voice": "workspace:^",
+    "@phoenix-ai/dsh-voice-codex": "workspace:^",
     "@phoenix-ai/dsh-voice-local": "workspace:^",
     "@phoenix-ai/dsh-web": "workspace:^",
     "@phoenix-ai/dsh-web-search-free": "workspace:^",

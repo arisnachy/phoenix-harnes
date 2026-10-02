@@ -45,6 +45,8 @@
       "@phoenix-ai/dsh-voice/invariant": ["./packages/voice/voice/src/invariant.ts"],
       "@phoenix-ai/dsh-voice-local": ["./packages/voice/voice-local/src/index.ts"],
       "@phoenix-ai/dsh-voice-local/invariant": ["./packages/voice/voice-local/src/invariant.ts"],
+      "@phoenix-ai/dsh-voice-codex": ["./packages/voice/voice-codex/src/index.ts"],
+      "@phoenix-ai/dsh-voice-codex/invariant": ["./packages/voice/voice-codex/src/invariant.ts"],
       "@phoenix-ai/dsh-mcp-connector-registry": ["./packages/mcp/mcp-registry/src"],
       "@phoenix-ai/dsh-tool-call-timeout-policy": ["./packages/guard/timeout-policy/src"],
       "@phoenix-ai/dsh-tool-call-timeout-policy/invariant": ["./packages/guard/timeout-policy/src/invariant.ts"],
