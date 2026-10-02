@@ -284,13 +284,20 @@ describe('dsh-tool-team', () => {
     const child = await waitRunning(ctx, childId)
 
     const roster = await execute(ctx, child, 'list_agents', {})
-    expect(JSON.parse(text(roster))).toMatchObject([
-      { name: 'lead', role: 'lead', elapsedMs: expect.any(Number) },
-      { name: 'json-worker', role: 'teammate', elapsedMs: expect.any(Number) },
+    const rosterValue: unknown = JSON.parse(text(roster))
+    expect(rosterValue).toMatchObject([
+      { name: 'lead', role: 'lead' },
+      { name: 'json-worker', role: 'teammate' },
     ])
+    if (!Array.isArray(rosterValue)) throw new Error('Team roster must be an array')
+    const rosterRows = rosterValue as unknown[]
+    for (const row of rosterRows) {
+      if (typeof row !== 'object' || row === null) throw new Error('Team roster rows must be objects')
+      expect(typeof (row as Record<string, unknown>).elapsedMs).toBe('number')
+    }
     // Every Team result reaches the model as compact JSON: indentation would
     // spend tokens on every roster, task, and receipt without adding meaning.
-    expect(text(roster)).toBe(JSON.stringify(JSON.parse(text(roster))))
+    expect(text(roster)).toBe(JSON.stringify(rosterValue))
     const peer = await execute(ctx, child, 'send_message', {
       target: 'lead', purpose: 'result', message: 'quiet report',
     })
