@@ -86,7 +86,6 @@ describe('native Codex authentication bridge', () => {
         fileExists: () => Promise.resolve(false),
       },
       credential: { type: 'api_key', key: token },
-      signal: new AbortController().signal,
     })
     expect(result?.auth.apiKey).toBe(token)
   })
