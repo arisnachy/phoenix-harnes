@@ -326,6 +326,84 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('uses the selected Codex model as Team Lead, Luna Max as muscle, and returns blockers to that Lead', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [
+        { name: 'read', description: 'read a file', parameters: { type: 'object' } },
+        { name: 'spawn_teammate', description: 'create a Kira teammate', parameters: { type: 'object' } },
+      ],
+    }))
+    const selection: ModelSelectionRef = {
+      current: {
+        provider: 'openai-codex',
+        model: 'gpt-6-astra',
+        reasoningEffort: ReasoningEffortId('high'),
+      },
+      assembled: undefined,
+    }
+    // Team mode itself enables the selected-planner -> Luna Max handoff even
+    // when a caller did not explicitly supply the legacy handoff resolver.
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Arregla router.ts y valida el resultado.' }],
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = {
+      provider: 'openai-codex',
+      model: 'gpt-6-astra',
+      reasoningEffort: ReasoningEffortId('high'),
+    }
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    events.push({
+      type: 'user/message',
+      data: {
+        source: {
+          kind: 'team-message',
+          messageId: 'direct-midturn-blocker',
+          purpose: 'blocker',
+        },
+        content: [{ type: 'text', text: 'Atlas está bloqueado y necesita una decisión del Lead.' }],
+      },
+    })
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 3, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+    // One Lead intervention is enough for this blocker; execution then returns
+    // to the cheaper/faster Luna Max worker route.
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('continues a Phoenix Auto task when the Sol planning step stops before executing tools', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
