@@ -145,7 +145,7 @@ export interface TeamMessageSource {
   readonly messageId: TeamMessageId
   readonly senderId: SessionId
   readonly senderName: string
-  /** Semantic purpose survives delivery so Phoenix Auto can route Kira without another classifier call. */
+  /** Semantic purpose survives delivery so the Lead can supervise Team work without another classifier call. */
   readonly purpose?: TeamMessagePurpose
 }
 
