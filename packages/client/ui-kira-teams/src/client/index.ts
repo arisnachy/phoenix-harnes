@@ -6,6 +6,7 @@ import type { TeamChatReplyRequest } from '@phoenix-ai/dsh-agent-team/chat-types
 import { TeamReplyDock, type TeamReplyChoice } from './TeamReplyDock.tsx'
 import { TeamAuthor } from './TeamAuthor.tsx'
 import { TeamMessageActions } from './TeamMessageActions.tsx'
+import { TeamMentionDock } from './TeamMentionDock.tsx'
 import { teamIdentityOf, KiraTeamMessageView } from './TeamChatMessage.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
@@ -48,6 +49,16 @@ export function apply(ctx: ClientContext): void {
       clearReply() { selectedReplies.delete(sessionId); publishReply(sessionId) },
     }),
   }, TeamReplyDock))
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock', id: 'team-mention', order: 90, locale: NS,
+    inject: (sessionId: SessionId) => ({
+      setDraft(draft: string) {
+        const scope = sessions.scope(sessionId)
+        if (scope === undefined) return
+        ctx.conversation.input.for(scope).setDraft(draft)
+      },
+    }),
+  }, TeamMentionDock))
   ctx.effect(() => () => { selectedReplies.clear(); pendingRequests.clear(); replyListeners.clear() }, 'ui-kira-teams: replies')
   ctx.slots.inject('conversation.chat.message-actions', () => ctx.slots.register({
     name: 'conversation.chat.message-actions', id: 'team-reactions', locale: NS,
