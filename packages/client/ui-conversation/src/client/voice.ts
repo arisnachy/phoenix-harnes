@@ -158,8 +158,7 @@ async function ensureVoiceRealtimeSession(): Promise<boolean> {
   if (voiceAssistantRealtimeOpening !== undefined) return voiceAssistantRealtimeOpening
 
   const generation = voiceAssistantRealtimeEpoch
-  let opening!: Promise<boolean>
-  opening = (async () => {
+  const opening = (async () => {
     const key = `kira-live:${crypto.randomUUID()}`
     const peer = new RTCPeerConnection()
     const audio = document.createElement('audio')
@@ -271,11 +270,11 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
     const request = realtime && remote.realtimeSpeak !== undefined && voiceAssistantRealtimeSession !== undefined
       ? remote.realtimeSpeak({ key: voiceAssistantRealtimeSession.key, text: planned.text })
       : remote.conversationSpeak({
-          key: messageKey,
-          sequence,
-          text: planned.text,
-          final: isFinalSegment,
-        })
+        key: messageKey,
+        sequence,
+        text: planned.text,
+        final: isFinalSegment,
+      })
 
     void request.then((result) => {
       if (remoteSpeech !== state || state.generation !== generation) return
