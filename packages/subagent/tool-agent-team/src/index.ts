@@ -206,6 +206,17 @@ function callingAgent(agent: Agent | undefined, toolName: string): Agent {
   return agent
 }
 
+
+function assertKiraPersonaName(name: string): void {
+  const normalized = name.trim().toLocaleLowerCase()
+  if (/^(?:gpt(?:-|$)|luna(?:-|$)|sol(?:-|$)|openai(?:-|$)|codex(?:-|$)|claude(?:-|$)|deepseek(?:-|$)|model(?:-|$))/u.test(normalized)) {
+    throw new Error(
+      'Visible Kira Team members must use a stable Kira persona name, not a model/provider label. '
+      + 'Use a codename such as atlas, argo, orion, zenith, nova, helix, or another KIRA roster identity.',
+    )
+  }
+}
+
 /** Register the complete Team tool set in one exact Agent scope. */
 function install(agent: Agent, ctx: Context, config: Required<Config>): () => void {
   const scoped = agent.ctx
@@ -225,7 +236,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       name: 'spawn_teammate',
       description: 'Create one named, durable teammate. Only the Team Lead may call this tool.',
       parameters: {
-        name: { type: 'string', required: true, description: 'Unique lower-kebab-case teammate name.' },
+        name: { type: 'string', required: true, description: 'Unique lower-kebab-case Kira persona name. Never use model/provider labels such as luna-1, gpt-6-luna, sol, or codex.' },
         description: { type: 'string', required: true, description: 'Short description of the delegated responsibility.' },
         prompt: { type: 'string', required: true, description: 'Complete initial task for the teammate.' },
         context: {
@@ -244,6 +255,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       output: jsonOutput(SPAWN_VALUE_SCHEMA),
       async execute(args, exec) {
         const agent = callingAgent(exec.agent, 'spawn_teammate')
+        assertKiraPersonaName(args.name)
         const context = args.context ?? 'fresh'
         const explicitProfile = 'model_profile' in args && typeof args.model_profile === 'string'
           ? args.model_profile
