@@ -18,6 +18,18 @@ const EmojiPicker = lazy(async () => {
   } }
 })
 const QUICK = ['👍', '❤️', '😂', '😮', '😢', '😡', '👀', '✅', '🎉', '🔥', '🤔', '💡', '👏', '🙌', '🚀', '💯']
+
+function AddReactionIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+      <path d="M15.8 7.4A7.5 7.5 0 1 0 18.5 13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <path d="M7.7 14.1c.9 1.1 2.1 1.7 3.5 1.7 1.5 0 2.8-.7 3.7-1.9" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="8.5" cy="10.2" r="1" fill="currentColor" />
+      <circle cx="13.8" cy="10.2" r="1" fill="currentColor" />
+      <path d="M19 2.5v5M16.5 5h5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  )
+}
 export interface TeamMessageActionsInjected {
   react: (messageId: string, emoji: string, active: boolean) => Promise<void>
   reply: (messageId: string, authorId: string, authorName: string, preview: string) => void
@@ -75,7 +87,9 @@ export function TeamMessageActions({
           activity={undefined} running={false} pending={false} ready />
       </span>)}{emoji} {people.length}
     </button>)}
-    <button type="button" className={css.reaction} aria-label={t('chat.addReaction')} disabled={historical} title={historical ? t('chat.historical') : undefined} aria-expanded={open} onClick={() => { setOpen(!open) }}>🙂+</button>
+    <button type="button" className={css.reactionAdd} aria-label={t('chat.addReaction')} disabled={historical}
+      title={historical ? t('chat.historical') : t('chat.addReaction')} aria-expanded={open}
+      data-add-reaction onClick={() => { setOpen(!open) }}><AddReactionIcon /></button>
     {authorKind === 'agent' && <button type="button" className={css.reaction} disabled={historical} onClick={() => { reply(messageId, authorId, authorName ?? '', replyPreview ?? '') }}>{t('chat.reply')}</button>}
     {open && <div className={css.emojiMenu}>
       {QUICK.map(emoji => <button type="button" key={emoji} disabled={pending || historical} onClick={() => { void toggle(emoji) }}>{emoji}</button>)}
