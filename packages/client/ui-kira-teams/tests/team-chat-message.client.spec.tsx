@@ -40,8 +40,8 @@ describe('KIRA Team chat message', () => {
   it('resolves stable personas without exposing model ids', () => {
     expect(teamIdentityOf('lead', 'root')).toMatchObject({ name: 'Kira', role: 'Coordinación', kind: 'kira' })
     expect(teamIdentityOf('KÍRA', 'root')).toMatchObject({ name: 'Kira', kind: 'kira' })
-    expect(teamIdentityOf('forja', 'worker-a')).toMatchObject({ name: 'Atlas', role: 'Programación', kind: 'atlas' })
-    expect(teamIdentityOf('la-forja', 'worker-a')).toMatchObject({ name: 'Atlas', kind: 'atlas' })
+    expect(teamIdentityOf('forja', 'worker-a')).toMatchObject({ name: 'La Forja', role: 'Programación', kind: 'atlas' })
+    expect(teamIdentityOf('la-forja', 'worker-a')).toMatchObject({ name: 'La Forja', kind: 'atlas' })
     expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Recuperación / soporte', kind: 'argo' })
     expect(teamIdentityOf('gpt-6-luna', 'worker-c').name).not.toContain('GPT')
 
@@ -64,7 +64,7 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('Kira')).toBeTruthy()
     expect(view.getByText('Coordinación')).toBeTruthy()
     expect(view.getByText('Asignación')).toBeTruthy()
-    expect(view.getByText('→ Atlas')).toBeTruthy()
+    expect(view.getByText('→ La Forja')).toBeTruthy()
     expect(view.container.querySelector('[data-avatar="kira"]')).toBeTruthy()
     expect(view.container.querySelector('[data-agent-portrait-image]')).toBeTruthy()
   })
@@ -92,7 +92,7 @@ describe('KIRA Team chat message', () => {
       reactions,
     })} />)
 
-    expect(view.getByText('Atlas')).toBeTruthy()
+    expect(view.getByText('La Forja')).toBeTruthy()
     expect(view.getByText('Programación')).toBeTruthy()
     expect(view.getByText('Bloqueo')).toBeTruthy()
     expect(view.getByText('→ Kira')).toBeTruthy()
