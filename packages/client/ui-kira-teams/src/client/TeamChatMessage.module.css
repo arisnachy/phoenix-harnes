@@ -249,8 +249,8 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--dsw-alias-status-success);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-status-success) 12%, transparent);
+  background: var(--dsw-alias-state-success-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dsw-alias-state-success-primary) 12%, transparent);
 }
 
 .emojiMenu {
