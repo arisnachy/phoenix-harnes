@@ -118,6 +118,36 @@
   line-height: 1;
 }
 
+.reactionAdd {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.reactionAdd:hover:not(:disabled),
+.reactionAdd:focus-visible {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 78%, transparent);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.reactionAdd:active:not(:disabled) {
+  transform: scale(.94);
+}
+
+.reactionAdd:disabled {
+  cursor: default;
+  opacity: .45;
+}
+
 .reactionAvatar {
   flex: none;
   width: 24px;
