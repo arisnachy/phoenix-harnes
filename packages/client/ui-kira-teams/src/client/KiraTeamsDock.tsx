@@ -200,8 +200,8 @@ function stablePersonaIndex(value: string, length: number): number {
   return (hash >>> 0) % length
 }
 
-/** Resolve one Team member name + immutable duty to the same visible KIRA persona everywhere. */
-export function kiraTeamSpecialistOf(name: string, description: string): KiraRosterEntry {
+/** Resolve one durable Team member name to the same visible KIRA persona everywhere. */
+export function kiraTeamSpecialistOf(name: string): KiraRosterEntry {
   const key = name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   const direct = ROSTER_BY_SLUG.get(key)
   if (direct !== undefined) return direct
@@ -210,11 +210,6 @@ export function kiraTeamSpecialistOf(name: string, description: string): KiraRos
     const alias = ROSTER_BY_KIND.get(aliasIdentity.kind)
     if (alias !== undefined) return { ...alias, name: aliasIdentity.name }
   }
-  const skill = skillOfText(description)
-  const pool = SKILL_POOLS[skill]
-  const kind = pool[stablePersonaIndex(key, pool.length)]
-  const specialist = kind === undefined ? undefined : ROSTER_BY_KIND.get(kind)
-  if (specialist !== undefined) return specialist
   const fallback = KIRA_ROSTER[stablePersonaIndex(key, KIRA_ROSTER.length)] ?? KIRA_ROSTER[0]
   if (fallback === undefined) throw new Error('KIRA roster must contain at least one specialist')
   return fallback
@@ -230,7 +225,7 @@ function teamNameOf(summary: SessionSummary): string | undefined {
 
 function specialistFor(summary: SessionSummary, occupied: ReadonlySet<ModelAvatarKind>): KiraRosterEntry {
   const teamName = teamNameOf(summary)
-  if (teamName !== undefined) return kiraTeamSpecialistOf(teamName, normalizedWorkText(summary))
+  if (teamName !== undefined) return kiraTeamSpecialistOf(teamName)
   const skill = skillOf(summary)
   for (const kind of SKILL_POOLS[skill]) {
     const entry = ROSTER_BY_KIND.get(kind)
