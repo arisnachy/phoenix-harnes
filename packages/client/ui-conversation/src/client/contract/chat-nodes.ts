@@ -7,7 +7,6 @@ import type {
 export interface KiraTeamReactionChatData {
   readonly reactorId: string
   readonly reactorName: string
-  readonly reactorDescription?: string
   readonly reaction: 'ack' | 'agree' | 'insight' | 'blocked' | 'done'
 }
 
@@ -16,10 +15,8 @@ export interface KiraTeamMessageChatData {
   readonly messageId: string
   readonly senderId: string
   readonly senderName: string
-  readonly senderDescription?: string
   readonly targetId: string
   readonly targetName?: string
-  readonly targetDescription?: string
   readonly purpose?: 'assignment' | 'question' | 'blocker' | 'result' | 'review' | 'decision' | 'update'
   readonly content: readonly unknown[]
   readonly time: number
