@@ -25,14 +25,8 @@ function queued(match: ConversationMatch): KiraTeamMessageChatData | undefined {
     messageId: message.id,
     senderId: message.senderId,
     senderName: message.senderName,
-    ...typeof message.senderDescription === 'string'
-      ? { senderDescription: message.senderDescription }
-      : {},
     targetId: message.targetId,
     ...typeof message.targetName === 'string' ? { targetName: message.targetName } : {},
-    ...typeof message.targetDescription === 'string'
-      ? { targetDescription: message.targetDescription }
-      : {},
     ...typeof message.purpose === 'string'
       && ['assignment', 'question', 'blocker', 'result', 'review', 'decision', 'update'].includes(message.purpose)
       ? { purpose: message.purpose as NonNullable<KiraTeamMessageChatData['purpose']> }
@@ -57,7 +51,6 @@ function delegated(match: ConversationMatch): KiraTeamMessageChatData | undefine
     senderName: 'lead',
     targetId: member.id,
     targetName: member.name,
-    targetDescription: member.description,
     purpose: 'assignment',
     content: [{ type: 'text', text: member.description }],
     time: match.event.time,
@@ -81,9 +74,6 @@ function reaction(match: ConversationMatch): {
     value: {
       reactorId: value.reactorId,
       reactorName: value.reactorName,
-      ...typeof value.reactorDescription === 'string'
-        ? { reactorDescription: value.reactorDescription }
-        : {},
       reaction: value.reaction as KiraTeamReactionChatData['reaction'],
     },
   }
