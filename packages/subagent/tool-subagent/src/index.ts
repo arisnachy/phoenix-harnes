@@ -37,6 +37,14 @@ const ACTIVE_SUBAGENT_GUIDANCE =
   'Para tareas simples trabaja directamente; no dupliques investigación. Mantén la memoria cognitiva, ' +
   'el contexto, la identidad y la síntesis final en el agente principal.'
 
+/** Keep generic delegation out of the visible Kira Team collaboration path. */
+const KIRA_TEAM_ROUTE_GUIDANCE =
+  ' Si las herramientas Agent Teams están disponibles y el usuario pide Kira Team, equipo de Kira, ' +
+  'dinámica de agentes, avatares de agentes, interacción entre Kira y especialistas, o una prueba visible ' +
+  'del equipo, NO uses esta herramienta genérica. Usa spawn_teammate y las herramientas Team para que el ' +
+  'trabajo produzca mensajes, reacciones e identidades reales en el chat. Nunca presentes un hijo genérico ' +
+  'como “Luna 1”, “Luna 2”, “Sol” u otro nombre de modelo; los modelos son motores internos, no miembros visibles.'
+
 /**
  * Child-only instruction for the KIRA live activity surface. The UI never
  * supplies display copy: the child authors the exact sentence that is shown.
@@ -431,7 +439,9 @@ export function apply(ctx: Context, config: Config): void {
         ? continuable
           ? ' This tool runs in the background by default, immediately returns a durable subagent id, and keeps the child conversation available for later turns. When that run settles, the runtime sends the parent a notice containing its outcome and any final assistant message; `send_message` starts a later turn in the same child conversation. Set `run_in_background: false` only when your next action depends on receiving the result.'
           : ' This call waits for the result by default. Set `run_in_background: true` to return a job id; collect with `job_output` and stop with `job_kill`.'
-        : ' This call waits for the subagent and returns its result.') + ACTIVE_SUBAGENT_GUIDANCE,
+        : ' This call waits for the subagent and returns its result.')
+        + ACTIVE_SUBAGENT_GUIDANCE
+        + KIRA_TEAM_ROUTE_GUIDANCE,
       parameters: {
         description: {
           type: 'string',
@@ -651,7 +661,7 @@ export function apply(ctx: Context, config: Config): void {
       order: SUBAGENT_SECTION_ORDER,
       text: context => disposeTool === undefined || ctx.tools.get(toolName, context.scope) === undefined
         ? ''
-        : `Usa ${toolName} para orquestar tareas independientes. No delegues recursivamente ni dupliques exploraciones. Mantén el alcance y responde en español; al finalizar, integra el resultado con evidencia.${ACTIVE_SUBAGENT_GUIDANCE}`,
+        : `Usa ${toolName} para orquestar tareas independientes. No delegues recursivamente ni dupliques exploraciones. Mantén el alcance y responde en español; al finalizar, integra el resultado con evidencia.${ACTIVE_SUBAGENT_GUIDANCE}${KIRA_TEAM_ROUTE_GUIDANCE}`,
     })
   }
 }
