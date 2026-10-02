@@ -80,14 +80,6 @@ jobs:
           pnpm install --frozen-lockfile
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-      - name: Build Phoenix production runtime
-        shell: pwsh
-        run: |
-          pnpm run build
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          node scripts/build-windows-runtime-seed.mjs
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
       - name: Validate bootstrap syntax
         shell: pwsh
         run: |
@@ -194,6 +186,14 @@ jobs:
           $rendered = Get-Content -LiteralPath $html -Raw
           if (-not $rendered.Contains('<h1>Phoenix reader</h1>')) { throw 'Markdown heading was not rendered' }
           if (-not $rendered.Contains('<strong>Markdown OK</strong>')) { throw 'Markdown strong text was not rendered' }
+
+      - name: Build Phoenix production runtime
+        shell: pwsh
+        run: |
+          pnpm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/build-windows-runtime-seed.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Desktop contract tests
         shell: pwsh
