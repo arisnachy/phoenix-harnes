@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ProactivityAttentionItem } from '../src/client/contract/slots.ts'
-import { parseProactivityAttention, refreshProactivityAttention } from '../src/client/skeleton/ProactivityAttention.ts'
+import { recordProactivityAttention, parseProactivityAttention, refreshProactivityAttention } from '../src/client/skeleton/ProactivityAttention.ts'
 
 const ROW = {
   id: 't:result:1',
+  revision: 'revision-1',
   taskId: 't',
   kind: 'result',
   title: ' NBA intelligence ',
@@ -20,7 +21,7 @@ describe('proactivity attention client bridge', () => {
     })))
     expect(rows).toHaveLength(8)
     expect(rows?.[0]).toEqual({
-      id: 'row-0', taskId: 'task-0', kind: 'result', title: 'NBA intelligence',
+      id: 'row-0', revision: 'revision-1', taskId: 'task-0', kind: 'result', title: 'NBA intelligence',
       at: '2026-09-29T19:00:00.000Z', score: 110,
     })
     expect(rows?.[1]?.detail).toBe('Two games changed.')
@@ -49,4 +50,15 @@ describe('proactivity attention client bridge', () => {
     await refreshProactivityAttention(undefined, store)
     expect(store.getSnapshot()).toHaveLength(1)
   })
+})
+
+it('removes the selected revision only after the host commits its receipt', async () => {
+  const rows = parseProactivityAttention([ROW])!
+  const store = createSnapshotStore<readonly ProactivityAttentionItem[]>(rows)
+  const call = vi.fn().mockResolvedValueOnce({ ok: false }).mockResolvedValueOnce({ ok: true, value: null })
+  await recordProactivityAttention({ rpc: { call } } as never, store, rows[0]!, 'handled')
+  expect(store.getSnapshot()).toHaveLength(1)
+  await recordProactivityAttention({ rpc: { call } } as never, store, rows[0]!, 'handled')
+  expect(store.getSnapshot()).toHaveLength(0)
+  expect(call).toHaveBeenLastCalledWith('/phoenix-tasks', 'attention-record', { itemId: ROW.id, revision: ROW.revision, state: 'handled' })
 })

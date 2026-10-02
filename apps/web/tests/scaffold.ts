@@ -433,6 +433,7 @@ export async function launchWebScaffold(options: LaunchOptions = {}): Promise<We
       },
     },
     { id: 'session-persistence-jsonl', config: { root: persistenceRoot } },
+    { id: 'hardness-adapters', config: { modelTools: false, judgeProvider: 'spawn', taskLedgerPath: join(workspaceCwd, '.phoenix-tasks.json'), wakeLedgerPath: join(workspaceCwd, '.phoenix-wake.json'), mailDirectory: join(workspaceCwd, '.phoenix-mail'), mailCredentialRef: 'PHOENIX_TEST_AGENTMAIL_API_KEY' } },
     // Content search is enabled here although the shipped bundles default it
     // off (`openAt: never`, pinned by apps/cli/tests/lazy-search-startup):
     // the seeded-session scenarios navigate by content search, and these e2e

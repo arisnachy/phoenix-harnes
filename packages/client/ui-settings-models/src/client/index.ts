@@ -1,3 +1,4 @@
+import type { AssistantMailClient, AssistantMailSnapshot } from './AssistantMailPanel.tsx'
 /**
  * Models, Connectors, and product-onboarding settings plugin, browser half.
  * It registers independent Models and Connectors pages plus the ordered
@@ -212,8 +213,23 @@ export function apply(ctx: ClientContext): void {
     localModel,
     localT,
   })
+  const assistantMail: AssistantMailClient = { call: async (action, input = {}) => {
+    const result = await connection.rpc.call('/phoenix-mail', action, input)
+    if (!result.ok) throw new Error(result.error.message)
+    const value: unknown = result.value
+    const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
+    const stringOrAbsent = (value: unknown): boolean => value === undefined || typeof value === 'string'
+    if (!record(value) || !record(value.account) || !Array.isArray(value.jobs) || !Array.isArray(value.account.contacts)
+      || typeof value.account.state !== 'string' || typeof value.connection !== 'string'
+      || !(value.account.contacts as unknown[]).every(contact => typeof contact === 'string')
+      || ![value.account.inboxId, value.account.ownerEmail, value.account.sessionId].every(stringOrAbsent)
+      || !(value.jobs as unknown[]).every(job => record(job) && typeof job.id === 'string' && typeof job.title === 'string' && typeof job.state === 'string' && stringOrAbsent(job.summary) && stringOrAbsent(job.error))
+      || (value.startup !== undefined && (!record(value.startup) || typeof value.startup.supported !== 'boolean' || typeof value.startup.enabled !== 'boolean'))) throw new Error('Invalid local mailbox response')
+    return value as unknown as AssistantMailSnapshot
+  } }
   const connectorsInjected = (): ConnectorsSettingsSectionProps => ({
     api: connection.api.authorization,
+    assistantMail,
     t,
     connectorT,
     chatGptWeb: chatGptWebClient(ctx),

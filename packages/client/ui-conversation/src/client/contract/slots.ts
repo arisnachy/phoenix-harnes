@@ -512,6 +512,7 @@ export type ChatStore = ReturnType<typeof createChatStore>
 /** One non-intrusive proactive signal shown only in the blank-session Hero. */
 export interface ProactivityAttentionItem {
   readonly id: string
+  readonly revision: string
   readonly taskId: string
   readonly kind: 'result' | 'failure' | 'upcoming'
   readonly title: string
@@ -528,6 +529,8 @@ export interface ConversationUserProfileState {
 
 /** Business callbacks injected into the conversation slot. */
 export interface ConversationInjected {
+  /** Persist acknowledgement of the exact home-feed revision. */
+  recordAttention: (item: ProactivityAttentionItem, state: 'handled' | 'dismissed') => Promise<void>
   /**
    * Connect the selected Workspace and open its reusable/new blank session.
    * When a blank session is already current, carry its draft to the target.

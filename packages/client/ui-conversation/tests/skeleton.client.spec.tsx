@@ -152,10 +152,11 @@ function mount(
     { id: 'chat', label: 'Chat' },
     { id: 'trajectory', label: 'Trajectory' },
   ]
+  const viewListeners = new Set<() => void>()
   const views = {
     list: () => viewTabs,
-    subscribe: () => () => {},
-    version: () => 1,
+    subscribe: (listener: () => void) => { viewListeners.add(listener); return () => { viewListeners.delete(listener) } },
+    version: () => viewTabs.map(view => view.id).join('|').length,
   }
   /** Owner share handed to the two composer tool-row seats, per render. */
   const seatOwners: { key: string; owner: unknown }[] = []
@@ -270,6 +271,7 @@ function mount(
     useComposerBlock: select => select(options.composerBlock),
     useUserProfile: bindSnapshotSelector(userProfile),
     useProactivityAttention: bindSnapshotSelector(proactivityAttention),
+    recordAttention: async () => {},
     useInput,
     inputActions,
     renderSlot,
@@ -281,7 +283,7 @@ function mount(
   return {
     view, chat, sink, retargetWorkspace, session, slotCalls, lineageOwners, seatOwners, open,
     pickerOwner: () => pickerOwner,
-    rerender: () => { view.rerender(<ConversationRoot {...props} />) },
+    rerender: () => { act(() => { for (const listener of viewListeners) listener() }); view.rerender(<ConversationRoot {...props} />) },
   }
 }
 
@@ -432,8 +434,8 @@ describe('ConversationRoot resident composer', () => {
     const header = b.view.container.querySelector('header')
     expect(host).not.toBeNull()
     expect(header?.getAttribute('aria-hidden')).toBe('true')
-    expect(b.view.getByText('PHOENIX')).toBeTruthy()
-    expect(b.view.getByText('预览版')).toBeTruthy()
+    expect(b.view.getByRole('heading', { level: 1 })).toBeTruthy()
+    expect(b.view.getByText('¿Qué quieres construir hoy en Phoenix?')).toBeTruthy()
     expect(b.view.queryByTestId('view-chat')).toBeNull()
     // The same machine-backed textarea is live in the hero, and the
     // persistence mirror stays bound (ConversationSession mounts chrome-hidden
@@ -481,7 +483,7 @@ describe('ConversationRoot resident composer', () => {
     // blank the column for the history round-trip.
     const root = b.view.container.querySelector('[data-phase]')
     expect(root?.getAttribute('data-phase')).toBe('hero')
-    expect(b.view.getByText('PHOENIX')).toBeTruthy()
+    expect(b.view.getByRole('heading', { level: 1 })).toBeTruthy()
     expect(b.view.getByRole('textbox')).toBeTruthy()
   })
 

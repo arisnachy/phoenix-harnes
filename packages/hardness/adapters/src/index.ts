@@ -1,3 +1,6 @@
+import { dirname } from 'node:path'
+import { installAssistantMail } from './assistant-mail-runtime.ts'
+import { AttentionStore } from './proactivity-attention-store.ts'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -180,6 +183,16 @@ export interface Config {
   privateWorkResultChars?: number
   /** Configured mail identity reference used for office mail sent on the user's behalf. */
   userMailIdentity?: string
+  /** Local mailbox settings; no provider activity until an owner enrolls. */
+  mailDirectory?: string
+  /** Credential service reference for the local AgentMail key; never a secret value. */
+  mailCredentialRef?: string
+  /** Local mailbox reconciliation interval in milliseconds; defaults to 60,000. */
+  mailPollMs?: number
+  /** Provider request deadline in milliseconds; defaults to 30,000. */
+  mailTimeoutMs?: number
+  /** Active mail mission deadline in milliseconds; defaults to 600,000 before owner review. */
+  mailWorkTimeoutMs?: number
   /** Configured mail identity reference Phoenix uses when communicating as itself. */
   harnessMailIdentity?: string
 }
@@ -197,6 +210,11 @@ export const Config: z<Config> = z.object({
   privateWorkResultChars: z.number().default(12_000),
   userMailIdentity: z.string().default(''),
   harnessMailIdentity: z.string().default(''),
+  mailDirectory: z.string().default(''),
+  mailCredentialRef: z.string().default('PHOENIX_AGENTMAIL_API_KEY'),
+  mailPollMs: z.number().min(1000).default(60_000),
+  mailTimeoutMs: z.number().min(1000).default(30_000),
+  mailWorkTimeoutMs: z.number().min(1000).default(600_000),
 })
 
 type Disposer = () => void
@@ -396,17 +414,21 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         disposers.push(ctx.tools.register(tool))
       }
     } else {
+      const userMailIdentity = configuredIdentity(config.userMailIdentity)
+      const harnessMailIdentity = configuredIdentity(config.harnessMailIdentity)
       const runtimeConfig = {
         pollMs: config.taskPollMs ?? 15_000,
         privateWorkProvider: config.privateWorkProvider?.trim() || 'spawn',
         privateWorkResultChars: config.privateWorkResultChars ?? 12_000,
-        ...(configuredIdentity(config.userMailIdentity) === undefined ? {} : { userMailIdentity: configuredIdentity(config.userMailIdentity)! }),
-        ...(configuredIdentity(config.harnessMailIdentity) === undefined ? {} : { harnessMailIdentity: configuredIdentity(config.harnessMailIdentity)! }),
+        ...(userMailIdentity === undefined ? {} : { userMailIdentity }),
+        ...(harnessMailIdentity === undefined ? {} : { harnessMailIdentity }),
         resolveDefaultMailRecipient: () => connectedGoogleEmail(authorization),
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
-      disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs))
+      const mailbox = installAssistantMail(ctx, { directory: config.mailDirectory?.trim() || join(dirname(taskLedgerPath(config)), 'phoenix-mail'), credentialRef: config.mailCredentialRef ?? 'PHOENIX_AGENTMAIL_API_KEY', pollMs: config.mailPollMs ?? 60_000, timeoutMs: config.mailTimeoutMs ?? 30_000, workTimeoutMs: config.mailWorkTimeoutMs ?? 600_000 }, runtimeConfig)
+      disposers.push(() => { void mailbox.dispose() })
+      disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs, new AttentionStore(`${taskLedgerPath(config)}.attention.json`), () => mailbox.attention()))
       wake.bindExecutor(createWakeExecutor(agents))
       disposers.push(installWakeRuntime(ctx, wake.engine))
       disposers.push(installConnectorEventBridge(ctx, mcpConnectors))

@@ -35,7 +35,7 @@ describe('preferredNameForHero', () => {
 
 describe('heroAttentionDetail', () => {
   it('prefers task-specific copy and keeps generic states useful', () => {
-    const base = { id: 'a', taskId: 't', title: 'Task', at: '2026-09-29T16:00:00.000Z', score: 1 } as const
+    const base = { id: 'a', revision: 'r1', taskId: 't', title: 'Task', at: '2026-09-29T16:00:00.000Z', score: 1 } as const
     expect(heroAttentionDetail({ ...base, kind: 'result', detail: '  Material change  ' })).toBe('Material change')
     expect(heroAttentionDetail({ ...base, kind: 'failure' })).toBe('Phoenix no pudo completar esta tarea.')
     expect(heroAttentionDetail({ ...base, kind: 'upcoming' })).toBe('Se acerca esta tarea.')
@@ -43,7 +43,7 @@ describe('heroAttentionDetail', () => {
   })
 
   it('turns a clicked signal into an actionable Phoenix draft', () => {
-    const base = { id: 'a', taskId: 't', title: 'PHOENIX main guard', at: '2026-09-29T16:00:00.000Z', score: 1 } as const
+    const base = { id: 'a', revision: 'r1', taskId: 't', title: 'PHOENIX main guard', at: '2026-09-29T16:00:00.000Z', score: 1 } as const
     expect(heroAttentionPrompt({
       ...base,
       kind: 'failure',

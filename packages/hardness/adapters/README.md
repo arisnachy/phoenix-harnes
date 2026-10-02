@@ -4,9 +4,21 @@ English | [中文](README.zh.md)
 
 Projects metadata from existing PHOENIX tools and skills into the HARDNESS Tool Atlas.
 
-The adapters do not execute tools, load skill bodies, or grant permissions; each source registry retains authority.
+The capability index does not execute tools, load skill bodies, or grant permissions; each source registry retains authority.
 
 The adapter separates host-owned indexing from model-facing tools. The host composition mounts `modelTools: false` to index capabilities and install the shared mission runtime once. Full agent presets mount `modelTools: true` to expose `hardness_run`, `connector_list`, and durable scheduled-task tools in their own scope without duplicating the shared HARDNESS registry. Minimal presets can therefore keep a deliberately small catalog.
+
+## Local assistant mailbox
+
+The resident Web host can enroll a Phoenix-owned inbox on AgentMail's included `agentmail.to` domain from Settings → Connectors → Correo propio de Phoenix. Signup returns the actual provider address; verification sent to the nominated human owner must finish before incoming mail becomes work. An existing free-domain account can instead be connected with its API key and a separate owner challenge. Secrets stay in the credential service, outside chat, account files and status replies. No custom domain, paid upgrade or public webhook is provisioned.
+
+Only provider-authenticated incoming mail from the verified owner or explicitly configured contacts creates a job. Automatic messages, Phoenix's own mail, blocked/spam/unauthenticated messages and unlisted senders do not invoke a model. Email contents cannot grant permissions. Kira executes in a dedicated persisted session using the selected coordinator's model, workspace and preset; existing worker selection and normal approval/finalization gates apply. `phoenix_mail_complete` records a verified reply proposal; it cannot send mail or complete another session's job. Replies target the authorized sender, overriding Reply-To and excluding CC.
+
+Reception belongs to the local host, not the browser. Closing the chat leaves it running; shutting down the PC stops execution. On startup, polling reconciles missed mail and persisted jobs. Outgoing WebSocket notifications reduce latency and reconnect after interruption. Invalid message reads do not starve other jobs; failed reads are retried on later polls. Windows desktop installs optionally create/remove only the owned **PHOENIX Assistant** login shortcut, using the durable installation root and a hidden background launch without opening the browser.
+
+Local configuration: `mailDirectory` defaults to `phoenix-mail` beside the task ledger; `mailCredentialRef` defaults to `PHOENIX_AGENTMAIL_API_KEY`; `mailPollMs`, `mailTimeoutMs` and `mailWorkTimeoutMs` default to 60,000, 30,000 and 600,000 milliseconds. Account, job and outbox files use serialized atomic private writes. Existing-account verification expires after 24 hours or ten attempts. Ambiguous signup is never automatically repeated. Reply retries retain identical content and idempotency keys; after the provider's 24-hour idempotency window an unconfirmed send is held for owner review rather than risking duplication. Provider quota stops work without a paid upgrade. Model usage retains its normal costs and limits.
+
+Home attention stores receipts beside the task ledger. Opening or dismissing a current suggestion hides that exact revision across reloads; new material revisions remain eligible. Receipts are applied before the eight-row endpoint limit. A successful newer run supersedes an old failure. Completed email results and concrete blockers join the existing home feed without a new dashboard.
 
 ## Durable proactive tasks
 
@@ -101,5 +113,5 @@ The projected catalog and proactivity protocol are cache-friendly while source s
 
 - External extension execution remains governed by the Capability Broker and isolated package-host contract rather than being activated eagerly at startup.
 - Durable mission tracing requires a live agent session; direct unit-level runner calls without one remain unrecorded and are not production proof.
-- Email identities are configuration references only; this package does not create external mailbox accounts. The selected provider/tool must already be configured and authorized.
+- Legacy scheduled email identities remain configuration references requiring authorized mail tools. The local assistant mailbox separately enrolls an included-domain AgentMail account; live signup and verification require the owner and provider availability. Incoming task text is bounded; attachments are not automatically executed.
 - Surprise visibility hides unrevealed content from ordinary task listings and compact tool presentation, but the durable ledger intentionally remains auditable to an authorized operator.

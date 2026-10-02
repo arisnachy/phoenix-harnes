@@ -754,6 +754,7 @@ function startHost() {
     env: {
       ...hydratePhoenixEnvironment(process.env),
       PHOENIX_RUNTIME_ROOT: runtimeRoot,
+      PHOENIX_INSTALL_ROOT: root,
       PHOENIX_UPDATE_SUPERVISED: '1',
     },
   })

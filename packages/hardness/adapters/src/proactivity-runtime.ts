@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto'
+import { AttentionStore, parseAttentionReceipt } from './proactivity-attention-store.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, AgentRegistry } from '@phoenix-ai/dsh-agent'
 import { boundContextSummary, createUserMessage, type ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -44,6 +46,7 @@ export type ProactivityAttentionKind = 'result' | 'failure' | 'upcoming'
 /** Browser-safe attention row. Task instructions, credentials, and raw event payloads never cross this projection. */
 export interface ProactivityAttentionItem {
   readonly id: string
+  readonly revision: string
   readonly taskId: string
   readonly kind: ProactivityAttentionKind
   readonly title: string
@@ -84,7 +87,13 @@ interface ExecutionAgentLease {
   release(): Promise<void>
 }
 
-async function acquireExecutionAgent(
+/** Acquire the selected coordinator without substituting another workspace.
+ * @param agents Live/resumable registry.
+ * @param targetAgentId Original selected session, when configured.
+ * @param config Persisted-preset composition policy.
+ * @returns Owned agent lease.
+ */
+export async function acquireExecutionAgent(
   agents: ProactivityAgentRegistry,
   targetAgentId: string | undefined,
   config: ProactivityRuntimeConfig,
@@ -432,7 +441,7 @@ function attentionPriority(task: ProactivityTask): number {
  * Rank task state into the quiet, non-intrusive Phoenix home feed.
  * @param tasks - Visible durable tasks; unrevealed surprises must already be filtered by the engine.
  * @param now - Ranking clock.
- * @returns At most eight browser-safe attention rows, highest-value first.
+ * @returns Browser-safe candidates, highest-value first; the endpoint caps after applying receipts.
  */
 export function buildProactivityAttentionItems(
   tasks: readonly ProactivityTask[],
@@ -448,11 +457,13 @@ export function buildProactivityAttentionItems(
     const mode = task.attentionMode ?? 'auto'
     if (mode === 'off') continue
     const priority = attentionPriority(task)
-    const failed = [...task.history].reverse().find(row => row.status === 'failed')
+    const latestOutcome = task.history.at(-1)
+    const failed = latestOutcome?.status === 'failed' ? latestOutcome : undefined
     const failureDetail = compactAttentionText(task.attentionText)
     if (failed !== undefined && failureDetail !== undefined && Date.parse(failed.finishedAt) >= oldestResult) {
       items.push({
         id: `${task.id}:failure:${failed.finishedAt}`,
+        revision: attentionRevision(task.title, failureDetail, failed.finishedAt),
         taskId: task.id,
         kind: 'failure',
         title: task.title,
@@ -472,6 +483,7 @@ export function buildProactivityAttentionItems(
       const ageHours = Math.max(0, (nowMs - Date.parse(latestDelivery.finishedAt)) / 3_600_000)
       items.push({
         id: `${task.id}:result:${latestDelivery.finishedAt}`,
+        revision: attentionRevision(task.title, summary, latestDelivery.finishedAt),
         taskId: task.id,
         kind: 'result',
         title: task.title,
@@ -490,6 +502,7 @@ export function buildProactivityAttentionItems(
       const detail = compactAttentionText(task.attentionText)
       items.push({
         id: `${task.id}:upcoming:${task.nextRunAt}`,
+        revision: attentionRevision(task.title, detail, task.nextRunAt),
         taskId: task.id,
         kind: 'upcoming',
         title: task.title,
@@ -502,22 +515,43 @@ export function buildProactivityAttentionItems(
 
   return items
     .sort((left, right) => right.score - left.score || Date.parse(right.at) - Date.parse(left.at) || left.id.localeCompare(right.id))
-    .slice(0, MAX_ATTENTION_ITEMS)
+}
+
+function attentionRevision(title: string, detail: string | undefined, at: string): string {
+  return createHash('sha256').update(JSON.stringify([title, detail, at])).digest('hex')
 }
 
 function rpcFailure(message: string): RpcResult<never> {
   return { ok: false, error: { code: 'internal', message, details: {} } }
 }
 
-/** Mount the read-only loopback endpoints used by the browser task and attention surfaces. */
-function installProactivityRpc(connection: HostConnectionHandle, engine: ProactivityEngine): () => Promise<void> {
-  return connection.rpc.handle('/phoenix-tasks', async (endpoint): Promise<RpcResult<readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[]>> => {
+/** Mount the loopback endpoints used by the browser task and attention surfaces. */
+function installProactivityRpc(connection: HostConnectionHandle,
+  engine: ProactivityEngine,
+  attention?: AttentionStore,
+  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>): () => Promise<void> {
+  return connection.rpc.handle('/phoenix-tasks', async (endpoint, input): Promise<RpcResult<readonly ProactivityTaskView[] | readonly ProactivityAttentionItem[] | null>> => {
     try {
       // `list()` intentionally omits surprises until reveal time. Hidden task
       // content therefore never crosses the browser transport ahead of time.
       const tasks = await engine.list()
       if (endpoint === 'list') return { ok: true, value: tasks.map(taskView) }
-      if (endpoint === 'attention') return { ok: true, value: buildProactivityAttentionItems(tasks) }
+      if (endpoint === 'attention') {
+        const items = [...buildProactivityAttentionItems(tasks),
+          ...await extraAttention?.() ?? []].sort((a,
+          b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at))
+        return { ok: true, value: (attention === undefined ? items : await attention.filter(items)).slice(0, MAX_ATTENTION_ITEMS) }
+      }
+      if (endpoint === 'attention-record' && attention !== undefined) {
+        const receipt = parseAttentionReceipt(input)
+        if (receipt === undefined) return rpcFailure('invalid attention receipt')
+        const items = [...buildProactivityAttentionItems(tasks),
+          ...await extraAttention?.() ?? []].sort((a,
+          b) => b.score - a.score || Date.parse(b.at) - Date.parse(a.at))
+        if (!items.some(item => item.id === receipt.itemId && item.revision === receipt.revision)) return rpcFailure('attention revision is no longer current')
+        await attention.record(receipt)
+        return { ok: true, value: null }
+      }
       return rpcFailure(`unknown Phoenix tasks endpoint: ${endpoint}`)
     } catch (error: unknown) {
       return rpcFailure(error instanceof Error ? error.message : String(error))
@@ -532,9 +566,15 @@ function installProactivityRpc(connection: HostConnectionHandle, engine: Proacti
  * @param ctx Cordis context that owns services, lifecycle events, and the host connection.
  * @param engine Durable proactivity engine whose scheduled work is pumped.
  * @param pollMs Interval between due-task and retry scans.
+ * @param attention Durable home-feed receipts.
+ * @param extraAttention Material outcomes from the local assistant mailbox.
  * @returns A disposer that stops polling and unmounts lifecycle/RPC handlers.
  */
-export function installProactivityRuntime(ctx: Context, engine: ProactivityEngine, pollMs: number): () => void {
+export function installProactivityRuntime(ctx: Context,
+  engine: ProactivityEngine,
+  pollMs: number,
+  attention?: AttentionStore,
+  extraAttention?: () => Promise<readonly ProactivityAttentionItem[]>): () => void {
   requirePositive(pollMs, 'pollMs')
   let disposed = false
   let pumping = false
@@ -550,7 +590,7 @@ export function installProactivityRuntime(ctx: Context, engine: ProactivityEngin
     if (previous !== undefined) void previous()
     if (connection === undefined) return
     activeConnection = connection
-    rpcDispose = installProactivityRpc(connection, engine)
+    rpcDispose = installProactivityRpc(connection, engine, attention, extraAttention)
   }
 
   const pump = async (): Promise<void> => {

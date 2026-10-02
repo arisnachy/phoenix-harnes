@@ -4,9 +4,21 @@
 
 将 PHOENIX 现有 tools 与 skills 的 metadata 投影到 HARDNESS Tool Atlas。
 
-适配器不会执行 tools、加载 skill 正文或授予权限；每个源 registry 仍保留其 authority。
+Capability index 不会执行 tools、加载 skill 正文或授予权限；每个源 registry 仍保留其 authority。
 
 适配器将 host 负责的索引与面向模型的工具分开。Host composition 使用 `modelTools: false`，只索引 capability 并安装一次共享的 mission runtime。完整 Agent preset 使用 `modelTools: true`，在自己的 scope 中提供 `hardness_run` 与 `connector_list`，不会重复注册共享的 HARDNESS registry。因此 minimal preset 可以保持有意精简的工具目录。
+
+## 本地助手邮箱
+
+驻留 Web host 可在 Settings → Connectors → Correo propio de Phoenix 中注册 Phoenix 自有邮箱，使用 AgentMail 免费方案包含的 `agentmail.to` 域名。注册显示服务商实际返回的地址；指定的人类所有者必须先完成邮件验证，收到的邮件才会成为任务。已有免费域名账户可用 API key 连接，再单独验证所有者。密钥保存在 credential service 中，不进入聊天、账户文件或状态响应。不创建自定义域名、付费升级或公开 webhook。
+
+只有经服务商认证、来自已验证所有者或显式授权联系人的入站邮件才能创建任务。自动邮件、Phoenix 自身邮件、被阻止、垃圾、未认证邮件及未授权发件人不会调用模型。邮件正文不能授予权限。Kira 使用所选协调者的模型、工作目录和 preset，在独立持久会话中执行任务；沿用现有子代理选择、审批及正常回合完成规则。`phoenix_mail_complete` 只记录经验证的回复提议，不能发送邮件，也不能完成其他会话的任务。回复仅发给授权发件人，覆盖 Reply-To 并排除 CC。
+
+收件由本地 host 持有，不由浏览器持有。关闭聊天后 host 继续运行；关闭 PC 后停止执行。启动时轮询补收邮件并恢复持久任务。出站 WebSocket 通知降低延迟，断线后重新连接。单封邮件读取失败不会阻塞其他任务；后续轮询会重试。Windows 桌面安装可选择创建或删除仅由 Phoenix 持有的 **PHOENIX Assistant** 登录快捷方式，从持久安装目录隐藏启动后台进程，不打开浏览器。
+
+本地配置：`mailDirectory` 默认为 task ledger 旁的 `phoenix-mail`；`mailCredentialRef` 默认为 `PHOENIX_AGENTMAIL_API_KEY`；`mailPollMs`、`mailTimeoutMs`、`mailWorkTimeoutMs` 默认分别为 60,000、30,000、600,000 毫秒。账户、任务和 outbox 使用串行原子私有文件写入。已有账户验证在 24 小时或十次尝试后失效。注册结果不确定时不会自动重复注册。回复重试保持相同正文与幂等键；超过服务商 24 小时幂等窗口仍未确认的发送会等待所有者核查，避免重复邮件。达到免费额度时停止，不升级付费。模型仍遵守原有费用与限制。
+
+主页提示的处理回执保存在 task ledger 旁。打开或关闭当前提示后，同一版本在刷新后仍被隐藏；新的实质版本仍可出现。先过滤回执，再限制 endpoint 最多返回八行。较新成功运行会取代旧错误。邮件结果与具体阻塞原因加入现有主页，不增加新仪表盘。
 
 ## 持久主动任务
 
@@ -100,5 +112,5 @@ protocol section 和 capability metadata 会增加模型 token；单纯索引源
 
 - 外部 extension 执行继续由 Capability Broker 与隔离 package-host contract 管理，不会在启动时被 eager activate。
 - 持久化 mission trace 需要 live agent session；没有 session 的直接 runner 单元调用不会记录，也不能作为 production proof。
-- Email identity 只是配置引用；本包不会创建外部 mailbox 账户。所选 provider/tool 必须事先完成配置并获得授权。
+- 旧版定时邮件 identity 仍是配置引用，需要已授权的邮件工具。本地助手邮箱单独注册 AgentMail 免费域名账户；真实注册和验证需要所有者及服务商可用。入站任务正文有长度限制，附件不会自动执行。
 - `surprise` visibility 会从普通 task listing 与 compact tool presentation 中隐藏尚未 reveal 的内容，但持久 ledger 会有意保留，以便获授权的 operator 审计。

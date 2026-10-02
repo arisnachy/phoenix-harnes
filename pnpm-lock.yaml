@@ -5089,12 +5089,18 @@ importers:
       '@phoenix-ai/dsh-authorization':
         specifier: workspace:^
         version: link:../../credentials/authorization
+      '@phoenix-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
       '@phoenix-ai/dsh-client-connection':
         specifier: workspace:^
         version: link:../../client/connection
       '@phoenix-ai/dsh-code-runtime':
         specifier: workspace:^
         version: link:../../code-runtime/code-runtime
+      '@phoenix-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
       '@phoenix-ai/dsh-hardness':
         specifier: workspace:^
         version: link:../hardness
@@ -5113,12 +5119,18 @@ importers:
       '@phoenix-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@phoenix-ai/dsh-session-persistence':
+        specifier: workspace:^
+        version: link:../../session/session-persistence
       '@phoenix-ai/dsh-skill':
         specifier: workspace:^
         version: link:../../skill/skill
       '@phoenix-ai/dsh-subagent':
         specifier: workspace:^
         version: link:../../subagent/subagent
+      '@phoenix-ai/dsh-subprocess':
+        specifier: workspace:^
+        version: link:../../subprocess/subprocess
       '@phoenix-ai/dsh-tools':
         specifier: workspace:^
         version: link:../../core/tools
