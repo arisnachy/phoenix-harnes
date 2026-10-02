@@ -34,7 +34,7 @@ it('preserves owner input typed before the initial host status resolves', async 
   const owner = screen.getByLabelText('Correo del propietario')
   fireEvent.change(owner, { target: { value: 'owner@example.com' } })
   await act(async () => { resolveStatus({ account: { state: 'not-configured', contacts: [] }, connection: 'disconnected', jobs: [] }); await pending })
-  expect(owner).toHaveValue('owner@example.com')
-  expect(screen.getByRole('button', { name: 'Crear mi correo gratuito' })).not.toBeDisabled()
+  expect((owner as HTMLInputElement).value).toBe('owner@example.com')
+  expect((screen.getByRole('button', { name: 'Crear mi correo gratuito' }) as HTMLButtonElement).disabled).toBe(false)
 })
 
