@@ -384,18 +384,15 @@ function resolveDelegationRun(
 
 export function apply(ctx: Context, config: Config): void {
   const activeBudget = activeBudgetFor(ctx.subagents)
-  const releaseContinuableSlot = (id: string): void => {
-    const release = activeBudget.continuableReleases.get(id)
-    if (release === undefined) return
-    activeBudget.continuableReleases.delete(id)
-    release()
-  }
   // Continuable calls return at inbox acceptance, so their reservation is held
-  // only while the child is actually resident. subagent/end is authoritative
-  // for remote/provider lifecycles; agent/disposed is a local fail-safe that
-  // prevents a vanished child from leaving a phantom Phoenix budget slot.
-  ctx.on('subagent/end', (info) => { releaseContinuableSlot(String(info.id)) })
-  ctx.on('agent/disposed', ({ agent }) => { releaseContinuableSlot(String(agent.id)) })
+  // until that child's residency epoch actually ends.
+  ctx.on('subagent/end', (info) => {
+    const key = String(info.id)
+    const release = activeBudget.continuableReleases.get(key)
+    if (release === undefined) return
+    activeBudget.continuableReleases.delete(key)
+    release()
+  })
   // Direct apply() bypasses Schemastery's numeric constraints. A direct-apply
   // omission stays capless (the schema default only runs through the loader).
   if (config.maxDepth !== 'provider-managed') assertSubagentMaxDepth(config.maxDepth)
