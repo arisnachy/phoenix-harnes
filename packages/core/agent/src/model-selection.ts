@@ -677,7 +677,6 @@ export function installModelSelection(
       // planner selection intentionally becomes Lead + Luna Max execution.
       const directCodexTeam = selection.assembledHasKiraTeam === true
         && selected.provider === 'openai-codex'
-        && isCodexPlannerModel(selected.model)
         && !isPhoenixCodexAutoSelection(selected)
       if (!isPhoenixCodexAutoSelection(selected) && handoff === undefined && !directCodexTeam) {
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
@@ -710,7 +709,16 @@ export function installModelSelection(
         }
       }
       const resolvedHandoff = handoff === undefined
-        ? (directCodexTeam ? defaultExecutionHandoff(selected) : undefined)
+        ? (directCodexTeam
+            ? {
+              afterStep: 1,
+              selection: {
+                provider: 'openai-codex',
+                model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+                reasoningEffort: ReasoningEffortId('max'),
+              },
+            }
+            : undefined)
         : typeof handoff === 'function' ? handoff(selected) : handoff
       const directLeadRescue = directCodexTeam
         && _payload.step > 1
