@@ -61,7 +61,7 @@ import { deepEqualJson, installSettingsSection, settingsNamespace } from '@phoen
 import { PiAiAdapter } from './adapter.ts'
 import { authContextFrom, credentialStoreFrom } from './auth.ts'
 import { catalogProviderIds } from './catalog.ts'
-import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'
+import { CODEX_PROVIDER, CodexLiveCatalog } from './codex-live-catalog.ts'\nimport { codexNativeAccessToken } from './codex-auth.ts'
 import { assertServiceable, CHATGPT_WEB_PROVIDER, chatgptWebDefaults, Config, resolveProfiles } from './config.ts'
 import type { PiAiProviderProfile, ResolvedPiAiProviderProfile } from './config.ts'
 import { discoverModels } from './discovery.ts'
@@ -244,11 +244,10 @@ export function apply(ctx: Context, config: Config): void {
     provider: string,
     profile: ResolvedPiAiProviderProfile,
   ): Promise<string | undefined> => {
-    // openai-codex is the native ChatGPT/Codex session route. Never let an
-    // OPENAI_API_KEY (including a stale apiKeyEnv left by an older Settings
-    // build) override that OAuth session; platform API keys belong to the
-    // separate "openai" provider route.
-    if (provider === CODEX_PROVIDER) return undefined
+    // openai-codex is the native ChatGPT/Codex session route. Ask Codex
+    // itself for the current ChatGPT access JWT; never consult OPENAI_API_KEY
+    // or a stale apiKeyEnv for this route. Codex owns login and refresh.
+    if (provider === CODEX_PROVIDER) return codexNativeAccessToken()
     const ref = profile.apiKeyEnv
     if (ref === undefined) return undefined
     const credentials = ctx.get('credentials')
