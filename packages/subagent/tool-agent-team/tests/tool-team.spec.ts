@@ -124,8 +124,13 @@ describe('dsh-tool-team', () => {
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
     expect(leadPrompt).toContain('real shared work, not role-play')
-    expect(leadPrompt).toContain('Phoenix Auto is explicitly authorized to use this Team path')
-    expect(leadPrompt).toContain('prefer spawn_teammate over legacy subagent delegation')
+    expect(leadPrompt).toContain("Kira is Phoenix's provider-neutral supervision layer")
+    expect(leadPrompt).toContain('root model selected by the user remains the Lead')
+    expect(leadPrompt).toContain('exact selected model stays Lead')
+    expect(leadPrompt).toContain("teammates inherit the Lead's provider/model")
+    expect(leadPrompt).toContain('Optimize in this order: preserve the required quality')
+    expect(leadPrompt).toContain('elapsedMs')
+    expect(leadPrompt).toContain('never role-play')
     expect(leadPrompt).toContain('unused KIRA codename')
     expect(leadPrompt).toContain('vortice, aurora, atlas')
     expect(leadPrompt).toContain('FS_STALE_VERSION')
@@ -135,7 +140,7 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
     expect(leadPrompt).toContain('Use team_react for a lightweight acknowledgement')
     expect(leadPrompt).toContain('must send it to lead with purpose result before ending its turn')
-    expect(leadPrompt).toContain('spawn_teammate is itself the initial assignment')
+    expect(leadPrompt).toContain('spawn_teammate is the initial assignment')
     expect(leadPrompt).toContain('root Phoenix chat is the shared Team room')
     expect(leadPrompt).toContain('route the substantive request with followup_task')
     expect(leadPrompt).toContain('Your Team role is lead')
@@ -280,8 +285,8 @@ describe('dsh-tool-team', () => {
 
     const roster = await execute(ctx, child, 'list_agents', {})
     expect(JSON.parse(text(roster))).toMatchObject([
-      { name: 'lead', role: 'lead' },
-      { name: 'json-worker', role: 'teammate' },
+      { name: 'lead', role: 'lead', elapsedMs: expect.any(Number) },
+      { name: 'json-worker', role: 'teammate', elapsedMs: expect.any(Number) },
     ])
     // Every Team result reaches the model as compact JSON: indentation would
     // spend tokens on every roster, task, and receipt without adding meaning.
