@@ -169,7 +169,15 @@ function withProviderAttribution(provider: Provider, spec: ProviderSpec): Provid
  */
 function routeAuth(spec: ProviderSpec, catalog: Provider | undefined): Provider['auth'] {
   if (catalog === undefined) return { apiKey: harnessApiKeyAuth(spec.displayName) }
-  if (catalog.auth.apiKey !== undefined || !spec.namesCredential) return catalog.auth
+  if (catalog.auth.apiKey !== undefined) return catalog.auth
+  // PHOENIX obtains the openai-codex access JWT from the authenticated Codex
+  // app-server on every cache refresh. Expose an override seat for that
+  // memory-only JWT even when Settings names no apiKeyEnv; this prevents
+  // pi-ai from consulting OPENAI_API_KEY while preserving its Codex wire.
+  if (spec.provider === 'openai-codex') {
+    return { ...catalog.auth, apiKey: harnessApiKeyAuth('Codex native ChatGPT session') }
+  }
+  if (!spec.namesCredential) return catalog.auth
   return { ...catalog.auth, apiKey: harnessApiKeyAuth(spec.displayName) }
 }
 
