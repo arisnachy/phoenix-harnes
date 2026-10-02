@@ -328,7 +328,13 @@ async function readResponse(
   }
 }
 
-function terminate(child: ChildProcessWithoutNullStreams, lines: ReadlineInterface): void {
+/**
+ * Tear down one Codex metadata/auth app-server process without leaking its
+ * Windows grandchild or leaving stdin EPIPE errors unowned.
+ * @param child - spawned Codex app-server process.
+ * @param lines - readline interface consuming app-server stdout.
+ */
+export function terminateCodexProcess(child: ChildProcessWithoutNullStreams, lines: ReadlineInterface): void {
   lines.close()
   // Avoid scheduling a final write on a pipe Codex already closed. The stdin
   // error guard above still owns the unavoidable close/write race.
@@ -412,7 +418,7 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
     if (error instanceof LlmError) throw error
     throw new LlmError('Codex model discovery failed', 'DISCOVERY_FAILED', { cause: error })
   } finally {
-    terminate(child, lines)
+    terminateCodexProcess(child, lines)
   }
 }
 
