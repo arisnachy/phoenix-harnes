@@ -169,7 +169,14 @@ function withProviderAttribution(provider: Provider, spec: ProviderSpec): Provid
  */
 function routeAuth(spec: ProviderSpec, catalog: Provider | undefined): Provider['auth'] {
   if (catalog === undefined) return { apiKey: harnessApiKeyAuth(spec.displayName) }
-  if (catalog.auth.apiKey !== undefined || !spec.namesCredential) return catalog.auth
+  if (catalog.auth.apiKey !== undefined) return catalog.auth
+  // The native Codex route supplies a short-lived ChatGPT JWT per request.
+  // Give pi-ai an override carrier even though its catalog entry is OAuth-only;
+  // this prevents ambient OPENAI_API_KEY discovery from deciding the request.
+  if (spec.provider === 'openai-codex') {
+    return { ...catalog.auth, apiKey: harnessApiKeyAuth('Codex native ChatGPT session') }
+  }
+  if (!spec.namesCredential) return catalog.auth
   return { ...catalog.auth, apiKey: harnessApiKeyAuth(spec.displayName) }
 }
 
