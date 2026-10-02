@@ -246,8 +246,8 @@ class CodexRealtimeProvider implements VoiceRealtimeProvider {
   readonly id = 'codex-realtime'
   readonly priority = 500
   private readonly enabled: boolean
-  private readonly model?: string
-  private readonly configuredVoice?: string
+  private readonly model: string | undefined
+  private readonly configuredVoice: string | undefined
   private readonly timeoutMs: number
   private readonly spawnProcess: CodexRealtimeSpawn
   private client: CodexWireClient | undefined
@@ -424,7 +424,6 @@ function spawnCodex(command: string): ChildProcessWithoutNullStreams {
     cwd: process.cwd(),
     env: codexEnvironment(),
     windowsHide: true,
-    stdio: ['pipe', 'pipe', 'pipe'] as const,
   }
   if (process.platform === 'win32' && command === 'codex') {
     const shell = process.env.ComSpec ?? 'cmd.exe'
