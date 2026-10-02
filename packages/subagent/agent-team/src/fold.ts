@@ -90,10 +90,8 @@ const teamMessageSnapshotSchema = z.object({
   id: teamMessageIdSchema,
   senderId: sessionIdSchema,
   senderName: z.string(),
-  senderDescription: z.string().optional(),
   targetId: sessionIdSchema,
   targetName: z.string().min(1).optional(),
-  targetDescription: z.string().optional(),
   purpose: z.enum(['assignment', 'question', 'blocker', 'result', 'review', 'decision', 'update']).optional(),
   delivery: z.enum(['quiet', 'wakeup']),
   content: z.array(contentBlockSchema),
@@ -133,7 +131,6 @@ const teamReactionSnapshotSchema = z.object({
   messageId: teamMessageIdSchema,
   reactorId: sessionIdSchema,
   reactorName: z.string().min(1),
-  reactorDescription: z.string().optional(),
   reaction: z.enum(['ack', 'agree', 'insight', 'blocked', 'done']),
 }).strict() as z.ZodType<TeamReactionSnapshot>
 
