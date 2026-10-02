@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import Loader from '@phoenix-ai/cordis-plugin-loader'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
-import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@phoenix-ai/dsh-tools'
+import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH, defineTool } from '@phoenix-ai/dsh-tools'
 import type { ToolExecutionResult, ToolExecutionToken } from '@phoenix-ai/dsh-tools'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { WorkflowRunId, WorkflowEngine } from '@phoenix-ai/dsh-workflow'
@@ -10,7 +10,7 @@ import type {
   WorkflowAgentEndInfo, WorkflowAgentInfo, WorkflowResult, WorkflowRun,
   WorkflowRunId as WorkflowRunIdType, WorkflowStartRequest,
 } from '@phoenix-ai/dsh-workflow'
-import { CallId } from '@phoenix-ai/dsh-llm'
+import { CallId, createUserMessage } from '@phoenix-ai/dsh-llm'
 import SubagentRuntime from '@phoenix-ai/dsh-subagent'
 import WorkerThreadWorkflowEngine from '@phoenix-ai/dsh-workflow-worker-thread'
 import * as toolWorkflow from '../src/index.ts'
@@ -106,6 +106,28 @@ function execute(ctx: Context, args: unknown, extra?: {
 }
 
 describe('dsh-tool-workflow', () => {
+  it('redirects explicit visible Kira Team requests away from workflow', async () => {
+    const { ctx, engine, parent, session } = await setup()
+    ctx.tools.register(defineTool({
+      name: 'spawn_teammate',
+      description: 'real Team route',
+      parameters: {},
+      async execute() {
+        return [{ type: 'text', text: 'unused' }]
+      },
+    }))
+    session.append('user/message', createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'Quiero probar la dinámica de agentes con avatares de Kira.' }],
+    }), { surfaceOp: 'append' })
+
+    const result = await execute(ctx, { script: SCRIPT, meta: META }, { agent: parent })
+    expect(result.isError).toBe(true)
+    expect((result.content[0] as { text: string }).text).toContain('spawn_teammate')
+    expect((result.content[0] as { text: string }).text).toContain('Agent Teams')
+    expect(engine.requests).toHaveLength(0)
+  })
+
   it('starts a run with the script/args/parent/signal and renders the completed value', async () => {
     const { ctx, engine, parent } = await setup()
     const controller = new AbortController()
