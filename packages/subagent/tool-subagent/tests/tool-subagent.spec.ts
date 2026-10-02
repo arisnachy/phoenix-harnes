@@ -143,7 +143,7 @@ describe('dsh-tool-subagent', () => {
       description: 'real Team route',
       parameters: {},
       async execute() {
-        return [{ type: 'text', text: 'unused' }]
+        throw new Error('unused test-only Team route')
       },
     }))
     const parent = {
