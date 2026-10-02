@@ -142,6 +142,13 @@ describe('dsh-tool-subagent', () => {
       name: 'spawn_teammate',
       description: 'real Team route',
       parameters: {},
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {},
+        },
+      },
       async execute() {
         throw new Error('unused test-only Team route')
       },
