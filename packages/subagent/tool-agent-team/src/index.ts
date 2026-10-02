@@ -273,7 +273,22 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           : config.modelProfiles[configuredDefault]
         const profileName = explicitProfile
           ?? (defaultProfile?.provider === leadOptions.provider ? configuredDefault : undefined)
-        const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
+        const candidateProfile = profileName === undefined ? undefined : config.modelProfiles[profileName]
+        const kiraUniversalRouting = configuredDefault === 'luna-max'
+        if (kiraUniversalRouting && explicitProfile !== undefined && candidateProfile !== undefined) {
+          const codexLead = leadOptions.provider === 'openai-codex'
+          const allowed = codexLead
+            ? candidateProfile.provider === 'openai-codex'
+            : candidateProfile.provider === leadOptions.provider && candidateProfile.model === leadOptions.model
+          if (!allowed) {
+            throw new Error(
+              codexLead
+                ? 'Kira Team Codex workers must stay on OpenAI Codex; cross-provider model profiles are forbidden.'
+                : 'Kira Team workers for a non-Codex Lead must inherit that exact provider/model; cross-route model profiles are forbidden.',
+            )
+          }
+        }
+        const profile = candidateProfile
         const agentOptions: AgentOptions = profile === undefined
           ? leadOptions
           : {
