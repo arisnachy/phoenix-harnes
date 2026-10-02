@@ -138,6 +138,10 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('spawn_teammate is itself the initial assignment')
     expect(leadPrompt).toContain('root Phoenix chat is the shared Team room')
     expect(leadPrompt).toContain('route the substantive request with followup_task')
+    expect(leadPrompt).toContain('dinámica de agentes')
+    expect(leadPrompt).toContain('avatares')
+    expect(leadPrompt).toContain('Luna 1')
+    expect(leadPrompt).toContain('never use legacy subagent or workflow')
     expect(leadPrompt).toContain('Your Team role is lead')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
