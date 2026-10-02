@@ -91,7 +91,7 @@ export class TeamRoster {
    * @param ctx - Team service context with Agent, Session, persistence, and subagent services.
    * @param journal - authoritative Lead-log transaction owner.
    * @param lifecycle - shared Team runtime admission cutoff.
-   * @param maxMembers - maximum immutable roster entries per Team.
+   * @param maxMembers - maximum non-failed roster entries admitted by one Team.
    */
   constructor(
     private readonly ctx: Context,
