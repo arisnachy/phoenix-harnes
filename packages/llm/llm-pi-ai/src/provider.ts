@@ -122,7 +122,7 @@ function providerHeaders(
 
   for (const [name, value] of Object.entries(openRouterAttributionHeaders())) {
     for (const existing of Object.keys(merged)) {
-      if (existing.toLowerCase() === name.toLowerCase()) delete merged[existing]
+      if (existing.toLowerCase() === name.toLowerCase()) Reflect.deleteProperty(merged, existing)
     }
     merged[name] = value
   }

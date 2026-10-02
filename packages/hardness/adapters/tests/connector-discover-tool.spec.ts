@@ -55,7 +55,7 @@ describe('connector_discover', () => {
 
     await expect(tool.execute({ query: ' ' }, {} as never)).rejects.toThrow('at least 2 characters')
     await expect(tool.execute({ query: 'ok', limit: 0 }, {} as never)).rejects.toThrow('positive finite')
-    await expect(tool.execute({ query: 'ok', limit: Number.POSITIVE_INFINITY }, {} as never)).rejects.toThrow('positive finite')
+    await expect(tool.execute({ query: 'ok', limit: Number.POSITIVE_INFINITY }, {} as never)).rejects.toThrow('invalid arguments: "limit" must be a finite JSON number')
 
     await execute(tool, { query: ' default ' })
     expect(service.searchMcpRegistry).toHaveBeenLastCalledWith({ query: 'default', limit: 8 })

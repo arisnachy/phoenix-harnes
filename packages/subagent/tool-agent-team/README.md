@@ -4,6 +4,9 @@ English | [中文](README.zh.md)
 
 Scoped model-facing adapter for [`ctx.agentTeams`](../agent-team/README.md). It installs the Agent Teams policy and collaboration tools in each implicit Lead and durable teammate scope. Scoped Team definitions shadow same-named legacy global continuable-subagent controls, so a composition that mounts both must disable the legacy definitions.
 
+## Main conversation tools
+
+`team_chat_read` exposes bounded canonical message ids and real public text to the exact Lead or direct child. `team_chat_react` sets or removes any valid Unicode emoji with the backend-authenticated actor identity. Generic direct children receive these chat tools without receiving Team task or roster authority. Guidance requires sparse useful collaboration, no private reasoning in public messages, and Kira review before the final result; a shared model does not imply independent verification.
 ## Config
 
 ```yaml

@@ -73,3 +73,5 @@ Host 带 placement 的 `session/queue` 快照也会携带待处理 steering。Qu
 - **TodoPanel 将过长条目截成单行省略号**：figma 条没有换行或展开入口，完整文本无法在行内读完。
 - **Queue 编辑仅支持文本**：包含非文本块的行仍显示扁平化预览，但由于内联编辑器无法保留这些块，其编辑控件会被禁用。文本行进入编辑模式后，删除和严格 steering 操作会被保存和取消取代；Enter 保存，Escape 取消。
 - **Queue 严格 steering 会保留完整消息**：agent 运行期间，steering 操作会以原子方式把所寻址的 Queue 单次入队项转移到当前 next-step 窗口。包含混合内容的行仍可使用此操作，因为它会转发不可变消息，而非文本投影。带 placement 的 Host 快照会在会话流末尾渲染待处理 steering，直到已消费的 `user/message` 折叠进持久 transcript（文本记录），因此立即展示、重连和回放共享同一个线性权威。
+
+`conversation/addressed-submit` 异步路由钩子允许团队插件在普通提交之前处理显式的代理提及或上下文回复。插件使用现有主聊天输入框并返回提交结果；无关消息继续走普通路由。真实的成员消息及其发送者和接收者身份保留在主聊天记录中。

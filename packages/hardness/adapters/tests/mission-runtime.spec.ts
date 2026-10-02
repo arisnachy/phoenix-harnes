@@ -59,7 +59,7 @@ describe('HARDNESS production mission runtime', () => {
     const connection: HostConnectionHandle = { rpc: { handle } as never }
     const append = vi.fn<Session['append']>()
     const session = { append, events: [] }
-    const agent = { session } as unknown as Agent
+    const agent = { session, options: { provider: 'mock', model: 'mock' } } as unknown as Agent
     const execute = vi.fn<ToolRuntime['execute']>(async () => ({ isError: false as const, value: null, content: [], meta: { artifact: { id: 'weather', mime: 'text/html', data: '<h1>Sunny</h1>' } } }))
     const tools = { execute }
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }

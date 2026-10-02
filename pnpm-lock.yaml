@@ -252,12 +252,12 @@ importers:
       '@phoenix-ai/dsh-token-meter':
         specifier: workspace:^
         version: link:../../packages/llm/token-meter
-      '@phoenix-ai/dsh-tool-ask-user':
-        specifier: workspace:^
-        version: link:../../packages/interaction/tool-ask-user
       '@phoenix-ai/dsh-tool-agent-team':
         specifier: workspace:^
         version: link:../../packages/subagent/tool-agent-team
+      '@phoenix-ai/dsh-tool-ask-user':
+        specifier: workspace:^
+        version: link:../../packages/interaction/tool-ask-user
       '@phoenix-ai/dsh-tool-bash':
         specifier: workspace:^
         version: link:../../packages/shell/tool-bash
@@ -459,6 +459,9 @@ importers:
       '@phoenix-ai/dsh-agent-spine-demo':
         specifier: workspace:*
         version: link:../packages/examples/agent-spine-demo
+      '@phoenix-ai/dsh-agent-team':
+        specifier: workspace:*
+        version: link:../packages/subagent/agent-team
       '@phoenix-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../packages/boot/app-boot
@@ -504,12 +507,6 @@ importers:
       '@phoenix-ai/dsh-e2b':
         specifier: workspace:*
         version: link:../packages/e2b/e2b
-      '@phoenix-ai/dsh-agent-team':
-        specifier: workspace:*
-        version: link:../packages/subagent/agent-team
-      '@phoenix-ai/dsh-tool-agent-team':
-        specifier: workspace:*
-        version: link:../packages/subagent/tool-agent-team
       '@phoenix-ai/dsh-fs-e2b':
         specifier: workspace:*
         version: link:../packages/e2b/fs-e2b
@@ -693,6 +690,9 @@ importers:
       '@phoenix-ai/dsh-token-meter':
         specifier: workspace:*
         version: link:../packages/llm/token-meter
+      '@phoenix-ai/dsh-tool-agent-team':
+        specifier: workspace:*
+        version: link:../packages/subagent/tool-agent-team
       '@phoenix-ai/dsh-tool-ask-user':
         specifier: workspace:*
         version: link:../packages/interaction/tool-ask-user
@@ -889,6 +889,9 @@ importers:
       '@phoenix-ai/dsh-agent-presets':
         specifier: workspace:^
         version: link:../../preset/agent-presets
+      '@phoenix-ai/dsh-agent-team':
+        specifier: workspace:^
+        version: link:../../subagent/agent-team
       '@phoenix-ai/dsh-api-gateway':
         specifier: workspace:^
         version: link:../gateway
@@ -1054,6 +1057,9 @@ importers:
       '@phoenix-ai/dsh-agent-loop':
         specifier: workspace:^
         version: link:../../core/agent-loop
+      '@phoenix-ai/dsh-agent-team':
+        specifier: workspace:^
+        version: link:../../subagent/agent-team
       '@phoenix-ai/dsh-api-gateway':
         specifier: workspace:^
         version: link:../../api/gateway
@@ -1093,12 +1099,6 @@ importers:
       '@phoenix-ai/dsh-credentials-local':
         specifier: workspace:^
         version: link:../../credentials/credentials-local
-      '@phoenix-ai/dsh-agent-team':
-        specifier: workspace:^
-        version: link:../../subagent/agent-team
-      '@phoenix-ai/dsh-tool-agent-team':
-        specifier: workspace:^
-        version: link:../../subagent/tool-agent-team
       '@phoenix-ai/dsh-fs-local':
         specifier: workspace:^
         version: link:../../fs/fs-local
@@ -1156,12 +1156,12 @@ importers:
       '@phoenix-ai/dsh-plan-mode':
         specifier: workspace:^
         version: link:../../plan/plan-mode
-      '@phoenix-ai/dsh-quality-policy':
-        specifier: workspace:^
-        version: link:../../guard/quality-policy
       '@phoenix-ai/dsh-pwsh-sandbox':
         specifier: workspace:^
         version: link:../../shell/pwsh-sandbox
+      '@phoenix-ai/dsh-quality-policy':
+        specifier: workspace:^
+        version: link:../../guard/quality-policy
       '@phoenix-ai/dsh-repeat-tool-reminder':
         specifier: workspace:^
         version: link:../../guard/repeat-tool-reminder
@@ -1240,6 +1240,9 @@ importers:
       '@phoenix-ai/dsh-token-meter':
         specifier: workspace:^
         version: link:../../llm/token-meter
+      '@phoenix-ai/dsh-tool-agent-team':
+        specifier: workspace:^
+        version: link:../../subagent/tool-agent-team
       '@phoenix-ai/dsh-tool-bash':
         specifier: workspace:^
         version: link:../../shell/tool-bash
@@ -2048,12 +2051,12 @@ importers:
       '@phoenix-ai/dsh-plan-mode':
         specifier: workspace:^
         version: link:../../plan/plan-mode
-      '@phoenix-ai/dsh-session-projection':
-        specifier: workspace:^
-        version: link:../../session/session-projection
       '@phoenix-ai/dsh-session':
         specifier: workspace:^
         version: link:../../core/session
+      '@phoenix-ai/dsh-session-projection':
+        specifier: workspace:^
+        version: link:../../session/session-projection
       '@phoenix-ai/dsh-session-stats':
         specifier: workspace:^
         version: link:../../session/session-stats
@@ -2313,10 +2316,20 @@ importers:
         version: 18.3.1
 
   packages/client/ui-kira-teams:
+    dependencies:
+      emoji-picker-react:
+        specifier: 4.22.3
+        version: 4.22.3(react@18.3.1)
     devDependencies:
       '@phoenix-ai/cordis':
         specifier: workspace:^
         version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent-team':
+        specifier: workspace:^
+        version: link:../../subagent/agent-team
+      '@phoenix-ai/dsh-api-remotes':
+        specifier: workspace:^
+        version: link:../../api/remotes
       '@phoenix-ai/dsh-client-locale':
         specifier: workspace:^
         version: link:../locale
@@ -2326,12 +2339,12 @@ importers:
       '@phoenix-ai/dsh-client-test-runtime':
         specifier: workspace:^
         version: link:../../test-support/client-runtime
-      '@phoenix-ai/dsh-client-ui-layout':
-        specifier: workspace:^
-        version: link:../ui-layout
       '@phoenix-ai/dsh-client-ui-conversation':
         specifier: workspace:^
         version: link:../ui-conversation
+      '@phoenix-ai/dsh-client-ui-layout':
+        specifier: workspace:^
+        version: link:../ui-layout
       '@phoenix-ai/dsh-client-ui-primitives':
         specifier: workspace:^
         version: link:../ui-primitives
@@ -4385,110 +4398,6 @@ importers:
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
-
-  packages/subagent/agent-team:
-    dependencies:
-      '@phoenix-ai/schemastery':
-        specifier: link:../../../vendor/schemastery
-        version: link:../../../vendor/schemastery
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@phoenix-ai/cordis':
-        specifier: workspace:^
-        version: link:../../../vendor/cordis
-      '@phoenix-ai/dsh-agent':
-        specifier: workspace:^
-        version: link:../../core/agent
-      '@phoenix-ai/dsh-agent-loop':
-        specifier: workspace:^
-        version: link:../../core/agent-loop
-      '@phoenix-ai/dsh-agent-loop-testkit':
-        specifier: workspace:^
-        version: link:../../test-support/agent-loop-testkit
-      '@phoenix-ai/dsh-brand':
-        specifier: workspace:^
-        version: link:../../util/brand
-      '@phoenix-ai/dsh-invariants':
-        specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
-      '@phoenix-ai/dsh-llm':
-        specifier: workspace:^
-        version: link:../../llm/llm
-      '@phoenix-ai/dsh-session':
-        specifier: workspace:^
-        version: link:../../core/session
-      '@phoenix-ai/dsh-session-persistence':
-        specifier: workspace:^
-        version: link:../../session/session-persistence
-      '@phoenix-ai/dsh-session-persistence-jsonl':
-        specifier: workspace:^
-        version: link:../../session/session-persistence-jsonl
-      '@phoenix-ai/dsh-session-persistence-sqlite':
-        specifier: workspace:^
-        version: link:../../session/session-persistence-sqlite
-      '@phoenix-ai/dsh-subagent':
-        specifier: workspace:^
-        version: link:../../subagent/subagent
-      '@phoenix-ai/dsh-subagent-fork-in-process':
-        specifier: workspace:^
-        version: link:../../subagent/subagent-fork-in-process
-      '@phoenix-ai/dsh-subagent-spawn-in-process':
-        specifier: workspace:^
-        version: link:../../subagent/subagent-spawn-in-process
-
-  packages/subagent/tool-agent-team:
-    dependencies:
-      '@phoenix-ai/schemastery':
-        specifier: link:../../../vendor/schemastery
-        version: link:../../../vendor/schemastery
-    devDependencies:
-      '@phoenix-ai/cordis':
-        specifier: workspace:^
-        version: link:../../../vendor/cordis
-      '@phoenix-ai/dsh-agent':
-        specifier: workspace:^
-        version: link:../../core/agent
-      '@phoenix-ai/dsh-agent-loop':
-        specifier: workspace:^
-        version: link:../../core/agent-loop
-      '@phoenix-ai/dsh-agent-loop-testkit':
-        specifier: workspace:^
-        version: link:../../test-support/agent-loop-testkit
-      '@phoenix-ai/dsh-agent-team':
-        specifier: workspace:^
-        version: link:../agent-team
-      '@phoenix-ai/dsh-invariants':
-        specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
-      '@phoenix-ai/dsh-scope':
-        specifier: workspace:^
-        version: link:../../core/scope
-      '@phoenix-ai/dsh-session':
-        specifier: workspace:^
-        version: link:../../core/session
-      '@phoenix-ai/dsh-session-persistence-jsonl':
-        specifier: workspace:^
-        version: link:../../session/session-persistence-jsonl
-      '@phoenix-ai/dsh-subagent':
-        specifier: workspace:^
-        version: link:../../subagent/subagent
-      '@phoenix-ai/dsh-subagent-fork-in-process':
-        specifier: workspace:^
-        version: link:../../subagent/subagent-fork-in-process
-      '@phoenix-ai/dsh-subagent-spawn-in-process':
-        specifier: workspace:^
-        version: link:../../subagent/subagent-spawn-in-process
-      '@phoenix-ai/dsh-system-prompt':
-        specifier: workspace:^
-        version: link:../../core/system-prompt
-      '@phoenix-ai/dsh-tool-subagent-control':
-        specifier: workspace:^
-        version: link:../../subagent/tool-subagent-control
-      '@phoenix-ai/dsh-tools':
-        specifier: workspace:^
-        version: link:../../core/tools
 
   packages/extensions/cordis-client-runner:
     devDependencies:
@@ -7875,6 +7784,70 @@ importers:
         specifier: workspace:^
         version: link:../storage
 
+  packages/subagent/agent-team:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+      emoji-regex:
+        specifier: 10.6.0
+        version: 10.6.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@phoenix-ai/dsh-agent-loop':
+        specifier: workspace:^
+        version: link:../../core/agent-loop
+      '@phoenix-ai/dsh-agent-loop-testkit':
+        specifier: workspace:^
+        version: link:../../test-support/agent-loop-testkit
+      '@phoenix-ai/dsh-brand':
+        specifier: workspace:^
+        version: link:../../util/brand
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@phoenix-ai/dsh-session-persistence':
+        specifier: workspace:^
+        version: link:../../session/session-persistence
+      '@phoenix-ai/dsh-session-persistence-jsonl':
+        specifier: workspace:^
+        version: link:../../session/session-persistence-jsonl
+      '@phoenix-ai/dsh-session-persistence-sqlite':
+        specifier: workspace:^
+        version: link:../../session/session-persistence-sqlite
+      '@phoenix-ai/dsh-session-projection':
+        specifier: workspace:^
+        version: link:../../session/session-projection
+      '@phoenix-ai/dsh-subagent':
+        specifier: workspace:^
+        version: link:../subagent
+      '@phoenix-ai/dsh-subagent-fork-in-process':
+        specifier: workspace:^
+        version: link:../subagent-fork-in-process
+      '@phoenix-ai/dsh-subagent-spawn-in-process':
+        specifier: workspace:^
+        version: link:../subagent-spawn-in-process
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
+      '@phoenix-ai/dsh-typert-protocol':
+        specifier: workspace:^
+        version: link:../../typert/protocol
+
   packages/subagent/subagent:
     dependencies:
       zod:
@@ -8265,6 +8238,58 @@ importers:
       '@phoenix-ai/dsh-tool-subagent':
         specifier: workspace:^
         version: link:../tool-subagent
+
+  packages/subagent/tool-agent-team:
+    dependencies:
+      '@phoenix-ai/schemastery':
+        specifier: link:../../../vendor/schemastery
+        version: link:../../../vendor/schemastery
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@phoenix-ai/dsh-agent-loop':
+        specifier: workspace:^
+        version: link:../../core/agent-loop
+      '@phoenix-ai/dsh-agent-loop-testkit':
+        specifier: workspace:^
+        version: link:../../test-support/agent-loop-testkit
+      '@phoenix-ai/dsh-agent-team':
+        specifier: workspace:^
+        version: link:../agent-team
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-scope':
+        specifier: workspace:^
+        version: link:../../core/scope
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
+      '@phoenix-ai/dsh-session-persistence-jsonl':
+        specifier: workspace:^
+        version: link:../../session/session-persistence-jsonl
+      '@phoenix-ai/dsh-subagent':
+        specifier: workspace:^
+        version: link:../subagent
+      '@phoenix-ai/dsh-subagent-fork-in-process':
+        specifier: workspace:^
+        version: link:../subagent-fork-in-process
+      '@phoenix-ai/dsh-subagent-spawn-in-process':
+        specifier: workspace:^
+        version: link:../subagent-spawn-in-process
+      '@phoenix-ai/dsh-system-prompt':
+        specifier: workspace:^
+        version: link:../../core/system-prompt
+      '@phoenix-ai/dsh-tool-subagent-control':
+        specifier: workspace:^
+        version: link:../tool-subagent-control
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/subagent/tool-subagent:
     dependencies:
@@ -9358,18 +9383,27 @@ importers:
       '@phoenix-ai/dsh-agent-loop':
         specifier: workspace:^
         version: link:../../packages/core/agent-loop
+      '@phoenix-ai/dsh-agent-presets':
+        specifier: workspace:^
+        version: link:../../packages/preset/agent-presets
       '@phoenix-ai/dsh-agent-spine-demo':
         specifier: workspace:^
         version: link:../../packages/examples/agent-spine-demo
-      '@phoenix-ai/dsh-agent-tool-presentation':
-        specifier: workspace:^
-        version: link:../../packages/core/agent-tool-presentation
       '@phoenix-ai/dsh-agent-team':
         specifier: workspace:^
         version: link:../../packages/subagent/agent-team
+      '@phoenix-ai/dsh-agent-tool-presentation':
+        specifier: workspace:^
+        version: link:../../packages/core/agent-tool-presentation
       '@phoenix-ai/dsh-anonymous-user-id':
         specifier: workspace:^
         version: link:../../packages/identity/anonymous-user-id
+      '@phoenix-ai/dsh-api-gateway':
+        specifier: workspace:^
+        version: link:../../packages/api/gateway
+      '@phoenix-ai/dsh-api-remotes':
+        specifier: workspace:^
+        version: link:../../packages/api/remotes
       '@phoenix-ai/dsh-app-boot':
         specifier: workspace:^
         version: link:../../packages/boot/app-boot
@@ -9388,6 +9422,9 @@ importers:
       '@phoenix-ai/dsh-brand':
         specifier: workspace:^
         version: link:../../packages/util/brand
+      '@phoenix-ai/dsh-client-connection':
+        specifier: workspace:^
+        version: link:../../packages/client/connection
       '@phoenix-ai/dsh-code-runtime':
         specifier: workspace:^
         version: link:../../packages/code-runtime/code-runtime
@@ -9418,6 +9455,9 @@ importers:
       '@phoenix-ai/dsh-credentials':
         specifier: workspace:^
         version: link:../../packages/credentials/credentials
+      '@phoenix-ai/dsh-file-reference':
+        specifier: workspace:^
+        version: link:../../packages/context/file-reference
       '@phoenix-ai/dsh-fs':
         specifier: workspace:^
         version: link:../../packages/fs/fs
@@ -9436,6 +9476,9 @@ importers:
       '@phoenix-ai/dsh-goal-round-driver':
         specifier: workspace:^
         version: link:../../packages/goal/goal-round-driver
+      '@phoenix-ai/dsh-hardness':
+        specifier: workspace:^
+        version: link:../../packages/hardness/hardness
       '@phoenix-ai/dsh-hardness-adapters':
         specifier: workspace:^
         version: link:../../packages/hardness/adapters
@@ -9451,6 +9494,15 @@ importers:
       '@phoenix-ai/dsh-hooks-codex':
         specifier: workspace:^
         version: link:../../packages/hooks/hooks-codex
+      '@phoenix-ai/dsh-host-apiproxy':
+        specifier: workspace:^
+        version: link:../../packages/host/apiproxy
+      '@phoenix-ai/dsh-host-plugin-inventory':
+        specifier: workspace:^
+        version: link:../../packages/host/plugin-inventory
+      '@phoenix-ai/dsh-host-webserver':
+        specifier: workspace:^
+        version: link:../../packages/host/webserver
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../packages/runtime-diagnostics/invariants
@@ -9481,6 +9533,9 @@ importers:
       '@phoenix-ai/dsh-mcp-connector-registry':
         specifier: workspace:^
         version: link:../../packages/mcp/mcp-registry
+      '@phoenix-ai/dsh-message-feedback':
+        specifier: workspace:^
+        version: link:../../packages/feedback/message-feedback
       '@phoenix-ai/dsh-output-retention':
         specifier: workspace:^
         version: link:../../packages/util/output-retention
@@ -9526,6 +9581,9 @@ importers:
       '@phoenix-ai/dsh-session-checkpoint-policy':
         specifier: workspace:^
         version: link:../../packages/session/session-checkpoint-policy
+      '@phoenix-ai/dsh-session-learning':
+        specifier: workspace:^
+        version: link:../../packages/session/session-learning
       '@phoenix-ai/dsh-session-persistence':
         specifier: workspace:^
         version: link:../../packages/session/session-persistence
@@ -9568,6 +9626,12 @@ importers:
       '@phoenix-ai/dsh-spill':
         specifier: workspace:^
         version: link:../../packages/spill/spill
+      '@phoenix-ai/dsh-storage':
+        specifier: workspace:^
+        version: link:../../packages/storage/storage
+      '@phoenix-ai/dsh-storage-domain':
+        specifier: workspace:^
+        version: link:../../packages/storage/storage-domain
       '@phoenix-ai/dsh-subagent':
         specifier: workspace:^
         version: link:../../packages/subagent/subagent
@@ -9604,12 +9668,12 @@ importers:
       '@phoenix-ai/dsh-token-meter':
         specifier: workspace:^
         version: link:../../packages/llm/token-meter
-      '@phoenix-ai/dsh-tool-ask-user':
-        specifier: workspace:^
-        version: link:../../packages/interaction/tool-ask-user
       '@phoenix-ai/dsh-tool-agent-team':
         specifier: workspace:^
         version: link:../../packages/subagent/tool-agent-team
+      '@phoenix-ai/dsh-tool-ask-user':
+        specifier: workspace:^
+        version: link:../../packages/interaction/tool-ask-user
       '@phoenix-ai/dsh-tool-bash':
         specifier: workspace:^
         version: link:../../packages/shell/tool-bash
@@ -9667,12 +9731,18 @@ importers:
       '@phoenix-ai/dsh-typert-protocol':
         specifier: workspace:^
         version: link:../../packages/typert/protocol
+      '@phoenix-ai/dsh-typert-registry':
+        specifier: workspace:^
+        version: link:../../packages/typert/registry
       '@phoenix-ai/dsh-user-approval':
         specifier: workspace:^
         version: link:../../packages/interaction/user-approval
       '@phoenix-ai/dsh-user-questions':
         specifier: workspace:^
         version: link:../../packages/interaction/user-questions
+      '@phoenix-ai/dsh-voice':
+        specifier: workspace:^
+        version: link:../../packages/voice/voice
       '@phoenix-ai/dsh-web':
         specifier: workspace:^
         version: link:../../packages/web/web
@@ -9697,51 +9767,6 @@ importers:
       '@phoenix-ai/schemastery':
         specifier: link:../../vendor/schemastery
         version: link:../../vendor/schemastery
-      '@phoenix-ai/dsh-client-connection':
-        specifier: workspace:^
-        version: link:../../packages/client/connection
-      '@phoenix-ai/dsh-hardness':
-        specifier: workspace:^
-        version: link:../../packages/hardness/hardness
-      '@phoenix-ai/dsh-host-apiproxy':
-        specifier: workspace:^
-        version: link:../../packages/host/apiproxy
-      '@phoenix-ai/dsh-session-learning':
-        specifier: workspace:^
-        version: link:../../packages/session/session-learning
-      '@phoenix-ai/dsh-host-webserver':
-        specifier: workspace:^
-        version: link:../../packages/host/webserver
-      '@phoenix-ai/dsh-agent-presets':
-        specifier: workspace:^
-        version: link:../../packages/preset/agent-presets
-      '@phoenix-ai/dsh-api-remotes':
-        specifier: workspace:^
-        version: link:../../packages/api/remotes
-      '@phoenix-ai/dsh-api-gateway':
-        specifier: workspace:^
-        version: link:../../packages/api/gateway
-      '@phoenix-ai/dsh-file-reference':
-        specifier: workspace:^
-        version: link:../../packages/context/file-reference
-      '@phoenix-ai/dsh-host-plugin-inventory':
-        specifier: workspace:^
-        version: link:../../packages/host/plugin-inventory
-      '@phoenix-ai/dsh-message-feedback':
-        specifier: workspace:^
-        version: link:../../packages/feedback/message-feedback
-      '@phoenix-ai/dsh-typert-registry':
-        specifier: workspace:^
-        version: link:../../packages/typert/registry
-      '@phoenix-ai/dsh-voice':
-        specifier: workspace:^
-        version: link:../../packages/voice/voice
-      '@phoenix-ai/dsh-storage-domain':
-        specifier: workspace:^
-        version: link:../../packages/storage/storage-domain
-      '@phoenix-ai/dsh-storage':
-        specifier: workspace:^
-        version: link:../../packages/storage/storage
 
   vendor/cordis:
     dependencies:
@@ -13211,8 +13236,17 @@ packages:
   electron-to-chromium@1.5.393:
     resolution: {integrity: sha512-kiDJdIUawuEIcp9XoICKp1iTYDEbgguIPq526N1Q7jIQDeQ3CqoMx71025PI/7E48Ddtw2HuWsVjY7afEgNxmg==}
 
+  emoji-picker-react@4.22.3:
+    resolution: {integrity: sha512-jrAkkoN69l5lA2Xp6P5axqoK1YdHNS1+MKMlLxwltnnnaXrojUjZaolgI/U8vdx8vFWqG42yYqpLSR83f6pwiw==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      react: '>=16.8'
+
   emoji-regex-xs@1.0.0:
     resolution: {integrity: sha512-LRlerrMYoIDrT6jgpeZ2YYl/L8EulRTt5hQcYjy5AInh7HWXKimpqx68aknBFpGL2+/IcogTcaydJEgaTmOpDg==}
+
+  emoji-regex@10.6.0:
+    resolution: {integrity: sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A==}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -14758,6 +14792,9 @@ packages:
   shiki@4.3.1:
     resolution: {integrity: sha512-oR+qDVi2OjX1tmDpyv+3KviX01KzO6Af+0NNnKnsp9491UEGz2YpxTuJboS/6VhYpTdqzmuJBuiTlrAWWJAssw==}
     engines: {node: '>=20'}
+
+  shipstyles@1.0.0:
+    resolution: {integrity: sha512-1AcihfXo/mSxqeOdoKqq/5TNv+vSH0dBYPFq88PUX5FBkK5pRmY5TP9SuMNio85PQ+euUI67+KpSVk1cUVDCgA==}
 
   side-channel-list@1.0.1:
     resolution: {integrity: sha512-mjn/0bi/oUURjc5Xl7IaWi/OJJJumuoJFQJfDDyO46+hBWsfaVM65TBHq2eoZBhzl9EchxOijpkbRC8SVBQU0w==}
@@ -18396,7 +18433,14 @@ snapshots:
 
   electron-to-chromium@1.5.393: {}
 
+  emoji-picker-react@4.22.3(react@18.3.1):
+    dependencies:
+      react: 18.3.1
+      shipstyles: 1.0.0
+
   emoji-regex-xs@1.0.0: {}
+
+  emoji-regex@10.6.0: {}
 
   emoji-regex@8.0.0: {}
 
@@ -20368,6 +20412,8 @@ snapshots:
       '@shikijs/types': 4.3.1
       '@shikijs/vscode-textmate': 10.0.2
       '@types/hast': 3.0.5
+
+  shipstyles@1.0.0: {}
 
   side-channel-list@1.0.1:
     dependencies:

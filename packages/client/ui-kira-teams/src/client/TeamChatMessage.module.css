@@ -131,3 +131,21 @@
   .column { max-width: calc(100% - 39px); }
   .bubble { padding: 8px 10px; }
 }
+
+.emojiMenu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  width: min(350px, 100%);
+  padding: 8px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1);
+}
+.emojiMenu button { padding: 4px; border: 0; background: transparent; cursor: pointer; font-size: 18px; }
+
+.row[data-team-highlighted="true"] .bubble { outline: 2px solid var(--dsw-alias-border-l1); }
+
+.replyContext { position: relative; padding: 8px 40px 8px 12px; }
+.replyContext blockquote { margin: 4px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.replyContext button { position: absolute; top: 8px; right: 12px; }

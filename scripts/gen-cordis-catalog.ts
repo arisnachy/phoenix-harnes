@@ -218,6 +218,7 @@ export const EVENT_SCOPE_PAGE: Record<string, string> = {
  * exemption cannot mask another declaration in that scope.
  */
 export const EVENT_WALK_EXEMPTIONS: Record<string, string> = {
+  'conversation/addressed-submit': 'client main composer routing hook — packages/client/ui-conversation/README.md owns this API',
   'command/executed': 'client-face local command acknowledgment — packages/client/ui-commands/README.md owns the API',
   'connection/reset': 'client-face transport signal — packages/client/runtime/README.md owns the API',
   'locale/change': 'client-face locale switch signal — packages/client/locale/README.md owns the API',
@@ -471,6 +472,10 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   ReactToTeamMessageResult: 'agent-team.md',
   SendTeamMessageRequest: 'agent-team.md',
   SendTeamMessageResult: 'agent-team.md',
+  TeamChatReadRequest: 'agent-team.md',
+  TeamChatReadResult: 'agent-team.md',
+  TeamChatReactRequest: 'agent-team.md',
+  TeamChatReplyRequest: 'agent-team.md',
   SpawnTeammateRequest: 'agent-team.md',
   SpawnTeammateResult: 'agent-team.md',
   TeamId: 'agent-team.md',

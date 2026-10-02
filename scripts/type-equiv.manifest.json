@@ -1994,6 +1994,41 @@
       "doc": "docs/subsystems/feedback.md",
       "symbol": "MessageFeedbackDeleteResult",
       "source": "packages/feedback/message-feedback/src/types.ts"
+    },
+    {
+      "doc": "docs/subsystems/agent-team.md",
+      "symbol": "TeamChatReaction",
+      "source": "packages/subagent/agent-team/src/chat-types.ts"
+    },
+    {
+      "doc": "docs/subsystems/agent-team.md",
+      "symbol": "TeamChatMessage",
+      "source": "packages/subagent/agent-team/src/chat-types.ts"
+    },
+    {
+      "doc": "docs/subsystems/agent-team.md",
+      "symbol": "TeamChatParticipant",
+      "source": "packages/subagent/agent-team/src/chat-types.ts"
+    },
+    {
+      "doc": "docs/subsystems/agent-team.md",
+      "symbol": "TeamChatReadResult",
+      "source": "packages/subagent/agent-team/src/chat-types.ts"
+    },
+    {
+      "doc": "docs/subsystems/agent-team.md",
+      "symbol": "TeamChatReadRequest",
+      "source": "packages/subagent/agent-team/src/chat-types.ts"
+    },
+    {
+      "doc": "docs/subsystems/agent-team.md",
+      "symbol": "TeamChatReactRequest",
+      "source": "packages/subagent/agent-team/src/chat-types.ts"
+    },
+    {
+      "doc": "docs/subsystems/agent-team.md",
+      "symbol": "TeamChatReplyRequest",
+      "source": "packages/subagent/agent-team/src/chat-types.ts"
     }
   ]
 }

@@ -162,7 +162,7 @@ export class InputHub implements SessionInputResolver {
    * exactly one path; a failed first prompt is an ordinary prompt failure
    * (banner via promptError, draft restored only while untouched).
    */
-  private sink(
+  private async sink(
     session: SessionFace,
     text: string,
     imageIds: readonly DraftAttachmentId[],
@@ -170,7 +170,8 @@ export class InputHub implements SessionInputResolver {
     signal: AbortSignal,
   ): Promise<SubmitOutcome> {
     if (text === '' && imageIds.length === 0) return Promise.resolve({ kind: 'success' })
-    return this.conversation().sendSession(session, text, imageIds, mode, signal)
+    const addressed = await this.rootCtx.bail(this.rootCtx, 'conversation/addressed-submit', { sessionId: session.sessionId, text, hasImages: imageIds.length > 0, signal })
+    return addressed ?? this.conversation().sendSession(session, text, imageIds, mode, signal)
   }
 
   /**

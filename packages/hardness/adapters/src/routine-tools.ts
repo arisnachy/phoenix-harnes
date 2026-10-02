@@ -38,8 +38,9 @@ function checkedMinutes(value: number | undefined, minimum: number): number {
 }
 
 function tagged(prefix: RoutinePrefix, kind: RoutineKind, value: unknown): Record<string, JsonValue> {
-  const row = value as Record<string, JsonValue>
-  const nativeId = typeof row.id === 'string' ? row.id : JSON.stringify(row.id)
+  // Task and wake provider views own string identifiers.
+  const row = value as Record<string, JsonValue> & { id: string }
+  const nativeId = row.id
   return { ...row, id: `${prefix}:${nativeId}`, native_id: nativeId, kind }
 }
 

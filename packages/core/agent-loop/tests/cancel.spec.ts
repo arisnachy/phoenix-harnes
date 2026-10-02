@@ -49,7 +49,7 @@ function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
 /** All user-message texts recorded in the log (to assert what actually ran). */
 function userTexts(agent: Agent): string[] {
   return agent.session.events
-    .filter(e => e.type === 'user/message')
+    .filter(e => e.type === 'user/message' && !(e.data.source.kind === 'plugin' && e.data.source.plugin === 'agent-loop'))
     .flatMap(e => e.type === 'user/message' ? e.data.content : [])
     .flatMap(b => b.type === 'text' ? [b.text] : [])
 }

@@ -22,7 +22,6 @@
     },
     {
       "path": "../../credentials/credentials"
-
     },
     {
       "path": "../../context/file-reference"
@@ -56,6 +55,12 @@
     },
     {
       "path": "../../typert/protocol"
+    },
+    {
+      "path": "../../subagent/agent-team"
+    },
+    {
+      "path": "../../subagent/agent-team"
     }
   ]
 }

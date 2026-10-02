@@ -122,4 +122,22 @@ describe('BinancePaperBroker', () => {
     })).rejects.toThrow('requires exactly one')
     await expect(broker.candles('BTCUSDT', '1h', 10_000)).resolves.toHaveLength(1_000)
   })
+
+  it.each([[0, 1], [1, 1], [2.9, 2], [1000, 1000], [10000, 1000]])(
+    'bounds the complete candle result for request %s to %s',
+    async (requested, expected) => {
+      const feed = market()
+      const calls: number[] = []
+      feed.candles = async (_symbol, _interval, limit) => {
+        calls.push(limit)
+        return Array.from({ length: limit + 1 }, (_, index) => ({
+          openTime: index, open: 1, high: 1, low: 1, close: 1, volume: 1,
+          closeTime: index + 1, quoteVolume: 1, trades: 1,
+        }))
+      }
+      const broker = new BinancePaperBroker(ledger(), feed)
+      await expect(broker.candles('BTCUSDT', '1h', requested)).resolves.toHaveLength(expected)
+      expect(calls).toEqual([expected])
+    },
+  )
 })

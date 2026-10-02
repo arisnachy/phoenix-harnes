@@ -97,6 +97,36 @@ Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnp
 Agent Teams service backed by the exact live Lead Session log.
 
 ```ts cordis-catalog
+/** Read actual team outputs without starting agents.
+ * @param request - root identity.
+ * @returns durable transcript.
+ */
+@Remote('chatMessages') async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult>
+
+/** Read a bounded transcript for the exact live caller.
+ * @param actor - actual agent.
+ * @param limit - protocol message bound.
+ * @returns bounded rows.
+ */
+async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult>
+
+/** Set/remove a human reaction.
+ * @param request - message and Unicode emoji.
+ */
+@Remote('chatReact') async chatReact(request: TeamChatReactRequest): Promise<void>
+
+/** Reply from the main composer to a direct child.
+ * @param request - target and reply context.
+ * @returns accepted identity.
+ */
+@Remote('chatReply') async chatReply(request: TeamChatReplyRequest): Promise<{ messageId: string; queued: boolean }>
+
+/** Set/remove a real agent reaction.
+ * @param actor - exact live actor.
+ * @param request - target mutation.
+ */
+async reactToChat(actor: Agent, request: TeamChatReactRequest): Promise<void>
+
 /**
  * Resolve one exact live Agent's Team role.
  * @param agent - exact live Agent used as the authority credential.
@@ -197,3 +227,92 @@ Types: [Agent](core.md)
 
 Source: [`packages/subagent/agent-team/src/index.ts`](../../packages/subagent/agent-team/src/index.ts)
 <!-- END GENERATED cordis-surface -->
+
+## Main conversation
+
+Model-hidden public transcript records retain canonical identity, source ownership and per-target admission receipts. Their versioned events and reaction/participant projections share the existing Session stream. A reply request identity is reused across browser and root recovery; repeated message snapshots are updates to one conversation row.
+
+```ts type-equiv
+/** Durable, model-hidden conversation records shared by the team and ordinary chat. */
+interface TeamChatReaction {
+  readonly id: string
+  readonly messageId: string
+  readonly reactorId: string
+  readonly reactorName: string
+  readonly reactorKind: 'user' | 'kira' | 'agent'
+  readonly emoji: string
+  readonly createdAt: number
+}
+```
+
+```ts type-equiv
+/** A public root transcript row; later durable snapshots keep the same identity. */
+interface TeamChatMessage {
+  readonly id: string
+  readonly senderId: string
+  readonly senderName: string
+  readonly senderKind: 'user' | 'kira' | 'agent'
+  readonly avatar?: string | undefined
+  readonly role?: string | undefined
+  readonly missionId?: string | undefined
+  readonly text: string
+  readonly time: number
+  readonly sourceSeq: number
+  readonly targetId?: string | undefined
+  readonly replyTo?: string | undefined
+  readonly replyQuote?: string | undefined
+  readonly mentions: readonly string[]
+  readonly supervised?: boolean | undefined
+  readonly deliveries?: readonly {
+    readonly targetId: string
+    readonly accepted: boolean
+    readonly error?: string | undefined
+  }[] | undefined
+  readonly reactions: readonly TeamChatReaction[]
+}
+```
+
+```ts type-equiv
+/** A stable mission-owned identity retained after the child completes. */
+interface TeamChatParticipant {
+  readonly id: string
+  readonly name: string
+  readonly role: string
+  readonly status: string
+  readonly avatar?: string | undefined
+  readonly task?: string | undefined
+  readonly missionId?: string | undefined
+}
+```
+
+```ts type-equiv
+/** Detached public transcript and real participant identities; reading never wakes agents. */
+interface TeamChatReadResult { readonly messages: TeamChatMessage[]
+  readonly participants: TeamChatParticipant[] }
+```
+
+```ts type-equiv
+/** A live root identity and optional bounded message count (1–200). */
+interface TeamChatReadRequest { readonly sessionId: string
+  readonly limit?: number }
+```
+
+```ts type-equiv
+/** A per-actor Unicode emoji set/remove on an existing public message. */
+interface TeamChatReactRequest extends TeamChatReadRequest {
+  readonly messageId: string
+  readonly emoji: string
+  readonly active: boolean
+}
+```
+
+```ts type-equiv
+/** A retry-stable human request to existing continuable direct children. */
+interface TeamChatReplyRequest extends TeamChatReadRequest {
+  readonly requestId: string
+  readonly targetId: string
+  readonly targetIds?: readonly string[]
+  readonly text: string
+  readonly replyTo?: string | undefined
+}
+```

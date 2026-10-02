@@ -1972,15 +1972,18 @@ describe('continuable settlement delivery', () => {
     // Open a parent turn first, so both notices arrive while it is running.
     parent.followup(createUserMessage({ content: message('start working'), source: { kind: 'user' } }))
     await vi.waitFor(() => { expect(parent.status).toBe('running') })
+    // Running is published before generation starts; reserve the parent's script entry first.
+    await vi.waitFor(() => { expect(adapter.requests).toHaveLength(1) })
 
     const first = await ctx.subagents.startContinuable(startSpec(parent))
     const second = await ctx.subagents.startContinuable(startSpec(parent))
+    await vi.waitFor(() => { expect(adapter.requests).toHaveLength(3) })
     releaseChildren.resolve(undefined)
     await waitNoActivation(ctx, first.childId)
     await waitNoActivation(ctx, second.childId)
 
     // Both notices are waiting for the same step boundary, not two turns.
-    expect(parent.inbox.nextStep).toHaveLength(2)
+    await vi.waitFor(() => { expect(parent.inbox.nextStep).toHaveLength(2) })
     expect(parent.inbox.nextTurn).toHaveLength(0)
     const turnStarts: number[] = []
     ctx.on('session/event', (session, event) => {

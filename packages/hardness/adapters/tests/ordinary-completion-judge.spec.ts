@@ -143,6 +143,21 @@ describe('ordinary completion judge', () => {
     expect(isGameAssetProvenanceMutation('write', { path: 'src/game.ts' })).toBe(false)
   })
 
+  it.each([
+    ['pwsh', 'Copy-Item hero.png assets/sprites/hero.png'],
+    ['pwsh', 'Copy-Item "hero.png" "assets/sprites/hero.png"'],
+    ['bash', 'cp hero.png assets/sprites/hero.png'],
+    ['bash', 'pwd; cp hero.png assets/sprites/hero.png'],
+  ])('recognizes %s asset mutations from the command argument: %s', (name, command) => {
+    expect(isGameAssetProduction(name, { command })).toBe(true)
+    expect(isSubstantiveMutation(name, { command })).toBe(true)
+  })
+
+  it('does not treat quoted instructions or unrelated shell metadata as asset production', () => {
+    expect(isGameAssetProduction('pwsh', { command: 'Write-Output "Copy-Item hero.png assets/sprites/hero.png"' })).toBe(false)
+    expect(isGameAssetProduction('bash', { command: 'pwd', note: 'cp hero.png assets/sprites/hero.png' })).toBe(false)
+  })
+
   it('injects the premium game quality contract into ordinary game reviews', async () => {
     const dispose = vi.fn(async () => {})
     const start = vi.fn<SubagentRuntime['start']>(async () => ({

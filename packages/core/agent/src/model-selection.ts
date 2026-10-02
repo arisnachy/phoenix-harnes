@@ -156,9 +156,11 @@ export function defaultExecutionHandoff(selection: ModelSelection | undefined): 
 }
 
 /** Operational verbs that strongly imply the user expects Phoenix to act on an artifact. */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const TOOL_ACTION = /\b(?:fix(?:es|ed|ing)?|repair(?:s|ed|ing)?|debug(?:s|ged|ging)?|implement(?:s|ed|ing)?|edit(?:s|ed|ing)?|modif(?:y|ies|ied|ying)|update(?:s|d|ing)?|create(?:s|d|ing)?|build(?:s|ing|built)?|run(?:s|ning)?|execute(?:s|d|ing)?|test(?:s|ed|ing)?|inspect(?:s|ed|ing)?|review(?:s|ed|ing)?|audit(?:s|ed|ing)?|refactor(?:s|ed|ing)?|deploy(?:s|ed|ing)?|install(?:s|ed|ing)?|remove(?:s|d|ing)?|delete(?:s|d|ing)?|rename(?:s|d|ing)?|commit(?:s|ted|ting)?|merge(?:s|d|ing)?|revert(?:s|ed|ing)?|resolv(?:e|es|ed|ing)|diagnos(?:e|es|ed|ing)|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*)\b/iu
 /** Artifact/code vocabulary used with {@link TOOL_ACTION} to avoid downgrading pure reasoning turns. */
-const TOOL_ARTIFACT = /(?:\b(?:file|files|archivo|archivos|code|c[oó]digo|repo|repository|repositorio|branch|rama|commit|test|tests|prueba|pruebas|script|package|build|cli|api|html|css|python|typescript|javascript|github|main|stable|error|exception|traceback|terminal|powershell|shell)\b|\x60\x60\x60|(?:^|[\s\x60'"(])(?:[A-Za-z]:\\|\.{0,2}\/)?[\w@.-]+(?:[\\/][\w@. -]+)*\.(?:ts|tsx|js|mjs|cjs|py|json|ya?ml|toml|md|html?|css|scss|sql|rs|go|java|kt|cs|cpp|c|h)\b)/iu
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
+const TOOL_ARTIFACT = /(?:\b(?:file|files|archivo|archivos|code|c[oó]digo|repo|repository|repositorio|branch|rama|commit|test|tests|prueba|pruebas|script|package|build|cli|api|html|css|python|typescript|javascript|github|main|stable|error|exception|traceback|terminal|powershell|shell)\b|\x60\x60\x60|(?:^|[\s\x60'"(])(?:[a-z]:\\|\.{0,2}\/)?[\w@.-]+(?:[\\/][\w@. -]+)*\.(?:ts|tsx|js|mjs|cjs|py|json|ya?ml|toml|md|html?|css|scss|sql|rs|go|java|kt|cs|cpp|c|h)\b)/iu
 
 /**
  * Detect an explicit operational request whose quality improves after early
@@ -183,11 +185,16 @@ const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|d
 const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate))/isu
 /** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
 const AUTO_CONTINUATION_LIMIT = 4
-const AUTO_EXECUTION_CONTINUATION = 'Planning or describing the next action is not task completion. Continue the current user request now with the available tools. Execute the next concrete action instead of only saying what you will do, and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
+const AUTO_EXECUTION_CONTINUATION =
+  'Planning or describing the next action is not task completion. ' +
+  'Continue the current user request now with the available tools. ' +
+  'Execute the next concrete action instead of only saying what you will do, ' +
+  'and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
 const FAST_SOCIAL_OPEN = /^(?:cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|tell\s+me\s+something(?:\s+good)?)$/iu
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const FAST_CONTEXTUAL_OPEN = /^(?:qu[eé]\s+quieres\s+que\s+hagamos|qu[eé]\s+te\s+gustar[ií]a\s+que\s+hagamos|de\s+qu[eé]\s+hablamos|what\s+do\s+you\s+want\s+to\s+do|what\s+should\s+we\s+talk\s+about)$/iu
 
 function normalizedFastSocialText(value: string): string {
@@ -198,6 +205,7 @@ function normalizedFastSocialText(value: string): string {
 }
 
 /** Short first-person/social state replies that are clearly small talk, not action approvals. */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const FAST_SOCIAL_REPLY = /^(?:[¡!¿?.,\s]*(?:(?:a\s+m[ií]|yo)\s+(?:estoy\s+)?(?:s[uú]per|muy\s+bien|bien|genial|excelente|fenomenal|tranquil[oa]|mal|regular)|(?:estoy|ando|me\s+siento)\s+(?:s[uú]per|muy\s+bien|bien|genial|excelente|fenomenal|tranquil[oa]|mal|regular)|todo\s+(?:bien|genial|excelente))[¡!¿?.,\s]*)$/iu
 /**
  * Bare confirmations/continuations are not self-contained social turns.
@@ -207,9 +215,12 @@ const FAST_SOCIAL_REPLY = /^(?:[¡!¿?.,\s]*(?:(?:a\s+m[ií]|yo)\s+(?:estoy\s+)?
  * Sending them through the tool-free conversational path can erase the very
  * action the user just approved.
  */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const CONTEXTUAL_CONTINUATION = /^(?:[¡!¿?.,\s]*(?:ok(?:ay)?|perfecto|dale|listo|entendido|bien|s[ií]|no|claro|de\s+acuerdo|adelante|contin[uú]a|sigue|hazlo|vamos|yes|yeah|yep|sure|go\s+ahead|continue|do\s+it)[¡!¿?.,\s]*)$/iu
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const FAST_RUNTIME_META = /^(?:[¡!¿?.,\s]*(?:(?:est[aá]s|estas|sigues)\s+(?:usando|utilizando)\s+jev|usas\s+jev|(?:se\s+)?est[aá]\s+usando\s+jev|qu[eé]\s+modelo\s+(?:est[aá]s|estas)\s+usando|cu[aá]l\s+modelo\s+(?:est[aá]s|estas)\s+usando)[¡!¿?.,\s]*)$/iu
 /** Short, non-question reactions to the current output; they never need external evidence. */
+// oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic bilingual matcher auditable as one regex literal.
 const FAST_CASUAL_REACTION = /(?:\b(?:jaj+a+|jeje+|jiji+|lol)\b|\b(?:eso|esto)\s+(?:parece|se\s+ve|est[aá])\b|\b(?:qu[eé]\s+)?(?:feo|bonito|lindo|gracioso|raro)\b)/iu
 
 /**

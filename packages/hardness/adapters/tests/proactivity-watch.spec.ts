@@ -56,7 +56,7 @@ interface HarnessOptions {
 
 function harness(options: HarnessOptions = {}) {
   const followup = vi.fn((_message: unknown) => undefined)
-  const parent = { id: 'parent', followup } as never
+  const parent = { id: 'parent', followup, whenIdle: vi.fn(async () => undefined) } as never
   const dispose = vi.fn(async () => undefined)
   const start = vi.fn(async (_providerName: string, _request: unknown) => ({
     id: 'watch-child',
@@ -112,7 +112,7 @@ describe('PHOENIX condition-watch executor', () => {
     const request = test.start.mock.calls[0]?.[1] as Record<string, unknown> | undefined
     expect(request?.outputSchema).toBeDefined()
     expect(request?.toolFilter).toEqual({
-      allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'],
+      allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch', 'phoenix_reality_now'],
     })
     expect(test.dispose).toHaveBeenCalledOnce()
   })

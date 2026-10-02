@@ -369,11 +369,12 @@ export class BinancePaperBroker {
    * Read public candles through the broker's market seam.
    * @param symbol - Binance Spot symbol.
    * @param interval - Binance kline interval.
-   * @param limit - Requested candle count.
+   * @param limit - Requested candle count, clamped to 1–1000 for every market provider.
    * @returns Public OHLCV candles.
    */
   async candles(symbol: string, interval: string, limit = 200): Promise<BinanceCandle[]> {
-    return this.market.candles(symbol, interval, limit)
+    const size = Math.max(1, Math.min(1000, Math.floor(limit)))
+    return (await this.market.candles(symbol, interval, size)).slice(0, size)
   }
 
   /**
@@ -497,7 +498,7 @@ export class BinancePaperBroker {
         state.cashUsdt += proceeds
         state.realizedPnlUsdt += realizedPnlUsdt
         const remainingQuantity = current.quantity - quantity
-        if (remainingQuantity <= 1e-12) delete state.positions[symbol]
+        if (remainingQuantity <= 1e-12) Reflect.deleteProperty(state.positions, symbol)
         else {
           state.positions[symbol] = {
             symbol,

@@ -52,7 +52,9 @@
     "@phoenix-ai/dsh-client-ui-layout": "workspace:^",
     "@phoenix-ai/dsh-invariants": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
-    "@phoenix-ai/dsh-client-ui-conversation": "workspace:^"
+    "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
+    "@phoenix-ai/dsh-agent-team": "workspace:^",
+    "@phoenix-ai/dsh-api-remotes": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-subagent": "workspace:^",
@@ -66,12 +68,17 @@
     "@types/react": "~18.3.1",
     "@phoenix-ai/cordis": "workspace:^",
     "react": "^18.2.0",
-    "@phoenix-ai/dsh-client-ui-conversation": "workspace:^"
+    "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
+    "@phoenix-ai/dsh-agent-team": "workspace:^",
+    "@phoenix-ai/dsh-api-remotes": "workspace:^"
   },
   "files": [
     "lib/index.js",
     "lib/invariant.js",
     "lib/client.js",
     "lib/types/**/*.d.ts"
-  ]
+  ],
+  "dependencies": {
+    "emoji-picker-react": "4.22.3"
+  }
 }

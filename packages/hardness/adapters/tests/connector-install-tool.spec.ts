@@ -7,7 +7,7 @@ import {
   type XMcpHostService,
 } from '../src/connector-install-tool.ts'
 
-function exec(agent: Agent | undefined = {} as Agent) {
+function exec(agent: Agent | undefined) {
   return {
     agent,
     callId: 'call-install' as never,
@@ -40,7 +40,7 @@ describe('connector_install', () => {
     const service = installer()
     const tool = createConnectorInstallTool(approval, service)
 
-    await expect(tool.execute({ name: ' ' }, exec())).rejects.toThrow('exact registry server name')
+    await expect(tool.execute({ name: ' ' }, exec({} as Agent))).rejects.toThrow('exact registry server name')
     await expect(tool.execute({ name: 'io.example/calendar' }, exec(undefined))).rejects.toThrow('active agent session')
     expect(approval.request).not.toHaveBeenCalled()
     expect(service.installMcpRegistryServer).not.toHaveBeenCalled()
@@ -50,7 +50,7 @@ describe('connector_install', () => {
     const approval = { request: vi.fn(async () => 'rejected' as const) }
     const service = installer()
     const tool = createConnectorInstallTool(approval, service)
-    const context = exec()
+    const context = exec({} as Agent)
 
     await expect(tool.execute({ name: ' io.example/calendar ', version: '1.0.0' }, context)).resolves.toEqual({
       status: 'denied',
@@ -72,7 +72,7 @@ describe('connector_install', () => {
     const service = installer()
     const tool = createConnectorInstallTool(approval, service)
 
-    await expect(tool.execute({ name: 'io.example/calendar' }, exec())).resolves.toEqual({
+    await expect(tool.execute({ name: 'io.example/calendar' }, exec({} as Agent))).resolves.toEqual({
       status: 'installed',
       serverName: 'calendar-abc1234',
       message: 'Installed io.example/calendar. Use connector_list to check whether it is ready or needs authorization.',
@@ -93,7 +93,7 @@ describe('connector_install', () => {
     })
     const tool = createConnectorInstallTool(approval, service)
 
-    await expect(tool.execute({ name: 'io.example/calendar', version: '1.0.0' }, exec())).resolves.toEqual({
+    await expect(tool.execute({ name: 'io.example/calendar', version: '1.0.0' }, exec({} as Agent))).resolves.toEqual({
       status: 'already-installed',
       serverName: 'calendar-abc1234',
       message: 'io.example/calendar is already installed. Use connector_list to check its current authorization state.',
@@ -151,15 +151,15 @@ describe('x_mcp_activate', () => {
     const host = xHost()
     const tool = createXMcpActivateTool(approval, host)
 
-    await expect(tool.execute({ requestedByUser: false }, exec())).resolves.toEqual({
+    await expect(tool.execute({ requestedByUser: false }, exec({} as Agent))).resolves.toEqual({
       status: 'denied',
       message: 'X MCP activation requires an explicit user request.',
     })
     await expect(tool.execute({ requestedByUser: true }, exec(undefined))).rejects.toThrow('active agent session')
-    await expect(createXMcpActivateTool(approval).execute({ requestedByUser: true }, exec()))
+    await expect(createXMcpActivateTool(approval).execute({ requestedByUser: true }, exec({} as Agent)))
       .rejects.toThrow('host integration is unavailable')
     await expect(createXMcpActivateTool(approval, { enableXMcp: host.enableXMcp })
-      .execute({ requestedByUser: true }, exec()))
+      .execute({ requestedByUser: true }, exec({} as Agent)))
       .rejects.toThrow('host integration is unavailable')
     expect(approval.request).not.toHaveBeenCalled()
     expect(host.enableXMcp).not.toHaveBeenCalled()
@@ -169,7 +169,7 @@ describe('x_mcp_activate', () => {
     const approval = { request: vi.fn(async () => 'rejected' as const) }
     const host = xHost()
     const tool = createXMcpActivateTool(approval, host)
-    const context = exec()
+    const context = exec({} as Agent)
 
     await expect(tool.execute({ requestedByUser: true }, context)).resolves.toEqual({
       status: 'denied',
@@ -191,7 +191,7 @@ describe('x_mcp_activate', () => {
     const ready = xHost({ credentials: true })
     const readyTool = createXMcpActivateTool(approval, ready)
 
-    await expect(readyTool.execute({ requestedByUser: true }, exec())).resolves.toMatchObject({
+    await expect(readyTool.execute({ requestedByUser: true }, exec({} as Agent))).resolves.toMatchObject({
       status: 'enabled',
       identity: 'user',
       api: 'installed',
@@ -202,7 +202,7 @@ describe('x_mcp_activate', () => {
 
     const missing = xHost({ credentials: false })
     const missingTool = createXMcpActivateTool(approval, missing)
-    await expect(missingTool.execute({ requestedByUser: true }, exec())).resolves.toMatchObject({
+    await expect(missingTool.execute({ requestedByUser: true }, exec({} as Agent))).resolves.toMatchObject({
       status: 'enabled',
       credentialsReady: false,
       message: 'Official X MCP is installed. X Docs can work without credentials; X API needs X_CLIENT_ID and X_CLIENT_SECRET stored with the human-only /secret command before xurl can authorize.',
@@ -214,7 +214,7 @@ describe('x_mcp_activate', () => {
       requestedByUser: true,
       identity: 'phoenix',
       username: '@PhoenixAI',
-    }, exec())).resolves.toMatchObject({
+    }, exec({} as Agent))).resolves.toMatchObject({
       status: 'enabled',
       identity: 'phoenix',
       credentialsReady: true,
@@ -230,7 +230,7 @@ describe('x_mcp_activate', () => {
     const host = xHost()
     const tool = createXMcpActivateTool(approval, host)
     const deferred = vi.fn()
-    const context = exec() as unknown as { deferContext: typeof deferred }
+    const context = exec({} as Agent) as unknown as { deferContext: typeof deferred }
     context.deferContext = deferred
 
     await expect(tool.execute({
@@ -274,7 +274,7 @@ describe('x_mcp_activate', () => {
     await expect(tool.execute({
       requestedByUser: true,
       identity: 'phoenix',
-    }, exec())).resolves.toMatchObject({
+    }, exec({} as Agent))).resolves.toMatchObject({
       status: 'enabled',
       identity: 'phoenix',
       message: 'Phoenix-owned X identity is already configured as x-api-phoenix.',

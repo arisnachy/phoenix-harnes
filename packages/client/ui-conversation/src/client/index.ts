@@ -42,6 +42,9 @@ export type {
 // Export discipline: packages/client/AGENTS.md.
 
 declare module '@phoenix-ai/cordis' {
+  interface Events {
+    'conversation/addressed-submit'(request: { sessionId: import('@phoenix-ai/dsh-client-runtime/client').SessionId; text: string; hasImages: boolean; signal: AbortSignal }): Promise<import('@phoenix-ai/dsh-client-ui-input-trigger/client').SubmitOutcome | undefined> | undefined
+  }
   interface Context {
     /** The outward face only; the concrete service stays inside this plugin. */
     conversation: import('./service.ts').IConversation

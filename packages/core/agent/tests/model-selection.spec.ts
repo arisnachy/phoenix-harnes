@@ -1157,7 +1157,7 @@ describe('installModelSelection()', () => {
       afterStep: 1,
       selection: { provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: ReasoningEffortId('high') },
     })
-    const agent = {} as Agent
+    const agent = { session: { events: [] } } as unknown as Agent
     const seed: LlmCallConfig = { provider: 'openai-codex', model: 'gpt-5.6-sol', reasoningEffort: ReasoningEffortId('high') }
     const signal = new AbortController().signal
     await ctx.systemPrompt.assemble()

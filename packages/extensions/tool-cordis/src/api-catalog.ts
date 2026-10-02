@@ -310,6 +310,34 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Agent Teams service backed by the exact live Lead Session log.',
     methods: [
       {
+        signature: '@Remote(\'chatMessages\') async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult>',
+        description: 'Read actual team outputs without starting agents.',
+        parameters: [{ name: 'request', description: 'root identity.' }],
+        returns: 'durable transcript.',
+      },
+      {
+        signature: 'async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult>',
+        description: 'Read a bounded transcript for the exact live caller.',
+        parameters: [{ name: 'actor', description: 'actual agent.' }, { name: 'limit', description: 'protocol message bound.' }],
+        returns: 'bounded rows.',
+      },
+      {
+        signature: '@Remote(\'chatReact\') async chatReact(request: TeamChatReactRequest): Promise<void>',
+        description: 'Set/remove a human reaction.',
+        parameters: [{ name: 'request', description: 'message and Unicode emoji.' }],
+      },
+      {
+        signature: '@Remote(\'chatReply\') async chatReply(request: TeamChatReplyRequest): Promise<{ messageId: string; queued: boolean }>',
+        description: 'Reply from the main composer to a direct child.',
+        parameters: [{ name: 'request', description: 'target and reply context.' }],
+        returns: 'accepted identity.',
+      },
+      {
+        signature: 'async reactToChat(actor: Agent, request: TeamChatReactRequest): Promise<void>',
+        description: 'Set/remove a real agent reaction.',
+        parameters: [{ name: 'actor', description: 'exact live actor.' }, { name: 'request', description: 'target mutation.' }],
+      },
+      {
         signature: 'membership(agent: Agent): TeamMembership',
         description: 'Resolve one exact live Agent\'s Team role.',
         parameters: [{ name: 'agent', description: 'exact live Agent used as the authority credential.' }],
@@ -1360,10 +1388,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Process-local MCP lifecycle registry. It stores no connection settings, credentials, URLs, headers, environment variables, or provider errors.',
     methods: [
       {
+        signature: 'subscribe(listener: McpConnectorListener): () => void',
+        description: 'Subscribe to secret-free lifecycle/tool changes without exposing transport configuration, credentials, URLs, provider errors, or reconnect callbacks.',
+        parameters: [{ name: 'listener', description: 'Synchronous observer removed by the returned disposer.' }],
+        returns: 'Idempotent disposer.',
+      },
+      {
         signature: 'register(input: McpConnectorRegistrationInput): McpConnectorRegistration',
         description: 'Register one server identity in stable insertion order.',
-        parameters: [{ name: 'input', description: 'secret-free server identity and transport.' }],
-        returns: 'a handle that publishes state and removes the entry.',
+        parameters: [{ name: 'input', description: 'Secret-free server identity and transport.' }],
+        returns: 'A handle that publishes state and removes the entry.',
       },
       {
         signature: 'reconnect(serverName: string): boolean',
@@ -4407,8 +4441,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
   },
   {
+    name: 'McpConnectorChange',
+    declaration: 'export interface McpConnectorChange {\n    readonly kind: McpConnectorChangeKind;\n    readonly serverName: string;\n    readonly entry: McpConnectorEntry;\n}',
+  },
+  {
+    name: 'McpConnectorChangeKind',
+    declaration: 'export type McpConnectorChangeKind = \'registered\' | \'status\' | \'tools\' | \'disposed\';',
+  },
+  {
     name: 'McpConnectorEntry',
     declaration: 'export interface McpConnectorEntry {\n    readonly serverName: string;\n    readonly transport: McpConnectorTransport;\n    readonly status: McpConnectorStatus;\n    readonly toolNames: readonly string[];\n    readonly reasonCode?: McpConnectorReasonCode;\n}',
+  },
+  {
+    name: 'McpConnectorListener',
+    declaration: 'export type McpConnectorListener = (change: McpConnectorChange) => void;',
   },
   {
     name: 'McpConnectorReasonCode',
@@ -4920,7 +4966,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SessionEventMap',
-    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': {\n        turn: number;\n        step: number;\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
+    declaration: 'export interface SessionEventMap {\n    \'turn/start\': {\n        turn: number;\n    };\n    \'turn/end\': {\n        turn: number;\n        reason: TurnEndReason;\n    };\n    \'step/start\': {\n        turn: number;\n        step: number;\n        historyProjection?: {\n            kind: \'conversational-tail\';\n            maxMessages: number;\n            maxChars: number;\n        };\n    };\n    \'step/end\': {\n        turn: number;\n        step: number;\n    };\n    \'user/message\': UserMessage;\n    \'assistant/chunk\': {\n        turn: number;\n        step: number;\n        chunk: StreamChunk;\n    };\n    \'assistant/message\': {\n        turn: number;\n        step: number;\n        message: AssistantMessage;\n        usage?: TokenUsage;\n        interrupted?: true;\n    };\n    \'tool/call\': {\n        turn: number;\n        step: number;\n        callId: CallId;\n        name: string;\n        arguments: string;\n    };\n    \'tool/result\': {\n        turn: number;\n        step: number;\n        message: ToolResultMessage;\n        error?: {\n            name: string;\n            code: string;\n        };\n        meta?: JsonValue;\n    };\n    \'todo/write\': {\n        todos: TodoItem[];\n    };\n    \'request/header\': {\n        header: EpochHeader;\n        reason: RequestHeaderReason;\n    };\n    \'request/context\': RequestContext;\n    \'session/end-seed\': Record<string, never>;\n}',
   },
   {
     name: 'SessionEventMetadataFilter',
@@ -5372,7 +5418,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubagentFollowupOptions',
-    declaration: 'export interface SubagentFollowupOptions {\n    readonly source: MessageSource;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SubagentFollowupOptions {\n    readonly delivery?: \'next-turn\' | \'next-step\';\n    readonly source: MessageSource;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SubagentInterruptAuthority',
@@ -5505,6 +5551,34 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TableValueOf',
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
+  },
+  {
+    name: 'TeamChatMessage',
+    declaration: 'export interface TeamChatMessage {\n    readonly id: string;\n    readonly senderId: string;\n    readonly senderName: string;\n    readonly senderKind: \'user\' | \'kira\' | \'agent\';\n    readonly avatar?: string | undefined;\n    readonly role?: string | undefined;\n    readonly missionId?: string | undefined;\n    readonly text: string;\n    readonly time: number;\n    readonly sourceSeq: number;\n    readonly targetId?: string | undefined;\n    readonly replyTo?: string | undefined;\n    readonly replyQuote?: string | undefined;\n    readonly mentions: readonly string[];\n    readonly supervised?: boolean | undefined;\n    readonly deliveries?: readonly {\n        readonly targetId: string;\n        readonly accepted: boolean;\n        readonly error?: string | undefined;\n    }[] | undefined;\n    readonly reactions: readonly TeamChatReaction[];\n}',
+  },
+  {
+    name: 'TeamChatParticipant',
+    declaration: 'export interface TeamChatParticipant {\n    readonly id: string;\n    readonly name: string;\n    readonly role: string;\n    readonly status: string;\n    readonly avatar?: string | undefined;\n    readonly task?: string | undefined;\n    readonly missionId?: string | undefined;\n}',
+  },
+  {
+    name: 'TeamChatReaction',
+    declaration: 'export interface TeamChatReaction {\n    readonly id: string;\n    readonly messageId: string;\n    readonly reactorId: string;\n    readonly reactorName: string;\n    readonly reactorKind: \'user\' | \'kira\' | \'agent\';\n    readonly emoji: string;\n    readonly createdAt: number;\n}',
+  },
+  {
+    name: 'TeamChatReactRequest',
+    declaration: 'export interface TeamChatReactRequest extends TeamChatReadRequest {\n    readonly messageId: string;\n    readonly emoji: string;\n    readonly active: boolean;\n}',
+  },
+  {
+    name: 'TeamChatReadRequest',
+    declaration: 'export interface TeamChatReadRequest {\n    readonly sessionId: string;\n    readonly limit?: number;\n}',
+  },
+  {
+    name: 'TeamChatReadResult',
+    declaration: 'export interface TeamChatReadResult {\n    readonly messages: TeamChatMessage[];\n    readonly participants: TeamChatParticipant[];\n}',
+  },
+  {
+    name: 'TeamChatReplyRequest',
+    declaration: 'export interface TeamChatReplyRequest extends TeamChatReadRequest {\n    readonly requestId: string;\n    readonly targetId: string;\n    readonly targetIds?: readonly string[];\n    readonly text: string;\n    readonly replyTo?: string | undefined;\n}',
   },
   {
     name: 'TeamId',

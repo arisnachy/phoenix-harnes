@@ -1,3 +1,7 @@
+import { Context } from '@phoenix-ai/cordis'
+import { ConversationNodeAssembler } from '../../runtime/src/client/sessions/conversation-assembler.ts'
+import { ConversationEventRegistry } from '../../runtime/src/client/conversation/event-registry.ts'
+import { ConversationViewRegistry } from '../../runtime/src/client/conversation/view-registry.ts'
 import { describe, expect, it } from 'vitest'
 import type {
   ConversationMatch, ConversationNodeContext,
@@ -271,4 +275,28 @@ describe('KIRA Team conversation node', () => {
       )).toBe(baseState)
     }
   })
+})
+
+// Use the actual assembler because repeated durable snapshots are not separate messages.
+it('assembles one human reply through per-target receipts, supervision and full replay', () => {
+  const ctx = new Context()
+  const events = new ConversationEventRegistry(ctx)
+  const views = new ConversationViewRegistry(ctx)
+  events.register(kiraTeamMessageDefinition)
+  views.register({ target: 'chat', create: () => ({ empty: [], replace: ({ nodes }) => nodes,
+    apply: ({ upserts }) => upserts }) })
+  const assembler = new ConversationNodeAssembler(events, views)
+  const message = { id: 'reply-1', senderId: 'user', senderName: 'User', senderKind: 'user', text: '@Zenith @Argo check #12',
+    mentions: ['zenith', 'argo'], reactions: [], deliveries: [{ targetId: 'zenith', accepted: false }, { targetId: 'argo', accepted: false }] }
+  const inputs = [0, 1, 2, 3].map(seq => ({ event: event('team/chat-message', { version: 1,
+    ...(seq === 0 ? {} : { update: true }), message: { ...message, supervised: seq === 3,
+      deliveries: message.deliveries.map((value, index) => ({ ...value, accepted: seq > index })) } }, seq), view: undefined }))
+  assembler.replaceWindow([inputs[0]!], false)
+  assembler.flush()
+  for (const input of inputs.slice(1)) { assembler.append(input); assembler.flush() }
+  expect(assembler.snapshot('chat')).toHaveLength(1)
+  expect(assembler.snapshot('chat')).toMatchObject([{ data: { senderKind: 'user', pendingDelivery: false } }])
+  assembler.replaceWindow(inputs, false)
+  assembler.flush()
+  expect(assembler.snapshot('chat')).toHaveLength(1)
 })

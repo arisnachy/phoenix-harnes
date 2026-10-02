@@ -83,6 +83,8 @@ Everything that goes beyond "call the model, run the tools, repeat" belongs to p
 - Persistence: eager write-behind from `session/event`; `session/flush` is an explicit observation barrier
 - UI: `session/event` (assistant token stream, boundaries, tool activity) + `agent/*` control events (`agent/status`, `agent/created`/`agent/disposed`)
 
+Social and meta conversation steps record an optional `historyProjection` on `step/start`. The request builder and reconstruction invariant apply that logged projection identically, so a short steering reply can omit tool history without losing exact durable request validation.
+
 ## Model Experience
 
 ### Complete conversation request

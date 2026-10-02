@@ -53,7 +53,9 @@ describe('phoenix_visualize tool', () => {
     expect(tool.parameters).toEqual(expect.objectContaining({
       type: 'object',
       required: ['title', 'visual'],
-      additionalProperties: false,
     }))
+    expect(tool.parameters).toMatchObject({
+      properties: { visual: { type: 'object', additionalProperties: true } },
+    })
   })
 })

@@ -1,0 +1,11 @@
+[
+  {
+    "turn": 1,
+    "step": 1,
+    "historyProjection": {
+      "kind": "conversational-tail",
+      "maxMessages": 8,
+      "maxChars": 12000
+    }
+  }
+]

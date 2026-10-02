@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useSyncExternalStore } from 'react'
 import {
   IconChevronDownOutline14, IconRefreshOutline14,
 } from '@phoenix-ai/dsh-client-ui-primitives'
@@ -8,8 +7,8 @@ import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import type {
   SessionId, SessionListState, SessionSummary, SubagentAddress,
 } from '@phoenix-ai/dsh-client-runtime/client'
-import type { PropsLocale, PropsRuntime, TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
-import { NS, type KiraTeamsKey } from './locales.ts'
+import type { InjectFace, PropsLocale, PropsRuntime, TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
+import { NS, zh, type KiraTeamsKey } from './locales.ts'
 import {
   ModelActivityAvatar, type ModelAvatarKind,
 } from './ModelActivityAvatar.tsx'
@@ -17,17 +16,17 @@ import css from './KiraTeamsDock.module.css'
 
 /** Sessions face plus business actions supplied by the slot registration. */
 export interface KiraTeamsInjected {
-  list: {
+  hooks: { list: {
     getSnapshot(): SessionListState
     subscribe(fn: () => void): () => void
-  }
+  } }
   layout: Pick<ILayout, 'setWorkspaceOccupant'>
   openChild: (address: SubagentAddress) => void
   refresh: (parentSessionId: SessionId) => void
 }
 
 export type KiraTeamsDockProps =
-  PropsRuntime<'shell.overlay'> & KiraTeamsInjected & PropsLocale<typeof NS>
+  PropsRuntime<'shell.overlay'> & InjectFace<KiraTeamsInjected> & PropsLocale<typeof NS>
 
 export interface MemberRow {
   summary: SessionSummary
@@ -64,7 +63,7 @@ export const KIRA_ROSTER: readonly KiraRosterEntry[] = [
   { kind: 'orion', name: 'Orión', tagline: 'Prueba lo que otros dan por hecho', specialty: 'skill.testing', skills: ['testing', 'quality'] },
   { kind: 'vega', name: 'Vega', tagline: 'Diseño que convierte intención en experiencia', specialty: 'skill.design', skills: ['design'] },
   { kind: 'eclipse', name: 'Eclipse', tagline: 'Busca fallos antes de que lleguen al usuario', specialty: 'skill.risk', skills: ['security', 'quality', 'testing'] },
-  { kind: 'argo', name: 'Argo', tagline: 'Recupera, acompaña y desbloquea', specialty: 'skill.recovery', skills: ['general', 'testing', 'browser'] },
+  { kind: 'argo', name: 'Argo', tagline: 'Verifica resultados y evidencia', specialty: 'skill.verification', skills: ['general', 'testing', 'browser'] },
   { kind: 'solaria', name: 'Solaria', tagline: 'Automatiza y despliega con control', specialty: 'skill.automation', skills: ['automation', 'integration'] },
   { kind: 'nexo', name: 'Nexo', tagline: 'Coordina personas, agentes y objetivos', specialty: 'skill.orchestration', skills: ['orchestration', 'integration'] },
   { kind: 'astra', name: 'Astra', tagline: 'Convierte metas en arquitectura y plan', specialty: 'skill.planning', skills: ['planning', 'orchestration'] },
@@ -127,9 +126,7 @@ function visibleLiveActivityTextOf(
 }
 
 function normalizedWorkText(summary: SessionSummary): string {
-  // oxlint-disable typescript/no-unnecessary-condition -- SessionSummary.projectionValues is optional in the source contract; the contracts lint resolves a generated companion that currently narrows it.
   const subagentLabel = summary.projectionValues?.subagent?.label ?? ''
-  // oxlint-enable typescript/no-unnecessary-condition
   return [
     subagentLabel,
     summary.displayTitle,
@@ -216,9 +213,7 @@ export function kiraTeamSpecialistOf(name: string): KiraRosterEntry {
 }
 
 function teamNameOf(summary: SessionSummary): string | undefined {
-  // oxlint-disable typescript/no-unnecessary-condition -- projectionValues remains optional in the public SessionSummary contract.
   const label = summary.projectionValues?.subagent?.label
-  // oxlint-enable typescript/no-unnecessary-condition
   if (label === undefined) return undefined
   return TEAM_LABEL.exec(label)?.[1]
 }
@@ -260,12 +255,15 @@ export function rosterCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
 }
 
 /** Render one card per live subagent, assigning identity from the capability actually requested. */
-export function liveCardsOf(rows: readonly MemberRow[]): KiraRosterCard[] {
+export function liveCardsOf(rows: readonly MemberRow[], participants: Record<string, import('@phoenix-ai/dsh-agent-team/chat-types').TeamChatParticipant> = {}): KiraRosterCard[] {
   const occupied = new Set<ModelAvatarKind>()
   const cards: KiraRosterCard[] = []
   for (const row of rows) {
     if (occupied.size >= KIRA_ROSTER.length) break
-    const identity = specialistFor(row.summary, occupied)
+    const person = participants[row.summary.id]
+    const base = KIRA_ROSTER.find(entry => entry.kind === person?.avatar) ?? specialistFor(row.summary, occupied)
+    const specialty = person !== undefined && Object.hasOwn(zh, person.role) ? person.role as KiraTeamsKey : base.specialty
+    const identity = { ...base, name: person?.name ?? base.name, specialty }
     occupied.add(identity.kind)
     cards.push({ ...identity, summary: row.summary, depth: row.depth })
   }
@@ -399,10 +397,10 @@ function openAgent(card: KiraRosterCard, openChild: (address: SubagentAddress) =
  * Agent count never changes the strip height: the strip shows at most three stacked
  * portraits and a +N overflow indicator, while the rail owns individual selection.
  */
-export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeamsDockProps) {
-  const state = useSyncExternalStore(list.subscribe.bind(list), list.getSnapshot.bind(list))
+export function KiraTeamsDock({ useList, openChild, refresh, t, layout }: KiraTeamsDockProps) {
+  const state = useList(value => value)
   const { root, rows } = lineageMembers(state)
-  const cards = liveCardsOf(rows)
+  const cards = liveCardsOf(rows, root?.projectionValues?.teamChatParticipants)
   const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen)
   const [selectedId, setSelectedId] = useState<string>()
   const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
@@ -540,7 +538,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
                 className={`${css.detailRow} ${selected ? css.detailRowSelected : ''}`}
                 aria-pressed={selected}
                 data-kira-agent-detail
-                onClick={() => { setSelectedId(String(summary.id)) }}
+                onClick={() => { setSelectedId(String(summary.id)); openAgent(card, openChild) }}
                 onDoubleClick={() => { openAgent(card, openChild) }}
               >
                 <span className={css.detailPortrait}>
@@ -591,7 +589,7 @@ export function KiraTeamsDock({ list, openChild, refresh, t, layout }: KiraTeams
                 data-agent-kind={card.kind}
                 data-agent-id={String(summary.id)}
                 data-agent-activity={actionKey}
-                onClick={() => { setSelectedId(String(summary.id)) }}
+                onClick={() => { setSelectedId(String(summary.id)); openAgent(card, openChild) }}
               >
                 <ModelActivityAvatar
                   kind={card.kind}

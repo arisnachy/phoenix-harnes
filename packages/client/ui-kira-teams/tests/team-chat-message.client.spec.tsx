@@ -3,6 +3,7 @@
 import { cleanup, render } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { TeamChatParticipant } from '@phoenix-ai/dsh-agent-team/chat-types'
 import type { ChatNode, KiraTeamMessageChatData } from '@phoenix-ai/dsh-client-ui-conversation/client'
 import {
   KiraTeamMessageView,
@@ -11,7 +12,14 @@ import {
 
 afterEach(cleanup)
 
-const View = KiraTeamMessageView as unknown as ComponentType<{ node: ChatNode<'kira-team-message'> }>
+const InjectedView = KiraTeamMessageView as unknown as ComponentType<{
+  node: ChatNode<'kira-team-message'>
+  useProjection: () => Record<string, TeamChatParticipant>
+}>
+const View = ({ node, useProjection = () => ({}) }: {
+  node: ChatNode<'kira-team-message'>
+  useProjection?: () => Record<string, TeamChatParticipant>
+}) => <InjectedView node={node} useProjection={useProjection} />
 
 function node(data: Partial<KiraTeamMessageChatData> = {}): ChatNode<'kira-team-message'> {
   return {
@@ -39,10 +47,10 @@ function node(data: Partial<KiraTeamMessageChatData> = {}): ChatNode<'kira-team-
 describe('KIRA Team chat message', () => {
   it('resolves stable personas without exposing model ids', () => {
     expect(teamIdentityOf('lead', 'root')).toMatchObject({ name: 'Kira', role: 'Coordinación', kind: 'kira' })
-    expect(teamIdentityOf('KÍRA', 'root')).toMatchObject({ name: 'Kira', kind: 'kira' })
-    expect(teamIdentityOf('forja', 'worker-a')).toMatchObject({ name: 'La Forja', role: 'Programación', kind: 'atlas' })
-    expect(teamIdentityOf('la-forja', 'worker-a')).toMatchObject({ name: 'La Forja', kind: 'atlas' })
-    expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Recuperación / soporte', kind: 'argo' })
+    expect(teamIdentityOf('KÍRA', 'root')).toMatchObject({ name: 'Kira' })
+    expect(teamIdentityOf('forja', 'worker-a')).toMatchObject({ name: 'La Forja', role: 'Programación' })
+    expect(teamIdentityOf('la-forja', 'worker-a')).toMatchObject({ name: 'La Forja' })
+    expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Verificación' })
     expect(teamIdentityOf('gpt-6-luna', 'worker-c').name).not.toContain('GPT')
 
     const first = teamIdentityOf('worker-a', 'session-a')
@@ -128,4 +136,15 @@ describe('KIRA Team chat message', () => {
     const view = render(<View node={node({ purpose })} />)
     expect(view.getByText(label)).toBeTruthy()
   })
+  it('uses the persisted participant identity for a real peer coordination message', () => {
+    const view = render(<View node={node({ senderName: 'review-worker', targetId: 'worker-b', targetName: 'verify-worker' })}
+      useProjection={() => ({
+        'worker-a': { id: 'worker-a', name: 'Zenith', avatar: 'zenith', role: 'skill.quality', status: 'working' },
+        'worker-b': { id: 'worker-b', name: 'Argo', avatar: 'argo', role: 'skill.verification', status: 'working' },
+      })} />)
+    expect(view.getByText('Zenith')).toBeTruthy()
+    expect(view.getByText('→ Argo')).toBeTruthy()
+    expect(view.container.querySelector('[data-avatar="zenith"]')).toBeTruthy()
+  })
+
 })
