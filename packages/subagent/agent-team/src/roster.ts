@@ -83,6 +83,11 @@ function liveUsage(agent: Agent | undefined) {
     : undefined
 }
 
+function liveElapsedMs(agent: Agent | undefined): number | undefined {
+  if (agent === undefined) return undefined
+  return Math.max(0, Date.now() - agent.session.header.createdAt)
+}
+
 /** Owns Team identities and the lifecycle of rostered continuable children. */
 export class TeamRoster {
   private readonly inFlightCreations = new Set<Promise<unknown>>()
