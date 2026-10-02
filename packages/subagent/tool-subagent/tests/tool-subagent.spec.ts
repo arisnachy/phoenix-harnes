@@ -6,7 +6,7 @@ import { Context } from '@phoenix-ai/cordis'
 import Loader from '@phoenix-ai/cordis-plugin-loader'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
-import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@phoenix-ai/dsh-tools'
+import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH, defineTool } from '@phoenix-ai/dsh-tools'
 import { assembleContextFor, type Agent } from '@phoenix-ai/dsh-agent'
 import AgentRegistry from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
@@ -132,6 +132,49 @@ describe('dsh-tool-subagent', () => {
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
     expect(Object.keys(props).sort()).toEqual(['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'])
     expect(schema!.description).toContain('job_output')
+    expect(schema!.description).toContain('spawn_teammate')
+    expect(schema!.description).toContain('Kira Team')
+  })
+
+  it('mechanically redirects visible Kira Team requests away from generic subagents', async () => {
+    const ctx = await setup({ provider: 'mock' })
+    ctx.tools.register(defineTool({
+      name: 'spawn_teammate',
+      description: 'real Team route',
+      parameters: {},
+      output: {
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {},
+        },
+        render: () => [],
+      },
+      async execute() {
+        throw new Error('unused test-only Team route')
+      },
+    }))
+    const parent = {
+      ...fakeAgent('team-parent'),
+      session: {
+        events: [{
+          type: 'user/message',
+          data: {
+            source: { kind: 'user' },
+            content: [{ type: 'text', text: 'Quiero ver la dinámica de agentes de Kira con avatares.' }],
+          },
+        }],
+      },
+    } as unknown as Agent
+
+    const result = await callSubagent(ctx, {
+      description: 'generic worker',
+      prompt: 'do work',
+    }, { agent: parent })
+
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('spawn_teammate')
+    expect(text(result)).toContain('Agent Teams')
   })
 
   it('omits run_in_background entirely when the instance disables it (schema and capability never disagree)', async () => {

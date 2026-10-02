@@ -53,6 +53,8 @@ export const Config: z<Config> = z.object({
 /** Model-facing collaboration guidance shared by Lead and teammates. */
 const POLICY = `Agent Teams is real shared work, not role-play. Create teammates when the user explicitly asks for a Team, or when the surrounding agent policy explicitly authorizes adaptive Team use for independent work. Phoenix Auto is explicitly authorized to use this Team path when independent specialist work materially improves quality or latency; in that mode prefer spawn_teammate over legacy subagent delegation. Never spawn a teammate only to make the interface look busy. When practical, name Phoenix Auto teammates with one unused KIRA codename that matches the duty (vortice, aurora, atlas, nova, lumen, helix, prisma, orion, vega, eclipse, argo, solaria, nexo, astra, lyra, zenith, cobalto, quasar, senda, orbita) so the same visible persona follows the teammate across the dock, chat and reactions.
 
+An explicit Team request includes any request for equipo de Kira, dinámica de agentes, avatares, teammates visibly talking to Kira or the user, or a visible multi-agent test, even when the user casually calls them subagentes. For those requests you must use spawn_teammate and the Team tools; never use legacy subagent or workflow to simulate the requested Team. The visible identity is the KIRA persona name, never the engine. Do not write “Luna 1”, “Luna 2”, “Sol”, GPT model ids, provider ids, or numbered model labels as teammate names unless the user explicitly asks which underlying engine is running. The engine may change without changing the teammate identity.
+
 Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Use team_react for a lightweight acknowledgement when prose would add no new information. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model. A teammate that reaches a material result must send it to lead with purpose result before ending its turn; use question or blocker instead when the Lead must respond first. spawn_teammate is itself the initial assignment, so do not send a duplicate assignment merely to narrate delegation. The root Phoenix chat is the shared Team room: when the user explicitly addresses a known teammate by @name or clearly asks that teammate to act, the Lead must route the substantive request with followup_task, continue supervising it, and let that teammate answer through a real Team message instead of paraphrasing as if it spoke. Requests addressed to Kira or to the Team as a whole remain Lead-orchestrated and may be delegated to one or more teammates.
 
 Model profiles are deployment-configured engines, not visible identities. The teammate name/persona remains stable even when its underlying model route changes. A fresh JUDGE is cognitively independent only when its reported modelProvider or model differs from the Lead; when they match or are unknown, report operational independence only and record the correlated-model limitation. Never claim an independent review merely because the teammate has a different name.
@@ -204,6 +206,17 @@ function callingAgent(agent: Agent | undefined, toolName: string): Agent {
   return agent
 }
 
+
+function assertKiraPersonaName(name: string): void {
+  const normalized = name.trim().toLocaleLowerCase()
+  if (/^(?:gpt(?:-|$)|luna(?:-|$)|sol(?:-|$)|openai(?:-|$)|codex(?:-|$)|claude(?:-|$)|deepseek(?:-|$)|model(?:-|$))/u.test(normalized)) {
+    throw new Error(
+      'Visible Kira Team members must use a stable Kira persona name, not a model/provider label. '
+      + 'Use a codename such as atlas, argo, orion, zenith, nova, helix, or another KIRA roster identity.',
+    )
+  }
+}
+
 /** Register the complete Team tool set in one exact Agent scope. */
 function install(agent: Agent, ctx: Context, config: Required<Config>): () => void {
   const scoped = agent.ctx
@@ -223,7 +236,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       name: 'spawn_teammate',
       description: 'Create one named, durable teammate. Only the Team Lead may call this tool.',
       parameters: {
-        name: { type: 'string', required: true, description: 'Unique lower-kebab-case teammate name.' },
+        name: { type: 'string', required: true, description: 'Unique lower-kebab-case Kira persona name. Never use model/provider labels such as luna-1, gpt-6-luna, sol, or codex.' },
         description: { type: 'string', required: true, description: 'Short description of the delegated responsibility.' },
         prompt: { type: 'string', required: true, description: 'Complete initial task for the teammate.' },
         context: {
@@ -242,6 +255,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       output: jsonOutput(SPAWN_VALUE_SCHEMA),
       async execute(args, exec) {
         const agent = callingAgent(exec.agent, 'spawn_teammate')
+        assertKiraPersonaName(args.name)
         const context = args.context ?? 'fresh'
         const explicitProfile = 'model_profile' in args && typeof args.model_profile === 'string'
           ? args.model_profile

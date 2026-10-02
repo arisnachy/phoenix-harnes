@@ -138,6 +138,10 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('spawn_teammate is itself the initial assignment')
     expect(leadPrompt).toContain('root Phoenix chat is the shared Team room')
     expect(leadPrompt).toContain('route the substantive request with followup_task')
+    expect(leadPrompt).toContain('dinámica de agentes')
+    expect(leadPrompt).toContain('avatares')
+    expect(leadPrompt).toContain('Luna 1')
+    expect(leadPrompt).toContain('never use legacy subagent or workflow')
     expect(leadPrompt).toContain('Your Team role is lead')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
@@ -161,6 +165,21 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'tool-worker' })
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
   })
+
+  it.each(['luna-1', 'luna-max', 'gpt-6-luna', 'sol', 'codex-worker'])(
+    'rejects model/provider label %s as a visible Kira teammate name',
+    async (name) => {
+      const { ctx, lead } = await setup([])
+      const result = await execute(ctx, lead, 'spawn_teammate', {
+        name,
+        description: 'visible specialist',
+        prompt: 'stay available',
+      })
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain('stable Kira persona name')
+      expect(ctx.agentTeams.listMembers(lead)).toHaveLength(1)
+    },
+  )
 
   it('routes teammates through provider-neutral model profiles', async () => {
     const { ctx, lead } = await setup(['hang'], false, {
