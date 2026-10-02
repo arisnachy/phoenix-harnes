@@ -20,7 +20,6 @@ interface TeamIdentity {
   readonly kind: ModelAvatarKind
 }
 
-
 const PERSONA_ROLE: Readonly<Partial<Record<ModelAvatarKind, string>>> = {
   vortice: 'Rendimiento',
   aurora: 'Producto / UX',
@@ -44,11 +43,12 @@ const PERSONA_ROLE: Readonly<Partial<Record<ModelAvatarKind, string>>> = {
   orbita: 'Monitoreo',
 }
 
-/** Resolve durable Team names and duties to one stable visible KIRA persona. */
-export function teamIdentityOf(name: string, id: string, description = ''): TeamIdentity {
-  const key = name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+/** Resolve durable Team names to one stable visible KIRA persona. */
+export function teamIdentityOf(name: string, id: string): TeamIdentity {
+  const stableName = name.trim().length === 0 ? id : name
+  const key = stableName.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (key === 'lead' || key === 'kira') return { name: 'Kira', role: 'Coordinación', kind: 'kira' }
-  const specialist = kiraTeamSpecialistOf(name, description || id)
+  const specialist = kiraTeamSpecialistOf(stableName)
   return {
     name: specialist.name,
     role: PERSONA_ROLE[specialist.kind] ?? 'Equipo Kira',
@@ -83,11 +83,7 @@ function textOf(content: readonly unknown[]): string {
 }
 
 function ReactionChip({ reaction }: { reaction: KiraTeamReactionChatData }) {
-  const identity = teamIdentityOf(
-    reaction.reactorName,
-    reaction.reactorId,
-    reaction.reactorDescription,
-  )
+  const identity = teamIdentityOf(reaction.reactorName, reaction.reactorId)
   return (
     <span className={css.reaction} title={`${identity.name}: ${reaction.reaction}`}>
       <span className={css.reactionAvatar}>
@@ -111,10 +107,10 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   node,
 }: KiraTeamMessageViewProps) {
   const data: KiraTeamMessageChatData = node.data
-  const sender = teamIdentityOf(data.senderName, data.senderId, data.senderDescription)
+  const sender = teamIdentityOf(data.senderName, data.senderId)
   const target = data.targetName === undefined
     ? undefined
-    : teamIdentityOf(data.targetName, data.targetId, data.targetDescription)
+    : teamIdentityOf(data.targetName, data.targetId)
   const text = textOf(data.content)
   if (text.trim() === '') return null
 
