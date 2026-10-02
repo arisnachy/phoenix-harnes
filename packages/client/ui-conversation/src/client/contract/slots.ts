@@ -129,6 +129,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
         authorKind: 'user' | 'kira' | 'agent'
         authorName?: string
         replyPreview?: string
+        originMissionId?: string
       }
     }
     /** Register one renderer keyed by the final business node kind.

@@ -14,6 +14,7 @@ import {
   performanceKeyOf,
   skillOf,
   isVisibleAgentSummary,
+  kiraTeamSpecialistOf,
   liveActivityTextOf,
   type KiraTeamsDockProps,
 } from '../src/client/KiraTeamsDock.tsx'
@@ -67,6 +68,28 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(cards[0]?.name).toBe('Vega')
     expect(cards[0]?.kind).toBe('vega')
     expect(skillOf(active)).toBe('design')
+  })
+
+  it('keeps a real Team codename aligned with the same KIRA persona used in chat', () => {
+    const teammate = summary({
+      id: sid('team-worker'),
+      parentId: sid('root'),
+      origin: 'subagent',
+      running: true,
+      projectionValues: {
+        subagent: {
+          mode: 'continuable',
+          label: 'KIRA:la-forja · typescript engineer fixing code',
+          seq: 10,
+        },
+      },
+    })
+    const [card] = liveCardsOf([{ summary: teammate, depth: 1 }])
+    expect(card).toMatchObject({ name: 'La Forja', kind: 'atlas' })
+    expect(kiraTeamSpecialistOf('la-forja'))
+      .toMatchObject({ name: 'La Forja', kind: 'atlas' })
+    expect(kiraTeamSpecialistOf('nova'))
+      .toMatchObject({ name: 'Nova', kind: 'nova' })
   })
 
   it('assigns specialist identities from the requested capability instead of agent-id randomness', () => {

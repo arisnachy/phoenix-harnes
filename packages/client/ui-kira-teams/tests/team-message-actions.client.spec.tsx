@@ -32,3 +32,14 @@ it('uses the same message identity for a quoted reply and Unicode quick reaction
   fireEvent.click(screen.getByRole('button', { name: '❤️' }))
   await vi.waitFor(() => { expect(react).toHaveBeenCalledWith('finding', '❤️', true) })
 })
+
+it('keeps inherited team messages readable without exposing actions for another mission', () => {
+  const react = vi.fn()
+  const reply = vi.fn()
+  render(<View sessionId="fork-root" originMissionId="original-root" messageId="team-member:original-child"
+    authorId="original-root" authorKind="kira" useProjection={() => undefined} react={react} reply={reply} t={(key: string) => key} />)
+  const action = screen.getByRole('button', { name: 'chat.addReaction' })
+  expect(action.hasAttribute('disabled')).toBe(true)
+  fireEvent.click(action)
+  expect(react).not.toHaveBeenCalled()
+})

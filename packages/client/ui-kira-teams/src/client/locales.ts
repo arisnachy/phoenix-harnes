@@ -7,6 +7,7 @@ export const NS = 'kira-teams'
 export const zh = {
   'skill.verification': '验证 / 证据',
   'chat.addReaction': '添加表情',
+  'chat.historical': '此消息属于原始团队；在该会话中互动',
   'chat.reply': '回复',
   'chat.replyingTo': '回复 {name}',
   'chat.cancelReply': '取消回复',
@@ -98,6 +99,7 @@ export type KiraTeamsKey = keyof typeof zh
 export const en: Record<KiraTeamsKey, string> = {
   'skill.verification': 'Verification',
   'chat.addReaction': 'Add reaction',
+  'chat.historical': 'This message belongs to the original team; interact in that session',
   'chat.reply': 'Reply',
   'chat.replyingTo': 'Replying to {name}',
   'chat.cancelReply': 'Cancel reply',
@@ -186,6 +188,7 @@ export const en: Record<KiraTeamsKey, string> = {
 export const es: Record<KiraTeamsKey, string> = {
   'skill.verification': 'Verificación',
   'chat.addReaction': 'Añadir reacción',
+  'chat.historical': 'Este mensaje pertenece al equipo original; interactúa en esa sesión',
   'chat.reply': 'Responder',
   'chat.replyingTo': 'Respondiendo a {name}',
   'chat.cancelReply': 'Cancelar respuesta',

@@ -20,7 +20,7 @@ function queued(match: ConversationMatch): KiraTeamMessageChatData | undefined {
     if (data?.version !== 1 || typeof message?.id !== 'string' || typeof message.senderId !== 'string'
       || typeof message.senderName !== 'string' || typeof message.text !== 'string') return undefined
     return { messageId: message.id, senderId: message.senderId, senderName: message.senderName,
-      senderKind: message.senderKind === 'user' ? 'user' : 'agent',
+      senderKind: message.senderKind === 'user' ? 'user' : message.senderKind === 'kira' ? 'kira' : 'agent',
       ...(typeof message.avatar === 'string' ? { avatar: message.avatar } : {}),
       ...(typeof message.role === 'string' ? { role: message.role } : {}),
       ...(typeof message.missionId === 'string' ? { missionId: message.missionId } : {}),
@@ -41,6 +41,8 @@ function queued(match: ConversationMatch): KiraTeamMessageChatData | undefined {
     messageId: message.id,
     senderId: message.senderId,
     senderName: message.senderName,
+    senderKind: message.senderName === 'lead' ? 'kira' : 'agent',
+    ...(typeof data.teamId === 'string' ? { missionId: data.teamId } : {}),
     targetId: message.targetId,
     ...typeof message.targetName === 'string' ? { targetName: message.targetName } : {},
     ...typeof message.purpose === 'string'
@@ -48,6 +50,29 @@ function queued(match: ConversationMatch): KiraTeamMessageChatData | undefined {
       ? { purpose: message.purpose as NonNullable<KiraTeamMessageChatData['purpose']> }
       : {},
     content,
+    time: match.event.time,
+    seq: match.event.seq,
+    reactions: [],
+  }
+}
+
+function delegated(match: ConversationMatch): KiraTeamMessageChatData | undefined {
+  if ((match.event.type as string) !== 'team/member') return undefined
+  const data = record(match.event.data)
+  const member = record(data?.member)
+  if (data?.version !== 1 || typeof data.teamId !== 'string'
+    || typeof member?.id !== 'string' || typeof member.name !== 'string'
+    || typeof member.description !== 'string' || member.phase !== 'active') return undefined
+  return {
+    messageId: `team-member:${member.id}`,
+    senderId: data.teamId,
+    senderName: 'lead',
+    senderKind: 'kira',
+    missionId: data.teamId,
+    targetId: member.id,
+    targetName: member.name,
+    purpose: 'assignment',
+    content: [{ type: 'text', text: member.description }],
     time: match.event.time,
     seq: match.event.seq,
     reactions: [],
@@ -95,6 +120,15 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
   kind: 'kira-team-message',
   target: 'chat',
   match: (event) => {
+    if ((event.type as string) === 'team/member') {
+      const data = record(event.data)
+      const member = record(data?.member)
+      return data?.version === 1 && typeof data.teamId === 'string'
+        && member?.phase === 'active' && typeof member.id === 'string'
+        && typeof member.name === 'string' && typeof member.description === 'string'
+        ? { id: `team-member:${member.id}`, role: 'start' }
+        : null
+    }
     if ((event.type as string) === 'team/message/queued' || (event.type as string) === 'team/chat-message') {
       const data = record(event.data)
       const message = record(data?.message)
@@ -108,7 +142,7 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
     return null
   },
   start: (_context, match) => {
-    const data = queued(match)
+    const data = queued(match) ?? delegated(match)
     if (data === undefined) throw new Error('kira-team-message start requires a valid team/message/queued event')
     return data
   },

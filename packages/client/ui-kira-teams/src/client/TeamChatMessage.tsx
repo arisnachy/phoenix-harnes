@@ -2,10 +2,9 @@ import { memo } from 'react'
 import { MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import {
-  KIRA_ROSTER,
+  KIRA_ROSTER, kiraTeamSpecialistOf,
 } from './KiraTeamsDock.tsx'
 import {
-  agentAvatarKind,
   ModelActivityAvatar,
   type ModelAvatarKind,
 } from './ModelActivityAvatar.tsx'
@@ -52,7 +51,7 @@ const SKILL_ROLE: Readonly<Record<string, string>> = {
 /** Resolve durable Team names to stable KIRA personas; model ids never become visible identities. */
 export function teamIdentityOf(name: string, id: string): TeamIdentity {
   const key = slug(name)
-  if (key === 'lead' || key === 'kira') return { name: 'Kira', role: 'Coordinación', kind: 'aurora' }
+  if (key === 'lead' || key === 'kira') return { name: 'Kira', role: 'Coordinación', kind: 'kira' }
   if (key === 'la-forja' || key === 'forja') return { name: 'La Forja', role: 'Programación', kind: 'atlas' }
   const roster = KIRA_ROSTER.find(agent => slug(agent.name) === key || slug(agent.kind) === key)
   if (roster !== undefined) {
@@ -62,11 +61,11 @@ export function teamIdentityOf(name: string, id: string): TeamIdentity {
       kind: roster.kind,
     }
   }
-  const kind = agentAvatarKind(id)
-  const stable = KIRA_ROSTER.find(agent => agent.kind === kind)
+  const stable = kiraTeamSpecialistOf(name === id || name.trim() === '' ? id : name)
+  const kind = stable.kind
   return {
-    name: name !== id && name.trim() !== '' && !/^(gpt|claude|gemini|deepseek|luna|sol|terra|mock)[-\d]/u.test(key) ? name : stable?.name ?? 'Equipo Kira',
-    role: stable === undefined ? 'Equipo Kira' : (SKILL_ROLE[stable.skills[0] ?? 'general'] ?? 'Equipo Kira'),
+    name: name !== id && name.trim() !== '' && !/^(gpt|claude|gemini|deepseek|luna|sol|terra|mock)[-\d]/u.test(key) ? name : stable.name,
+    role: SKILL_ROLE[stable.skills[0] ?? 'general'] ?? 'Equipo Kira',
     kind,
   }
 }
@@ -97,8 +96,7 @@ function textOf(content: readonly unknown[]): string {
   }).join('\n')
 }
 
-function ReactionChip({ reaction }: { reaction: KiraTeamReactionChatData }) {
-  const identity = teamIdentityOf(reaction.reactorName, reaction.reactorId)
+function ReactionChip({ reaction, identity }: { reaction: KiraTeamReactionChatData; identity: TeamIdentity }) {
   return (
     <span className={css.reaction} title={`${identity.name}: ${reaction.reaction}`}>
       <span className={css.reactionAvatar}>
@@ -119,15 +117,25 @@ function ReactionChip({ reaction }: { reaction: KiraTeamReactionChatData }) {
 type KiraTeamMessageViewProps = PropsRuntime<'conversation.chat.node', 'kira-team-message'> & Partial<PropsLocale<typeof NS>>
 
 export const KiraTeamMessageView = memo(function KiraTeamMessageView({
-  node, t,
+  node, t, useProjection,
 }: KiraTeamMessageViewProps) {
   const data: KiraTeamMessageChatData = node.data
-  const identity = teamIdentityOf(data.senderName, data.senderId)
+  const participants = useProjection('teamChatParticipants') ?? {}
+  const identityFor = (name: string, id: string): TeamIdentity => {
+    const base = teamIdentityOf(name, id)
+    const participant = participants[id]
+    return participant === undefined ? base : {
+      ...base, name: participant.name,
+      kind: KIRA_ROSTER.find(persona => persona.kind === participant.avatar)?.kind ?? base.kind,
+    }
+  }
+  const identity = identityFor(data.senderName, data.senderId)
   const avatar = KIRA_ROSTER.find(persona => persona.kind === data.avatar)?.kind ?? identity.kind
-  const sender = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: '', kind: 'aurora' as const } : { ...identity, name: data.missionId === undefined ? identity.name : data.senderName, kind: avatar }
+  const sender = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: '', kind: 'aurora' as const } : { ...identity, name: data.senderKind === 'kira' ? 'Kira'
+    : participants[data.senderId]?.name ?? (data.missionId === undefined ? identity.name : data.senderName), kind: avatar }
   const target = data.targetName === undefined
     ? undefined
-    : teamIdentityOf(data.targetName, data.targetId)
+    : identityFor(data.targetName, data.targetId)
   const text = textOf(data.content)
   if (text.trim() === '') return null
 
@@ -146,7 +154,8 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
       <div className={css.column}>
         <div className={css.meta}>
           <strong>{sender.name}</strong>
-          <span>{data.role === undefined ? sender.role : t?.(data.role as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
+          <span>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
+            : t?.((data.role ?? participants[data.senderId]?.role) as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
           {data.purpose !== undefined && data.purpose !== 'update' && (
             <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
           )}
@@ -160,7 +169,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
         {data.reactions.length > 0 && (
           <div className={css.reactions} aria-label="Reacciones del equipo">
             {data.reactions.map(item => (
-              <ReactionChip key={`${item.reactorId}:${item.reaction}`} reaction={item} />
+              <ReactionChip key={`${item.reactorId}:${item.reaction}`} reaction={item} identity={identityFor(item.reactorName, item.reactorId)} />
             ))}
           </div>
         )}

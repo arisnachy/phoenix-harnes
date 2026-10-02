@@ -82,6 +82,40 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
   })
 
+  it('keeps Phoenix Auto specialist delegation inside the real Kira Team path', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [
+        { name: 'read', description: 'read a file', parameters: { type: 'object' } },
+        { name: 'spawn_teammate', description: 'create a Kira teammate', parameters: { type: 'object' } },
+        { name: 'subagent', description: 'legacy subagent', parameters: { type: 'object' } },
+        { name: 'subagent_fork', description: 'legacy fork', parameters: { type: 'object' } },
+      ],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+
+    const autoAssembly = await ctx.systemPrompt.assemble()
+    expect(autoAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
+    expect(selection.assembledToolCount).toBe(2)
+
+    selection.current = { provider: 'openai-codex', model: 'gpt-6-luna' }
+    const explicitAssembly = await ctx.systemPrompt.assemble()
+    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual([
+      'read',
+      'spawn_teammate',
+      'subagent',
+      'subagent_fork',
+    ])
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('routes Phoenix Auto from Sol planning to Luna Max execution', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
@@ -1123,7 +1157,7 @@ describe('installModelSelection()', () => {
       afterStep: 1,
       selection: { provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: ReasoningEffortId('high') },
     })
-    const agent = {} as Agent
+    const agent = { session: { events: [] } } as unknown as Agent
     const seed: LlmCallConfig = { provider: 'openai-codex', model: 'gpt-5.6-sol', reasoningEffort: ReasoningEffortId('high') }
     const signal = new AbortController().signal
     await ctx.systemPrompt.assemble()

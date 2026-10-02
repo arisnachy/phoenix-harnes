@@ -228,6 +228,8 @@ Types: [Agent](core.zh.md)
 Source: [`packages/subagent/agent-team/src/index.ts`](../../packages/subagent/agent-team/src/index.ts)
 <!-- END GENERATED cordis-surface -->
 
+<a id="main-conversation"></a>
+
 ## 主会话
 
 对模型隐藏的公开会话记录保留规范身份、源所有权及每个目标的接收记录。带版本的事件和表情、参与者投影共享现有 Session 流。浏览器及根会话恢复会重用回复请求身份；重复消息快照属于同一会话行的更新。

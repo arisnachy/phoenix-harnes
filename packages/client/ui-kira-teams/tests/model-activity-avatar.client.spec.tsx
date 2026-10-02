@@ -104,3 +104,9 @@ describe('ModelActivityAvatar', () => {
     expect(fallback.props).toMatchObject({ 'data-avatar': 'generic', 'data-phase': 'preparing' })
   })
 })
+
+describe('Kira lead identity', () => {
+  it('reuses an approved portrait asset while remaining a distinct semantic avatar kind', () => {
+    expect(portraitSrcForKind('kira')).toBe(portraitSrcForKind('aurora'))
+  })
+})

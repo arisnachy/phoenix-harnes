@@ -69,7 +69,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
           />
         ),
       })}
-      {messageId !== undefined && renderSlot('conversation.chat.message-actions', { messageId, authorId, authorKind, ...(routedNode.kind === 'kira-team-message' ? { authorName: routedNode.data.senderName, replyPreview: routedNode.data.content.flatMap(block => typeof block === 'object' && block !== null && 'type' in block && block.type === 'text' && 'text' in block && typeof block.text === 'string' ? [block.text] : []).join('\n') } : {}) })}
+      {messageId !== undefined && renderSlot('conversation.chat.message-actions', { messageId, authorId, authorKind, ...(routedNode.kind === 'kira-team-message' ? { ...(routedNode.data.missionId === undefined ? {} : { originMissionId: routedNode.data.missionId }), authorName: routedNode.data.senderName, replyPreview: routedNode.data.content.flatMap(block => typeof block === 'object' && block !== null && 'type' in block && block.type === 'text' && 'text' in block && typeof block.text === 'string' ? [block.text] : []).join('\n') } : {}) })}
     </div>
   )
 })

@@ -1962,4 +1962,40 @@ describe('visible team conversation', () => {
     expect(lead.session.events).toHaveLength(count)
   })
 
+  it('lets every participant react to the real initial Kira assignment', async () => {
+    const { ctx, lead, adapter } = await setup(['hang'], {}, true)
+    const started = await spawn(ctx, lead, 'zenith')
+    const messageId = `team-member:${started.member.id}`
+    const before = adapter.requests.length
+    await expect(ctx.agentTeams.chatReact({ sessionId: lead.id, messageId, emoji: '🚀', active: true })).resolves.toBeUndefined()
+    const row = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(message => message.id === messageId)
+    expect(row).toMatchObject({ senderKind: 'kira', senderId: lead.id, targetId: started.member.id })
+    expect(row?.reactions).toMatchObject([{ reactorKind: 'user', emoji: '🚀' }])
+    expect(adapter.requests).toHaveLength(before)
+  })
+
+  it('keeps captured and peer history readable in a fork but rejects cross-mission reactions', async () => {
+    const { ctx, lead } = await setup(['hang'], {}, true)
+    await spawn(ctx, lead, 'zenith')
+    lead.session.append('team/chat-message', { version: 1, message: {
+      id: 'original-captured', senderId: 'original-worker', senderName: 'Zenith', senderKind: 'agent',
+      missionId: lead.id, text: 'Original evidence', time: 1, sourceSeq: 0, mentions: [], reactions: [],
+    } })
+    const peer = await ctx.agentTeams.sendMessage(lead, {
+      target: 'zenith', content: content('Original coordination'), delivery: 'quiet', signal: SIGNAL,
+    })
+    const fork = ctx.sessions.create(SessionId('readonly-history-fork'), {
+      meta: { parentSession: lead.id }, seed: [...lead.session.events],
+    })
+    const read = await ctx.agentTeams.chatMessages({ sessionId: fork.id })
+    expect(read.messages.some(message => message.id === 'original-captured')).toBe(true)
+    expect(read.messages.some(message => message.id === peer.messageId)).toBe(true)
+    const count = fork.events.length
+    for (const messageId of ['original-captured', peer.messageId]) {
+      await expect(ctx.agentTeams.chatReact({ sessionId: fork.id, messageId, emoji: '👍', active: true }))
+        .rejects.toThrow('another mission')
+    }
+    expect(fork.events).toHaveLength(count)
+  })
+
 })

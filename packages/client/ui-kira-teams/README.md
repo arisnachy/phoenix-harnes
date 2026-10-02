@@ -28,3 +28,5 @@ This package does not assemble or send provider requests, so it does not affect 
 ## Known Limitations and Deferred Work
 
 - The rail can show only live subagents published by the current host session; settled, remote, or historical teams are not included.
+
+Inherited Team messages remain readable in an ordinary user fork. Controls for another mission are disabled; new replies and reactions stay owned by the current mission.

@@ -23,13 +23,16 @@ export interface TeamMessageActionsInjected {
   reply: (messageId: string, authorId: string, authorName: string, preview: string) => void
 }
 type Props = PropsRuntime<'conversation.chat.message-actions'> & TeamMessageActionsInjected & PropsLocale<typeof NS>
-export function TeamMessageActions({ messageId, authorId, authorKind, authorName, replyPreview, useProjection, react, reply, t }: Props) {
+export function TeamMessageActions({
+  messageId, authorId, authorKind, authorName, replyPreview, originMissionId, sessionId, useProjection, react, reply, t,
+}: Props) {
   const reactions = useProjection('teamChatReactions')?.[messageId] ?? []
   const participants = useProjection('teamChatParticipants') ?? {}
   const [open, setOpen] = useState(false)
   const [full, setFull] = useState(false)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
+  const historical = originMissionId !== undefined && originMissionId !== sessionId
   const groups = new Map<string, typeof reactions>()
   for (const reaction of reactions) groups.set(reaction.emoji, [...(groups.get(reaction.emoji) ?? []), reaction])
   const toggle = async (emoji: string) => {
@@ -43,8 +46,9 @@ export function TeamMessageActions({ messageId, authorId, authorKind, authorName
     finally { setPending(false) }
   }
   return <div className={css.reactions} data-team-reactions={messageId}>
-    {[...groups].map(([emoji, people]) => <button key={emoji} className={css.reaction} disabled={pending}
-      title={people.map(item => item.reactorKind === 'user' ? item.reactorName : teamIdentityOf(item.reactorName, item.reactorId).name).join(', ')}
+    {[...groups].map(([emoji, people]) => <button key={emoji} className={css.reaction} disabled={pending || historical}
+      title={people.map(item => item.reactorKind === 'user' ? item.reactorName
+        : participants[item.reactorId]?.name ?? teamIdentityOf(item.reactorName, item.reactorId).name).join(', ')}
       aria-pressed={people.some(item => item.reactorKind === 'user')} onClick={() => { void toggle(emoji) }}>
       {people.filter(item => item.reactorKind !== 'user').slice(0, 3).map(item => <span className={css.reactionAvatar} key={item.reactorId}>
         <ModelActivityAvatar
@@ -53,10 +57,10 @@ export function TeamMessageActions({ messageId, authorId, authorKind, authorName
           activity={undefined} running={false} pending={false} ready />
       </span>)}{emoji} {people.length}
     </button>)}
-    <button type="button" className={css.reaction} aria-label={t('chat.addReaction')} aria-expanded={open} onClick={() => { setOpen(!open) }}>🙂+</button>
-    {authorKind === 'agent' && <button type="button" className={css.reaction} onClick={() => { reply(messageId, authorId, authorName ?? '', replyPreview ?? '') }}>{t('chat.reply')}</button>}
+    <button type="button" className={css.reaction} aria-label={t('chat.addReaction')} disabled={historical} title={historical ? t('chat.historical') : undefined} aria-expanded={open} onClick={() => { setOpen(!open) }}>🙂+</button>
+    {authorKind === 'agent' && <button type="button" className={css.reaction} disabled={historical} onClick={() => { reply(messageId, authorId, authorName ?? '', replyPreview ?? '') }}>{t('chat.reply')}</button>}
     {open && <div className={css.emojiMenu}>
-      {QUICK.map(emoji => <button type="button" key={emoji} disabled={pending} onClick={() => { void toggle(emoji) }}>{emoji}</button>)}
+      {QUICK.map(emoji => <button type="button" key={emoji} disabled={pending || historical} onClick={() => { void toggle(emoji) }}>{emoji}</button>)}
       <button type="button" onClick={() => { setFull(!full) }}>+</button>
       {full && <Suspense fallback={<span>…</span>}><EmojiPicker onEmojiClick={(emoji) => { void toggle(emoji.emoji) }} lazyLoadEmojis width="100%" searchPlaceHolder={t('chat.searchEmoji')} /></Suspense>}
     </div>}

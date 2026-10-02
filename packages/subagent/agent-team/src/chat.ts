@@ -12,6 +12,7 @@ import emojiRegex from 'emoji-regex'
 import { inferTeamSkill, TEAM_PERSONAS, TEAM_SKILL_POOLS } from './personas.ts'
 import { chatMessageSchema, chatParticipantSchema, chatReactionSchema } from './chat-projection.ts'
 import { foldTeam } from './fold.ts'
+import { TeamId } from './types.ts'
 import type { TeamJournal } from './journal.ts'
 import type { TeamChatMessage, TeamChatParticipant, TeamChatReadResult, TeamChatReaction, TeamChatReactRequest, TeamChatReplyRequest } from './chat-types.ts'
 
@@ -57,6 +58,15 @@ export class TeamChat {
     const rows = new Map<string, TeamChatMessage>()
     const reactions = new Map<string, TeamChatReaction>()
     for (const event of root.events) {
+      if (event.type === 'team/member' && chatVersion(event.data.version)
+        && event.data.teamId === TeamId(root.id) && event.data.member.phase === 'active') {
+        const member = event.data.member
+        rows.set(`team-member:${member.id}`, {
+          id: `team-member:${member.id}`, senderId: root.id, senderName: 'Kira', senderKind: 'kira',
+          avatar: 'kira', role: 'skill.orchestration', missionId: root.id, text: member.description,
+          time: event.time, sourceSeq: event.seq, targetId: member.id, mentions: [member.id], reactions: [],
+        })
+      }
       if (event.type === 'team/chat-message' && chatVersion(event.data.version)) {
         const parsed = chatMessageSchema.safeParse(event.data.message)
         if (parsed.success) rows.set(parsed.data.id, parsed.data)
@@ -65,7 +75,7 @@ export class TeamChat {
         const message = event.data.message
         rows.set(message.id, { id: message.id, senderId: message.senderId, senderName: message.senderName,
           senderKind: message.senderId === root.id ? 'kira' : 'agent', text: textOf(message.content), time: event.time,
-          sourceSeq: event.seq, targetId: message.targetId, mentions: [message.targetId], reactions: [] })
+          sourceSeq: event.seq, missionId: event.data.teamId, targetId: message.targetId, mentions: [message.targetId], reactions: [] })
       }
       if (event.type === 'user/message' && event.data.source.kind !== 'user') continue
       if ((event.type === 'user/message' || event.type === 'assistant/message') && isAppendSurfaceEvent(event)) {
@@ -278,6 +288,7 @@ export class TeamChat {
       this.assertLive(root)
       const message = this.messages(root).find(row => row.id === request.messageId)
       if (message === undefined) throw new Error('team chat message not found')
+      if (message.missionId !== undefined && message.missionId !== root.id) throw new Error('message belongs to another mission')
       const actorId = actor?.id ?? 'user'
       const existing = message.reactions.find(row => row.reactorId === actorId && row.emoji === request.emoji)
       if ((existing !== undefined) === request.active) return

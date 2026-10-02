@@ -10,17 +10,20 @@ $ErrorActionPreference = 'Stop'
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
 $launcherPath = Join-Path $rootPath 'scripts\phoenix-desktop-launch.ps1'
 $markdownOpenPath = Join-Path $rootPath 'scripts\phoenix-markdown-open.ps1'
-$iconSourcePath = Join-Path $rootPath 'apps\web\public\favicon.png'
+$iconAssetPath = Join-Path $rootPath 'scripts\phoenix-windows-icon.ico.b64'
 
-foreach ($required in @($launcherPath, $markdownOpenPath, $iconSourcePath)) {
+foreach ($required in @($launcherPath, $markdownOpenPath, $iconAssetPath)) {
   if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
     throw "PHOENIX shell integration file is missing: $required"
   }
 }
 
 $desktopPath = [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory)
+$commonDesktopPath = [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonDesktopDirectory)
 $programsPath = [Environment]::GetFolderPath([Environment+SpecialFolder]::Programs)
+$startupPath = [Environment]::GetFolderPath([Environment+SpecialFolder]::Startup)
 $localAppData = [Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)
+
 if ([string]::IsNullOrWhiteSpace($desktopPath)) {
   throw 'Windows did not return a Desktop directory for the current user.'
 }
@@ -34,104 +37,34 @@ if ([string]::IsNullOrWhiteSpace($localAppData)) {
 $phoenixState = Join-Path $localAppData 'Phoenix'
 New-Item -ItemType Directory -Force -Path $phoenixState | Out-Null
 
-function Get-BigEndianInt32([byte[]]$Bytes, [int]$Offset) {
-  return (
-    ([int]$Bytes[$Offset] -shl 24) -bor
-    ([int]$Bytes[$Offset + 1] -shl 16) -bor
-    ([int]$Bytes[$Offset + 2] -shl 8) -bor
-    [int]$Bytes[$Offset + 3]
-  )
+# Use a real ICO shipped with Phoenix instead of synthesizing one at runtime.
+# The hash in the file name also invalidates Explorer's stale icon cache.
+$iconBase64 = (Get-Content -LiteralPath $iconAssetPath -Raw).Trim()
+try {
+  $iconBytes = [Convert]::FromBase64String($iconBase64)
 }
-
-function Write-PhoenixIcon([string]$SourcePath, [string]$DestinationPath) {
-  $png = [IO.File]::ReadAllBytes($SourcePath)
-  if ($png.Length -lt 24) { throw 'Phoenix logo PNG is too small to be valid.' }
-  $signature = @(
-    0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
-  )
-  for ($index = 0; $index -lt $signature.Count; $index += 1) {
-    if ($png[$index] -ne $signature[$index]) {
-      throw 'Phoenix logo is not a valid PNG.'
-    }
-  }
-  if ([Text.Encoding]::ASCII.GetString($png, 12, 4) -ne 'IHDR') {
-    throw 'Phoenix logo PNG has no IHDR header.'
-  }
-
-  $width = Get-BigEndianInt32 $png 16
-  $height = Get-BigEndianInt32 $png 20
-  if ($width -lt 1 -or $height -lt 1 -or $width -gt 256 -or $height -gt 256) {
-    throw "Phoenix logo dimensions are unsupported for the Windows icon: $width x $height"
-  }
-
-  $iconWidth = if ($width -eq 256) { [byte]0 } else { [byte]$width }
-  $iconHeight = if ($height -eq 256) { [byte]0 } else { [byte]$height }
-
-  $stream = [IO.File]::Open(
-    $DestinationPath,
-    [IO.FileMode]::Create,
-    [IO.FileAccess]::Write,
-    [IO.FileShare]::None
-  )
-  try {
-    $writer = New-Object IO.BinaryWriter($stream)
-    try {
-      $writer.Write([UInt16]0)
-      $writer.Write([UInt16]1)
-      $writer.Write([UInt16]1)
-      $writer.Write($iconWidth)
-      $writer.Write($iconHeight)
-      $writer.Write([byte]0)
-      $writer.Write([byte]0)
-      $writer.Write([UInt16]1)
-      $writer.Write([UInt16]32)
-      $writer.Write([UInt32]$png.Length)
-      $writer.Write([UInt32]22)
-      $writer.Write($png)
-    }
-    finally {
-      $writer.Dispose()
-    }
-  }
-  finally {
-    $stream.Dispose()
-  }
+catch {
+  throw 'PHOENIX shortcut icon asset is not valid base64.'
 }
-
-function Test-PhoenixIcon([string]$Path) {
-  if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
-  try {
-    $bytes = [IO.File]::ReadAllBytes($Path)
-    return (
-      $bytes.Length -gt 30 -and
-      $bytes[0] -eq 0 -and
-      $bytes[1] -eq 0 -and
-      $bytes[2] -eq 1 -and
-      $bytes[3] -eq 0 -and
-      $bytes[4] -eq 1 -and
-      $bytes[5] -eq 0 -and
-      $bytes[22] -eq 0x89 -and
-      $bytes[23] -eq 0x50 -and
-      $bytes[24] -eq 0x4E -and
-      $bytes[25] -eq 0x47
-    )
-  }
-  catch {
-    return $false
-  }
+if (
+  $iconBytes.Length -lt 64 -or
+  $iconBytes[0] -ne 0 -or
+  $iconBytes[1] -ne 0 -or
+  $iconBytes[2] -ne 1 -or
+  $iconBytes[3] -ne 0
+) {
+  throw 'PHOENIX shortcut icon asset is not a valid ICO file.'
 }
-
-$iconPath = Join-Path $phoenixState 'phoenix.ico'
-$refreshIcon = -not (Test-PhoenixIcon $iconPath)
-if (-not $refreshIcon) {
-  $refreshIcon = (Get-Item -LiteralPath $iconSourcePath).LastWriteTimeUtc -gt
-    (Get-Item -LiteralPath $iconPath).LastWriteTimeUtc
+$sha256 = [Security.Cryptography.SHA256]::Create()
+try {
+  $iconHash = ([BitConverter]::ToString($sha256.ComputeHash($iconBytes))).Replace('-', '').Substring(0, 12).ToLowerInvariant()
 }
-if ($refreshIcon) {
-  Write-PhoenixIcon $iconSourcePath $iconPath
+finally {
+  $sha256.Dispose()
 }
+$iconPath = Join-Path $phoenixState "phoenix-browser-$iconHash.ico"
 if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
-  throw "Phoenix Windows icon could not be prepared: $iconPath"
+  [IO.File]::WriteAllBytes($iconPath, $iconBytes)
 }
 
 $powerShellExe = Join-Path $PSHOME 'powershell.exe'
@@ -142,53 +75,75 @@ $iconLocation = "$iconPath,0"
 $windowStyle = 7
 $shell = New-Object -ComObject WScript.Shell
 
+function Remove-LegacyPhoenixShortcut([string]$ShortcutPath) {
+  if ([string]::IsNullOrWhiteSpace($ShortcutPath)) { return }
+  if (-not (Test-Path -LiteralPath $ShortcutPath -PathType Leaf)) { return }
+
+  try {
+    $legacy = $shell.CreateShortcut($ShortcutPath)
+    $targetFile = [IO.Path]::GetFileName([string]$legacy.TargetPath)
+    $shortcutName = [IO.Path]::GetFileName($ShortcutPath)
+    if (
+      $targetFile -ieq 'Phoenix.exe' -or
+      $shortcutName -ieq 'PHOENIX HARDNESS.lnk'
+    ) {
+      Remove-Item -LiteralPath $ShortcutPath -Force -ErrorAction Stop
+    }
+  }
+  catch {
+    # If Windows cannot inspect a legacy link, do not destroy an unknown file.
+  }
+}
+
+$taskbarDirectory = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
+
+# Remove all known shortcuts created by the old native EXE/managed installer
+# before writing the one canonical browser launcher.
+$legacyLocations = @(
+  (Join-Path $desktopPath 'Phoenix.lnk'),
+  (Join-Path $desktopPath 'PHOENIX HARDNESS.lnk'),
+  (Join-Path $programsPath 'Phoenix.lnk'),
+  (Join-Path $programsPath 'PHOENIX HARDNESS.lnk'),
+  (Join-Path $startupPath 'PHOENIX HARDNESS.lnk'),
+  (Join-Path $taskbarDirectory 'Phoenix.lnk'),
+  (Join-Path $taskbarDirectory 'PHOENIX HARDNESS.lnk')
+)
+if (-not [string]::IsNullOrWhiteSpace($commonDesktopPath)) {
+  $legacyLocations += Join-Path $commonDesktopPath 'Phoenix.lnk'
+}
+foreach ($legacyPath in $legacyLocations) {
+  Remove-LegacyPhoenixShortcut $legacyPath
+}
+
 function Set-PhoenixShortcut([string]$ShortcutPath) {
   $directory = Split-Path -Parent $ShortcutPath
   New-Item -ItemType Directory -Force -Path $directory | Out-Null
 
-  $needsWrite = $true
-  if (Test-Path -LiteralPath $ShortcutPath -PathType Leaf) {
-    try {
-      $existing = $shell.CreateShortcut($ShortcutPath)
-      $needsWrite = (
-        $existing.TargetPath -ne $targetPath -or
-        $existing.Arguments -ne $arguments -or
-        $existing.WorkingDirectory -ne $workingDirectory -or
-        $existing.IconLocation -ne $iconLocation -or
-        $existing.WindowStyle -ne $windowStyle
-      )
-    }
-    catch {
-      $needsWrite = $true
-    }
-  }
-
-  if ($needsWrite) {
-    $shortcut = $shell.CreateShortcut($ShortcutPath)
-    $shortcut.TargetPath = $targetPath
-    $shortcut.Arguments = $arguments
-    $shortcut.WorkingDirectory = $workingDirectory
-    $shortcut.Description = 'PHOENIX AI'
-    $shortcut.IconLocation = $iconLocation
-    $shortcut.WindowStyle = $windowStyle
-    $shortcut.Save()
-  }
+  # Rewrite every time. This repairs target, icon and working directory even
+  # when Windows cached a shortcut created by the old Phoenix.exe installer.
+  $shortcut = $shell.CreateShortcut($ShortcutPath)
+  $shortcut.TargetPath = $targetPath
+  $shortcut.Arguments = $arguments
+  $shortcut.WorkingDirectory = $workingDirectory
+  $shortcut.Description = 'Phoenix AI — navegador'
+  $shortcut.IconLocation = $iconLocation
+  $shortcut.WindowStyle = $windowStyle
+  $shortcut.Save()
 }
 
-# Desktop and Start Menu use the same normal browser launcher. Never Phoenix.exe.
-$shortcutPath = Join-Path $desktopPath 'PHOENIX.lnk'
-$startMenuShortcutPath = Join-Path $programsPath 'PHOENIX.lnk'
+# One canonical shortcut name everywhere. It launches pnpm phoenix through
+# phoenix-desktop-launch.ps1 and never targets Phoenix.exe.
+$shortcutPath = Join-Path $desktopPath 'Phoenix.lnk'
+$startMenuShortcutPath = Join-Path $programsPath 'Phoenix.lnk'
+$taskbarShortcutPath = Join-Path $taskbarDirectory 'Phoenix.lnk'
 Set-PhoenixShortcut $shortcutPath
 Set-PhoenixShortcut $startMenuShortcutPath
-
-# Prepare and, where Windows exposes the verb, pin PHOENIX to the taskbar.
-$taskbarDirectory = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
-$taskbarShortcutPath = Join-Path $taskbarDirectory 'PHOENIX.lnk'
 Set-PhoenixShortcut $taskbarShortcutPath
+
 try {
   $shellApplication = New-Object -ComObject Shell.Application
   $programFolder = $shellApplication.Namespace($programsPath)
-  $programItem = $programFolder.ParseName('PHOENIX.lnk')
+  $programItem = $programFolder.ParseName('Phoenix.lnk')
   if ($null -ne $programItem) {
     $pinVerb = @($programItem.Verbs()) | Where-Object {
       $verbName = ($_.Name -replace '&', '').Trim()
@@ -201,11 +156,11 @@ try {
   }
 }
 catch {
-  # Windows 11 may suppress the pin verb for scripted callers. The deterministic
-  # taskbar-ready shortcut remains in the user's pinned TaskBar directory.
+  # Windows 11 can block programmatic pin verbs. The canonical pinned shortcut
+  # has still been repaired in the user's taskbar shortcut directory.
 }
 
-# Register a user-level Markdown reader so .md files do not fall through to VS Code.
+# Register the Phoenix Markdown reader without changing the Phoenix launcher.
 $classesRoot = 'HKCU:\Software\Classes'
 $markdownProgId = 'Phoenix.Markdown'
 $progIdPath = Join-Path $classesRoot $markdownProgId
@@ -237,8 +192,6 @@ foreach ($extension in @('.md', '.markdown')) {
   New-Item -Path $openWithPath -Force | Out-Null
   New-ItemProperty -Path $openWithPath -Name $markdownProgId -PropertyType String -Value '' -Force | Out-Null
 
-  # If VS Code was explicitly stored as the per-user choice, remove only that
-  # stale override so the requested Phoenix.Markdown association can take effect.
   $userChoicePath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts\$extension\UserChoice"
   try {
     $choice = Get-ItemProperty -Path $userChoicePath -ErrorAction Stop
@@ -247,8 +200,7 @@ foreach ($extension in @('.md', '.markdown')) {
     }
   }
   catch {
-    # Protected UserChoice keys can be immutable on some Windows builds.
-    # The Phoenix ProgID is still registered and will be offered by Windows.
+    # Protected UserChoice keys are best-effort only.
   }
 }
 
@@ -269,7 +221,7 @@ public static class PhoenixShellNotify {
   )
 }
 catch {
-  # The shortcuts and registry entries are already durable; notification is best-effort.
+  # Explorer will still discover the rewritten shortcut on its next refresh.
 }
 
 Write-Output $shortcutPath
