@@ -157,7 +157,7 @@ declare module '@phoenix-ai/dsh-llm' {
 
 /** Team-service deployment limits. */
 export interface Config {
-  /** Maximum immutable teammate names retained by one Team. */
+  /** Maximum non-failed teammate identities admitted by one Team; failed starts remain diagnostic history only. */
   readonly maxMembers?: number
   /** Maximum non-deleted tasks retained by one Team. */
   readonly maxTasks?: number
