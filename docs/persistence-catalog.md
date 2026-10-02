@@ -843,6 +843,44 @@ Source: [`packages/subagent/subagent/src/descriptor.ts:37`](../packages/subagent
 
 ### `team/*`
 
+<a id="teamchat-message--log-only"></a>
+
+#### `team/chat-message` — log-only
+
+```ts persistence-catalog
+/** Actual child output copied into its root's transcript, never model history. */
+'team/chat-message': { readonly version: 1
+  readonly update?: true
+  readonly message: TeamChatMessage }
+```
+
+Source: [`packages/subagent/agent-team/src/chat-types.ts:71`](../packages/subagent/agent-team/src/chat-types.ts)
+
+<a id="teamchat-participant--log-only"></a>
+
+#### `team/chat-participant` — log-only
+
+```ts persistence-catalog
+/** Complete, stable real child identity and operational state in its mission. */
+'team/chat-participant': { readonly version: 1
+  readonly participant: TeamChatParticipant }
+```
+
+Source: [`packages/subagent/agent-team/src/chat-types.ts:68`](../packages/subagent/agent-team/src/chat-types.ts)
+
+<a id="teamchat-reaction--log-only"></a>
+
+#### `team/chat-reaction` — log-only
+
+```ts persistence-catalog
+/** Idempotent per-person, per-emoji set/remove mutation, without waking a model. */
+'team/chat-reaction': { readonly version: 1
+  readonly reaction: TeamChatReaction
+  readonly active: boolean }
+```
+
+Source: [`packages/subagent/agent-team/src/chat-types.ts:75`](../packages/subagent/agent-team/src/chat-types.ts)
+
 <a id="teammember--log-only"></a>
 
 #### `team/member` — log-only

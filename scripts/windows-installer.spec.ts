@@ -40,7 +40,7 @@ describe('PHOENIX managed Windows installation', () => {
     const markdownReader = read('scripts/phoenix-markdown-reader.mjs')
     expect(shortcut).toContain("Join-Path $phoenixState 'phoenix.ico'")
     expect(shortcut).toContain('New-Object IO.BinaryWriter')
-    expect(shortcut).toContain("$taskbarDirectory = Join-Path $env:APPDATA")
+    expect(shortcut).toContain('$taskbarDirectory = Join-Path $env:APPDATA')
     expect(shortcut).toContain("'PHOENIX.lnk'")
     expect(shortcut).toContain("'Phoenix.Markdown'")
     expect(shortcut).toContain("'OpenWithProgids'")

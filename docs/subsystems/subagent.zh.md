@@ -172,6 +172,8 @@ interface CoordinatorMessageSource {
 ```ts type-equiv
 /** Options for following up with one continuable child. */
 interface SubagentFollowupOptions {
+  /** Human interventions can reach the nearest step; ordinary peer work stays FIFO. */
+  readonly delivery?: 'next-turn' | 'next-step'
   /** Durable attribution retained on the delivered message; it grants no authority. */
   readonly source: MessageSource
   /** Caller cancellation, owning the operation only until inbox acceptance. */

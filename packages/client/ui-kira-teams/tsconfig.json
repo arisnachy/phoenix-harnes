@@ -31,6 +31,12 @@
     },
     {
       "path": "../../runtime-diagnostics/invariants"
+    },
+    {
+      "path": "../../subagent/agent-team"
+    },
+    {
+      "path": "../../api/remotes/tsconfig.client.json"
     }
   ]
 }

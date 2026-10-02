@@ -129,7 +129,7 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('Task readiness never starts an owner')
     expect(leadPrompt).toContain('returns noProgress immediately')
     expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
-    expect(leadPrompt).toContain('Use team_react for a lightweight acknowledgement')
+    expect(leadPrompt).toContain('team_chat_react')
     expect(leadPrompt).toContain('Your Team role is lead')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
@@ -180,6 +180,27 @@ describe('dsh-tool-team', () => {
       model: 'independent-judge',
     } })
     await execute(ctx, lead, 'interrupt_agent', { target: 'judge' })
+  })
+
+  it('keeps the selected Codex planner while real teammates execute on Luna Max', async () => {
+    const { ctx, lead } = await setup([], false, {
+      defaultModelProfile: 'luna-max',
+      modelProfiles: { 'luna-max': { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' } },
+    })
+    const codex = new MockAdapter(['hang'], {
+      efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }], defaultEffort: ReasoningEffortId('max'),
+    })
+    ctx.llm.registerAdapter(['openai-codex'], codex)
+    lead.options.provider = 'openai-codex'
+    lead.options.model = 'gpt-6.1-sol'
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'luna-worker', description: 'bounded execution', prompt: 'wait for instructions',
+    })
+    const child = await waitRunning(ctx, spawnedChildId(spawned))
+    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' })
+    expect(lead.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6.1-sol' })
+    expect(codex.requests.every(request => request.sessionId === child.id)).toBe(true)
+    await execute(ctx, lead, 'interrupt_agent', { target: 'luna-worker' })
   })
 
   it('inherits the Lead route when a default profile belongs to another provider and honors explicit profiles', async () => {

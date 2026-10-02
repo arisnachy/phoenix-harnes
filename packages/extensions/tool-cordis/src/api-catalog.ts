@@ -310,6 +310,34 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Agent Teams service backed by the exact live Lead Session log.',
     methods: [
       {
+        signature: '@Remote(\'chatMessages\') async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult>',
+        description: 'Read actual team outputs without starting agents.',
+        parameters: [{ name: 'request', description: 'root identity.' }],
+        returns: 'durable transcript.',
+      },
+      {
+        signature: 'async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult>',
+        description: 'Read a bounded transcript for the exact live caller.',
+        parameters: [{ name: 'actor', description: 'actual agent.' }, { name: 'limit', description: 'protocol message bound.' }],
+        returns: 'bounded rows.',
+      },
+      {
+        signature: '@Remote(\'chatReact\') async chatReact(request: TeamChatReactRequest): Promise<void>',
+        description: 'Set/remove a human reaction.',
+        parameters: [{ name: 'request', description: 'message and Unicode emoji.' }],
+      },
+      {
+        signature: '@Remote(\'chatReply\') async chatReply(request: TeamChatReplyRequest): Promise<{ messageId: string; queued: boolean }>',
+        description: 'Reply from the main composer to a direct child.',
+        parameters: [{ name: 'request', description: 'target and reply context.' }],
+        returns: 'accepted identity.',
+      },
+      {
+        signature: 'async reactToChat(actor: Agent, request: TeamChatReactRequest): Promise<void>',
+        description: 'Set/remove a real agent reaction.',
+        parameters: [{ name: 'actor', description: 'exact live actor.' }, { name: 'request', description: 'target mutation.' }],
+      },
+      {
         signature: 'membership(agent: Agent): TeamMembership',
         description: 'Resolve one exact live Agent\'s Team role.',
         parameters: [{ name: 'agent', description: 'exact live Agent used as the authority credential.' }],
@@ -5390,7 +5418,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubagentFollowupOptions',
-    declaration: 'export interface SubagentFollowupOptions {\n    readonly source: MessageSource;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SubagentFollowupOptions {\n    readonly delivery?: \'next-turn\' | \'next-step\';\n    readonly source: MessageSource;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SubagentInterruptAuthority',
@@ -5523,6 +5551,34 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'TableValueOf',
     declaration: 'export type TableValueOf<S extends DomainSpec, N extends keyof S[\'tables\']> = S[\'tables\'][N] extends DomainTableSpec<string, infer V> ? V : never;',
+  },
+  {
+    name: 'TeamChatMessage',
+    declaration: 'export interface TeamChatMessage {\n    readonly id: string;\n    readonly senderId: string;\n    readonly senderName: string;\n    readonly senderKind: \'user\' | \'kira\' | \'agent\';\n    readonly avatar?: string | undefined;\n    readonly role?: string | undefined;\n    readonly missionId?: string | undefined;\n    readonly text: string;\n    readonly time: number;\n    readonly sourceSeq: number;\n    readonly targetId?: string | undefined;\n    readonly replyTo?: string | undefined;\n    readonly replyQuote?: string | undefined;\n    readonly mentions: readonly string[];\n    readonly supervised?: boolean | undefined;\n    readonly deliveries?: readonly {\n        readonly targetId: string;\n        readonly accepted: boolean;\n        readonly error?: string | undefined;\n    }[] | undefined;\n    readonly reactions: readonly TeamChatReaction[];\n}',
+  },
+  {
+    name: 'TeamChatParticipant',
+    declaration: 'export interface TeamChatParticipant {\n    readonly id: string;\n    readonly name: string;\n    readonly role: string;\n    readonly status: string;\n    readonly avatar?: string | undefined;\n    readonly task?: string | undefined;\n    readonly missionId?: string | undefined;\n}',
+  },
+  {
+    name: 'TeamChatReaction',
+    declaration: 'export interface TeamChatReaction {\n    readonly id: string;\n    readonly messageId: string;\n    readonly reactorId: string;\n    readonly reactorName: string;\n    readonly reactorKind: \'user\' | \'kira\' | \'agent\';\n    readonly emoji: string;\n    readonly createdAt: number;\n}',
+  },
+  {
+    name: 'TeamChatReactRequest',
+    declaration: 'export interface TeamChatReactRequest extends TeamChatReadRequest {\n    readonly messageId: string;\n    readonly emoji: string;\n    readonly active: boolean;\n}',
+  },
+  {
+    name: 'TeamChatReadRequest',
+    declaration: 'export interface TeamChatReadRequest {\n    readonly sessionId: string;\n    readonly limit?: number;\n}',
+  },
+  {
+    name: 'TeamChatReadResult',
+    declaration: 'export interface TeamChatReadResult {\n    readonly messages: TeamChatMessage[];\n    readonly participants: TeamChatParticipant[];\n}',
+  },
+  {
+    name: 'TeamChatReplyRequest',
+    declaration: 'export interface TeamChatReplyRequest extends TeamChatReadRequest {\n    readonly requestId: string;\n    readonly targetId: string;\n    readonly targetIds?: readonly string[];\n    readonly text: string;\n    readonly replyTo?: string | undefined;\n}',
   },
   {
     name: 'TeamId',

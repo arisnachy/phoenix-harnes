@@ -4,6 +4,11 @@ English | [中文](README.zh.md)
 
 Implicit-root Agent Teams domain. `ctx.agentTeams` owns a flat Lead/teammate roster, a durable peer mailbox, and a shared task DAG in the Lead Session log. The [Agent Teams Agent Note](../../../.agents/notes/implemented/feature/2026-08-05-agent-teams.md) owns the coordination and isolation decisions; the [Team subsystem catalog](../../../docs/subsystems/agent-team.md) records the literal durable shapes and service API.
 
+## Main chat
+
+The service publishes actual direct-child text in the root transcript, excluding inherited history, replacement output, reasoning and tool blocks. `teamChatParticipants` retains mission-owned names, portraits and operational states after completion. Capture and Unicode reaction set/remove mutations never wake a model.
+
+The generated `chatMessages`, `chatReact` and `chatReply` remotes use exact root and message identities. Replies address existing continuable direct children, preserve quoted context, publish one human row and keep durable per-target admission receipts. `requestId` is retained across retries; `queued` distinguishes pending deliveries. Root recovery resumes pending admission and supervisory context. Model-facing reads share one configured `maxMessageBytes` budget. See the [conversation contracts](../../../docs/subsystems/agent-team.md#main-conversation) and [ownership decision](../../../.agents/notes/implemented/feature/2026-10-01-kira-main-chat.md).
 ## Config
 
 ```yaml
@@ -17,7 +22,7 @@ Implicit-root Agent Teams domain. `ctx.agentTeams` owns a flat Lead/teammate ros
     disposalTimeoutMs: 5000
 ```
 
-Every limit must be a positive safe integer. `maxMembers` counts every name ever provisioned, including failed members, because names are never reusable. `maxTasks` counts non-deleted tasks. The mailbox limit is per target; the byte limit covers the complete framed delivery, including its stable id and sender name. `disposalTimeoutMs` bounds admitted creation, mailbox dispatch, and Team-owned Activation settlement so plugin reload and process shutdown fail visibly instead of waiting forever.
+Every limit must be a positive safe integer. `maxMembers` counts provisioning and successfully created members. Failed attempts retain diagnostics and reserved names but release capacity. `maxTasks` counts non-deleted tasks. The mailbox limit is per target; the byte limit covers the complete framed delivery, including its stable id and sender name. `disposalTimeoutMs` bounds admitted creation, mailbox dispatch, and Team-owned Activation settlement so plugin reload and process shutdown fail visibly instead of waiting forever.
 
 The service requires Agent, Session, Session persistence, and continuable-subagent services. A composition without durable Session storage does not activate it.
 
@@ -37,7 +42,7 @@ The roster reports durable provisioning/failed phases and live `running`/`idle` 
 
 The target message begins with `Team message <id> from <name>:` and retains the same id and sender in `TeamMessageSource`. Once the target Session durably holds that identity either in its pending inbox or recorded user-message history, the Lead log appends `team/message/delivered`. Immediate admissions are serialized per target in durable queue order, and recovery dispatches queued-minus-delivered records in the same order. Delivery folds both live and persisted inbox/history state before retrying, so a crash between inbox acceptance and model claim does not duplicate the message. A successful Lead-log flush wakes current `waitForChange()` callers, which then re-list authoritative state.
 
-The guarantee is process-local retry plus target-Session de-duplication, not cross-process exactly-once delivery. This release has no shared mailbox transaction across processes and no mailbox timeline UI.
+The guarantee is process-local retry plus target-Session de-duplication, not cross-process exactly-once delivery. This release has no shared mailbox transaction across processes.
 
 ## Shared task board
 

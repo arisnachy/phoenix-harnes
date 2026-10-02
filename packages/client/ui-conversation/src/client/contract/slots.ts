@@ -113,7 +113,27 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
      * conversation snapshot through the standard kit.
      */
     'conversation.view': { kind: 'list'; scope: 'session'; owner: ConvViewOwnerProps }
-    /** Final business node renderer, dispatched by `ChatConversationViewNode.kind`. */
+    /** Register additive author badges for the current ordinary chat message.
+     * Components receive session runtime and projection hooks. No entry leaves the built-in author presentation intact.
+     */
+    'conversation.chat.message-author': { kind: 'list'; scope: 'session' }
+    /** Register additive controls beside every ordinary or team transcript message.
+     * Components receive message/author identity and a public reply preview; no entry leaves messages without extra controls.
+     */
+    'conversation.chat.message-actions': {
+      kind: 'list'
+      scope: 'session'
+      owner: {
+        messageId: string
+        authorId: string
+        authorKind: 'user' | 'kira' | 'agent'
+        authorName?: string
+        replyPreview?: string
+      }
+    }
+    /** Register one renderer keyed by the final business node kind.
+     * Components receive that node and turn runtime; a matching registration owns its rendering and absence uses the fallback.
+     */
     'conversation.chat.node': {
       kind: 'keyed'
       scope: 'session'
@@ -843,7 +863,7 @@ export interface ChatViewInjected {
 /** Full chat-view component props: runtime & its Tool/command/tail render shares & store & injected & locale seat. */
 export type ChatViewSlotProps =
   PropsRuntime<'conversation.view'>
-  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images'>
+  & PropsRenderSlots<'conversation.chat.node' | 'conversation.message.images' | 'conversation.chat.message-actions' | 'conversation.chat.message-author'>
   & PropsStore<ChatStore> & ChatViewInjected & PropsLocale<'conversation'>
 
 /** Full props of the attachment plugin's composer entry. */

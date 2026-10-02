@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
-import type { PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
+import type { PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import {
   KIRA_ROSTER,
 } from './KiraTeamsDock.tsx'
@@ -13,6 +13,7 @@ import type {
   KiraTeamMessageChatData,
   KiraTeamReactionChatData,
 } from '@phoenix-ai/dsh-client-ui-conversation/client'
+import { NS } from './locales.ts'
 import css from './TeamChatMessage.module.css'
 
 interface TeamIdentity {
@@ -57,14 +58,14 @@ export function teamIdentityOf(name: string, id: string): TeamIdentity {
   if (roster !== undefined) {
     return {
       name: roster.name,
-      role: SKILL_ROLE[roster.skills[0] ?? 'general'] ?? 'Equipo Kira',
+      role: roster.kind === 'argo' ? 'Verificación' : SKILL_ROLE[roster.skills[0] ?? 'general'] ?? 'Equipo Kira',
       kind: roster.kind,
     }
   }
   const kind = agentAvatarKind(id)
   const stable = KIRA_ROSTER.find(agent => agent.kind === kind)
   return {
-    name: stable?.name ?? 'Equipo Kira',
+    name: name !== id && name.trim() !== '' && !/^(gpt|claude|gemini|deepseek|luna|sol|terra|mock)[-\d]/u.test(key) ? name : stable?.name ?? 'Equipo Kira',
     role: stable === undefined ? 'Equipo Kira' : (SKILL_ROLE[stable.skills[0] ?? 'general'] ?? 'Equipo Kira'),
     kind,
   }
@@ -115,13 +116,15 @@ function ReactionChip({ reaction }: { reaction: KiraTeamReactionChatData }) {
 }
 
 /** Render one actual Agent Teams peer message inside Phoenix's existing chat column. */
-type KiraTeamMessageViewProps = PropsRuntime<'conversation.chat.node', 'kira-team-message'>
+type KiraTeamMessageViewProps = PropsRuntime<'conversation.chat.node', 'kira-team-message'> & Partial<PropsLocale<typeof NS>>
 
 export const KiraTeamMessageView = memo(function KiraTeamMessageView({
-  node,
+  node, t,
 }: KiraTeamMessageViewProps) {
   const data: KiraTeamMessageChatData = node.data
-  const sender = teamIdentityOf(data.senderName, data.senderId)
+  const identity = teamIdentityOf(data.senderName, data.senderId)
+  const avatar = KIRA_ROSTER.find(persona => persona.kind === data.avatar)?.kind ?? identity.kind
+  const sender = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: '', kind: 'aurora' as const } : { ...identity, name: data.missionId === undefined ? identity.name : data.senderName, kind: avatar }
   const target = data.targetName === undefined
     ? undefined
     : teamIdentityOf(data.targetName, data.targetId)
@@ -129,26 +132,28 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   if (text.trim() === '') return null
 
   return (
-    <div className={css.row} data-kira-team-message={data.messageId}>
+    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId}>
       <div className={css.avatar}>
-        <ModelActivityAvatar
+        {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
           kind={sender.kind}
           activity={undefined}
           running={false}
           pending={false}
           ready
           variant="card"
-        />
+        />}
       </div>
       <div className={css.column}>
         <div className={css.meta}>
           <strong>{sender.name}</strong>
-          <span>{sender.role}</span>
+          <span>{data.role === undefined ? sender.role : t?.(data.role as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
           {data.purpose !== undefined && data.purpose !== 'update' && (
             <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
           )}
           {target !== undefined && <span className={css.target}>→ {target.name}</span>}
         </div>
+        {data.pendingDelivery === true && <span role="status">{t?.('chat.pendingDelivery') ?? 'Delivery pending; retry on reconnect'}</span>}
+        {data.replyQuote !== undefined && <blockquote>{data.replyQuote}</blockquote>}
         <div className={css.bubble}>
           <MarkdownText text={text} />
         </div>

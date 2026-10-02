@@ -1,3 +1,4 @@
+import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
 import {
   ModelActivityAvatar,
@@ -37,15 +38,13 @@ describe('portraitSrcForKind', () => {
 
 describe('ModelActivityAvatar', () => {
   it('renders a real standalone portrait img instead of a shared sprite wrapper', () => {
-    const element = ModelActivityAvatar({
+    const element: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
       agentId: 'c1',
       activity: { model: 'gpt-5.6-luna', phase: 'running-tools' },
       running: true,
       pending: false,
     })
-    const children = Array.isArray(element.props.children)
-      ? element.props.children
-      : [element.props.children]
+    const children = Children.toArray(element.props.children).filter(isValidElement<Record<string, unknown>>)
     const image = children.find((child: { props?: Record<string, unknown> }) =>
       child?.props?.['data-agent-portrait-image'] === true)
     const vectorPortrait = children.find((child: { props?: Record<string, unknown> }) =>
@@ -53,9 +52,9 @@ describe('ModelActivityAvatar', () => {
 
     expect(element.props['data-avatar']).toBe('vega')
     expect(image).toBeDefined()
-    expect(image.type).toBe('img')
-    expect(image.props.src).toBe(portraitSrcForKind('vega'))
-    expect(image.props.src).toMatch(/^data:image\/webp;base64,/)
+    expect(image?.type).toBe('img')
+    expect(image?.props.src).toBe(portraitSrcForKind('vega'))
+    expect(image?.props.src).toMatch(/^data:image\/webp;base64,/)
     expect(vectorPortrait).toBeUndefined()
   })
 
@@ -67,7 +66,7 @@ describe('ModelActivityAvatar', () => {
   ] as const)(
     'exposes %s work as the reactive %s motion state',
     (inputPhase, expectedPhase, expectedState) => {
-      const element = ModelActivityAvatar({
+      const element: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
         agentId: 'c2',
         activity: { model: 'gpt-5.6-luna', phase: inputPhase },
         running: true,
@@ -82,7 +81,7 @@ describe('ModelActivityAvatar', () => {
   )
 
   it('keeps ready, pending and completed avatars alive without losing identity', () => {
-    const ready = ModelActivityAvatar({
+    const ready: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
       kind: 'argo', activity: undefined, running: false, pending: false, ready: true,
     })
     const done = ModelActivityAvatar({

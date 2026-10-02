@@ -44,6 +44,12 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
   // keyed-slot entry passed alongside that same Node. TypeScript does not
   // distribute an object containing a union into a union of objects itself.
   const routedOwner = { ...owner, node: routedNode } as RoutedChatNodeOwner
+  const messageId = routedNode.kind === 'assistant-step' ? routedNode.data.finalNode?.messageId
+    : (routedNode.kind === 'user' || routedNode.kind === 'steering') ? routedNode.data.messageId
+      : routedNode.kind === 'kira-team-message' ? routedNode.data.messageId : undefined
+  const authorKind = (routedNode.kind === 'user' || routedNode.kind === 'steering') ? 'user' : routedNode.kind === 'kira-team-message'
+    ? routedNode.data.senderKind ?? 'agent' : 'kira'
+  const authorId = routedNode.kind === 'kira-team-message' ? routedNode.data.senderId : authorKind
   return (
     <div
       className={css.flowItem}
@@ -51,6 +57,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       data-chat-flow-key={routedNode.key}
       data-chat-flow-kind={routedNode.kind}
     >
+      {routedNode.kind === 'assistant-step' && renderSlot('conversation.chat.message-author', {})}
       {renderSlot('conversation.chat.node', routedOwner, {
         entryKey: routedNode.kind,
         hookContext: nodeKey,
@@ -62,6 +69,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
           />
         ),
       })}
+      {messageId !== undefined && renderSlot('conversation.chat.message-actions', { messageId, authorId, authorKind, ...(routedNode.kind === 'kira-team-message' ? { authorName: routedNode.data.senderName, replyPreview: routedNode.data.content.flatMap(block => typeof block === 'object' && block !== null && 'type' in block && block.type === 'text' && 'text' in block && typeof block.text === 'string' ? [block.text] : []).join('\n') } : {}) })}
     </div>
   )
 })

@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 /** ui-kira-teams browser half: overlay registration, injected actions, lineage read model. */
 import { Context } from '@phoenix-ai/cordis'
 import { stubSettingsScope } from '@phoenix-ai/dsh-client-test-runtime'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   SlotRegistry, type SessionId, type SessionListState,
   type SessionSummary, type SubagentAddress,
@@ -58,6 +59,9 @@ async function provideSlotFaces(ctx: Context): Promise<void> {
     children: {
       'shell.workspace': { kind: 'list', scope: 'root' },
       'shell.overlay': { kind: 'list', scope: 'root' },
+      'conversation.chat.message-actions': { kind: 'list', scope: 'session' },
+      'conversation.chat.message-author': { kind: 'list', scope: 'session' },
+      'conversation.input.dock': { kind: 'list', scope: 'session' },
       'conversation.chat.node': { kind: 'keyed', scope: 'session' },
     },
   } as never, () => null)
@@ -69,7 +73,10 @@ async function fullBench(sessions: SessionSummary[], current?: SessionId) {
   const face = sessionsWith(sessions, current)
   ctx.provide('sessions', face)
   ctx.provide('connection', { api: { settings: {} }, isLoopback: false } as never)
-  ctx.provide('remote', { $on: () => () => {} } as never)
+  const agentTeams = { chatMessages: vi.fn(async () => ({ ok: true, value: { messages: [], participants: [{ id: 'c1', name: 'Zenith' }, { id: 'c2', name: 'Argo' }] } })), chatReply: vi.fn(async (_request: unknown) => ({ ok: true, value: { messageId: 'reply' } })), chatReact: vi.fn(async () => ({ ok: true, value: undefined })) }
+  ctx.provide('remote', { $on: () => () => {}, agentTeams } as never)
+  ctx.provide('remote.agentTeams', agentTeams as never)
+  ctx.provide('conversation', { input: { for: () => ({ setDraft() {}, state: { getSnapshot: () => ({ draft: '' }) } }) } } as never)
   ctx.provide('settingsScope', { bind: () => stubSettingsScope().scope } as never)
   const layout = {
     toggleSidebar() {},
@@ -83,7 +90,7 @@ async function fullBench(sessions: SessionSummary[], current?: SessionId) {
   await provideSlotFaces(ctx)
   await ctx.plugin({ inject: localeInject, apply: applyLocale }).await()
   await ctx.plugin({ inject: [...inject], apply }).await()
-  return { face, ctx, layout }
+  return { face, ctx, layout, agentTeams }
 }
 
 const FAMILY: SessionSummary[] = [
@@ -117,8 +124,8 @@ describe('lineageMembers', () => {
       model: 'gpt-5.6-luna',
       phase: 'running-tools',
     })
-    expect(agentNameOf(child)).toBe('Vega')
-    expect(agentNameOf(FAMILY.find(item => item.id === sid('c2'))!)).toBe('Eclipse')
+    expect(agentNameOf(child)).toBe('Argo')
+    expect(agentNameOf(FAMILY.find(item => item.id === sid('c2'))!)).toBe('Argo')
   })
 
   it('maps activity phases to visible status labels without exposing prompts', () => {
@@ -134,7 +141,7 @@ describe('lineageMembers', () => {
     const done = summary({ id: sid('done'), parentId: sid('root'), origin: 'subagent', running: false })
     expect(statusKeyOf(FAMILY.find(item => item.id === sid('c1'))!)).toBe('status.tools')
     expect(statusKeyOf(verifying)).toBe('status.verifying')
-    expect(statusKeyOf(preparing)).toBe('status.preparing')
+    expect(statusKeyOf(preparing)).toBe('status.running')
     expect(statusKeyOf(waiting)).toBe('status.waiting')
     expect(statusKeyOf(done)).toBe('status.done')
   })
@@ -227,14 +234,14 @@ describe('team chat identity', () => {
   it('keeps Kira personas stable while models remain internal engines', () => {
     expect(teamIdentityOf('lead', 'root')).toMatchObject({ name: 'Kira', role: 'Coordinación' })
     expect(teamIdentityOf('la-forja', 'worker-a')).toMatchObject({ name: 'La Forja', role: 'Programación' })
-    expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Datos / análisis' })
+    expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Verificación' })
     expect(teamIdentityOf('gpt-6-luna', 'worker-c').name).not.toBe('GPT 6 Luna')
   })
 })
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout'])
+    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams'])
   })
 
   it('registers one shell.overlay entry so KIRA never reserves conversation width', async () => {
@@ -246,23 +253,44 @@ describe('apply', () => {
     expect(ctx.slots.entries('conversation.chat.node')
       .some(slotEntry => slotEntry.component === KiraTeamMessageView)).toBe(true)
     const injected = (entry.inject as unknown as () => {
-      list: { getSnapshot(): SessionListState }
+      hooks: { list: { getSnapshot(): SessionListState } }
       layout: unknown
       openChild: (address: SubagentAddress) => void
       refresh: (parentSessionId: SessionId) => void
     })()
-    expect(injected.list.getSnapshot().current).toBe(sid('root'))
+    expect(injected.hooks.list.getSnapshot().current).toBe(sid('root'))
     expect(injected.layout).toBe(layout)
     const address: SubagentAddress = {
       parentSessionId: sid('root'),
       childSessionId: sid('c1'),
       mode: 'continuable',
     }
+    const row = document.createElement('div')
+    row.dataset.teamSenderId = 'c1'
+    const scroll = vi.fn()
+    row.scrollIntoView = scroll
+    document.body.append(row)
     injected.openChild(address)
+    expect(row.dataset.teamHighlighted).toBe('true')
+    expect(scroll).toHaveBeenCalled()
+    row.remove()
     injected.refresh(sid('root'))
     expect(face.actionCalls).toEqual([
-      { method: 'openSubagent', args: [address] },
       { method: 'refreshSubagents', args: [sid('root')] },
     ])
   })
+})
+
+it('reuses the durable request identity after a committed RPC response is lost', async () => {
+  const { ctx, agentTeams } = await fullBench(FAMILY, sid('root'))
+  agentTeams.chatReply.mockRejectedValueOnce(new Error('Connection lost after commit'))
+  const request = { sessionId: sid('root'), text: '@Zenith @Argo focus on #12', hasImages: false, signal: new AbortController().signal }
+  const first = await ctx.bail('conversation/addressed-submit', request)
+  expect(first).toMatchObject({ kind: 'error' })
+  const second = await ctx.bail('conversation/addressed-submit', request)
+  expect(second).toMatchObject({ kind: 'success' })
+  expect(agentTeams.chatReply).toHaveBeenCalledTimes(2)
+  expect(agentTeams.chatReply.mock.calls[0]?.[0]).toEqual(agentTeams.chatReply.mock.calls[1]?.[0])
+  expect(agentTeams.chatReply.mock.calls[0]?.[0]).toMatchObject({ targetIds: ['c1', 'c2'] })
+  await ctx.fiber.dispose()
 })

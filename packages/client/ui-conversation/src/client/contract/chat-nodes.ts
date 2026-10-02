@@ -12,6 +12,13 @@ export interface KiraTeamReactionChatData {
 
 /** Durable KIRA Team message projected into the ordinary Phoenix chat stream. */
 export interface KiraTeamMessageChatData {
+  readonly pendingDelivery?: boolean
+  readonly avatar?: string
+  readonly role?: string
+  readonly missionId?: string
+  readonly senderKind?: 'user' | 'kira' | 'agent'
+  readonly replyTo?: string
+  readonly replyQuote?: string
   readonly messageId: string
   readonly senderId: string
   readonly senderName: string

@@ -148,6 +148,8 @@ export type SubagentInterruptAuthority =
 
 /** Options for following up with one continuable child. */
 export interface SubagentFollowupOptions {
+  /** Human interventions can reach the nearest step; ordinary peer work stays FIFO. */
+  readonly delivery?: 'next-turn' | 'next-step'
   /** Durable attribution retained on the delivered message; it grants no authority. */
   readonly source: MessageSource
   /** Caller cancellation, owning the operation only until inbox acceptance. */
@@ -519,7 +521,7 @@ export class SubagentContinuationManager {
         if (activation.disposal !== undefined) {
           return activation.disposal.then(() => undefined, () => undefined)
         }
-        return this.submitAdmitted(activation, content, options.source, parent, options.signal)
+        return this.submitAdmitted(activation, content, options.source, parent, options.signal, options.delivery)
       })
       /* v8 ignore start -- only the lost-cutoff arm above returns undefined, so only that
        * race reaches the retry below, which then cold-resumes a new Activation. */
@@ -1194,13 +1196,15 @@ export class SubagentContinuationManager {
     content: ContentBlock[],
     source: MessageSource,
     parent: Agent,
+    delivery: 'next-turn' | 'next-step' = 'next-turn',
   ): MessageId {
     // Parent-originated delivery keeps the parent live through ownership, so
     // establish it before the message can enter the child's inbox.
     this.acquireOwnership(parent, activation.childId)
     const message = createUserMessage({ content, source })
     const accepted = this.admitWaking(activation, message.id, () => {
-      activation.handle.agent.followup(message)
+      if (delivery === 'next-step') activation.handle.agent.steer(message)
+      else activation.handle.agent.followup(message)
     })
     // Past this point the caller has an id for this child, so its eventual
     // settlement is something the parent is owed an account of.
@@ -1246,6 +1250,7 @@ export class SubagentContinuationManager {
     source: MessageSource,
     parent: Agent,
     signal: AbortSignal,
+    delivery: 'next-turn' | 'next-step' = 'next-turn',
   ): MessageId {
     signal.throwIfAborted()
     this.assertAdmitting(parent)
@@ -1262,7 +1267,7 @@ export class SubagentContinuationManager {
       activation.childId,
       activation.handle.agent.session.header.parentSession,
     )
-    return this.submit(activation, content, source, parent)
+    return this.submit(activation, content, source, parent, delivery)
   }
 
   /**
@@ -1493,14 +1498,14 @@ export class SubagentContinuationManager {
         return
       }
       // An idle parent has nothing else to look at, so it gets one ordinary
-      // turn. A busy parent is steered instead of woken: `Inbox.claim()` takes
+      // turn. A busy parent gets non-interrupting next-step input: `Inbox.claim()` takes
       // the whole next-step batch at one boundary, so several children settling
-      // together cost one step rather than one turn each. Steering rather than
-      // injecting closes the window where a driver retires between this status
+      // together cost one step rather than one turn each. A waking send rather
+      // than a quiet injection closes the window where a driver retires between this status
       // read and the send, which would strand the notice unclaimed.
       this.sendWaking(parent, message, () => {
         if (parent.status === 'idle') parent.followup(message)
-        else parent.steer(message)
+        else parent.send(message, 'next-step', true)
       })
     } catch (error: unknown) {
       this.ctx.logger.warn(

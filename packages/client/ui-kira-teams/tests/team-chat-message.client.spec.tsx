@@ -42,7 +42,7 @@ describe('KIRA Team chat message', () => {
     expect(teamIdentityOf('KÍRA', 'root')).toMatchObject({ name: 'Kira' })
     expect(teamIdentityOf('forja', 'worker-a')).toMatchObject({ name: 'La Forja', role: 'Programación' })
     expect(teamIdentityOf('la-forja', 'worker-a')).toMatchObject({ name: 'La Forja' })
-    expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Datos / análisis' })
+    expect(teamIdentityOf('argo', 'worker-b')).toMatchObject({ name: 'Argo', role: 'Verificación' })
     expect(teamIdentityOf('gpt-6-luna', 'worker-c').name).not.toContain('GPT')
   })
 

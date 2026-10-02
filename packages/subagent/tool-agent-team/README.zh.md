@@ -4,6 +4,9 @@
 
 [`ctx.agentTeams`](../agent-team/README.zh.md) 的 scoped 模型适配器。它会在每个隐式 Lead 与持久 teammate scope 中安装 Agent Teams 策略和协作工具。scoped Team 定义会覆盖同名的旧全局 continuable-subagent control，因此同时挂载两者的组合必须禁用旧定义。
 
+## 主会话工具
+
+`team_chat_read` 向准确的主代理或直属子代理提供有界的规范消息 ID 和真实公开文本。`team_chat_react` 使用服务端验证的参与者身份添加或移除任意有效 Unicode 表情。普通直属子代理可获得聊天工具，但不会获得团队任务或成员权限。指导要求简洁且有用的协作、公开消息中不包含私有推理，并在最终结果前由 Kira 审核；使用同一模型不代表独立验证。
 ## 配置
 
 ```yaml

@@ -1,19 +1,23 @@
 // @vitest-environment jsdom
 
+import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
+
 import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ModelActivityAvatar, portraitSrcForKind } from '../src/client/ModelActivityAvatar.tsx'
 
-const dockCss = readFileSync(new URL('../src/client/KiraTeamsDock.module.css', import.meta.url), 'utf8')
-const avatarCss = readFileSync(new URL('../src/client/ModelActivityAvatar.module.css', import.meta.url), 'utf8')
-const teamChatCss = readFileSync(new URL('../src/client/TeamChatMessage.module.css', import.meta.url), 'utf8')
-const frameCss = readFileSync(new URL('../../ui-layout/src/client/AppFrame.module.css', import.meta.url), 'utf8')
+const packageRoot = join(process.cwd(), 'packages/client/ui-kira-teams')
+const dockCss = readFileSync(join(packageRoot, 'src/client/KiraTeamsDock.module.css'), 'utf8')
+const avatarCss = readFileSync(join(packageRoot, 'src/client/ModelActivityAvatar.module.css'), 'utf8')
+const teamChatCss = readFileSync(join(packageRoot, 'src/client/TeamChatMessage.module.css'), 'utf8')
+const frameCss = readFileSync(join(packageRoot, '../ui-layout/src/client/AppFrame.module.css'), 'utf8')
 const conversationCss = readFileSync(
-  new URL('../../ui-conversation/src/client/skeleton/ConversationRoot.module.css', import.meta.url),
+  join(packageRoot, '../ui-conversation/src/client/skeleton/ConversationRoot.module.css'),
   'utf8',
 )
 const chatCss = readFileSync(
-  new URL('../../ui-conversation/src/client/chat/ChatView.module.css', import.meta.url),
+  join(packageRoot, '../ui-conversation/src/client/chat/ChatView.module.css'),
   'utf8',
 )
 
@@ -38,24 +42,25 @@ describe('KIRA mission-control layout regression', () => {
     expect(conversationCss).toMatch(/--dsh-chat-content-width:\s*768px/)
     expect(conversationCss).toMatch(/--dsh-composer-card-max-width:\s*calc\(var\(--dsh-chat-content-width\) \+ 32px\)/)
     expect(frameCss).toMatch(/--dsh-chat-floating-overlay-axis-shift:\s*var\(--dsh-overlay-stable-chat-axis-offset, 0px\)/)
-    expect(frameCss).not.toMatch(/\.centerCol:has\([^)]*data-kira-teams/s)
+    // Compatibility registrations in shell.workspace must float as well.
+    expect(frameCss).toMatch(/data-kira-teams[^}]+> \[data-shell-workspace\]\s*{[^}]*position:\s*absolute/s)
     expect(conversationCss).toMatch(
       /\.composerSeat\s*{[^}]*translateX\(calc\(0px - var\(--dsh-chat-floating-overlay-axis-shift, 0px\)\)\)/s,
     )
     expect(chatCss).toMatch(/\.column\s*{[^}]*translateX\(calc\(0px - var\(--dsh-chat-floating-overlay-axis-shift, 0px\)\)\)/s)
     expect(teamChatCss).toMatch(/\.row\s*{[^}]*width:\s*100%/s)
-    expect(teamChatCss).not.toMatch(/position:\s*(?:fixed|absolute)/s)
+    expect(teamChatCss).not.toMatch(/\.row\s*{[^}]*position:\s*(?:fixed|absolute)/s)
     expect(teamChatCss).not.toMatch(/width:\s*(?:100vw|calc\(100vw)/s)
   })
 
   it('renders each persona from bundled portrait pixels while keeping phase data for animation', () => {
-    const avatar = ModelActivityAvatar({
+    const avatar: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
       kind: 'cobalto',
       activity: { model: 'gpt-5.6-luna', phase: 'verifying' },
       running: true,
       pending: false,
     })
-    const children = Array.isArray(avatar.props.children) ? avatar.props.children : [avatar.props.children]
+    const children = Children.toArray(avatar.props.children).filter(isValidElement<Record<string, unknown>>)
     const portrait = children.find((child: { props?: Record<string, unknown> }) =>
       child?.props?.['data-agent-portrait-image'] === true)
 

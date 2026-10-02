@@ -1,9 +1,13 @@
 /** Agent Teams service façade over roster, mailbox, task, and runtime lifecycle owners. */
 
-import { Context, Service } from '@phoenix-ai/cordis'
+import { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type {} from '@phoenix-ai/dsh-session-persistence'
+import { TypertRemoteService, Remote } from '@phoenix-ai/dsh-typert-protocol'
+import { teamChatParticipantsDefinition, teamChatReactionsDefinition } from './chat-projection.ts'
+import { TeamChat } from './chat.ts'
+import type { TeamChatReadResult, TeamChatReadRequest, TeamChatReactRequest, TeamChatReplyRequest } from './chat-types.ts'
 import { TeamActivity } from './activity.ts'
 import { errorMessage, TeamError } from './error.ts'
 import { TeamJournal } from './journal.ts'
@@ -55,7 +59,7 @@ function positiveLimit(name: string, value: number): number {
 }
 
 /** Agent Teams service backed by the exact live Lead Session log. */
-export class TeamService extends Service {
+export class TeamService extends TypertRemoteService {
   static inject = ['agents', 'sessions', 'sessionPersistence', 'subagents']
 
   static Config: z<Config> = z.object({
@@ -75,6 +79,8 @@ export class TeamService extends Service {
   private readonly roster: TeamRoster
   private readonly mailbox: TeamMailbox
   private readonly tasks: TeamTaskBoard
+  private readonly chat: TeamChat
+  private readonly pendingChat = new Set<Promise<unknown>>()
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'agentTeams')
@@ -105,8 +111,26 @@ export class TeamService extends Service {
       this.config.maxMessageBytes,
     )
     this.tasks = new TeamTaskBoard(this.journal, this.config.maxTasks)
+    this.chat = new TeamChat(ctx, this.journal, this.config.maxMessageBytes, this.config.maxMembers, this.lifecycle.signal)
+    ctx.inject(['sessionProjections'], (child) => {
+      child.sessionProjections.register(teamChatReactionsDefinition)
+      child.sessionProjections.register(teamChatParticipantsDefinition)
+    })
 
-    ctx.on('session/event', (session, event) => { this.mailbox.observeSessionEvent(session, event) })
+    ctx.on('session/event', (session, event) => {
+      if (this.lifecycle.disposed) return
+      this.mailbox.observeSessionEvent(session, event)
+      const parentId = session.header.parentSession
+      const root = parentId === undefined ? undefined : ctx.sessions.get(parentId)
+      if (root !== undefined && session.header.origin === 'subagent' && (event.type === 'subagent/descriptor' || event.type === 'turn/start' || event.type === 'turn/end')) {
+        void this.trackChat(this.chat.presence(root, session, event)).catch((error: unknown) => { ctx.logger.warn(`Team presence publication failed: ${errorMessage(error)}`) })
+      }
+      if (root !== undefined && event.type === 'assistant/message') {
+        void this.trackChat(this.chat.capture(root, session.header, [event])).catch((error: unknown) => {
+          ctx.logger.warn(`Team chat publication failed: ${errorMessage(error)}`)
+        })
+      }
+    })
     ctx.on('agent/session-start', ({ agent }) => { this.scheduleRecovery(agent) })
     ctx.on('agent/status', ({ agent }) => {
       const membership = this.roster.tryMembership(agent)
@@ -115,6 +139,45 @@ export class TeamService extends Service {
     ctx.effect(() => () => this.disposeRuntime(), 'agentTeams.runtimeLifecycle()')
     for (const agent of ctx.agents.list()) this.scheduleRecovery(agent)
   }
+
+  /** Read actual team outputs without starting agents.
+   * @param request - root identity.
+   * @returns durable transcript.
+   */
+  @Remote('chatMessages')
+  async chatMessages(request: TeamChatReadRequest): Promise<TeamChatReadResult> {
+    return await this.trackChat(this.chat.read(request.sessionId, request.limit))
+  }
+
+  /** Read a bounded transcript for the exact live caller.
+   * @param actor - actual agent.
+   * @param limit - protocol message bound.
+   * @returns bounded rows.
+   */
+  async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult> {
+    return await this.trackChat(this.chat.readFor(actor, limit))
+  }
+
+  /** Set/remove a human reaction.
+   * @param request - message and Unicode emoji.
+   */
+  @Remote('chatReact')
+  async chatReact(request: TeamChatReactRequest): Promise<void> { await this.trackChat(this.chat.react(request)) }
+
+  /** Reply from the main composer to a direct child.
+   * @param request - target and reply context.
+   * @returns accepted identity.
+   */
+  @Remote('chatReply')
+  async chatReply(request: TeamChatReplyRequest): Promise<{ messageId: string; queued: boolean }> {
+    return await this.trackChat(this.chat.reply(request))
+  }
+
+  /** Set/remove a real agent reaction.
+   * @param actor - exact live actor.
+   * @param request - target mutation.
+   */
+  async reactToChat(actor: Agent, request: TeamChatReactRequest): Promise<void> { await this.trackChat(this.chat.react(request, actor)) }
 
   /**
    * Resolve one exact live Agent's Team role.
@@ -271,6 +334,13 @@ export class TeamService extends Service {
     return this.roster.tryMembership(agent)
   }
 
+  /** Retain admitted chat operations until the shared runtime has settled. */
+  private trackChat<T>(operation: Promise<T>): Promise<T> {
+    this.pendingChat.add(operation)
+    void operation.then(() => this.pendingChat.delete(operation), () => this.pendingChat.delete(operation))
+    return operation
+  }
+
   /** Queue one contained recovery pass after publication has unwound. */
   private scheduleRecovery(agent: Agent): void {
     queueMicrotask(() => {
@@ -286,6 +356,7 @@ export class TeamService extends Service {
   private async recoverFor(agent: Agent): Promise<void> {
     await this.roster.recoverFor(agent, this.lifecycle.signal)
     await this.mailbox.recoverFor(agent, this.lifecycle.signal)
+    await this.trackChat(this.chat.recover(agent))
   }
 
   /** Stop Team-owned live branches and release every waiter before service disposal completes. */
@@ -296,6 +367,7 @@ export class TeamService extends Service {
     const failures: unknown[] = []
     await this.lifecycle.settle(this.roster.pendingCreations(), failures)
     await this.lifecycle.settle(this.mailbox.pendingDispatches(), failures)
+    await this.lifecycle.settle([...this.pendingChat], failures)
     for (const [root, childIds] of this.roster.liveChildrenByRoot()) {
       try {
         await this.roster.stopTeammates(root, childIds)

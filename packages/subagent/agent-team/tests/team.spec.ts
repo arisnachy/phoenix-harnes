@@ -6,13 +6,15 @@ import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
-import { createUserMessage } from '@phoenix-ai/dsh-llm'
+import { defineTool } from '@phoenix-ai/dsh-tools'
+import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId, type Session } from '@phoenix-ai/dsh-session'
+import SessionProjections from '@phoenix-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
 import SubagentService from '@phoenix-ai/dsh-subagent'
 import * as SubagentFork from '@phoenix-ai/dsh-subagent-fork-in-process'
 import * as SubagentSpawn from '@phoenix-ai/dsh-subagent-spawn-in-process'
-import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
+import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import TeamService, { foldTeam, TeamError, TeamId, TeamMessageId, TeamTaskId } from '../src/index.ts'
 import { TeamRuntimeLifecycle } from '../src/lifecycle.ts'
 import type { TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot } from '../src/index.ts'
@@ -42,6 +44,7 @@ function durable(agent: Agent): {
 async function setup(
   script: ConstructorParameters<typeof MockAdapter>[0],
   config: ConstructorParameters<typeof TeamService>[1] = {},
+  projections = false,
 ) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
@@ -49,6 +52,7 @@ async function setup(
   roots.push(storageRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
   await ctx.plugin(AgentLoop, { agents: [] })
+  if (projections) await ctx.plugin(SessionProjections)
   await ctx.plugin(SubagentService)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(SubagentFork, { providerName: 'fork' })
@@ -287,8 +291,8 @@ describe('Team identity and provisioning', () => {
     if (member !== undefined) await waitNoAgent(ctx, member.id)
   })
 
-  it('records failed provisioning durably, reserves its name, and counts it against the limit', async () => {
-    const { ctx, lead } = await setup([], { maxMembers: 1 })
+  it('retains failed provisioning evidence without occupying a creation slot', async () => {
+    const { ctx, lead } = await setup(['hang'], { maxMembers: 1 })
     await expect(spawn(ctx, lead, 'failed-worker', { provider: 'missing' })).rejects.toThrow()
 
     expect(ctx.agentTeams.listMembers(lead)[1]).toMatchObject({
@@ -297,7 +301,10 @@ describe('Team identity and provisioning', () => {
       provider: 'missing',
     })
     await expect(spawn(ctx, lead, 'failed-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_NAME_TAKEN' })
-    await expect(spawn(ctx, lead, 'other-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    const actual = await spawn(ctx, lead, 'other-worker')
+    expect(actual.member.name).toBe('other-worker')
+    expect(ctx.agents.get(actual.member.id)).toBeDefined()
+    await expect(spawn(ctx, lead, 'third-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
   })
 
   it('records non-Error provider failures and contains a reversed provisioning settlement race', async () => {
@@ -1201,7 +1208,7 @@ describe('Team mailbox and waiting', () => {
   })
 
   it('rejects invalid reactions and exposes live usage so the Lead can supervise cost', async () => {
-    const { ctx, lead } = await setup([textResponse('first turn'), 'hang'])
+    const { ctx, lead } = await setup([textResponse('first turn'), 'hang', 'hang'])
     const worker = await spawn(ctx, lead, 'usage-worker')
     await waitNoAgent(ctx, worker.member.id)
 
@@ -1253,6 +1260,8 @@ describe('Team mailbox and waiting', () => {
 
     ctx.agentTeams.interrupt(lead, 'usage-worker')
     await waitNoAgent(ctx, worker.member.id)
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
   })
 
   it('enforces message byte and pending-count limits without encouraging retry after enqueue', async () => {
@@ -1747,4 +1756,210 @@ describe('Team mailbox and waiting', () => {
       phase: 'failed', error: 'settled elsewhere',
     })
   })
+})
+
+
+describe('visible team conversation', () => {
+  it('captures actual generic child text once without injecting the lead or leaking reasoning', async () => {
+    const { ctx, lead, adapter } = await setup([], {}, true)
+    const child = ctx.sessions.create(SessionId('chat-child'), { meta: { parentSession: lead.id, origin: 'subagent' } })
+    child.append('assistant/message', { turn: 1, step: 1, message: createAssistantMessage({ source: { provider: 'mock', model: 'mock' },
+      content: [{ type: 'reasoning', text: 'private reasoning' }, { type: 'text', text: 'Verified result.' }],
+    }) }, { surfaceOp: 'append' })
+    const result = await ctx.agentTeams.chatMessages({ sessionId: lead.id })
+    expect(result.messages).toEqual([expect.objectContaining({ senderId: child.id, text: 'Verified result.' })])
+    expect(JSON.stringify(result)).not.toContain('private reasoning')
+    expect(lead.session.deriveMessages()).toEqual([])
+    expect(adapter.requests).toHaveLength(0)
+    expect((await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages).toHaveLength(1)
+  })
+
+  it('persists Unicode reactions idempotently and removes only the selected emoji without waking a model', async () => {
+    const { ctx, lead, adapter } = await setup([], {}, true)
+    const message = createUserMessage({ content: content('Please check this'), source: { kind: 'user' } })
+    lead.session.append('user/message', message, { surfaceOp: 'append' })
+    const request = { sessionId: lead.id, messageId: message.id, emoji: '👩🏽‍💻', active: true }
+    await Promise.all([ctx.agentTeams.chatReact(request), ctx.agentTeams.chatReact(request)])
+    await ctx.agentTeams.chatReact({ ...request, emoji: '❤️' })
+    await ctx.agentTeams.chatReact({ ...request, active: false })
+    const result = await ctx.agentTeams.chatMessages({ sessionId: lead.id })
+    expect(result.messages[0]?.reactions).toEqual([expect.objectContaining({ emoji: '❤️', reactorKind: 'user' })])
+    expect(adapter.requests).toHaveLength(0)
+    await expect(ctx.agentTeams.chatReact({ ...request, emoji: 'not an emoji' })).rejects.toThrow(/emoji/)
+    await expect(ctx.agentTeams.chatReact({ ...request, messageId: 'missing' })).rejects.toThrow(/not found/)
+  })
+
+  it('excludes inherited fork messages and rejects replies to unrelated sessions', async () => {
+    const { ctx, lead } = await setup([], {}, true)
+    const seed = createAssistantMessage({ source: { provider: 'mock', model: 'mock' }, content: content('Inherited response') })
+    const child = ctx.sessions.create(SessionId('fork-chat'), { meta: { parentSession: lead.id, origin: 'subagent', seedLength: 1 }, seed: [
+      { seq: 0, time: 1, surfaceOp: 'append', type: 'assistant/message', data: { turn: 1, step: 1, message: seed } },
+    ] })
+    expect((await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages).toEqual([])
+    child.append('assistant/message', { turn: 2, step: 1, message: createAssistantMessage({ source: { provider: 'mock', model: 'mock' }, content: content('Own response') }) }, { surfaceOp: 'append' })
+    expect((await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.map(row => row.text)).toEqual(['Own response'])
+    const unrelated = ctx.sessions.create(SessionId('unrelated'))
+    await expect(ctx.agentTeams.chatReply({ requestId: 'test-reply', sessionId: lead.id, targetId: unrelated.id, text: 'Hi' })).rejects.toThrow(/belong|member|child/)
+  })
+  it('delivers a contextual user intervention at the working agent’s next step, once for retries', async () => {
+    const { ctx, lead, adapter } = await setup([
+      toolCallResponse('pause-call', 'pause', {}, 'Found a discrepancy.'),
+      textResponse('Prioritized the requested point.'), 'hang',
+    ], {}, true)
+    const entered = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    ctx.tools.register(defineTool({ name: 'pause', description: 'Hold a test tool', parameters: {},
+      output: { schema: { type: 'object', additionalProperties: false, properties: {} }, render: () => [] },
+      async execute() { entered.resolve(undefined); await release.promise; return {} },
+    }))
+    const started = await spawn(ctx, lead, 'zenith')
+    await entered.promise
+    const before = await ctx.agentTeams.chatMessages({ sessionId: lead.id })
+    const finding = before.messages.find(row => row.senderId === started.member.id)
+    expect(finding?.text).toBe('Found a discrepancy.')
+    const request = { requestId: 'contextual-user-reply', sessionId: lead.id, targetId: started.member.id,
+      text: '@Zenith prioritize #12.', replyTo: finding!.id }
+    await ctx.agentTeams.chatReply(request)
+    await ctx.agentTeams.chatReply(request)
+    const child = ctx.sessions.get(started.member.id)!
+    const addressed = child.events.filter(event => event.type === 'agent/inbox/spliced'
+      && event.data.inserted.some(message => message.content.some(block => block.type === 'text' && block.text.includes('[Team user message contextual-user-reply]'))))
+    expect(addressed).toHaveLength(1)
+    expect(addressed[0]?.data).toMatchObject({ target: 'next-step' })
+    expect((await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.filter(row => row.id === request.requestId)).toHaveLength(1)
+    release.resolve(undefined)
+    await waitNoAgent(ctx, started.member.id)
+    expect(adapter.requests[1]?.messages.some(message => message.content.some(block => block.type === 'text'
+      && block.text.includes('Found a discrepancy.') && block.text.includes('@Zenith prioritize #12.')))).toBe(true)
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
+  })
+
+  it('keeps one multi-target user row across partial delivery retries and attributes all three reactor kinds', async () => {
+    const { ctx, lead, adapter } = await setup([
+      toolCallResponse('hold-a', 'hold', {}, 'Quality evidence.'),
+      toolCallResponse('hold-b', 'hold', {}, 'Verification evidence.'),
+      textResponse('Review complete.'), textResponse('Verification complete.'), 'hang',
+    ], {}, true)
+    const release = Promise.withResolvers<undefined>()
+    let entered = 0
+    ctx.tools.register(defineTool({ name: 'hold', description: 'Hold a test tool', parameters: {},
+      output: { schema: { type: 'object', additionalProperties: false, properties: {} }, render: () => [] },
+      async execute() { entered++; await release.promise; return {} },
+    }))
+    const zenith = await spawn(ctx, lead, 'zenith')
+    const argo = await spawn(ctx, lead, 'argo')
+    await vi.waitFor(() => { expect(entered).toBe(2) })
+    const row = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(item => item.senderId === zenith.member.id)!
+    const count = adapter.requests.length
+    await ctx.agentTeams.chatReact({ sessionId: lead.id, messageId: row.id, emoji: '👍', active: true })
+    await ctx.agentTeams.reactToChat(lead, { sessionId: lead.id, messageId: row.id, emoji: '✅', active: true })
+    await ctx.agentTeams.reactToChat(ctx.agents.get(argo.member.id)!, { sessionId: lead.id, messageId: row.id, emoji: '👀', active: true })
+    expect(adapter.requests).toHaveLength(count)
+    expect((await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(item => item.id === row.id)?.reactions.map(item => item.reactorKind)).toEqual(['user', 'kira', 'agent'])
+    const realFollowup = ctx.subagents.followup.bind(ctx.subagents)
+    const deliveries = vi.spyOn(ctx.subagents, 'followup').mockImplementationOnce(realFollowup).mockRejectedValueOnce(new Error('temporary delivery conflict'))
+    const request = { requestId: 'shared-user-intervention', sessionId: lead.id, targetId: zenith.member.id,
+      targetIds: [zenith.member.id, argo.member.id], text: '@Zenith @Argo focus on #12.', replyTo: row.id }
+    await ctx.agentTeams.chatReply(request)
+    const replyRow = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(item => item.id === request.requestId)
+    expect(replyRow?.deliveries).toEqual([
+      { targetId: zenith.member.id, accepted: true }, { targetId: argo.member.id, accepted: false, error: 'temporary delivery conflict' },
+    ])
+    deliveries.mockRestore()
+    await ctx.agentTeams.chatReply(request)
+    await ctx.agentTeams.chatReply(request)
+    const visible = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.filter(item => item.id === request.requestId)
+    expect(visible).toHaveLength(1)
+    expect(visible[0]?.deliveries?.every(item => item.accepted)).toBe(true)
+    for (const childId of [zenith.member.id, argo.member.id]) {
+      expect(ctx.sessions.get(childId)?.events.filter(event => event.type === 'agent/inbox/spliced'
+        && event.data.inserted.some(message => message.content.some(block => block.type === 'text' && block.text.includes('[Team user message shared-user-intervention]'))))).toHaveLength(1)
+    }
+    release.resolve(undefined)
+    await waitNoAgent(ctx, zenith.member.id)
+    await waitNoAgent(ctx, argo.member.id)
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
+  })
+
+  it('excludes model-only replacements and supports an ordinary user fork as a team root', async () => {
+    const { ctx, lead } = await setup([], {}, true)
+    const root = ctx.sessions.create(SessionId('user-fork-root'), { meta: { parentSession: lead.id } })
+    const child = ctx.sessions.create(SessionId('fork-worker'), { meta: { parentSession: root.id, origin: 'subagent' } })
+    const original = child.append('assistant/message', { turn: 1, step: 1, message: createAssistantMessage({
+      source: { provider: 'mock', model: 'mock' }, content: content('Public finding.'),
+    }) }, { surfaceOp: 'append' })
+    child.append('assistant/message', { turn: 1, step: 1, message: createAssistantMessage({
+      source: { provider: 'mock', model: 'mock' }, content: content('Model-only replacement.'),
+    }) }, { surfaceOp: { op: 'replace', start: original.seq, end: original.seq }, sourceEventSeqs: [original.seq] })
+    expect((await ctx.agentTeams.chatMessages({ sessionId: root.id })).messages.map(row => row.text)).toEqual(['Public finding.'])
+  })
+
+  it('retains completed and failed personas when first read backfills historical children', async () => {
+    const { ctx, lead, adapter } = await setup([], {}, true)
+    for (const [id, reason, expected] of [
+      ['historical-done', { kind: 'completed' as const }, 'done'],
+      ['historical-failed', { kind: 'error' as const, error: { code: 'UNKNOWN', message: 'Failed verification' } }, 'failed'],
+    ] as const) {
+      const child = ctx.sessions.create(SessionId(id), { meta: { parentSession: lead.id, origin: 'subagent' } })
+      child.append('turn/start', { turn: 1 })
+      child.append('assistant/message', { turn: 1, step: 1, message: createAssistantMessage({
+        source: { provider: 'mock', model: 'mock' }, content: content(id),
+      }) }, { surfaceOp: 'append' })
+      child.append('turn/end', { turn: 1, reason })
+      const first = await ctx.agentTeams.chatMessages({ sessionId: lead.id })
+      expect(first.participants.find(person => person.id === id)?.status).toBe(expected)
+      const second = await ctx.agentTeams.chatMessages({ sessionId: lead.id })
+      expect(second.participants.find(person => person.id === id)).toEqual(first.participants.find(person => person.id === id))
+    }
+    expect(adapter.requests).toHaveLength(0)
+  })
+
+  it('recovers a delivered reply whose supervisory checkpoint failed without reinjecting the notice', async () => {
+    const { ctx, lead } = await setup(['hang'], {}, true)
+    const started = await spawn(ctx, lead, 'supervised-worker')
+    await waitRunning(ctx, started.member.id)
+    const originalInject = lead.inject.bind(lead)
+    const inject = vi.spyOn(lead, 'inject').mockImplementationOnce((message) => {
+      originalInject(message)
+      throw new Error('checkpoint unavailable')
+    })
+    const request = { requestId: 'supervision-recovery', sessionId: lead.id, targetId: started.member.id, text: 'User priority' }
+    await expect(ctx.agentTeams.chatReply(request)).rejects.toThrow('checkpoint unavailable')
+    inject.mockRestore()
+    await teamInternals(ctx).recoverFor(lead)
+    const row = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(message => message.id === request.requestId)
+    expect(row?.supervised).toBe(true)
+    expect(row?.deliveries).toEqual([{ targetId: started.member.id, accepted: true }])
+    const notices = lead.session.events.filter(event => event.type === 'agent/inbox/spliced' && event.data.inserted.some(message =>
+      message.content.some(block => block.type === 'text' && block.text.includes('[Team supervision supervision-recovery]'))))
+    expect(notices).toHaveLength(1)
+  })
+
+  it('closes reply admission and drains publication before Team unload completes', async () => {
+    const { ctx, lead, teamFiber } = await setup(['hang'], {}, true)
+    const service = ctx.agentTeams
+    const started = await spawn(ctx, lead, 'chat-disposal-worker')
+    await waitRunning(ctx, started.member.id)
+    const entered = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    vi.spyOn(ctx.subagents, 'followup').mockImplementationOnce(async (_lead, _target, _content, options) => {
+      entered.resolve(undefined)
+      await release.promise
+      options.signal.throwIfAborted()
+      throw new Error('must not admit after disposal')
+    })
+    const reply = service.chatReply({ requestId: 'unloaded-reply', sessionId: lead.id, targetId: started.member.id, text: 'Pending reply' })
+    const rejected = expect(reply).rejects.toMatchObject({ code: 'TEAM_DISPOSED' })
+    await entered.promise
+    const unloading = teamFiber.dispose()
+    release.resolve(undefined)
+    await rejected
+    await unloading
+    const count = lead.session.events.length
+    await expect(service.chatReact({ sessionId: lead.id, messageId: 'unloaded-reply', emoji: '👍', active: true })).rejects.toMatchObject({ code: 'TEAM_DISPOSED' })
+    expect(lead.session.events).toHaveLength(count)
+  })
+
 })

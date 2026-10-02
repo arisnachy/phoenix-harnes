@@ -53,7 +53,9 @@ export const Config: z<Config> = z.object({
 /** Model-facing collaboration guidance shared by Lead and teammates. */
 const POLICY = `Agent Teams is real shared work, not role-play. Create teammates when the user explicitly asks for a Team, or when the surrounding agent policy explicitly authorizes adaptive Team use for independent work. Never spawn a teammate only to make the interface look busy.
 
-Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Use team_react for a lightweight acknowledgement when prose would add no new information. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model.
+Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Your ordinary text outputs and peer messages appear under your own identity in the main user chat. Address operational questions to peers with send_message/followup_task; the Lead remains responsible for the mission and final answer. User-directed replies preserve their original context. Use team_chat_read to obtain real conversation message IDs and team_chat_react with any Unicode emoji for a lightweight acknowledgement when prose would add no new information. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model.
+
+Kira is accountable for planning, supervision, actual verification and the final result. Keep her selected model as the brain and escalation route. Under OpenAI Codex use the configured Luna Max worker profile for bounded execution; outside Codex inherit the selected provider/model unless the user explicitly requests another route. Reuse existing workers rather than spawning a new team for each message.
 
 Model profiles are deployment-configured engines, not visible identities. The teammate name/persona remains stable even when its underlying model route changes. A fresh JUDGE is cognitively independent only when its reported modelProvider or model differs from the Lead; when they match or are unknown, report operational independence only and record the correlated-model limitation. Never claim an independent review merely because the teammate has a different name.
 
@@ -202,6 +204,51 @@ function callingAgent(agent: Agent | undefined, toolName: string): Agent {
   /* v8 ignore next 2 -- Team tools are registered only in an exact Agent scope, so discovery supplies this carrier. */
   if (agent === undefined) throw new Error(`${toolName} requires a calling Agent`)
   return agent
+}
+
+/** Install bounded conversation participation for both roster and ordinary subagent children. */
+function installChatTools(agent: Agent, ctx: Context): () => void {
+  const scoped = agent.ctx
+  const disposers: Array<() => unknown> = []
+  const register = (dispose: () => unknown): void => { disposers.push(dispose) }
+  try {
+    register(scoped.systemPrompt.section({ name: 'team:conversation', order: 61,
+      text: 'Your real operational text appears under your own identity in the main user conversation. Keep updates useful and sparse; never expose private reasoning or narrate every tool call. Use team_chat_read for real message IDs and team_chat_react for natural Unicode acknowledgements. Reactions need no extra prose. Kira supervises the mission and delivers its final answer.' }))
+    register(scoped.tools.register(defineTool({
+      name: 'team_chat_read',
+      description: 'Read recent real user/Kira/agent conversation messages and IDs for replies or reactions. Does not wake agents.',
+      parameters: { limit: { type: 'integer', description: 'Recent message count, from 1 through 50; default 20.' } },
+      output: jsonOutput({ type: 'object', additionalProperties: false, properties: { messages: { type: 'array', required: true, items: {
+        type: 'object', additionalProperties: false, properties: { id: { type: 'string', required: true }, sender: { type: 'string', required: true }, text: { type: 'string', required: true } },
+      } } } }),
+      async execute(args, exec) {
+        const actor = callingAgent(exec.agent, 'team_chat_read')
+        const limit = args.limit ?? 20
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 50) throw new Error('limit must be between 1 and 50')
+        const result = await ctx.agentTeams.readChatFor(actor, limit)
+        return { messages: result.messages.slice(-limit).map(row => ({ id: row.id, sender: row.senderName, text: row.text })) }
+      },
+    })))
+    register(scoped.tools.register(defineTool({
+      name: 'team_chat_react',
+      description: 'Add/remove your Unicode emoji reaction to a real user/Kira/agent message. Use naturally, without spam or an extra prose turn.',
+      parameters: { message_id: { type: 'string', required: true }, emoji: { type: 'string', required: true }, active: { type: 'boolean', description: 'False removes your selected emoji; default true.' } },
+      output: jsonOutput({ type: 'object', additionalProperties: false, properties: { applied: { type: 'boolean', required: true } } }),
+      async execute(args, exec) {
+        const actor = callingAgent(exec.agent, 'team_chat_react')
+        exec.signal.throwIfAborted()
+        const sessionId = actor.session.header.origin === 'subagent' ? actor.session.header.parentSession : actor.id
+        if (sessionId === undefined) throw new Error('team root not found')
+        await ctx.agentTeams.reactToChat(actor, { sessionId, messageId: args.message_id, emoji: args.emoji, active: args.active ?? true })
+        return { applied: true }
+      },
+    })))
+
+  } catch (error) {
+    for (const dispose of disposers.reverse()) void dispose()
+    throw error
+  }
+  return () => { for (const dispose of disposers.reverse()) void dispose() }
 }
 
 /** Register the complete Team tool set in one exact Agent scope. */
@@ -513,8 +560,15 @@ export function apply(ctx: Context, config: Config = {}): void {
   }
   const installed = new Map<Agent, () => void>()
   const maybeInstall = (agent: Agent): void => {
-    if (installed.has(agent) || ctx.agentTeams.tryMembership(agent) === undefined) return
-    installed.set(agent, install(agent, ctx, resolved))
+    if (installed.has(agent)) return
+    const membership = ctx.agentTeams.tryMembership(agent)
+    const parentId = agent.session.header.parentSession
+    if (membership === undefined && (agent.session.header.origin !== 'subagent' || parentId === undefined || ctx.agents.get(parentId) === undefined)) return
+    const chat = installChatTools(agent, ctx)
+    try {
+      const team = membership === undefined ? undefined : install(agent, ctx, resolved)
+      installed.set(agent, () => { team?.(); chat() })
+    } catch (error) { chat(); throw error }
   }
   for (const agent of ctx.agents.list()) maybeInstall(agent)
   ctx.on('agent/created', ({ agent }) => { maybeInstall(agent) })

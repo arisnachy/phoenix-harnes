@@ -4,6 +4,11 @@
 
 隐式 Root Agent Teams 领域。`ctx.agentTeams` 在 Lead Session 日志中维护扁平的 Lead／teammate roster、持久 peer mailbox 与共享任务 DAG。[Agent Teams Agent Note](../../../.agents/notes/implemented/feature/2026-08-05-agent-teams.zh.md)负责协作和隔离决策；[Team 子系统目录](../../../docs/subsystems/agent-team.zh.md)记录持久数据的字面形态与服务 API。
 
+## 主聊天
+
+服务将直属子代理真实生成的文本发布到根会话，排除继承历史、替换输出、推理和工具内容。`teamChatParticipants` 在任务完成后仍保留任务所属的名称、头像和运行状态。文本发布及 Unicode 表情的添加和移除不会唤醒模型。
+
+生成的 `chatMessages`、`chatReact` 和 `chatReply` 远程方法使用准确的根会话及消息身份。回复针对已有的可继续直属子代理，保留引用上下文，只发布一条用户消息，并持久化每个目标的接收记录。重试保留 `requestId`；`queued` 区分待发送状态。根会话恢复时重试待发送消息及监督上下文。模型读取共同受一个配置的 `maxMessageBytes` 预算约束。参见[会话契约](../../../docs/subsystems/agent-team.zh.md#main-conversation)及[所有权决策](../../../.agents/notes/implemented/feature/2026-10-01-kira-main-chat.zh.md)。
 ## 配置
 
 ```yaml
@@ -17,7 +22,7 @@
     disposalTimeoutMs: 5000
 ```
 
-每个限制都必须是正的安全整数。`maxMembers` 统计所有曾 provision 的名字，包括失败成员，因为名字永不复用。`maxTasks` 统计未删除任务。mailbox 限额按目标成员计算；字节限制覆盖完整的投递帧，包括稳定 id 与发送者名称。`disposalTimeoutMs` 限制已获准创建、mailbox dispatch 与 Team 自有 Activation 的 settlement 时长，使插件 reload 与进程 shutdown 在异常时明确失败，而不是无限等待。
+每个限制都必须是正的安全整数。`maxMembers` 统计正在创建或已成功创建的成员。失败尝试保留诊断和名称，但释放容量。`maxTasks` 统计未删除任务。mailbox 限额按目标成员计算；字节限制覆盖完整的投递帧，包括稳定 id 与发送者名称。`disposalTimeoutMs` 限制已获准创建、mailbox dispatch 与 Team 自有 Activation 的 settlement 时长，使插件 reload 与进程 shutdown 在异常时明确失败，而不是无限等待。
 
 该服务要求 Agent、Session、Session persistence 与 continuable-subagent 服务。没有持久 Session 存储的组合不会激活它。
 

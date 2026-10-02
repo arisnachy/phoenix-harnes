@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
-import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
+
+import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionId, SessionListState, SessionSummary } from '@phoenix-ai/dsh-client-runtime/client'
 import {
   KIRA_ROSTER,
@@ -20,6 +22,8 @@ import {
   ModelActivityAvatar,
   portraitSrcForKind,
 } from '../src/client/ModelActivityAvatar.tsx'
+
+afterEach(cleanup)
 
 const sid = (id: string) => id as SessionId
 
@@ -200,7 +204,7 @@ describe('approved KIRA compact live-agent dock', () => {
       byId: { [String(root.id)]: root, [String(child.id)]: child },
     } as unknown as SessionListState
     const props = {
-      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      useList: (selector: (value: SessionListState) => unknown) => selector(state),
       layout: { setWorkspaceOccupant: vi.fn() },
       openChild: vi.fn(),
       refresh: vi.fn(),
@@ -260,7 +264,7 @@ describe('approved KIRA compact live-agent dock', () => {
       byId: { [String(root.id)]: root, [String(stopped.id)]: stopped },
     } as unknown as SessionListState
     const props = {
-      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      useList: (selector: (value: SessionListState) => unknown) => selector(state),
       layout: { setWorkspaceOccupant: vi.fn() },
       openChild: vi.fn(),
       refresh: vi.fn(),
@@ -290,7 +294,7 @@ describe('approved KIRA compact live-agent dock', () => {
     } as unknown as SessionListState
     const setWorkspaceOccupant = vi.fn()
     const props = {
-      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      useList: (selector: (value: SessionListState) => unknown) => selector(state),
       layout: { setWorkspaceOccupant },
       openChild: vi.fn(),
       refresh: vi.fn(),
@@ -326,7 +330,7 @@ describe('approved KIRA compact live-agent dock', () => {
     const byId = Object.fromEntries([root, ...children].map(item => [String(item.id), item]))
     const state = { current: root.id, byId } as unknown as SessionListState
     const props = {
-      list: { getSnapshot: () => state, subscribe: () => () => undefined },
+      useList: (selector: (value: SessionListState) => unknown) => selector(state),
       layout: { setWorkspaceOccupant: vi.fn() },
       openChild: vi.fn(),
       refresh: vi.fn(),
@@ -353,12 +357,12 @@ describe('individual KIRA portrait assets', () => {
   })
 
   it('renders the individual portrait while keeping live phase data for animation', () => {
-    const ready = ModelActivityAvatar({ kind: 'argo', activity: undefined, running: false, pending: false, ready: true, variant: 'card' })
-    const live = ModelActivityAvatar({
+    const ready: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({ kind: 'argo', activity: undefined, running: false, pending: false, ready: true, variant: 'card' })
+    const live: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
       kind: 'atlas', activity: { model: 'gpt-5.6-luna', phase: 'running-tools' }, running: true, pending: false, variant: 'card',
     })
-    const readyChildren = Array.isArray(ready.props.children) ? ready.props.children : [ready.props.children]
-    const liveChildren = Array.isArray(live.props.children) ? live.props.children : [live.props.children]
+    const readyChildren = Children.toArray(ready.props.children).filter(isValidElement<Record<string, unknown>>)
+    const liveChildren = Children.toArray(live.props.children).filter(isValidElement<Record<string, unknown>>)
     const readyPortrait = readyChildren.find((child: { props?: Record<string, unknown> }) => child?.props?.['data-agent-portrait-image'] === true)
     const livePortrait = liveChildren.find((child: { props?: Record<string, unknown> }) => child?.props?.['data-agent-portrait-image'] === true)
 
@@ -369,4 +373,13 @@ describe('individual KIRA portrait assets', () => {
     expect(livePortrait?.type).toBe('img')
     expect(livePortrait?.props?.src).toBe(portraitSrcForKind('atlas'))
   })
+})
+
+it('uses the same durable name, portrait and assigned role in the dock as the transcript', () => {
+  const active = summary({ id: sid('canonical-argo'), parentId: sid('root'), origin: 'subagent', running: true })
+  const participant = { id: active.id, name: 'Argo', avatar: 'argo', role: 'skill.quality', status: 'working' }
+  const first = liveCardsOf([{ summary: active, depth: 1 }], { [active.id]: participant })
+  const afterRouteChange = liveCardsOf([{ summary: { ...active, agentPreset: 'another-engine' }, depth: 1 }], { [active.id]: participant })
+  expect(first[0]).toMatchObject({ name: 'Argo', kind: 'argo', specialty: 'skill.quality' })
+  expect(afterRouteChange[0]).toMatchObject({ name: 'Argo', kind: 'argo', specialty: 'skill.quality' })
 })

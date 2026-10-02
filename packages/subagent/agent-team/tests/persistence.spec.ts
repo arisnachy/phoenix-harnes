@@ -7,7 +7,8 @@ import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
-import { createUserMessage } from '@phoenix-ai/dsh-llm'
+import SessionProjections from '@phoenix-ai/dsh-session-projection'
+import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
 import SqliteSessionPersistence from '@phoenix-ai/dsh-session-persistence-sqlite'
@@ -89,12 +90,14 @@ async function stack(
   backend: PersistenceMount,
   root: string,
   script: ConstructorParameters<typeof MockAdapter>[0],
+  projections = false,
 ) {
   const ctx = new Context()
   contexts.add(ctx)
   await mountAgentLoopTestDependencies(ctx)
   await backend.mount(ctx, root)
   await ctx.plugin(AgentLoop, { agents: [] })
+  if (projections) await ctx.plugin(SessionProjections)
   await ctx.plugin(SubagentService)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
   await ctx.plugin(TeamService)
@@ -479,6 +482,33 @@ for (const backend of backends) {
       expect(pendingCopies).toHaveLength(1)
 
       await rootHandle.dispose()
+      await second.dispose()
+    })
+    it('reopens actual child history and Unicode reactions without duplicate publication or model calls', async () => {
+      const storageRoot = mkdtempSync(join(tmpdir(), 'team-chat-reopen-'))
+      roots.push(storageRoot)
+      const first = await stack(backend, storageRoot, [], true)
+      const rootId = SessionId('chat-reopen-root')
+      const lead = first.ctx.agentLoop.create(rootId, { provider: 'mock', model: 'mock' })
+      const child = first.ctx.sessions.create(SessionId('chat-reopen-child'), { meta: { parentSession: rootId, origin: 'subagent' } })
+      child.append('assistant/message', { turn: 1, step: 1, message: createAssistantMessage({
+        source: { provider: 'mock', model: 'mock' }, content: [{ type: 'text', text: 'Durable real finding.' }],
+      }) }, { surfaceOp: 'append' })
+      const message = (await first.ctx.agentTeams.chatMessages({ sessionId: rootId })).messages[0]!
+      await first.ctx.agentTeams.chatReact({ sessionId: rootId, messageId: message.id, emoji: '👩🏽‍💻', active: true })
+      await first.ctx.sessions.flush(child)
+      await first.ctx.sessions.flush(lead.session)
+      await first.dispose()
+      const second = await stack(backend, storageRoot, [], true)
+      const resumed = await second.ctx.agents.resume({ resumeSessionId: rootId, agentOptions: { provider: 'mock', model: 'mock' } })
+      const read = await second.ctx.agentTeams.chatMessages({ sessionId: rootId })
+      expect(read.messages).toHaveLength(1)
+      expect(read.messages[0]).toMatchObject({ id: message.id, text: 'Durable real finding.', reactions: [{ emoji: '👩🏽‍💻', reactorKind: 'user' }] })
+      expect((await second.ctx.agentTeams.chatMessages({ sessionId: rootId })).messages).toHaveLength(1)
+      await second.ctx.agentTeams.chatReact({ sessionId: rootId, messageId: message.id, emoji: '👩🏽‍💻', active: false })
+      expect((await second.ctx.agentTeams.chatMessages({ sessionId: rootId })).messages[0]?.reactions).toEqual([])
+      expect(second.adapter.requests).toHaveLength(0)
+      await resumed.dispose()
       await second.dispose()
     })
   })
