@@ -33,7 +33,7 @@ import { acquireRealityContext } from './reality-registry.ts'
 import { installRealityProtocol } from './reality-protocol.ts'
 import { installRealityContextProjection, realityConfigFromEnvironment, type RealityPromptRegistrar } from './reality-context.ts'
 import { createRealitySnapshotTool } from './reality-tool.ts'
-import { createProactivityExecutor, installProactivityRuntime } from './proactivity-runtime.ts'
+import { createProactivityExecutor, ensureAmbientBriefingTask, installProactivityRuntime } from './proactivity-runtime.ts'
 import { createProactivityTools } from './proactivity-tools.ts'
 import { acquireWakeEngine } from './wake-registry.ts'
 import { createWakeExecutor, installWakeRuntime } from './wake-runtime.ts'
@@ -407,6 +407,16 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
       disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs))
+      // A connected Google account is explicit authorization for read access, not
+      // for external writes. Seed one low-frequency read-only briefing so the
+      // home can surface fresh recommendations without manufacturing test noise.
+      void connectedGoogleEmail(authorization)
+        .then(async (email) => {
+          if (email !== undefined) await ensureAmbientBriefingTask(proactivity.engine)
+        })
+        .catch((error: unknown) => {
+          ctx.logger.warn(`ambient Phoenix briefing setup failed: ${error instanceof Error ? error.message : String(error)}`)
+        })
       wake.bindExecutor(createWakeExecutor(agents))
       disposers.push(installWakeRuntime(ctx, wake.engine))
       disposers.push(installConnectorEventBridge(ctx, mcpConnectors))
