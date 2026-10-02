@@ -103,15 +103,15 @@ async function nextResponse(
   expectedId: number,
 ): Promise<unknown> {
   for (;;) {
-    const line = await Promise.race([
-      iterator.next(),
-      new Promise<never>((_resolve, reject) => {
-        setTimeout(() => reject(new LlmError(
+    const line = await new Promise<IteratorResult<string>>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new LlmError(
           'Codex app-server timed out while reading native authentication',
           'MISSING_CREDENTIAL',
-        )), RPC_TIMEOUT_MS)
-      }),
-    ])
+        ))
+      }, RPC_TIMEOUT_MS)
+      void iterator.next().then(resolve, reject).finally(() => { clearTimeout(timer) })
+    })
     if (line.done) {
       throw new LlmError(
         'Codex app-server closed before native authentication completed',
