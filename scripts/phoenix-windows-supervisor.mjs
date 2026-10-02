@@ -47,6 +47,7 @@ const UPDATE_STORAGE_RETENTION_MS = Math.max(
     ? configuredUpdateStorageRetentionMs
     : DEFAULT_UPDATE_STORAGE_RETENTION_MS,
 )
+const STAGE_STORAGE_RETENTION_MS = Math.max(7 * 24 * 60 * 60 * 1000, UPDATE_STORAGE_RETENTION_MS)
 const HOST_STABLE_MS = Math.max(5_000, Number.parseInt(process.env.PHOENIX_HOST_STABLE_MS ?? '15000', 10) || 15_000)
 const CONFIG_SNAPSHOT_SCHEMA = 1
 const CONFIG_SNAPSHOT_FILE = 'phoenix-config-last-known-good.json'
@@ -361,7 +362,7 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
   }
 
   for (const candidate of staleStageDirectoriesForCleanup()) {
-    if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue
+    if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
     if (!removeManagedWorktree(candidate)) continue
     removedStages += 1
     console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
