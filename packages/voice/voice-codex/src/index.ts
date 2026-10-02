@@ -388,7 +388,10 @@ class CodexRealtimeProvider implements VoiceRealtimeProvider {
   }
 }
 
-/** Build a Codex realtime provider without exposing authentication material to clients. */
+/** Build a Codex realtime provider without exposing authentication material to clients.
+ * @param options - Provider command, model, voice, timeout, and injectable process seam.
+ * @returns A host-only realtime provider registered by the voice plugin.
+ */
 export function createCodexRealtimeProvider(options: CodexRealtimeProviderOptions = {}): VoiceRealtimeProvider {
   return new CodexRealtimeProvider(options)
 }
