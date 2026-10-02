@@ -145,7 +145,7 @@ export interface TeamMessageSource {
   readonly messageId: TeamMessageId
   readonly senderId: SessionId
   readonly senderName: string
-  /** Semantic purpose survives delivery so the Lead can supervise Team work without another classifier call. */
+  /** Semantic purpose survives delivery so Phoenix Auto can route Kira without another classifier call. */
   readonly purpose?: TeamMessagePurpose
 }
 
@@ -157,7 +157,7 @@ declare module '@phoenix-ai/dsh-llm' {
 
 /** Team-service deployment limits. */
 export interface Config {
-  /** Maximum non-failed teammate identities admitted by one Team; failed starts remain diagnostic history only. */
+  /** Maximum immutable teammate names retained by one Team. */
   readonly maxMembers?: number
   /** Maximum non-deleted tasks retained by one Team. */
   readonly maxTasks?: number
