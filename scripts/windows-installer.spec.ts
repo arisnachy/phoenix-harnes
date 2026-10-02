@@ -42,7 +42,13 @@ describe('PHOENIX managed Windows installation', () => {
     const icon = read('scripts/phoenix-windows-icon.ico.b64')
     const markdownOpen = read('scripts/phoenix-markdown-open.ps1')
     const markdownReader = read('scripts/phoenix-markdown-reader.mjs')
-    expect(icon.trim().length).toBeGreaterThan(1000)
+    const encodedIcon = icon.trim()
+    expect(encodedIcon.length).toBeGreaterThan(1000)
+    expect(encodedIcon.length % 4).toBe(0)
+    expect(encodedIcon).toMatch(/^[A-Za-z0-9+/]+={0,2}$/u)
+    const decodedIcon = Buffer.from(encodedIcon, 'base64')
+    expect([...decodedIcon.subarray(0, 4)]).toEqual([0, 0, 1, 0])
+    expect(decodedIcon.length).toBeGreaterThan(512)
     expect(shortcut).toContain('phoenix-windows-icon.ico.b64')
     expect(shortcut).toContain('[Convert]::FromBase64String')
     expect(shortcut).toContain('phoenix-browser-$iconHash.ico')
@@ -56,6 +62,20 @@ describe('PHOENIX managed Windows installation', () => {
     expect(markdownOpen).toContain('Start-Process -FilePath $htmlPath')
     expect(markdownReader).toContain('Phoenix Markdown')
     expect(markdownReader).toContain('mdast-util-from-markdown')
+  })
+
+  it('repairs the Windows shortcut before optional developer hooks', () => {
+    const manifest = JSON.parse(read('package.json')) as { scripts?: { postinstall?: string } }
+    const postinstall = manifest.scripts?.postinstall ?? ''
+    const shortcutIndex = postinstall.indexOf('phoenix-windows-shortcut.mjs --install')
+    const lefthookIndex = postinstall.indexOf('install-lefthook.mjs')
+    expect(shortcutIndex).toBeGreaterThanOrEqual(0)
+    expect(lefthookIndex).toBeGreaterThan(shortcutIndex)
+
+    const lefthookInstaller = read('scripts/install-lefthook.mjs')
+    expect(lefthookInstaller).not.toContain("import lefthookPackage from 'lefthook/package.json'")
+    expect(lefthookInstaller).toContain("await import('lefthook/package.json'")
+    expect(lefthookInstaller).toContain("errorCode(error) === 'ERR_MODULE_NOT_FOUND'")
   })
 
   it('forces upgrade takeover from a stale tray instance before replacing the payload', () => {
