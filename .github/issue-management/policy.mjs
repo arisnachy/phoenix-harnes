@@ -437,9 +437,16 @@ async function graphql(query, variables) {
 async function issueSnapshot(number, status = undefined) {
   const issue = await api(`/repos/${ACTIVE_REPOSITORY.owner}/${ACTIVE_REPOSITORY.repository}/issues/${number}`)
   if (issue.pull_request) return null
-  const values = await api(
+  // Personal repositories may not expose native issue fields; absent optional Priority is legal.
+  let values = await api(
     `/repos/${ACTIVE_REPOSITORY.owner}/${ACTIVE_REPOSITORY.repository}/issues/${number}/issue-field-values?per_page=100`,
+    { allow404: true },
   )
+  if (values === null) {
+    const repository = await api(`/repos/${ACTIVE_REPOSITORY.owner}/${ACTIVE_REPOSITORY.repository}`)
+    if (repository.owner.type !== 'User') throw new Error('native issue fields unavailable for organization repository')
+    values = []
+  }
   const field = (name) => values.find((value) => value.issue_field_name === name)
   return {
     number,
