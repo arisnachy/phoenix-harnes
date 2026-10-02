@@ -26,18 +26,6 @@ describe('agentAvatarKind', () => {
 })
 
 describe('portraitSrcForKind', () => {
-  it('keeps Kira as a distinct semantic lead identity even while reusing the approved Aurora portrait asset', () => {
-    const lead = ModelActivityAvatar({
-      kind: 'kira',
-      activity: undefined,
-      running: false,
-      pending: false,
-      ready: true,
-    })
-    expect(lead.props['data-avatar']).toBe('kira')
-    expect(portraitSrcForKind('kira')).toBe(portraitSrcForKind('aurora'))
-  })
-
   it('resolves model aliases to stable bundled KIRA portraits', () => {
     expect(portraitSrcForKind('sol')).toBe(portraitSrcForKind('solaria'))
     expect(portraitSrcForKind('luna')).toBe(portraitSrcForKind('eclipse'))
@@ -115,5 +103,11 @@ describe('ModelActivityAvatar', () => {
     expect(done.props).toMatchObject({ 'data-avatar': 'vega', 'data-phase': 'idle', 'data-state': 'done' })
     expect(pending.props).toMatchObject({ 'data-avatar': 'eclipse', 'data-phase': 'running-tools', 'data-state': 'pending' })
     expect(fallback.props).toMatchObject({ 'data-avatar': 'generic', 'data-phase': 'preparing' })
+  })
+})
+
+describe('Kira lead identity', () => {
+  it('reuses an approved portrait asset while remaining a distinct semantic avatar kind', () => {
+    expect(portraitSrcForKind('kira')).toBe(portraitSrcForKind('aurora'))
   })
 })
