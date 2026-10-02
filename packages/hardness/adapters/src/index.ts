@@ -42,6 +42,7 @@ import { createRoutineTools } from './routine-tools.ts'
 import { installRoutineProtocol } from './routine-protocol.ts'
 import { createLearnedSkillTool } from './learned-skill.ts'
 import { installConnectorEventBridge } from './connector-event-bridge.ts'
+import { DEFAULT_ASSISTANT_PULSE_MS, ensureAssistantPulse } from './assistant-pulse.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
@@ -153,6 +154,8 @@ export { ROUTINE_PROTOCOL, installRoutineProtocol } from './routine-protocol.ts'
 export { LearnedSkillStore, createLearnedSkillTool } from './learned-skill.ts'
 export type { LearnedSkillInput, LearnedSkillReceipt } from './learned-skill.ts'
 export { installConnectorEventBridge } from './connector-event-bridge.ts'
+export { ASSISTANT_PULSE_INSTRUCTION, ASSISTANT_PULSE_TITLE, DEFAULT_ASSISTANT_PULSE_MS, MIN_ASSISTANT_PULSE_MS, ensureAssistantPulse } from './assistant-pulse.ts'
+export type { AssistantPulseOptions } from './assistant-pulse.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -172,6 +175,10 @@ export interface Config {
   taskLedgerPath?: string
   /** How often the host checks for due scheduled work. */
   taskPollMs?: number
+  /** Keep KIRA quietly alive like a personal assistant, using the existing durable proactivity engine. */
+  assistantPulseEnabled?: boolean
+  /** Ambient assistant cadence; minimum 5 minutes. Default 30 minutes. */
+  assistantPulseMs?: number
   /** Durable event-driven wake-trigger ledger. Empty/omitted uses ~/.dsh/phoenix-wake-triggers.json; :memory: is test-only. */
   wakeLedgerPath?: string
   /** One-shot subagent provider used for private preparation and scheduled office work. */
@@ -192,6 +199,8 @@ export const Config: z<Config> = z.object({
   maxOrdinaryJudgePasses: z.number().step(1).min(1).max(3).default(2),
   taskLedgerPath: z.string().default(''),
   taskPollMs: z.number().default(15_000),
+  assistantPulseEnabled: z.boolean().default(true),
+  assistantPulseMs: z.number().step(1).min(5 * 60 * 1_000).default(DEFAULT_ASSISTANT_PULSE_MS),
   wakeLedgerPath: z.string().default(''),
   privateWorkProvider: z.string().default('spawn'),
   privateWorkResultChars: z.number().default(12_000),
@@ -406,6 +415,10 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
+      await ensureAssistantPulse(proactivity.engine, {
+        enabled: config.assistantPulseEnabled ?? true,
+        intervalMs: config.assistantPulseMs ?? DEFAULT_ASSISTANT_PULSE_MS,
+      })
       disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs))
       wake.bindExecutor(createWakeExecutor(agents))
       disposers.push(installWakeRuntime(ctx, wake.engine))
