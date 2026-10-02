@@ -58,7 +58,7 @@ const LIVE_ACTIVITY_GUIDANCE =
 
 
 function latestUserRequestText(parent: Agent): string {
-  const events = parent.session?.events ?? []
+  const events = parent.session.events
   for (let index = events.length - 1; index >= 0; index--) {
     const event = events[index]
     if (event?.type !== 'user/message') continue
