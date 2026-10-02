@@ -12,7 +12,7 @@ import {
 import type { CompatibilityStatus } from './types.ts'
 
 /** Exact OpenClaw core package version accepted by this donor snapshot. */
-export const OPENCLAW_CORE_PACKAGE_SPEC = 'openclaw@2026.8.1' as const
+export const OPENCLAW_CORE_PACKAGE_SPEC = 'openclaw@2026.9.6' as const
 
 /** Registration families admitted across the OpenClaw compatibility boundary. */
 export type OpenClawRegistrationFamily =

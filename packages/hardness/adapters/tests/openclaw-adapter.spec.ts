@@ -24,10 +24,13 @@ describe('HARDNESS OpenClaw adapter', () => {
 
     const dispose = indexOpenClawExtensions(hardness)
 
-    expect(registered).toHaveLength(153)
+    expect(registered).toHaveLength(160)
     expect(registered.every(item => item.status === 'experimental')).toBe(true)
     expect(registered.find(item => item.id === 'openclaw:a2a')?.kind).toBe('agent-protocol')
     expect(registered.find(item => item.id === 'openclaw:workboard')?.kind).toBe('work')
+    expect(registered.find(item => item.id === 'openclaw:github')?.kind).toBe('integration')
+    expect(registered.find(item => item.id === 'openclaw:facetime')?.kind).toBe('voice')
+    expect(registered.find(item => item.id === 'openclaw:onnx')?.kind).toBe('local-inference')
 
     dispose()
     expect(disposeCalls.every(count => count === 1)).toBe(true)

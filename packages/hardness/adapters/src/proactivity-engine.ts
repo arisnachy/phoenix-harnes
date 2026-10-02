@@ -47,6 +47,8 @@ export interface ProactivityTask {
   readonly title: string
   readonly instruction: string
   readonly createdBy: ProactivityTaskCreator
+  /** Stable internal identity for host-owned maintenance/assistant work. Omitted for user/model-created tasks. */
+  readonly systemKey?: string
   readonly createdAt: string
   readonly updatedAt: string
   readonly nextRunAt: string
@@ -78,6 +80,8 @@ export interface CreateProactivityTaskInput {
   readonly instruction: string
   readonly runAt: string
   readonly createdBy: ProactivityTaskCreator
+  /** Stable internal identity for host-owned work. Not exposed by model-facing creation tools. */
+  readonly systemKey?: string
   readonly recurrence?: ProactivityRecurrence
   readonly catchUp?: ProactivityCatchUp
   readonly visibility?: ProactivityVisibility
@@ -141,6 +145,8 @@ export interface ProactivityEngineOptions {
 /** Options for projecting tasks to a caller. */
 export interface ProactivityListOptions {
   readonly includeHidden?: boolean
+  /** Include host-owned system tasks such as the KIRA assistant pulse. */
+  readonly includeSystem?: boolean
   readonly now?: Date
 }
 
@@ -348,6 +354,8 @@ function parseTask(raw: unknown): ProactivityTask {
     throw new Error('invalid proactivity task')
   }
   const recurrence = parseRecurrence(raw.recurrence)
+  if (raw.systemKey !== undefined && typeof raw.systemKey !== 'string') throw new Error('invalid systemKey')
+  if (raw.systemKey !== undefined && raw.createdBy !== 'system') throw new Error('systemKey requires createdBy=system')
   if (raw.revealAt !== undefined && typeof raw.revealAt !== 'string') throw new Error('invalid revealAt')
   if (raw.preparationInstruction !== undefined && typeof raw.preparationInstruction !== 'string') throw new Error('invalid preparationInstruction')
   if (raw.prepareLeadMs !== undefined && typeof raw.prepareLeadMs !== 'number') throw new Error('invalid prepareLeadMs')
@@ -366,6 +374,7 @@ function parseTask(raw: unknown): ProactivityTask {
     title: nonEmpty(raw.title, 'title'),
     instruction: nonEmpty(raw.instruction, 'instruction'),
     createdBy: raw.createdBy,
+    ...(raw.systemKey === undefined ? {} : { systemKey: boundedNonEmpty(raw.systemKey, 'systemKey', 160) }),
     createdAt: iso(raw.createdAt, 'createdAt'),
     updatedAt: iso(raw.updatedAt, 'updatedAt'),
     nextRunAt: iso(raw.nextRunAt, 'nextRunAt'),
@@ -512,6 +521,9 @@ export class ProactivityEngine {
       const snapshot = await this.snapshot()
       const now = new Date().toISOString()
       const recurrence = input.recurrence ?? { kind: 'once' as const }
+      if (input.systemKey !== undefined && input.createdBy !== 'system') {
+        throw new Error('systemKey requires createdBy=system')
+      }
       if (recurrence.kind === 'interval') finitePositive(recurrence.everyMs, 'recurrence.everyMs')
       if (recurrence.kind === 'yearly') {
         finitePositive(recurrence.everyYears, 'recurrence.everyYears')
@@ -532,6 +544,7 @@ export class ProactivityEngine {
         title: nonEmpty(input.title, 'title'),
         instruction: nonEmpty(input.instruction, 'instruction'),
         createdBy: input.createdBy,
+        ...(input.systemKey === undefined ? {} : { systemKey: boundedNonEmpty(input.systemKey, 'systemKey', 160) }),
         createdAt: now,
         updatedAt: now,
         nextRunAt: iso(input.runAt, 'runAt'),
@@ -579,6 +592,7 @@ export class ProactivityEngine {
     return this.exclusive(async () => {
       const now = (options.now ?? new Date()).getTime()
       return (await this.snapshot()).tasks
+        .filter(task => options.includeSystem === true || task.systemKey === undefined)
         .filter(task => options.includeHidden === true || task.visibility !== 'surprise' || now >= Date.parse(task.revealAt ?? task.nextRunAt))
         .map(cloneTask)
     })
@@ -596,6 +610,7 @@ export class ProactivityEngine {
     if (snapshot === undefined) return []
     const now = (options.now ?? new Date()).getTime()
     return snapshot.tasks
+      .filter(task => options.includeSystem === true || task.systemKey === undefined)
       .filter(task => options.includeHidden === true || task.visibility !== 'surprise' || now >= Date.parse(task.revealAt ?? task.nextRunAt))
       .map(cloneTask)
   }

@@ -7,8 +7,8 @@ import {
 describe('OpenClaw HARDNESS projection', () => {
   it('projects all donor extensions as non-routable experimental capabilities', () => {
     const descriptors = toHardnessCapabilityDescriptors()
-    expect(descriptors).toHaveLength(153)
-    expect(new Set(descriptors.map(item => item.id)).size).toBe(153)
+    expect(descriptors).toHaveLength(160)
+    expect(new Set(descriptors.map(item => item.id)).size).toBe(160)
     expect(descriptors.every(item => item.status === 'experimental')).toBe(true)
     expect(descriptors.every(item => item.provider === 'openclaw')).toBe(true)
     expect(descriptors.every(item => item.compatibility.includes(`donor:${OPENCLAW_DONOR_COMMIT}`))).toBe(true)

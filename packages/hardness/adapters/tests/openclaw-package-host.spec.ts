@@ -15,13 +15,13 @@ describe('OpenClaw isolated package host', () => {
 
     expect(candidate).toEqual({
       extensionId: 'brave',
-      coreSpec: 'openclaw@2026.8.1',
+      coreSpec: 'openclaw@2026.9.6',
       pluginSelector: 'brave',
       donorCommit: OPENCLAW_DONOR_COMMIT,
       source: 'official-catalog',
       registrationFamily: 'web-search',
     })
-    expect(OPENCLAW_CORE_PACKAGE_SPEC).toBe('openclaw@2026.8.1')
+    expect(OPENCLAW_CORE_PACKAGE_SPEC).toBe('openclaw@2026.9.6')
     expect(JSON.stringify(candidate)).not.toMatch(/https?:|git\+|\/main\b/i)
     expect(() => resolveOpenClawInstallCandidate('not-in-donor')).toThrow('unknown OpenClaw extension')
   })

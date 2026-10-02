@@ -46,6 +46,37 @@ describe('proactivity automatic retry', () => {
     expect((await restarted.get('retryable'))?.status).toBe('completed')
   })
 
+  it('retries failed host-owned assistant work even though it is hidden from ordinary listings', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-01T18:00:00.000Z'))
+
+    const store = new MemoryProactivityStore()
+    const failed = new ProactivityEngine(store, {
+      execute: async () => { throw new Error('connector temporarily unavailable') },
+    }, { id: () => 'system-pulse' })
+    await failed.create({
+      title: 'KIRA assistant pulse',
+      instruction: 'Review ambient signals.',
+      runAt: '2026-10-01T17:30:00.000Z',
+      createdBy: 'system',
+      systemKey: 'kira.assistant-pulse.v1',
+      recurrence: { kind: 'interval', everyMs: 1_800_000 },
+      catchUp: 'skip',
+      delivery: 'work',
+    })
+    await failed.runDue(new Date())
+    expect((await failed.get('system-pulse'))?.status).toBe('failed')
+    expect(await failed.list()).toEqual([])
+
+    vi.setSystemTime(new Date('2026-10-01T18:01:00.000Z'))
+    expect(await retryFailedProactivityTasks(failed, new Date(), {
+      maxAttempts: 5,
+      retryBaseMs: 60_000,
+      retryMaxMs: 3_600_000,
+    })).toBe(1)
+    expect((await failed.get('system-pulse'))?.status).toBe('scheduled')
+  })
+
   it('stops retrying after the configured attempt ceiling', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-13T16:00:00.000Z'))

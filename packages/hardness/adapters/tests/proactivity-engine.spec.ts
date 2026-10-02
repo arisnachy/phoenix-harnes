@@ -38,6 +38,51 @@ describe('HARDNESS ProactivityEngine', () => {
       .toEqual(['Visible follow-up', 'Hidden surprise'])
   })
 
+  it('keeps host-owned system tasks out of ordinary task listings while retaining internal access', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async () => ({}) },
+      { id: fixedIds('system-pulse') },
+    )
+    await engine.create({
+      title: 'KIRA assistant pulse',
+      instruction: 'Review ambient signals.',
+      runAt: '2026-09-14T12:00:00.000Z',
+      createdBy: 'system',
+      systemKey: 'kira.assistant-pulse.v1',
+      recurrence: { kind: 'interval', everyMs: 1_800_000 },
+      delivery: 'work',
+    })
+
+    expect(await engine.list({ now: new Date('2026-09-13T12:00:00.000Z') })).toEqual([])
+    expect(engine.peek({ now: new Date('2026-09-13T12:00:00.000Z') })).toEqual([])
+    const internal = await engine.list({
+      includeHidden: true,
+      includeSystem: true,
+      now: new Date('2026-09-13T12:00:00.000Z'),
+    })
+    expect(internal).toHaveLength(1)
+    expect(internal[0]).toMatchObject({
+      id: 'system-pulse',
+      createdBy: 'system',
+      systemKey: 'kira.assistant-pulse.v1',
+    })
+  })
+
+  it('reserves system task identities to host-created work', async () => {
+    const engine = new ProactivityEngine(
+      new MemoryProactivityStore(),
+      { execute: async () => ({}) },
+    )
+    await expect(engine.create({
+      title: 'Hidden user task',
+      instruction: 'Do something.',
+      runAt: '2026-09-14T12:00:00.000Z',
+      createdBy: 'user',
+      systemKey: 'not-allowed',
+    })).rejects.toThrow('systemKey requires createdBy=system')
+  })
+
   it('runs an overdue one-shot once after restart and records completion', async () => {
     const store = new MemoryProactivityStore()
     const firstExecutor = { execute: vi.fn(async () => ({ summary: 'sent' })) }

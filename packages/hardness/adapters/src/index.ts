@@ -52,6 +52,7 @@ import { createConnectorInstallTool, createXMcpActivateTool } from './connector-
 import type { McpRegistryInstallerService, XMcpHostService } from './connector-install-tool.ts'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import { installOrdinaryCompletionJudgeBridge } from './ordinary-completion-judge.ts'
+import { DEFAULT_ASSISTANT_PULSE_EVERY_MINUTES, installAssistantPulseRuntime } from './assistant-pulse.ts'
 
 export { indexTools } from './tool-adapter.ts'
 export type { ToolAtlasIndexOptions, ToolChangeSource } from './tool-adapter.ts'
@@ -153,6 +154,15 @@ export { ROUTINE_PROTOCOL, installRoutineProtocol } from './routine-protocol.ts'
 export { LearnedSkillStore, createLearnedSkillTool } from './learned-skill.ts'
 export type { LearnedSkillInput, LearnedSkillReceipt } from './learned-skill.ts'
 export { installConnectorEventBridge } from './connector-event-bridge.ts'
+export {
+  ASSISTANT_PULSE_INSTRUCTION,
+  ASSISTANT_PULSE_SYSTEM_KEY,
+  ASSISTANT_PULSE_TITLE,
+  DEFAULT_ASSISTANT_PULSE_EVERY_MINUTES,
+  installAssistantPulseRuntime,
+  reconcileAssistantPulse,
+} from './assistant-pulse.ts'
+export type { AssistantPulseAgentRegistry, AssistantPulseConfig } from './assistant-pulse.ts'
 
 /** Base-composition consumer that projects existing registries into HARDNESS. */
 export const name = 'hardness-adapters'
@@ -174,6 +184,10 @@ export interface Config {
   taskPollMs?: number
   /** Durable event-driven wake-trigger ledger. Empty/omitted uses ~/.dsh/phoenix-wake-triggers.json; :memory: is test-only. */
   wakeLedgerPath?: string
+  /** Keep KIRA's quiet ambient assistant pulse active in the host. */
+  assistantPulseEnabled?: boolean
+  /** Minutes between bounded ambient assistant checks. Event-driven wake remains preferred. */
+  assistantPulseEveryMinutes?: number
   /** One-shot subagent provider used for private preparation and scheduled office work. */
   privateWorkProvider?: string
   /** Maximum retained characters from one private preparation result. */
@@ -193,6 +207,8 @@ export const Config: z<Config> = z.object({
   taskLedgerPath: z.string().default(''),
   taskPollMs: z.number().default(15_000),
   wakeLedgerPath: z.string().default(''),
+  assistantPulseEnabled: z.boolean().default(true),
+  assistantPulseEveryMinutes: z.number().step(1).min(15).max(1440).default(DEFAULT_ASSISTANT_PULSE_EVERY_MINUTES),
   privateWorkProvider: z.string().default('spawn'),
   privateWorkResultChars: z.number().default(12_000),
   userMailIdentity: z.string().default(''),
@@ -407,6 +423,10 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
       disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs))
+      disposers.push(installAssistantPulseRuntime(ctx, proactivity.engine, agents, {
+        enabled: config.assistantPulseEnabled ?? true,
+        everyMinutes: config.assistantPulseEveryMinutes ?? DEFAULT_ASSISTANT_PULSE_EVERY_MINUTES,
+      }))
       wake.bindExecutor(createWakeExecutor(agents))
       disposers.push(installWakeRuntime(ctx, wake.engine))
       disposers.push(installConnectorEventBridge(ctx, mcpConnectors))

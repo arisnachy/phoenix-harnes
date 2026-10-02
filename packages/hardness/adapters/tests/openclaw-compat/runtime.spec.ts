@@ -43,7 +43,7 @@ describe('OpenClaw compatibility runtime', () => {
     const activateExtension = vi.fn()
     const runtime = createOpenClawCompatibilityRuntime({ loadManifest, activateExtension })
     const discovered = runtime.discover()
-    expect(discovered).toHaveLength(153)
+    expect(discovered).toHaveLength(160)
     expect(loadManifest).not.toHaveBeenCalled()
     expect(activateExtension).not.toHaveBeenCalled()
     expect(discovered.find(item => item.entry.id === 'a2a')?.capabilities[0]?.kind).toBe('agent-protocol')

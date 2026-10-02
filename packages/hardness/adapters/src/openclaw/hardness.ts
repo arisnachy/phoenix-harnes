@@ -2,10 +2,10 @@ import type { CapabilityDescriptor, CapabilityId } from '@phoenix-ai/dsh-hardnes
 import { OPENCLAW_DONOR_COMMIT, listOpenClawExtensions } from './catalog.ts'
 import { toPhoenixCapabilities } from './capabilities.ts'
 
-// The donor remains pinned at 2026.8.1. This is the Phoenix descriptor
-// revision, which must advance when the projected metadata changes so a live
-// process can replace a stale descriptor during resume or HMR.
-const HARDNESS_DESCRIPTOR_VERSION = '2026.8.2'
+// The donor is pinned to the verified OpenClaw 2026.9.6 stable release.
+// This Phoenix descriptor revision advances with projected metadata so a live
+// process can replace stale descriptors during resume or HMR.
+const HARDNESS_DESCRIPTOR_VERSION = '2026.9.6'
 
 /**
  * Project every pinned donor extension into non-routable HARDNESS metadata.
