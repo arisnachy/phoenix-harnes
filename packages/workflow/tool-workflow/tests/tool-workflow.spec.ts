@@ -118,6 +118,7 @@ describe('dsh-tool-workflow', () => {
           additionalProperties: false,
           properties: {},
         },
+        render: () => [],
       },
       async execute() {
         throw new Error('unused test-only Team route')
