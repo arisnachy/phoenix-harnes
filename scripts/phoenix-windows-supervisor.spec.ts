@@ -209,4 +209,21 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('instead of relaunching a broken update')
   })
 
+  it('garbage-collects obsolete isolated runtimes without deleting the active runtime', () => {
+    expect(source).toContain('function runtimeDirectoriesForCurrentCheckout()')
+    expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [])')
+    expect(source).toContain('const active = readActiveRuntimeRecord()')
+    expect(source).toContain('keep.add(runtimePathKey(active.path))')
+    expect(source).toContain("spawnSync('git', ['worktree', 'remove', '--force', path]")
+    expect(source).toContain("spawnSync('git', ['worktree', 'prune', '--expire', 'now']")
+    expect(source).toContain('removed obsolete isolated runtime')
+    expect(source).toContain('runtime cleanup removed')
+  })
+
+  it('runs runtime garbage collection at startup and after safe runtime handoff paths', () => {
+    expect(source).toContain('restoreActiveRuntime()\ncleanupObsoleteRuntimes()')
+    expect(source).toContain("if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()")
+    expect(source).toContain('clearActiveRuntime()\n    cleanupObsoleteRuntimes()')
+  })
+
 })

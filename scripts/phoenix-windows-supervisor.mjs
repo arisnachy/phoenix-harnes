@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -249,6 +249,73 @@ function runtimeBaseDirectory() {
 
 function persistentRuntime(target) {
   return join(runtimeBaseDirectory(), `phoenix-runtime-${stageIdentity()}-${target.slice(0, 12)}`)
+}
+
+function runtimePathKey(path) {
+  const normalized = resolve(path)
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function runtimeDirectoriesForCurrentCheckout() {
+  const base = runtimeBaseDirectory()
+  const prefix = `phoenix-runtime-${stageIdentity()}-`
+  return readdirSync(base, { withFileTypes: true })
+    .filter(entry => entry.isDirectory()
+      && entry.name.startsWith(prefix)
+      && /^[0-9a-f]{12}$/iu.test(entry.name.slice(prefix.length)))
+    .map(entry => join(base, entry.name))
+}
+
+function removeRuntimeWorktree(path) {
+  const result = spawnSync('git', ['worktree', 'remove', '--force', path], {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  if (result.status !== 0 && existsSync(path)) {
+    try {
+      rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })
+    } catch (error) {
+      console.error(
+        `[PHOENIX UPDATE] warning: could not remove obsolete runtime ${path}: `
+        + `${error instanceof Error ? error.message : String(error)}`,
+      )
+      return false
+    }
+  }
+  return !existsSync(path)
+}
+
+function cleanupObsoleteRuntimes(extraKeep = []) {
+  const keep = new Set(extraKeep.filter(Boolean).map(runtimePathKey))
+  const active = readActiveRuntimeRecord()
+  if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
+  if (runtimeRoot !== root) keep.add(runtimePathKey(runtimeRoot))
+
+  let removed = 0
+  for (const candidate of runtimeDirectoriesForCurrentCheckout()) {
+    if (keep.has(runtimePathKey(candidate))) continue
+    if (!removeRuntimeWorktree(candidate)) continue
+    removed += 1
+    console.error(`[PHOENIX UPDATE] removed obsolete isolated runtime: ${candidate}`)
+  }
+
+  const prune = spawnSync('git', ['worktree', 'prune', '--expire', 'now'], {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (prune.status !== 0) {
+    const detail = typeof prune.stderr === 'string' ? prune.stderr.trim() : ''
+    console.error(
+      `[PHOENIX UPDATE] warning: git worktree prune failed${detail.length > 0 ? `: ${detail}` : ''}`,
+    )
+  } else if (removed > 0) {
+    console.error(`[PHOENIX UPDATE] runtime cleanup removed ${String(removed)} obsolete runtime(s).`)
+  }
 }
 
 function runChecked(cwd, bin, args, label) {
@@ -899,6 +966,7 @@ process.once('SIGTERM', requestShutdown)
 repairDesktopShortcut()
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
+cleanupObsoleteRuntimes()
 recoverConfigurationBeforeFirstBoot()
 
 let finalCode = 0
@@ -953,6 +1021,8 @@ while (true) {
   if (!watcherStopped) await watcherSupervisor.stop()
   activeHost = undefined
 
+  if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()
+
   if (shutdownRequested) {
     finalCode = hostExit.code ?? (hostExit.signal === null ? 0 : 0)
     break
@@ -969,6 +1039,7 @@ while (true) {
       console.error(
         `[PHOENIX UPDATE] consumed duplicate post-exit activation request for already-active runtime ${requestedTarget.slice(0, 12)}.`,
       )
+      cleanupObsoleteRuntimes()
       continue
     }
 
@@ -996,6 +1067,7 @@ while (true) {
         repairDesktopShortcut()
         clearPreparedRecord()
         clearRestartRequest()
+        cleanupObsoleteRuntimes()
         console.error(`[PHOENIX UPDATE] isolated runtime ${runtime.target.slice(0, 12)} activated; relaunching PHOENIX without touching the source checkout.`)
       } catch (error) {
         clearRestartRequest()
@@ -1038,6 +1110,7 @@ while (true) {
 
     runtimeRoot = root
     clearActiveRuntime()
+    cleanupObsoleteRuntimes()
     repairDesktopShortcut()
     console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
     continue
@@ -1060,6 +1133,7 @@ while (true) {
     const failedRuntime = runtimeRoot
     runtimeRoot = root
     clearActiveRuntime()
+    cleanupObsoleteRuntimes()
     console.error(
       `[PHOENIX RECOVERY] isolated runtime ${failedRuntime} exited unexpectedly; `
       + 'retired its active marker and falling back to the source checkout instead of relaunching a broken update.',
