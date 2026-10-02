@@ -309,7 +309,9 @@ export class TeamRoster {
       if (state.memberIdsByName.has(name)) {
         throw new TeamError(`teammate name "${name}" was already used in this Team`, 'TEAM_MEMBER_NAME_TAKEN')
       }
-      if (state.members.size >= this.maxMembers) {
+      const admittedMembers = [...state.members.values()]
+        .filter(member => member.phase !== 'failed').length
+      if (admittedMembers >= this.maxMembers) {
         throw new TeamError(`Team member limit ${this.maxMembers} reached`, 'TEAM_MEMBER_LIMIT')
       }
       await this.journal.appendAndFlush(root, 'team/member', { version: 1, teamId: TeamId(root.id), member })
