@@ -82,7 +82,7 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
   })
 
-  it('keeps Phoenix Auto specialist delegation inside the real Kira Team path', async () => {
+  it('keeps every selected model inside the real Kira Team delegation path when Team is mounted', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -105,12 +105,11 @@ describe('installModelSelection()', () => {
 
     selection.current = { provider: 'openai-codex', model: 'gpt-6-luna' }
     const explicitAssembly = await ctx.systemPrompt.assemble()
-    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual([
-      'read',
-      'spawn_teammate',
-      'subagent',
-      'subagent_fork',
-    ])
+    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
+
+    selection.current = { provider: 'deepseek-official', model: 'deepseek-v4-flash' }
+    const externalAssembly = await ctx.systemPrompt.assemble()
+    expect(externalAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
 
     dispose()
     await ctx.fiber.dispose()
@@ -266,6 +265,219 @@ describe('installModelSelection()', () => {
     // immediately to Luna Max after the one strategic intervention.
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 2, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('returns a direct Codex Team blocker to the selected Lead before Luna Max execution resumes', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: {
+        provider: 'openai-codex',
+        model: 'gpt-6-astra',
+        reasoningEffort: ReasoningEffortId('high'),
+      },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: {
+            kind: 'team-message',
+            messageId: 'team-blocker-direct-1',
+            purpose: 'blocker',
+          },
+          content: [{ type: 'text', text: 'Atlas needs the Lead to choose between two incompatible fixes.' }],
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = {
+      provider: 'openai-codex',
+      model: 'gpt-6-astra',
+      reasoningEffort: ReasoningEffortId('high'),
+    }
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('uses the selected Codex model as Team Lead, Luna Max as muscle, and returns blockers to that Lead', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [
+        { name: 'read', description: 'read a file', parameters: { type: 'object' } },
+        { name: 'spawn_teammate', description: 'create a Kira teammate', parameters: { type: 'object' } },
+      ],
+    }))
+    const selection: ModelSelectionRef = {
+      current: {
+        provider: 'openai-codex',
+        model: 'gpt-6-astra',
+        reasoningEffort: ReasoningEffortId('high'),
+      },
+      assembled: undefined,
+    }
+    // Team mode itself enables the selected-planner -> Luna Max handoff even
+    // when a caller did not explicitly supply the legacy handoff resolver.
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Arregla router.ts y valida el resultado.' }],
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = {
+      provider: 'openai-codex',
+      model: 'gpt-6-astra',
+      reasoningEffort: ReasoningEffortId('high'),
+    }
+    await ctx.systemPrompt.assemble()
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    events.push({
+      type: 'user/message',
+      data: {
+        source: {
+          kind: 'team-message',
+          messageId: 'direct-midturn-blocker',
+          purpose: 'blocker',
+        },
+        content: [{ type: 'text', text: 'Atlas está bloqueado y necesita una decisión del Lead.' }],
+      },
+    })
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 3, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+    // One Lead intervention is enough for this blocker; execution then returns
+    // to the cheaper/faster Luna Max worker route.
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('returns repeated direct Codex execution failures to the selected Lead without a Team blocker message', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [
+        { name: 'read', description: 'read a file', parameters: { type: 'object' } },
+        { name: 'spawn_teammate', description: 'create a Kira teammate', parameters: { type: 'object' } },
+      ],
+    }))
+    const selection: ModelSelectionRef = {
+      current: {
+        provider: 'openai-codex',
+        model: 'gpt-6-astra',
+        reasoningEffort: ReasoningEffortId('high'),
+      },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Repara router.ts y termina la tarea.' }],
+        },
+      },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed: LlmCallConfig = {
+      provider: 'openai-codex',
+      model: 'gpt-6-astra',
+      reasoningEffort: ReasoningEffortId('high'),
+    }
+    await ctx.systemPrompt.assemble()
+
+    await agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
+    )
+    await agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
+    )
+    events.push({
+      type: 'tool/result',
+      data: {
+        turn: 1,
+        step: 2,
+        error: { name: 'ToolError', code: 'E_REPEAT' },
+        message: { content: [{ type: 'text', text: 'same failure at line 42' }] },
+      },
+    })
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 3, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
+    })
+    events.push({
+      type: 'tool/result',
+      data: {
+        turn: 1,
+        step: 3,
+        error: { name: 'ToolError', code: 'E_REPEAT' },
+        message: { content: [{ type: 'text', text: 'same failure at line 77' }] },
+      },
+    })
+
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 4, signal }, () => Promise.resolve(seed),
+    )).resolves.toEqual(seed)
+    await expect(agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step: 5, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6-luna',

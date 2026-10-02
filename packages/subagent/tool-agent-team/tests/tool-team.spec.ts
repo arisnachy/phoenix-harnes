@@ -123,19 +123,24 @@ describe('dsh-tool-team', () => {
     expect(leadAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
-    expect(leadPrompt).toContain('real shared work, not role-play')
-    expect(leadPrompt).toContain('Phoenix Auto is explicitly authorized to use this Team path')
-    expect(leadPrompt).toContain('prefer spawn_teammate over legacy subagent delegation')
+    expect(leadPrompt).toContain('real shared work, never role-play')
+    expect(leadPrompt).toContain("Kira is Phoenix's provider-neutral supervision layer")
+    expect(leadPrompt).toContain('root model selected by the user remains the Lead')
+    expect(leadPrompt).toContain('exact selected model stays Lead')
+    expect(leadPrompt).toContain("teammates inherit the Lead's provider/model")
+    expect(leadPrompt).toContain('Optimize in this order: preserve the required quality')
+    expect(leadPrompt).toContain('elapsedMs')
+    expect(leadPrompt).toContain('never role-play')
     expect(leadPrompt).toContain('unused KIRA codename')
     expect(leadPrompt).toContain('vortice, aurora, atlas')
     expect(leadPrompt).toContain('FS_STALE_VERSION')
     expect(leadPrompt).toContain('Bash, formatters, code generators, and scripts are not fully protected')
     expect(leadPrompt).toContain('Task readiness never starts an owner')
     expect(leadPrompt).toContain('returns noProgress immediately')
-    expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
+    expect(leadPrompt).toContain('cognitively independent only when its modelProvider or model differs')
     expect(leadPrompt).toContain('Use team_react for a lightweight acknowledgement')
     expect(leadPrompt).toContain('must send it to lead with purpose result before ending its turn')
-    expect(leadPrompt).toContain('spawn_teammate is itself the initial assignment')
+    expect(leadPrompt).toContain('spawn_teammate is the initial assignment')
     expect(leadPrompt).toContain('root Phoenix chat is the shared Team room')
     expect(leadPrompt).toContain('route the substantive request with followup_task')
     expect(leadPrompt).toContain('Your Team role is lead')
@@ -222,6 +227,51 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'explicit-worker' })
   })
 
+  it('forbids a non-Codex Lead from crossing to the Luna Max profile', async () => {
+    const { ctx, lead } = await setup(['hang'], false, {
+      defaultModelProfile: 'luna-max',
+      modelProfiles: {
+        'luna-max': { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      },
+    })
+
+    const crossed = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'crossed-worker',
+      description: 'must remain on the external Lead route',
+      prompt: 'wait',
+      model_profile: 'luna-max',
+    })
+    expect(crossed.isError).toBe(true)
+    expect(text(crossed)).toContain('must inherit that exact provider/model')
+    expect(ctx.agentTeams.listMembers(lead)).toHaveLength(1)
+  })
+
+  it('inherits the Lead live selected route instead of the session creation model', async () => {
+    const { ctx, lead } = await setup(['hang'], false, {
+      defaultModelProfile: 'foreign',
+      modelProfiles: {
+        foreign: { provider: 'other-provider', model: 'foreign-model' },
+      },
+    })
+    vi.spyOn(lead.session, 'requestHeader').mockReturnValue({
+      config: { provider: 'mock', model: 'selected-live-model' },
+    })
+
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'live-route-worker',
+      description: 'inherit the current selected route',
+      prompt: 'wait',
+    })
+    expect(spawned.isError).toBe(false)
+    const child = await waitRunning(ctx, spawnedChildId(spawned))
+    expect(child.options).toMatchObject({
+      provider: 'mock',
+      model: 'selected-live-model',
+    })
+
+    await execute(ctx, lead, 'interrupt_agent', { target: 'live-route-worker' })
+  })
+
   it('rejects a dangling default model profile before touching Team runtime services', () => {
     expect(() => {
       toolTeam.apply(new Context(), {
@@ -279,13 +329,20 @@ describe('dsh-tool-team', () => {
     const child = await waitRunning(ctx, childId)
 
     const roster = await execute(ctx, child, 'list_agents', {})
-    expect(JSON.parse(text(roster))).toMatchObject([
+    const rosterValue: unknown = JSON.parse(text(roster))
+    expect(rosterValue).toMatchObject([
       { name: 'lead', role: 'lead' },
       { name: 'json-worker', role: 'teammate' },
     ])
+    if (!Array.isArray(rosterValue)) throw new Error('Team roster must be an array')
+    const rosterRows = rosterValue as unknown[]
+    for (const row of rosterRows) {
+      if (typeof row !== 'object' || row === null) throw new Error('Team roster rows must be objects')
+      expect(typeof (row as Record<string, unknown>).elapsedMs).toBe('number')
+    }
     // Every Team result reaches the model as compact JSON: indentation would
     // spend tokens on every roster, task, and receipt without adding meaning.
-    expect(text(roster)).toBe(JSON.stringify(JSON.parse(text(roster))))
+    expect(text(roster)).toBe(JSON.stringify(rosterValue))
     const peer = await execute(ctx, child, 'send_message', {
       target: 'lead', purpose: 'result', message: 'quiet report',
     })

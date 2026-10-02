@@ -53,6 +53,12 @@ export function resolveActiveMember(
   return { id: member.id, name }
 }
 
+/** Measure live session age; spawned teammate sessions begin with their delegated work. */
+function liveElapsedMs(agent: Agent | undefined): number | undefined {
+  if (agent === undefined) return undefined
+  return Math.max(0, Date.now() - agent.session.header.createdAt)
+}
+
 /** Sum finalized provider usage for one live Agent without double-counting streaming usage chunks. */
 function liveUsage(agent: Agent | undefined) {
   if (agent === undefined) return undefined
@@ -85,7 +91,7 @@ export class TeamRoster {
    * @param ctx - Team service context with Agent, Session, persistence, and subagent services.
    * @param journal - authoritative Lead-log transaction owner.
    * @param lifecycle - shared Team runtime admission cutoff.
-   * @param maxMembers - maximum immutable roster entries per Team.
+   * @param maxMembers - maximum non-failed roster entries admitted by one Team.
    */
   constructor(
     private readonly ctx: Context,
@@ -153,6 +159,7 @@ export class TeamRoster {
     const { root } = membership
     const state = this.journal.state(root)
     const rootUsage = liveUsage(root)
+    const rootElapsedMs = liveElapsedMs(root)
     const result: TeamMemberView[] = [{
       id: root.id,
       name: 'lead',
@@ -160,12 +167,14 @@ export class TeamRoster {
       status: root.status,
       ...root.options.provider === undefined ? {} : { modelProvider: root.options.provider },
       ...root.options.model === undefined ? {} : { model: root.options.model },
+      ...rootElapsedMs === undefined ? {} : { elapsedMs: rootElapsedMs },
       ...rootUsage === undefined ? {} : { usage: rootUsage },
       diagnostics: [],
     }]
     for (const member of state.members.values()) {
       const live = this.ctx.agents.get(member.id)
       const model = live?.options.model ?? root.options.model
+      const elapsedMs = liveElapsedMs(live)
       const usage = liveUsage(live)
       result.push({
         id: member.id,
@@ -181,6 +190,7 @@ export class TeamRoster {
         context: member.context,
         ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
         ...model === undefined ? {} : { model },
+        ...elapsedMs === undefined ? {} : { elapsedMs },
         ...usage === undefined ? {} : { usage },
         diagnostics: member.error === undefined ? [] : [member.error],
       })
@@ -299,7 +309,9 @@ export class TeamRoster {
       if (state.memberIdsByName.has(name)) {
         throw new TeamError(`teammate name "${name}" was already used in this Team`, 'TEAM_MEMBER_NAME_TAKEN')
       }
-      if (state.members.size >= this.maxMembers) {
+      const admittedMembers = [...state.members.values()]
+        .filter(member => member.phase !== 'failed').length
+      if (admittedMembers >= this.maxMembers) {
         throw new TeamError(`Team member limit ${this.maxMembers} reached`, 'TEAM_MEMBER_LIMIT')
       }
       await this.journal.appendAndFlush(root, 'team/member', { version: 1, teamId: TeamId(root.id), member })
@@ -464,6 +476,7 @@ export class TeamRoster {
   /** Build one runtime member row after successful creation. */
   private memberView(member: TeamMemberSnapshot & { readonly phase: 'active' }): TeamMemberView {
     const live = this.ctx.agents.get(member.id)
+    const elapsedMs = liveElapsedMs(live)
     const usage = liveUsage(live)
     return {
       id: member.id,
@@ -475,6 +488,7 @@ export class TeamRoster {
       context: member.context,
       ...live?.options.provider === undefined ? {} : { modelProvider: live.options.provider },
       ...live?.options.model === undefined ? {} : { model: live.options.model },
+      ...elapsedMs === undefined ? {} : { elapsedMs },
       ...usage === undefined ? {} : { usage },
       diagnostics: [],
     }

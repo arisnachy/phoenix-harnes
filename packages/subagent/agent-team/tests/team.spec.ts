@@ -287,8 +287,8 @@ describe('Team identity and provisioning', () => {
     if (member !== undefined) await waitNoAgent(ctx, member.id)
   })
 
-  it('records failed provisioning durably, reserves its name, and counts it against the limit', async () => {
-    const { ctx, lead } = await setup([], { maxMembers: 1 })
+  it('records failed provisioning durably without consuming a live Team slot', async () => {
+    const { ctx, lead } = await setup(['hang'], { maxMembers: 1 })
     await expect(spawn(ctx, lead, 'failed-worker', { provider: 'missing' })).rejects.toThrow()
 
     expect(ctx.agentTeams.listMembers(lead)[1]).toMatchObject({
@@ -297,7 +297,12 @@ describe('Team identity and provisioning', () => {
       provider: 'missing',
     })
     await expect(spawn(ctx, lead, 'failed-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_NAME_TAKEN' })
-    await expect(spawn(ctx, lead, 'other-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+
+    const replacement = await spawn(ctx, lead, 'replacement-worker')
+    expect(replacement.member).toMatchObject({ name: 'replacement-worker' })
+    await expect(spawn(ctx, lead, 'third-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    ctx.agentTeams.interrupt(lead, 'replacement-worker')
+    await waitNoAgent(ctx, replacement.member.id)
   })
 
   it('records non-Error provider failures and contains a reversed provisioning settlement race', async () => {

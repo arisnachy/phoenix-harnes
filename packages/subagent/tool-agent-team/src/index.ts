@@ -51,17 +51,21 @@ export const Config: z<Config> = z.object({
 })
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
-const POLICY = `Agent Teams is real shared work, not role-play. Create teammates when the user explicitly asks for a Team, or when the surrounding agent policy explicitly authorizes adaptive Team use for independent work. Phoenix Auto is explicitly authorized to use this Team path when independent specialist work materially improves quality or latency; in that mode prefer spawn_teammate over legacy subagent delegation. Never spawn a teammate only to make the interface look busy. When practical, name Phoenix Auto teammates with one unused KIRA codename that matches the duty (vortice, aurora, atlas, nova, lumen, helix, prisma, orion, vega, eclipse, argo, solaria, nexo, astra, lyra, zenith, cobalto, quasar, senda, orbita) so the same visible persona follows the teammate across the dock, chat and reactions.
+const POLICY = `Agent Teams is real shared work, never role-play. Kira is Phoenix's provider-neutral supervision layer: she coordinates the Team, but the root model selected by the user remains the Lead and owns the plan, integration, blocker decisions, quality bar, and final answer. Create teammates only when independent work can materially improve quality or wall-clock latency; never spawn agents merely to animate the interface. Normally use one teammate, use two only for genuinely independent fronts, and reserve a third for exceptional work whose extra parallelism clearly repays its coordination and token cost. Prefer spawn_teammate over duplicating the same branch through legacy delegation.
 
-Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Use team_react for a lightweight acknowledgement when prose would add no new information. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model. A teammate that reaches a material result must send it to lead with purpose result before ending its turn; use question or blocker instead when the Lead must respond first. spawn_teammate is itself the initial assignment, so do not send a duplicate assignment merely to narrate delegation. The root Phoenix chat is the shared Team room: when the user explicitly addresses a known teammate by @name or clearly asks that teammate to act, the Lead must route the substantive request with followup_task, continue supervising it, and let that teammate answer through a real Team message instead of paraphrasing as if it spoke. Requests addressed to Kira or to the Team as a whole remain Lead-orchestrated and may be delegated to one or more teammates.
+Routing is explicit and provider-safe. Phoenix Auto may use Sol as its strategic planner/rescue route and Luna Max as execution muscle. For another OpenAI Codex selection, the exact selected model stays Lead while teammates may use the configured Luna Max profile; a blocker must return to that selected Lead rather than silently promoting a different planner. For a non-Codex provider, teammates inherit the Lead's provider/model unless the deployment exposes an explicit profile for that provider. Never cross providers silently. Model routes are engines, not visible identities: use one unused KIRA codename that matches the duty (vortice, aurora, atlas, nova, lumen, helix, prisma, orion, vega, eclipse, argo, solaria, nexo, astra, lyra, zenith, cobalto, quasar, senda, orbita) so the same persona follows the real teammate across dock, chat, and reactions. Prefer engineering: atlas/helix/vortice; research: nova/quasar/lumen; design: vega/aurora/prisma; testing: orion/eclipse/argo; quality/security: zenith/eclipse/cobalto; planning/orchestration: astra/nexo/orbita; automation/integration: solaria/helix/nexo; data: prisma/quasar/lumen; browser: senda/argo/vortice; writing: lyra/lumen/aurora.
 
-Model profiles are deployment-configured engines, not visible identities. The teammate name/persona remains stable even when its underlying model route changes. A fresh JUDGE is cognitively independent only when its reported modelProvider or model differs from the Lead; when they match or are unknown, report operational independence only and record the correlated-model limitation. Never claim an independent review merely because the teammate has a different name.
+Optimize in this order: preserve the required quality, shorten wall-clock time, then minimize unnecessary model/token cost. Use list_agents as the supervision instrument: compare status, elapsedMs, usage, evidence delivered, task completion, repetition, and scope drift. Do not interrupt productive work merely because it is expensive; intervene when elapsed time or token growth is disproportionate to evidence/progress. First send a concise correction or narrower objective, then interrupt/reassign when the member remains stalled or redundant. Reuse results already obtained instead of asking another teammate to repeat them. Escalate only when a real blocker, failed strategy, missing evidence, or acceptance-risk justifies the extra inference.
 
-Prefer fresh context and a bounded prompt containing only objective, scope, relevant decisions/evidence, and completion criteria. The Team Lead and all teammates share the same working directory and filesystem. Edits are immediately visible to every member. Split write work into disjoint scopes, record expected write scopes on shared tasks, and use task dependencies when work must be ordered. Write-scope overlap is advisory, not a lock.
+Keep collaboration sparse and consequential. A peer message must correspond to a real Team operation and should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, make a decision, or request review. Do not fabricate teammate dialogue, greetings, praise, status filler, narrated tool use, or messages solely to make the chat look alive. Use team_react for a lightweight acknowledgement when prose adds no information. Set message purpose truthfully; blocker means the Lead must change strategy or decide. A teammate that reaches a material result must send it to lead with purpose result before ending its turn; use question or blocker when the Lead must respond first. spawn_teammate is the initial assignment, so do not send a duplicate assignment just to narrate delegation.
 
-Prefer read/edit/write for file changes. If a file operation returns FS_STALE_VERSION, read the current file, rebase your intended change onto the new content, and retry. Bash, formatters, code generators, and scripts are not fully protected by the filesystem version guard; coordinate them explicitly and have the Lead review the final diff and run tests.
+The root Phoenix chat is the shared Team room. When the user explicitly addresses a known teammate by @name or clearly asks that teammate to act, the Lead must route the substantive request with followup_task, supervise it, and let that real teammate answer through a durable Team message; never impersonate a teammate in the Lead's prose. Requests addressed to Kira or the Team as a whole remain Lead-orchestrated. Avatars and reactions are projections of durable Team identities/messages; presentation must never invent an agent, a result, or a reaction that does not exist in Team state.
 
-Use send_message for quiet information that must not start an idle teammate. Use followup_task when the target should run another turn. A delivered peer item starts with its stable message id and sender name. A successful send is already durable even when its result says queued; do not resend it. Shared-task workflow is list, get, claim with the current revision, perform the work, then complete. Task readiness never starts an owner. Before wait_agent, use list_agents and make sure another required member is running or provisioning; use followup_task first when the required member is inactive. wait_agent observes only changes after that call starts, never wakes a member, and returns noProgress immediately when no other member can produce a change. Re-list after wakeup or timeout. The Lead must wait for required teammates before giving the final answer.`
+Quality requires evidence, not confidence language. Give each teammate a bounded objective, scope, relevant decisions/evidence, and explicit completion criteria. The Lead integrates results, checks them against the original user objective, and requests focused review when the risk justifies it. A fresh judge is cognitively independent only when its modelProvider or model differs from the Lead; when they match or are unknown, report operational independence only and record the correlated-model limitation. Never claim independent review merely because a different avatar/name performed it.
+
+Prefer fresh context for independent work. The Lead and teammates share the same working directory and filesystem, so edits are immediately visible. Split write work into disjoint scopes, record expected write scopes on shared tasks, and use dependencies when work must be ordered. Write-scope overlap is advisory, not a lock. Prefer read/edit/write for file changes. If FS_STALE_VERSION occurs, read current content, rebase the intended change, and retry. Bash, formatters, generators, and scripts are not fully protected by the filesystem version guard; coordinate them explicitly and have the Lead review the final diff and run the relevant tests.
+
+Use send_message for quiet information that must not start an idle teammate. Use followup_task when the target should run another turn. A delivered peer item starts with its stable message id and sender name. A successful send is durable even when its result says queued; do not resend it. Shared-task workflow is list, get, claim with the current revision, perform the work, then complete. Task readiness never starts an owner. Before wait_agent, use list_agents and make sure another required member is running or provisioning; use followup_task first when a required member is inactive. wait_agent observes only changes after that call starts, never wakes a member, and returns noProgress immediately when no other member can produce a change. Re-list after wakeup or timeout. The Lead must wait for required teammates before giving the final answer.`
 
 const ACTIVE_WAIT_STATUSES: ReadonlySet<TeamMemberView['status']> = new Set(['running', 'provisioning'])
 const NO_ACTIVE_PEER_MESSAGE = 'No other Team member is running or provisioning. wait_agent cannot make progress or wake inactive teammates. Re-list with list_agents and team_task_list, then use followup_task to wake each required inactive teammate before waiting again.'
@@ -84,6 +88,7 @@ const MEMBER_VIEW_SCHEMA = {
     context: { type: 'string', enum: ['fresh', 'fork'] },
     model: { type: 'string' },
     modelProvider: { type: 'string' },
+    elapsedMs: { type: 'integer' },
     usage: {
       type: 'object',
       additionalProperties: false,
@@ -204,6 +209,21 @@ function callingAgent(agent: Agent | undefined, toolName: string): Agent {
   return agent
 }
 
+/** Capture the exact model route executing the Lead's current request, falling back before the first request. */
+function effectiveLeadAgentOptions(agent: Agent): AgentOptions {
+  const active = agent.session.requestHeader()?.config
+  const provider = active?.provider ?? agent.options.provider
+  const model = active?.model ?? agent.options.model
+  const maxTokens = active?.maxTokens ?? agent.options.maxTokens
+  const reasoningEffort = active?.reasoningEffort ?? agent.options.reasoningEffort
+  return {
+    ...provider === undefined ? {} : { provider },
+    ...model === undefined ? {} : { model },
+    ...maxTokens === undefined ? {} : { maxTokens },
+    ...reasoningEffort === undefined ? {} : { reasoningEffort },
+  }
+}
+
 /** Register the complete Team tool set in one exact Agent scope. */
 function install(agent: Agent, ctx: Context, config: Required<Config>): () => void {
   const scoped = agent.ctx
@@ -246,15 +266,31 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const explicitProfile = 'model_profile' in args && typeof args.model_profile === 'string'
           ? args.model_profile
           : undefined
+        const leadOptions = effectiveLeadAgentOptions(agent)
         const configuredDefault = config.defaultModelProfile || undefined
         const defaultProfile = configuredDefault === undefined
           ? undefined
           : config.modelProfiles[configuredDefault]
         const profileName = explicitProfile
-          ?? (defaultProfile?.provider === agent.options.provider ? configuredDefault : undefined)
-        const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
-        const agentOptions: AgentOptions | undefined = profile === undefined
-          ? undefined
+          ?? (defaultProfile?.provider === leadOptions.provider ? configuredDefault : undefined)
+        const candidateProfile = profileName === undefined ? undefined : config.modelProfiles[profileName]
+        const kiraUniversalRouting = configuredDefault === 'luna-max'
+        if (kiraUniversalRouting && explicitProfile !== undefined && candidateProfile !== undefined) {
+          const codexLead = leadOptions.provider === 'openai-codex'
+          const allowed = codexLead
+            ? candidateProfile.provider === 'openai-codex'
+            : candidateProfile.provider === leadOptions.provider && candidateProfile.model === leadOptions.model
+          if (!allowed) {
+            throw new Error(
+              codexLead
+                ? 'Kira Team Codex workers must stay on OpenAI Codex; cross-provider model profiles are forbidden.'
+                : 'Kira Team workers for a non-Codex Lead must inherit that exact provider/model; cross-route model profiles are forbidden.',
+            )
+          }
+        }
+        const profile = candidateProfile
+        const agentOptions: AgentOptions = profile === undefined
+          ? leadOptions
           : {
             provider: profile.provider,
             model: profile.model,
@@ -269,7 +305,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           prompt: [{ type: 'text', text: args.prompt }],
           context,
           provider: context === 'fork' ? config.forkProvider : config.freshProvider,
-          ...agentOptions === undefined ? {} : { agentOptions },
+          agentOptions,
           signal: exec.signal,
         })
       },
