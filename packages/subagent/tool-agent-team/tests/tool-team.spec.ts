@@ -227,6 +227,32 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'explicit-worker' })
   })
 
+  it('inherits the Lead live selected route instead of the session creation model', async () => {
+    const { ctx, lead } = await setup(['hang'], false, {
+      defaultModelProfile: 'foreign',
+      modelProfiles: {
+        foreign: { provider: 'other-provider', model: 'foreign-model' },
+      },
+    })
+    vi.spyOn(lead.session, 'requestHeader').mockReturnValue({
+      config: { provider: 'mock', model: 'selected-live-model' },
+    })
+
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'live-route-worker',
+      description: 'inherit the current selected route',
+      prompt: 'wait',
+    })
+    expect(spawned.isError).toBe(false)
+    const child = await waitRunning(ctx, spawnedChildId(spawned))
+    expect(child.options).toMatchObject({
+      provider: 'mock',
+      model: 'selected-live-model',
+    })
+
+    await execute(ctx, lead, 'interrupt_agent', { target: 'live-route-worker' })
+  })
+
   it('rejects a dangling default model profile before touching Team runtime services', () => {
     expect(() => {
       toolTeam.apply(new Context(), {
