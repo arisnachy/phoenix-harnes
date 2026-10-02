@@ -53,7 +53,7 @@ export function resolveActiveMember(
   return { id: member.id, name }
 }
 
-/** Sum finalized provider usage for one live Agent without double-counting streaming usage chunks. */
+/** Measure live session age; spawned teammate sessions begin with their delegated work. */
 function liveElapsedMs(agent: Agent | undefined): number | undefined {
   if (agent === undefined) return undefined
   return Math.max(0, Date.now() - agent.session.header.createdAt)
