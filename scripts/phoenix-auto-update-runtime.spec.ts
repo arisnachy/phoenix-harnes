@@ -82,6 +82,18 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
 
+  it('prunes stale updater storage left by retired checkout identities', () => {
+    expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 48 * 60 * 60 * 1000')
+    expect(supervisor).toContain('PHOENIX_UPDATE_STORAGE_RETENTION_MS')
+    expect(supervisor).toContain('function runtimeDirectoriesForCleanup()')
+    expect(supervisor).toContain('/^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu')
+    expect(supervisor).toContain('function runtimeProtectedByOwningCheckout(path)')
+    expect(supervisor).toContain('managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS')
+    expect(supervisor).toContain('function staleStageDirectoriesForCleanup()')
+    expect(supervisor).toContain('/^phoenix-stage-[0-9a-f]{10}$/iu')
+    expect(supervisor).toContain('removed stale updater staging worktree')
+  })
+
   it('prunes ignored stale workspace shells before reusing persistent staging', () => {
     expect(updater).toContain('function pruneStaleWorkspaceShells(stage)')
     expect(updater).toContain("git(stage, ['ls-files', '--', relativePath]")
