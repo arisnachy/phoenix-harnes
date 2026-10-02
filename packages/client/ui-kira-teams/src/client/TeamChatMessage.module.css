@@ -12,14 +12,14 @@
 .avatar {
   flex: none;
   width: 38px;
-  height: 42px;
+  height: 38px;
   display: grid;
   place-items: center;
 }
 
 .avatar > span {
-  transform: scale(.78);
-  transform-origin: center;
+  width: 100%;
+  height: 100%;
 }
 
 .column {
@@ -30,7 +30,7 @@
 .meta {
   display: flex;
   min-width: 0;
-  align-items: baseline;
+  align-items: center;
   gap: 7px;
   margin-bottom: 4px;
   font-size: 12px;
@@ -96,6 +96,14 @@
   padding-left: 4px;
 }
 
+[data-chat-flow-kind="user"] .reactions[data-author-kind="user"] {
+  justify-content: flex-end;
+}
+
+[data-chat-flow-kind="kira-team-message"] .reactions {
+  padding-left: 48px;
+}
+
 .reaction {
   display: inline-flex;
   height: 24px;
@@ -111,24 +119,27 @@
 }
 
 .reactionAvatar {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   border-radius: 50%;
 }
 
 .reactionAvatar > span {
-  transform: scale(.39);
-  transform-origin: center;
+  width: 100%;
+  height: 100%;
 }
 
 @media (max-width: 620px) {
   .row { gap: 7px; }
   .avatar { width: 32px; }
-  .avatar > span { transform: scale(.68); }
+  .avatar { height: 32px; }
   .column { max-width: calc(100% - 39px); }
+  [data-chat-flow-kind="kira-team-message"] .reactions { padding-left: 39px; }
   .bubble { padding: 8px 10px; }
 }
 

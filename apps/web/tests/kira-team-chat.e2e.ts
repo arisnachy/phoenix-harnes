@@ -55,6 +55,25 @@ describe('Kira team in the existing main chat', () => {
     await page.locator('textarea:enabled').last().fill('USER_TEAM_MISSION')
     await page.getByRole('button', { name: 'Send message', exact: true }).click()
     await page.getByText('KIRA_TEAM_COORDINATION', { exact: true }).waitFor()
+    const kiraPortrait = page.locator('[data-team-author="kira"] img').first()
+    await expect.poll(() => kiraPortrait.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+    const geometry = await kiraPortrait.evaluate((image) => {
+      const portrait = image.getBoundingClientRect()
+      const avatar = image.parentElement!.getBoundingClientRect()
+      const holder = image.parentElement!.parentElement!.getBoundingClientRect()
+      return {
+        portrait: { width: portrait.width, left: portrait.left, top: portrait.top, right: portrait.right, bottom: portrait.bottom },
+        holder: { width: holder.width, left: holder.left, top: holder.top, right: holder.right, bottom: holder.bottom },
+        avatar: { width: avatar.width, height: avatar.height },
+      }
+    })
+    expect(geometry.portrait.width, JSON.stringify(geometry)).toBeGreaterThanOrEqual(28)
+    expect(Math.abs(geometry.avatar.width - geometry.avatar.height)).toBeLessThan(1)
+    expect(geometry.portrait.left).toBeGreaterThanOrEqual(geometry.holder.left)
+    expect(geometry.portrait.top).toBeGreaterThanOrEqual(geometry.holder.top)
+    expect(geometry.portrait.right).toBeLessThanOrEqual(geometry.holder.right)
+    expect(geometry.portrait.bottom).toBeLessThanOrEqual(geometry.holder.bottom)
+    await page.screenshot({ path: '/tmp/phoenix-kira-visible-author.png' })
     const start = async (name: string) => await scaffold.ctx.agentTeams.spawnTeammate(lead, {
       name, description: `${name} review evidence`, prompt: [{ type: 'text', text: `Review ${name}` }], context: 'fresh', provider: 'spawn', signal: new AbortController().signal,
     })
@@ -82,6 +101,21 @@ describe('Kira team in the existing main chat', () => {
       .some(message => message.content.some(block => block.type === 'text' && block.text.includes('ARGO_PEER_QUESTION_EVIDENCE')))).toBe(true)
     expect((await scaffold.ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
       .some(message => message.id === peer.messageId)).toBe(true)
+    const humanMessage = transcript.messages.find(row => row.text === 'USER_TEAM_MISSION')!
+    await scaffold.ctx.agentTeams.reactToChat(lead, { sessionId: lead.id, messageId: humanMessage.id, emoji: '❤️', active: true })
+    const livePulse = page.waitForFunction(id => document.querySelector(`[data-team-reactions="${id}"]`)
+      ?.querySelector('button[title="Argo"]')?.getAnimations().some(animation => animation.playState === 'running'), humanMessage.id)
+    await scaffold.ctx.agentTeams.reactToChat(actualArgo, { sessionId: lead.id, messageId: humanMessage.id, emoji: '👍', active: true })
+    await livePulse
+    const humanActions = page.locator(`[data-team-reactions="${humanMessage.id}"]`)
+    await humanActions.locator('button[title="Kira"]').waitFor()
+    await humanActions.locator('button[title="Argo"]').waitFor()
+    expect(await humanActions.getAttribute('data-author-kind')).toBe('user')
+    expect(await humanActions.evaluate(element => getComputedStyle(element).justifyContent)).toBe('flex-end')
+    for (const row of [zenithRow, argoRow]) {
+      const size = await row.locator('img').first().boundingBox()
+      expect(size!.width).toBeGreaterThanOrEqual(24)
+    }
     const calls = adapter.requests.length
     await scaffold.ctx.agentTeams.reactToChat(lead, { sessionId: lead.id, messageId: finding.id, emoji: '✅', active: true })
     await scaffold.ctx.agentTeams.reactToChat(scaffold.ctx.agents.get(argo.member.id)!, { sessionId: lead.id, messageId: finding.id, emoji: '👩🏽‍💻', active: true })
@@ -112,6 +146,10 @@ describe('Kira team in the existing main chat', () => {
       expect(child.events.some(event => event.type === 'agent/inbox/spliced' && event.data.target === 'next-step'
         && event.data.inserted.some(message => message.content.some(block => block.type === 'text' && block.text.includes('ZENITH_REAL_FINDING') && block.text.includes('USER_FOCUS_12'))))).toBe(true)
     }
+    const humanReply = (await scaffold.ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(row => row.text === '@Zenith @Argo USER_FOCUS_12')!
+    const replyBubble = await page.locator('[data-team-sender-id="user"]').filter({ hasText: 'USER_FOCUS_12' }).locator('[class*="bubble"]').boundingBox()
+    const replyReaction = await page.locator(`[data-team-reactions="${humanReply.id}"]`).getByRole('button', { name: 'Add reaction', exact: true }).boundingBox()
+    expect(Math.abs(replyReaction!.x - replyBubble!.x)).toBeLessThan(8)
     await page.reload()
     await zenithRow.waitFor()
     await argoRow.waitFor()
@@ -119,6 +157,16 @@ describe('Kira team in the existing main chat', () => {
     await expect.poll(() => actions.getByRole('button', { name: /👍 1/ }).count()).toBe(1)
     expect(await page.locator('[data-team-sender-id="user"]').filter({ hasText: 'USER_FOCUS_12' }).count()).toBe(1)
     expect(adapter.requests).toHaveLength(calls)
+    await humanActions.locator('button[title="Kira"]').waitFor()
+    await humanActions.locator('button[title="Argo"]').waitFor()
+    expect(await humanActions.locator('button[title="Argo"]').evaluate(button => button.getAnimations().length)).toBe(0)
+    await page.setViewportSize({ width: 600, height: 900 })
+    await expect.poll(async () => await page.evaluate((id) => {
+      const bubble = document.querySelector('[data-team-sender-id="user"] [class*="bubble"]')!.getBoundingClientRect()
+      const action = document.querySelector(`[data-team-reactions="${id}"] button`)!.getBoundingClientRect()
+      return Math.abs(action.left - bubble.left)
+    }, humanReply.id)).toBeLessThan(8)
+    await page.setViewportSize({ width: 1680, height: 1000 })
     await page.screenshot({ path: '/tmp/phoenix-kira-team-chat.png', fullPage: true })
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
