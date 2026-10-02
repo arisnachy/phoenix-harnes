@@ -51,6 +51,7 @@ interface NotificationWaiter {
 interface RealtimeSession {
   readonly threadId: string
   readonly voice?: string
+  tail: Promise<void>
 }
 
 /** Injectable Codex process factory used by deterministic tests. */
@@ -314,6 +315,7 @@ class CodexRealtimeProvider implements VoiceRealtimeProvider {
       this.sessions.set(request.key, {
         threadId,
         ...selectedVoice === undefined ? {} : { voice: selectedVoice },
+        tail: Promise.resolve(),
       })
       return {
         sdp: answer,
@@ -329,7 +331,18 @@ class CodexRealtimeProvider implements VoiceRealtimeProvider {
     const session = this.sessions.get(key)
     if (session === undefined) throw new Error('voice-codex: realtime session is not open')
     const client = await this.ensureClient()
-    await client.request('thread/realtime/appendSpeech', { threadId: session.threadId, text })
+    const task = session.tail.catch(() => {}).then(async () => {
+      const spoken = client.waitFor('thread/realtime/transcript/done', params => (
+        isRecord(params)
+        && params.threadId === session.threadId
+        && params.role === 'assistant'
+        && typeof params.text === 'string'
+      ))
+      await client.request('thread/realtime/appendSpeech', { threadId: session.threadId, text })
+      await spoken
+    })
+    session.tail = task
+    await task
   }
 
   async close(key: string): Promise<boolean> {
