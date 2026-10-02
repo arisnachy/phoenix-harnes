@@ -132,6 +132,8 @@ describe('dsh-tool-subagent', () => {
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
     expect(Object.keys(props).sort()).toEqual(['description', 'extreme_parallelism', 'hard_parallelism', 'prompt', 'run_in_background'])
     expect(schema!.description).toContain('job_output')
+    expect(schema!.description).toContain('spawn_teammate')
+    expect(schema!.description).toContain('Kira Team')
   })
 
   it('omits run_in_background entirely when the instance disables it (schema and capability never disagree)', async () => {
