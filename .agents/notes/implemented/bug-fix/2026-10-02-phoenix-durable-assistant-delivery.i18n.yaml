@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-02-phoenix-durable-assistant-delivery.md
+2026-10-02-phoenix-durable-assistant-delivery.md: 0f17874300482c0cfb5980ea3c2148474604facc
+2026-10-02-phoenix-durable-assistant-delivery.zh.md: b130a730c4e11e2941ee54ff484d4a3496963993

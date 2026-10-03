@@ -20,7 +20,7 @@ Scoped model-facing adapter for [`ctx.agentTeams`](../agent-team/README.md). It 
       judge: { provider: anthropic, model: claude-sonnet-4 }
 ```
 
-`freshProvider` and `forkProvider` select registered continuable-subagent transports. `modelProfiles` is an optional allowlist of LLM routes; when present, `spawn_teammate.model_profile` selects one route, while omission inherits the Lead route. Provider ids and model ids are ordinary configured harness routes, not OpenAI-specific role names.
+`freshProvider` and `forkProvider` select registered continuable-subagent transports. Under OpenAI Codex, `modelProfiles` supplies configured worker routes and `defaultModelProfile` selects the bounded execution route when `spawn_teammate.model_profile` is omitted. Outside OpenAI Codex, every teammate inherits the exact currently selected provider and model even when a profile is requested. Kira retains her selected model for supervision and final verification; a worker's model route does not change its visible name or persona.
 
 The Team policy calls a JUDGE cognitively independent only when its reported `modelProvider` or `model` differs from the Lead. A fresh child on the same route is operationally independent but remains correlated and must be reported as such.
 

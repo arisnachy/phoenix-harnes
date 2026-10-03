@@ -83,6 +83,7 @@ export class MailReceiver {
     if (this.isStopped()) return
     await this.outbox.flush()
     for (const row of await this.outbox.list()) {
+      if ('subject' in row.reply) continue
       const id = MailJobId(row.reply.idempotencyKey.replace(/^phoenix-mail-/u, ''))
       const job = (await this.journal.list()).find(job => job.id === id)
       if (job?.state !== 'reply-pending') continue

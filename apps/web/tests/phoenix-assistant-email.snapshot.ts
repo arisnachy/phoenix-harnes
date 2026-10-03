@@ -1,9 +1,11 @@
 /** Real Loader, host, credentials, Kira loop and Chromium; only the external mail/model providers are deterministic. */
 import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import type { SessionId } from '@phoenix-ai/dsh-session'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../packages/core/agent-loop/tests/mock-adapter.ts'
+import { MailOutbox } from '../../../packages/hardness/adapters/src/assistant-mail-outbox.ts'
 import { launchWebScaffold, compareOrRefreshGolden, type WebScaffold } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage } from './support.ts'
 
@@ -90,6 +92,15 @@ describe('Phoenix local email assistant', () => {
     const repeated = await connection.rpc.call('/phoenix-mail', 'refresh', {})
     expect(repeated.ok).toBe(true)
     expect(replies.size).toBe(1)
+    const persisted = await new MailOutbox(join(scaffold.workspaceCwd, '.phoenix-mail', 'outbox.json'), async () => {
+      throw new Error('read-only acceptance inspection must not send mail')
+    }).list()
+    expect(persisted).toHaveLength(1)
+    expect(persisted[0]?.firstAttempt).toBeGreaterThan(0)
+    const delivery = persisted.map(row => ({
+      state: row.state, to: row.reply.to, text: row.reply.text, delivery: row.delivery,
+    }))
+    await compareOrRefreshGolden(fileURLToPath(new URL('./snapshots/phoenix-assistant-email/delivery.expected.json', import.meta.url)), JSON.stringify(delivery, null, 2), scaffold.mode)
     const status = await connection.rpc.call('/phoenix-mail', 'status', {})
     expect(status.ok && JSON.stringify(status.value)).toContain('replied')
     expect(JSON.stringify(status)).not.toContain('keyless-mail-secret')

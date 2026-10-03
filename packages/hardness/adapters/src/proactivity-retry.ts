@@ -71,7 +71,7 @@ export async function retryFailedProactivityTasks(
   for (const task of tasks) {
     if (task.status !== 'failed') continue
     const latest = latestFailure(task.history)
-    if (latest === undefined) continue
+    if (latest === undefined || latest.error?.startsWith('mail delivery requires manual review:')) continue
     const attempts = failedAttempts(task.history, latest)
     if (attempts >= policy.maxAttempts) continue
     const finishedAt = Date.parse(latest.finishedAt)

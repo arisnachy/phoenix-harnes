@@ -1,0 +1,11 @@
+[
+  {
+    "state": "sent",
+    "to": "owner@example.com",
+    "text": "El encargo fue revisado.",
+    "delivery": {
+      "messageId": "reply-request-1",
+      "threadId": "thread-1"
+    }
+  }
+]

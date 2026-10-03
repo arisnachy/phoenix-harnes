@@ -6,7 +6,7 @@
 
 ## 主聊天
 
-服务将直属子代理真实生成的文本发布到根会话，排除继承历史、替换输出、推理和工具内容。`teamChatParticipants` 在任务完成后仍保留任务所属的名称、头像和运行状态。文本发布及 Unicode 表情的添加和移除不会唤醒模型。
+服务将直属子代理真实生成的文本发布到根会话，排除继承历史、替换输出、推理和工具内容。`teamChatParticipants` 在任务完成后仍保留任务所属的名称、头像和运行状态。文本发布及 Unicode 表情的添加和移除不会唤醒模型。反应投影版本 2 在恢复版本 1 的 checkpoint 时，将历史 Team 语义反应重放到统一表情流中，保留 Lead 或 teammate 的反应者身份。
 
 生成的 `chatMessages`、`chatReact` 和 `chatReply` 远程方法使用准确的根会话及消息身份。回复针对已有的可继续直属子代理，保留引用上下文，只发布一条用户消息，并持久化每个目标的接收记录。重试保留 `requestId`；`queued` 区分待发送状态。根会话恢复时重试待发送消息及监督上下文。模型读取共同受一个配置的 `maxMessageBytes` 预算约束。参见[会话契约](../../../docs/subsystems/agent-team.zh.md#main-conversation)及[所有权决策](../../../.agents/notes/implemented/feature/2026-10-01-kira-main-chat.zh.md)。
 ## 配置

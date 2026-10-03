@@ -1,6 +1,7 @@
 import { SessionId } from '@phoenix-ai/dsh-session'
 import { existsSync } from 'node:fs'
 import type {} from '@phoenix-ai/dsh-subprocess'
+import { ProactivityDeferredError } from './proactivity-engine.ts'
 import { mailStartupSpec } from './assistant-mail-startup.ts'
 /** Local mailbox lifecycle, human-only configuration RPC and home-feed projection. */
 import { join } from 'node:path'
@@ -15,6 +16,7 @@ import { MailOutbox } from './assistant-mail-outbox.ts'
 import { MailReceiver } from './assistant-mail-receiver.ts'
 import { createMailExecutor } from './assistant-mail-executor.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
+import type { MailOutgoingOwnership, MailOutgoingMessage } from './assistant-mail-types.ts'
 import type { ProactivityAttentionItem, ProactivityRuntimeConfig } from './proactivity-runtime.ts'
 
 /** Local mail runtime deployment settings. */
@@ -23,6 +25,11 @@ export interface AssistantMailConfig { readonly directory: string
   readonly pollMs: number
   readonly timeoutMs: number
   readonly workTimeoutMs: number
+  /** Revalidate the persisted task and occurrence before every provider attempt, including background recovery.
+   * @param ownership Durable task identity, occurrence, recipient and provider key.
+   * @returns Whether the task still authorizes this delivery; false suppresses IO without discarding evidence.
+   */
+  readonly authorizeOutgoing: (ownership: MailOutgoingOwnership) => Promise<boolean>
   /** Resolve the already-connected owner email used for automatic first-run enrollment. */
   readonly resolveOwnerEmail?: () => Promise<string | undefined> }
 /** Mail host projection consumed by normal home attention. */
@@ -31,10 +38,15 @@ export interface AssistantMailRuntime {
    * @returns Browser-safe home feed rows.
    */
   attention(): Promise<ProactivityAttentionItem[]>
+  /** Check verified sender availability and recover persisted delivery without regenerating its body.
+   * @param idempotencyKey Occurrence identity whose existing payload must be reused.
+   * @returns Confirmed body, or undefined when no message was persisted.
+   */
+  preflight(idempotencyKey: string): Promise<string | undefined>
   /** Send a new idempotent message from Kira's verified mailbox.
    * @param input Authorized recipient, subject, body and stable deduplication key.
    */
-  send(input: { readonly to: string; readonly subject: string; readonly text: string; readonly idempotencyKey: string }): Promise<void>
+  send(input: Omit<MailOutgoingMessage, 'inboxId'>): Promise<void>
   /** Stop socket, timers and owned work, then await cleanup. */
   dispose(): Promise<void>
 }
@@ -49,6 +61,7 @@ export function installAssistantMail(ctx: Context,
   config: AssistantMailConfig,
   workConfig: ProactivityRuntimeConfig): AssistantMailRuntime {
   for (const value of [config.pollMs, config.timeoutMs, config.workTimeoutMs]) if (!Number.isSafeInteger(value) || value <= 0 || value > 2_147_483_647) throw new Error('mail intervals must be positive bounded integers')
+  if (typeof config.authorizeOutgoing !== 'function') throw new Error('mail requires scheduled occurrence authorization')
   const ref = credentialRef(config.credentialRef)
   const installRoot = process.env.PHOENIX_INSTALL_ROOT
   const startupPath = process.env.APPDATA === undefined ? undefined : join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'PHOENIX Assistant.lnk')
@@ -82,15 +95,59 @@ export function installAssistantMail(ctx: Context,
   let transportInbox: string | undefined
   let status = 'not-configured'
   let disposed = false
+  const controller = new AbortController()
+  const sends = new Set<Promise<unknown>>()
+  const assertActive = (): void => { if (disposed) throw new Error('assistant mail runtime is disposed') }
+  const owned = <T>(operation: () => Promise<T>): Promise<T> => {
+    if (disposed) return Promise.reject(new Error('assistant mail runtime is disposed'))
+    const pending = operation()
+    sends.add(pending)
+    void pending.then(() => { sends.delete(pending) }, () => { sends.delete(pending) })
+    return pending
+  }
   const isDisposed = (): boolean => disposed
   let pumping: Promise<void> | undefined
   const outbox = new MailOutbox(join(config.directory, 'outbox.json'), async (reply) => {
+    assertActive()
     const account = await onboarding.status()
+    assertActive()
     if (account.state !== 'ready' || account.inboxId !== reply.inboxId || ![account.ownerEmail, ...account.contacts].includes(reply.to)) throw new Error('mail sender authorization revoked')
-    try { return await new AgentMailTransport(resolveKey, reply.inboxId, config.timeoutMs).reply(reply) } catch (error) {
+    const transport = new AgentMailTransport(resolveKey, reply.inboxId, config.timeoutMs, fetch, controller.signal)
+    try { return await transport.reply(reply) } catch (error) {
       status = error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
       throw error
     }
+  }, Date.now, async (message) => {
+    assertActive()
+    const account = await onboarding.status()
+    assertActive()
+    if (account.state !== 'ready' || account.inboxId !== message.inboxId
+      || ![account.ownerEmail, ...account.contacts].includes(message.to)) throw new ProactivityDeferredError('mail sender authorization is unavailable')
+    if (!await config.authorizeOutgoing(message)) throw new ProactivityDeferredError('mail task authorization is no longer active')
+    assertActive()
+    const transport = new AgentMailTransport(resolveKey, message.inboxId, config.timeoutMs, fetch, controller.signal)
+    try { return await transport.send(message.to, message.subject, message.text, message.idempotencyKey) } catch (error) {
+      status = error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
+      throw error
+    }
+  }, ownership => config.authorizeOutgoing(ownership))
+  const delivery = async (key: string): Promise<string | undefined> => {
+    const row = (await outbox.list()).find(row => row.reply.idempotencyKey === key)
+    if (row === undefined) return undefined
+    if (!('subject' in row.reply)) throw new Error('mail occurrence identity belongs to an incoming reply')
+    if (row.state === 'ambiguous') {
+      throw new Error('mail delivery requires manual review: provider confirmation missing beyond its retry window')
+    }
+    if (row.state !== 'sent') throw new ProactivityDeferredError('mail delivery confirmation is pending')
+    return row.reply.text
+  }
+  const preflight = (key: string): Promise<string | undefined> => owned(async () => {
+    const account = await onboarding.status()
+    assertActive()
+    if (account.state !== 'ready' || account.inboxId === undefined || await resolveKey() === undefined) throw new ProactivityDeferredError('Kira mail is not verified or its credential is unavailable')
+    assertActive()
+    await outbox.flush()
+    return delivery(key)
   })
   const recover = async (): Promise<void> => {
     await ensureEnrollment()
@@ -100,7 +157,7 @@ export function installAssistantMail(ctx: Context,
     if (receiver === undefined || transportInbox !== account.inboxId || socketDispose === undefined) {
       socketDispose?.()
       await receiver?.stop()
-      const transport = new AgentMailTransport(resolveKey, account.inboxId, config.timeoutMs)
+      const transport = new AgentMailTransport(resolveKey, account.inboxId, config.timeoutMs, fetch, controller.signal)
       receiver = new MailReceiver(transport, journal, outbox, () => onboarding.status(), job => executor.run(job))
       transportInbox = account.inboxId
       await receiver.reconcile()
@@ -183,34 +240,40 @@ export function installAssistantMail(ctx: Context,
   const dispose = (): Promise<void> => {
     if (disposing !== undefined) return disposing
     disposed = true
+    controller.abort()
     clearInterval(timer)
     unbind()
     socketDispose?.()
     // Stop reception before cancellation; both disposal callers share the same cleanup settlement.
+    const outboxStopped = outbox.stop()
     const receiverStopped = receiver?.stop().catch(() => { /* The pump already owns reporting transport failure. */ })
     disposing = (async () => {
       await executor.stop()
       await receiverStopped
       await pumping
+      await Promise.allSettled([...sends])
+      await outboxStopped
       await rpcDispose?.()
     })()
     return disposing
   }
   ctx.effect(() => dispose, 'assistant-mail: owned local receiver')
-  return { dispose,
-    async send(input) {
+  return { dispose, preflight,
+    send(input) { return owned(async () => {
       const account = await onboarding.status()
-      if (account.state !== 'ready' || account.inboxId === undefined) throw new Error('Kira mail is not verified yet')
+      assertActive()
+      if (account.state !== 'ready' || account.inboxId === undefined) throw new ProactivityDeferredError('Kira mail is not verified yet')
       const to = mailAddress(input.to)
       if (![account.ownerEmail, ...account.contacts].includes(to)) throw new Error('mail recipient is not authorized')
-      const transport = new AgentMailTransport(resolveKey, account.inboxId, config.timeoutMs)
-      try {
-        await transport.send(to, mailString(input.subject, 1024), mailString(input.text, 64_000), mailString(input.idempotencyKey))
-      } catch (error) {
-        status = error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
-        throw error
-      }
-    },
+      if (!await config.authorizeOutgoing({ ...input, to })) throw new ProactivityDeferredError('mail task authorization is no longer active')
+      assertActive()
+      await outbox.enqueueMessage({ inboxId: account.inboxId, to, taskId: mailString(input.taskId),
+        scheduledFor: mailString(input.scheduledFor), subject: mailString(input.subject, 1024),
+        text: mailString(input.text, 64_000), idempotencyKey: mailString(input.idempotencyKey) })
+      assertActive()
+      await outbox.flush()
+      await delivery(input.idempotencyKey)
+    }) },
     async attention() {
       const rows: ProactivityAttentionItem[] = []
       for (const job of await journal.list()) {
