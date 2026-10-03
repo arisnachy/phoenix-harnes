@@ -22,13 +22,14 @@ const chatCss = readFileSync(
 )
 
 describe('KIRA mission-control layout regression', () => {
-  it('keeps one fixed-height activity strip and a narrow independent agent rail', () => {
+  it('keeps only the narrow independent presence rail', () => {
     expect(dockCss).toMatch(/\.root\s*{[^}]*position:\s*absolute/s)
     expect(dockCss).not.toMatch(/\.root\s*{[^}]*position:\s*fixed/s)
-    expect(dockCss).toMatch(/\.root\s*{[^}]*left:\s*10px/s)
-    expect(dockCss).toMatch(/\.strip\s*{[^}]*height:\s*44px/s)
+    expect(dockCss).toMatch(/\.root\s*{[^}]*width:\s*48px/s)
+    expect(dockCss).not.toMatch(/\.strip\s*{/s)
+    expect(dockCss).not.toMatch(/\.detailsPanel\s*{/s)
+    expect(dockCss).not.toMatch(/\.focusActivity\s*{/s)
     expect(dockCss).toMatch(/\.rail\s*{[^}]*width:\s*48px/s)
-    expect(dockCss).toMatch(/\.avatarStack\s*{[^}]*display:\s*flex/s)
     expect(dockCss).toMatch(/\.railAgents\s*{[^}]*overflow-y:\s*auto/s)
     expect(dockCss).not.toMatch(/grid-template-columns:\s*repeat\(2,/s)
     expect(avatarCss).toMatch(/\.avatar\s*{[^}]*width:\s*42px;[^}]*height:\s*42px/s)
