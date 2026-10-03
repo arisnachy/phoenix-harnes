@@ -10,9 +10,9 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Interface as ReadlineInterface } from 'node:readline'
 import { LlmError } from '@phoenix-ai/dsh-llm'
@@ -21,6 +21,7 @@ import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
 // Cold Codex catalog refreshes can spend tens of seconds in the upstream models manager.
 // Stay bounded, but do not abort the app-server before its own refresh path can settle.
 const RPC_TIMEOUT_MS = 45_000
+const CODEX_METADATA_EXIT_GRACE_MS = 750
 /** Failed metadata probes cool down globally so Settings cannot spawn a process storm. */
 const DISCOVERY_FAILURE_COOLDOWN_MS = 30_000
 const PAGE_LIMIT = 100
@@ -238,12 +239,43 @@ export function codexDiscoveryArgs(): string[] {
   ]
 }
 
+function managedCodexBin(): string | undefined {
+  const configured = process.env.DSH_HOME?.trim()
+  const dshHome = configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.dsh')
+  const runtimeRoot = join(dshHome, 'codex-cli')
+  const markerPath = join(runtimeRoot, 'active.json')
+  if (!existsSync(markerPath)) return undefined
+  try {
+    const marker = JSON.parse(readFileSync(markerPath, 'utf8')) as {
+      schema?: unknown
+      version?: unknown
+      bin?: unknown
+    }
+    if (marker.schema !== 1 || typeof marker.version !== 'string'
+      || !/^\d+\.\d+\.\d+$/u.test(marker.version) || typeof marker.bin !== 'string') return undefined
+    const candidate = resolve(runtimeRoot, marker.bin)
+    const boundary = runtimeRoot.endsWith(sep) ? runtimeRoot : `${runtimeRoot}${sep}`
+    if (candidate !== runtimeRoot && !candidate.startsWith(boundary)) return undefined
+    return existsSync(candidate) ? candidate : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   const common = {
     cwd: process.cwd(),
     env: codexEnvironment(),
     windowsHide: true,
     signal,
+  }
+  const managed = managedCodexBin()
+  if (managed !== undefined) {
+    return finishProcessSetup(spawn(
+      process.execPath,
+      [managed, ...codexDiscoveryArgs()],
+      common,
+    ))
   }
   if (process.platform === 'win32') {
     const shell = process.env.ComSpec ?? 'cmd.exe'
@@ -334,10 +366,35 @@ async function readResponse(
  * @param child - spawned Codex app-server process.
  * @param lines - readline interface consuming app-server stdout.
  */
-export function terminateCodexProcess(child: ChildProcessWithoutNullStreams, lines: ReadlineInterface): void {
-  lines.close()
-  // Avoid scheduling a final write on a pipe Codex already closed. The stdin
-  // error guard above still owns the unavoidable close/write race.
+async function waitForNaturalCodexExit(
+  child: ChildProcessWithoutNullStreams,
+  timeoutMs: number,
+): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return true
+  return await new Promise<boolean>((resolvePromise) => {
+    let settled = false
+    const finish = (value: boolean): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      child.off('exit', onExit)
+      resolvePromise(value)
+    }
+    const onExit = (): void => { finish(true) }
+    const timer = setTimeout(() => { finish(false) }, timeoutMs)
+    timer.unref?.()
+    child.once('exit', onExit)
+  })
+}
+
+export async function terminateCodexProcess(
+  child: ChildProcessWithoutNullStreams,
+  lines: ReadlineInterface,
+): Promise<void> {
+  // EOF is Codex app-server's normal shutdown signal. Give it a short window
+  // to finish its own background model-cache write before escalating to a
+  // process-tree kill; force-killing immediately after model/list can cancel
+  // the Tokio cache task and emit "failed to write models cache: background task failed".
   if (!child.stdin.destroyed && !child.stdin.writableEnded) {
     try {
       child.stdin.end()
@@ -345,11 +402,17 @@ export function terminateCodexProcess(child: ChildProcessWithoutNullStreams, lin
       // The child won the race and closed its pipe synchronously.
     }
   }
+  if (await waitForNaturalCodexExit(child, CODEX_METADATA_EXIT_GRACE_MS)) {
+    lines.close()
+    return
+  }
+  lines.close()
   if (child.exitCode !== null || child.signalCode !== null) return
   if (process.platform === 'win32' && child.pid !== undefined) {
     // Discovery is launched through cmd.exe on Windows. Killing only that shell
     // can orphan the Codex app-server grandchild, which then keeps SQLite state
-    // and model-refresh workers alive. Terminate the complete process tree.
+    // and model-refresh workers alive. Terminate the complete process tree only
+    // after the graceful EOF window has expired.
     spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
       windowsHide: true,
       stdio: 'ignore',
@@ -418,7 +481,7 @@ export async function listCodexModels(signal?: AbortSignal): Promise<readonly Ll
     if (error instanceof LlmError) throw error
     throw new LlmError('Codex model discovery failed', 'DISCOVERY_FAILED', { cause: error })
   } finally {
-    terminateCodexProcess(child, lines)
+    await terminateCodexProcess(child, lines)
   }
 }
 
