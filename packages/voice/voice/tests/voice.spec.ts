@@ -114,6 +114,31 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
   })
 })
 
+describe('Codex realtime safety gate', () => {
+  it('stays fully disabled without starting Codex when the feature is turned off', async () => {
+    const { voice } = await mountVoice({ codexRealtime: false })
+    await expect(voice.conversationRealtimeStatus()).resolves.toEqual({
+      enabled: false,
+      available: false,
+      authenticated: false,
+      provider: 'openai-codex',
+      reason: 'disabled',
+    })
+    await expect(voice.conversationRealtimeStart({
+      key: 'session-voice-test',
+      offerSdp: 'v=0',
+    })).resolves.toEqual({ accepted: false, reason: 'disabled' })
+  })
+
+  it('rejects malformed WebRTC starts before touching the Codex sidecar', async () => {
+    const { voice } = await mountVoice()
+    await expect(voice.conversationRealtimeStart({
+      key: '',
+      offerSdp: 'v=0',
+    })).resolves.toEqual({ accepted: false, reason: 'invalid' })
+  })
+})
+
 describe('session-event voice mapping', () => {
   it('announces only authorization, verified completion, and real blocking', () => {
     expect(sessionEventToVoiceEvent({ type: 'approval/asked', data: { toolName: 'home-control' } })).toMatchObject({ kind: 'authorization' })
