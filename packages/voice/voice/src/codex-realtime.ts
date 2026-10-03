@@ -79,8 +79,10 @@ export class CodexRealtimeBridge {
   /** Negotiate one browser WebRTC call through the authenticated Codex backend. */
   async start(options: CodexRealtimeStartOptions): Promise<CodexRealtimeStartResult> {
     await this.ensureStarted()
-    this.clearIdleClose()
     await this.stop(options.key).catch(() => {})
+    // stop() arms the idle reap when there was no previous call; this start
+    // is now active negotiation and must own the sidecar until it settles.
+    this.clearIdleClose()
 
     const threadParams: Record<string, unknown> = { ephemeral: true }
     const model = normalizeCodexModel(options.model)
