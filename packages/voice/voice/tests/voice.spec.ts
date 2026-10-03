@@ -223,7 +223,7 @@ describe('Codex realtime optional session context', () => {
 
     await expect(voice.conversationRealtimeStart({
       key: 'session-without-injected-store',
-      offerSdp: 'v=0\\r\\noffer',
+      offerSdp: 'v=0\\r\\noffer\\r\\n',
       model: 'gpt-6-luna',
     })).resolves.toEqual({
       accepted: true,
@@ -233,7 +233,7 @@ describe('Codex realtime optional session context', () => {
     expect(bridge.probe).toHaveBeenCalledTimes(1)
     expect(bridge.start).toHaveBeenCalledWith({
       key: 'session-without-injected-store',
-      offerSdp: 'v=0\\r\\noffer',
+      offerSdp: 'v=0\\r\\noffer\\r\\n',
       model: 'gpt-6-luna',
     })
   })
@@ -253,6 +253,31 @@ describe('Codex realtime safety gate', () => {
       key: 'session-voice-test',
       offerSdp: 'v=0',
     })).resolves.toEqual({ accepted: false, reason: 'disabled' })
+  })
+
+  it('preserves terminal CRLF in browser SDP instead of trimming the offer', async () => {
+    const { voice } = await mountVoice()
+    const internal = voice as unknown as {
+      codexRealtimeBridge(): {
+        probe(): Promise<{ available: boolean; authenticated: boolean }>
+        start(input: {
+          key: string
+          offerSdp: string
+        }): Promise<{ threadId: string; answerSdp: string }>
+      }
+    }
+    const start = vi.fn(async () => ({ threadId: 'thread-sdp', answerSdp: 'v=0\\r\\nanswer\\r\\n' }))
+    vi.spyOn(internal, 'codexRealtimeBridge').mockReturnValue({
+      probe: vi.fn(async () => ({ available: true, authenticated: true })),
+      start,
+    })
+
+    const offerSdp = 'v=0\\r\\no=- 1 2 IN IP4 127.0.0.1\\r\\ns=-\\r\\nt=0 0\\r\\n'
+    await expect(voice.conversationRealtimeStart({
+      key: 'session-sdp',
+      offerSdp,
+    })).resolves.toMatchObject({ accepted: true })
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({ offerSdp }))
   })
 
   it('rejects malformed WebRTC starts before touching the Codex sidecar', async () => {
