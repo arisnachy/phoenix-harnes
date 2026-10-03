@@ -31,10 +31,10 @@ it('preserves owner input typed before the initial host status resolves', async 
     return { account: { state: 'pending-verification', inboxId: 'actual@agentmail.to', contacts: [] }, connection: 'disconnected', jobs: [] }
   } }
   render(<AssistantMailPanel client={client} />)
-  const owner = screen.getByLabelText('Correo del propietario')
+  const owner = screen.getByLabelText<HTMLInputElement>('Correo del propietario')
   fireEvent.change(owner, { target: { value: 'owner@example.com' } })
   await act(async () => { resolveStatus({ account: { state: 'not-configured', contacts: [] }, connection: 'disconnected', jobs: [] }); await pending })
-  expect((owner as HTMLInputElement).value).toBe('owner@example.com')
-  expect(screen.getByRole('button', { name: 'Crear mi correo gratuito' }).disabled).toBe(false)
+  expect(owner.value).toBe('owner@example.com')
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Crear mi correo gratuito' }).disabled).toBe(false)
 })
 
