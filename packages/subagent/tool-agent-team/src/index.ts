@@ -3,7 +3,15 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
-import { selectTeamPersonaName, TeamMessageId, TeamTaskId, teamSocialStyle } from '@phoenix-ai/dsh-agent-team'
+import {
+  selectTeamPersonaName,
+  TeamError,
+  TeamMessageId,
+  TeamTaskId,
+  teamExecutionProof,
+  teamExecutionRequirement,
+  teamSocialStyle,
+} from '@phoenix-ai/dsh-agent-team'
 import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
 import { foldRequestHeader } from '@phoenix-ai/dsh-session'
 import { defineTool } from '@phoenix-ai/dsh-tools'
@@ -58,7 +66,7 @@ Keep collaboration sparse and consequential. A peer message should assign work, 
 
 Kira is accountable for planning, supervision, actual verification and the final result. Keep her selected model as the brain and escalation route. Under OpenAI Codex use the configured Luna Max worker profile for bounded execution; outside OpenAI Codex every teammate MUST inherit exactly the currently selected provider and model. A configured profile must never change that route; do not switch to OpenAI Codex/Luna or another model while a different provider/model is selected. Reuse existing workers rather than spawning a new team for each message. Never claim a teammate is running from intent alone: spawn_teammate success and the real roster/presence state are authoritative.
 
-Use team_chat_react as the canonical visible social reaction in the shared transcript. team_react is a legacy semantic peer-message compatibility tool; prefer team_chat_react whenever the visible user/Kira/agent chat message can be targeted. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model. A teammate that reaches a material result must send it to lead with purpose result before ending its turn; use question or blocker instead when the Lead must respond first. spawn_teammate is itself the initial assignment, so do not send a duplicate assignment merely to narrate delegation. The root Phoenix chat is the shared Team room: when the user explicitly addresses a known teammate by @name or clearly asks that teammate to act, the Lead must route the substantive request with followup_task, continue supervising it, and let that teammate answer through a real Team message instead of paraphrasing as if it spoke. Requests addressed to Kira or to the Team as a whole remain Lead-orchestrated and may be delegated to one or more teammates.
+Use team_chat_react as the canonical visible social reaction in the shared transcript. team_react is a legacy semantic peer-message compatibility tool; prefer team_chat_react whenever the visible user/Kira/agent chat message can be targeted. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model. A teammate that reaches a material result must send it to lead with purpose result before ending its turn; use question or blocker instead when the Lead must respond first. Operational claims are receipt-gated by the runtime: saying that an email was sent, a file was changed, a test ran, a deployment happened, or a verification completed is not evidence. The child Session must contain a successful non-Team tool result for the assigned action before a visible result or task completion is accepted. If the needed capability is unavailable, send a blocker instead of inventing completion. spawn_teammate is itself the initial assignment, so do not send a duplicate assignment merely to narrate delegation. The root Phoenix chat is the shared Team room: when the user explicitly addresses a known teammate by @name or clearly asks that teammate to act, the Lead must route the substantive request with followup_task, continue supervising it, and let that teammate answer through a real Team message instead of paraphrasing as if it spoke. Requests addressed to Kira or to the Team as a whole remain Lead-orchestrated and may be delegated to one or more teammates.
 
 Model profiles are deployment-configured engines, not visible identities. The teammate name/persona remains stable even when its underlying model route changes. A fresh JUDGE is cognitively independent only when its reported modelProvider or model differs from the Lead; when they match or are unknown, report operational independence only and record the correlated-model limitation. Never claim an independent review merely because the teammate has a different name.
 
@@ -254,6 +262,28 @@ function installChatTools(agent: Agent, ctx: Context): () => void {
   return () => { for (const dispose of disposers.reverse()) void dispose() }
 }
 
+// oxlint-disable-next-line @stylistic/max-len -- Completion vocabulary is intentionally auditable as one bilingual regex.
+const COMPLETION_CLAIM = /\b(?:sent|done|completed|created|updated|changed|fixed|repaired|tested|verified|deployed|published|installed|deleted|removed|submitted|scheduled|booked|saved|enviado|enviada|hecho|hecha|completado|completada|creado|creada|actualizado|actualizada|cambiado|cambiada|arreglado|arreglada|reparado|reparada|probado|probada|verificado|verificada|desplegado|desplegada|publicado|publicada|instalado|instalada|eliminado|eliminada|guardado|guardada|programado|programada)\b/iu
+
+function executionProofText(tools: readonly string[]): string {
+  return `✓ Evidencia ejecutada: ${tools.join(', ')}`
+}
+
+function requireExecutionProof(
+  agent: Agent,
+  requirement?: ReturnType<typeof teamExecutionRequirement>,
+): readonly string[] {
+  const proof = teamExecutionProof(agent.session.events, { ...requirement === undefined ? {} : { requirement } })
+  if (proof.requirement !== 'none' && !proof.satisfied) {
+    throw new TeamError(
+      'Operational result rejected: no successful non-Team tool receipt exists for the current assignment. '
+        + 'Perform the real action first, or report a blocker instead of claiming completion.',
+      'TEAM_EXECUTION_EVIDENCE_REQUIRED',
+    )
+  }
+  return proof.requirement === 'none' ? [] : proof.tools
+}
+
 /** Register the complete Team tool set in one exact Agent scope. */
 function install(agent: Agent, ctx: Context, config: Required<Config>): () => void {
   const scoped = agent.ctx
@@ -365,10 +395,20 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         },
         output: jsonOutput(SEND_VALUE_SCHEMA),
         execute(args, exec) {
-          return ctx.agentTeams.sendMessage(callingAgent(exec.agent, toolName), {
+          const actor = callingAgent(exec.agent, toolName)
+          const membership = ctx.agentTeams.membership(actor)
+          const claim = args.purpose === 'result'
+            || (args.purpose === 'update' && COMPLETION_CLAIM.test(args.message))
+          const proofTools = membership.role === 'teammate' && claim
+            ? requireExecutionProof(actor)
+            : []
+          const message = proofTools.length === 0
+            ? args.message
+            : `${args.message}\n\n${executionProofText(proofTools)}`
+          return ctx.agentTeams.sendMessage(actor, {
             target: args.target,
             purpose: args.purpose,
-            content: [{ type: 'text', text: args.message }],
+            content: [{ type: 'text', text: message }],
             delivery,
             signal: exec.signal,
           })
@@ -551,7 +591,13 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       },
       output: jsonOutput(TASK_VIEW_SCHEMA),
       async execute(args, exec) {
-        return await ctx.agentTeams.updateTask(callingAgent(exec.agent, 'team_task_update'), {
+        const actor = callingAgent(exec.agent, 'team_task_update')
+        if (args.action === 'complete') {
+          const task = ctx.agentTeams.getTask(actor, TeamTaskId(args.task_id))
+          const requirement = teamExecutionRequirement(`${task.subject}\n${task.description}`)
+          requireExecutionProof(actor, requirement)
+        }
+        return await ctx.agentTeams.updateTask(actor, {
           taskId: TeamTaskId(args.task_id),
           expectedRevision: args.expected_revision,
           action: args.action,
