@@ -47,7 +47,10 @@ const UPDATE_STORAGE_RETENTION_MS = Math.max(
     ? configuredUpdateStorageRetentionMs
     : DEFAULT_UPDATE_STORAGE_RETENTION_MS,
 )
-const STAGE_STORAGE_RETENTION_MS = Math.max(7 * 24 * 60 * 60 * 1000, UPDATE_STORAGE_RETENTION_MS)
+const STAGE_STORAGE_RETENTION_MS = Math.max(
+  60 * 60 * 1000,
+  Math.min(UPDATE_STORAGE_RETENTION_MS, 6 * 60 * 60 * 1000),
+)
 const HOST_STABLE_MS = Math.max(5_000, Number.parseInt(process.env.PHOENIX_HOST_STABLE_MS ?? '15000', 10) || 15_000)
 const CONFIG_SNAPSHOT_SCHEMA = 1
 const CONFIG_SNAPSHOT_FILE = 'phoenix-config-last-known-good.json'
@@ -277,13 +280,28 @@ function runtimeDirectoriesForCleanup() {
     .map(entry => join(base, entry.name))
 }
 
-function staleStageDirectoriesForCleanup() {
+function stageDirectoriesForCleanup() {
   const base = runtimeBaseDirectory()
-  const currentStage = runtimePathKey(persistentStage())
   return readdirSync(base, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && /^phoenix-stage-[0-9a-f]{10}$/iu.test(entry.name))
     .map(entry => join(base, entry.name))
-    .filter(path => runtimePathKey(path) !== currentStage)
+}
+
+function stageProtectedByOwningCheckout(path) {
+  const common = absoluteGitPath(path, gitValue(path, ['rev-parse', '--git-common-dir']))
+  if (common === undefined || !existsSync(common)) return false
+  const marker = join(common, PREPARED_FILE)
+  if (!existsSync(marker)) return false
+  try {
+    const value = JSON.parse(readFileSync(marker, 'utf8'))
+    const head = gitValue(path, ['rev-parse', 'HEAD'])
+    return value?.schema === 1
+      && typeof value.target === 'string'
+      && /^[0-9a-f]{40}$/iu.test(value.target)
+      && value.target === head
+  } catch {
+    return false
+  }
 }
 
 function belongsToCurrentCheckoutRuntime(path) {
@@ -361,8 +379,14 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
     console.error(`[PHOENIX UPDATE] removed obsolete isolated runtime: ${candidate}`)
   }
 
-  for (const candidate of staleStageDirectoriesForCleanup()) {
-    if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
+  const currentStage = runtimePathKey(persistentStage())
+  for (const candidate of stageDirectoriesForCleanup()) {
+    const key = runtimePathKey(candidate)
+    if (stageProtectedByOwningCheckout(candidate)) continue
+    // The current checkout's stage is disposable as soon as its prepared
+    // marker is consumed. Other checkout stages get a short grace window so a
+    // concurrent Phoenix clone can finish its own handoff before we reclaim it.
+    if (key !== currentStage && managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
     if (!removeManagedWorktree(candidate)) continue
     removedStages += 1
     console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
