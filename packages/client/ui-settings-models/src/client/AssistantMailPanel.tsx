@@ -52,6 +52,18 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     } }, () => { if (!stopped) setFailure('El correo local no está disponible en este host.') })
     return () => { stopped = true }
   }, [client])
+  useEffect(() => {
+    let stopped = false
+    const timer = globalThis.setInterval(() => {
+      void client.call('status').then((value) => {
+        if (stopped) return
+        setSnapshot(value)
+        setOwner(current => current.trim().length > 0 ? current : value.account.ownerEmail ?? '')
+        setContacts(current => current.trim().length > 0 ? current : value.account.contacts.join(', '))
+      }, () => { /* Background status refresh is best-effort. */ })
+    }, 5_000)
+    return () => { stopped = true; globalThis.clearInterval(timer) }
+  }, [client])
   const operate = async (action: string, input?: Record<string, unknown>): Promise<void> => {
     setBusy(true); setFailure(undefined)
     try { setSnapshot(await client.call(action, input)); setKey(''); setCode('') } catch (error) { setFailure(error instanceof Error ? error.message : 'No se pudo completar la operación de correo.') } finally { setBusy(false) }
@@ -60,13 +72,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const state = snapshot?.account.state
   return <section className={styles.block} aria-label="Correo propio de Phoenix">
     <div className={styles.heading}><h3>Correo propio de Phoenix</h3></div>
-    <p>Recibe encargos y contesta cuando Phoenix está ejecutándose en tu PC. Los pendientes se recuperan al arrancar.
+    <p>Recibe encargos y contesta cuando Phoenix está ejecutándose en tu PC. Si la PC está apagada, el proveedor conserva los correos y Phoenix recupera únicamente los nuevos al volver a arrancar.
       Buzón del plan gratuito; los modelos mantienen sus límites y costes habituales.</p>
-    {snapshot?.account.inboxId === undefined ? null : <strong>{snapshot.account.inboxId}</strong>}
+    {snapshot?.account.inboxId === undefined ? null : <p><span>Correo de Kira: </span><strong>{snapshot.account.inboxId}</strong>{' '}<button type="button" disabled={busy} aria-label="Copiar correo de Kira" onClick={() => { void globalThis.navigator?.clipboard?.writeText(snapshot.account.inboxId!) }}>Copiar</button></p>}
     <p role="status">{state === 'ready' ? 'Correo verificado' : state === 'pending-verification' ? 'Pendiente de verificación' : state === 'signup-ambiguous' ? 'Alta sin confirmar: recupera la clave de la cuenta existente.' : 'Sin configurar'}{state === 'ready' ? ` · ${labels[snapshot?.connection ?? 'disconnected'] ?? 'Sin conexión'}` : ''}</p>
     <label>Correo del propietario <input type="email" value={owner} onChange={(event) => { setOwner(event.target.value) }} disabled={busy || state === 'ready'} /></label>
     {state === 'ready' ? null : <>
-      {state === 'not-configured' && <button type="button" disabled={busy || !owner} onClick={() => { void operate('signup', { ownerEmail: owner }) }}>Crear mi correo gratuito</button>}
+      {state === 'not-configured' && <><p>Si hay una cuenta de Google conectada, Kira intenta crear su buzón automáticamente en segundo plano. Este botón queda como respaldo manual.</p><button type="button" disabled={busy || !owner} onClick={() => { void operate('signup', { ownerEmail: owner }) }}>Crear mi correo gratuito</button></>}
       <details><summary>Conectar una cuenta existente</summary>
         <label>Dirección del buzón <input type="email" value={inbox} onChange={(event) => { setInbox(event.target.value) }} disabled={busy} /></label>
         <label>Clave de AgentMail <input type="password" autoComplete="off" value={key} onChange={(event) => { setKey(event.target.value) }} disabled={busy} /></label>
@@ -74,6 +86,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       </details>
     </>}
     {state !== 'pending-verification' ? null : <>
+      {snapshot?.account.inboxId === undefined ? null : <p>Kira ya creó su correo. Revisa {snapshot.account.ownerEmail ?? 'tu correo del propietario'} para el código de verificación.</p>}
       <label>Código de verificación <input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => { setCode(event.target.value) }} disabled={busy} /></label>
       <button type="button" disabled={busy || !/^\d{6}$/u.test(code)} onClick={() => { void operate('verify', { code }) }}>Verificar correo</button>
     </>}
