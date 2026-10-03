@@ -107,6 +107,8 @@ export type { SessionReferenceMentionCandidate } from '@phoenix-ai/dsh-session-r
 export type {
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
+  VoiceConversationRealtimeSpeakReceipt,
+  VoiceConversationRealtimeSpeakRequest,
   VoiceConversationRealtimeStartReceipt,
   VoiceConversationRealtimeStartRequest,
   VoiceConversationRealtimeStatus,
@@ -115,6 +117,7 @@ export type {
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
+  VoiceAssistantGender,
 } from '@phoenix-ai/dsh-voice/types'
 
 declare module '@phoenix-ai/cordis' {
