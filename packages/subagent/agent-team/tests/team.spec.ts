@@ -2011,6 +2011,46 @@ describe('visible team conversation', () => {
     expect(lead.session.events).toHaveLength(count)
   })
 
+  it('exposes the initial Kira assignment as a reaction target while the teammate is provisioning', async () => {
+    const { ctx, lead, adapter } = await setup([], {}, true)
+    const childId = SessionId('provisioning-reaction-target')
+    lead.session.append('team/member', {
+      version: 1,
+      teamId: TeamId(lead.id),
+      member: {
+        id: childId,
+        name: 'zenith',
+        description: 'verify the result',
+        provider: 'spawn',
+        context: 'fresh',
+        phase: 'provisioning',
+      },
+    })
+    const row = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
+      .find(message => message.id === `team-member:${childId}`)
+    expect(row).toMatchObject({
+      senderKind: 'kira',
+      senderId: lead.id,
+      targetId: childId,
+      text: 'verify the result',
+    })
+    expect(adapter.requests).toHaveLength(0)
+  })
+
+  it('gives a new teammate the exact visible Kira assignment id in its first prompt', async () => {
+    const { ctx, lead, adapter } = await setup(['hang'], {}, true)
+    const started = await spawn(ctx, lead, 'zenith')
+    await vi.waitFor(() => { expect(adapter.requests.length).toBeGreaterThan(0) })
+    const promptText = adapter.requests[0]?.messages
+      .flatMap(message => message.content.flatMap(block => block.type === 'text' ? [block.text] : []))
+      .join('\n') ?? ''
+    expect(promptText).toContain(`Visible Kira assignment reaction target: team-member:${started.member.id}`)
+    expect(promptText).toContain('team_chat_react')
+    expect(promptText).toContain('Before substantive work')
+    ctx.agentTeams.interrupt(lead, 'zenith')
+    await waitNoAgent(ctx, started.member.id)
+  })
+
   it('lets every participant react to the real initial Kira assignment', async () => {
     const { ctx, lead, adapter } = await setup(['hang'], {}, true)
     const started = await spawn(ctx, lead, 'zenith')
