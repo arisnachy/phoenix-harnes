@@ -62,6 +62,17 @@ describe('Team execution evidence', () => {
       tools: [],
     })
 
+    const unrelatedEffect = [
+      ...base,
+      toolCall(3, 'wrong-effect', 'mcp__GitHub__update_file'),
+      toolResult(4, 'wrong-effect'),
+    ]
+    expect(teamExecutionProof(unrelatedEffect)).toMatchObject({
+      requirement: 'effect',
+      satisfied: false,
+      tools: [],
+    })
+
     const executed = [
       ...base,
       toolCall(3, 'send-mail', 'mcp__Gmail__send_email'),
