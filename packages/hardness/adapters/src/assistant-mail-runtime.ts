@@ -341,10 +341,17 @@ export function installAssistantMail(ctx: Context,
     const root = mailRecord(value)
     const series = root[key]
     if (!Array.isArray(series) || series.length === 0) return 0
+    let latestAt = Number.NEGATIVE_INFINITY
     let latest = 0
     for (const item of series) {
       const row = mailRecord(item)
-      if (typeof row.value === 'number' && Number.isFinite(row.value)) latest = Math.max(latest, row.value)
+      if (typeof row.value !== 'number' || !Number.isFinite(row.value)) continue
+      const at = typeof row.timestamp === 'string' ? Date.parse(row.timestamp) : Number.NaN
+      const rank = Number.isFinite(at) ? at : latestAt + 1
+      if (rank >= latestAt) {
+        latestAt = rank
+        latest = row.value
+      }
     }
     return Math.max(0, latest)
   }

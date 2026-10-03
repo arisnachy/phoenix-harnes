@@ -11,7 +11,17 @@ import { connectFreshWorkspace, newEnglishPage } from './support.ts'
 
 class MailSocket extends EventTarget {
   constructor(_url: string) { super(); queueMicrotask(() => { this.dispatchEvent(new Event('open')) }) }
-  send(_data: string): void {}
+  send(data: string): void {
+    const row = JSON.parse(data) as { type?: string; inbox_ids?: string[] }
+    if (row.type !== 'subscribe') return
+    queueMicrotask(() => {
+      const event = new Event('message') as Event & { readonly data: string }
+      Object.defineProperty(event, 'data', {
+        value: JSON.stringify({ type: 'subscribed', inbox_ids: row.inbox_ids }),
+      })
+      this.dispatchEvent(event)
+    })
+  }
   close(): void {}
 }
 
@@ -34,6 +44,21 @@ describe('Phoenix local email assistant', () => {
     if (!address.startsWith('https://api.agentmail.to/')) return originalFetch(url, init)
     if (address.endsWith('/agent/sign-up')) return Response.json({ api_key: 'keyless-mail-secret', inbox_id: 'kira-keyless@agentmail.to' })
     if (address.endsWith('/agent/verify')) return Response.json({ verified: true })
+    if (address.endsWith('/organizations')) return Response.json({
+      organization_id: 'org-test',
+      inbox_count: 1,
+      inbox_limit: 3,
+      domain_count: 0,
+    })
+    if (address.includes('/metrics/usage?')) return Response.json({
+      storage_bytes: [{ timestamp: '2026-10-03T18:00:00.000Z', value: 536870912 }],
+      message_count: [{ timestamp: '2026-10-03T18:00:00.000Z', value: incoming ? 2 : 1 }],
+      thread_count: [{ timestamp: '2026-10-03T18:00:00.000Z', value: 1 }],
+    })
+    if (address.includes('/metrics/events?')) return Response.json({
+      'message.sent': [{ timestamp: '2026-10-03T00:00:00.000Z', count: replies.size }],
+      'message.received': [{ timestamp: '2026-10-03T00:00:00.000Z', count: incoming ? 1 : 0 }],
+    })
     if (address.includes('/messages?')) return Response.json({ count: incoming ? 1 : 0, messages: incoming ? [{ message_id: requestId }] : [] })
     if (address.endsWith(`/messages/${requestId}`)) return Response.json({ inbox_id: 'kira-keyless@agentmail.to', message_id: requestId, thread_id: 'thread-1', labels: ['received'], from: 'owner@example.com', subject: requestId === 'request-1' ? 'Encargo local' : 'Encargo nuevo', text: 'Revisa el encargo y entrega un resumen de la comprobación.', headers: {} })
     if (address.endsWith(`/messages/${requestId}/reply`)) {
