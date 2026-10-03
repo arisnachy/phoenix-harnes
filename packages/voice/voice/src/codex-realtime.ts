@@ -25,26 +25,41 @@ interface UnknownRecord {
   readonly [key: string]: unknown
 }
 
+/** One compact role-bearing Phoenix message used to seed Realtime V3. */
 export interface CodexRealtimeInitialItem {
+  /** Realtime text role accepted by Codex. */
   readonly role: 'user' | 'developer' | 'assistant'
+  /** Plain visible text only; no tools, images, reasoning, or secrets. */
   readonly text: string
 }
 
+/** Inputs for one authenticated Codex WebRTC negotiation. */
 export interface CodexRealtimeStartOptions {
+  /** Stable Phoenix session key owning this voice call. */
   readonly key: string
+  /** Browser-generated WebRTC SDP offer. */
   readonly offerSdp: string
+  /** Current Codex text model used by delegated work, when direct. */
   readonly model?: string
+  /** Small recent Phoenix transcript used instead of the full startup prompt. */
   readonly initialItems?: readonly CodexRealtimeInitialItem[]
 }
 
+/** Successful Codex app-server WebRTC negotiation. */
 export interface CodexRealtimeStartResult {
+  /** Ephemeral Codex thread created for the live conversation. */
   readonly threadId: string
+  /** Remote SDP answer to apply to the browser peer connection. */
   readonly answerSdp: string
 }
 
+/** Readiness of subscription-backed Codex realtime voice. */
 export interface CodexRealtimeProbe {
+  /** Whether the local Codex binary and experimental realtime API are usable. */
   readonly available: boolean
+  /** Whether app-server reports an active ChatGPT account. */
   readonly authenticated: boolean
+  /** Stable unavailability reason for client fallback. */
   readonly reason?: 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable'
 }
 
