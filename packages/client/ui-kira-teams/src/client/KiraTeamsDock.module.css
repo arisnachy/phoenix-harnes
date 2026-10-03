@@ -1,360 +1,24 @@
-/* KIRA mission-control overlay: scoped to the center column so it can never
-   cover the sidebar. The shell.overlay host already owns the full center
-   viewport; this root stays inside that coordinate space. */
+/* KIRA live-agent presence rail.
+   Teammate-authored text lives only in the shared chat transcript. */
 
 .root {
   position: absolute;
   z-index: 80;
   top: 72px;
   right: 10px;
-  left: 10px;
+  width: 48px;
   height: 0;
   box-sizing: border-box;
   pointer-events: none;
 }
 
-.strip {
-  pointer-events: auto;
-  position: absolute;
-  top: 0;
-  right: 58px;
-  left: 14px;
-  height: 44px;
-  display: grid;
-  grid-template-columns: minmax(156px, 224px) minmax(0, 1fr) 30px 30px;
-  align-items: center;
-  gap: 7px;
-  padding: 0 7px 0 10px;
-  box-sizing: border-box;
-  color: var(--dsw-alias-label-primary);
-  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 94%, transparent);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 12px;
-  box-shadow: 0 8px 28px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 24%, transparent);
-  backdrop-filter: blur(16px) saturate(1.06);
-}
-
-.teamBlock {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.avatarStack {
-  flex: none;
-  display: flex;
-  align-items: center;
-  width: 72px;
-  min-width: 72px;
-  height: 30px;
-}
-
-.stackAvatar {
-  width: 23px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  margin-inline-start: -5px;
-}
-
-.stackAvatar:first-child { margin-inline-start: 0; }
-
-.stackAvatar > span {
-  transform: scale(.64);
-  transform-origin: center;
-}
-
-.stackOverflow {
-  flex: none;
-  min-width: 22px;
-  height: 22px;
-  margin-inline-start: -2px;
-  display: inline-grid;
-  place-items: center;
-  padding-inline: 4px;
-  box-sizing: border-box;
-  border-radius: 999px;
-  background: var(--dsw-alias-bg-layer-2);
-  border: 1px solid var(--dsw-alias-border-l2);
-  color: var(--dsw-alias-label-secondary);
-  font-size: 10px;
-  line-height: 1;
-  font-weight: 650;
-}
-
-.teamCopy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.teamTitle,
-.teamCount,
-.focusName,
-.focusRole,
-.focusStatus,
-.focusText,
-.detailName,
-.detailRole,
-.detailAction {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.teamTitle {
-  color: var(--dsw-alias-label-primary);
-  font-size: 12px;
-  line-height: 1.1;
-  font-weight: 700;
-}
-
-.teamCount {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
-  line-height: 1.1;
-}
-
-.focusActivity {
-  appearance: none;
-  position: relative;
-  min-width: 0;
-  height: 36px;
-  display: grid;
-  grid-template-rows: 16px 15px;
-  align-content: center;
-  gap: 1px;
-  padding: 2px 8px 4px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-  overflow: hidden;
-}
-
-.focusActivity:hover,
-.focusActivity:focus-visible,
-.iconButton:hover,
-.iconButton:focus-visible,
-.railAgent:hover,
-.railAgent:focus-visible,
-.detailRow:hover,
-.detailRow:focus-visible {
-  background: var(--dsw-alias-interactive-bg-hover);
-  outline: none;
-}
-
-.focusHeading {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.focusName {
-  flex: none;
-  max-width: 110px;
-  color: var(--dsw-alias-label-primary);
-  font-size: 11.5px;
-  line-height: 1.15;
-  font-weight: 720;
-}
-
-.focusRole {
-  min-width: 0;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
-  line-height: 1.15;
-}
-
-.focusStatus,
-.detailStatus {
-  --kira-state: var(--dsw-alias-state-business-primary);
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--kira-state);
-  font-size: 10px;
-  line-height: 1;
-  font-weight: 650;
-}
-
-.focusStatus { margin-inline-start: auto; }
-
-.focusStatus[data-activity='activity.waiting'],
-.detailStatus[data-activity='activity.waiting'] {
-  --kira-state: var(--dsw-alias-state-warn-primary);
-}
-
-.focusStatus[data-activity='activity.ready'],
-.focusStatus[data-activity='activity.done'],
-.detailStatus[data-activity='activity.ready'],
-.detailStatus[data-activity='activity.done'] {
-  --kira-state: var(--dsw-alias-state-success-primary);
-}
-
-.statusDot {
-  flex: none;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.focusText {
-  min-width: 0;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 10.5px;
-  line-height: 1.15;
-}
-
-.activityPulse {
-  position: absolute;
-  right: 8px;
-  bottom: 1px;
-  left: 8px;
-  height: 1px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--dsw-alias-border-l1);
-}
-
-.activityPulse::after {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 30%;
-  border-radius: inherit;
-  background: var(--dsw-alias-state-business-primary);
-  content: '';
-  opacity: .58;
-  transform: translateX(-130%);
-  animation: kira-activity-trace 1.7s ease-in-out infinite;
-}
-
-.focusActivity[data-running='false'] .activityPulse::after {
-  width: 100%;
-  opacity: .18;
-  transform: none;
-  animation: none;
-}
-
-.iconButton {
-  appearance: none;
-  width: 30px;
-  height: 30px;
-  display: inline-grid;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  transition: background 130ms ease, color 130ms ease, transform 130ms ease;
-}
-
-.iconButton:active { transform: translateY(1px); }
-
-.detailsButtonOpen svg { transform: rotate(180deg); }
-
-.detailsPanel {
-  pointer-events: auto;
-  position: absolute;
-  top: 50px;
-  right: 58px;
-  left: 14px;
-  max-width: 720px;
-  max-height: min(56vh, 520px);
-  overflow: auto;
-  box-sizing: border-box;
-  padding: 4px 0;
-  color: var(--dsw-alias-label-primary);
-  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 96%, transparent);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 22%, transparent);
-  backdrop-filter: blur(16px);
-}
-
-.detailRow {
-  appearance: none;
-  width: 100%;
-  min-height: 48px;
-  display: grid;
-  grid-template-columns: 38px minmax(110px, 150px) 92px minmax(0, 1fr);
-  align-items: center;
-  gap: 9px;
-  padding: 4px 10px;
-  box-sizing: border-box;
-  border: 0;
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-}
-
-.detailRow:last-child { border-bottom: 0; }
-
-.detailRowSelected {
-  background: var(--dsw-alias-interactive-bg-active);
-  box-shadow: inset 2px 0 0 var(--dsw-alias-state-business-primary);
-}
-
-.detailPortrait {
-  width: 34px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-}
-
-.detailPortrait > span {
-  transform: scale(.72);
-  transform-origin: center;
-}
-
-.detailIdentity {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.detailName {
-  color: var(--dsw-alias-label-primary);
-  font-size: 11.5px;
-  line-height: 1.15;
-  font-weight: 700;
-}
-
-.detailRole {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
-  line-height: 1.15;
-}
-
-.detailAction {
-  min-width: 0;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 10.5px;
-  line-height: 1.2;
-}
-
 .rail {
   pointer-events: auto;
   position: absolute;
-  top: 50px;
+  top: 0;
   right: 0;
   width: 48px;
-  max-height: calc(100vh - 146px);
+  max-height: calc(100vh - 88px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -425,6 +89,12 @@
   cursor: pointer;
 }
 
+.railAgent:hover,
+.railAgent:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  outline: none;
+}
+
 .railAgent > span {
   transform: scale(.76);
   transform-origin: center;
@@ -441,95 +111,14 @@
   content: '';
 }
 
-@keyframes kira-activity-trace {
-  0% { transform: translateX(-130%); opacity: .18; }
-  45% { opacity: .68; }
-  100% { transform: translateX(430%); opacity: .12; }
-}
-
-@media (max-width: 900px) {
-  .root {
-    right: 8px;
-    left: 8px;
-  }
-
-  .strip {
-    right: 52px;
-    left: 8px;
-    grid-template-columns: 86px minmax(0, 1fr) 30px 30px;
-  }
-
-  .teamCopy { display: none; }
-  .focusRole { display: none; }
-
-  .detailsPanel {
-    right: 52px;
-    left: 8px;
-  }
-}
-
 @media (max-width: 620px) {
   .root {
-    top: 62px;
-    right: 8px;
-    left: 8px;
-  }
-
-  .strip {
-    right: 0;
-    left: 0;
-    grid-template-columns: 76px minmax(0, 1fr) 30px 30px;
-  }
-
-  .avatarStack {
-    width: 68px;
-    min-width: 68px;
-  }
-
-  .rail { display: none; }
-
-  .detailsPanel {
-    right: 0;
-    left: 0;
-    max-width: none;
-  }
-
-  .detailRow {
-    grid-template-columns: 38px minmax(86px, 120px) minmax(0, 1fr);
-  }
-
-  .detailStatus { display: none; }
-}
-
-@media (max-width: 430px) {
-  .strip {
-    grid-template-columns: 66px minmax(0, 1fr) 28px 28px;
-    gap: 4px;
-    padding-inline: 6px;
-  }
-
-  .avatarStack {
-    width: 60px;
-    min-width: 60px;
-  }
-
-  .stackAvatar:nth-child(3) { display: none; }
-  .focusStatus { display: none; }
-  .focusName { max-width: 82px; }
-
-  .detailRow {
-    grid-template-columns: 36px minmax(72px, 100px) minmax(0, 1fr);
-    gap: 6px;
-    padding-inline: 7px;
+    display: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .activityPulse::after,
-  .iconButton,
-  .focusActivity,
-  .railAgent,
-  .detailRow {
+  .railAgent {
     animation: none !important;
     transition: none !important;
   }
