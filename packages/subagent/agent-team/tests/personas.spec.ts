@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { KIRA_SOCIAL_STYLE, TEAM_PERSONAS, teamSocialStyle } from '../src/personas.ts'
+import { KIRA_SOCIAL_STYLE, TEAM_PERSONAS, teamPersonaGender, teamSocialStyle } from '../src/personas.ts'
 
 describe('KIRA Team social personalities', () => {
   it('keeps all twenty specialists distinct and compact', () => {
     expect(TEAM_PERSONAS).toHaveLength(20)
     expect(new Set(TEAM_PERSONAS.map(persona => persona.kind)).size).toBe(20)
     expect(new Set(TEAM_PERSONAS.map(persona => persona.voice)).size).toBe(20)
+    expect(TEAM_PERSONAS.every(persona => persona.gender === 'male' || persona.gender === 'female')).toBe(true)
     for (const persona of TEAM_PERSONAS) {
       expect(persona.voice.length).toBeGreaterThan(40)
       expect(persona.voice.length).toBeLessThan(230)
@@ -27,9 +28,22 @@ describe('KIRA Team social personalities', () => {
     expect(teamSocialStyle('la-forja', 'teammate')).toContain('Calm, pragmatic, precise')
   })
 
+  it('keeps approved persona gender explicit instead of guessing from names or avatars', () => {
+    expect(teamPersonaGender('lead', 'lead')).toBe('female')
+    expect(teamPersonaGender('Kira', 'lead')).toBe('female')
+    expect(teamPersonaGender('la-forja', 'teammate')).toBe('male')
+    expect(teamPersonaGender('orion', 'teammate')).toBe('male')
+    expect(teamPersonaGender('aurora', 'teammate')).toBe('female')
+    expect(teamSocialStyle('la-forja', 'teammate')).toContain('Your persona is male')
+    expect(teamSocialStyle('la-forja', 'teammate')).toContain('listo/preparado')
+    expect(teamSocialStyle('lead', 'lead')).toContain('Kira is feminine')
+  })
+
   it('keeps unknown worker names natural instead of inventing a persona', () => {
     const style = teamSocialStyle('custom-worker', 'teammate')
     expect(style).toContain('Natural, concise, collegial')
+    expect(style).toContain('persona gender is unspecified')
     expect(style).toContain('not a character performance')
+    expect(teamPersonaGender('custom-worker', 'teammate')).toBeUndefined()
   })
 })
