@@ -255,6 +255,43 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'explicit-other-model' })
   })
 
+  it('uses the live selector request route instead of stale Agent options outside Codex', async () => {
+    const { ctx, lead } = await setup(['hang'], false, {
+      defaultModelProfile: 'luna-max',
+      modelProfiles: {
+        'luna-max': { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      },
+    })
+    const codex = new MockAdapter(['hang'], {
+      efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
+      defaultEffort: ReasoningEffortId('max'),
+    })
+    ctx.llm.registerAdapter(['openai-codex'], codex)
+
+    // Reproduce a session that was created on Codex but whose visible selector
+    // has since moved to another provider/model for this live turn.
+    lead.options.provider = 'openai-codex'
+    lead.options.model = 'gpt-6.1-sol'
+    lead.session.append('turn/start', { turn: 1 })
+    lead.session.append('request/header', {
+      header: { config: { provider: 'mock', model: 'mock' } },
+      reason: 'change',
+    })
+
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'same-selected-worker',
+      description: 'inherit the visible selected non-Codex route',
+      prompt: 'wait',
+    })
+    expect(spawned.isError).toBe(false)
+    const child = await waitRunning(ctx, spawnedChildId(spawned))
+    expect(child.options).toMatchObject({ provider: 'mock', model: 'mock' })
+    expect(child.options.provider).not.toBe('openai-codex')
+    expect(child.options.model).not.toBe('gpt-6-luna')
+    expect(codex.requests).toHaveLength(0)
+    await execute(ctx, lead, 'interrupt_agent', { target: 'same-selected-worker' })
+  })
+
   it('keeps the selected Codex planner while real teammates execute on Luna Max', async () => {
     const { ctx, lead } = await setup([], false, {
       defaultModelProfile: 'luna-max',
