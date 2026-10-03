@@ -1,9 +1,14 @@
 /** Client-safe Remote vocabulary for conversational PHOENIX voice. */
 
+/** Presentation chosen for the assistant's spoken identity. */
+export type VoiceAssistantGender = 'masculine' | 'feminine' | 'neutral'
+
 /** Current Host speech route visible to the local Client. */
 export interface VoiceConversationStatus {
   readonly enabled: boolean
   readonly natural: boolean
+  /** Assistant identity preference that browser/local fallback must honor too. */
+  readonly assistantGender: VoiceAssistantGender
   readonly provider?: string
 }
 
@@ -56,9 +61,23 @@ export interface VoiceConversationRealtimeStartReceipt {
   readonly accepted: boolean
   readonly threadId?: string
   readonly answerSdp?: string
+  /** Concrete Realtime voice chosen from the assistant presentation preference. */
+  readonly voice?: string
   readonly reason?: 'disabled' | 'invalid' | 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable' | 'negotiation-failed'
   /** Bounded sanitized startup diagnostic when native Codex negotiation fails. */
   readonly detail?: string
+}
+
+/** Speak Phoenix-owned prose through an already-active native Realtime call. */
+export interface VoiceConversationRealtimeSpeakRequest {
+  readonly key: string
+  readonly text: string
+}
+
+/** Result of appending Phoenix speech to the active Realtime thread. */
+export interface VoiceConversationRealtimeSpeakReceipt {
+  readonly accepted: boolean
+  readonly reason?: 'disabled' | 'invalid' | 'not-active' | 'speak-failed'
 }
 
 /** Stop one native Codex realtime session addressed by its PHOENIX session key. */
