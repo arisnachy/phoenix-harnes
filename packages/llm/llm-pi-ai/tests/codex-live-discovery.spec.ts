@@ -83,16 +83,22 @@ describe('Codex app-server model/list mapping', () => {
   it('uses the turn model value, keeps display names, skips hidden rows, and preserves pagination', () => {
     expect(readCodexModelPage({
       data: [
-        { id: 'catalog-id', model: 'actual-turn-model', displayName: 'Actual model', hidden: false },
-        { id: 'fallback-id', displayName: 'Legacy shape', hidden: false },
+        {
+          id: 'catalog-id',
+          model: 'actual-turn-model',
+          displayName: 'Actual model',
+          hidden: false,
+          inputModalities: ['text', 'image'],
+        },
+        { id: 'fallback-id', displayName: 'Legacy shape', hidden: false, inputModalities: ['text'] },
         { id: 'hidden-id', model: 'hidden-model', displayName: 'Hidden', hidden: true },
         { displayName: 'missing id' },
       ],
       nextCursor: 'cursor-2',
     })).toEqual({
       models: [
-        { id: 'actual-turn-model', name: 'Actual model' },
-        { id: 'fallback-id', name: 'Legacy shape' },
+        { id: 'actual-turn-model', name: 'Actual model', inputModalities: ['text', 'image'] },
+        { id: 'fallback-id', name: 'Legacy shape', inputModalities: ['text'] },
       ],
       nextCursor: 'cursor-2',
     })
