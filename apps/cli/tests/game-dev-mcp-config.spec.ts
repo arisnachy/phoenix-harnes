@@ -54,21 +54,23 @@ describe('game development connector pack', () => {
     for (const preset of [standardPreset, codePreset]) {
       const source = readFileSync(preset, 'utf8')
       expect(source).toContain("new URL('skills/', baseUrl)")
+      expect(source).toContain(preset === standardPreset ? 'carga la habilidad `game-development`' : 'load the `game-development` skill')
     }
   })
 
   it('teaches engine routing and both modern-retro and native-retro workflows', () => {
-    const source = readFileSync(skill, 'utf8')
+    const directory = resolve(skill, '..')
+    const source = ['SKILL.md', 'references/production-art.md', 'references/browser-games.md', 'references/godot-games.md', 'references/native-retro.md'].map(resource => readFileSync(resolve(directory, resource), 'utf8')).join('\n')
 
-    expect(source).toContain('Retro moderno')
-    expect(source).toContain('Retro nativo')
-    expect(source).toContain('cc65/ca65/ld65')
+    expect(source).toContain('estética moderna por defecto')
+    expect(source).toContain('Hardware retro real')
+    expect(source).toContain('cc65')
     expect(source).toContain('PVSnesLib')
     expect(source).toContain('SGDK')
     expect(source).toContain('GBDK-2020')
     expect(source).toContain('connector_list')
     expect(source).toContain('connector_discover')
-    expect(source).toContain('Bucle de calidad obligatorio')
+    expect(source).toContain('tres pruebas separadas')
     expect(source).toContain('Mandato premium de producción')
     expect(source).toContain('Rúbrica interna de 100 puntos')
     expect(source).toContain('90/100 o más')

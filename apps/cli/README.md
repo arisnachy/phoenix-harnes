@@ -17,6 +17,10 @@ The `dsh` command is the product launcher for profiles: ordered stacks of plugin
 
 The invoking directory is the default workspace root. The `web` and `headless` profiles auto-initialize on first use from shipped templates; any other profile must be created through `dsh plugin`.
 
+## Game creation
+
+The standard and code presets load the shipped [game-development skill](config/agent-presets/standard/skills/game-development/SKILL.md) for game work. It routes browser arcade, Godot 2D/3D, modern retro aesthetics and explicitly requested native homebrew separately, with lazy platform recipes and a Node-based tool doctor. Godot/Blender installation is explicit through trusted platform package managers; native SDKs, export templates and emulators require their own verification. Genre-specific technical, visual and executed-play evidence is required before delivery.
+
 ## ChatGPT Web bridge
 
 PHOENIX can use the local [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) bridge as the `chatgpt-web` model route. The bridge owns browser login and cookies; PHOENIX never imports or stores them. On Windows, complete `Setup > Browser-only` in the installed Codex Web GPT launcher; `dsh chatgpt-web start` then discovers the complete packaged runtime automatically. An incomplete runtime is ignored. A manual JSON argv configuration remains available for other installations:

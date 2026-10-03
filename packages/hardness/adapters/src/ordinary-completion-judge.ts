@@ -18,7 +18,7 @@ import type {
   ToolRestriction,
 } from '@phoenix-ai/dsh-tools'
 import { resolveStructuredProvider, type SubagentRuntime } from '@phoenix-ai/dsh-subagent'
-import { isGameDevelopmentNeed, qualityRequirementsForNeed } from './quality-contract.ts'
+import { abstractGameReview, isAbstractGameNeed, isGameDevelopmentNeed, qualityRequirementsForNeed, requestsGameAssets } from './quality-contract.ts'
 
 const OUTPUT_SCHEMA: ObjectJsonSchema = {
   type: 'object',
@@ -67,22 +67,18 @@ const GAME_EDITOR_READ_ONLY = /(?:^|_)(?:get|list|read|inspect|query|search|find
 const GAME_EDITOR_VISUAL_ACTION = /(?:^|_)(?:capture|screenshot|snapshot|render|viewport)(?:_|$)/i
 const GAME_EDITOR_PLAY_ACTION = /(?:^|_)(?:play|run|start|launch|pie)(?:_|$)/i
 const GAMEPLAY_VISUAL_ACTION = /(?:^|_)(?:capture|screenshot|snapshot|frame|inspect|render)(?:_|$)/i
-// oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
-const GAME_NEED = /\b(?:game|games|gaming|juego|juegos|videogame|videojuego|godot|unity|unreal|blender|sprite|tileset|npc|enemy|character|pixel\s*art|2d|3d|retro|nes|snes|rpg|platformer|metroidvania|gameplay)\b/i
 const DIRECT_ASSET_MUTATION = /^(?:image_generation|audio_generation|generate_image|generate_audio)$/
-// oxlint-disable-next-line @stylistic/max-len -- Keep the asset-discovery matcher auditable as one regex literal.
 const GAME_ASSET_DISCOVERY_OP = /^(?:web_search|web_fetch|browser_search|browser_open|browser_navigate|connector_list|connector_discover)$/
 // oxlint-disable-next-line @stylistic/max-len -- Keep the asset-source matcher auditable as one regex literal.
 const GAME_ASSET_DISCOVERY_TEXT = /\b(?:kenney|opengameart|itch(?:\.io)?|quaternius|poly\s+haven|ambientcg|game\s+assets?|asset(?:\s|-)?packs?|sprite(?:\s|-)?sheets?|tilesets?|pixel\s+art|rpg\s+assets?|cc0|creative\s+commons|licen[cs]e)\b/i
 // oxlint-disable-next-line @stylistic/max-len -- Keep the production-asset path matcher auditable as one regex literal.
 const GAME_ASSET_PATH = /(?:^|[\\/])(?:assets?|art|sprites?|tiles?|tilesets?|textures?|models?|audio|music|sfx|fonts?)[\\/][^"'\s]*\.(?:png|webp|jpe?g|gif|ase|aseprite|tmx|tres|blend1?|glb|gltf|fbx|obj|wav|ogg|mp3|flac|ttf|otf|woff2?)\b/i
 const GAME_ASSET_PROVENANCE = /\b(?:asset-manifest|asset-sourcing|licenses|credits)\.(?:json|md)\b/i
-// oxlint-disable-next-line @stylistic/max-len -- Keep the game-build intent matcher auditable as one regex literal.
-const GAME_BUILD_ACTION = /\b(?:create|build|make|develop|design|crear|crea|construir|desarrollar|diseñar|diseña|hacer)\b/i
+const GAME_BUILD_ACTION = /\b(?:create|build|make|develop|design|implement|haz|crear|crea|construir|desarrollar|diseñar|diseña|hacer)\b/i
 // oxlint-disable-next-line @stylistic/max-len -- Keep the visual-quality intent matcher auditable as one regex literal.
 const GAME_VISUAL_QUALITY = /\b(?:visual|graphics?|gr[aá]fic[oa]s?|arte|art|sprites?|tilesets?|characters?|personajes?|enemig(?:o|os)|enemy|enemies|npc|world|mundo|environment|entorno|ui|hud|vfx|audio|m[uú]sica|retro|nes|snes|genesis|pixel\s*art|bonit[oa]|beautiful|quality|calidad|premium|polish|pulir|presentaci[oó]n)\b/i
 // oxlint-disable-next-line @stylistic/max-len -- Keep the original-asset request matcher auditable as one regex literal.
-const ORIGINAL_ASSET_REQUEST = /\b(?:original\s+assets?|original\s+art|arte\s+original|assets?\s+originales?|sprites?\s+originales?|desde\s+cero|from\s+scratch)\b/i
+const ORIGINAL_ASSET_REQUEST = /\b(?:original\s+(?:\w+\s+){0,3}(?:assets?|sprites?|art|backgrounds?)|arte\s+original|assets?\s+originales?|sprites?\s+originales?|desde\s+cero|from\s+scratch)\b/i
 // oxlint-disable-next-line @stylistic/max-len -- Keep this matcher auditable as one regex literal.
 const SHELL_VERIFY = /\b(?:vitest|pytest|unittest|jest|mocha|tsc|oxlint|eslint|ruff|mypy|cargo\s+test|go\s+test|dotnet\s+test|pnpm\s+(?:run\s+)?(?:test|check|lint|typecheck|build|verify)|npm\s+(?:run\s+)?(?:test|check|lint|build|verify)|yarn\s+(?:test|check|lint|build)|python\s+-m\s+pytest|benchmark|tracemalloc)\b/i
 // oxlint-disable-next-line @stylistic/max-len -- Keep the game-runtime matcher auditable as one regex literal.
@@ -177,6 +173,7 @@ function shellMutationText(value: unknown): string {
 }
 
 function argumentText(value: unknown): string {
+  // oxlint-disable-next-line typescript/no-unnecessary-condition -- Top-level function/symbol input can stringify to undefined.
   try { return JSON.stringify(value) ?? 'null' } catch { return String(value) }
 }
 
@@ -192,7 +189,7 @@ export function isSubstantiveMutation(name: string, args: unknown): boolean {
   const op = operationName(name)
   const text = argumentText(args)
   if (DIRECT_ASSET_MUTATION.test(op)) return true
-  if (op === 'hardness_run' && GAME_NEED.test(text)) return true
+  if (op === 'hardness_run' && isGameDevelopmentNeed(args)) return true
   if (GAME_EDITOR_NAMESPACE.test(normalizedName) && !GAME_EDITOR_READ_ONLY.test(op)) return true
   if (MUTATION.test(op)) return SUBSTANTIVE.test(text)
   return SHELL.test(op) && SHELL_MUTATE.test(shellMutationText(args)) && SUBSTANTIVE.test(text)
@@ -252,7 +249,9 @@ export function isGameAssetProvenanceMutation(name: string, args: unknown): bool
  * @internal
  */
 export function needsGameAssetPipeline(request: string): boolean {
-  return GAME_NEED.test(request) && (GAME_BUILD_ACTION.test(request) || GAME_VISUAL_QUALITY.test(request))
+  return isGameDevelopmentNeed(request)
+    && (!isAbstractGameNeed(request) || requestsGameAssets(request))
+    && (GAME_BUILD_ACTION.test(request) || GAME_VISUAL_QUALITY.test(request) || requestsGameAssets(request))
 }
 
 function explicitlyRequestsOriginalAssets(request: string): boolean {
@@ -378,7 +377,7 @@ export async function reviewOrdinaryCompletion(input: {
 
   const toolFilter: ToolRestriction = { allow: [...READ_ONLY_TOOLS] }
   const taskQuality = qualityRequirementsForNeed({ description: input.request })
-  const gameReview = isGameDevelopmentNeed({ description: input.request })
+  const gameReview = isAbstractGameNeed(input.request) ? abstractGameReview(input.request) : isGameDevelopmentNeed(input.request)
     ? 'This is game-development work. Require three independent evidence gates from the current mutation generation: technical build/test/check evidence, visual capture inspected with read_image/screenshot, and executed gameplay/playtest evidence. A build cannot satisfy the visual or play gate; a screenshot cannot satisfy the play gate; a gameplay tool call cannot replace close visual inspection. Require actual evidence for graphics/art direction, character quality, environment quality, animation/VFX, UI, music/ambience/SFX and mix, gameplay feel, camera/input/collision feedback, and performance from an executed build or emulator. When improving an existing game, require a baseline capture of the current build and a comparable after capture; visible regressions or no material improvement fail when the request is to make it better. Compare with strong current category references when web tools are available. Inspect the latest gameplay frame with read_image when available and explicitly judge the player plus representative enemy and NPC/interactive actors at normal gameplay scale and close enough to see sprite/model detail. For requests that create or materially improve game visuals, require durable evidence that asset-first scouting actually happened through web_search, browser, or connectors with concrete candidate packs and source/license comparison, unless the user explicitly required original assets. Also require durable evidence for use of production asset tools such as image_generation backend=auto, Aseprite/Tiled, Blender, engine-native asset pipelines, or an equivalent real raster/3D/audio workflow when available, plus asset-manifest.json or asset-sourcing.json provenance. DOM/CSS/SVG/canvas primitives are not a substitute for final character or environment art. Do not pass any final actor rendered as a rectangle, box, circle, capsule, emoji, text glyph, single flat block, default mannequin, primitive mesh, or collision/debug shape unless the user explicitly requested an abstract/minimalist art direction and the evidence shows that choice is intentional and polished. For 2D/pixel art require role-readable silhouettes, coherent palette/pixel density/scale, clean transparency, and animation-state coverage appropriate to the role: locomotion in every relevant direction plus attack/telegraph, hurt, death, or interaction states where applicable. Do not pass placeholders, default/template assets, silent or temporary audio, empty environments, generic characters, screenshot-only evidence, compile-only evidence, or technically functional but visibly unpolished gameplay. When the request includes an intro, opening, title sequence, menu, or cutscene, require evidence of a production-quality boot/title/menu/intro flow and a real transition into gameplay. Treat sparse repeated-prop maps as incomplete: require scene density, terrain transitions, landmarks, structures where appropriate, prop and vegetation variety, and environmental storytelling. '
     : ''
   let run: Awaited<ReturnType<JudgeRuntime['start']>> | undefined

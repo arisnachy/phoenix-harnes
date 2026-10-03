@@ -85,7 +85,7 @@ describe('ordinary completion judge', () => {
       requiredChanges: expect.arrayContaining([
         'assert CycleError includes the exact cycle',
         'measure bounded memory growth',
-      ]),
+      ]) as unknown,
     })
     const options = start.mock.calls[0]?.[1]
     expect(options?.toolFilter).toEqual({
@@ -281,4 +281,33 @@ describe('ordinary completion judge', () => {
       signal: new AbortController().signal,
     })).resolves.toMatchObject({ verdict: 'blocked' })
   })
+  it.each(['Create a polished browser Snake', 'make a geometric Pong arcade', 'build premium Tetris', 'implement playable chess', 'create a 2048 puzzle'])('does not require asset scouting for abstract-only work: %s', (request) => {
+    expect(needsGameAssetPipeline(request)).toBe(false)
+    expect(isSubstantiveMutation('hardness_run', { need: { description: request } })).toBe(true)
+  })
+
+  it.each(['haz un gta tipo ps1', 'create a PlayStation adventure', 'make a Sonic game for Sega', 'Create Snake with external character sprites and background assets', 'Create Pong with original background art', 'Crea Snake con assets originales'])('retains required asset work: %s', (request) => {
+    expect(needsGameAssetPipeline(request)).toBe(true)
+  })
+
+  it('reviews abstract game art and sound without imposing representational production steps', async () => {
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'abstract-judge' as never, localAgent: undefined,
+      result: Promise.resolve({ stopReason: 'completed' as const, output: [], structured: {
+        verdict: 'needs_changes', summary: 'play evidence missing', evidence: ['capture'], known_limitations: [],
+        risk_coverage: { ambiguity: true, limitations: true, report_integrity: true }, required_changes: ['execute gameplay'],
+      } }), dispose: async () => {},
+    }))
+    await reviewOrdinaryCompletion({ subagents: { getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never, start }, provider: 'spawn', parent, request: 'Create polished browser Snake', mutations: ['write'], verifications: ['build'], signal: new AbortController().signal })
+    const prompt = start.mock.calls[0]?.[1].prompt.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ') ?? ''
+    expect(prompt).toMatch(/current mutation generation/)
+    expect(prompt).toMatch(/three independent evidence gates.*technical.*visual.*play/)
+    expect(prompt).toMatch(/polished geometry|procedural audio|compact designed arena/)
+    expect(prompt).not.toMatch(/asset-first scouting|character bible|locomotion in every|prop and vegetation variety/)
+  })
+
+  it('retains requested illustrated characters and backgrounds in an abstract puzzle game', () => {
+    expect(needsGameAssetPipeline('Make a puzzle game with animated animal characters and illustrated backgrounds')).toBe(true)
+  })
+
 })
