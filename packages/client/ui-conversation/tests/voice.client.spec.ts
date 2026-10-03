@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   configureVoiceAssistantRemote,
+  configureVoiceModelRouteResolver,
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
@@ -13,6 +14,7 @@ import {
   setVoiceAssistantListening,
   speakVoiceAssistantResponse,
   streamVoiceAssistantResponse,
+  tryStartCodexRealtimeVoice,
   type VoiceRecognitionLike,
 } from '../src/client/voice.ts'
 
@@ -43,6 +45,36 @@ describe('browser voice adapter', () => {
     expect(hasVoiceRecognition({})).toBe(false)
     expect(createVoiceRecognition(() => {}, () => {}, 'en-US', {})).toBeUndefined()
   })
+
+  it('allows legacy fallback only for a genuinely non-Codex route', async () => {
+    const disposeRoute = configureVoiceModelRouteResolver(async () => ({
+      provider: 'deepseek',
+      model: 'deepseek-chat',
+    }))
+    try {
+      await expect(tryStartCodexRealtimeVoice('session-non-codex')).resolves.toEqual({
+        kind: 'not-codex',
+      })
+    } finally {
+      disposeRoute()
+    }
+  })
+
+  it('keeps Codex realtime failures explicit instead of silently using fallback speech', async () => {
+    const disposeRoute = configureVoiceModelRouteResolver(async () => ({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+    }))
+    try {
+      await expect(tryStartCodexRealtimeVoice('session-codex')).resolves.toEqual({
+        kind: 'failed',
+        reason: 'host-realtime-unavailable',
+      })
+    } finally {
+      disposeRoute()
+    }
+  })
+
 
   it('configures one explicit recognition session and forwards final text', () => {
     const transcripts: string[] = []
