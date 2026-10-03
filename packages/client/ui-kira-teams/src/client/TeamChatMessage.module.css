@@ -120,6 +120,18 @@
 .bubble :global(.markdown) > :first-child { margin-top: 0; }
 .bubble :global(.markdown) > :last-child { margin-bottom: 0; }
 
+.messageActions {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin-top: 4px;
+}
+
+.messageActions .reactions {
+  margin-top: 0;
+  padding-left: 0;
+}
+
 .reactions {
   display: flex;
   align-items: center;
