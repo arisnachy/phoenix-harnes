@@ -618,6 +618,16 @@ export function installModelSelection(
   }
   const disposeAssembly = agentCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const selected = selection.current
+    // The selector is the authority for the next assembled step. Reused blank
+    // sessions can otherwise retain creation-time AgentOptions from a previous
+    // provider, which makes delegators spawn teammates on the wrong route.
+    const scopedAgent = agentCtx.agent
+    if (selected !== undefined && scopedAgent !== undefined && !isPhoenixCodexAutoSelection(selected)) {
+      scopedAgent.options.provider = selected.provider
+      scopedAgent.options.model = selected.model
+      if (selected.reasoningEffort === undefined) delete scopedAgent.options.reasoningEffort
+      else scopedAgent.options.reasoningEffort = selected.reasoningEffort
+    }
     const assembled = await next()
     selection.assembled = selected
     const hasKiraTeam = assembled.tools.some(tool => tool.name === 'spawn_teammate')
