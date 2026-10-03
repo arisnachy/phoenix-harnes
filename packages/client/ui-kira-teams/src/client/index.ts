@@ -5,7 +5,7 @@ import type {} from '@phoenix-ai/dsh-api-remotes/client'
 import type { TeamChatReplyRequest } from '@phoenix-ai/dsh-agent-team/chat-types'
 import { TeamReplyDock, type TeamReplyChoice } from './TeamReplyDock.tsx'
 import { TeamAuthor } from './TeamAuthor.tsx'
-import { TeamMessageActions } from './TeamMessageActions.tsx'
+import { AssistantReactionAction, TeamMessageActions } from './TeamMessageActions.tsx'
 import { TeamMentionDock } from './TeamMentionDock.tsx'
 import { teamIdentityOf, KiraTeamMessageView } from './TeamChatMessage.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
@@ -60,13 +60,20 @@ export function apply(ctx: ClientContext): void {
     }),
   }, TeamMentionDock))
   ctx.effect(() => () => { selectedReplies.clear(); pendingRequests.clear(); replyListeners.clear() }, 'ui-kira-teams: replies')
+  const reactionInject = (sessionId: SessionId) => ({
+    async react(messageId: string, emoji: string, active: boolean) {
+      const result = await ctx.remote.agentTeams.chatReact({ sessionId, messageId, emoji, active })
+      if (!result.ok) throw new Error(result.error.message)
+    },
+  })
+  ctx.slots.inject('conversation.chat.assistant-actions', () => ctx.slots.register({
+    name: 'conversation.chat.assistant-actions', id: 'team-reactions', order: 5, locale: NS,
+    inject: reactionInject,
+  }, AssistantReactionAction))
   ctx.slots.inject('conversation.chat.message-actions', () => ctx.slots.register({
     name: 'conversation.chat.message-actions', id: 'team-reactions', locale: NS,
     inject: (sessionId: SessionId) => ({
-      async react(messageId: string, emoji: string, active: boolean) {
-        const result = await ctx.remote.agentTeams.chatReact({ sessionId, messageId, emoji, active })
-        if (!result.ok) throw new Error(result.error.message)
-      },
+      ...reactionInject(sessionId),
       reply(messageId: string, authorId: string, authorName: string, preview: string) {
         const identity = teamIdentityOf(authorName, authorId)
         selectedReplies.set(sessionId, { messageId, authorId, name: identity.name, preview })
