@@ -553,6 +553,117 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('keeps actionable Phoenix Auto work open until a real Kira teammate reports back', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [
+        { name: 'read', description: 'read a file', parameters: { type: 'object' } },
+        { name: 'spawn_teammate', description: 'create a Kira teammate', parameters: { type: 'object' } },
+      ],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Arregla router.ts y ejecuta los tests.' }],
+        },
+      },
+      {
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 3,
+          message: {
+            source: { provider: 'openai-codex', model: 'gpt-6-luna' },
+            content: [{ type: 'text', text: 'Corregido y verificado.' }],
+          },
+        },
+      },
+    ]
+    const steered: unknown[] = []
+    const agent = {
+      session: { events },
+      steer: (message: unknown) => { steered.push(message) },
+    } as unknown as Agent
+    const signal = new AbortController().signal
+
+    await ctx.systemPrompt.assemble()
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+
+    expect(steered).toHaveLength(1)
+    expect(JSON.stringify(steered[0])).toMatch(/real Kira Team participation/i)
+    expect(JSON.stringify(steered[0])).toMatch(/spawn_teammate/i)
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('allows Phoenix Auto to close after a real teammate result reaches Kira', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [
+        { name: 'read', description: 'read a file', parameters: { type: 'object' } },
+        { name: 'spawn_teammate', description: 'create a Kira teammate', parameters: { type: 'object' } },
+      ],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Arregla router.ts y ejecuta los tests.' }],
+        },
+      },
+      {
+        type: 'user/message',
+        data: {
+          source: { kind: 'team-message', messageId: 'team-result-1', purpose: 'result' },
+          content: [{ type: 'text', text: 'Orión verificó el cambio y las pruebas pasan.' }],
+        },
+      },
+      {
+        type: 'assistant/message',
+        data: {
+          turn: 1,
+          step: 4,
+          message: {
+            source: { provider: 'openai-codex', model: 'gpt-6-luna' },
+            content: [{ type: 'text', text: 'Resultado integrado y verificado.' }],
+          },
+        },
+      },
+    ]
+    const steered: unknown[] = []
+    const agent = {
+      session: { events },
+      steer: (message: unknown) => { steered.push(message) },
+    } as unknown as Agent
+    const signal = new AbortController().signal
+
+    await ctx.systemPrompt.assemble()
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+
+    expect(steered).toEqual([])
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('uses Luna low for answer-only Phoenix Auto turns', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
