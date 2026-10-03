@@ -47,6 +47,8 @@ Model-facing presets expose `hardness_workflow.executionMode` so Phoenix can dis
 The same policy is reinforced in active goal rounds. An already-authorized mission continues through recoverable tool and verification failures using repair, alternate routes, capability acquisition/building, or a materially different strategy. Internal retry/round limits cannot complete or cancel the mission. Permission, credentials, safety policy, provider quota, explicit denial, and genuinely unsatisfied external dependencies remain hard boundaries and are never bypassed by the fast path.
 
 
+Game quality follows the requested genre and art direction. Game-development detection includes console references such as PS1/PSX/PlayStation and Sega, and uses development context for ambiguous names such as Snake or chess. Abstract board, puzzle and arcade games may use polished geometry, procedural audio and compact designed arenas as final production work; explicit character/background or external/original asset requests still require the relevant production and provenance workflow. Representational RPG/adventure/GTA work retains its production asset, cast and environment requirements. Every game still requires independent technical, visual-inspection and actual-play evidence from the current mutation generation.
+
 ## Runtime validation
 
 Paper candle reads clamp both the provider request and returned rows to 1–1000. Shell mutation classification reads the command argument. Runtime-service telemetry performs an immediate first probe and then reuses observations until their TTL expires.
