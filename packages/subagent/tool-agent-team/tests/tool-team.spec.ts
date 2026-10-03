@@ -196,7 +196,7 @@ describe('dsh-tool-team', () => {
     await waitNoAgent(ctx, childId)
   })
 
-  it('routes teammates through provider-neutral model profiles', async () => {
+  it('honors an explicitly requested provider-neutral model profile', async () => {
     const { ctx, lead } = await setup(['hang'], false, {
       defaultModelProfile: 'judge',
       modelProfiles: {
@@ -210,6 +210,7 @@ describe('dsh-tool-team', () => {
       name: 'judge',
       description: 'independent acceptance review',
       prompt: 'review the evidence',
+      model_profile: 'judge',
     })
     expect(spawned.isError).toBe(false)
     const child = await waitRunning(ctx, spawnedChildId(spawned))
@@ -222,6 +223,51 @@ describe('dsh-tool-team', () => {
       model: 'independent-judge',
     } })
     await execute(ctx, lead, 'interrupt_agent', { target: 'judge' })
+  })
+
+  it('inherits the live selected non-Codex route even when Agent creation options are stale', async () => {
+    const { ctx, lead } = await setup([], false, {
+      defaultModelProfile: 'luna-max',
+      modelProfiles: {
+        'luna-max': { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' },
+      },
+    })
+    const external = new MockAdapter(['hang'], {
+      efforts: [{ id: ReasoningEffortId('high'), name: 'High' }],
+      defaultEffort: ReasoningEffortId('high'),
+    })
+    ctx.llm.registerAdapter(['external-provider'], external)
+
+    // The Agent was created on mock, but the current request was assembled after
+    // the user switched the visible selector to another provider/model.
+    expect(lead.options).toMatchObject({ provider: 'mock', model: 'mock' })
+    lead.session.append('turn/start', { turn: 1 })
+    lead.session.append('step/start', { turn: 1, step: 1 })
+    lead.session.append('request/header', {
+      header: {
+        config: {
+          provider: 'external-provider',
+          model: 'external-model',
+          reasoningEffort: ReasoningEffortId('high'),
+        },
+      },
+      reason: 'initial',
+    })
+
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'same-model-worker',
+      description: 'inherit current external selection',
+      prompt: 'wait',
+    })
+    const child = await waitRunning(ctx, spawnedChildId(spawned))
+    expect(child.options).toMatchObject({
+      provider: 'external-provider',
+      model: 'external-model',
+      reasoningEffort: 'high',
+    })
+    expect(child.options.provider).not.toBe('openai-codex')
+    expect(child.options.model).not.toBe('gpt-6-luna')
+    await execute(ctx, lead, 'interrupt_agent', { target: 'same-model-worker' })
   })
 
   it('keeps the selected Codex planner while real teammates execute on Luna Max', async () => {
