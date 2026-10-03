@@ -51,9 +51,10 @@ class StubAdapter extends LlmAdapter {
   }
 
   override resolveModel(provider: string, model: string): Promise<LlmResolvedModelInfo> {
+    const listed = this.listed.find(candidate => candidate.id === model)
     return Promise.resolve({
       provider, id: model, name: model,
-      inputModalities: [...this.modalities] as never,
+      inputModalities: [...(listed?.inputModalities ?? this.modalities)] as never,
     })
   }
 
