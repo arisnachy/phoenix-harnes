@@ -58,13 +58,14 @@ export function TeamMessageActions({
         { transform: 'translateY(0) scale(.97)', opacity: 1, offset: .72 },
         { transform: 'translateY(0) scale(1)', opacity: 1 },
       ], { duration: 560, easing: 'cubic-bezier(.2,.9,.25,1)' })
-      chip?.querySelector<HTMLElement>('[data-reaction-emoji]')?.animate([
+      const emojiNode = chip?.querySelector<HTMLElement>('[data-reaction-emoji]')
+      emojiNode?.animate?.([
         { transform: 'rotate(-8deg) scale(.72)' },
         { transform: 'rotate(7deg) scale(1.42)', offset: .45 },
         { transform: 'rotate(0deg) scale(1)' },
       ], { duration: 620, easing: 'cubic-bezier(.2,.9,.25,1)' })
       for (const avatar of chip?.querySelectorAll<HTMLElement>('[data-reaction-reactor]') ?? []) {
-        avatar.animate([
+        avatar.animate?.([
           { transform: 'scale(.65)', opacity: .45 },
           { transform: 'scale(1.22)', opacity: 1, offset: .5 },
           { transform: 'scale(1)', opacity: 1 },
