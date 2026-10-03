@@ -10,9 +10,9 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { join, resolve, sep } from 'node:path'
 import { createInterface } from 'node:readline'
 import type { Interface as ReadlineInterface } from 'node:readline'
 import { LlmError } from '@phoenix-ai/dsh-llm'
@@ -239,12 +239,43 @@ export function codexDiscoveryArgs(): string[] {
   ]
 }
 
+function managedCodexBin(): string | undefined {
+  const configured = process.env.DSH_HOME?.trim()
+  const dshHome = configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.dsh')
+  const runtimeRoot = join(dshHome, 'codex-cli')
+  const markerPath = join(runtimeRoot, 'active.json')
+  if (!existsSync(markerPath)) return undefined
+  try {
+    const marker = JSON.parse(readFileSync(markerPath, 'utf8')) as {
+      schema?: unknown
+      version?: unknown
+      bin?: unknown
+    }
+    if (marker.schema !== 1 || typeof marker.version !== 'string'
+      || !/^\d+\.\d+\.\d+$/u.test(marker.version) || typeof marker.bin !== 'string') return undefined
+    const candidate = resolve(runtimeRoot, marker.bin)
+    const boundary = runtimeRoot.endsWith(sep) ? runtimeRoot : `${runtimeRoot}${sep}`
+    if (candidate !== runtimeRoot && !candidate.startsWith(boundary)) return undefined
+    return existsSync(candidate) ? candidate : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function codexProcess(signal?: AbortSignal): ChildProcessWithoutNullStreams {
   const common = {
     cwd: process.cwd(),
     env: codexEnvironment(),
     windowsHide: true,
     signal,
+  }
+  const managed = managedCodexBin()
+  if (managed !== undefined) {
+    return finishProcessSetup(spawn(
+      process.execPath,
+      [managed, ...codexDiscoveryArgs()],
+      common,
+    ))
   }
   if (process.platform === 'win32') {
     const shell = process.env.ComSpec ?? 'cmd.exe'
