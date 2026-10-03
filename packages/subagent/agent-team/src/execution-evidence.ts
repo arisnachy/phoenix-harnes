@@ -79,7 +79,8 @@ function successfulTools(
   }
   const tools: string[] = []
   for (const event of events) {
-    if (event.seq <= afterSeq || event.seq > upToSeq || event.type !== 'tool/result' || event.data.error !== undefined) continue
+    if (event.seq <= afterSeq || event.seq > upToSeq || event.type !== 'tool/result'
+      || event.data.error !== undefined || event.data.message.content[0].isError) continue
     const callId = String(event.data.message.source.callId)
     const raw = calls.get(callId)
     if (raw === undefined) continue
