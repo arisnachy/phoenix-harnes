@@ -103,13 +103,10 @@ describe('KIRA Team chat message', () => {
     expect(failed.container.querySelector('[data-team-target-status="failed"]')).toBeTruthy()
   })
 
-  it('renders one real team bubble with recipient, purpose and compact reactions', () => {
+  it('leaves all emoji reactions to the canonical animated message-actions tray', () => {
     const reactions: KiraTeamMessageChatData['reactions'] = [
       { reactorId: 'root', reactorName: 'lead', reaction: 'ack' },
       { reactorId: 'a', reactorName: 'la-forja', reaction: 'agree' },
-      { reactorId: 'b', reactorName: 'argo', reaction: 'insight' },
-      { reactorId: 'c', reactorName: 'vigia', reaction: 'blocked' },
-      { reactorId: 'd', reactorName: 'eclipse', reaction: 'done' },
     ]
     const view = render(<View node={node({
       targetName: 'lead',
@@ -131,11 +128,7 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('Bloqueo')).toBeTruthy()
     expect(view.getByText('→ Kira')).toBeTruthy()
     expect(view.getByText(/Necesito dirección/)).toBeTruthy()
-    expect(view.getByLabelText('Reacciones del equipo').textContent).toContain('👍')
-    expect(view.getByLabelText('Reacciones del equipo').textContent).toContain('✓')
-    expect(view.getByLabelText('Reacciones del equipo').textContent).toContain('💡')
-    expect(view.getByLabelText('Reacciones del equipo').textContent).toContain('⚠')
-    expect(view.getByLabelText('Reacciones del equipo').textContent).toContain('✅')
+    expect(view.queryByLabelText('Reacciones del equipo')).toBeNull()
   })
 
   it('keeps ordinary updates visually quiet and omits empty synthetic rows', () => {
