@@ -416,6 +416,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     } else {
       const userMailIdentity = configuredIdentity(config.userMailIdentity)
       const harnessMailIdentity = configuredIdentity(config.harnessMailIdentity)
+      let mailbox: ReturnType<typeof installAssistantMail> | undefined
       const runtimeConfig = {
         pollMs: config.taskPollMs ?? 15_000,
         privateWorkProvider: config.privateWorkProvider?.trim() || 'spawn',
@@ -423,12 +424,23 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         ...(userMailIdentity === undefined ? {} : { userMailIdentity }),
         ...(harnessMailIdentity === undefined ? {} : { harnessMailIdentity }),
         resolveDefaultMailRecipient: () => connectedGoogleEmail(authorization),
+        sendMail: async (input: { readonly to: string; readonly subject: string; readonly text: string; readonly idempotencyKey: string }) => {
+          if (mailbox === undefined) throw new Error('Kira mailbox is unavailable')
+          await mailbox.send(input)
+        },
         composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
       }
+      mailbox = installAssistantMail(ctx, {
+        directory: config.mailDirectory?.trim() || join(dirname(taskLedgerPath(config)), 'phoenix-mail'),
+        credentialRef: config.mailCredentialRef ?? 'PHOENIX_AGENTMAIL_API_KEY',
+        pollMs: config.mailPollMs ?? 60_000,
+        timeoutMs: config.mailTimeoutMs ?? 30_000,
+        workTimeoutMs: config.mailWorkTimeoutMs ?? 600_000,
+        resolveOwnerEmail: () => connectedGoogleEmail(authorization),
+      }, runtimeConfig)
       proactivity.bindExecutor(createProactivityExecutor(agents, subagents, runtimeConfig))
-      const mailbox = installAssistantMail(ctx, { directory: config.mailDirectory?.trim() || join(dirname(taskLedgerPath(config)), 'phoenix-mail'), credentialRef: config.mailCredentialRef ?? 'PHOENIX_AGENTMAIL_API_KEY', pollMs: config.mailPollMs ?? 60_000, timeoutMs: config.mailTimeoutMs ?? 30_000, workTimeoutMs: config.mailWorkTimeoutMs ?? 600_000 }, runtimeConfig)
-      disposers.push(() => { void mailbox.dispose() })
-      disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs, new AttentionStore(`${taskLedgerPath(config)}.attention.json`), () => mailbox.attention()))
+      disposers.push(() => { void mailbox?.dispose() })
+      disposers.push(installProactivityRuntime(ctx, proactivity.engine, runtimeConfig.pollMs, new AttentionStore(`${taskLedgerPath(config)}.attention.json`), () => mailbox?.attention() ?? Promise.resolve([])))
       wake.bindExecutor(createWakeExecutor(agents))
       disposers.push(installWakeRuntime(ctx, wake.engine))
       disposers.push(installConnectorEventBridge(ctx, mcpConnectors))
