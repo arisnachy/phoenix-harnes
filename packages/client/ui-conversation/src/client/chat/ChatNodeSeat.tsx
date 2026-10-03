@@ -22,6 +22,34 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
 }: ChatNodeSeatProps) {
   const node = useSession(snapshot => snapshot.chat.nodes.get(nodeKey))
   const routedNode = node as ChatNode | undefined
+  // Ordinary assistant controls are rendered by the completed Turn footer,
+  // where copy / feedback / speech / branch already live. Generic transcript
+  // actions are only for user and Team rows and are passed INTO those renderers
+  // so plugins cannot accidentally create a second detached controls row.
+  const messageId = routedNode === undefined ? undefined
+    : (routedNode.kind === 'user' || routedNode.kind === 'steering')
+      ? routedNode.data.messageId
+      : routedNode.kind === 'kira-team-message' ? routedNode.data.messageId : undefined
+  const authorKind = routedNode === undefined ? undefined
+    : (routedNode.kind === 'user' || routedNode.kind === 'steering') ? 'user'
+      : routedNode.kind === 'kira-team-message' ? routedNode.data.senderKind ?? 'agent' : undefined
+  const authorId = routedNode?.kind === 'kira-team-message' ? routedNode.data.senderId : authorKind
+  const messageActions = messageId === undefined || authorKind === undefined || authorId === undefined
+    ? null
+    : renderSlot('conversation.chat.message-actions', {
+      messageId,
+      authorId,
+      authorKind,
+      ...(routedNode?.kind === 'kira-team-message'
+        ? {
+          ...(routedNode.data.missionId === undefined ? {} : { originMissionId: routedNode.data.missionId }),
+          authorName: routedNode.data.senderName,
+          replyPreview: routedNode.data.content.flatMap(block =>
+            typeof block === 'object' && block !== null && 'type' in block && block.type === 'text'
+              && 'text' in block && typeof block.text === 'string' ? [block.text] : []).join('\n'),
+        }
+        : {}),
+    })
   const owner = useMemo<ChatNodeOwnerProps | null>(() => node === undefined
     ? null
     : {
@@ -35,21 +63,16 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       ...loadImage === undefined ? {} : { loadImage },
       fileMentions,
       workspaceFileMentions,
+      ...(messageActions == null ? {} : { messageActions }),
     }, [
     node, selectedCallId, cwd, openFile, inspectCall, forkAt, renderMessageImages, loadImage, fileMentions, runArtifact,
-    workspaceFileMentions,
+    workspaceFileMentions, messageActions,
   ])
   if (routedNode === undefined || owner === null) return null
   // Runtime dispatch owns the correlation: every Node's discriminant is the
   // keyed-slot entry passed alongside that same Node. TypeScript does not
   // distribute an object containing a union into a union of objects itself.
   const routedOwner = { ...owner, node: routedNode } as RoutedChatNodeOwner
-  const messageId = routedNode.kind === 'assistant-step' ? routedNode.data.finalNode?.messageId
-    : (routedNode.kind === 'user' || routedNode.kind === 'steering') ? routedNode.data.messageId
-      : routedNode.kind === 'kira-team-message' ? routedNode.data.messageId : undefined
-  const authorKind = (routedNode.kind === 'user' || routedNode.kind === 'steering') ? 'user' : routedNode.kind === 'kira-team-message'
-    ? routedNode.data.senderKind ?? 'agent' : 'kira'
-  const authorId = routedNode.kind === 'kira-team-message' ? routedNode.data.senderId : authorKind
   return (
     <div
       className={css.flowItem}
@@ -69,7 +92,6 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
           />
         ),
       })}
-      {messageId !== undefined && renderSlot('conversation.chat.message-actions', { messageId, authorId, authorKind, ...(routedNode.kind === 'kira-team-message' ? { ...(routedNode.data.missionId === undefined ? {} : { originMissionId: routedNode.data.missionId }), authorName: routedNode.data.senderName, replyPreview: routedNode.data.content.flatMap(block => typeof block === 'object' && block !== null && 'type' in block && block.type === 'text' && 'text' in block && typeof block.text === 'string' ? [block.text] : []).join('\n') } : {}) })}
     </div>
   )
 })
