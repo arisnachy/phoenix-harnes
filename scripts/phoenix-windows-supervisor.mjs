@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
@@ -35,6 +35,19 @@ const HOST_RESTART_REQUEST_FILE = 'phoenix-host-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
 const HOST_RESTART_DELAY_MS = 1000
 const CONTROL_POLL_MS = 500
+const DEFAULT_UPDATE_STORAGE_RETENTION_MS = 48 * 60 * 60 * 1000
+const MIN_UPDATE_STORAGE_RETENTION_MS = 60 * 60 * 1000
+const configuredUpdateStorageRetentionMs = Number.parseInt(
+  process.env.PHOENIX_UPDATE_STORAGE_RETENTION_MS ?? '',
+  10,
+)
+const UPDATE_STORAGE_RETENTION_MS = Math.max(
+  MIN_UPDATE_STORAGE_RETENTION_MS,
+  Number.isFinite(configuredUpdateStorageRetentionMs) && configuredUpdateStorageRetentionMs > 0
+    ? configuredUpdateStorageRetentionMs
+    : DEFAULT_UPDATE_STORAGE_RETENTION_MS,
+)
+const STAGE_STORAGE_RETENTION_MS = Math.max(7 * 24 * 60 * 60 * 1000, UPDATE_STORAGE_RETENTION_MS)
 const HOST_STABLE_MS = Math.max(5_000, Number.parseInt(process.env.PHOENIX_HOST_STABLE_MS ?? '15000', 10) || 15_000)
 const CONFIG_SNAPSHOT_SCHEMA = 1
 const CONFIG_SNAPSHOT_FILE = 'phoenix-config-last-known-good.json'
@@ -256,17 +269,54 @@ function runtimePathKey(path) {
   return process.platform === 'win32' ? normalized.toLowerCase() : normalized
 }
 
-function runtimeDirectoriesForCurrentCheckout() {
+function runtimeDirectoriesForCleanup() {
   const base = runtimeBaseDirectory()
-  const prefix = `phoenix-runtime-${stageIdentity()}-`
   return readdirSync(base, { withFileTypes: true })
     .filter(entry => entry.isDirectory()
-      && entry.name.startsWith(prefix)
-      && /^[0-9a-f]{12}$/iu.test(entry.name.slice(prefix.length)))
+      && /^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu.test(entry.name))
     .map(entry => join(base, entry.name))
 }
 
-function removeRuntimeWorktree(path) {
+function staleStageDirectoriesForCleanup() {
+  const base = runtimeBaseDirectory()
+  const currentStage = runtimePathKey(persistentStage())
+  return readdirSync(base, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && /^phoenix-stage-[0-9a-f]{10}$/iu.test(entry.name))
+    .map(entry => join(base, entry.name))
+    .filter(path => runtimePathKey(path) !== currentStage)
+}
+
+function belongsToCurrentCheckoutRuntime(path) {
+  const prefix = runtimePathKey(join(runtimeBaseDirectory(), `phoenix-runtime-${stageIdentity()}-`))
+  return runtimePathKey(path).startsWith(prefix)
+}
+
+function managedDirectoryAgeMs(path) {
+  try {
+    return Math.max(0, Date.now() - statSync(path).mtimeMs)
+  } catch {
+    return Number.POSITIVE_INFINITY
+  }
+}
+
+function runtimeProtectedByOwningCheckout(path) {
+  const common = absoluteGitPath(path, gitValue(path, ['rev-parse', '--git-common-dir']))
+  if (common === undefined || !existsSync(common)) return false
+
+  const marker = join(common, ACTIVE_RUNTIME_FILE)
+  if (!existsSync(marker)) return false
+
+  try {
+    const value = JSON.parse(readFileSync(marker, 'utf8'))
+    return value?.schema === 1
+      && typeof value.path === 'string'
+      && runtimePathKey(value.path) === runtimePathKey(path)
+  } catch {
+    return false
+  }
+}
+
+function removeManagedWorktree(path) {
   const result = spawnSync('git', ['worktree', 'remove', '--force', path], {
     cwd: root,
     encoding: 'utf8',
@@ -279,7 +329,7 @@ function removeRuntimeWorktree(path) {
       rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })
     } catch (error) {
       console.error(
-        `[PHOENIX UPDATE] warning: could not remove obsolete runtime ${path}: `
+        `[PHOENIX UPDATE] warning: could not remove obsolete managed worktree ${path}: `
         + `${error instanceof Error ? error.message : String(error)}`,
       )
       return false
@@ -294,12 +344,28 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
   if (runtimeRoot !== root) keep.add(runtimePathKey(runtimeRoot))
 
-  let removed = 0
-  for (const candidate of runtimeDirectoriesForCurrentCheckout()) {
-    if (keep.has(runtimePathKey(candidate))) continue
-    if (!removeRuntimeWorktree(candidate)) continue
-    removed += 1
+  let removedRuntimes = 0
+  let removedStages = 0
+  for (const candidate of runtimeDirectoriesForCleanup()) {
+    const key = runtimePathKey(candidate)
+    if (keep.has(key)) continue
+
+    const currentCheckout = belongsToCurrentCheckoutRuntime(candidate)
+    if (!currentCheckout) {
+      if (runtimeProtectedByOwningCheckout(candidate)) continue
+      if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue
+    }
+
+    if (!removeManagedWorktree(candidate)) continue
+    removedRuntimes += 1
     console.error(`[PHOENIX UPDATE] removed obsolete isolated runtime: ${candidate}`)
+  }
+
+  for (const candidate of staleStageDirectoriesForCleanup()) {
+    if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
+    if (!removeManagedWorktree(candidate)) continue
+    removedStages += 1
+    console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
   }
 
   const prune = spawnSync('git', ['worktree', 'prune', '--expire', 'now'], {
@@ -313,8 +379,11 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
     console.error(
       `[PHOENIX UPDATE] warning: git worktree prune failed${detail.length > 0 ? `: ${detail}` : ''}`,
     )
-  } else if (removed > 0) {
-    console.error(`[PHOENIX UPDATE] runtime cleanup removed ${String(removed)} obsolete runtime(s).`)
+  } else if (removedRuntimes > 0 || removedStages > 0) {
+    console.error(
+      `[PHOENIX UPDATE] storage cleanup removed ${String(removedRuntimes)} obsolete runtime(s) `
+      + `and ${String(removedStages)} stale staging worktree(s).`,
+    )
   }
 }
 
