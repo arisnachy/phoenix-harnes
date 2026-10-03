@@ -107,6 +107,11 @@ export type { SessionReferenceMentionCandidate } from '@phoenix-ai/dsh-session-r
 export type {
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
+  VoiceConversationRealtimeStartReceipt,
+  VoiceConversationRealtimeStartRequest,
+  VoiceConversationRealtimeStatus,
+  VoiceConversationRealtimeStopReceipt,
+  VoiceConversationRealtimeStopRequest,
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
