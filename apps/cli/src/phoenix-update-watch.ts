@@ -17,8 +17,19 @@ export function startPhoenixUpdateWatcher(): void {
     stdio: ['ignore', 'pipe', 'ignore'],
   })
   if (rootResult.status !== 0 || typeof rootResult.stdout !== 'string') return
-  const root = resolve(rootResult.stdout.trim())
+  const detectedRoot = resolve(rootResult.stdout.trim())
+  const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()
+  const root = installRoot === undefined || installRoot.length === 0
+    ? detectedRoot
+    : resolve(installRoot)
   if (root.length === 0) return
+
+  if (process.platform === 'win32') {
+    const supervisor = resolve(root, 'scripts', 'phoenix-windows-supervisor.mjs')
+    if (existsSync(supervisor)) {
+      startWatcher(root, supervisor, 'PHOENIX STORAGE', ['--cleanup-storage'])
+    }
+  }
 
   const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()
 
