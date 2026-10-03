@@ -207,7 +207,7 @@ describe('Team identity and provisioning', () => {
   })
 
   it('enforces maxMembers as a concurrent ceiling rather than a lifetime session budget', async () => {
-    const { ctx, lead } = await setup(['hang', 'hang'], { maxMembers: 2 })
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'], { maxMembers: 2 })
     const first = await spawn(ctx, lead, 'first-worker')
     const second = await spawn(ctx, lead, 'second-worker')
     await waitRunning(ctx, first.member.id)
