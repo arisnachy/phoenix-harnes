@@ -14,6 +14,7 @@ function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailCo
       inboxId: 'kira-new@agentmail.to',
       connection: 'not-configured',
     })),
+    operate: overrides.operate ?? (async () => ({ ok: true })),
   }
 }
 

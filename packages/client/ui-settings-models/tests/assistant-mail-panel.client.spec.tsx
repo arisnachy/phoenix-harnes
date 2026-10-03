@@ -40,3 +40,42 @@ it('preserves owner input typed before the initial host status resolves', async 
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Configurar correo de Kira' }).disabled).toBe(false)
 })
 
+
+
+it('shows Free-plan telemetry and requires an explicit cleanup click after preview', async () => {
+  const actions: string[] = []
+  const client = { call: async (action: string) => {
+    actions.push(action)
+    const cleanup = action === 'cleanup-preview'
+      ? { mode: 'preview', candidateCount: 4 }
+      : action === 'cleanup-trash'
+        ? { mode: 'execute', candidateCount: 4, deleted: 4, failed: [] }
+        : undefined
+    return {
+      account: { state: 'ready', inboxId: 'kira@agentmail.to', contacts: [] },
+      connection: 'connected',
+      quota: {
+        plan: 'free' as const,
+        limits: { inboxes: 3, monthlyEmails: 3000, storageBytes: 3221225472 },
+        used: { inboxes: 1, monthlyEmails: 1250, storageBytes: 1073741824, storedMessages: 25, threads: 12 },
+        remaining: { inboxes: 2, monthlyEmails: 1750, storageBytes: 2147483648 },
+        utilization: { inboxes: 1 / 3, monthlyEmails: 1250 / 3000, storage: 1 / 3 },
+        level: 'ok' as const,
+        measuredAt: '2026-10-03T18:00:00.000Z',
+        resetsAt: '2026-11-01T00:00:00.000Z',
+      },
+      ...(cleanup === undefined ? {} : { cleanup }),
+      jobs: [],
+    }
+  } }
+  render(<AssistantMailPanel client={client} />)
+  expect(await screen.findByText('AgentMail Free')).toBeTruthy()
+  expect(screen.getByText('1250/3000')).toBeTruthy()
+  expect(screen.getByText(/Quedan 1750/u)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Revisar papelera antigua' }))
+  expect(await screen.findByRole('button', { name: 'Eliminar 4 de papelera' })).toBeTruthy()
+  expect(actions).not.toContain('cleanup-trash')
+  fireEvent.click(screen.getByRole('button', { name: 'Eliminar 4 de papelera' }))
+  expect(await screen.findByText(/Limpieza: 4 eliminados/u)).toBeTruthy()
+  expect(actions).toContain('cleanup-trash')
+})

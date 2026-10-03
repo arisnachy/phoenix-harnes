@@ -14,6 +14,22 @@ export interface AssistantMailSnapshot {
   }
   readonly startup?: { readonly supported: boolean; readonly enabled: boolean }
   readonly connection: string
+  readonly quota?: {
+    readonly plan: 'free'
+    readonly limits: { readonly inboxes: number; readonly monthlyEmails: number; readonly storageBytes: number }
+    readonly used: { readonly inboxes: number; readonly monthlyEmails: number; readonly storageBytes: number; readonly storedMessages: number; readonly threads: number }
+    readonly remaining: { readonly inboxes: number; readonly monthlyEmails: number; readonly storageBytes: number }
+    readonly utilization: { readonly inboxes: number; readonly monthlyEmails: number; readonly storage: number }
+    readonly level: 'ok' | 'watch' | 'high' | 'critical'
+    readonly measuredAt: string
+    readonly resetsAt: string
+  }
+  readonly cleanup?: {
+    readonly mode: string
+    readonly candidateCount: number
+    readonly deleted?: number
+    readonly failed?: readonly string[]
+  }
   readonly jobs: readonly {
     readonly id: string
     readonly title: string
@@ -55,6 +71,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const [code, setCode] = useState('')
   const [contacts, setContacts] = useState('')
   const [failure, setFailure] = useState<string>()
+  const [cleanup, setCleanup] = useState<AssistantMailSnapshot['cleanup']>()
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -90,7 +107,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     setBusy(true)
     setFailure(undefined)
     try {
-      setSnapshot(await client.call(action, input))
+      const next = await client.call(action, input)
+      setSnapshot(next)
+      if (next.cleanup !== undefined) setCleanup(next.cleanup)
       setKey('')
       setCode('')
     } catch (error) {
@@ -125,6 +144,14 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     if (kiraInbox === undefined) return
     void globalThis.navigator.clipboard.writeText(kiraInbox)
   }
+  const formatBytes = (bytes: number): string => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 GB'
+    return `${(bytes / (1024 ** 3)).toFixed(bytes >= 1024 ** 3 ? 2 : 3)} GB`
+  }
+  const quota = snapshot?.quota
+  const quotaTone = quota?.level === 'critical' ? 'Crítico'
+    : quota?.level === 'high' ? 'Alto'
+      : quota?.level === 'watch' ? 'Vigilar' : 'Normal'
 
   return <section className={styles.mailCard} aria-label="Correo de Kira">
     <div className={styles.hero}>
@@ -216,6 +243,67 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     </div> : null}
 
     {ready ? <>
+      {quota === undefined ? null : <section className={styles.quotaPanel} aria-label="Uso del plan AgentMail Free">
+        <div className={styles.quotaHeader}>
+          <div>
+            <strong>AgentMail Free</strong>
+            <p>Control automático para mantener a Kira dentro del plan gratuito.</p>
+          </div>
+          <span className={quota.level === 'ok' ? styles.quotaOk : styles.quotaWarn}>{quotaTone}</span>
+        </div>
+        <div className={styles.quotaGrid}>
+          <div className={styles.quotaMetric}>
+            <div className={styles.quotaRow}><span>Buzones</span><strong>{quota.used.inboxes}/{quota.limits.inboxes}</strong></div>
+            <progress max={1} value={Math.min(1, quota.utilization.inboxes)} aria-label="Uso de buzones" />
+            <small>Quedan {quota.remaining.inboxes}</small>
+          </div>
+          <div className={styles.quotaMetric}>
+            <div className={styles.quotaRow}><span>Emails este mes</span><strong>{quota.used.monthlyEmails}/{quota.limits.monthlyEmails}</strong></div>
+            <progress max={1} value={Math.min(1, quota.utilization.monthlyEmails)} aria-label="Uso mensual de emails" />
+            <small>Quedan {quota.remaining.monthlyEmails} · reinicia {new Date(quota.resetsAt).toLocaleDateString()}</small>
+          </div>
+          <div className={styles.quotaMetric}>
+            <div className={styles.quotaRow}><span>Almacenamiento</span><strong>{formatBytes(quota.used.storageBytes)}/3.00 GB</strong></div>
+            <progress max={1} value={Math.min(1, quota.utilization.storage)} aria-label="Uso de almacenamiento" />
+            <small>Quedan {formatBytes(quota.remaining.storageBytes)} · {quota.used.storedMessages} mensajes</small>
+          </div>
+        </div>
+        <p className={styles.help}>
+          Phoenix reserva 100 emails de margen para entradas nuevas antes de pausar envíos salientes.
+          La limpieza recupera almacenamiento; el contador mensual solo baja cuando reinicia el período.
+        </p>
+        <div className={styles.actions}>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={busy}
+            onClick={() => { void operate('cleanup-preview', { older_than_days: 7, max_delete: 100 }) }}
+          >
+            Revisar papelera antigua
+          </button>
+          {(cleanup?.candidateCount ?? 0) > 0 ? <button
+            type="button"
+            className={styles.button}
+            disabled={busy}
+            onClick={() => { void operate('cleanup-trash', { older_than_days: 7, max_delete: 100 }) }}
+          >
+            Eliminar {cleanup?.candidateCount ?? 0} de papelera
+          </button> : null}
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={busy}
+            onClick={() => { void operate('refresh') }}
+          >
+            Actualizar telemetría
+          </button>
+        </div>
+        {cleanup === undefined ? null : <p className={styles.help} role="status">
+          {cleanup.mode === 'execute'
+            ? `Limpieza: ${cleanup.deleted ?? 0} eliminados${(cleanup.failed?.length ?? 0) > 0 ? ` · ${cleanup.failed?.length ?? 0} no pudieron eliminarse` : ''}.`
+            : `Papelera de más de 7 días: ${cleanup.candidateCount} mensaje(s) candidatos.`}
+        </p>}
+      </section>}
       <p className={styles.help}>
         Si la PC está apagada, el proveedor conserva los mensajes. Al volver a encender Phoenix,
         Kira recupera los nuevos y evita volver a ejecutar los ya procesados.

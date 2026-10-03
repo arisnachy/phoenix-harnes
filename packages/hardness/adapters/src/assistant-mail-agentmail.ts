@@ -11,6 +11,7 @@ import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
  * @param body Optional JSON body.
  * @param idempotencyKey Immutable outgoing identity.
  * @param signal Optional owner cancellation, combined with the request deadline.
+ * @param method Optional explicit HTTP method for non-GET/POST mailbox operations.
  * @returns Parsed provider JSON.
  */
 export async function agentMailRequest(path: string,
@@ -19,15 +20,18 @@ export async function agentMailRequest(path: string,
   fetcher: typeof fetch,
   body?: unknown,
   idempotencyKey?: string,
-  signal?: AbortSignal): Promise<unknown> {
+  signal?: AbortSignal,
+  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'): Promise<unknown> {
   const response = await fetcher(`https://api.agentmail.to/v0${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
+    method: method ?? (body === undefined ? 'GET' : 'POST'),
     headers: { 'Content-Type': 'application/json', ...(key === undefined ? {} : { Authorization: `Bearer ${key}` }), ...(idempotencyKey === undefined ? {} : { 'Idempotency-Key': idempotencyKey }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
   })
   if (!response.ok) throw new Error(response.status === 429 ? 'mail quota reached; no paid upgrade will be requested' : `mail provider request failed (${response.status})`)
+  if (response.status === 204) return { ok: true }
   const text = await response.text()
+  if (text.length === 0) return { ok: true }
   if (text.length > 2_000_000) throw new Error('mail provider response exceeds limit')
   try { return JSON.parse(text) as unknown } catch { throw new Error('invalid mail provider JSON response') }
 }
@@ -117,16 +121,99 @@ export class AgentMailTransport implements AssistantMailTransport {
     const key = await this.key()
     if (key === undefined) throw new Error('mail credential is unavailable')
     const socket = new WebSocket(`wss://ws.agentmail.to/v0?api_key=${encodeURIComponent(key)}`)
-    socket.addEventListener('open', () => { socket.send(JSON.stringify({ type: 'subscribe', inbox_ids: [this.inboxId], event_types: ['message.received'] })) })
-    socket.addEventListener('message', () => { onMessage() })
-    let closed = false
-    const disconnected = (): void => {
-      if (closed) return
-      closed = true
-      try { onDisconnected?.() } catch { /* Callback failure cannot escape the provider event loop. */ }
-    }
-    socket.addEventListener('close', disconnected)
-    socket.addEventListener('error', disconnected)
-    return () => { closed = true; socket.close() }
+    return new Promise<() => void>((resolve, reject) => {
+      let closed = false
+      let ready = false
+      let disconnectReported = false
+      const reportDisconnected = (): void => {
+        if (disconnectReported) return
+        disconnectReported = true
+        try { onDisconnected?.() } catch { /* Callback failure cannot escape the provider event loop. */ }
+      }
+      const onAbort = (): void => {
+        if (closed) return
+        closed = true
+        clearTimeout(timer)
+        try { socket.close() } catch { /* Best-effort owner cancellation. */ }
+        if (!ready) {
+          ready = true
+          reject(new Error('mail websocket subscription aborted'))
+        }
+      }
+      const dispose = (): void => {
+        if (closed) return
+        closed = true
+        clearTimeout(timer)
+        this.signal?.removeEventListener('abort', onAbort)
+        socket.close()
+      }
+      const failBeforeReady = (message: string): void => {
+        if (ready || closed) return
+        ready = true
+        closed = true
+        clearTimeout(timer)
+        this.signal?.removeEventListener('abort', onAbort)
+        try { socket.close() } catch { /* Best-effort failed handshake cleanup. */ }
+        reject(new Error(message))
+      }
+      const timer = setTimeout(() => { failBeforeReady('mail websocket subscription timed out') }, this.timeoutMs)
+      this.signal?.addEventListener('abort', onAbort, { once: true })
+      socket.addEventListener('open', () => {
+        if (closed) return
+        try {
+          // AgentMail's raw WebSocket protocol uses snake_case on the wire.
+          socket.send(JSON.stringify({
+            type: 'subscribe',
+            inbox_ids: [this.inboxId],
+            event_types: ['message.received'],
+          }))
+        } catch {
+          failBeforeReady('mail websocket subscription failed')
+        }
+      })
+      socket.addEventListener('message', (event) => {
+        if (closed) return
+        let row: Record<string, unknown>
+        try {
+          const data = (event as MessageEvent).data
+          row = mailRecord(JSON.parse(typeof data === 'string' ? data : String(data)))
+        } catch {
+          return
+        }
+        if (row.type === 'subscribed') {
+          const rawIds = Array.isArray(row.inbox_ids) ? row.inbox_ids : Array.isArray(row.inboxIds) ? row.inboxIds : []
+          const inboxes = rawIds.filter((value): value is string => typeof value === 'string')
+          if (inboxes.length > 0 && !inboxes.includes(this.inboxId)) {
+            failBeforeReady('mail websocket subscribed to the wrong inbox')
+            return
+          }
+          if (!ready) {
+            ready = true
+            clearTimeout(timer)
+            resolve(dispose)
+          }
+          return
+        }
+        const eventType = row.eventType ?? row.event_type
+        if ((row.type === 'event' && eventType === 'message.received')
+          || row.type === 'message_received'
+          || eventType === 'message.received') {
+          try { onMessage() } catch { /* Wake callback failure cannot break the provider socket. */ }
+        }
+      })
+      const disconnected = (): void => {
+        if (closed) return
+        if (!ready) {
+          failBeforeReady('mail websocket disconnected before subscription')
+          return
+        }
+        closed = true
+        clearTimeout(timer)
+        this.signal?.removeEventListener('abort', onAbort)
+        reportDisconnected()
+      }
+      socket.addEventListener('close', disconnected)
+      socket.addEventListener('error', disconnected)
+    })
   }
 }

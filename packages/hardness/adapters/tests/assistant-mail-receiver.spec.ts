@@ -70,3 +70,39 @@ it('retains the running checkpoint when its owner stops', async () => {
     expect((await journal.list())[0]?.state).toBe('running')
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
+
+
+it('keeps a pre-execution startup failure pending and retries it on the next reconciliation', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-receiver-retry-'))
+  try {
+    let attempts = 0
+    let sends = 0
+    const transport: AssistantMailTransport = {
+      listMessages: async () => ({ ids: [MailMessageId('incoming')] }),
+      readMessage: async () => message,
+      reply: async () => {
+        sends++
+        return { messageId: MailMessageId('sent'), threadId: MailThreadId('thread') }
+      },
+      subscribe: async () => () => {},
+    }
+    const journal = new MailJournal(join(directory, 'jobs.json'))
+    const receiver = new MailReceiver(
+      transport,
+      journal,
+      new MailOutbox(join(directory, 'outbox.json'), input => transport.reply(input)),
+      async () => ({ state: 'ready', ownerEmail: message.from, inboxId: message.inboxId, contacts: [] }),
+      async () => {
+        attempts++
+        if (attempts === 1) throw new Error('session persistence not mounted yet')
+        return { outcome: 'completed', summary: 'Recovered after startup', evidence: 'Verified after services mounted' }
+      },
+    )
+    await receiver.reconcile()
+    expect((await journal.list())[0]?.state).toBe('pending')
+    await receiver.reconcile()
+    expect((await journal.list())[0]?.state).toBe('replied')
+    expect(attempts).toBe(2)
+    expect(sends).toBe(1)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
