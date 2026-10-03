@@ -199,7 +199,8 @@ function proactivePrompt(
   if (input.preparationResult !== undefined) lines.push(`Prepared result: ${input.preparationResult}`)
   if (conditionEvidence !== undefined) lines.push(`Condition verified true: ${conditionEvidence}`)
   if (input.task.delivery === 'email') {
-    if (config.sendMail !== undefined) {
+    const useKiraMailbox = config.sendMail !== undefined && input.task.senderIdentity !== 'user'
+    if (useKiraMailbox) {
       lines.push('Delivery sender: Phoenix owns a verified Kira mailbox. Do not call a mail connector yourself. Produce the final email body only; the host will send it after this run completes successfully.')
     } else {
       const identity = mailIdentity(input.task.senderIdentity, config)
@@ -385,7 +386,7 @@ export function createProactivityExecutor(
             throw new Error(result.diagnostic ?? `private proactive work ended with ${result.stopReason}`)
           }
           const summary = plainOutput(result.output, config.privateWorkResultChars)
-          if (input.phase === 'deliver' && input.task.delivery === 'email' && config.sendMail !== undefined) {
+          if (input.phase === 'deliver' && input.task.delivery === 'email' && input.task.senderIdentity !== 'user' && config.sendMail !== undefined) {
             if (summary.length === 0) throw new Error('scheduled email produced no message body')
             if (resolvedRecipient === undefined) throw new ProactivityDeferredError('scheduled email has no recipient')
             await config.sendMail({
