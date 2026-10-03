@@ -7,7 +7,7 @@ import type { Agent } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
 import { defineTool } from '@phoenix-ai/dsh-tools'
-import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
+import { CallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId, type Session } from '@phoenix-ai/dsh-session'
 import SessionProjections from '@phoenix-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
@@ -1782,6 +1782,59 @@ describe('Team mailbox and waiting', () => {
 
 
 describe('visible team conversation', () => {
+  it('hides theatrical operational claims until a real tool receipt exists', async () => {
+    const { ctx, lead } = await setup([], {}, true)
+    const child = ctx.sessions.create(SessionId('receipt-child'), {
+      meta: { parentSession: lead.id, origin: 'subagent' },
+    })
+    child.append('user/message', createUserMessage({
+      source: { kind: 'user' },
+      content: content('Envía un correo de prueba por Gmail y confirma el envío.'),
+    }), { surfaceOp: 'append' })
+    child.append('assistant/message', {
+      turn: 1,
+      step: 1,
+      message: createAssistantMessage({
+        source: { provider: 'mock', model: 'mock' },
+        content: content('El correo ya fue enviado.'),
+      }),
+    }, { surfaceOp: 'append' })
+
+    expect((await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages)
+      .toEqual([])
+
+    const callId = CallId('gmail-send')
+    child.append('tool/call', {
+      turn: 1,
+      step: 2,
+      callId,
+      name: 'mcp__Gmail__send_email',
+      arguments: '{"to":"example@example.com"}',
+    })
+    child.append('tool/result', {
+      turn: 1,
+      step: 2,
+      message: createToolResultMessage({
+        callId,
+        content: content('sent'),
+        isError: false,
+      }),
+    }, { surfaceOp: 'append' })
+    child.append('assistant/message', {
+      turn: 1,
+      step: 3,
+      message: createAssistantMessage({
+        source: { provider: 'mock', model: 'mock' },
+        content: content('Correo de prueba enviado correctamente.'),
+      }),
+    }, { surfaceOp: 'append' })
+
+    const visible = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
+    expect(visible).toHaveLength(1)
+    expect(visible[0]?.text).toContain('Correo de prueba enviado correctamente.')
+    expect(visible[0]?.text).toContain('✓ Evidencia ejecutada: send_email')
+  })
+
   it('captures actual generic child text once without injecting the lead or leaking reasoning', async () => {
     const { ctx, lead, adapter } = await setup([], {}, true)
     const child = ctx.sessions.create(SessionId('chat-child'), { meta: { parentSession: lead.id, origin: 'subagent' } })
