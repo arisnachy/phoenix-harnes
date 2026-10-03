@@ -5,6 +5,7 @@ import z from '@phoenix-ai/schemastery'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
 import { TeamMessageId, TeamTaskId, teamSocialStyle } from '@phoenix-ai/dsh-agent-team'
 import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
+import { foldRequestHeader } from '@phoenix-ai/dsh-session'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { InferValue, ValueSchemaSpec } from '@phoenix-ai/dsh-tools'
 
@@ -55,7 +56,7 @@ const POLICY = `Agent Teams is real shared work, not role-play. Kira may delegat
 
 Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Your ordinary text outputs and peer messages appear under your own identity in the main user chat. Address operational questions to peers with send_message/followup_task; the Lead remains responsible for the mission and final answer. User-directed replies preserve their original context. Use team_chat_read to obtain real conversation message IDs and team_chat_react only when a genuine social reaction adds value. Reactions are optional and no reaction is a normal outcome. Choose any valid Unicode emoji that naturally fits the actual message and your own contextual judgment. You are not restricted to the user's visible quick-reaction set; the full Unicode emoji repertoire is available (for example, a Snake game may naturally invite 🐍). Never use a default reaction, react merely because a message arrived, or repeat the same emoji mechanically. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model.
 
-Kira is accountable for planning, supervision, actual verification and the final result. Keep her selected model as the brain and escalation route. Under OpenAI Codex use the configured Luna Max worker profile for bounded execution; outside OpenAI Codex every teammate MUST inherit the currently selected provider and model, and MUST NOT switch to OpenAI Codex/Luna merely because a Luna profile exists, unless the user explicitly requests that route. Reuse existing workers rather than spawning a new team for each message. Never claim a teammate is running from intent alone: spawn_teammate success and the real roster/presence state are authoritative.
+Kira is accountable for planning, supervision, actual verification and the final result. Keep her selected model as the brain and escalation route. Under OpenAI Codex use the configured Luna Max worker profile for bounded execution; outside OpenAI Codex every teammate MUST inherit exactly the currently selected provider and model. A configured profile must never change that route; do not switch to OpenAI Codex/Luna or another model while a different provider/model is selected. Reuse existing workers rather than spawning a new team for each message. Never claim a teammate is running from intent alone: spawn_teammate success and the real roster/presence state are authoritative.
 
 Use team_react for a lightweight acknowledgement when prose would add no new information. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model. A teammate that reaches a material result must send it to lead with purpose result before ending its turn; use question or blocker instead when the Lead must respond first. spawn_teammate is itself the initial assignment, so do not send a duplicate assignment merely to narrate delegation. The root Phoenix chat is the shared Team room: when the user explicitly addresses a known teammate by @name or clearly asks that teammate to act, the Lead must route the substantive request with followup_task, continue supervising it, and let that teammate answer through a real Team message instead of paraphrasing as if it spoke. Requests addressed to Kira or to the Team as a whole remain Lead-orchestrated and may be delegated to one or more teammates.
 
@@ -285,7 +286,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           model_profile: {
             type: 'string' as const,
             enum: Object.keys(config.modelProfiles),
-            description: 'Deployment-configured LLM route. Omit to inherit the Lead route.',
+            description: 'Deployment-configured worker route for OpenAI Codex. Outside OpenAI Codex this is ignored and the exact live selected provider/model is inherited.',
           },
         },
       },
@@ -300,14 +301,21 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const defaultProfile = configuredDefault === undefined
           ? undefined
           : config.modelProfiles[configuredDefault]
-        const profileName = explicitProfile
-          ?? (agent.options.provider === 'openai-codex' && defaultProfile?.provider === 'openai-codex'
-            ? configuredDefault
-            : undefined)
+        // Agent.options is the creation-time route and may be stale after the
+        // user changes the live model selector. The latest request/header is
+        // the authoritative route actually serving this turn/tool call.
+        const requestConfig = foldRequestHeader(agent.session.events)?.config
+        const activeProvider = requestConfig?.provider ?? agent.options.provider
+        const activeModel = requestConfig?.model ?? agent.options.model
+        const activeReasoningEffort = requestConfig?.reasoningEffort ?? agent.options.reasoningEffort
+        const activeMaxTokens = requestConfig?.maxTokens ?? agent.options.maxTokens
+        const profileName = activeProvider === 'openai-codex'
+          ? explicitProfile
+            ?? (defaultProfile?.provider === 'openai-codex' ? configuredDefault : undefined)
+          : undefined
         const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
-        const agentOptions: AgentOptions | undefined = profile === undefined
-          ? undefined
-          : {
+        const agentOptions: AgentOptions | undefined = profile !== undefined
+          ? {
             provider: profile.provider,
             model: profile.model,
             ...profile.maxTokens === undefined ? {} : { maxTokens: profile.maxTokens },
@@ -315,6 +323,14 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
               ? {}
               : { reasoningEffort: profile.reasoningEffort as NonNullable<AgentOptions['reasoningEffort']> },
           }
+          : activeProvider === undefined || activeModel === undefined
+            ? undefined
+            : {
+              provider: activeProvider,
+              model: activeModel,
+              ...activeMaxTokens === undefined ? {} : { maxTokens: activeMaxTokens },
+              ...activeReasoningEffort === undefined ? {} : { reasoningEffort: activeReasoningEffort },
+            }
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: args.name,
           description: args.description,

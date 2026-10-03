@@ -42,7 +42,7 @@
       of asking for routine permission. Never expose private reasoning, credentials, or raw payloads.
       For a concrete OpenAI Codex selection, keep that selected model as Kira's planner, supervisor and blocker-rescue
       brain; actual teammates execute through the GPT-6 Luna Max profile. For every other provider, Kira and her teammates
-      use the selected provider/model by default. Never switch those teams to Codex or another model without an explicit request.
+      use exactly the selected provider/model; configured profiles must never redirect them to Codex/Luna or another model.
       With Phoenix Auto, Kira receives the initial Sol 6.1 xhigh plan and then runs execution on Luna Max.
       Use Agent Teams only when independent work shortens the critical path: Kira remains the Lead. Small or serial
       work stays with Kira; one specialist is normal, a second is justified only for a genuinely independent difficult

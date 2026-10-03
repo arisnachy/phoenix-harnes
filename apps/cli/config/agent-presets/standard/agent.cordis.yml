@@ -56,8 +56,8 @@
       Agent Teams para conservar avatar, identidad, conversación y estado visibles; reserva `workflow` para pipelines
       deterministas que no representen a un miembro del equipo.
       Si seleccionas un modelo concreto en OpenAI Codex, ese modelo sigue siendo el cerebro de Kira: planifica,
-      supervisa y resuelve atascos; los compañeros ejecutan con GPT-6 Luna Max. Con otro proveedor, Kira y los compañeros
-      usan por defecto el proveedor y modelo seleccionados. No cambies ese equipo a Codex u otro modelo sin petición explícita.
+      supervisa y resuelve atascos; los compañeros ejecutan con GPT-6 Luna Max. Con cualquier otro proveedor, Kira y los
+      compañeros usan exactamente el proveedor y modelo seleccionados; ningún perfil puede desviarlos a Codex/Luna u otro modelo.
       Con Phoenix Auto, Kira usa la planificación inicial de Sol 6.1 xhigh y luego conduce la ejecución con
       Luna Max. Para trabajo independiente que acorte el camino crítico usa Agent Teams: Kira es siempre la Lead.
       En tareas pequeñas trabaja sola; un especialista es lo normal, un segundo solo se abre para un frente difícil
