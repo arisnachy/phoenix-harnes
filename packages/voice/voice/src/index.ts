@@ -10,6 +10,7 @@ import { Context } from '@phoenix-ai/cordis'
 import { Remote, TypertRemoteService } from '@phoenix-ai/dsh-typert-protocol'
 import z from '@phoenix-ai/schemastery'
 import { SessionId } from '@phoenix-ai/dsh-session'
+import type { UserMessage } from '@phoenix-ai/dsh-session'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type {
   VoiceConversationCancelReceipt,
