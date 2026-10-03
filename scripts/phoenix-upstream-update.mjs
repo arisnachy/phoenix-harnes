@@ -452,6 +452,9 @@ function outputInspection(inspection, quiet) {
 
 async function cycle(home, mode, options = {}) {
   const quiet = options.quiet === true
+  // Storage maintenance is independent from network/update policy. Turning
+  // upstream intake off must not preserve already-terminal backup snapshots.
+  pruneObsoleteTransactionBackups(home)
   if (mode === 'off') {
     saveState(home, { mode, status: 'off', providers: {} })
     return 0
