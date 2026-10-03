@@ -12,3 +12,4 @@ export declare function buildActivationPlan(
     candidate: { managedSkills?: unknown }
   }>,
 ): Array<{ kind: string; from: string; to: string; state: string }>
+export declare function pruneObsoleteTransactionBackups(home: string): { removed: number }
