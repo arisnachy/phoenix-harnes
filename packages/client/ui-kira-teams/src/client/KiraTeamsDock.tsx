@@ -1,7 +1,4 @@
 import { useEffect, useState } from 'react'
-import {
-  IconChevronDownOutline14, IconRefreshOutline14,
-} from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ILayout } from '@phoenix-ai/dsh-client-ui-layout/client'
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import type {
@@ -75,16 +72,6 @@ export const KIRA_ROSTER: readonly KiraRosterEntry[] = [
   { kind: 'orbita', name: 'Órbita', tagline: 'Mantiene runtime, tareas y operaciones en curso', specialty: 'skill.runtime', skills: ['automation', 'orchestration', 'performance'] },
 ] as const
 
-const DETAILS_KEY = 'dsh.kira-teams.details-open'
-
-function initialDetailsOpen(): boolean {
-  try {
-    return window.localStorage.getItem(DETAILS_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
 export function activityOf(summary: SessionSummary): SubagentActivityProjection | undefined {
   return summary.projectionValues?.subagentActivity
 }
@@ -113,16 +100,6 @@ function compactAgentAuthoredText(value: string, maxLength: number): string {
 export function liveActivityTextOf(summary: SessionSummary, maxLength = 72): string {
   const authored = activityOf(summary)?.text
   return authored === undefined ? '' : compactAgentAuthoredText(authored, maxLength)
-}
-
-function visibleLiveActivityTextOf(
-  summary: SessionSummary,
-  actionKey: KiraTeamsKey,
-  t: TranslateNS<typeof NS>,
-): string {
-  const authored = liveActivityTextOf(summary)
-  if (authored.length === 0) return ''
-  return authored.toLocaleLowerCase() === t(actionKey).trim().toLocaleLowerCase() ? '' : authored
 }
 
 function normalizedWorkText(summary: SessionSummary): string {
@@ -392,21 +369,20 @@ function openAgent(card: KiraRosterCard, openChild: (address: SubagentAddress) =
 }
 
 /**
- * Render the fixed-height KIRA activity strip plus the right-side live-agent rail.
+ * Render only the slim live-agent rail.
  *
- * Agent count never changes the strip height: the strip shows at most three stacked
- * portraits and a +N overflow indicator, while the rail owns individual selection.
+ * Public model-authored teammate text belongs exclusively to the shared transcript.
+ * The rail is presence/navigation only, so a subagent response can never appear here
+ * before its durable chat message is available to the user.
  */
-export function KiraTeamsDock({ useList, openChild, refresh, t, layout }: KiraTeamsDockProps) {
+export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockProps) {
   const state = useList(value => value)
   const { root, rows } = lineageMembers(state)
   const cards = liveCardsOf(rows, root?.projectionValues?.teamChatParticipants)
-  const [detailsOpen, setDetailsOpen] = useState(initialDetailsOpen)
   const [selectedId, setSelectedId] = useState<string>()
-  const runningCount = rows.reduce((total, row) => total + (row.summary.running ? 1 : 0), 0)
 
   useEffect(() => {
-    // KIRA stays in the overlay layer; neither the strip nor the rail consumes chat width.
+    // KIRA stays in the overlay layer; the rail never consumes chat width.
     layout.setWorkspaceOccupant('subagent', false)
     return () => { layout.setWorkspaceOccupant('subagent', false) }
   }, [layout])
@@ -416,156 +392,15 @@ export function KiraTeamsDock({ useList, openChild, refresh, t, layout }: KiraTe
   const selectedCard = cards.find(card => String(card.summary?.id) === selectedId)
     ?? cards.find(card => card.summary?.id === state.current)
     ?? cards[0]
-  const selectedSummary = selectedCard?.summary
-  if (selectedCard === undefined || selectedSummary === undefined) return null
-
-  const selectedActionKey = activityKeyOf(selectedSummary)
-  const selectedActivity = visibleLiveActivityTextOf(selectedSummary, selectedActionKey, t)
-
-  const membersKey = cards.length === 1 ? 'count.members.one' : 'count.members.other'
-  const runningKey = runningCount === 1 ? 'count.running.one' : 'count.running.other'
-  const countCopy = runningCount > 0
-    ? `${t(membersKey, { count: cards.length })} · ${t(runningKey, { count: runningCount })}`
-    : t(membersKey, { count: cards.length })
-
-  const stackCards = cards.slice(0, 3)
-  const hiddenStackCount = Math.max(0, cards.length - stackCards.length)
-  const toggleDetails = (): void => {
-    setDetailsOpen((current) => {
-      const next = !current
-      try {
-        window.localStorage.setItem(DETAILS_KEY, next ? '1' : '0')
-      } catch {
-        /* persistence is best-effort */
-      }
-      return next
-    })
-  }
+  const selectedSummaryId = selectedCard?.summary?.id
 
   return (
     <div
       className={css.root}
       data-kira-teams
-      data-kira-layout="activity-rail"
+      data-kira-layout="agent-rail"
       data-kira-count={cards.length}
     >
-      <section className={css.strip} aria-label={t('team.aria')} data-kira-activity-strip>
-        <span className={css.teamBlock}>
-          <span className={css.avatarStack} aria-hidden="true">
-            {stackCards.map((card) => {
-              const summary = card.summary
-              if (summary === undefined) return null
-              return (
-                <span
-                  key={String(summary.id)}
-                  className={css.stackAvatar}
-                  data-kira-stack-avatar
-                >
-                  <ModelActivityAvatar
-                    kind={card.kind}
-                    activity={activityOf(summary)}
-                    running={summary.running}
-                    pending={summary.pendingInteraction !== undefined}
-                  />
-                </span>
-              )
-            })}
-            {hiddenStackCount > 0 && (
-              <span className={css.stackOverflow} data-kira-stack-overflow>
-                +{hiddenStackCount}
-              </span>
-            )}
-          </span>
-          <span className={css.teamCopy}>
-            <span className={css.teamTitle}>{t('dock.title')}</span>
-            <span className={css.teamCount} title={countCopy}>{countCopy}</span>
-          </span>
-        </span>
-
-        <button
-          type="button"
-          className={css.focusActivity}
-          data-running={selectedSummary.running ? 'true' : 'false'}
-          aria-label={`${selectedCard.name} · ${t(selectedActionKey)}`}
-          title={selectedSummary.displayTitle}
-          onClick={() => { openAgent(selectedCard, openChild) }}
-        >
-          <span className={css.focusHeading}>
-            <span className={css.focusName}>{selectedCard.name}</span>
-            <span className={css.focusRole}>{t(selectedCard.specialty)}</span>
-            <span className={css.focusStatus} data-activity={selectedActionKey}>
-              <span className={css.statusDot} aria-hidden="true" />
-              {t(selectedActionKey)}
-            </span>
-          </span>
-          {selectedActivity.length > 0 && (
-            <span className={css.focusText} title={selectedActivity}>{selectedActivity}</span>
-          )}
-          <span className={css.activityPulse} aria-hidden="true" />
-        </button>
-
-        <button
-          type="button"
-          className={css.iconButton}
-          aria-label={t('dock.refresh')}
-          onClick={() => { refresh(root.id) }}
-        >
-          <IconRefreshOutline14 />
-        </button>
-        <button
-          type="button"
-          className={`${css.iconButton} ${detailsOpen ? css.detailsButtonOpen : ''}`}
-          aria-expanded={detailsOpen}
-          aria-label={detailsOpen ? t('dock.collapse') : t('dock.expand')}
-          onClick={toggleDetails}
-        >
-          <IconChevronDownOutline14 />
-        </button>
-      </section>
-
-      {detailsOpen && (
-        <section className={css.detailsPanel} aria-label={t('team.aria')} data-kira-details>
-          {cards.map((card) => {
-            const summary = card.summary
-            if (summary === undefined) return null
-            const actionKey = activityKeyOf(summary)
-            const liveActivity = visibleLiveActivityTextOf(summary, actionKey, t)
-            const selected = String(summary.id) === String(selectedSummary.id)
-            return (
-              <button
-                key={String(summary.id)}
-                type="button"
-                className={`${css.detailRow} ${selected ? css.detailRowSelected : ''}`}
-                aria-pressed={selected}
-                data-kira-agent-detail
-                onClick={() => { setSelectedId(String(summary.id)); openAgent(card, openChild) }}
-                onDoubleClick={() => { openAgent(card, openChild) }}
-              >
-                <span className={css.detailPortrait}>
-                  <ModelActivityAvatar
-                    kind={card.kind}
-                    activity={activityOf(summary)}
-                    running={summary.running}
-                    pending={summary.pendingInteraction !== undefined}
-                  />
-                </span>
-                <span className={css.detailIdentity}>
-                  <span className={css.detailName}>{card.name}</span>
-                  <span className={css.detailRole}>{t(card.specialty)}</span>
-                </span>
-                <span className={css.detailStatus} data-activity={actionKey}>
-                  <span className={css.statusDot} aria-hidden="true" />
-                  {t(actionKey)}
-                </span>
-                <span className={css.detailAction} title={liveActivity}>
-                  {liveActivity}
-                </span>
-              </button>
-            )
-          })}
-        </section>
-      )}
-
       <aside className={css.rail} aria-label={t('team.aria')} data-kira-agent-rail-container>
         <span className={css.railBrand} aria-hidden="true">
           <span className={css.railBrandMark} />
@@ -576,7 +411,7 @@ export function KiraTeamsDock({ useList, openChild, refresh, t, layout }: KiraTe
             const summary = card.summary
             if (summary === undefined) return null
             const actionKey = activityKeyOf(summary)
-            const selected = String(summary.id) === String(selectedSummary.id)
+            const selected = String(summary.id) === String(selectedSummaryId)
             return (
               <button
                 key={String(summary.id)}
