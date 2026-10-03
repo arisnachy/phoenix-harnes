@@ -2,6 +2,8 @@
 
 import type {
   VoiceConversationCancelReceipt,
+  VoiceConversationRealtimeSpeakReceipt,
+  VoiceConversationRealtimeSpeakRequest,
   VoiceConversationRealtimeStartReceipt,
   VoiceConversationRealtimeStartRequest,
   VoiceConversationRealtimeStatus,
@@ -12,7 +14,7 @@ import type {
 } from '@phoenix-ai/dsh-api-remotes/client'
 import {
   conversationalSpeechText, createSpeechOutput, hasSpeechOutput, nextStreamingSpeechSegment,
-  type SpeechOutput,
+  type SpeechOutput, type SpeechVoiceGender,
 } from './speech-output.ts'
 
 /** States exposed by the short-lived browser recognition session. */
@@ -45,6 +47,9 @@ export interface VoiceAssistantRemote {
   conversationRealtimeStart?(
     request: VoiceConversationRealtimeStartRequest,
   ): Promise<VoiceRemoteResult<VoiceConversationRealtimeStartReceipt>>
+  conversationRealtimeSpeak?(
+    request: VoiceConversationRealtimeSpeakRequest,
+  ): Promise<VoiceRemoteResult<VoiceConversationRealtimeSpeakReceipt>>
   conversationRealtimeStop?(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationRealtimeStopReceipt>>
 }
 
@@ -73,7 +78,9 @@ let voiceAssistantSpokenText = ''
 let voiceAssistantRemote: VoiceAssistantRemote | undefined
 let voiceAssistantRemoteNatural = false
 let voiceAssistantRemoteEpoch = 0
+let voiceAssistantGender: SpeechVoiceGender = 'feminine'
 let remoteSpeech: RemoteSpeechState | undefined
+let realtimeSpeech: RemoteSpeechState | undefined
 
 /** Current provider/model route read from the Host only when voice starts. */
 export interface VoiceModelRoute {
@@ -89,6 +96,8 @@ interface CodexRealtimeVoiceSession {
   readonly microphone: MediaStream
   readonly events: RTCDataChannel
   readonly audio: HTMLAudioElement
+  readonly onTranscript?: (text: string) => void
+  readonly deliveredTranscripts: Set<string>
 }
 
 let voiceModelRouteResolver: VoiceModelRouteResolver | undefined
@@ -126,7 +135,7 @@ function browserSpeech(messageKey: string, text: string, final: boolean): void {
       if (!voiceAssistantSnapshot.active || voiceAssistantSpeechKey !== messageKey) return
       if (state === 'speaking') publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
       else publishVoiceIdle()
-    })
+    }, undefined, undefined, voiceAssistantGender)
   }
   voiceAssistantSpeech.update(text, final)
 }
@@ -205,6 +214,126 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
   return true
 }
 
+
+function resetRealtimeSpeech(): void {
+  realtimeSpeech = undefined
+}
+
+function realtimeSpeechFinished(state: RemoteSpeechState, generation: number): void {
+  if (realtimeSpeech !== state || state.generation !== generation) return
+  state.pending = Math.max(0, state.pending - 1)
+  if (state.pending === 0) {
+    if (state.final) realtimeSpeech = undefined
+    publishVoiceIdle()
+  }
+}
+
+function streamCodexRealtimeSpeech(messageKey: string, text: string, final: boolean): boolean {
+  const session = codexRealtimeVoiceSession
+  const remote = voiceAssistantRemote
+  if (session === undefined || remote?.conversationRealtimeSpeak === undefined) return false
+  const transcript = conversationalSpeechText(text)
+  if (transcript === '') return true
+
+  let state = realtimeSpeech
+  if (state === undefined || state.key !== messageKey || !transcript.startsWith(state.transcript)) {
+    state = {
+      key: messageKey,
+      generation: (state?.generation ?? 0) + 1,
+      transcript: '',
+      through: 0,
+      sequence: 0,
+      pending: 0,
+      final: false,
+    }
+    realtimeSpeech = state
+  }
+  state.transcript = transcript
+  state.final = final
+
+  let queued = false
+  while (true) {
+    const planned = nextStreamingSpeechSegment(state.transcript, state.through, final)
+    if (planned === undefined) break
+    state.through = planned.end
+    const generation = state.generation
+    state.sequence += 1
+    state.pending += 1
+    queued = true
+    publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
+    void remote.conversationRealtimeSpeak({
+      key: session.key,
+      text: planned.text,
+    }).then((result) => {
+      if (realtimeSpeech !== state || state.generation !== generation) return
+      if (!result.ok || !result.value.accepted) {
+        resetRealtimeSpeech()
+        return
+      }
+      realtimeSpeechFinished(state, generation)
+    }, () => {
+      if (realtimeSpeech === state && state.generation === generation) resetRealtimeSpeech()
+    })
+  }
+
+  if (final && !queued && state.pending === 0) {
+    realtimeSpeech = undefined
+    publishVoiceIdle()
+  }
+  return true
+}
+
+/**
+ * Extract a completed human utterance from either the browser Realtime data
+ * channel or a forwarded Codex app-server transcript notification.
+ */
+export function codexRealtimeUserTranscript(payload: string): string | undefined {
+  let value: Record<string, unknown>
+  try {
+    const parsed = JSON.parse(payload) as unknown
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return undefined
+    value = parsed as Record<string, unknown>
+  } catch {
+    return undefined
+  }
+  const type = typeof value.type === 'string'
+    ? value.type
+    : typeof value.method === 'string' ? value.method : ''
+  const params = typeof value.params === 'object' && value.params !== null && !Array.isArray(value.params)
+    ? value.params as Record<string, unknown>
+    : undefined
+
+  if (type === 'thread/realtime/transcript/done') {
+    if (params?.role !== 'user') return undefined
+    const text = typeof params.text === 'string' ? params.text.trim() : ''
+    return text === '' ? undefined : text
+  }
+
+  const inputDone = type === 'conversation.item.input_audio_transcription.completed'
+    || type === 'input_audio_transcription.completed'
+    || (type.includes('input') && type.includes('transcription') && type.includes('completed'))
+  if (!inputDone) return undefined
+  const text = typeof value.transcript === 'string'
+    ? value.transcript.trim()
+    : typeof value.text === 'string' ? value.text.trim() : ''
+  return text === '' ? undefined : text
+}
+
+/** Speak a fresh background result/attention notice only when native Realtime is actively open. */
+export function speakVoiceAssistantNotice(text: string): boolean {
+  const session = codexRealtimeVoiceSession
+  const remote = voiceAssistantRemote
+  const spoken = conversationalSpeechText(text)
+  if (!voiceAssistantSnapshot.active || session === undefined
+    || remote?.conversationRealtimeSpeak === undefined || spoken === '') return false
+  voiceAssistantSpokenText = spoken
+  publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
+  void remote.conversationRealtimeSpeak({ key: session.key, text: spoken }).finally(() => {
+    if (voiceAssistantSnapshot.active) publishVoiceIdle()
+  })
+  return true
+}
+
 /**
  * Attach a lightweight current-model resolver. The conversation package stays
  * independent of the model-selector UI and asks the Host's session.models
@@ -264,6 +393,7 @@ export type CodexRealtimeVoiceStartResult =
  */
 export async function tryStartCodexRealtimeVoice(
   sessionKey: string,
+  onTranscript?: (text: string) => void,
 ): Promise<CodexRealtimeVoiceStartResult> {
   const resolveRoute = voiceModelRouteResolver
   if (resolveRoute === undefined) return { kind: 'failed', reason: 'route-unavailable' }
@@ -334,6 +464,13 @@ export async function tryStartCodexRealtimeVoice(
     events.onmessage = (event) => {
       if (codexRealtimeVoiceGeneration !== generation || typeof event.data !== 'string') return
       updateCodexRealtimePhase(event.data)
+      const transcript = codexRealtimeUserTranscript(event.data)
+      if (transcript === undefined || onTranscript === undefined) return
+      const active = codexRealtimeVoiceSession
+      const key = normalizeEchoText(transcript)
+      if (active?.key !== sessionKey || key === '' || active.deliveredTranscripts.has(key)) return
+      active.deliveredTranscripts.add(key)
+      onTranscript(transcript)
     }
 
     const offer = await peer.createOffer()
@@ -354,7 +491,15 @@ export async function tryStartCodexRealtimeVoice(
     await peer.setRemoteDescription({ type: 'answer', sdp: result.value.answerSdp })
     if (generation !== codexRealtimeVoiceGeneration) throw new Error('start-superseded')
 
-    codexRealtimeVoiceSession = { key: sessionKey, peer, microphone, events, audio }
+    codexRealtimeVoiceSession = {
+      key: sessionKey,
+      peer,
+      microphone,
+      events,
+      audio,
+      ...(onTranscript === undefined ? {} : { onTranscript }),
+      deliveredTranscripts: new Set(),
+    }
     setVoiceAssistantActive(true)
     setVoiceAssistantListening(true)
 
@@ -395,6 +540,7 @@ export async function stopCodexRealtimeVoice(): Promise<boolean> {
   const session = codexRealtimeVoiceSession
   codexRealtimeVoiceGeneration += 1
   codexRealtimeVoiceSession = undefined
+  resetRealtimeSpeech()
   if (session === undefined) return false
 
   setVoiceAssistantListening(false)
@@ -487,6 +633,12 @@ export async function refreshVoiceAssistantRemote(): Promise<boolean> {
     const result = await remote.conversationStatus()
     if (epoch !== voiceAssistantRemoteEpoch || voiceAssistantRemote !== remote) return false
     voiceAssistantRemoteNatural = result.ok && result.value.enabled && result.value.natural
+    if (result.ok) {
+      const gender = result.value.assistantGender
+      if (gender === 'masculine' || gender === 'neutral' || gender === 'feminine') {
+        voiceAssistantGender = gender
+      }
+    }
     return voiceAssistantRemoteNatural
   } catch {
     if (epoch === voiceAssistantRemoteEpoch && voiceAssistantRemote === remote) {
@@ -525,6 +677,7 @@ export function setVoiceAssistantActive(active: boolean): void {
     voiceAssistantSpeech = undefined
     voiceAssistantSpeechKey = undefined
     resetRemoteSpeech(true)
+    resetRealtimeSpeech()
     voiceAssistantMicListening = false
     voiceAssistantSpokenText = ''
     spokenAssistantMessages.clear()
@@ -557,12 +710,14 @@ export function interruptVoiceAssistantSpeech(): boolean {
   if (!voiceAssistantSnapshot.active) return false
   const hadBrowserSpeech = voiceAssistantSpeech !== undefined
   const hadRemoteSpeech = remoteSpeech !== undefined
+  const hadRealtimeSpeech = realtimeSpeech !== undefined
   voiceAssistantSpeech?.dispose()
   voiceAssistantSpeech = undefined
   voiceAssistantSpeechKey = undefined
   resetRemoteSpeech(true)
-  if (hadBrowserSpeech || hadRemoteSpeech) publishVoiceIdle()
-  return hadBrowserSpeech || hadRemoteSpeech
+  resetRealtimeSpeech()
+  if (hadBrowserSpeech || hadRemoteSpeech || hadRealtimeSpeech) publishVoiceIdle()
+  return hadBrowserSpeech || hadRemoteSpeech || hadRealtimeSpeech
 }
 
 /**
@@ -598,10 +753,15 @@ export function streamVoiceAssistantResponse(
   messageTime: number,
   final = false,
 ): void {
-  if (!voiceAssistantSnapshot.active || codexRealtimeVoiceSession !== undefined
+  if (!voiceAssistantSnapshot.active
     || text.trim() === '' || messageTime < voiceAssistantSnapshot.activatedAt - 1_000) return
   if (spokenAssistantMessages.has(messageKey)) return
   voiceAssistantSpokenText = text
+
+  if (codexRealtimeVoiceSession !== undefined) {
+    if (streamCodexRealtimeSpeech(messageKey, text, final) && final) spokenAssistantMessages.add(messageKey)
+    return
+  }
 
   if (streamRemoteSpeech(messageKey, text, final)) {
     voiceAssistantSpeech?.dispose()
