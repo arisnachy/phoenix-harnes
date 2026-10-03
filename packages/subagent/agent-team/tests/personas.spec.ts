@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { KIRA_SOCIAL_STYLE, TEAM_PERSONAS, teamPersonaGender, teamSocialStyle } from '../src/personas.ts'
+import {
+  KIRA_SOCIAL_STYLE,
+  TEAM_PERSONAS,
+  TEAM_SKILL_POOLS,
+  selectTeamPersonaName,
+  teamPersonaGender,
+  teamSocialStyle,
+} from '../src/personas.ts'
 
 describe('KIRA Team social personalities', () => {
   it('keeps all twenty specialists distinct and compact', () => {
@@ -37,6 +44,22 @@ describe('KIRA Team social personalities', () => {
     expect(teamSocialStyle('la-forja', 'teammate')).toContain('Your persona is male')
     expect(teamSocialStyle('la-forja', 'teammate')).toContain('listo/preparado')
     expect(teamSocialStyle('lead', 'lead')).toContain('Kira is feminine')
+  })
+
+  it('routes unnamed work to unused matching specialists instead of a universal La Forja default', () => {
+    const security = selectTeamPersonaName('security audit authentication risk', [])
+    expect(TEAM_SKILL_POOLS.security).toContain(security)
+
+    const secondSecurity = selectTeamPersonaName('security audit authentication risk', [security])
+    expect(TEAM_SKILL_POOLS.security).toContain(secondSecurity)
+    expect(secondSecurity).not.toBe(security)
+
+    const design = selectTeamPersonaName('responsive UX visual design and animation', [])
+    expect(TEAM_SKILL_POOLS.design).toContain(design)
+    expect(design).not.toBe('atlas')
+
+    const engineering = selectTeamPersonaName('debug and repair TypeScript implementation', [])
+    expect(TEAM_SKILL_POOLS.engineering).toContain(engineering)
   })
 
   it('keeps unknown worker names natural instead of inventing a persona', () => {
