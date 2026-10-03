@@ -414,7 +414,7 @@ export function installAssistantMail(ctx: Context,
     return quotaCache
   }
   const assertFreeSendHeadroom = async (): Promise<void> => {
-    const quota = await quotaSnapshot()
+    const quota = await quotaSnapshot(true)
     if (quota.used.monthlyEmails >= FREE_MONTHLY_EMAIL_LIMIT - FREE_EMAIL_RESERVE) {
       throw new Error(`AgentMail Free guard paused outbound mail at ${quota.used.monthlyEmails}/${FREE_MONTHLY_EMAIL_LIMIT} emails to preserve ${FREE_EMAIL_RESERVE} messages of inbound headroom until ${quota.resetsAt}`)
     }
@@ -535,9 +535,13 @@ export function installAssistantMail(ctx: Context,
           ...(remove === undefined ? {} : { remove_labels: remove }),
         })
       }
-      case 'send_message':
+      case 'send_message': {
         await assertFreeSendHeadroom()
-        return providerOperation(`/inboxes/${encodedInbox}/messages/send`, 'POST', messageBody(input, account), idempotency)
+        const result = await providerOperation(`/inboxes/${encodedInbox}/messages/send`, 'POST', messageBody(input, account), idempotency)
+        quotaCache = undefined
+        quotaCacheAt = 0
+        return result
+      }
       case 'reply_message':
       case 'reply_all': {
         const original = mailRecord(await providerOperation(`/inboxes/${encodedInbox}/messages/${messageId()}`))
@@ -561,16 +565,23 @@ export function installAssistantMail(ctx: Context,
           body.to = [sender]
           body.reply_all = false
         }
-        return providerOperation(
+        const result = await providerOperation(
           `/inboxes/${encodedInbox}/messages/${messageId()}/${action === 'reply_all' ? 'reply-all' : 'reply'}`,
           'POST',
           body,
           idempotency,
         )
+        quotaCache = undefined
+        quotaCacheAt = 0
+        return result
       }
-      case 'forward_message':
+      case 'forward_message': {
         await assertFreeSendHeadroom()
-        return providerOperation(`/inboxes/${encodedInbox}/messages/${messageId()}/forward`, 'POST', messageBody(input, account), idempotency)
+        const result = await providerOperation(`/inboxes/${encodedInbox}/messages/${messageId()}/forward`, 'POST', messageBody(input, account), idempotency)
+        quotaCache = undefined
+        quotaCacheAt = 0
+        return result
+      }
       case 'delete_message':
         requirePermanent(input, 'message')
         return providerOperation(`/inboxes/${encodedInbox}/messages/${messageId()}`, 'DELETE')
@@ -656,10 +667,13 @@ export function installAssistantMail(ctx: Context,
         }
         const add = operationStrings(input.add_labels, 'add_labels')
         const remove = operationStrings(input.remove_labels, 'remove_labels')
-        return providerOperation(`/inboxes/${encodedInbox}/drafts/${draftId()}/send`, 'POST', {
+        const result = await providerOperation(`/inboxes/${encodedInbox}/drafts/${draftId()}/send`, 'POST', {
           ...(add === undefined ? {} : { add_labels: add }),
           ...(remove === undefined ? {} : { remove_labels: remove }),
         }, idempotency)
+        quotaCache = undefined
+        quotaCacheAt = 0
+        return result
       }
       case 'delete_draft':
         requirePermanent(input, 'draft')
@@ -675,7 +689,7 @@ export function installAssistantMail(ctx: Context,
         return providerOperation(`/inboxes/${encodedInbox}`)
       case 'create_inbox': {
         requireInboxAdmin(input)
-        const quota = await quotaSnapshot()
+        const quota = await quotaSnapshot(true)
         if (quota.used.inboxes >= FREE_INBOX_LIMIT) throw new Error('AgentMail Free inbox limit reached (3/3); delete an unused inbox before creating another')
         const body: Record<string, unknown> = {}
         if (input.username !== undefined) body.username = operationString(input.username, 'username', 128)
@@ -843,6 +857,8 @@ export function installAssistantMail(ctx: Context,
       assertActive()
       await outbox.flush()
       await delivery(input.idempotencyKey)
+      quotaCache = undefined
+      quotaCacheAt = 0
     }) },
     async attention() {
       const rows: ProactivityAttentionItem[] = []

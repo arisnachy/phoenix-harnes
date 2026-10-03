@@ -59,3 +59,23 @@ describe('Kira AgentMail operations tool', () => {
     }))
   })
 })
+
+
+it('forwards Free quota status and explicit trash cleanup operations to the resident host', async () => {
+  const operate = vi.fn(async (action: string) => action === 'quota_status'
+    ? { plan: 'free', remaining: { monthlyEmails: 2500 } }
+    : { mode: 'execute', deleted: 3 })
+  const tool = createAssistantMailOperationsTool(() => control(operate))
+  await tool.execute({ action: 'quota_status', refresh: true }, { callId: 'quota' } as never)
+  await tool.execute({
+    action: 'cleanup_execute',
+    older_than_days: 7,
+    max_delete: 100,
+    confirm_cleanup: true,
+  }, { callId: 'cleanup' } as never)
+  expect(operate).toHaveBeenNthCalledWith(1, 'quota_status', expect.objectContaining({ refresh: true }))
+  expect(operate).toHaveBeenNthCalledWith(2, 'cleanup_execute', expect.objectContaining({
+    older_than_days: 7,
+    confirm_cleanup: true,
+  }))
+})
