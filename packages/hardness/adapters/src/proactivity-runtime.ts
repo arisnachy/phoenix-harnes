@@ -32,6 +32,8 @@ export interface ProactivityRuntimeConfig {
   readonly userMailIdentity?: string
   readonly harnessMailIdentity?: string
   readonly resolveDefaultMailRecipient?: () => Promise<string | undefined>
+  /** Host-owned Kira mailbox sender used for verified email delivery when available. */
+  readonly sendMail?: (input: { readonly to: string; readonly subject: string; readonly text: string; readonly idempotencyKey: string }) => Promise<void>
   /**
    * Re-compose a persisted session before a scheduler-owned resume is published.
    * This restores the same preset/tool world the original conversation used.
@@ -197,14 +199,18 @@ function proactivePrompt(
   if (input.preparationResult !== undefined) lines.push(`Prepared result: ${input.preparationResult}`)
   if (conditionEvidence !== undefined) lines.push(`Condition verified true: ${conditionEvidence}`)
   if (input.task.delivery === 'email') {
-    const identity = mailIdentity(input.task.senderIdentity, config)
-    if (identity !== undefined) {
-      lines.push(`Delivery sender: use configured identity reference ${JSON.stringify(identity)}.`)
+    if (config.sendMail !== undefined) {
+      lines.push('Delivery sender: Phoenix owns a verified Kira mailbox. Do not call a mail connector yourself. Produce the final email body only; the host will send it after this run completes successfully.')
     } else {
-      lines.push('Delivery sender: no dedicated mail identity reference is configured; use the currently authorized connected mail account through the normal governed mail tool. Do not invent an account or identity.')
+      const identity = mailIdentity(input.task.senderIdentity, config)
+      if (identity !== undefined) {
+        lines.push(`Delivery sender: use configured identity reference ${JSON.stringify(identity)}.`)
+      } else {
+        lines.push('Delivery sender: no dedicated mail identity reference is configured; use the currently authorized connected mail account through the normal governed mail tool. Do not invent an account or identity.')
+      }
+      lines.push('Do not expose credentials. Revalidate authorization and use the normal governed mail tool.')
     }
     if (resolvedRecipient !== undefined) lines.push(`Recipient: ${resolvedRecipient}`)
-    lines.push('Do not expose credentials. Revalidate authorization and use the normal governed mail tool.')
   } else if (input.task.delivery === 'work') {
     lines.push('Delivery: complete the requested work and return a concise result.')
   } else {
@@ -378,7 +384,19 @@ export function createProactivityExecutor(
           if (result.stopReason !== 'completed') {
             throw new Error(result.diagnostic ?? `private proactive work ended with ${result.stopReason}`)
           }
-          return { summary: plainOutput(result.output, config.privateWorkResultChars) }
+          const summary = plainOutput(result.output, config.privateWorkResultChars)
+          if (input.phase === 'deliver' && input.task.delivery === 'email' && config.sendMail !== undefined) {
+            if (summary.length === 0) throw new Error('scheduled email produced no message body')
+            if (resolvedRecipient === undefined) throw new ProactivityDeferredError('scheduled email has no recipient')
+            await config.sendMail({
+              to: resolvedRecipient,
+              subject: input.task.title,
+              text: summary,
+              idempotencyKey: input.idempotencyKey,
+            })
+            return { summary: `email sent to ${resolvedRecipient}: ${summary}` }
+          }
+          return { summary }
         } finally {
           await run.dispose()
         }
