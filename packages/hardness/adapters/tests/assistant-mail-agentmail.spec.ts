@@ -15,6 +15,24 @@ describe('AgentMail transport', () => {
     expect(requests[1]?.init?.headers).toMatchObject({ 'Idempotency-Key': 'stable-job' })
     expect(JSON.parse((requests[1]?.init?.body as string))).toMatchObject({ to: ['owner@example.com'], reply_all: false })
   })
+  it('sends a new Kira message with a stable idempotency key', async () => {
+    const requests: { url: string; init: RequestInit | undefined }[] = []
+    const transport = new AgentMailTransport(async () => 'private-key', 'kira@agentmail.to', 1000, async (url, init) => {
+      requests.push({ url: typeof url === 'string' ? url : url instanceof URL ? url.href : url.url, init })
+      return Response.json({ message_id: 'sent-new', thread_id: 'thread-new' })
+    })
+    await expect(transport.send('owner@example.com', 'Resultado Phoenix', 'Trabajo terminado', 'task-occurrence-1')).resolves.toEqual({
+      messageId: 'sent-new',
+      threadId: 'thread-new',
+    })
+    expect(requests[0]?.url).toContain('/inboxes/kira%40agentmail.to/messages/send')
+    expect(requests[0]?.init?.headers).toMatchObject({ 'Idempotency-Key': 'task-occurrence-1' })
+    expect(JSON.parse(requests[0]?.init?.body as string)).toMatchObject({
+      to: ['owner@example.com'],
+      subject: 'Resultado Phoenix',
+      text: 'Trabajo terminado',
+    })
+  })
   it('reports quota without exposing secrets or automatically upgrading', async () => {
     let requests = 0
     const transport = new AgentMailTransport(async () => 'private-key', 'kira@agentmail.to', 1000, async () => {
