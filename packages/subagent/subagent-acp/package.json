@@ -42,7 +42,7 @@
     "@phoenix-ai/cordis": "workspace:^"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "0.25.1",
+    "@agentclientprotocol/sdk": "1.3.0",
     "@phoenix-ai/schemastery": "workspace:^"
   },
   "devDependencies": {
