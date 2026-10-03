@@ -3,7 +3,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
-import { TeamMessageId, TeamTaskId } from '@phoenix-ai/dsh-agent-team'
+import { TeamMessageId, TeamTaskId, teamSocialStyle } from '@phoenix-ai/dsh-agent-team'
 import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { InferValue, ValueSchemaSpec } from '@phoenix-ai/dsh-tools'
@@ -264,7 +264,8 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       order: 60,
       text: () => {
         const membership = ctx.agentTeams.membership(agent)
-        return `${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.`
+        const socialStyle = teamSocialStyle(membership.name, membership.role)
+        return `${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}`
       },
     }))
 
