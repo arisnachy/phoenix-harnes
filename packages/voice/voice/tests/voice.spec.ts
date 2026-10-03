@@ -171,6 +171,33 @@ describe('Codex realtime app-server notifications', () => {
     bridge.close()
   })
 
+  it('routes finalized realtime user and assistant transcripts to the owning Phoenix call', () => {
+    const bridge = new CodexRealtimeBridge()
+    const received: unknown[] = []
+    const internal = bridge as unknown as {
+      transcriptListeners: Map<string, (value: unknown) => void>
+      routeMessage(value: unknown): void
+    }
+    internal.transcriptListeners.set('thread-chat', value => { received.push(value) })
+    internal.routeMessage({
+      method: 'thread/realtime/transcript/done',
+      params: { threadId: 'thread-other', role: 'assistant', text: 'ignore me' },
+    })
+    internal.routeMessage({
+      method: 'thread/realtime/transcript/done',
+      params: { threadId: 'thread-chat', role: 'user', text: '  Hola Kira  ' },
+    })
+    internal.routeMessage({
+      method: 'thread/realtime/transcript/done',
+      params: { threadId: 'thread-chat', role: 'assistant', text: 'Hola, te escucho.' },
+    })
+    expect(received).toEqual([
+      { role: 'user', text: 'Hola Kira' },
+      { role: 'assistant', text: 'Hola, te escucho.' },
+    ])
+    bridge.close()
+  })
+
   it('keeps unrelated realtime notifications isolated by thread', async () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
@@ -231,11 +258,53 @@ describe('Codex realtime optional session context', () => {
       answerSdp: 'v=0\\r\\nanswer',
     })
     expect(bridge.probe).toHaveBeenCalledTimes(1)
-    expect(bridge.start).toHaveBeenCalledWith({
+    expect(bridge.start).toHaveBeenCalledWith(expect.objectContaining({
       key: 'session-without-injected-store',
       offerSdp: 'v=0\\r\\noffer\\r\\n',
       model: 'gpt-6-luna',
+      assistantName: 'KIRA',
+      assistantGender: 'feminine',
+      voice: 'juniper',
+      onTranscript: expect.any(Function),
+    }))
+  })
+})
+
+describe('Codex realtime profile identity', () => {
+  it('uses the persisted assistant name and masculine voice presentation', async () => {
+    const { ctx, voice } = await mountVoice()
+    const nativeGet = ctx.get.bind(ctx)
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => {
+      if (name === 'userProfile') {
+        return { getAssistantIdentity: () => ({ name: 'Marco', gender: 'masculine' }) }
+      }
+      return nativeGet(name as never)
+    }) as typeof ctx.get)
+
+    const internal = voice as unknown as {
+      codexRealtimeBridge(): {
+        probe(): Promise<{ available: boolean; authenticated: boolean }>
+        start(input: Record<string, unknown>): Promise<{ threadId: string; answerSdp: string }>
+      }
+    }
+    const start = vi.fn(async () => ({ threadId: 'thread-profile', answerSdp: 'v=0\\r\\nanswer' }))
+    vi.spyOn(internal, 'codexRealtimeBridge').mockReturnValue({
+      probe: vi.fn(async () => ({ available: true, authenticated: true })),
+      start,
     })
+
+    await expect(voice.conversationRealtimeStart({
+      key: 'session-profile',
+      offerSdp: 'v=0\\r\\noffer\\r\\n',
+      model: 'gpt-6-luna',
+    })).resolves.toMatchObject({ accepted: true })
+
+    expect(start).toHaveBeenCalledWith(expect.objectContaining({
+      assistantName: 'Marco',
+      assistantGender: 'masculine',
+      voice: 'cove',
+      onTranscript: expect.any(Function),
+    }))
   })
 })
 
