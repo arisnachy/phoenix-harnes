@@ -38,10 +38,33 @@ export interface CodexRealtimeInitialItem {
   readonly text: string
 }
 
-/** Voices accepted by Codex Realtime V1/V3 WebRTC. */
+/** Voices accepted by current Codex Realtime plus the legacy V1 fallback. */
 export type CodexRealtimeVoice =
+  | 'alloy' | 'ash' | 'ballad' | 'coral' | 'echo' | 'sage' | 'shimmer' | 'verse'
+  | 'marin' | 'cedar'
   | 'juniper' | 'maple' | 'spruce' | 'ember' | 'vale'
   | 'breeze' | 'arbor' | 'sol' | 'cove'
+
+/** Assistant identity presentation used to choose a stable Realtime voice. */
+export type CodexRealtimeAssistantGender = 'masculine' | 'feminine' | 'neutral'
+
+/**
+ * Choose a stable voice for the assistant presentation and protocol generation.
+ * These are presentation choices, not claims about a synthetic voice's biology.
+ */
+export function realtimeVoiceForGender(
+  gender: CodexRealtimeAssistantGender = 'feminine',
+  version: 'v3' | 'v1' = 'v3',
+): CodexRealtimeVoice {
+  if (version === 'v1') {
+    if (gender === 'masculine') return 'cove'
+    if (gender === 'neutral') return 'breeze'
+    return 'juniper'
+  }
+  if (gender === 'masculine') return 'cedar'
+  if (gender === 'neutral') return 'alloy'
+  return 'marin'
+}
 
 /** One finalized realtime transcript segment. */
 export interface CodexRealtimeTranscript {
@@ -62,7 +85,7 @@ export interface CodexRealtimeStartOptions {
   /** Persisted Phoenix assistant name; provider branding must never replace it. */
   readonly assistantName?: string
   /** Persisted Phoenix assistant presentation used for identity wording. */
-  readonly assistantGender?: 'masculine' | 'feminine' | 'neutral'
+  readonly assistantGender?: CodexRealtimeAssistantGender
   /** Explicit realtime voice selected from the persisted presentation. */
   readonly voice?: CodexRealtimeVoice
   /** Final transcript callback used to mirror the live call into Phoenix chat. */
@@ -75,6 +98,8 @@ export interface CodexRealtimeStartResult {
   readonly threadId: string
   /** Remote SDP answer to apply to the browser peer connection. */
   readonly answerSdp: string
+  /** Concrete voice selected for the negotiated protocol generation. */
+  readonly voice: CodexRealtimeVoice
 }
 
 /** Readiness of subscription-backed Codex realtime voice. */
@@ -100,6 +125,7 @@ export class CodexRealtimeBridge {
   private readonly notifications = new Map<string, Set<NotificationWaiter>>()
   private readonly sessions = new Map<string, string>()
   private readonly transcriptListeners = new Map<string, (transcript: CodexRealtimeTranscript) => void>()
+  private readonly speechTails = new Map<string, Promise<void>>()
   private readonly stderrTail: string[] = []
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
@@ -140,6 +166,7 @@ export class CodexRealtimeBridge {
       threadId = await this.startVoiceThread(options.model)
       if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
       let answerSdp: string
+      let negotiatedVersion: 'v3' | 'v1' = 'v3'
       try {
         answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
       } catch (error) {
@@ -149,10 +176,15 @@ export class CodexRealtimeBridge {
         // V3/Frameless Bidi. Stay inside authenticated Codex Realtime and retry
         // the older AVAS WebRTC protocol instead of falling back to browser TTS.
         await this.request('thread/realtime/stop', { threadId }).catch(() => {})
+        negotiatedVersion = 'v1'
         answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
       }
       this.sessions.set(options.key, threadId)
-      return { threadId, answerSdp }
+      return {
+        threadId,
+        answerSdp,
+        voice: options.voice ?? realtimeVoiceForGender(options.assistantGender, negotiatedVersion),
+      }
     } catch (error) {
       if (threadId !== undefined) {
         this.transcriptListeners.delete(threadId)
@@ -215,7 +247,8 @@ export class CodexRealtimeBridge {
       await this.request('thread/realtime/start', version === 'v3'
         ? {
           threadId,
-          clientManagedHandoffs: false,
+          clientManagedHandoffs: true,
+          delegationAckFiller: false,
           flushTranscriptTailOnSessionEnd: true,
           backendReasoningStatus: false,
           outputModality: 'audio',
@@ -230,7 +263,7 @@ export class CodexRealtimeBridge {
             options.assistantName,
             options.assistantGender,
           ),
-          ...(options.voice === undefined ? {} : { voice: options.voice }),
+          voice: options.voice ?? realtimeVoiceForGender(options.assistantGender, version),
           transport: { type: 'webrtc', sdp: options.offerSdp },
           version,
         }
@@ -241,7 +274,7 @@ export class CodexRealtimeBridge {
             options.assistantName,
             options.assistantGender,
           ),
-          ...(options.voice === undefined ? {} : { voice: options.voice }),
+          voice: options.voice ?? realtimeVoiceForGender(options.assistantGender, version),
           transport: { type: 'webrtc', sdp: options.offerSdp },
           version,
         })
@@ -263,6 +296,32 @@ export class CodexRealtimeBridge {
     }
   }
 
+  /** Whether one Phoenix session currently owns a live Realtime thread. */
+  has(key: string): boolean {
+    return this.sessions.has(key)
+  }
+
+  /**
+   * Speak Phoenix-owned text through an existing Realtime session.
+   * Per-session serialization preserves the order of settled streaming segments.
+   */
+  async speak(key: string, text: string): Promise<boolean> {
+    const threadId = this.sessions.get(key)
+    const normalized = text.trim()
+    if (threadId === undefined || normalized === '') return false
+    const previous = this.speechTails.get(key) ?? Promise.resolve()
+    const next = previous.catch(() => {}).then(async () => {
+      await this.request('thread/realtime/appendSpeech', { threadId, text: normalized })
+    })
+    this.speechTails.set(key, next)
+    try {
+      await next
+      return true
+    } finally {
+      if (this.speechTails.get(key) === next) this.speechTails.delete(key)
+    }
+  }
+
   /** Stop one active realtime conversation without affecting text Codex use.
    * @param key Browser-owned call identity.
    * @returns Whether an existing call was removed; transport failures may reject after local removal.
@@ -275,6 +334,7 @@ export class CodexRealtimeBridge {
     }
     this.sessions.delete(key)
     this.transcriptListeners.delete(threadId)
+    this.speechTails.delete(key)
     try {
       if (this.child !== undefined) await this.request('thread/realtime/stop', { threadId })
     } finally {
@@ -290,6 +350,8 @@ export class CodexRealtimeBridge {
     this.child = undefined
     this.startup = undefined
     this.sessions.clear()
+    this.transcriptListeners.clear()
+    this.speechTails.clear()
     if (child !== undefined && !child.killed) {
       // On Windows the npm-installed Codex executable is normally a .cmd shim
       // launched through cmd.exe. Killing only the shell orphans app-server,
@@ -545,6 +607,7 @@ export class CodexRealtimeBridge {
     this.startup = undefined
     this.sessions.clear()
     this.transcriptListeners.clear()
+    this.speechTails.clear()
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
       pending.reject(error)
@@ -587,7 +650,10 @@ function realtimeIdentityInstructions(
     'Codex is an internal execution/runtime backend, never your identity or name. Never introduce yourself as Codex, ChatGPT, the model name, or the provider.',
     grammar,
     'Speak naturally, warmly, and concisely in the user\'s language. This is a continuation of the compact Phoenix conversation history; do not repeat that history.',
-    'When substantive work is needed, use the available execution backend silently while preserving the same Phoenix identity. Give only useful progress, findings, blockers, and results; never perform fake tool narration.',
+    'You are the low-latency microphone and speaker for the real Phoenix chat. Phoenix chat owns planning, tools, delegation, tasks, approvals, and completion.',
+    'Do not answer a finalized human utterance on your own. Remain silent after the user finishes speaking until Phoenix appends Phoenix-owned speech for you to read.',
+    'Do not claim that substantive work was performed inside this ephemeral realtime thread. Finalized human speech is routed into the real Phoenix agent, whose response is appended back for you to speak.',
+    'Give no fake tool narration and do not invent task completion.',
   ].join(' ')
 }
 

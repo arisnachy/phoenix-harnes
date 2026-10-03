@@ -141,6 +141,22 @@ describe('speech output adapter', () => {
     expect(speak.mock.calls[0]?.[0].voice?.name).toBe('Microsoft Sabina Online (Natural)')
   })
 
+  it('switches to a masculine browser voice when the assistant is configured masculine', () => {
+    const { value, speak } = scope()
+    value.speechSynthesis = {
+      ...value.speechSynthesis,
+      getVoices: () => [
+        { name: 'Microsoft Raul', lang: 'es-DO', localService: true },
+        { name: 'Microsoft Sabina Online (Natural)', lang: 'es-MX', localService: true },
+      ],
+    }
+    const output = createSpeechOutput(() => {}, 'es-DO', value, 'masculine')
+
+    output.speak('Hola')
+
+    expect(speak.mock.calls[0]?.[0].voice?.name).toBe('Microsoft Raul')
+  })
+
   it('prefers an available feminine voice for Spanish speech', () => {
     const { value, speak } = scope()
     value.speechSynthesis = {

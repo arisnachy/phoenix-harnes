@@ -7,7 +7,7 @@ import VoiceRuntime, {
   type VoiceImportantEvent,
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
-import { CodexRealtimeBridge } from '../src/codex-realtime.ts'
+import { CodexRealtimeBridge, realtimeVoiceForGender } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
   ctx: Context
@@ -147,6 +147,34 @@ describe('Codex realtime compact context', () => {
   })
 })
 
+describe('Codex realtime assistant presentation', () => {
+  it('maps configured presentation to current and legacy Realtime voices', () => {
+    expect(realtimeVoiceForGender('feminine', 'v3')).toBe('marin')
+    expect(realtimeVoiceForGender('masculine', 'v3')).toBe('cedar')
+    expect(realtimeVoiceForGender('neutral', 'v3')).toBe('alloy')
+    expect(realtimeVoiceForGender('feminine', 'v1')).toBe('juniper')
+    expect(realtimeVoiceForGender('masculine', 'v1')).toBe('cove')
+    expect(realtimeVoiceForGender('neutral', 'v1')).toBe('breeze')
+  })
+
+  it('serializes Phoenix-owned speech through the active Realtime thread', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      sessions: Map<string, string>
+      request(method: string, params?: unknown): Promise<unknown>
+    }
+    internal.sessions.set('session-1', 'thread-1')
+    const request = vi.spyOn(internal, 'request').mockResolvedValue({})
+    await expect(bridge.speak('session-1', 'Trabajo terminado.')).resolves.toBe(true)
+    expect(request).toHaveBeenCalledWith('thread/realtime/appendSpeech', {
+      threadId: 'thread-1',
+      text: 'Trabajo terminado.',
+    })
+    await expect(bridge.speak('missing', 'Nada')).resolves.toBe(false)
+    bridge.close()
+  })
+})
+
 describe('Codex realtime app-server notifications', () => {
   it('surfaces an async startup error immediately instead of waiting for a missing SDP', async () => {
     const bridge = new CodexRealtimeBridge()
@@ -264,14 +292,13 @@ describe('Codex realtime optional session context', () => {
       model: 'gpt-6-luna',
       assistantName: 'KIRA',
       assistantGender: 'feminine',
-      voice: 'juniper',
       onTranscript: expect.any(Function),
     }))
   })
 })
 
 describe('Codex realtime profile identity', () => {
-  it('uses the persisted assistant name and masculine voice presentation', async () => {
+  it('uses the persisted assistant name and masculine presentation', async () => {
     const { ctx, voice } = await mountVoice()
     const nativeGet = ctx.get.bind(ctx)
     vi.spyOn(ctx, 'get').mockImplementation(((name: string) => {
@@ -302,9 +329,54 @@ describe('Codex realtime profile identity', () => {
     expect(start).toHaveBeenCalledWith(expect.objectContaining({
       assistantName: 'Marco',
       assistantGender: 'masculine',
-      voice: 'cove',
       onTranscript: expect.any(Function),
     }))
+  })
+})
+
+describe('Codex realtime Phoenix work bridge', () => {
+  it('forwards finalized user speech into the live Agent followup path', async () => {
+    const { ctx, voice } = await mountVoice()
+    const followup = vi.fn()
+    const nativeGet = ctx.get.bind(ctx)
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string, required?: boolean) => {
+      if (name === 'agents') return { get: () => ({ followup }) }
+      if (name === 'userProfile') {
+        return { getAssistantIdentity: () => ({ name: 'KIRA', gender: 'feminine' }) }
+      }
+      return nativeGet(name as never, required as never)
+    }) as typeof ctx.get)
+
+    let onTranscript: ((value: { role: 'user' | 'assistant'; text: string }) => void) | undefined
+    const internal = voice as unknown as {
+      codexRealtimeBridge(): {
+        probe(): Promise<{ available: boolean; authenticated: boolean }>
+        start(input: Record<string, unknown>): Promise<{ threadId: string; answerSdp: string }>
+      }
+    }
+    vi.spyOn(internal, 'codexRealtimeBridge').mockReturnValue({
+      probe: vi.fn(async () => ({ available: true, authenticated: true })),
+      start: vi.fn(async (input: Record<string, unknown>) => {
+        onTranscript = input.onTranscript as typeof onTranscript
+        return { threadId: 'thread-work', answerSdp: 'v=0\\r\\nanswer' }
+      }),
+    })
+
+    await expect(voice.conversationRealtimeStart({
+      key: 'session-work',
+      offerSdp: 'v=0\\r\\noffer\\r\\n',
+      model: 'gpt-6-luna',
+    })).resolves.toMatchObject({ accepted: true })
+
+    onTranscript?.({ role: 'assistant', text: 'ephemeral reply must not drive Phoenix' })
+    expect(followup).not.toHaveBeenCalled()
+    onTranscript?.({ role: 'user', text: 'crea un plan y empieza la tarea' })
+    expect(followup).toHaveBeenCalledTimes(1)
+    expect(followup.mock.calls[0]?.[0]).toMatchObject({
+      role: 'user',
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'crea un plan y empieza la tarea' }],
+    })
   })
 })
 
