@@ -278,7 +278,6 @@ export async function tryStartCodexRealtimeVoice(sessionKey: string): Promise<bo
     events = peer.createDataChannel('oai-events', { ordered: true })
     audio = document.createElement('audio')
     audio.autoplay = true
-    audio.playsInline = true
     audio.dataset.phoenixCodexVoice = 'true'
     audio.style.display = 'none'
     document.body.append(audio)
