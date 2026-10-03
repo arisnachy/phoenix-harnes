@@ -22,7 +22,10 @@ describe('Phoenix Auto parallel Luna delegation', () => {
       expect(content).toContain('GPT-6 Luna Max')
       expect(content).toContain('@phoenix-ai/dsh-tool-agent-team')
       expect(content).toContain('defaultModelProfile: luna-max')
+      expect(content).toContain('Never exceed two')
+      expect(content).toContain('real Team work before completion')
       expect(content).toContain('workflow')
+      expect(content).not.toContain('Never exceed three')
       expect(content).not.toContain('model: gpt-5.6-luna\n          reasoningEffort: xhigh')
     }
   })
