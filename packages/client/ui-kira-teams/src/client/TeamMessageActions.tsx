@@ -43,7 +43,7 @@ type Props = PropsRuntime<'conversation.chat.message-actions'> & TeamMessageActi
   placement?: 'message' | 'assistant-toolbar'
 }
 export function TeamMessageActions({
-  messageId, authorId = 'kira', authorKind = 'kira', authorName, replyPreview, originMissionId,
+  messageId, authorId, authorKind, authorName, replyPreview, originMissionId,
   sessionId, useProjection, react, reply, t, placement = 'message',
 }: Props) {
   const reactionProjection = useProjection('teamChatReactions')
