@@ -22,6 +22,7 @@ describe('Codex automatic live catalog policy', () => {
         name: 'New Live Model',
         contextWindow: 123_456,
         maxTokens: 7_890,
+        inputModalities: ['text', 'image'],
         reasoning: {
           efforts: [
             { id: 'off', name: 'Off' },
@@ -38,6 +39,7 @@ describe('Codex automatic live catalog policy', () => {
         name: 'New Live Model',
         contextWindow: 123_456,
         maxTokens: 7_890,
+        input: ['text', 'image'],
         reasoningEfforts: { off: null, low: 'low' },
       },
       { id: 'second-live-model' },
