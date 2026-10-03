@@ -107,7 +107,11 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const ambiguous = state === 'signup-ambiguous'
   const connection = snapshot?.connection ?? 'disconnected'
   const statusText = ready
-    ? connection === 'connected' ? 'Activo' : connection === 'connecting' ? 'Conectando' : 'Listo para reconectar'
+    ? connection === 'connected'
+      ? 'Correo verificado · Activo'
+      : connection === 'connecting'
+        ? 'Correo verificado · Conectando'
+        : 'Correo verificado'
     : pendingVerification ? 'Verifica una vez'
       : ambiguous ? 'Necesita recuperación'
         : 'Aún sin correo'
