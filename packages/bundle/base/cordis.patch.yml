@@ -443,12 +443,12 @@
       config:
         providerName: fork
 
-    # Real KIRA Team state lives in the Lead Session. Phoenix constrains one
-    # operational team to two specialist teammates; Kira remains the Lead.
+    # Real KIRA Team state lives in the Lead Session. Phoenix uses an adaptive
+    # 1 -> 2 -> 3 teammate ladder; Kira remains the Lead and three is the hard cap.
     - id: agent-team
       name: '@phoenix-ai/dsh-agent-team'
       config:
-        maxMembers: 2
+        maxMembers: 3
         maxTasks: 64
         maxPendingMessagesPerMember: 16
         maxMessageBytes: 16384
