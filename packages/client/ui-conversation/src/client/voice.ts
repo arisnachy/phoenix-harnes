@@ -42,7 +42,9 @@ export interface VoiceAssistantRemote {
   conversationCancel(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationCancelReceipt>>
   /** Newer Hosts expose native Codex realtime; optional keeps rolling upgrades compatible. */
   conversationRealtimeStatus?(): Promise<VoiceRemoteResult<VoiceConversationRealtimeStatus>>
-  conversationRealtimeStart?(request: VoiceConversationRealtimeStartRequest): Promise<VoiceRemoteResult<VoiceConversationRealtimeStartReceipt>>
+  conversationRealtimeStart?(
+    request: VoiceConversationRealtimeStartRequest,
+  ): Promise<VoiceRemoteResult<VoiceConversationRealtimeStartReceipt>>
   conversationRealtimeStop?(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationRealtimeStopReceipt>>
 }
 
@@ -219,19 +221,21 @@ export function configureVoiceModelRouteResolver(resolver: VoiceModelRouteResolv
 
 /** Minimal browser surface needed to capability-probe Codex Realtime WebRTC. */
 export interface CodexRealtimeVoiceWindow {
-  readonly RTCPeerConnection?: typeof RTCPeerConnection
-  readonly navigator?: Navigator
+  readonly RTCPeerConnection?: unknown
+  readonly navigator?: {
+    readonly mediaDevices?: {
+      readonly getUserMedia?: unknown
+    }
+  }
 }
 
 /** Browser primitives required for direct Codex Realtime WebRTC. */
 export function hasCodexRealtimeVoiceSupport(
-  scope: CodexRealtimeVoiceWindow | undefined = typeof window === 'undefined'
-    ? undefined
-    : window as unknown as CodexRealtimeVoiceWindow,
+  scope: CodexRealtimeVoiceWindow | undefined = typeof window === 'undefined' ? undefined : window,
 ): boolean {
   return scope !== undefined
     && typeof scope.RTCPeerConnection === 'function'
-    && scope.navigator?.mediaDevices?.getUserMedia !== undefined
+    && typeof scope.navigator?.mediaDevices?.getUserMedia === 'function'
 }
 
 /** Whether the currently active hands-free session is the direct Codex WebRTC path. */
