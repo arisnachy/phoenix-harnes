@@ -38,6 +38,17 @@ export interface CodexRealtimeInitialItem {
   readonly text: string
 }
 
+/** Voices accepted by Codex Realtime V1/V3 WebRTC. */
+export type CodexRealtimeVoice =
+  | 'juniper' | 'maple' | 'spruce' | 'ember' | 'vale'
+  | 'breeze' | 'arbor' | 'sol' | 'cove'
+
+/** One finalized realtime transcript segment. */
+export interface CodexRealtimeTranscript {
+  readonly role: 'user' | 'assistant'
+  readonly text: string
+}
+
 /** Inputs for one authenticated Codex WebRTC negotiation. */
 export interface CodexRealtimeStartOptions {
   /** Stable Phoenix session key owning this voice call. */
@@ -48,6 +59,14 @@ export interface CodexRealtimeStartOptions {
   readonly model?: string
   /** Small recent Phoenix transcript used instead of the full startup prompt. */
   readonly initialItems?: readonly CodexRealtimeInitialItem[]
+  /** Persisted Phoenix assistant name; provider branding must never replace it. */
+  readonly assistantName?: string
+  /** Persisted Phoenix assistant presentation used for identity wording. */
+  readonly assistantGender?: 'masculine' | 'feminine' | 'neutral'
+  /** Explicit realtime voice selected from the persisted presentation. */
+  readonly voice?: CodexRealtimeVoice
+  /** Final transcript callback used to mirror the live call into Phoenix chat. */
+  readonly onTranscript?: (transcript: CodexRealtimeTranscript) => void
 }
 
 /** Successful Codex app-server WebRTC negotiation. */
@@ -80,6 +99,7 @@ export class CodexRealtimeBridge {
   private readonly pending = new Map<string, RpcPending>()
   private readonly notifications = new Map<string, Set<NotificationWaiter>>()
   private readonly sessions = new Map<string, string>()
+  private readonly transcriptListeners = new Map<string, (transcript: CodexRealtimeTranscript) => void>()
   private readonly stderrTail: string[] = []
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
@@ -118,6 +138,7 @@ export class CodexRealtimeBridge {
     let threadId: string | undefined
     try {
       threadId = await this.startVoiceThread(options.model)
+      if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
       let answerSdp: string
       try {
         answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
@@ -134,6 +155,7 @@ export class CodexRealtimeBridge {
       return { threadId, answerSdp }
     } catch (error) {
       if (threadId !== undefined) {
+        this.transcriptListeners.delete(threadId)
         await this.request('thread/realtime/stop', { threadId }).catch(() => {})
       }
       throw error
@@ -204,14 +226,22 @@ export class CodexRealtimeBridge {
           ...(options.initialItems === undefined || options.initialItems.length === 0
             ? {}
             : { initialItems: options.initialItems }),
-          realtimeStartInstructions:
-            'Speak naturally and concisely. This is a continuation of the Phoenix conversation represented by the compact initial history. Do not repeat that history. Hand substantive work to Codex when needed.',
+          realtimeStartInstructions: realtimeIdentityInstructions(
+            options.assistantName,
+            options.assistantGender,
+          ),
+          ...(options.voice === undefined ? {} : { voice: options.voice }),
           transport: { type: 'webrtc', sdp: options.offerSdp },
           version,
         }
         : {
           threadId,
           outputModality: 'audio',
+          realtimeStartInstructions: realtimeIdentityInstructions(
+            options.assistantName,
+            options.assistantGender,
+          ),
+          ...(options.voice === undefined ? {} : { voice: options.voice }),
           transport: { type: 'webrtc', sdp: options.offerSdp },
           version,
         })
@@ -244,6 +274,7 @@ export class CodexRealtimeBridge {
       return false
     }
     this.sessions.delete(key)
+    this.transcriptListeners.delete(threadId)
     try {
       if (this.child !== undefined) await this.request('thread/realtime/stop', { threadId })
     } finally {
@@ -494,6 +525,14 @@ export class CodexRealtimeBridge {
       return
     }
     if (typeof value.method !== 'string') return
+    if (value.method === 'thread/realtime/transcript/done' && isRecord(value.params)) {
+      const threadId = typeof value.params.threadId === 'string' ? value.params.threadId : undefined
+      const role = value.params.role
+      const text = typeof value.params.text === 'string' ? value.params.text.trim() : ''
+      if (threadId !== undefined && (role === 'user' || role === 'assistant') && text !== '') {
+        this.transcriptListeners.get(threadId)?.({ role, text })
+      }
+    }
     const waiters = this.notifications.get(value.method)
     if (waiters === undefined || waiters.size === 0) return
     for (const waiter of [...waiters]) {
@@ -505,6 +544,7 @@ export class CodexRealtimeBridge {
     if (this.child !== undefined) this.child = undefined
     this.startup = undefined
     this.sessions.clear()
+    this.transcriptListeners.clear()
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
       pending.reject(error)
@@ -529,6 +569,26 @@ export class CodexRealtimeBridge {
     if (this.idleTimer !== undefined) clearTimeout(this.idleTimer)
     this.idleTimer = undefined
   }
+}
+
+function realtimeIdentityInstructions(
+  name: string | undefined,
+  gender: 'masculine' | 'feminine' | 'neutral' | undefined,
+): string {
+  const assistantName = name?.trim() || 'KIRA'
+  const presentation = gender ?? 'feminine'
+  const grammar = presentation === 'feminine'
+    ? 'When Spanish self-reference is gendered, use feminine forms naturally.'
+    : presentation === 'masculine'
+      ? 'When Spanish self-reference is gendered, use masculine forms naturally.'
+      : 'Prefer naturally gender-neutral Spanish self-reference.'
+  return [
+    `You are ${assistantName}, the PHOENIX assistant. Your user-facing name is exactly ${assistantName}.`,
+    'Codex is an internal execution/runtime backend, never your identity or name. Never introduce yourself as Codex, ChatGPT, the model name, or the provider.',
+    grammar,
+    'Speak naturally, warmly, and concisely in the user\'s language. This is a continuation of the compact Phoenix conversation history; do not repeat that history.',
+    'When substantive work is needed, use the available execution backend silently while preserving the same Phoenix identity. Give only useful progress, findings, blockers, and results; never perform fake tool narration.',
+  ].join(' ')
 }
 
 function normalizeCodexModel(model: string | undefined): string | undefined {
