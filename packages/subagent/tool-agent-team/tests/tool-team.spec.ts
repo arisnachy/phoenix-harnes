@@ -140,6 +140,8 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('root Phoenix chat is the shared Team room')
     expect(leadPrompt).toContain('route the substantive request with followup_task')
     expect(leadPrompt).toContain('Your Team role is lead')
+    expect(leadPrompt).toContain('Warm, confident, curious, and witty')
+    expect(leadPrompt).toContain('high quality, fast completion, and low cost')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'tool-worker',
@@ -152,7 +154,10 @@ describe('dsh-tool-team', () => {
     const childAssembly = await assembly(ctx, child)
     expect(childAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
-    expect(renderPrompt(childAssembly)).toContain('Your Team role is teammate; your Team name is tool-worker')
+    const childPrompt = renderPrompt(childAssembly)
+    expect(childPrompt).toContain('Your Team role is teammate; your Team name is tool-worker')
+    expect(childPrompt).toContain('Natural, concise, collegial')
+    expect(childPrompt).not.toContain('detective-like')
 
     const denied = await execute(ctx, child, 'spawn_teammate', {
       name: 'nested', description: 'not allowed', prompt: 'no',
@@ -161,6 +166,25 @@ describe('dsh-tool-team', () => {
     expect(text(denied)).toContain('only the Team Lead')
     await execute(ctx, lead, 'interrupt_agent', { target: 'tool-worker' })
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
+  })
+
+  it('injects only the active named KIRA persona instead of all twenty voices', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'argo',
+      description: 'verify result and evidence',
+      prompt: 'stay available',
+    })
+    const childId = spawnedChildId(spawned)
+    const child = await waitRunning(ctx, childId)
+    const prompt = renderPrompt(await assembly(ctx, child))
+    expect(prompt).toContain('Your Team name is argo')
+    expect(prompt).toContain('detective-like')
+    expect(prompt).toContain('understated dry humor')
+    expect(prompt).not.toContain('Playfully adversarial')
+    expect(prompt).not.toContain('Warm, empathetic, creative')
+    await execute(ctx, lead, 'interrupt_agent', { target: 'argo' })
+    await waitNoAgent(ctx, childId)
   })
 
   it('routes teammates through provider-neutral model profiles', async () => {
