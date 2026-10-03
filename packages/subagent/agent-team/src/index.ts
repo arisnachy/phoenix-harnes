@@ -37,7 +37,8 @@ export type { TeamMembership } from './roster.ts'
 export { TeamId, TeamMessageId, TeamTaskId } from './types.ts'
 export { TeamError } from './error.ts'
 export { foldTeam } from './fold.ts'
-export { KIRA_SOCIAL_STYLE, TEAM_PERSONAS, TEAM_SKILL_POOLS, teamSocialStyle } from './personas.ts'
+export { KIRA_SOCIAL_STYLE, TEAM_PERSONAS, TEAM_SKILL_POOLS, teamPersonaGender, teamSocialStyle } from './personas.ts'
+export type { TeamPersonaGender } from './personas.ts'
 
 declare module '@phoenix-ai/cordis' {
   interface Context {
