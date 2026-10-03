@@ -82,7 +82,7 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
   })
 
-  it('keeps Phoenix Auto specialist delegation inside the real Kira Team path', async () => {
+  it('keeps every provider specialist delegation inside the real Kira Team path', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -105,12 +105,11 @@ describe('installModelSelection()', () => {
 
     selection.current = { provider: 'openai-codex', model: 'gpt-6-luna' }
     const explicitAssembly = await ctx.systemPrompt.assemble()
-    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual([
-      'read',
-      'spawn_teammate',
-      'subagent',
-      'subagent_fork',
-    ])
+    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
+
+    selection.current = { provider: 'deepseek', model: 'deepseek-v4-pro' }
+    const nonCodexAssembly = await ctx.systemPrompt.assemble()
+    expect(nonCodexAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
 
     dispose()
     await ctx.fiber.dispose()
@@ -649,6 +648,30 @@ describe('installModelSelection()', () => {
       model: 'gpt-6-luna',
       reasoningEffort: ReasoningEffortId('max'),
     })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('synchronizes live AgentOptions to a concrete non-Codex selection before delegation tools run', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+      assembled: undefined,
+    }
+    const agent = {
+      options: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') },
+      session: { events: [] },
+    } as unknown as Agent
+    ctx.agent = agent
+    const dispose = installModelSelection(ctx, selection)
+
+    await ctx.systemPrompt.assemble()
+
+    expect(agent.options.provider).toBe('deepseek')
+    expect(agent.options.model).toBe('deepseek-v4-pro')
+    expect(agent.options.reasoningEffort).toBeUndefined()
 
     dispose()
     await ctx.fiber.dispose()

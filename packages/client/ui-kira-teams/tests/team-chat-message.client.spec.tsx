@@ -66,6 +66,8 @@ describe('KIRA Team chat message', () => {
       targetName: 'la-forja',
       purpose: 'assignment',
       content: [{ type: 'text', text: 'Revisar el flujo de delegación.' }],
+    })} useProjection={() => ({
+      'worker-a': { id: 'worker-a', name: 'La Forja', avatar: 'atlas', role: 'skill.engineering', status: 'working' },
     })} />)
 
     expect(view.getByText('Kira')).toBeTruthy()
@@ -74,6 +76,31 @@ describe('KIRA Team chat message', () => {
     expect(view.getByText('→ La Forja')).toBeTruthy()
     expect(view.container.querySelector('[data-avatar="kira"]')).toBeTruthy()
     expect(view.container.querySelector('[data-agent-portrait-image]')).toBeTruthy()
+    expect(view.getByRole('status').textContent).toContain('trabajando')
+    expect(view.container.querySelector('[data-team-target-status="working"]')).toBeTruthy()
+  })
+
+  it('keeps historical assignments honest when the real teammate is done or failed', () => {
+    const assignment = node({
+      senderId: 'root',
+      senderName: 'lead',
+      targetId: 'worker-a',
+      targetName: 'argo',
+      purpose: 'assignment',
+      content: [{ type: 'text', text: 'Verificar el resultado.' }],
+    })
+    const done = render(<View node={assignment} useProjection={() => ({
+      'worker-a': { id: 'worker-a', name: 'Argo', avatar: 'argo', role: 'skill.verification', status: 'done' },
+    })} />)
+    expect(done.getByRole('status').textContent).toContain('terminó')
+    expect(done.container.querySelector('[data-team-target-status="done"]')).toBeTruthy()
+    done.unmount()
+
+    const failed = render(<View node={assignment} useProjection={() => ({
+      'worker-a': { id: 'worker-a', name: 'Argo', avatar: 'argo', role: 'skill.verification', status: 'failed' },
+    })} />)
+    expect(failed.getByRole('status').textContent).toContain('falló')
+    expect(failed.container.querySelector('[data-team-target-status="failed"]')).toBeTruthy()
   })
 
   it('renders one real team bubble with recipient, purpose and compact reactions', () => {

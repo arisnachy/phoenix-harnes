@@ -178,11 +178,12 @@ describe('Team identity and provisioning', () => {
     await Promise.resolve()
   })
 
-  it('creates fresh and fork teammates with immutable names and bounded roster size', async () => {
+  it('creates fresh and fork teammates with immutable names while completed teammates release capacity', async () => {
     const { ctx, lead } = await setup([
       textResponse('lead answer'),
       textResponse('fork answer'),
       textResponse('fresh answer'),
+      textResponse('third answer'),
     ], { maxMembers: 2 })
     lead.followup(createUserMessage({ content: content('lead turn'), source: { kind: 'user' } }))
     await lead.whenIdle()
@@ -191,6 +192,8 @@ describe('Team identity and provisioning', () => {
     await waitNoAgent(ctx, forked.member.id)
     const fresh = await spawn(ctx, lead, 'fresh-worker')
     await waitNoAgent(ctx, fresh.member.id)
+    const third = await spawn(ctx, lead, 'third-worker')
+    await waitNoAgent(ctx, third.member.id)
 
     expect((await ctx.sessionPersistence.inspect(forked.member.id)).meta.seedLength).toBeGreaterThan(0)
     expect((await ctx.sessionPersistence.inspect(fresh.member.id)).meta.seedLength ?? 0).toBe(0)
@@ -198,9 +201,28 @@ describe('Team identity and provisioning', () => {
       ['lead', undefined, 'idle'],
       ['fork-worker', 'fork', 'inactive'],
       ['fresh-worker', 'fresh', 'inactive'],
+      ['third-worker', 'fresh', 'inactive'],
     ])
-    await expect(spawn(ctx, lead, 'third-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
     await expect(spawn(ctx, lead, 'fresh-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_NAME_TAKEN' })
+  })
+
+  it('enforces maxMembers as a concurrent ceiling rather than a lifetime session budget', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'], { maxMembers: 2 })
+    const first = await spawn(ctx, lead, 'first-worker')
+    const second = await spawn(ctx, lead, 'second-worker')
+    await waitRunning(ctx, first.member.id)
+    await waitRunning(ctx, second.member.id)
+
+    await expect(spawn(ctx, lead, 'third-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+
+    ctx.agentTeams.interrupt(lead, 'first-worker')
+    await waitNoAgent(ctx, first.member.id)
+    const replacement = await spawn(ctx, lead, 'third-worker')
+    expect(replacement.member.name).toBe('third-worker')
+    ctx.agentTeams.interrupt(lead, 'second-worker')
+    ctx.agentTeams.interrupt(lead, 'third-worker')
+    await waitNoAgent(ctx, second.member.id)
+    await waitNoAgent(ctx, replacement.member.id)
   })
 
   it('flushes the accepted child prompt before committing the active roster edge', async () => {
