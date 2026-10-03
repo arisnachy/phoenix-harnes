@@ -50,9 +50,27 @@ export function TeamMessageActions({
     if (earlier === undefined) return
     const added = new Set(reactions.filter(item => !earlier.has(item.id)).map(item => item.emoji))
     if (added.size === 0 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    for (const emoji of added) buttons.current.get(emoji)?.animate([
-      { transform: 'scale(1)' }, { transform: 'scale(1.14)', offset: .4 }, { transform: 'scale(1)' },
-    ], { duration: 420, easing: 'ease-out' })
+    for (const emoji of added) {
+      const chip = buttons.current.get(emoji)
+      chip?.animate([
+        { transform: 'translateY(2px) scale(.82)', opacity: .35 },
+        { transform: 'translateY(-3px) scale(1.2)', opacity: 1, offset: .42 },
+        { transform: 'translateY(0) scale(.97)', opacity: 1, offset: .72 },
+        { transform: 'translateY(0) scale(1)', opacity: 1 },
+      ], { duration: 560, easing: 'cubic-bezier(.2,.9,.25,1)' })
+      chip?.querySelector<HTMLElement>('[data-reaction-emoji]')?.animate([
+        { transform: 'rotate(-8deg) scale(.72)' },
+        { transform: 'rotate(7deg) scale(1.42)', offset: .45 },
+        { transform: 'rotate(0deg) scale(1)' },
+      ], { duration: 620, easing: 'cubic-bezier(.2,.9,.25,1)' })
+      for (const avatar of chip?.querySelectorAll<HTMLElement>('[data-reaction-reactor]') ?? []) {
+        avatar.animate([
+          { transform: 'scale(.65)', opacity: .45 },
+          { transform: 'scale(1.22)', opacity: 1, offset: .5 },
+          { transform: 'scale(1)', opacity: 1 },
+        ], { duration: 520, easing: 'ease-out' })
+      }
+    }
   }, [reactionProjection, reactions])
   const participants = useProjection('teamChatParticipants') ?? {}
   const [open, setOpen] = useState(false)
@@ -73,20 +91,29 @@ export function TeamMessageActions({
     finally { setPending(false) }
   }
   return <div className={css.reactions} data-team-reactions={messageId} data-author-kind={authorKind}>
-    {[...groups].map(([emoji, people]) => <button key={emoji} ref={(element) => {
-      if (element === null) buttons.current.delete(emoji)
-      else buttons.current.set(emoji, element)
-    }} className={css.reaction} disabled={pending || historical}
-    title={people.map(item => item.reactorKind === 'user' ? item.reactorName
-      : participants[item.reactorId]?.name ?? teamIdentityOf(item.reactorName, item.reactorId).name).join(', ')}
-    aria-pressed={people.some(item => item.reactorKind === 'user')} onClick={() => { void toggle(emoji) }}>
-      {people.filter(item => item.reactorKind !== 'user').slice(0, 3).map(item => <span className={css.reactionAvatar} key={item.reactorId}>
-        <ModelActivityAvatar
-          kind={KIRA_ROSTER.find(person => person.kind === participants[item.reactorId]?.avatar)?.kind
-            ?? teamIdentityOf(participants[item.reactorId]?.name ?? item.reactorName, item.reactorId).kind}
-          activity={undefined} running={false} pending={false} ready />
-      </span>)}{emoji} {people.length}
-    </button>)}
+    {[...groups].map(([emoji, people]) => {
+      const names = people.map(item => item.reactorKind === 'user' ? item.reactorName
+        : participants[item.reactorId]?.name ?? teamIdentityOf(item.reactorName, item.reactorId).name)
+      const userReacted = people.some(item => item.reactorKind === 'user')
+      return <button key={emoji} ref={(element) => {
+        if (element === null) buttons.current.delete(emoji)
+        else buttons.current.set(emoji, element)
+      }} className={css.reaction} disabled={pending || historical}
+      title={names.join(', ')} aria-label={`${emoji} · ${names.join(', ')}`}
+      aria-pressed={userReacted} data-user-reacted={userReacted ? 'true' : 'false'}
+      onClick={() => { void toggle(emoji) }}>
+        {people.filter(item => item.reactorKind !== 'user').slice(0, 3).map(item => <span
+          className={css.reactionAvatar} key={item.reactorId} data-reaction-reactor={item.reactorKind}
+        >
+          <ModelActivityAvatar
+            kind={KIRA_ROSTER.find(person => person.kind === participants[item.reactorId]?.avatar)?.kind
+              ?? teamIdentityOf(participants[item.reactorId]?.name ?? item.reactorName, item.reactorId).kind}
+            activity={undefined} running={false} pending={false} ready />
+        </span>)}
+        <span className={css.reactionEmoji} data-reaction-emoji aria-hidden="true">{emoji}</span>
+        <span className={css.reactionCount} aria-hidden="true">{people.length}</span>
+      </button>
+    })}
     <button type="button" className={css.reactionAdd} aria-label={t('chat.addReaction')} disabled={historical}
       title={historical ? t('chat.historical') : t('chat.addReaction')} aria-expanded={open}
       data-add-reaction onClick={() => { setOpen(!open) }}><AddReactionIcon /></button>
