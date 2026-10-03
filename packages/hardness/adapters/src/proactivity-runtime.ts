@@ -33,7 +33,12 @@ export interface ProactivityRuntimeConfig {
   readonly harnessMailIdentity?: string
   readonly resolveDefaultMailRecipient?: () => Promise<string | undefined>
   /** Host-owned Kira mailbox sender used for verified email delivery when available. */
-  readonly sendMail?: (input: { readonly to: string; readonly subject: string; readonly text: string; readonly idempotencyKey: string }) => Promise<void>
+  readonly sendMail?: (input: {
+    readonly to: string
+    readonly subject: string
+    readonly text: string
+    readonly idempotencyKey: string
+  }) => Promise<void>
   /**
    * Re-compose a persisted session before a scheduler-owned resume is published.
    * This restores the same preset/tool world the original conversation used.
