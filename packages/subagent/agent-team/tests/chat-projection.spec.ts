@@ -33,7 +33,7 @@ describe('team chat reaction projection', () => {
   })
 
   it('maps legacy teammate reactions to their own avatar-bearing actor identity', () => {
-    const state = teamChatReactionsDefinition.init()
+    const state: Record<string, TeamChatReaction[]> = {}
     const next = teamChatReactionsDefinition.apply(state, {
       type: 'team/reaction',
       seq: 8,
