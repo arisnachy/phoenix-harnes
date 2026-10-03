@@ -8,11 +8,11 @@ describe('local assistant mailbox settings', () => {
     const client = { call: async (action: string) => ({ account: { state: action === 'verify' ? 'ready' : 'pending-verification', inboxId: 'actual@agentmail.to', contacts: [] }, connection: 'disconnected', jobs: [] }) }
     render(<AssistantMailPanel client={client} />)
     expect(await screen.findByText('actual@agentmail.to')).toBeTruthy()
-    expect(screen.getByText('Correo de Kira:')).toBeTruthy()
+    expect(screen.getByText('Dirección de Kira')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copiar correo de Kira' })).toBeTruthy()
     expect(screen.getByText('Pendiente de verificación')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Código de verificación'), { target: { value: '123456' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Verificar correo' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Verificar y activar' }))
     expect(await screen.findByText(/Correo verificado/u)).toBeTruthy()
   })
 })
@@ -33,10 +33,10 @@ it('preserves owner input typed before the initial host status resolves', async 
     return { account: { state: 'pending-verification', inboxId: 'actual@agentmail.to', contacts: [] }, connection: 'disconnected', jobs: [] }
   } }
   render(<AssistantMailPanel client={client} />)
-  const owner = screen.getByLabelText<HTMLInputElement>('Correo del propietario')
+  const owner = screen.getByLabelText<HTMLInputElement>('Tu correo para recibir el código de verificación')
   fireEvent.change(owner, { target: { value: 'owner@example.com' } })
   await act(async () => { resolveStatus({ account: { state: 'not-configured', contacts: [] }, connection: 'disconnected', jobs: [] }); await pending })
   expect(owner.value).toBe('owner@example.com')
-  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Crear mi correo gratuito' }).disabled).toBe(false)
+  expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Configurar correo de Kira' }).disabled).toBe(false)
 })
 

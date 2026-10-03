@@ -1,23 +1,28 @@
 /** Local email enrollment and secret-free job status in the existing Integrations page. */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import styles from './ConnectorsSection.module.css'
+import styles from './AssistantMailPanel.module.css'
 
 /** Secret-free mailbox state read from the local host. */
 export interface AssistantMailSnapshot {
-  readonly account: { readonly state: string
+  readonly account: {
+    readonly state: string
     readonly inboxId?: string
     readonly ownerEmail?: string
     readonly contacts: readonly string[]
-    readonly sessionId?: string }
+    readonly sessionId?: string
+  }
   readonly startup?: { readonly supported: boolean; readonly enabled: boolean }
   readonly connection: string
-  readonly jobs: readonly { readonly id: string
+  readonly jobs: readonly {
+    readonly id: string
     readonly title: string
     readonly state: string
     readonly summary?: string
-    readonly error?: string }[]
+    readonly error?: string
+  }[]
 }
+
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
@@ -28,9 +33,19 @@ export interface AssistantMailClient {
   call(action: string, input?: Record<string, unknown>): Promise<AssistantMailSnapshot>
 }
 
-/** Keep mail enrollment inside the existing connector layout.
+const JOB_LABELS: Readonly<Record<string, string>> = {
+  received: 'Recibido',
+  pending: 'Pendiente',
+  running: 'Kira está trabajando',
+  verifying: 'Verificando resultado',
+  'reply-pending': 'Respuesta pendiente',
+  replied: 'Respuesta enviada',
+  blocked: 'Necesita tu atención',
+}
+
+/** Keep Kira mailbox enrollment clear inside the existing connector layout.
  * @param props Local mailbox client.
- * @returns Setup and status section.
+ * @returns Setup and status card.
  */
 export function AssistantMailPanel({ client }: { readonly client: AssistantMailClient }): ReactNode {
   const [snapshot, setSnapshot] = useState<AssistantMailSnapshot>()
@@ -41,17 +56,20 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const [contacts, setContacts] = useState('')
   const [failure, setFailure] = useState<string>()
   const [busy, setBusy] = useState(false)
+
   useEffect(() => {
     let stopped = false
-    void client.call('status').then((value) => { if (!stopped) {
+    void client.call('status').then((value) => {
+      if (stopped) return
       setSnapshot(value)
-      // Initial host hydration must never erase text the owner already entered
-      // while the asynchronous status request was in flight.
       setOwner(current => current.trim().length > 0 ? current : value.account.ownerEmail ?? '')
       setContacts(current => current.trim().length > 0 ? current : value.account.contacts.join(', '))
-    } }, () => { if (!stopped) setFailure('El correo local no está disponible en este host.') })
+    }, () => {
+      if (!stopped) setFailure('El correo de Kira no está disponible en este host.')
+    })
     return () => { stopped = true }
   }, [client])
+
   useEffect(() => {
     let stopped = false
     const timer = globalThis.setInterval(() => {
@@ -62,52 +80,257 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         setContacts(current => current.trim().length > 0 ? current : value.account.contacts.join(', '))
       }, () => { /* Background status refresh is best-effort. */ })
     }, 5_000)
-    return () => { stopped = true; globalThis.clearInterval(timer) }
+    return () => {
+      stopped = true
+      globalThis.clearInterval(timer)
+    }
   }, [client])
+
   const operate = async (action: string, input?: Record<string, unknown>): Promise<void> => {
-    setBusy(true); setFailure(undefined)
-    try { setSnapshot(await client.call(action, input)); setKey(''); setCode('') } catch (error) { setFailure(error instanceof Error ? error.message : 'No se pudo completar la operación de correo.') } finally { setBusy(false) }
+    setBusy(true)
+    setFailure(undefined)
+    try {
+      setSnapshot(await client.call(action, input))
+      setKey('')
+      setCode('')
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : 'No se pudo completar la operación de correo.')
+    } finally {
+      setBusy(false)
+    }
   }
-  const labels: Readonly<Record<string, string>> = { connected: 'Conectado', connecting: 'Conectando', disconnected: 'Sin conexión', 'not-configured': 'Sin configurar', 'quota-reached': 'Límite gratuito alcanzado', received: 'Recibido', pending: 'Pendiente', running: 'Kira está trabajando', verifying: 'Verificando resultado', 'reply-pending': 'Respuesta pendiente', replied: 'Respuesta enviada', blocked: 'Necesita tu atención' }
+
   const state = snapshot?.account.state
   const kiraInbox = snapshot?.account.inboxId
+  const ready = state === 'ready'
+  const pendingVerification = state === 'pending-verification'
+  const ambiguous = state === 'signup-ambiguous'
+  const connection = snapshot?.connection ?? 'disconnected'
+  const statusText = ready
+    ? connection === 'connected'
+      ? 'Correo verificado · Activo'
+      : connection === 'connecting'
+        ? 'Correo verificado · Conectando'
+        : 'Correo verificado'
+    : pendingVerification ? 'Verifica una vez'
+      : ambiguous ? 'Necesita recuperación'
+        : 'Aún sin correo'
+  const statusClass = ready
+    ? `${styles.status} ${styles.statusReady}`
+    : pendingVerification || ambiguous
+      ? `${styles.status} ${styles.statusWarn}`
+      : styles.status
+
   const copyKiraInbox = (): void => {
     if (kiraInbox === undefined) return
     void globalThis.navigator.clipboard.writeText(kiraInbox)
   }
-  return <section className={styles.block} aria-label="Correo propio de Phoenix">
-    <div className={styles.heading}><h3>Correo propio de Phoenix</h3></div>
-    <p>
-      Recibe encargos y contesta cuando Phoenix está ejecutándose en tu PC. Si la PC está apagada,
-      el proveedor conserva los correos y Phoenix recupera únicamente los nuevos al volver a arrancar.
-      Buzón del plan gratuito; los modelos mantienen sus límites y costes habituales.
-    </p>
-    {kiraInbox === undefined ? null : <p>
-      <span>Correo de Kira: </span><strong>{kiraInbox}</strong>{' '}
-      <button type="button" disabled={busy} aria-label="Copiar correo de Kira" onClick={copyKiraInbox}>Copiar</button>
-    </p>}
-    <p role="status">{state === 'ready' ? 'Correo verificado' : state === 'pending-verification' ? 'Pendiente de verificación' : state === 'signup-ambiguous' ? 'Alta sin confirmar: recupera la clave de la cuenta existente.' : 'Sin configurar'}{state === 'ready' ? ` · ${labels[snapshot?.connection ?? 'disconnected'] ?? 'Sin conexión'}` : ''}</p>
-    <label>Correo del propietario <input type="email" value={owner} onChange={(event) => { setOwner(event.target.value) }} disabled={busy || state === 'ready'} /></label>
-    {state === 'ready' ? null : <>
-      {state === 'not-configured' && <><p>Si hay una cuenta de Google conectada, Kira intenta crear su buzón automáticamente en segundo plano. Este botón queda como respaldo manual.</p><button type="button" disabled={busy || !owner} onClick={() => { void operate('signup', { ownerEmail: owner }) }}>Crear mi correo gratuito</button></>}
-      <details><summary>Conectar una cuenta existente</summary>
-        <label>Dirección del buzón <input type="email" value={inbox} onChange={(event) => { setInbox(event.target.value) }} disabled={busy} /></label>
-        <label>Clave de AgentMail <input type="password" autoComplete="off" value={key} onChange={(event) => { setKey(event.target.value) }} disabled={busy} /></label>
-        <button type="button" disabled={busy || !owner || !inbox || !key} onClick={() => { void operate('connect', { ownerEmail: owner, inboxId: inbox, apiKey: key }) }}>Conectar buzón</button>
+
+  return <section className={styles.mailCard} aria-label="Correo de Kira">
+    <div className={styles.hero}>
+      <div className={styles.avatar} aria-hidden="true">K</div>
+      <div className={styles.heroCopy}>
+        <h3>Correo de Kira</h3>
+        <p>Su buzón propio para recibir encargos y enviarte resultados.</p>
+      </div>
+      <span className={statusClass} role="status">{statusText}</span>
+    </div>
+
+    {kiraInbox === undefined ? null : <div className={styles.identity}>
+      <span className={styles.identityLabel}>Dirección de Kira</span>
+      <div className={styles.addressRow}>
+        <strong className={styles.address}>{kiraInbox}</strong>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={busy}
+          aria-label="Copiar correo de Kira"
+          onClick={copyKiraInbox}
+        >
+          Copiar
+        </button>
+      </div>
+    </div>}
+
+    {state === 'not-configured' || state === undefined ? <div className={styles.setup}>
+      <p className={styles.note}>
+        Kira puede crear su buzón gratuito automáticamente. No necesitas abrir AgentMail
+        ni generar una clave API.
+      </p>
+      <label>
+        <span className={styles.fieldLabel}>Tu correo para recibir el código de verificación</span>
+        <input
+          className={styles.field}
+          type="email"
+          value={owner}
+          onChange={(event) => { setOwner(event.target.value) }}
+          disabled={busy}
+          placeholder="tu@correo.com"
+        />
+      </label>
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className={styles.button}
+          disabled={busy || owner.trim().length === 0}
+          onClick={() => { void operate('signup', { ownerEmail: owner }) }}
+        >
+          Configurar correo de Kira
+        </button>
+        <button
+          type="button"
+          className={styles.secondaryButton}
+          disabled={busy}
+          onClick={() => { void operate('refresh') }}
+        >
+          Comprobar estado
+        </button>
+      </div>
+    </div> : null}
+
+    {pendingVerification ? <div className={styles.setup}>
+      <p className={styles.note}>
+        El buzón ya existe. Revisa {snapshot?.account.ownerEmail ?? 'tu correo'} e introduce
+        el código de seis dígitos. No se creará otro buzón.
+      </p>
+      <label>
+        <span className={styles.fieldLabel}>Código de verificación</span>
+        <input
+          className={styles.field}
+          inputMode="numeric"
+          autoComplete="one-time-code"
+          value={code}
+          onChange={(event) => { setCode(event.target.value) }}
+          disabled={busy}
+          placeholder="123456"
+        />
+      </label>
+      <button
+        type="button"
+        className={styles.button}
+        disabled={busy || !/^\d{6}$/u.test(code)}
+        onClick={() => { void operate('verify', { code }) }}
+      >
+        Verificar y activar
+      </button>
+    </div> : null}
+
+    {ready ? <>
+      <p className={styles.help}>
+        Si la PC está apagada, el proveedor conserva los mensajes. Al volver a encender Phoenix,
+        Kira recupera los nuevos y evita volver a ejecutar los ya procesados.
+      </p>
+      <details className={styles.advanced}>
+        <summary>Opciones</summary>
+        <div className={styles.advancedBody}>
+          <label>
+            <span className={styles.fieldLabel}>Remitentes autorizados</span>
+            <input
+              className={styles.field}
+              value={contacts}
+              onChange={(event) => { setContacts(event.target.value) }}
+              disabled={busy}
+              placeholder="correo@ejemplo.com"
+            />
+          </label>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={busy}
+            onClick={() => {
+              void operate('configure', {
+                contacts: contacts.split(',').map(value => value.trim()).filter(Boolean),
+              })
+            }}
+          >
+            Guardar remitentes
+          </button>
+          {snapshot?.startup?.supported === true ? <label className={styles.help}>
+            <input
+              type="checkbox"
+              checked={snapshot.startup.enabled}
+              disabled={busy}
+              onChange={(event) => {
+                void operate('startup', { enabled: event.target.checked })
+              }}
+            />{' '}
+            Iniciar Phoenix en segundo plano con Windows
+          </label> : null}
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={busy}
+            onClick={() => { void operate('refresh') }}
+          >
+            Actualizar estado
+          </button>
+        </div>
       </details>
-    </>}
-    {state !== 'pending-verification' ? null : <>
-      {snapshot?.account.inboxId === undefined ? null : <p>Kira ya creó su correo. Revisa {snapshot.account.ownerEmail ?? 'tu correo del propietario'} para el código de verificación.</p>}
-      <label>Código de verificación <input inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(event) => { setCode(event.target.value) }} disabled={busy} /></label>
-      <button type="button" disabled={busy || !/^\d{6}$/u.test(code)} onClick={() => { void operate('verify', { code }) }}>Verificar correo</button>
-    </>}
-    {state !== 'ready' ? null : <>
-      <label>Remitentes autorizados <input value={contacts} onChange={(event) => { setContacts(event.target.value) }} disabled={busy} placeholder="correo@ejemplo.com" /></label>
-      <button type="button" disabled={busy} onClick={() => { void operate('configure', { contacts: contacts.split(',').map(value => value.trim()).filter(Boolean) }) }}>Guardar contactos</button>
-    </>}
-    {snapshot?.startup?.supported !== true ? null : <label><input type="checkbox" checked={snapshot.startup.enabled} disabled={busy} onChange={(event) => { void operate('startup', { enabled: event.target.checked }) }} /> Iniciar Phoenix en segundo plano al entrar en Windows</label>}
-    <button type="button" disabled={busy} onClick={() => { void operate('refresh') }}>Actualizar correo</button>
-    {failure === undefined ? null : <p role="alert">{failure}</p>}
-    {snapshot?.jobs.slice(-5).reverse().map(job => <p key={job.id}><strong>{job.title}</strong> · {labels[job.state] ?? 'Necesita tu atención'}{job.error === undefined ? '' : ` · ${job.error}`}</p>)}
+    </> : null}
+
+    {ambiguous ? <div className={styles.setup}>
+      <p className={styles.failure}>
+        El alta pudo haberse completado, pero Phoenix no recibió la confirmación. Por seguridad
+        no la repetirá y no creará otro buzón.
+      </p>
+      <details className={styles.advanced}>
+        <summary>Recuperación avanzada</summary>
+        <div className={styles.advancedBody}>
+          <label>
+            <span className={styles.fieldLabel}>Correo del propietario</span>
+            <input
+              className={styles.field}
+              type="email"
+              value={owner}
+              onChange={(event) => { setOwner(event.target.value) }}
+              disabled={busy}
+            />
+          </label>
+          <label>
+            <span className={styles.fieldLabel}>Dirección existente de Kira</span>
+            <input
+              className={styles.field}
+              type="email"
+              value={inbox}
+              onChange={(event) => { setInbox(event.target.value) }}
+              disabled={busy}
+            />
+          </label>
+          <label>
+            <span className={styles.fieldLabel}>Clave de recuperación de AgentMail</span>
+            <input
+              className={styles.field}
+              type="password"
+              autoComplete="off"
+              value={key}
+              onChange={(event) => { setKey(event.target.value) }}
+              disabled={busy}
+            />
+          </label>
+          <button
+            type="button"
+            className={styles.secondaryButton}
+            disabled={busy || !owner || !inbox || !key}
+            onClick={() => {
+              void operate('connect', { ownerEmail: owner, inboxId: inbox, apiKey: key })
+            }}
+          >
+            Recuperar buzón existente
+          </button>
+        </div>
+      </details>
+    </div> : null}
+
+    {failure === undefined ? null : <p className={styles.failure} role="alert">{failure}</p>}
+
+    {snapshot?.jobs.length === 0 ? null : <details className={styles.advanced}>
+      <summary>Actividad reciente</summary>
+      <div className={styles.jobs}>
+        {snapshot?.jobs.slice(-5).reverse().map(job => <p className={styles.job} key={job.id}>
+          <strong>{job.title}</strong> · {JOB_LABELS[job.state] ?? 'Necesita tu atención'}
+          {job.error === undefined ? '' : ` · ${job.error}`}
+        </p>)}
+      </div>
+    </details>}
   </section>
 }
