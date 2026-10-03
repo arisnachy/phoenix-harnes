@@ -31,7 +31,7 @@ export const teamChatReactionsDefinition = {
         messageId: value.messageId,
         reactorId: value.reactorId,
         reactorName: value.reactorName,
-        reactorKind: value.reactorId === event.data.teamId ? 'kira' : 'agent',
+        reactorKind: String(value.reactorId) === String(event.data.teamId) ? 'kira' : 'agent',
         emoji,
         createdAt: event.time,
       })
