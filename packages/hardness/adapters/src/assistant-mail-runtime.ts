@@ -223,20 +223,23 @@ export function installAssistantMail(ctx: Context,
       connection: status,
     }
   }
-  new AssistantMailControlService(
-    ctx,
-    identity,
-    async (ownerEmail) => {
-      await ensureEnrollment(ownerEmail, true)
-      const account = await onboarding.status()
-      const root = ctx.get('agents')?.roots()[0]
-      if (account.sessionId === undefined && root !== undefined) {
-        await onboarding.configure(account.contacts, root.id)
-      }
-      if (account.state === 'ready') void pump()
-      return identity()
-    },
-  )
+  const serviceContext = ctx as unknown as { readonly reflect?: unknown }
+  if (serviceContext.reflect !== undefined) {
+    new AssistantMailControlService(
+      ctx,
+      identity,
+      async (ownerEmail) => {
+        await ensureEnrollment(ownerEmail, true)
+        const account = await onboarding.status()
+        const root = ctx.get('agents')?.roots()[0]
+        if (account.sessionId === undefined && root !== undefined) {
+          await onboarding.configure(account.contacts, root.id)
+        }
+        if (account.state === 'ready') void pump()
+        return identity()
+      },
+    )
+  }
   let connection: HostConnectionHandle | undefined
   let rpcDispose: (() => Promise<void>) | undefined
   const syncRpc = (): void => {
