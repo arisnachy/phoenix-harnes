@@ -217,6 +217,9 @@ export class CodexRealtimeBridge {
   private async startProcess(): Promise<void> {
     const codexArgs = [
       '--config', "forced_login_method='chatgpt'",
+      '--config', 'features.realtime_conversation=true',
+      '--config', 'features.plugins=false',
+      '--config', 'skills.bundled.enabled=false',
       'app-server', '--listen', 'stdio://',
     ]
     const command = process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : 'codex'
