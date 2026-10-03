@@ -140,6 +140,33 @@ describe('Team identity and provisioning', () => {
     }
   })
 
+  it('uses a hard three-teammate product cap by default', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'])
+    const first = await spawn(ctx, lead, 'first-worker')
+    const second = await spawn(ctx, lead, 'second-worker')
+    const third = await spawn(ctx, lead, 'third-worker')
+    await waitRunning(ctx, first.member.id)
+    await waitRunning(ctx, second.member.id)
+    await waitRunning(ctx, third.member.id)
+
+    await expect(spawn(ctx, lead, 'fourth-worker')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+
+    ctx.agents.get(first.member.id)?.cancel({ kind: 'user' })
+    ctx.agents.get(second.member.id)?.cancel({ kind: 'user' })
+    ctx.agents.get(third.member.id)?.cancel({ kind: 'user' })
+    await Promise.all([
+      waitNoAgent(ctx, first.member.id),
+      waitNoAgent(ctx, second.member.id),
+      waitNoAgent(ctx, third.member.id),
+    ])
+  })
+
+  it('rejects deployment attempts to raise the product cap above three', async () => {
+    await expect(setup([], { maxMembers: 4 })).rejects.toMatchObject({
+      code: 'TEAM_INVALID_CONFIG',
+    })
+  })
+
   it('supports direct-constructor defaults and recovers roots that already exist', async () => {
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)
