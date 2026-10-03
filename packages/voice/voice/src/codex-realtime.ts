@@ -415,7 +415,7 @@ export class CodexRealtimeBridge {
     predicate: (params: unknown) => boolean,
     timeoutMs: number,
   ): NotificationWait {
-    let waiter: NotificationWaiter
+    let waiter!: NotificationWaiter
     const promise = new Promise<unknown>((resolve, reject) => {
       waiter = {
         predicate,
