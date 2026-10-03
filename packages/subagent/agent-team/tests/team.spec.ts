@@ -1853,10 +1853,12 @@ describe('visible team conversation', () => {
     const row = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(item => item.senderId === zenith.member.id)!
     const count = adapter.requests.length
     await ctx.agentTeams.chatReact({ sessionId: lead.id, messageId: row.id, emoji: '👍', active: true })
-    await ctx.agentTeams.reactToChat(lead, { sessionId: lead.id, messageId: row.id, emoji: '✅', active: true })
+    await ctx.agentTeams.reactToChat(lead, { sessionId: lead.id, messageId: row.id, emoji: '🐍', active: true })
     await ctx.agentTeams.reactToChat(ctx.agents.get(argo.member.id)!, { sessionId: lead.id, messageId: row.id, emoji: '👀', active: true })
     expect(adapter.requests).toHaveLength(count)
-    expect((await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(item => item.id === row.id)?.reactions.map(item => item.reactorKind)).toEqual(['user', 'kira', 'agent'])
+    const reactions = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(item => item.id === row.id)?.reactions
+    expect(reactions?.map(item => item.reactorKind)).toEqual(['user', 'kira', 'agent'])
+    expect(reactions?.map(item => item.emoji)).toEqual(['👍', '🐍', '👀'])
     const realFollowup = ctx.subagents.followup.bind(ctx.subagents)
     const deliveries = vi.spyOn(ctx.subagents, 'followup').mockImplementationOnce(realFollowup).mockRejectedValueOnce(new Error('temporary delivery conflict'))
     const request = { requestId: 'shared-user-intervention', sessionId: lead.id, targetId: zenith.member.id,
