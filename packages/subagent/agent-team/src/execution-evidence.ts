@@ -25,7 +25,7 @@ const SEND_NOUN = /(?:\b(?:env[ií]o|delivery|sending)\b.{0,80}\b(?:correo|email
 // oxlint-disable-next-line @stylistic/max-len -- Keep the non-evidence Team tool set in one visible gate.
 const COORDINATION_TOOL = /^(?:spawn_teammate|send_message|followup_task|team_react|team_chat_react|team_chat_read|list_agents|wait_agent|interrupt_agent|team_task_.+|subagent(?:_fork)?|todo_write|ask_user_question|report)$/u
 // oxlint-disable-next-line @stylistic/max-len -- Effectful tool verbs are intentionally one auditable allowlist.
-const EFFECT_TOOL = /^(?:send|create|update|edit|modify|write|save|upload|deploy|publish|commit|push|install|uninstall|delete|remove|move|rename|copy|submit|schedule|book|fill|reply|forward|archive|label|merge|apply|set|add|insert|execute|run|bash|pwsh|run_code)(?:_|$)/u
+const EFFECT_TOOL = /^(?:send|create|update|edit|modify|write|save|upload|deploy|publish|commit|push|install|uninstall|delete|remove|move|rename|copy|submit|schedule|book|fill|reply|forward|archive|label|merge|apply|set|add|insert|execute|run|bash|pwsh|run_code|click|type|press|select|navigate)(?:_|$)/u
 
 function textOf(content: readonly { readonly type: string; readonly text?: unknown }[]): string {
   return content
@@ -122,7 +122,10 @@ function successfulTools(
     const call = calls.get(callId)
     if (call === undefined) continue
     const operation = operationName(call.name)
-    if (COORDINATION_TOOL.test(operation)) continue
+    // Match the actual model-facing tool id, not only its last namespace
+    // segment: mcp__Slack__send_message is a real external effect, while the
+    // local Team tool named send_message is coordination only.
+    if (COORDINATION_TOOL.test(call.name)) continue
     if (requirement === 'effect' && !EFFECT_TOOL.test(operation)) continue
     if (!toolMatchesAssignment(assignmentText, call)) continue
     tools.push(operation)
