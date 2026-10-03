@@ -342,7 +342,7 @@ export async function tryStartCodexRealtimeVoice(
     })
     if (!result.ok) throw new Error(result.error.code)
     if (!result.value.accepted || result.value.answerSdp === undefined) {
-      throw new Error(result.value.reason ?? 'codex-realtime-rejected')
+      throw new Error(result.value.detail ?? result.value.reason ?? 'codex-realtime-rejected')
     }
     await peer.setRemoteDescription({ type: 'answer', sdp: result.value.answerSdp })
     if (generation !== codexRealtimeVoiceGeneration) throw new Error('start-superseded')
