@@ -1,6 +1,7 @@
 import type { ConnectionHandle } from '@phoenix-ai/dsh-api-remotes/client'
 import type { SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ProactivityAttentionItem } from '../contract/slots.ts'
+import { speakVoiceAssistantNotice } from '../voice.ts'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -56,6 +57,27 @@ function sameAttention(
   })
 }
 
+const VOICE_ATTENTION_FRESH_MS = 5 * 60_000
+
+function newlySpeakableAttention(
+  previous: readonly ProactivityAttentionItem[],
+  next: readonly ProactivityAttentionItem[],
+  now = Date.now(),
+): readonly ProactivityAttentionItem[] {
+  const seen = new Set(previous.map(item => `${item.id}\u0000${item.revision}`))
+  return next.filter(item => {
+    if (item.kind !== 'result' && item.kind !== 'failure') return false
+    if (seen.has(`${item.id}\u0000${item.revision}`)) return false
+    const at = Date.parse(item.at)
+    return Number.isFinite(at) && Math.abs(now - at) <= VOICE_ATTENTION_FRESH_MS
+  })
+}
+
+function attentionSpeech(item: ProactivityAttentionItem): string {
+  const prefix = item.kind === 'failure' ? 'Necesito tu atención.' : 'Trabajo terminado.'
+  return `${prefix} ${item.title}. ${item.detail ?? ''}`.replace(/\s+/gu, ' ').trim()
+}
+
 /**
  * Pull the local Host's ranked proactive attention rows without disturbing chat when unavailable.
  * @param connection - Current loopback client connection.
@@ -70,8 +92,12 @@ export async function refreshProactivityAttention(
     const response = await connection.rpc.call('/phoenix-tasks', 'attention', {})
     if (!response.ok) return
     const next = parseProactivityAttention(response.value)
-    if (next === undefined || sameAttention(store.getSnapshot(), next)) return
+    const previous = store.getSnapshot()
+    if (next === undefined || sameAttention(previous, next)) return
     store.set(next)
+    for (const item of newlySpeakableAttention(previous, next)) {
+      speakVoiceAssistantNotice(attentionSpeech(item))
+    }
   } catch {
     // Hero attention is best-effort local chrome; reconnect/poll retries it without replacing healthy state.
   }
