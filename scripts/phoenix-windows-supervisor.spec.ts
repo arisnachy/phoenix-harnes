@@ -199,14 +199,19 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('retired isolated runtime')
   })
 
-  it('retires a stale isolated runtime when a clean managed checkout has advanced past it', () => {
-    expect(source).toContain('function activeRuntimeIsSupersededByLiveCheckout(target)')
-    expect(source).toContain('!liveStatus.ok || liveStatus.entries.length > 0')
-    expect(source).toContain('isManagedReleaseBranch(liveBranch, STABLE_SOURCE_BRANCH)')
-    expect(source).toContain("['merge-base', '--is-ancestor', target, liveHead]")
+  it('never restores an isolated runtime that is older than the durable checkout HEAD', () => {
+    const start = source.indexOf('function activeRuntimeIsSupersededByLiveCheckout(target)')
+    const end = source.indexOf('function restoreActiveRuntime()', start)
+    const supersededRule = source.slice(start, end)
+
+    expect(supersededRule).toContain("const liveHead = gitValue(root, ['rev-parse', 'HEAD'])")
+    expect(supersededRule).toContain("['merge-base', '--is-ancestor', target, liveHead]")
+    expect(supersededRule).not.toContain('gitStatus(root)')
+    expect(supersededRule).not.toContain("['branch', '--show-current']")
+    expect(supersededRule).not.toContain('isManagedReleaseBranch')
     expect(source).toContain('activeRuntimeIsSupersededByLiveCheckout(value.target)')
     expect(source).toContain('retired stale isolated runtime')
-    expect(source).toContain('clean managed checkout is newer')
+    expect(source).toContain('durable checkout is newer')
   })
 
   it('retires an isolated runtime after any unexpected Host exit instead of relaunching it forever', () => {

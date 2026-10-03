@@ -590,13 +590,14 @@ function activatePreparedRuntime(target) {
 }
 
 function activeRuntimeIsSupersededByLiveCheckout(target) {
-  const liveBranch = gitValue(root, ['branch', '--show-current'])
   const liveHead = gitValue(root, ['rev-parse', 'HEAD'])
-  const liveStatus = gitStatus(root)
-  if (liveBranch === undefined || liveHead === undefined) return false
-  if (!liveStatus.ok || liveStatus.entries.length > 0) return false
-  if (!isManagedReleaseBranch(liveBranch, STABLE_SOURCE_BRANCH)) return false
-  if (liveHead === target) return false
+  if (liveHead === undefined || liveHead === target) return false
+
+  // Runtime selection is a version-ordering decision, not a cleanliness
+  // decision. If the saved isolated runtime is an ancestor of the durable
+  // checkout HEAD, restoring it would intentionally boot older PHOENIX code.
+  // Local changes and development branches must never make an older runtime
+  // outrank a newer checkout.
   return gitSucceeds(root, ['merge-base', '--is-ancestor', target, liveHead])
 }
 
@@ -614,7 +615,7 @@ function restoreActiveRuntime() {
       const liveHead = gitValue(root, ['rev-parse', 'HEAD'])
       console.error(
         `[PHOENIX UPDATE] retired stale isolated runtime ${value.target.slice(0, 12)}; `
-        + `clean managed checkout is newer at ${liveHead?.slice(0, 12) ?? 'unknown'}.`,
+        + `durable checkout is newer at ${liveHead?.slice(0, 12) ?? 'unknown'}.`,
       )
       return
     }
