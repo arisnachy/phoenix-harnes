@@ -534,7 +534,7 @@ function isThreadModelCompatibilityError(value: unknown): boolean {
 
 function isRealtimeVersionCompatibilityError(value: unknown): boolean {
   const message = errorText(value)
-  return /(?:v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v3|frameless|gpt-live-1-codex)/iu.test(message)
+  return /notification timed out: thread\/realtime\/sdp|\b(?:400|404)\b|bad request|(?:v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v3|frameless|gpt-live-1-codex)/iu.test(message)
 }
 
 function realtimeNotificationMessage(value: unknown, fallback: string): string {
