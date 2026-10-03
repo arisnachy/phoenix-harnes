@@ -236,8 +236,15 @@ export function pruneManagedCodexVersions(home, activeVersion) {
     if (!entry.isDirectory()) continue
     if (entry.name === activeVersion) continue
     if (!/^\d+\.\d+\.\d+$/u.test(entry.name) && !entry.name.startsWith('.staging-')) continue
-    rmSync(join(versions, entry.name), { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })
-    removed += 1
+    try {
+      rmSync(join(versions, entry.name), { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })
+      removed += 1
+    } catch (error) {
+      if (!['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) throw error
+      // A still-running Codex process can keep its previous Windows executable
+      // locked. The active marker already points at the new version; leave the
+      // old directory for the next maintenance pass instead of failing update.
+    }
   }
   return { removed }
 }
