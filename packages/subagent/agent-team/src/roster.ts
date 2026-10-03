@@ -299,8 +299,11 @@ export class TeamRoster {
       if (state.memberIdsByName.has(name)) {
         throw new TeamError(`teammate name "${name}" was already used in this Team`, 'TEAM_MEMBER_NAME_TAKEN')
       }
-      if ([...state.members.values()].filter(member => member.phase !== 'failed').length >= this.maxMembers) {
-        throw new TeamError(`Team member limit ${this.maxMembers} reached`, 'TEAM_MEMBER_LIMIT')
+      const occupied = [...state.members.values()].filter(member =>
+        member.phase === 'provisioning'
+        || (member.phase === 'active' && this.ctx.agents.get(member.id) !== undefined))
+      if (occupied.length >= this.maxMembers) {
+        throw new TeamError(`Concurrent Team member limit ${this.maxMembers} reached`, 'TEAM_MEMBER_LIMIT')
       }
       await this.journal.appendAndFlush(root, 'team/member', { version: 1, teamId: TeamId(root.id), member })
     })
