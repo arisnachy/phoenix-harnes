@@ -12,7 +12,7 @@ import type {
   KiraTeamMessageChatData,
   KiraTeamReactionChatData,
 } from '@phoenix-ai/dsh-client-ui-conversation/client'
-import { NS } from './locales.ts'
+import { NS, type KiraTeamsKey } from './locales.ts'
 import css from './TeamChatMessage.module.css'
 
 interface TeamIdentity {
@@ -88,6 +88,40 @@ const PURPOSE_LABEL: Readonly<Record<NonNullable<KiraTeamMessageChatData['purpos
   update: 'Actualización',
 }
 
+const STATUS_FALLBACK: Readonly<Record<KiraTeamsKey, string>> = {
+  'status.preparing': 'preparando',
+  'status.running': 'trabajando',
+  'status.waiting': 'en espera',
+  'status.done': 'terminó',
+  'status.failed': 'falló',
+} as Partial<Record<KiraTeamsKey, string>> as Readonly<Record<KiraTeamsKey, string>>
+
+function assignmentStatusKey(status: string | undefined): KiraTeamsKey {
+  switch (status?.toLocaleLowerCase()) {
+    case 'working':
+    case 'running':
+    case 'active':
+      return 'status.running'
+    case 'waiting':
+      return 'status.waiting'
+    case 'done':
+    case 'completed':
+    case 'inactive':
+    case 'idle':
+      return 'status.done'
+    case 'failed':
+    case 'error':
+      return 'status.failed'
+    case 'provisioning':
+    default:
+      return 'status.preparing'
+  }
+}
+
+function runningStatus(status: string | undefined): boolean {
+  return status === 'working' || status === 'running' || status === 'active' || status === 'provisioning'
+}
+
 function textOf(content: readonly unknown[]): string {
   return content.flatMap((block) => {
     if (typeof block !== 'object' || block === null || Array.isArray(block)) return []
@@ -136,6 +170,13 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   const target = data.targetName === undefined
     ? undefined
     : identityFor(data.targetName, data.targetId)
+  const senderStatus = participants[data.senderId]?.status
+  const targetStatus = data.purpose === 'assignment'
+    ? participants[data.targetId]?.status
+    : undefined
+  const targetStatusKey = data.purpose === 'assignment' && target !== undefined
+    ? assignmentStatusKey(targetStatus)
+    : undefined
   const text = textOf(data.content)
   if (text.trim() === '') return null
 
@@ -145,9 +186,9 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
           kind={sender.kind}
           activity={undefined}
-          running={false}
-          pending={false}
-          ready
+          running={data.senderKind === 'agent' && runningStatus(senderStatus)}
+          pending={data.senderKind === 'agent' && senderStatus === 'provisioning'}
+          ready={senderStatus !== 'provisioning'}
           variant="card"
         />}
       </div>
@@ -160,6 +201,16 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
             <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
           )}
           {target !== undefined && <span className={css.target}>→ {target.name}</span>}
+          {targetStatusKey !== undefined && (
+            <span
+              className={css.assignmentStatus}
+              data-team-target-status={targetStatus ?? 'provisioning'}
+              role="status"
+            >
+              <span className={css.statusDot} aria-hidden="true" />
+              {t?.(targetStatusKey) ?? STATUS_FALLBACK[targetStatusKey]}
+            </span>
+          )}
         </div>
         {data.pendingDelivery === true && <span role="status">{t?.('chat.pendingDelivery') ?? 'Delivery pending; retry on reconnect'}</span>}
         {data.replyQuote !== undefined && <blockquote>{data.replyQuote}</blockquote>}
