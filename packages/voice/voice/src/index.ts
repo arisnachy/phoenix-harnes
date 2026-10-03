@@ -124,6 +124,7 @@ export interface VoiceRuntimeStatus {
   readonly ttsProvider?: string
   /** Selected STT provider id, when currently available. */
   readonly sttProvider?: string
+  /** Whether native Codex realtime voice is enabled for eligible sessions. */
   readonly codexRealtime: boolean
 }
 
