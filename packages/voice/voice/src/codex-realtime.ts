@@ -25,10 +25,16 @@ interface UnknownRecord {
   readonly [key: string]: unknown
 }
 
+export interface CodexRealtimeInitialItem {
+  readonly role: 'user' | 'developer' | 'assistant'
+  readonly text: string
+}
+
 export interface CodexRealtimeStartOptions {
   readonly key: string
   readonly offerSdp: string
   readonly model?: string
+  readonly initialItems?: readonly CodexRealtimeInitialItem[]
 }
 
 export interface CodexRealtimeStartResult {
@@ -105,9 +111,15 @@ export class CodexRealtimeBridge {
         flushTranscriptTailOnSessionEnd: true,
         backendReasoningStatus: false,
         outputModality: 'audio',
-        includeStartupContext: true,
+        // The Phoenix transcript below supplies only the recent useful context.
+        // Avoid replaying Codex's much larger startup context into every short
+        // voice session: the normal Codex thread still owns delegated work.
+        includeStartupContext: false,
+        ...(options.initialItems === undefined || options.initialItems.length === 0
+          ? {}
+          : { initialItems: options.initialItems }),
         realtimeStartInstructions:
-          'Speak naturally and concisely. Keep the spoken conversation synchronized with the Codex thread and hand substantive work to Codex when needed.',
+          'Speak naturally and concisely. This is a continuation of the Phoenix conversation represented by the compact initial history. Do not repeat that history. Hand substantive work to Codex when needed.',
         transport: { type: 'webrtc', sdp: options.offerSdp },
         version: 'v3',
       })
