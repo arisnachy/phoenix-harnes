@@ -212,14 +212,14 @@ export function installAssistantMail(ctx: Context,
       }
     },
     async attention() {
-    const rows: ProactivityAttentionItem[] = []
-    for (const job of await journal.list()) {
-      if (job.state !== 'replied' && job.state !== 'blocked') continue
-      const detail = job.state === 'replied' ? job.summary : job.error
-      if (detail === undefined) continue
-      const revision = createHash('sha256').update(JSON.stringify([job.state, detail])).digest('hex')
-      rows.push({ id: `mail:${job.id}`, revision, taskId: job.id, kind: job.state === 'replied' ? 'result' : 'failure', title: job.message.subject, detail: detail.slice(0, 320), at: job.updatedAt, score: job.state === 'blocked' ? 130 : 100 })
-    }
-    return rows
-  } }
+      const rows: ProactivityAttentionItem[] = []
+      for (const job of await journal.list()) {
+        if (job.state !== 'replied' && job.state !== 'blocked') continue
+        const detail = job.state === 'replied' ? job.summary : job.error
+        if (detail === undefined) continue
+        const revision = createHash('sha256').update(JSON.stringify([job.state, detail])).digest('hex')
+        rows.push({ id: `mail:${job.id}`, revision, taskId: job.id, kind: job.state === 'replied' ? 'result' : 'failure', title: job.message.subject, detail: detail.slice(0, 320), at: job.updatedAt, score: job.state === 'blocked' ? 130 : 100 })
+      }
+      return rows
+    } }
 }
