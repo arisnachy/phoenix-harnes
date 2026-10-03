@@ -566,6 +566,7 @@ export class VoiceRuntime extends TypertRemoteService {
     const sttProvider = this.selectSttProvider()
     return {
       enabled: this.config.enabled,
+      codexRealtime: this.config.codexRealtime,
       queued: this.queue.length,
       speaking: this.current !== undefined
         || [...this.conversationSpeech.values()].some(channel => channel.controllers.size > 0),
