@@ -43,18 +43,20 @@ export interface AssistantMailIdentity {
 export interface AssistantMailControl {
   /** Read the current Kira mailbox identity. */
   status(): Promise<AssistantMailIdentity>
-  /** Create the free Kira mailbox once when absent, or reuse the existing enrollment. */
-  ensure(): Promise<AssistantMailIdentity>
+  /** Create the free Kira mailbox once when absent, or reuse the existing enrollment.
+   * @param ownerEmail Optional explicit owner email when no connected account identity is available.
+   */
+  ensure(ownerEmail?: string): Promise<AssistantMailIdentity>
 }
 
 class AssistantMailControlService extends Service implements AssistantMailControl {
   constructor(ctx: Context,
     private readonly read: () => Promise<AssistantMailIdentity>,
-    private readonly create: () => Promise<AssistantMailIdentity>) {
+    private readonly create: (ownerEmail?: string) => Promise<AssistantMailIdentity>) {
     super(ctx, 'assistantMail')
   }
   status(): Promise<AssistantMailIdentity> { return this.read() }
-  ensure(): Promise<AssistantMailIdentity> { return this.create() }
+  ensure(ownerEmail?: string): Promise<AssistantMailIdentity> { return this.create(ownerEmail) }
 }
 
 /** Mail host projection consumed by normal home attention. */
@@ -98,15 +100,20 @@ export function installAssistantMail(ctx: Context,
     await credentials.set(ref, key)
   } })
   let enrolling: Promise<void> | undefined
-  const ensureEnrollment = (): Promise<void> => {
+  const ensureEnrollment = (explicitOwnerEmail?: string): Promise<void> => {
     if (enrolling !== undefined) return enrolling
     enrolling = (async () => {
       const account = await onboarding.status()
       if (account.state !== 'not-configured') return
       // Never create the provider account until Phoenix can durably retain the returned key.
-      if (ctx.get('credentials') === undefined) return
-      const owner = await config.resolveOwnerEmail?.()
-      if (owner === undefined || owner.trim().length === 0) return
+      if (ctx.get('credentials') === undefined) throw new Error('secure credential storage is unavailable')
+      const resolvedOwner = explicitOwnerEmail?.trim() || await config.resolveOwnerEmail?.()
+      if (resolvedOwner === undefined || resolvedOwner.length === 0) {
+        throw new Error('owner email required for one-time mailbox verification')
+      }
+      const owner = mailAddress(resolvedOwner)
+      // AgentMail creates the mailbox without a pre-existing API key. The signup
+      // response returns the new key, which Phoenix stores immediately in credentials.
       // signup persists signup-ambiguous before provider IO, so a timeout is never
       // silently retried and cannot rotate/lose the first account key.
       await onboarding.signup(owner, `kira-${randomUUID().slice(0, 8)}`)
@@ -218,8 +225,8 @@ export function installAssistantMail(ctx: Context,
   new AssistantMailControlService(
     ctx,
     identity,
-    async () => {
-      await ensureEnrollment()
+    async (ownerEmail) => {
+      await ensureEnrollment(ownerEmail)
       const account = await onboarding.status()
       const root = ctx.get('agents')?.roots()[0]
       if (account.sessionId === undefined && root !== undefined) {
