@@ -61,6 +61,7 @@ function resolvedDshHome(): string {
  * Resolve the PHOENIX-managed stable Codex CLI selected by the background
  * updater. The marker contains only a version and a path relative to DSH_HOME;
  * malformed or missing state falls back to the package-pinned CLI.
+ * @returns Valid managed executable path, or undefined when the marker cannot select one.
  */
 export function managedCodexPackageBin(): string | undefined {
   const runtimeRoot = join(resolvedDshHome(), 'codex-cli')

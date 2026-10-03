@@ -84,7 +84,9 @@ export class CodexRealtimeBridge {
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
 
-  /** Start app-server and verify that its active account is ChatGPT OAuth. */
+  /** Start app-server and verify that its active account is ChatGPT OAuth.
+   * @returns Sidecar availability, authentication and a classified failure reason.
+   */
   async probe(): Promise<CodexRealtimeProbe> {
     try {
       await this.ensureStarted()
@@ -102,7 +104,10 @@ export class CodexRealtimeBridge {
     }
   }
 
-  /** Negotiate one browser WebRTC call through the authenticated Codex backend. */
+  /** Negotiate one browser WebRTC call through the authenticated Codex backend.
+   * @param options Call identity, selected model and browser SDP offer.
+   * @returns Negotiated answer SDP and Codex thread identity.
+   */
   async start(options: CodexRealtimeStartOptions): Promise<CodexRealtimeStartResult> {
     await this.ensureStarted()
     await this.stop(options.key).catch(() => {})
@@ -228,7 +233,10 @@ export class CodexRealtimeBridge {
     }
   }
 
-  /** Stop one active realtime conversation without affecting text Codex use. */
+  /** Stop one active realtime conversation without affecting text Codex use.
+   * @param key Browser-owned call identity.
+   * @returns Whether an existing call was removed; transport failures may reject after local removal.
+   */
   async stop(key: string): Promise<boolean> {
     const threadId = this.sessions.get(key)
     if (threadId === undefined) {
@@ -531,11 +539,13 @@ function normalizeCodexModel(model: string | undefined): string | undefined {
 
 function isThreadModelCompatibilityError(value: unknown): boolean {
   const message = errorText(value)
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the protocol compatibility matcher auditable as one literal.
   return /(?:model|deployment).*(?:not found|unknown|unsupported|unavailable|invalid)|(?:not found|unknown|unsupported|unavailable|invalid).*(?:model|deployment)/iu.test(message)
 }
 
 function isRealtimeVersionCompatibilityError(value: unknown): boolean {
   const message = errorText(value)
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the protocol compatibility matcher auditable as one literal.
   return /notification timed out: thread\/realtime\/sdp|\b(?:400|404)\b|bad request|(?:v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v3|frameless|gpt-live-1-codex)/iu.test(message)
 }
 

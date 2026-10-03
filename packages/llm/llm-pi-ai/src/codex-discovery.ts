@@ -401,6 +401,10 @@ async function waitForNaturalCodexExit(
   })
 }
 
+/** Shut down the owned Codex sidecar, escalating from stdin EOF to process-tree termination.
+ * @param child Sidecar process to stop.
+ * @param lines Readline interface associated with its stdout, closed during cleanup.
+ */
 export async function terminateCodexProcess(
   child: ChildProcessWithoutNullStreams,
   lines: ReadlineInterface,

@@ -3420,6 +3420,8 @@ export interface VoiceRuntimeConfig {
   readonly ttsProvider?: string
   /** Preferred STT provider. */
   readonly sttProvider?: string
+  /** Native Codex/ChatGPT realtime voice, using Codex login rather than API keys. */
+  readonly codexRealtime?: boolean
 }
 ```
 

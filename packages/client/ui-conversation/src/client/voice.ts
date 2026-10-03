@@ -229,7 +229,10 @@ export interface CodexRealtimeVoiceWindow {
   }
 }
 
-/** Browser primitives required for direct Codex Realtime WebRTC. */
+/** Check browser primitives required for direct Codex Realtime WebRTC.
+ * @param scope Browser globals to inspect; defaults to the current window when available.
+ * @returns Whether WebRTC and microphone acquisition are available.
+ */
 export function hasCodexRealtimeVoiceSupport(
   scope: CodexRealtimeVoiceWindow | undefined = typeof window === 'undefined' ? undefined : window,
 ): boolean {
@@ -238,7 +241,9 @@ export function hasCodexRealtimeVoiceSupport(
     && typeof scope.navigator?.mediaDevices?.getUserMedia === 'function'
 }
 
-/** Whether the currently active hands-free session is the direct Codex WebRTC path. */
+/** Identify the currently active hands-free transport.
+ * @returns Whether a direct Codex WebRTC session is active.
+ */
 export function isCodexRealtimeVoiceActive(): boolean {
   return codexRealtimeVoiceSession !== undefined
 }
@@ -254,6 +259,8 @@ export type CodexRealtimeVoiceStartResult =
  * openai-codex. A Codex route never silently degrades to browser/local speech:
  * failures stay failures so the UI cannot make a fallback voice sound like
  * native Codex Realtime.
+ * @param sessionKey Conversation whose selected model route determines the voice provider.
+ * @returns Started, non-Codex route, or a classified startup failure.
  */
 export async function tryStartCodexRealtimeVoice(
   sessionKey: string,
@@ -381,7 +388,9 @@ export async function tryStartCodexRealtimeVoice(
   }
 }
 
-/** Stop the direct Codex call and release mic/audio/WebRTC resources immediately. */
+/** Stop the direct Codex call and release mic/audio/WebRTC resources immediately.
+ * @returns Whether an active session was released; remote cleanup is best effort.
+ */
 export async function stopCodexRealtimeVoice(): Promise<boolean> {
   const session = codexRealtimeVoiceSession
   codexRealtimeVoiceGeneration += 1

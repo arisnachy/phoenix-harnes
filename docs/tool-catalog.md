@@ -2748,7 +2748,7 @@ Create one named, durable teammate. Only the Team Lead may call this tool.
   "properties": {
     "name": {
       "type": "string",
-      "description": "Unique lower-kebab-case teammate name."
+      "description": "Optional unique lower-kebab-case teammate name. Omit for automatic specialist selection from the delegated responsibility."
     },
     "description": {
       "type": "string",
@@ -2768,7 +2768,6 @@ Create one named, durable teammate. Only the Team Lead may call this tool.
     }
   },
   "required": [
-    "name",
     "description",
     "prompt"
   ]
