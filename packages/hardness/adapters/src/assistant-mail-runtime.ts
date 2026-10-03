@@ -6,7 +6,7 @@ import { mailStartupSpec } from './assistant-mail-startup.ts'
 /** Local mailbox lifecycle, human-only configuration RPC and home-feed projection. */
 import { join } from 'node:path'
 import { randomUUID, createHash } from 'node:crypto'
-import type { Context } from '@phoenix-ai/cordis'
+import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
 import { AgentMailTransport } from './assistant-mail-agentmail.ts'
@@ -16,7 +16,7 @@ import { MailOutbox } from './assistant-mail-outbox.ts'
 import { MailReceiver } from './assistant-mail-receiver.ts'
 import { createMailExecutor } from './assistant-mail-executor.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
-import type { MailOutgoingOwnership, MailOutgoingMessage } from './assistant-mail-types.ts'
+import type { MailAccount, MailOutgoingOwnership, MailOutgoingMessage } from './assistant-mail-types.ts'
 import type { ProactivityAttentionItem, ProactivityRuntimeConfig } from './proactivity-runtime.ts'
 
 /** Local mail runtime deployment settings. */
@@ -32,6 +32,31 @@ export interface AssistantMailConfig { readonly directory: string
   readonly authorizeOutgoing: (ownership: MailOutgoingOwnership) => Promise<boolean>
   /** Resolve the already-connected owner email used for automatic first-run enrollment. */
   readonly resolveOwnerEmail?: () => Promise<string | undefined> }
+/** Secret-free Kira mailbox identity exposed to model-facing tools. */
+export interface AssistantMailIdentity {
+  readonly state: MailAccount['state']
+  readonly inboxId?: string
+  readonly connection: string
+}
+
+/** Host service used by Kira to inspect or create her own mailbox without touching Gmail setup. */
+export interface AssistantMailControl {
+  /** Read the current Kira mailbox identity. */
+  status(): Promise<AssistantMailIdentity>
+  /** Create the free Kira mailbox once when absent, or reuse the existing enrollment. */
+  ensure(): Promise<AssistantMailIdentity>
+}
+
+class AssistantMailControlService extends Service implements AssistantMailControl {
+  constructor(ctx: Context,
+    private readonly read: () => Promise<AssistantMailIdentity>,
+    private readonly create: () => Promise<AssistantMailIdentity>) {
+    super(ctx, 'assistantMail')
+  }
+  status(): Promise<AssistantMailIdentity> { return this.read() }
+  ensure(): Promise<AssistantMailIdentity> { return this.create() }
+}
+
 /** Mail host projection consumed by normal home attention. */
 export interface AssistantMailRuntime {
   /** Read material blocked/completed mail outcomes.
@@ -182,6 +207,28 @@ export function installAssistantMail(ctx: Context,
     }).finally(() => { pumping = undefined })
     return pumping
   }
+  const identity = async (): Promise<AssistantMailIdentity> => {
+    const account = await onboarding.status()
+    return {
+      state: account.state,
+      ...(account.inboxId === undefined ? {} : { inboxId: account.inboxId }),
+      connection: status,
+    }
+  }
+  new AssistantMailControlService(
+    ctx,
+    identity,
+    async () => {
+      await ensureEnrollment()
+      const account = await onboarding.status()
+      const root = ctx.get('agents')?.roots()[0]
+      if (account.sessionId === undefined && root !== undefined) {
+        await onboarding.configure(account.contacts, root.id)
+      }
+      if (account.state === 'ready') void pump()
+      return identity()
+    },
+  )
   let connection: HostConnectionHandle | undefined
   let rpcDispose: (() => Promise<void>) | undefined
   const syncRpc = (): void => {
