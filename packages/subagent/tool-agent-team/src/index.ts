@@ -262,13 +262,17 @@ function installChatTools(agent: Agent, ctx: Context): () => void {
   return () => { for (const dispose of disposers.reverse()) void dispose() }
 }
 
+// oxlint-disable-next-line @stylistic/max-len -- Completion vocabulary is intentionally auditable as one bilingual regex.
 const COMPLETION_CLAIM = /\b(?:sent|done|completed|created|updated|changed|fixed|repaired|tested|verified|deployed|published|installed|deleted|removed|submitted|scheduled|booked|saved|enviado|enviada|hecho|hecha|completado|completada|creado|creada|actualizado|actualizada|cambiado|cambiada|arreglado|arreglada|reparado|reparada|probado|probada|verificado|verificada|desplegado|desplegada|publicado|publicada|instalado|instalada|eliminado|eliminada|guardado|guardada|programado|programada)\b/iu
 
 function executionProofText(tools: readonly string[]): string {
   return `✓ Evidencia ejecutada: ${tools.join(', ')}`
 }
 
-function requireExecutionProof(agent: Agent, requirement?: ReturnType<typeof teamExecutionRequirement>): readonly string[] {
+function requireExecutionProof(
+  agent: Agent,
+  requirement?: ReturnType<typeof teamExecutionRequirement>,
+): readonly string[] {
   const proof = teamExecutionProof(agent.session.events, { ...requirement === undefined ? {} : { requirement } })
   if (proof.requirement !== 'none' && !proof.satisfied) {
     throw new TeamError(
