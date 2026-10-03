@@ -77,6 +77,23 @@ export class AgentMailTransport implements AssistantMailTransport {
       automatic: labels.includes('sent') || from === this.inboxId.toLowerCase() || (autoSubmitted !== undefined && autoSubmitted !== 'no') || /^(mailer-daemon|postmaster)@/u.test(from),
     }
   }
+  /** Send a new message from Kira's verified mailbox.
+   * @param to Authorized recipient.
+   * @param subject Bounded message subject.
+   * @param text Bounded message body.
+   * @param idempotencyKey Stable provider deduplication key.
+   * @returns Confirmed delivery identity.
+   */
+  async send(to: string, subject: string, text: string, idempotencyKey: string): Promise<MailDelivery> {
+    const data = mailRecord(await this.request(`${this.messagesPath()}/send`, {
+      to: [mailAddress(to)],
+      subject: mailString(subject, 1024),
+      text: mailString(text, 64_000),
+      headers: { 'Auto-Submitted': 'auto-generated' },
+    }, mailString(idempotencyKey)))
+    return { messageId: MailMessageId(mailString(data.message_id)), threadId: MailThreadId(mailString(data.thread_id)) }
+  }
+
   /** Reply to the validated sender, overriding potentially hostile Reply-To and excluding CC.
    * @param request Durable reply.
    * @returns Confirmed delivery identity.
