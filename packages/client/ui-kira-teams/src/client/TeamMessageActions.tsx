@@ -34,7 +34,7 @@ export interface TeamMessageActionsInjected {
   react: (messageId: string, emoji: string, active: boolean) => Promise<void>
   reply?: (messageId: string, authorId: string, authorName: string, preview: string) => void
 }
-type Props = PropsRuntime<'conversation.chat.assistant-actions'> & TeamMessageActionsInjected & PropsLocale<typeof NS> & {
+type Props = PropsRuntime<'conversation.chat.message-actions'> & TeamMessageActionsInjected & PropsLocale<typeof NS> & {
   authorId?: string
   authorKind?: 'user' | 'kira' | 'agent'
   authorName?: string
