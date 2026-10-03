@@ -21,6 +21,11 @@ interface NotificationWaiter {
   readonly timer: ReturnType<typeof setTimeout>
 }
 
+interface NotificationWait {
+  readonly promise: Promise<unknown>
+  readonly cancel: () => void
+}
+
 interface UnknownRecord {
   readonly [key: string]: unknown
 }
@@ -105,48 +110,119 @@ export class CodexRealtimeBridge {
     // is now active negotiation and must own the sidecar until it settles.
     this.clearIdleClose()
 
-    const threadParams: Record<string, unknown> = { ephemeral: true }
-    const model = normalizeCodexModel(options.model)
-    if (model !== undefined) threadParams.model = model
+    const threadId = await this.startVoiceThread(options.model)
 
-    const started = await this.request('thread/start', threadParams)
+    try {
+      let answerSdp: string
+      try {
+        answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
+      } catch (error) {
+        if (!isRealtimeVersionCompatibilityError(error)) throw error
+        // Realtime V3 is the preferred native Codex Live path. Older Codex
+        // installations can expose the experimental API before they understand
+        // V3/Frameless Bidi. Stay inside authenticated Codex Realtime and retry
+        // the older AVAS WebRTC protocol instead of falling back to browser TTS.
+        await this.request('thread/realtime/stop', { threadId }).catch(() => {})
+        answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
+      }
+      this.sessions.set(options.key, threadId)
+      return { threadId, answerSdp }
+    } catch (error) {
+      await this.request('thread/realtime/stop', { threadId }).catch(() => {})
+      throw error
+    } finally {
+      if (!this.sessions.has(options.key) && this.sessions.size === 0) this.armIdleClose()
+    }
+  }
+
+  /** Start the disposable Codex backing thread, retrying only a stale text-model selection. */
+  private async startVoiceThread(model: string | undefined): Promise<string> {
+    const selectedModel = normalizeCodexModel(model)
+    const threadParams: Record<string, unknown> = { ephemeral: true }
+    if (selectedModel !== undefined) threadParams.model = selectedModel
+
+    let started: unknown
+    try {
+      started = await this.request('thread/start', threadParams)
+    } catch (error) {
+      if (selectedModel === undefined || !isThreadModelCompatibilityError(error)) throw error
+      // Voice itself has a dedicated realtime model. A stale/newer text model
+      // must not prevent the native voice call from opening.
+      started = await this.request('thread/start', { ephemeral: true })
+    }
     const threadId = readThreadId(started)
     if (threadId === undefined) throw new Error('Codex realtime thread/start returned no thread id')
+    return threadId
+  }
 
+  /** Negotiate one Codex-native WebRTC protocol version and surface async startup errors. */
+  private async negotiateRealtime(
+    threadId: string,
+    options: CodexRealtimeStartOptions,
+    version: 'v3' | 'v1',
+  ): Promise<string> {
     const sdpWait = this.waitForNotification(
       'thread/realtime/sdp',
       params => isRecord(params) && params.threadId === threadId && typeof params.sdp === 'string',
       SDP_TIMEOUT_MS,
     )
+    const errorWait = this.waitForNotification(
+      'thread/realtime/error',
+      params => isRecord(params) && params.threadId === threadId,
+      SDP_TIMEOUT_MS,
+    )
+    const closedWait = this.waitForNotification(
+      'thread/realtime/closed',
+      params => isRecord(params) && params.threadId === threadId,
+      SDP_TIMEOUT_MS,
+    )
+    const outcome = Promise.race([
+      sdpWait.promise.then(params => ({ kind: 'sdp' as const, params })),
+      errorWait.promise.then(params => ({ kind: 'error' as const, params })),
+      closedWait.promise.then(params => ({ kind: 'closed' as const, params })),
+    ])
 
     try {
-      await this.request('thread/realtime/start', {
-        threadId,
-        clientManagedHandoffs: false,
-        flushTranscriptTailOnSessionEnd: true,
-        backendReasoningStatus: false,
-        outputModality: 'audio',
-        // The Phoenix transcript below supplies only the recent useful context.
-        // Avoid replaying Codex's much larger startup context into every short
-        // voice session: the normal Codex thread still owns delegated work.
-        includeStartupContext: false,
-        ...(options.initialItems === undefined || options.initialItems.length === 0
-          ? {}
-          : { initialItems: options.initialItems }),
-        realtimeStartInstructions:
-          'Speak naturally and concisely. This is a continuation of the Phoenix conversation represented by the compact initial history. Do not repeat that history. Hand substantive work to Codex when needed.',
-        transport: { type: 'webrtc', sdp: options.offerSdp },
-        version: 'v3',
-      })
-      const params = await sdpWait
-      if (!isRecord(params) || typeof params.sdp !== 'string') {
+      await this.request('thread/realtime/start', version === 'v3'
+        ? {
+          threadId,
+          clientManagedHandoffs: false,
+          flushTranscriptTailOnSessionEnd: true,
+          backendReasoningStatus: false,
+          outputModality: 'audio',
+          // The Phoenix transcript below supplies only the recent useful context.
+          // Avoid replaying Codex's much larger startup context into every short
+          // voice session: the normal Codex thread still owns delegated work.
+          includeStartupContext: false,
+          ...(options.initialItems === undefined || options.initialItems.length === 0
+            ? {}
+            : { initialItems: options.initialItems }),
+          realtimeStartInstructions:
+            'Speak naturally and concisely. This is a continuation of the Phoenix conversation represented by the compact initial history. Do not repeat that history. Hand substantive work to Codex when needed.',
+          transport: { type: 'webrtc', sdp: options.offerSdp },
+          version,
+        }
+        : {
+          threadId,
+          outputModality: 'audio',
+          transport: { type: 'webrtc', sdp: options.offerSdp },
+          version,
+        })
+      const settled = await outcome
+      if (settled.kind === 'error') {
+        throw new Error(`Codex realtime startup failed: ${realtimeNotificationMessage(settled.params, 'unknown realtime error')}`)
+      }
+      if (settled.kind === 'closed') {
+        throw new Error(`Codex realtime closed before SDP: ${realtimeNotificationMessage(settled.params, 'transport closed')}`)
+      }
+      if (!isRecord(settled.params) || typeof settled.params.sdp !== 'string') {
         throw new Error('Codex realtime returned an invalid SDP answer')
       }
-      this.sessions.set(options.key, threadId)
-      return { threadId, answerSdp: params.sdp }
-    } catch (error) {
-      await this.request('thread/realtime/stop', { threadId }).catch(() => {})
-      throw error
+      return settled.params.sdp
+    } finally {
+      sdpWait.cancel()
+      errorWait.cancel()
+      closedWait.cancel()
     }
   }
 
@@ -338,9 +414,10 @@ export class CodexRealtimeBridge {
     method: string,
     predicate: (params: unknown) => boolean,
     timeoutMs: number,
-  ): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      const waiter: NotificationWaiter = {
+  ): NotificationWait {
+    let waiter: NotificationWaiter
+    const promise = new Promise<unknown>((resolve, reject) => {
+      waiter = {
         predicate,
         resolve: (params) => {
           clearTimeout(waiter.timer)
@@ -364,6 +441,13 @@ export class CodexRealtimeBridge {
       }
       set.add(waiter)
     })
+    return {
+      promise,
+      cancel: () => {
+        clearTimeout(waiter.timer)
+        this.notifications.get(method)?.delete(waiter)
+      },
+    }
   }
 
   private consumeStdout(chunk: string): void {
@@ -441,6 +525,24 @@ function normalizeCodexModel(model: string | undefined): string | undefined {
   const value = model?.trim()
   if (value === undefined || value === '' || value === 'phoenix-auto') return undefined
   return value.length <= 128 ? value : undefined
+}
+
+function isThreadModelCompatibilityError(value: unknown): boolean {
+  const message = errorText(value)
+  return /(?:model|deployment).*(?:not found|unknown|unsupported|unavailable|invalid)|(?:not found|unknown|unsupported|unavailable|invalid).*(?:model|deployment)/iu.test(message)
+}
+
+function isRealtimeVersionCompatibilityError(value: unknown): boolean {
+  const message = errorText(value)
+  return /(?:v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v3|frameless|gpt-live-1-codex)/iu.test(message)
+}
+
+function realtimeNotificationMessage(value: unknown, fallback: string): string {
+  if (!isRecord(value)) return fallback
+  const message = typeof value.message === 'string' ? value.message.trim() : ''
+  if (message !== '') return message.slice(0, 1_024)
+  const reason = typeof value.reason === 'string' ? value.reason.trim() : ''
+  return reason === '' ? fallback : reason.slice(0, 1_024)
 }
 
 function readThreadId(value: unknown): string | undefined {
