@@ -2,10 +2,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { TeamMessageActions } from '../src/client/TeamMessageActions.tsx'
+import { AssistantReactionAction, TeamMessageActions } from '../src/client/TeamMessageActions.tsx'
 import type { TeamChatReaction } from '@phoenix-ai/dsh-agent-team/chat-types'
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const View = TeamMessageActions as unknown as ComponentType<Record<string, unknown>>
+const AssistantView = AssistantReactionAction as unknown as ComponentType<Record<string, unknown>>
 it('groups actual participants and removes only the user reaction from the selected message', async () => {
   const reactions: TeamChatReaction[] = ['user', 'kira', 'agent'].map((kind, index) => ({
     id: String(index), messageId: 'finding', reactorId: kind, reactorName: kind === 'agent' ? 'Zenith' : kind === 'kira' ? 'Kira' : 'User',
@@ -35,6 +36,20 @@ it('uses the same message identity for a quoted reply and Unicode quick reaction
   fireEvent.click(screen.getByRole('button', { name: '❤️' }))
   await vi.waitFor(() => { expect(react).toHaveBeenCalledWith('finding', '❤️', true) })
 })
+
+it('moves ordinary Kira reaction affordance into the assistant footer toolbar only', () => {
+  const react = vi.fn(async () => {})
+  const ordinary = render(<View sessionId="root" messageId="kira-answer" authorId="kira" authorKind="kira"
+    useProjection={() => undefined} react={react} t={(key: string) => key} />)
+  expect(ordinary.queryByRole('button', { name: 'chat.addReaction' })).toBeNull()
+  ordinary.unmount()
+
+  const footer = render(<AssistantView sessionId="root" messageId="kira-answer"
+    useProjection={() => undefined} react={react} t={(key: string) => key} />)
+  expect(footer.getByRole('button', { name: 'chat.addReaction' })).toBeTruthy()
+  expect(footer.container.querySelector('[data-reaction-placement="assistant-toolbar"]')).toBeTruthy()
+})
+
 
 it('keeps inherited team messages readable without exposing actions for another mission', () => {
   const react = vi.fn()
