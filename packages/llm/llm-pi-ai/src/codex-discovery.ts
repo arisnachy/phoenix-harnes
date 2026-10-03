@@ -50,6 +50,7 @@ interface CodexModelShape {
   hidden?: unknown
   supportedReasoningEfforts?: unknown
   defaultReasoningEffort?: unknown
+  inputModalities?: unknown
 }
 
 interface CodexModelListShape {
@@ -59,6 +60,8 @@ interface CodexModelListShape {
 
 /** Extra discovery metadata Codex exposes beyond the provider-neutral minimum. */
 export interface CodexDiscoveredModel extends LlmDiscoveredModel {
+  /** Request modalities advertised by Codex model/list for this exact account/model route. */
+  inputModalities?: Array<'text' | 'image'>
   reasoning?: {
     efforts: Array<{ id: string; name: string; description?: string }>
     defaultEffort?: string
@@ -89,6 +92,15 @@ function effortName(id: string): string {
   return known[id] ?? id
     .replace(/[_-]+/g, ' ')
     .replace(/\b\w/g, letter => letter.toUpperCase())
+}
+
+/** Preserve only the request modalities PHOENIX/pi-ai can currently dispatch. */
+function inputModalitiesOf(entry: CodexModelShape): CodexDiscoveredModel['inputModalities'] | undefined {
+  if (!Array.isArray(entry.inputModalities)) return undefined
+  const modalities = entry.inputModalities.filter(
+    (value): value is 'text' | 'image' => value === 'text' || value === 'image',
+  )
+  return modalities.length === 0 ? undefined : [...new Set(modalities)]
 }
 
 /** Preserve the account-scoped reasoning capabilities Codex advertises for one model. */
@@ -153,10 +165,12 @@ export function readCodexModelPage(result: unknown): {
     const id = text(entry?.model) ?? text(entry?.id)
     if (id === undefined) continue
     const name = text(entry?.displayName)
+    const inputModalities = entry === null ? undefined : inputModalitiesOf(entry)
     const reasoning = entry === null ? undefined : reasoningOf(entry)
     models.push({
       id,
       ...name === undefined ? {} : { name },
+      ...inputModalities === undefined ? {} : { inputModalities },
       ...reasoning === undefined ? {} : { reasoning },
     })
   }
