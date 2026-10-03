@@ -53,7 +53,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
     state: value.state,
     connection: value.connection,
     needs_verification: false,
-    guidance: 'Kira does not have a mailbox yet. Use action=ensure to create the included free AgentMail inbox from the already connected owner identity.',
+    guidance: 'Kira does not have a mailbox yet. Use action=ensure. AgentMail signup does not require a pre-existing API key; Phoenix receives the new key from signup and stores it securely. If no owner identity is connected, provide owner_email only for the one-time verification code.',
   }
 }
 
@@ -74,6 +74,10 @@ export function createAssistantMailIdentityTool(
         enum: ['status', 'ensure'],
         required: true,
         description: 'status reads the current real mailbox; ensure creates it once if absent and then returns the real provider address.',
+      },
+      owner_email: {
+        type: 'string',
+        description: 'Optional owner email for the one-time verification code when Phoenix cannot resolve one from an already connected account. This is not Kira\'s mailbox.',
       },
     },
     output: {
@@ -107,7 +111,21 @@ export function createAssistantMailIdentityTool(
           guidance: 'The local Kira mailbox runtime is not mounted in this Phoenix process. Do not fall back to Gmail creation or invent an address.',
         } satisfies MailIdentityResult
       }
-      return project(args.action === 'ensure' ? await service.ensure() : await service.status())
+      try {
+        return project(args.action === 'ensure' ? await service.ensure(args.owner_email) : await service.status())
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        if (/owner email required/iu.test(message)) {
+          return {
+            kind: 'kira_mail_identity',
+            available: true,
+            state: 'not-configured',
+            needs_verification: false,
+            guidance: 'Ask only for the owner email that should receive the one-time verification code, then call action=ensure again with owner_email. Do not ask for an AgentMail API key, do not send the user to AgentMail.to, and do not start Gmail OAuth.',
+          } satisfies MailIdentityResult
+        }
+        throw error
+      }
     },
     presentCall(args) {
       return {
