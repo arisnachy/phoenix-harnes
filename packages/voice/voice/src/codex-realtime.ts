@@ -39,6 +39,9 @@ export interface CodexRealtimeInitialItem {
 }
 
 /** Inputs for one authenticated Codex WebRTC negotiation. */
+/** Assistant identity presentation used to choose a stable Realtime voice. */
+export type CodexRealtimeAssistantGender = 'masculine' | 'feminine' | 'neutral'
+
 export interface CodexRealtimeStartOptions {
   /** Stable Phoenix session key owning this voice call. */
   readonly key: string
@@ -48,6 +51,8 @@ export interface CodexRealtimeStartOptions {
   readonly model?: string
   /** Small recent Phoenix transcript used instead of the full startup prompt. */
   readonly initialItems?: readonly CodexRealtimeInitialItem[]
+  /** User-selected assistant presentation. */
+  readonly assistantGender?: CodexRealtimeAssistantGender
 }
 
 /** Successful Codex app-server WebRTC negotiation. */
@@ -56,6 +61,8 @@ export interface CodexRealtimeStartResult {
   readonly threadId: string
   /** Remote SDP answer to apply to the browser peer connection. */
   readonly answerSdp: string
+  /** Concrete voice selected for this Realtime protocol generation. */
+  readonly voice: string
 }
 
 /** Readiness of subscription-backed Codex realtime voice. */
@@ -72,6 +79,32 @@ const RPC_TIMEOUT_MS = 30_000
 const SDP_TIMEOUT_MS = 30_000
 const IDLE_CLOSE_MS = 60_000
 
+/**
+ * Map assistant presentation to one stable OpenAI Realtime voice.
+ *
+ * These are presentation choices, not claims that a synthetic voice has a
+ * biological sex. V3 uses the current voice family; V1 keeps an older
+ * compatible mapping for Codex installations that need the fallback protocol.
+ */
+export function realtimeVoiceForGender(
+  gender: CodexRealtimeAssistantGender = 'feminine',
+  version: 'v3' | 'v1' = 'v3',
+): string {
+  if (version === 'v1') {
+    if (gender === 'masculine') return 'cove'
+    if (gender === 'neutral') return 'breeze'
+    return 'juniper'
+  }
+  if (gender === 'masculine') return 'cedar'
+  if (gender === 'neutral') return 'alloy'
+  return 'marin'
+}
+
+function realtimeIdentityInstruction(gender: CodexRealtimeAssistantGender | undefined): string {
+  const presentation = gender ?? 'feminine'
+  return `Use a ${presentation} voice presentation consistently with Phoenix's configured assistant identity.`
+}
+
 /** Small JSON-RPC client around `codex app-server --listen stdio://`. */
 export class CodexRealtimeBridge {
   private child: ChildProcessWithoutNullStreams | undefined
@@ -80,6 +113,7 @@ export class CodexRealtimeBridge {
   private readonly pending = new Map<string, RpcPending>()
   private readonly notifications = new Map<string, Set<NotificationWaiter>>()
   private readonly sessions = new Map<string, string>()
+  private readonly speechTails = new Map<string, Promise<void>>()
   private readonly stderrTail: string[] = []
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
@@ -119,6 +153,7 @@ export class CodexRealtimeBridge {
     try {
       threadId = await this.startVoiceThread(options.model)
       let answerSdp: string
+      let negotiatedVersion: 'v3' | 'v1' = 'v3'
       try {
         answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
       } catch (error) {
@@ -128,10 +163,15 @@ export class CodexRealtimeBridge {
         // V3/Frameless Bidi. Stay inside authenticated Codex Realtime and retry
         // the older AVAS WebRTC protocol instead of falling back to browser TTS.
         await this.request('thread/realtime/stop', { threadId }).catch(() => {})
+        negotiatedVersion = 'v1'
         answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
       }
       this.sessions.set(options.key, threadId)
-      return { threadId, answerSdp }
+      return {
+        threadId,
+        answerSdp,
+        voice: realtimeVoiceForGender(options.assistantGender, negotiatedVersion),
+      }
     } catch (error) {
       if (threadId !== undefined) {
         await this.request('thread/realtime/stop', { threadId }).catch(() => {})
@@ -190,13 +230,18 @@ export class CodexRealtimeBridge {
     ])
 
     try {
+      const voice = realtimeVoiceForGender(options.assistantGender, version)
       await this.request('thread/realtime/start', version === 'v3'
         ? {
           threadId,
-          clientManagedHandoffs: false,
+          // Phoenix owns plans, tools, tasks, and completion. Realtime is the
+          // low-latency microphone/speaker front end, so handoffs stay client-managed.
+          clientManagedHandoffs: true,
+          delegationAckFiller: false,
           flushTranscriptTailOnSessionEnd: true,
           backendReasoningStatus: false,
           outputModality: 'audio',
+          voice,
           // The Phoenix transcript below supplies only the recent useful context.
           // Avoid replaying Codex's much larger startup context into every short
           // voice session: the normal Codex thread still owns delegated work.
@@ -204,14 +249,22 @@ export class CodexRealtimeBridge {
           ...(options.initialItems === undefined || options.initialItems.length === 0
             ? {}
             : { initialItems: options.initialItems }),
-          realtimeStartInstructions:
-            'Speak naturally and concisely. This is a continuation of the Phoenix conversation represented by the compact initial history. Do not repeat that history. Hand substantive work to Codex when needed.',
+          realtimeStartInstructions: [
+            'You are the realtime voice front end for Phoenix/Kira, not a separate task executor.',
+            'Phoenix chat owns planning, tools, delegation, tasks, approvals, and completion.',
+            'Do not claim that substantive work was performed in this ephemeral voice thread.',
+            'Capture the human utterance faithfully so the client can forward it into the real Phoenix chat.',
+            'When Phoenix appends speech, read that Phoenix-owned text naturally and concisely.',
+            'This is a continuation of the compact initial history; do not repeat that history.',
+            realtimeIdentityInstruction(options.assistantGender),
+          ].join(' '),
           transport: { type: 'webrtc', sdp: options.offerSdp },
           version,
         }
         : {
           threadId,
           outputModality: 'audio',
+          voice,
           transport: { type: 'webrtc', sdp: options.offerSdp },
           version,
         })
@@ -233,6 +286,35 @@ export class CodexRealtimeBridge {
     }
   }
 
+  /** Whether one Phoenix session currently owns a live Realtime thread. */
+  has(key: string): boolean {
+    return this.sessions.has(key)
+  }
+
+  /**
+   * Speak one Phoenix-owned segment through the existing Realtime session.
+   * Segments are serialized per session so streaming assistant prose cannot
+   * reorder when several stable sentences settle together.
+   */
+  async speak(key: string, text: string): Promise<boolean> {
+    const threadId = this.sessions.get(key)
+    const normalized = text.trim()
+    if (threadId === undefined || normalized === '') return false
+    const previous = this.speechTails.get(key) ?? Promise.resolve()
+    const next = previous
+      .catch(() => {})
+      .then(async () => {
+        await this.request('thread/realtime/appendSpeech', { threadId, text: normalized })
+      })
+    this.speechTails.set(key, next)
+    try {
+      await next
+      return true
+    } finally {
+      if (this.speechTails.get(key) === next) this.speechTails.delete(key)
+    }
+  }
+
   /** Stop one active realtime conversation without affecting text Codex use.
    * @param key Browser-owned call identity.
    * @returns Whether an existing call was removed; transport failures may reject after local removal.
@@ -244,6 +326,7 @@ export class CodexRealtimeBridge {
       return false
     }
     this.sessions.delete(key)
+    this.speechTails.delete(key)
     try {
       if (this.child !== undefined) await this.request('thread/realtime/stop', { threadId })
     } finally {
@@ -259,6 +342,7 @@ export class CodexRealtimeBridge {
     this.child = undefined
     this.startup = undefined
     this.sessions.clear()
+    this.speechTails.clear()
     if (child !== undefined && !child.killed) {
       // On Windows the npm-installed Codex executable is normally a .cmd shim
       // launched through cmd.exe. Killing only the shell orphans app-server,
