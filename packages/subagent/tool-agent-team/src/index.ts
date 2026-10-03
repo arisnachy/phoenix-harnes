@@ -301,7 +301,9 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           ? undefined
           : config.modelProfiles[configuredDefault]
         const profileName = explicitProfile
-          ?? (defaultProfile?.provider === agent.options.provider ? configuredDefault : undefined)
+          ?? (agent.options.provider === 'openai-codex' && defaultProfile?.provider === 'openai-codex'
+            ? configuredDefault
+            : undefined)
         const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
         const agentOptions: AgentOptions | undefined = profile === undefined
           ? undefined
