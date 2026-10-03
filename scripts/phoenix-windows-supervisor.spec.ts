@@ -6,6 +6,7 @@ const source = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), '
 const restartBridgeSource = readFileSync(resolve('scripts/phoenix-prepared-restart-bridge.mjs'), 'utf8')
 const activatorSource = readFileSync(resolve('scripts/phoenix-activate-prepared.mjs'), 'utf8')
 const cliSource = readFileSync(resolve('apps/cli/src/bin.ts'), 'utf8')
+const updateWatchSource = readFileSync(resolve('apps/cli/src/phoenix-update-watch.ts'), 'utf8')
 const acpPackage = JSON.parse(readFileSync(resolve('packages/examples/acp-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
 const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrpc-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
 
@@ -227,6 +228,14 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('if (stageProtectedByOwningCheckout(candidate)) continue')
     expect(source).toContain('key !== currentStage && managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS')
     expect(source).toContain('removed stale updater staging worktree')
+  })
+
+  it('offers a cleanup-only supervisor mode and invokes it from each new Windows Host', () => {
+    expect(source).toContain("if (process.argv.includes('--cleanup-storage'))")
+    expect(source).toContain('recoverStaleStagingIndexLock()')
+    expect(source).toContain('cleanupObsoleteRuntimes()')
+    expect(updateWatchSource).toContain("const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()")
+    expect(updateWatchSource).toContain("startWatcher(root, supervisor, 'PHOENIX STORAGE', ['--cleanup-storage'])")
   })
 
   it('runs runtime garbage collection at startup and after safe runtime handoff paths', () => {
