@@ -63,7 +63,7 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       ...loadImage === undefined ? {} : { loadImage },
       fileMentions,
       workspaceFileMentions,
-      ...(messageActions == null ? {} : { messageActions }),
+      ...(messageActions === null || messageActions === undefined ? {} : { messageActions }),
     }, [
     node, selectedCallId, cwd, openFile, inspectCall, forkAt, renderMessageImages, loadImage, fileMentions, runArtifact,
     workspaceFileMentions, messageActions,
