@@ -142,6 +142,8 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('Your Team role is lead')
     expect(leadPrompt).toContain('Warm, confident, curious, and witty')
     expect(leadPrompt).toContain('high quality, fast completion, and low cost')
+    expect(leadPrompt).toContain('never synthesize roster filenames')
+    expect(leadPrompt).toContain('Phoenix has no repository-root cordis.yml')
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'tool-worker',
@@ -157,6 +159,8 @@ describe('dsh-tool-team', () => {
     const childPrompt = renderPrompt(childAssembly)
     expect(childPrompt).toContain('Your Team role is teammate; your Team name is tool-worker')
     expect(childPrompt).toContain('Natural, concise, collegial')
+    expect(childPrompt).toContain('never synthesize roster filenames')
+    expect(childPrompt).toContain('Phoenix has no repository-root cordis.yml')
     expect(childPrompt).not.toContain('detective-like')
 
     const denied = await execute(ctx, child, 'spawn_teammate', {
