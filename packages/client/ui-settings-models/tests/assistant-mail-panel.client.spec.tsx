@@ -8,6 +8,8 @@ describe('local assistant mailbox settings', () => {
     const client = { call: async (action: string) => ({ account: { state: action === 'verify' ? 'ready' : 'pending-verification', inboxId: 'actual@agentmail.to', contacts: [] }, connection: 'disconnected', jobs: [] }) }
     render(<AssistantMailPanel client={client} />)
     expect(await screen.findByText('actual@agentmail.to')).toBeTruthy()
+    expect(screen.getByText('Correo de Kira:')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copiar correo de Kira' })).toBeTruthy()
     expect(screen.getByText('Pendiente de verificación')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Código de verificación'), { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: 'Verificar correo' }))
