@@ -64,7 +64,7 @@ it('keeps inherited team messages readable without exposing actions for another 
 
 it('pulses a fresh reaction even when it lands with the first projection frame', () => {
   vi.stubGlobal('matchMedia', () => ({ matches: false }))
-  const originalAnimate = HTMLElement.prototype.animate
+  const originalAnimate = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'animate')
   const animate = vi.fn(() => ({ playState: 'running' }))
   Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, writable: true, value: animate })
   try {
@@ -77,9 +77,8 @@ it('pulses a fresh reaction even when it lands with the first projection frame',
       react={vi.fn()} reply={vi.fn()} t={(key: string) => key} />)
     expect(animate).toHaveBeenCalled()
   } finally {
-    Object.defineProperty(HTMLElement.prototype, 'animate', {
-      configurable: true, writable: true, value: originalAnimate,
-    })
+    if (originalAnimate === undefined) delete (HTMLElement.prototype as { animate?: unknown }).animate
+    else Object.defineProperty(HTMLElement.prototype, 'animate', originalAnimate)
   }
 })
 
