@@ -6,7 +6,12 @@ import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
-import { CallId, ReasoningEffortId, type LlmModelReasoningInfo } from '@phoenix-ai/dsh-llm'
+import {
+  CallId,
+  ReasoningEffortId,
+  createToolResultMessage,
+  type LlmModelReasoningInfo,
+} from '@phoenix-ai/dsh-llm'
 import { scopeOf } from '@phoenix-ai/dsh-scope'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
@@ -422,6 +427,57 @@ describe('dsh-tool-team', () => {
     expect(text(aborted)).toBe("Error: wait_agent aborted: { kind: 'user' }")
     await execute(activeSetup.ctx, activeSetup.lead, 'interrupt_agent', { target: 'active-worker' })
     await waitNoAgent(activeSetup.ctx, activeId)
+  })
+
+  it('rejects a teammate result claim until the assigned external action has a real receipt', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'mail-worker',
+      description: 'send a real test email',
+      prompt: 'Envía un correo de prueba por Gmail y confirma solo después del envío real.',
+    })
+    const childId = spawnedChildId(spawned)
+    const child = await waitRunning(ctx, childId)
+
+    const theatrical = await execute(ctx, child, 'send_message', {
+      target: 'lead',
+      purpose: 'result',
+      message: 'Correo enviado correctamente.',
+    })
+    expect(theatrical.isError).toBe(true)
+    expect(text(theatrical)).toContain('no successful non-Team tool receipt')
+
+    const callId = CallId('real-gmail-send')
+    child.session.append('tool/call', {
+      turn: 1,
+      step: 2,
+      callId,
+      name: 'mcp__Gmail__send_email',
+      arguments: '{"to":"test@example.com"}',
+    })
+    child.session.append('tool/result', {
+      turn: 1,
+      step: 2,
+      message: createToolResultMessage({
+        callId,
+        content: [{ type: 'text', text: 'sent' }],
+        isError: false,
+      }),
+    }, { surfaceOp: 'append' })
+
+    const proven = await execute(ctx, child, 'send_message', {
+      target: 'lead',
+      purpose: 'result',
+      message: 'Correo enviado correctamente.',
+    })
+    expect(proven.isError).toBe(false)
+    const team = await ctx.agentTeams.chatMessages({ sessionId: lead.id })
+    expect(team.messages.some(message =>
+      message.text.includes('Correo enviado correctamente.')
+      && message.text.includes('✓ Evidencia ejecutada: send_email'))).toBe(true)
+
+    await execute(ctx, lead, 'interrupt_agent', { target: 'mail-worker' })
+    await waitNoAgent(ctx, childId)
   })
 
   it('adapts roster, mailbox, wait, and task CAS operations to canonical JSON', async () => {
