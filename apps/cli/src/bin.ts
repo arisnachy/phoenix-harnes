@@ -86,6 +86,20 @@ if (rawArgs[0] === 'codex-plugin') {
   process.exit(runCodexPlugin(rawArgs.slice(1)))
 }
 
+// Codex CLI itself is updated independently from the PHOENIX source tree.
+// The managed runtime lives under DSH_HOME and is activated only after an
+// official stable npm release passes a local smoke test.
+if (rawArgs[0] === 'codex-update') {
+  const script = resolve(fileURLToPath(new URL('../../../scripts/phoenix-codex-cli-update.mjs', import.meta.url)))
+  const result = spawnSync(process.execPath, [script, ...rawArgs.slice(1)], {
+    cwd: resolve(script, '..', '..'),
+    env: process.env,
+    stdio: 'inherit',
+    windowsHide: true,
+  })
+  process.exit(result.status ?? 1)
+}
+
 // OpenClaw skills are a launcher capability rather than a profile plugin:
 // syncing and auditing them must work before any profile is parsed or booted.
 if (rawArgs[0] === 'openclaw-skills') {

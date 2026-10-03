@@ -1,4 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -8,6 +8,7 @@ import {
   containsUnsafeGeneratedLiteral,
   normalizeMode,
   parseRemoteHead,
+  pruneObsoleteTransactionBackups,
 } from './phoenix-upstream-update.mjs'
 
 const temporaryPaths: string[] = []
@@ -43,6 +44,35 @@ describe('PHOENIX upstream update intake', () => {
     expect(containsUnsafeGeneratedLiteral(`name: ${legacyNamespace}`)).toBe(true)
     expect(containsUnsafeGeneratedLiteral('api_key: literal-secret-value')).toBe(true)
     expect(containsUnsafeGeneratedLiteral("Authorization: !!js 'Bearer ${process.env.API_TOKEN}'")).toBe(false)
+  })
+
+  it('removes completed/orphaned transaction backups but protects an active recovery transaction', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-upstream-cleanup-'))
+    temporaryPaths.push(home)
+    const base = join(home, '.phoenix-upstream-updates')
+    mkdirSync(join(base, 'abc12345-deadbeef', 'backup'), { recursive: true })
+    mkdirSync(join(base, 'abc12346-cafebabe', 'backup'), { recursive: true })
+    mkdirSync(join(base, 'not-phoenix-user-data'), { recursive: true })
+    writeFileSync(join(home, 'phoenix-upstream-transaction.json'), JSON.stringify({
+      schema: 1,
+      id: 'abc12346-cafebabe',
+      status: 'recovery-required',
+      operations: [],
+    }))
+
+    expect(pruneObsoleteTransactionBackups(home)).toEqual({ removed: 1 })
+    expect(existsSync(join(base, 'abc12345-deadbeef'))).toBe(false)
+    expect(existsSync(join(base, 'abc12346-cafebabe'))).toBe(true)
+    expect(existsSync(join(base, 'not-phoenix-user-data'))).toBe(true)
+
+    writeFileSync(join(home, 'phoenix-upstream-transaction.json'), JSON.stringify({
+      schema: 1,
+      id: 'abc12346-cafebabe',
+      status: 'completed',
+      operations: [],
+    }))
+    expect(pruneObsoleteTransactionBackups(home)).toEqual({ removed: 1 })
+    expect(existsSync(join(base, 'abc12346-cafebabe'))).toBe(false)
   })
 
   it('plans only bridge-owned roots and namespaced skills, leaving user skills alone', () => {

@@ -42,6 +42,8 @@ describe('native Codex managed-account boundary', () => {
 
   it('keeps slow app-server teardown from becoming a Host-fatal account probe failure', () => {
     expect(accountSource).toContain('ACCOUNT_CLOSE_MIN_TIMEOUT_MS')
+    expect(accountSource).toContain('ACCOUNT_NATURAL_EXIT_GRACE_MS')
+    expect(accountSource).toContain('if (!naturalExit) this.child.terminate()')
     expect(accountSource).toContain('ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS')
     expect(accountSource).toContain('continuing without failing the Host')
     expect(accountSource).not.toContain("if (!exited) throw new Error('subagent-codex account: app-server process tree did not terminate')")
