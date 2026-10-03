@@ -364,6 +364,7 @@ export class VoiceRuntime extends TypertRemoteService {
   /**
    * Probe the native Codex realtime sidecar. This is separate from ordinary TTS
    * so non-Codex providers can keep the existing browser/local voice route.
+   * @returns Enabled state, sidecar availability and authentication status.
    */
   @Remote('conversationRealtimeStatus')
   async conversationRealtimeStatus(): Promise<VoiceConversationRealtimeStatus> {
@@ -389,6 +390,8 @@ export class VoiceRuntime extends TypertRemoteService {
   /**
    * Negotiate browser WebRTC directly with Codex Realtime through the locally
    * authenticated app-server. No API key is accepted by this path.
+   * @param request Browser-owned call identity, model selection and SDP offer.
+   * @returns Accepted negotiation with answer SDP, or a classified rejection.
    */
   @Remote('conversationRealtimeStart')
   async conversationRealtimeStart(
@@ -444,7 +447,10 @@ export class VoiceRuntime extends TypertRemoteService {
     }
   }
 
-  /** Stop one browser-owned Codex realtime call. */
+  /** Stop one browser-owned Codex realtime call.
+   * @param request Browser-owned call identity to stop.
+   * @returns Whether an active call was stopped; invalid or unknown identities return false.
+   */
   @Remote('conversationRealtimeStop')
   async conversationRealtimeStop(
     request: VoiceConversationRealtimeStopRequest,
@@ -716,7 +722,7 @@ function codexRealtimeFailureDetail(value: unknown): string {
   const message = (value instanceof Error ? value.message : String(value)).trim()
   const redacted = message
     .replace(/\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\b/gu, '[redacted]')
-    .replace(/Bearer\s+[A-Za-z0-9._~+\/-]+=*/giu, 'Bearer [redacted]')
+    .replace(/Bearer\s+[a-z0-9._~+\/-]+=*/giu, 'Bearer [redacted]')
   return (redacted === '' ? 'Codex realtime negotiation failed' : redacted).slice(0, 1_024)
 }
 

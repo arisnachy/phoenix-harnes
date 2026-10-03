@@ -3418,10 +3418,12 @@ export interface VoiceRuntimeConfig {
   readonly ttsProvider?: string
   /** Preferred STT provider. */
   readonly sttProvider?: string
+  /** Native Codex/ChatGPT realtime voice, using Codex login rather than API keys. */
+  readonly codexRealtime?: boolean
 }
 ```
 
-Source: [`packages/voice/voice/src/index.ts:124`](../packages/voice/voice/src/index.ts)
+Source: [`packages/voice/voice/src/index.ts:130`](../packages/voice/voice/src/index.ts)
 
 <a id="phoenix-aidsh-voice-local"></a>
 

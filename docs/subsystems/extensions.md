@@ -336,6 +336,27 @@ Provider registry and non-blocking important-event announcement queue.
 @Remote('conversationStatus') async conversationStatus(): Promise<VoiceConversationStatus>
 
 /**
+ * Probe the native Codex realtime sidecar. This is separate from ordinary TTS
+ * so non-Codex providers can keep the existing browser/local voice route.
+ * @returns Enabled state, sidecar availability and authentication status.
+ */
+@Remote('conversationRealtimeStatus') async conversationRealtimeStatus(): Promise<VoiceConversationRealtimeStatus>
+
+/**
+ * Negotiate browser WebRTC directly with Codex Realtime through the locally
+ * authenticated app-server. No API key is accepted by this path.
+ * @param request Browser-owned call identity, model selection and SDP offer.
+ * @returns Accepted negotiation with answer SDP, or a classified rejection.
+ */
+@Remote('conversationRealtimeStart') async conversationRealtimeStart( request: VoiceConversationRealtimeStartRequest, ): Promise<VoiceConversationRealtimeStartReceipt>
+
+/** Stop one browser-owned Codex realtime call.
+ * @param request Browser-owned call identity to stop.
+ * @returns Whether an active call was stopped; invalid or unknown identities return false.
+ */
+@Remote('conversationRealtimeStop') async conversationRealtimeStop( request: VoiceConversationRealtimeStopRequest, ): Promise<VoiceConversationRealtimeStopReceipt>
+
+/**
  * Play one stable semantic segment on the Host without blocking the browser thread.
  * @param request - Message identity, ordering, text, language, and final-segment metadata.
  * @returns Admission/playback receipt for the selected neural provider.

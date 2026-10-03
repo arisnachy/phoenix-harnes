@@ -2654,6 +2654,24 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'Current conversational voice availability and selected provider.',
       },
       {
+        signature: '@Remote(\'conversationRealtimeStatus\') async conversationRealtimeStatus(): Promise<VoiceConversationRealtimeStatus>',
+        description: 'Probe the native Codex realtime sidecar. This is separate from ordinary TTS so non-Codex providers can keep the existing browser/local voice route.',
+        parameters: [],
+        returns: 'Enabled state, sidecar availability and authentication status.',
+      },
+      {
+        signature: '@Remote(\'conversationRealtimeStart\') async conversationRealtimeStart( request: VoiceConversationRealtimeStartRequest, ): Promise<VoiceConversationRealtimeStartReceipt>',
+        description: 'Negotiate browser WebRTC directly with Codex Realtime through the locally authenticated app-server. No API key is accepted by this path.',
+        parameters: [{ name: 'request', description: 'Browser-owned call identity, model selection and SDP offer.' }],
+        returns: 'Accepted negotiation with answer SDP, or a classified rejection.',
+      },
+      {
+        signature: '@Remote(\'conversationRealtimeStop\') async conversationRealtimeStop( request: VoiceConversationRealtimeStopRequest, ): Promise<VoiceConversationRealtimeStopReceipt>',
+        description: 'Stop one browser-owned Codex realtime call.',
+        parameters: [{ name: 'request', description: 'Browser-owned call identity to stop.' }],
+        returns: 'Whether an active call was stopped; invalid or unknown identities return false.',
+      },
+      {
         signature: '@Remote(\'conversationSpeak\') async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt>',
         description: 'Play one stable semantic segment on the Host without blocking the browser thread.',
         parameters: [{ name: 'request', description: 'Message identity, ordering, text, language, and final-segment metadata.' }],
@@ -5951,6 +5969,26 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'VoiceConversationCancelRequest',
     declaration: 'export interface VoiceConversationCancelRequest {\n    readonly key: string;\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStartReceipt',
+    declaration: 'export interface VoiceConversationRealtimeStartReceipt {\n    readonly accepted: boolean;\n    readonly threadId?: string;\n    readonly answerSdp?: string;\n    readonly reason?: \'disabled\' | \'invalid\' | \'codex-unavailable\' | \'codex-login-required\' | \'experimental-unavailable\' | \'negotiation-failed\';\n    readonly detail?: string;\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStartRequest',
+    declaration: 'export interface VoiceConversationRealtimeStartRequest {\n    readonly key: string;\n    readonly offerSdp: string;\n    readonly model?: string;\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStatus',
+    declaration: 'export interface VoiceConversationRealtimeStatus {\n    readonly enabled: boolean;\n    readonly available: boolean;\n    readonly authenticated: boolean;\n    readonly provider: \'openai-codex\';\n    readonly reason?: \'disabled\' | \'codex-unavailable\' | \'codex-login-required\' | \'experimental-unavailable\';\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStopReceipt',
+    declaration: 'export interface VoiceConversationRealtimeStopReceipt {\n    readonly stopped: boolean;\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeStopRequest',
+    declaration: 'export interface VoiceConversationRealtimeStopRequest {\n    readonly key: string;\n}',
   },
   {
     name: 'VoiceConversationSpeakReceipt',

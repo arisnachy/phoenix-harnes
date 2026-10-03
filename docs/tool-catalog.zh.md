@@ -2755,7 +2755,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
   "properties": {
     "name": {
       "type": "string",
-      "description": "Unique lower-kebab-case teammate name."
+      "description": "Optional unique lower-kebab-case teammate name. Omit for automatic specialist selection from the delegated responsibility."
     },
     "description": {
       "type": "string",
@@ -2775,7 +2775,6 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
     }
   },
   "required": [
-    "name",
     "description",
     "prompt"
   ]
