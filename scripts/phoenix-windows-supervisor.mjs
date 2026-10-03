@@ -1048,6 +1048,12 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
   }
 }
 
+if (process.argv.includes('--cleanup-storage')) {
+  recoverStaleStagingIndexLock()
+  cleanupObsoleteRuntimes()
+  process.exit(0)
+}
+
 let shutdownRequested = false
 let activeHost
 function requestShutdown() {
