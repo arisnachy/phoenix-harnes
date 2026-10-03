@@ -252,7 +252,7 @@ export function InputBar({
         // Codex routes are strict: if native Realtime fails, do not make
         // browser/local speech sound as though Realtime succeeded. Fallback is
         // reserved for genuinely non-Codex providers.
-        const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
+        const realtime = await tryStartCodexRealtimeVoice(String(sessionId), appendVoiceText)
         if (realtime.kind === 'started') {
           setVoiceState('listening')
           return

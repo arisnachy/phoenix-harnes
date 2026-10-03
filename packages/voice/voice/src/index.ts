@@ -13,6 +13,8 @@ import { SessionId } from '@phoenix-ai/dsh-session'
 import type {
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
+  VoiceConversationRealtimeSpeakReceipt,
+  VoiceConversationRealtimeSpeakRequest,
   VoiceConversationRealtimeStartReceipt,
   VoiceConversationRealtimeStartRequest,
   VoiceConversationRealtimeStatus,
@@ -21,6 +23,7 @@ import type {
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
+  type VoiceAssistantGender,
 } from './types.ts'
 import { CodexRealtimeBridge, type CodexRealtimeInitialItem } from './codex-realtime.ts'
 
@@ -306,6 +309,29 @@ function compactRealtimeContextText(text: string, limit: number): string {
   return `${text.slice(0, head)}${separator}${text.slice(-tail)}`
 }
 
+function assistantGenderFromContext(ctx: Context): VoiceAssistantGender {
+  // Voice is intentionally optional with respect to user-profile composition.
+  // Read the service structurally so a minimal deployment does not gain a
+  // hard package dependency merely to choose a voice.
+  const service = (ctx as unknown as {
+    get(name: string, required?: boolean): unknown
+  }).get('userProfile', false) as {
+    getAssistantIdentity?: () => { readonly gender?: unknown }
+    get?: () => { readonly profile?: { readonly assistantGender?: unknown } }
+  } | undefined
+  const identity = service?.getAssistantIdentity?.()
+  const value = identity?.gender ?? service?.get?.().profile?.assistantGender
+  return value === 'masculine' || value === 'neutral' || value === 'feminine'
+    ? value
+    : 'feminine'
+}
+
+function sessionKeyOf(session: unknown): string | undefined {
+  if (typeof session !== 'object' || session === null || !('id' in session)) return undefined
+  const value = (session as { readonly id?: unknown }).id
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
 /** Provider registry and non-blocking important-event announcement queue. */
 export class VoiceRuntime extends TypertRemoteService {
   static Config: z<VoiceRuntimeConfig> = z.object({
@@ -340,9 +366,21 @@ export class VoiceRuntime extends TypertRemoteService {
       codexRealtime: config.codexRealtime ?? true,
     }
     ctx.on('voice/important', (event) => { void this.announce(event) })
-    ctx.on('session/event', (_session, event) => {
+    ctx.on('session/event', (session, event) => {
       const important = sessionEventToVoiceEvent(event)
-      if (important !== undefined) void this.announce(important)
+      if (important === undefined) return
+      const key = sessionKeyOf(session)
+      const text = displayOutputToVoiceText(important.displayOutput, this.config.maxChars)
+      // If the user is actively on a native Realtime call for this exact
+      // session, completion/block/approval belongs in that same voice. Do not
+      // double-speak it through the ordinary announcement queue.
+      if (key !== undefined && text !== '' && this.codexRealtime?.has(key) === true) {
+        void this.codexRealtime.speak(key, text).catch((error: unknown) => {
+          this.ctx.logger('voice').warn(`realtime important-event speech failed: ${String(error)}`)
+        })
+        return
+      }
+      void this.announce(important)
     })
     ctx.effect(() => () => { this.stop() }, 'voice queue teardown')
   }
@@ -357,6 +395,7 @@ export class VoiceRuntime extends TypertRemoteService {
     return {
       enabled: this.config.enabled,
       natural: this.config.enabled && provider?.id === 'phoenix-natural',
+      assistantGender: assistantGenderFromContext(this.ctx),
       ...(provider === undefined ? {} : { provider: provider.id }),
     }
   }
@@ -430,6 +469,7 @@ export class VoiceRuntime extends TypertRemoteService {
       const result = await this.codexRealtimeBridge().start({
         key,
         offerSdp,
+        assistantGender: assistantGenderFromContext(this.ctx),
         ...(model === undefined ? {} : { model }),
         ...(initialItems.length === 0 ? {} : { initialItems }),
       })
@@ -437,6 +477,7 @@ export class VoiceRuntime extends TypertRemoteService {
         accepted: true,
         threadId: result.threadId,
         answerSdp: result.answerSdp,
+        ...(result.voice === undefined ? {} : { voice: result.voice }),
       }
     } catch (error) {
       const message = String(error)
@@ -452,6 +493,33 @@ export class VoiceRuntime extends TypertRemoteService {
         reason: 'negotiation-failed',
         detail: codexRealtimeFailureDetail(error),
       }
+    }
+  }
+
+  /**
+   * Read Phoenix-owned chat/task prose through the already-active native
+   * Realtime call. Realtime never decides the task here; it is only the voice
+   * transport for text the real Phoenix session produced.
+   */
+  @Remote('conversationRealtimeSpeak')
+  async conversationRealtimeSpeak(
+    request: VoiceConversationRealtimeSpeakRequest,
+  ): Promise<VoiceConversationRealtimeSpeakReceipt> {
+    if (!this.config.enabled || !this.config.codexRealtime) {
+      return { accepted: false, reason: 'disabled' }
+    }
+    const key = request.key.trim()
+    const text = displayOutputToVoiceText(request.text, Math.min(this.config.maxChars, 360))
+    if (key === '' || key.length > 256 || request.text.length > 4_096) {
+      return { accepted: false, reason: 'invalid' }
+    }
+    if (text === '') return { accepted: false, reason: 'invalid' }
+    if (this.codexRealtime?.has(key) !== true) return { accepted: false, reason: 'not-active' }
+    try {
+      return { accepted: await this.codexRealtime.speak(key, text) }
+    } catch (error) {
+      this.ctx.logger('voice').warn(`Codex realtime appendSpeech failed: ${String(error)}`)
+      return { accepted: false, reason: 'speak-failed' }
     }
   }
 

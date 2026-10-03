@@ -7,6 +7,7 @@ import {
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
+  codexRealtimeUserTranscript,
   interruptVoiceAssistantSpeech,
   isLikelyVoiceAssistantEcho,
   refreshVoiceAssistantRemote,
@@ -75,6 +76,25 @@ describe('browser voice adapter', () => {
     }
   })
 
+
+  it('extracts only completed human Realtime transcripts for the real Phoenix chat', () => {
+    expect(codexRealtimeUserTranscript(JSON.stringify({
+      type: 'conversation.item.input_audio_transcription.completed',
+      transcript: '  crea el plan y comienza la tarea  ',
+    }))).toBe('crea el plan y comienza la tarea')
+    expect(codexRealtimeUserTranscript(JSON.stringify({
+      method: 'thread/realtime/transcript/done',
+      params: { role: 'user', text: 'revisa el correo' },
+    }))).toBe('revisa el correo')
+    expect(codexRealtimeUserTranscript(JSON.stringify({
+      method: 'thread/realtime/transcript/done',
+      params: { role: 'assistant', text: 'respuesta de Kira' },
+    }))).toBeUndefined()
+    expect(codexRealtimeUserTranscript(JSON.stringify({
+      type: 'response.audio_transcript.done',
+      transcript: 'assistant output',
+    }))).toBeUndefined()
+  })
 
   it('configures one explicit recognition session and forwards final text', () => {
     const transcripts: string[] = []
@@ -170,7 +190,7 @@ describe('browser voice adapter', () => {
   it('routes streaming speech to the Host neural voice and cancels it on barge-in', async () => {
     const status = vi.fn(async () => ({
       ok: true as const,
-      value: { enabled: true, natural: true, provider: 'phoenix-natural' },
+      value: { enabled: true, natural: true, assistantGender: 'feminine' as const, provider: 'phoenix-natural' },
     }))
     const speak = vi.fn(async (_request: {
       readonly key: string
