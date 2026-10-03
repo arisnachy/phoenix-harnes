@@ -1,4 +1,6 @@
 import { EventEmitter } from 'node:events'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it, vi } from 'vitest'
 import { finishProcessSetup } from '../src/codex-discovery.ts'
 
@@ -22,5 +24,24 @@ describe('Codex metadata stdio resilience', () => {
       )
     }).not.toThrow()
     expect(resume).toHaveBeenCalledOnce()
+  })
+})
+
+
+describe('Codex metadata teardown source contract', () => {
+  const source = readFileSync(fileURLToPath(new URL('../src/codex-discovery.ts', import.meta.url)), 'utf8')
+
+  it('gives app-server EOF time to flush model cache before force-killing the process tree', () => {
+    expect(source).toContain('CODEX_METADATA_EXIT_GRACE_MS')
+    expect(source).toContain('await waitForNaturalCodexExit(child, CODEX_METADATA_EXIT_GRACE_MS)')
+    expect(source).toContain('failed to write models cache: background task failed')
+    expect(source.indexOf('await waitForNaturalCodexExit')).toBeLessThan(source.indexOf("spawnSync('taskkill'"))
+  })
+
+  it('prefers the Phoenix-managed stable Codex runtime when one is active', () => {
+    expect(source).toContain("join(dshHome, 'codex-cli')")
+    expect(source).toContain("join(runtimeRoot, 'active.json')")
+    expect(source).toContain('const managed = managedCodexBin()')
+    expect(source).toContain('[managed, ...codexDiscoveryArgs()]')
   })
 })
