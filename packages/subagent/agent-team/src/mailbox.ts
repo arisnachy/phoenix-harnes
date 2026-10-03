@@ -319,6 +319,7 @@ export class TeamMailbox {
     return [
       { type: 'text', text: `Team message ${message.id} from ${message.senderName}${message.purpose === undefined ? '' : ` [${message.purpose}]`}:` },
       ...structuredClone(message.content),
+      { type: 'text', text: `Visible reaction target: ${message.id}. If this direct message, result, review, approval, thanks, joke, or useful finding merits a natural acknowledgement, use team_chat_react once on this exact id with a contextual Unicode emoji. Prefer the reaction over filler prose; do not react mechanically.` },
     ]
   }
 

@@ -17,6 +17,10 @@
 
 运行命令时所在的目录将作为默认 workspace 根目录。`web` 和 `headless` profile 在首次使用时会从随附模板自动初始化；其他任何 profile 都必须通过 `dsh plugin` 创建。
 
+## 游戏创作
+
+standard 和 code 预设在处理游戏任务时加载内置的 [game-development 技能](config/agent-presets/standard/skills/game-development/SKILL.md)。它分别处理浏览器街机、Godot 2D/3D、现代复古风格以及明确要求的原生自制游戏，按需加载平台配方，并通过 Node 工具检查程序。Godot/Blender 仅通过可信的平台包管理器显式安装；原生 SDK、导出模板和模拟器需独立验证。交付前必须提供与游戏类型相符的技术、视觉和实际游玩证据。
+
 ## ChatGPT Web 网桥
 
 PHOENIX 可以将本地的 [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) 网桥作为 `chatgpt-web` 模型路由使用。网桥负责浏览器登录与 cookie；PHOENIX 不会导入或保存这些内容。在 Windows 上，请先在已安装的 Codex Web GPT 启动器中完成 `Setup > Browser-only`；随后 `dsh chatgpt-web start` 会自动发现完整的打包运行时，并忽略不完整的安装。其他安装仍可使用 JSON argv 配置：

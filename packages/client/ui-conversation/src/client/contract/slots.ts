@@ -442,6 +442,8 @@ export interface ChatNodeTurnDataInjected {
 
 /** Stable owner currency delivered to one keyed Chat business renderer. */
 export interface ChatNodeOwnerProps {
+  /** Additive per-message controls already rendered for this exact transcript node. */
+  messageActions?: ReactNode
   /** Selected Tool call, when the shared details store names one. */
   selectedCallId?: CallId | undefined
   /** Session workspace root; Tool summaries display paths relative to it. */

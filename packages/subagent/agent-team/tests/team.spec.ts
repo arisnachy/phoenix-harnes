@@ -1857,6 +1857,31 @@ describe('visible team conversation', () => {
     await lead.whenIdle()
   })
 
+  it('delivers the exact visible reaction target id with peer messages', async () => {
+    const { ctx, lead } = await setup(['hang'], {}, true)
+    const started = await spawn(ctx, lead, 'zenith')
+    await waitRunning(ctx, started.member.id)
+    const sent = await ctx.agentTeams.sendMessage(lead, {
+      target: 'zenith',
+      purpose: 'review',
+      content: content('Please verify this result.'),
+      delivery: 'quiet',
+      signal: SIGNAL,
+    })
+    const child = ctx.sessions.get(started.member.id)!
+    const delivered = child.events.findLast(event => event.type === 'user/message'
+      && event.data.source.kind === 'team-message'
+      && event.data.source.messageId === sent.messageId)
+    expect(delivered?.type).toBe('user/message')
+    if (delivered?.type !== 'user/message') throw new Error('team message was not delivered')
+    const modelText = delivered.data.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
+    expect(modelText).toContain(`Visible reaction target: ${sent.messageId}`)
+    expect(modelText).toContain('team_chat_react')
+    expect(modelText).toContain('Prefer the reaction over filler prose')
+    ctx.agentTeams.interrupt(lead, 'zenith')
+    await waitNoAgent(ctx, started.member.id)
+  })
+
   it('keeps one multi-target user row across partial delivery retries and attributes all three reactor kinds', async () => {
     const { ctx, lead, adapter } = await setup([
       toolCallResponse('hold-a', 'hold', {}, 'Quality evidence.'),
@@ -1984,6 +2009,46 @@ describe('visible team conversation', () => {
     const count = lead.session.events.length
     await expect(service.chatReact({ sessionId: lead.id, messageId: 'unloaded-reply', emoji: '👍', active: true })).rejects.toMatchObject({ code: 'TEAM_DISPOSED' })
     expect(lead.session.events).toHaveLength(count)
+  })
+
+  it('exposes the initial Kira assignment as a reaction target while the teammate is provisioning', async () => {
+    const { ctx, lead, adapter } = await setup([], {}, true)
+    const childId = SessionId('provisioning-reaction-target')
+    lead.session.append('team/member', {
+      version: 1,
+      teamId: TeamId(lead.id),
+      member: {
+        id: childId,
+        name: 'zenith',
+        description: 'verify the result',
+        provider: 'spawn',
+        context: 'fresh',
+        phase: 'provisioning',
+      },
+    })
+    const row = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
+      .find(message => message.id === `team-member:${childId}`)
+    expect(row).toMatchObject({
+      senderKind: 'kira',
+      senderId: lead.id,
+      targetId: childId,
+      text: 'verify the result',
+    })
+    expect(adapter.requests).toHaveLength(0)
+  })
+
+  it('gives a new teammate the exact visible Kira assignment id in its first prompt', async () => {
+    const { ctx, lead, adapter } = await setup(['hang'], {}, true)
+    const started = await spawn(ctx, lead, 'zenith')
+    await vi.waitFor(() => { expect(adapter.requests.length).toBeGreaterThan(0) })
+    const promptText = adapter.requests[0]?.messages
+      .flatMap(message => message.content.flatMap(block => block.type === 'text' ? [block.text] : []))
+      .join('\n') ?? ''
+    expect(promptText).toContain(`Visible Kira assignment reaction target: team-member:${started.member.id}`)
+    expect(promptText).toContain('team_chat_react')
+    expect(promptText).toContain('Before substantive work')
+    ctx.agentTeams.interrupt(lead, 'zenith')
+    await waitNoAgent(ctx, started.member.id)
   })
 
   it('lets every participant react to the real initial Kira assignment', async () => {

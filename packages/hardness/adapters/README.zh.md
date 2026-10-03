@@ -46,6 +46,8 @@ Email 有两个独立 identity reference。`userMailIdentity` 表示获授权的
 
 同一策略也会在 active goal round 中被强化。已经授权的 mission 遇到可恢复的 tool 或 verification failure 时，会通过修复、替代 route、能力获取/构建或实质不同的策略继续推进。内部 retry/round limit 不能完成或取消 mission。Permission、credential、safety policy、provider quota、明确拒绝以及真正无法满足的外部 dependency 仍是硬边界，fast path 永远不会绕过这些限制。
 
+游戏质量要求遵循所请求的类型与美术方向。游戏开发识别涵盖 PS1/PSX/PlayStation、Sega 等主机参考，并通过开发语境区分 Snake、国际象棋等名称的歧义。抽象棋盘、解谜和街机游戏可将精致几何图形、程序化音频及紧凑且经过设计的场地作为成品；明确请求角色、背景、外部或原创资源时，仍须采用相关制作与来源记录流程。具象 RPG、冒险及 GTA 类作品保留角色、环境和制作资源要求。所有游戏仍须提供当前修改轮次的独立技术验证、画面检查和实际游玩证据。
+
 ## 运行时验证
 
 模拟蜡烛图读取将 provider 请求和返回行数都限制为 1–1000。Shell 修改分类读取 command 参数。运行时服务遥测立即执行首次探测，随后在 TTL 过期前复用观察结果。

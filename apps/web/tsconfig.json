@@ -24,6 +24,7 @@
   "exclude": [
     "tests/kira-team-chat.e2e.ts",
     "tests/phoenix-assistant-email.snapshot.ts",
+    "tests/game-development.snapshot.ts",
     "tests/scaffold.ts",
     "tests/scaffold-hermetic.e2e.ts",
     "tests/startup-rpc-budget.e2e.ts",

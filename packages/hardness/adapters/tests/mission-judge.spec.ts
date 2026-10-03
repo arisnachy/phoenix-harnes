@@ -228,4 +228,24 @@ describe('HARDNESS mission judges', () => {
     })
     await expect(judge(input())).resolves.toMatchObject({ verdict: 'blocked' })
   })
+  it('reviews geometric arcade work with current-generation technical, visual and actual play evidence', async () => {
+    const start = vi.fn<SubagentRuntime['start']>(async () => ({
+      id: 'abstract-mission-judge' as never, localAgent: undefined,
+      result: Promise.resolve({ stopReason: 'completed' as const, output: [], structured: {
+        verdict: 'needs_changes', summary: 'play evidence missing', evidence: ['capture'], required_changes: ['execute gameplay'],
+        criteria: [{ id: 'artifact', verdict: 'needs_changes', evidence: ['capture'], findings: ['execute gameplay'] }],
+        quality: { verdict: 'needs_changes', summary: 'play evidence missing', evidence: ['capture'], findings: ['execute gameplay'] },
+      } }), dispose: async () => {},
+    }))
+    const judge = createSubagentMissionJudge({ subagents: { getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }) as never, start }, provider: 'spawn' })
+    const candidate = input()
+    candidate.need = { kind: 'game', inputs: ['brief'], outputs: ['playable-build'], description: 'Create a geometric Pong arcade' } as never
+    await judge(candidate)
+    const prompt = start.mock.calls[0]?.[1].prompt.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ') ?? ''
+    expect(prompt).toMatch(/three independent evidence gates.*technical.*visual.*play/)
+    expect(prompt).toMatch(/current mutation generation/)
+    expect(prompt).toMatch(/polished geometry|procedural audio|compact designed arena/)
+    expect(prompt).not.toMatch(/asset-first scouting|character bible|locomotion in every|environmental storytelling/)
+  })
+
 })

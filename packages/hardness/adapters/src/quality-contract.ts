@@ -66,7 +66,38 @@ function requestText(need: unknown): string {
   try { return JSON.stringify(need).toLocaleLowerCase() } catch { return String(need).toLocaleLowerCase() }
 }
 
+function gameRequestText(need: unknown): string {
+  if (need !== null && typeof need === 'object' && !Array.isArray(need)) {
+    const record = need as Record<string, unknown>
+    if (record.need !== undefined) return gameRequestText(record.need)
+    if (typeof record.description === 'string') {
+      return `${typeof record.kind === 'string' ? record.kind : ''} ${record.description}`.toLocaleLowerCase()
+    }
+  }
+  return requestText(need)
+}
+
 function matches(value: string, pattern: RegExp): boolean { return pattern.test(value) }
+
+// oxlint-disable-next-line @stylistic/max-len -- Keep the game-intent matcher auditable as one regex literal.
+const GAME_ACTION = /\b(?:create|build|make|develop|design|implement|program|improve|polish|fix|playable|crear|crea|haz|construir|desarrollar|desarrolla|diseñar|diseña|hacer|mejora|mejorar|programa|jugable)\b/u
+// oxlint-disable-next-line @stylistic/max-len -- Match the requested educational output before its game topic.
+const GAME_EDUCATIONAL_OUTPUT = /\b(?:create|write|prepare|build|make|design|crea|crear|escribe|prepara|haz|diseña)\s+(?:(?!based\b|from\b|using\b|with\b|that\b|which\b|con\b|desde\b)[\p{L}\p{N}-]+\s+){0,5}(?:lesson|essay|article|lecture|tutorial|report|lecci[oó]n|ensayo|art[ií]culo|informe)\b/u
+// oxlint-disable-next-line @stylistic/max-len -- Keep the game-intent matcher auditable as one regex literal.
+const GAME_EDUCATION = /\b(?:explain|teach|lesson|history|biology|essay|article|report|sales|revenue|explica|enseña|lecci[oó]n|historia|biolog[ií]a|ventas|informe)\b/u
+// oxlint-disable-next-line @stylistic/max-len -- Keep the non-game target matcher auditable as one regex literal.
+const GAME_NON_PLAYABLE_TARGET = /\b(?:dashboard|poster|diagram|illustration|logo|photograph|infographic|p[oó]ster|diagrama|ilustraci[oó]n)\b/u
+// oxlint-disable-next-line @stylistic/max-len -- Keep the game-intent matcher auditable as one regex literal.
+const GAME_DOMAIN = /\b(?:game|games|gaming|juego|juegos|videogame|video-game|videojuego|videojuegos|unreal|unity|godot|pixel\s*art|rom|homebrew|platformer|metroidvania|rpg|shooter|gameplay)\b/u
+const GAME_PLATFORM = /\b(?:ps1|psx|playstation|sega|nes|snes|genesis|mega\s*drive|master\s*system|game\s*gear|game\s*boy)\b/u
+// oxlint-disable-next-line @stylistic/max-len -- Keep the game-intent matcher auditable as one regex literal.
+const GAME_GENRE = /\b(?:gta|sonic|zelda|mario|minecraft|doom|adventure|aventura|arcade|racing|racer|strategy|sports|rhythm|roguelike|roguelite|simulation|simulator|survival|fighting|puzzle|board|snake|pong|tetris|2048|chess|checkers|sudoku|breakout|arkanoid|minesweeper|ajedrez|damas|buscaminas)\b/u
+// oxlint-disable-next-line @stylistic/max-len -- Keep the game-intent matcher auditable as one regex literal.
+const ABSTRACT_GAME = /\b(?:snake|pong|tetris|2048|chess|checkers|sudoku|breakout|arkanoid|minesweeper|ajedrez|damas|buscaminas|puzzle|puzle|rompecabezas|board\s+game|juego\s+de\s+mesa|geometric|geom[eé]tric[oa]|abstract|abstract[oa])\b/u
+// oxlint-disable-next-line @stylistic/max-len -- Keep the game-intent matcher auditable as one regex literal.
+const REPRESENTATIONAL_GAME = /\b(?:rpg|role[ -]playing|open[ -]world|mundo\s+abierto|npc|realistic|photorealistic|gta|zelda|mario|sonic|adventure|aventura|dungeon|platformer|metroidvania)\b/u
+// oxlint-disable-next-line @stylistic/max-len -- Keep the game-intent matcher auditable as one regex literal.
+const REQUESTED_GAME_ASSETS = /\b(?:(?:external|original|custom|generated|licensed|downloaded|imported|animated|illustrated|hand-painted|extern[oa]s?|originales?|personalizad[oa]s?)\s+(?:\w+\s+){0,3}(?:assets?|sprites?|textures?|models?|characters?|backgrounds?|art|music|soundtrack|recursos|personajes?|fondos?|arte)|(?:assets?|sprites?|recursos|personajes?|fondos?|arte)\s+(?:extern[oa]s?|originales?|personalizad[oa]s?)|(?:character|background|personaje|fondo)\s+(?:sprites?|assets?|art|arte)|(?:import|download|generate|importa|descarga|genera)\s+(?:\w+\s+){0,3}(?:assets?|sprites?|textures?|models?))\b/u
 
 /**
  * Identify game-development work from the capability request without requiring
@@ -75,8 +106,52 @@ function matches(value: string, pattern: RegExp): boolean { return pattern.test(
  * @returns Whether game-specific quality requirements and review apply.
  */
 export function isGameDevelopmentNeed(need: unknown): boolean {
-  return matches(requestText(need), /\b(?:game|games|gaming|juego|juegos|videogame|video-game|videojuego|videojuegos|unreal|unity|godot|blender|pixel\s*art|nes|snes|genesis|mega\s*drive|master\s*system|game\s*gear|game\s*boy|rom|homebrew|platformer|metroidvania|rpg|shooter|gameplay)\b/u)
+  const text = gameRequestText(need)
+  if (GAME_EDUCATIONAL_OUTPUT.test(text)) return false
+  if (GAME_NON_PLAYABLE_TARGET.test(text) && !/\b(?:game|juego|playable|jugable|gameplay)\b/u.test(text)) return false
+  if (GAME_EDUCATION.test(text) && !(GAME_ACTION.test(text) && GAME_DOMAIN.test(text))
+    && !/\b(?:playable|jugable|gameplay|videojuego)\b/u.test(text)) return false
+  return GAME_DOMAIN.test(text)
+    || (GAME_PLATFORM.test(text) && (GAME_ACTION.test(text) || GAME_GENRE.test(text)))
+    || ((GAME_ACTION.test(text) || REQUESTED_GAME_ASSETS.test(text)) && GAME_GENRE.test(text))
 }
+
+/** Identify a game whose intended actors and arena use abstract geometry.
+ * @param need Requested game genre and art direction.
+ * @returns Whether genre-native geometric presentation applies instead of representational world/cast requirements.
+ */
+export function isAbstractGameNeed(need: unknown): boolean {
+  const text = gameRequestText(need)
+  return isGameDevelopmentNeed(need) && ABSTRACT_GAME.test(text) && !REPRESENTATIONAL_GAME.test(text)
+}
+
+/** Identify explicit asset work within an otherwise abstract game.
+ * @param need Requested genre, presentation and assets.
+ * @returns Whether requested character/background or external/original assets require a production asset pipeline.
+ */
+export function requestsGameAssets(need: unknown): boolean { return REQUESTED_GAME_ASSETS.test(gameRequestText(need)) }
+
+/** Shared art review instructions for an abstract game without imposing a representational cast or world.
+ * @param need Requested genre and asset scope.
+ * @returns Genre-specific judge instructions with independent current-generation evidence gates.
+ */
+export function abstractGameReview(need: unknown): string {
+  return 'This is abstract game-development work. Require three independent evidence gates from the current mutation generation: technical build/test/check evidence, visual capture inspected with read_image/screenshot, and executed gameplay/playtest evidence. None may substitute for another. '
+    + 'Judge polished geometry, a compact designed arena or board, deliberate typography/palette, readable state, animation/feedback, integrated UI, procedural audio or suitable music/SFX, input response, rules, progression, failure/restart states, and measured performance in actual play. '
+    + 'Compare against strong references in the intended board, puzzle or arcade genre. Geometric pieces and a compact playfield are final art when deliberately composed and visually evidenced. Require comparable baseline-before and candidate-after captures when improving existing work. '
+    + (requestsGameAssets(need) ? 'The explicitly requested assets still require suitable production tooling, source/license checks for external assets and asset-manifest.json or asset-sourcing.json provenance. Require concrete scouting when external asset selection is in scope. ' : '')
+}
+
+const ABSTRACT_GAME_REQUIREMENTS = [
+  'Judge the intended board, puzzle or arcade genre against strong current category references, with polished geometry, deliberate palette, typography, composition and readable game state; unpolished prototypes and unfinished placeholders fail completion.',
+  'A compact designed arena or board is valid final work. Game-native UI, responsive layout, contrast and input affordances support the intended playfield without obscuring it.',
+  'Procedural audio is valid final sound when intentional and reviewed in actual play: timing, loudness balance, loops, transitions and gameplay/UI feedback suit the genre.',
+  'Verify rules, input response, gameplay feel, collision or piece interaction where relevant, scoring/progression, win/loss, pause/restart and meaningful edge cases through actual executed gameplay.',
+  'Inspect animation, effects and visual feedback at normal play scale and measure relevant frame-time, memory, loading and platform constraints.',
+  'When improving an existing game, require comparable baseline-before and candidate-after captures and reject material regressions or no visible improvement.',
+  'Requested boot/title/menu/intro flows are polished, usable and verified through their transition into gameplay.',
+  'Completion requires independent technical, visual-inspection and executed-play evidence from the current mutation generation; passing build/tests or screenshots alone cannot establish complete game quality.',
+] as const
 
 /**
  * Derive a bounded quality contract from a capability request. Generic
@@ -104,7 +179,10 @@ export function qualityRequirementsForNeed(need: unknown): readonly string[] {
     requirements.push(...AUTOMATION_REQUIREMENTS)
   }
   if (isGameDevelopmentNeed(need)) {
-    requirements.push(...GAME_REQUIREMENTS)
+    if (isAbstractGameNeed(need)) {
+      requirements.push(...ABSTRACT_GAME_REQUIREMENTS)
+      if (requestsGameAssets(need)) requirements.push(GAME_REQUIREMENTS[2], GAME_REQUIREMENTS[3])
+    } else requirements.push(...GAME_REQUIREMENTS)
   }
 
   return [...new Set(requirements)].slice(0, MAX_REQUIREMENTS)

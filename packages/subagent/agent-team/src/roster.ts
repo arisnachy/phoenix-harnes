@@ -308,6 +308,13 @@ export class TeamRoster {
       await this.journal.appendAndFlush(root, 'team/member', { version: 1, teamId: TeamId(root.id), member })
     })
 
+    const initialPrompt = [
+      ...request.prompt,
+      {
+        type: 'text' as const,
+        text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. Before substantive work, acknowledge it once with team_chat_react and one natural contextual Unicode emoji unless a reaction would be socially inappropriate or redundant. Do not add filler prose just to acknowledge it.`,
+      },
+    ]
     let started: ContinuableStart
     try {
       started = await this.ctx.subagents.startContinuable({
@@ -315,7 +322,7 @@ export class TeamRoster {
         provider: request.provider,
         label: `KIRA:${name} · ${description}`,
         request: {
-          prompt: request.prompt,
+          prompt: initialPrompt,
           parent: root,
           ...request.agentOptions === undefined ? {} : { agentOptions: request.agentOptions },
         },
