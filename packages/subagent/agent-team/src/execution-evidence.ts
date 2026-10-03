@@ -13,12 +13,18 @@ export interface TeamExecutionProof {
   readonly satisfied: boolean
 }
 
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual operational vocabulary stays auditable as one regex.
 const OPERATIONAL_OBJECT = /\b(?:email|e-mail|mail|gmail|correo|mensaje|message|file|files|archivo|archivos|repo|repository|repositorio|branch|rama|commit|pull\s+request|\bpr\b|code|c[oó]digo|script|package|paquete|dependency|dependencia|test|tests|prueba|pruebas|build|cli|api|app|application|aplicaci[oó]n|web|website|sitio|form|formulario|calendar|calendario|event|evento|database|base\s+de\s+datos|document|documento|sheet|spreadsheet|drive|github|slack|setting|settings|config|configuraci[oó]n|account|cuenta|record|registro|deployment|despliegue)\b/iu
-const EFFECT_ACTION = /\b(?:send|create|update|edit|modify|write|save|upload|deploy|publish|commit|push|install|uninstall|delete|remove|move|rename|copy|submit|schedule|book|fill|reply|forward|archive|label|merge|apply|execute|run|env[ií]a\p{L}*|mand\p{L}*|crea\p{L}*|actualiz\p{L}*|edit\p{L}*|modific\p{L}*|escrib\p{L}*|guard\p{L}*|sub\p{L}*|despleg\p{L}*|public\p{L}*|fusion\p{L}*|instal\p{L}*|desinstal\p{L}*|elimin\p{L}*|borr\p{L}*|muev\p{L}*|mov\p{L}*|renombr\p{L}*|copi\p{L}*|rellen\p{L}*|complet\p{L}*|respond\p{L}*|reenv[ií]\p{L}*|archiv\p{L}*|etiquet\p{L}*|ejecut\p{L}*|corr\p{L}*)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual action vocabulary stays auditable as one regex.
+const EFFECT_ACTION = /\b(?:send|create|update|edit|modify|write|save|upload|deploy|publish|commit|push|install|uninstall|delete|remove|move|rename|copy|submit|schedule|book|fill|reply|forward|archive|label|merge|apply|execute|run|env[ií]a\p{L}*|mand\p{L}*|crea\p{L}*|actualiz\p{L}*|edit\p{L}*|modific\p{L}*|escrib\p{L}*|guard\p{L}*|sub\p{L}*|despleg\p{L}*|public\p{L}*|fusion\p{L}*|instal\p{L}*|desinstal\p{L}*|elimin\p{L}*|borr\p{L}*|muev\p{L}*|mov\p{L}*|renombr\p{L}*|copi\p{L}*|rellen\p{L}*|complet\p{L}*|respond\p{L}*|reenv[ií]\p{L}*|archiv\p{L}*|etiquet\p{L}*|ejecut\p{L}*)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Bilingual verification vocabulary stays auditable as one regex.
 const VERIFY_ACTION = /\b(?:verify|check|test|inspect|review|audit|search|research|investigate|validate|confirm|compare|verific\p{L}*|comprob\p{L}*|prueb\p{L}*|inspeccion\p{L}*|revis\p{L}*|audit\p{L}*|busc\p{L}*|investig\p{L}*|valid\p{L}*|confirm\p{L}*|compar\p{L}*)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Paired send-noun matcher is clearer as one expression.
 const SEND_NOUN = /(?:\b(?:env[ií]o|delivery|sending)\b.{0,80}\b(?:correo|email|e-mail|mail|mensaje|message)\b|\b(?:correo|email|e-mail|mail|mensaje|message)\b.{0,80}\b(?:env[ií]o|delivery|sending)\b)/iu
 
+// oxlint-disable-next-line @stylistic/max-len -- Keep the non-evidence Team tool set in one visible gate.
 const COORDINATION_TOOL = /^(?:spawn_teammate|send_message|followup_task|team_react|team_chat_react|team_chat_read|list_agents|wait_agent|interrupt_agent|team_task_.+|subagent(?:_fork)?|todo_write|ask_user_question|report)$/u
+// oxlint-disable-next-line @stylistic/max-len -- Effectful tool verbs are intentionally one auditable allowlist.
 const EFFECT_TOOL = /^(?:send|create|update|edit|modify|write|save|upload|deploy|publish|commit|push|install|uninstall|delete|remove|move|rename|copy|submit|schedule|book|fill|reply|forward|archive|label|merge|apply|set|add|insert|execute|run|bash|pwsh|run_code)(?:_|$)/u
 
 function textOf(content: readonly { readonly type: string; readonly text?: unknown }[]): string {
