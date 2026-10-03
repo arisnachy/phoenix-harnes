@@ -654,6 +654,30 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('synchronizes live AgentOptions to a concrete non-Codex selection before delegation tools run', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+      assembled: undefined,
+    }
+    const agent = {
+      options: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') },
+      session: { events: [] },
+    } as unknown as Agent
+    ctx.agent = agent
+    const dispose = installModelSelection(ctx, selection)
+
+    await ctx.systemPrompt.assemble()
+
+    expect(agent.options.provider).toBe('deepseek')
+    expect(agent.options.model).toBe('deepseek-v4-pro')
+    expect(agent.options.reasoningEffort).toBeUndefined()
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('keeps an explicit selection exact when adaptive handoff is not installed', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
