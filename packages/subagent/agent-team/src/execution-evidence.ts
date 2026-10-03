@@ -58,8 +58,11 @@ function latestAssignment(
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     if (event === undefined || event.seq > upToSeq || event.type !== 'user/message') continue
-    const source = event.data.source as { readonly kind?: string }
+    const source = event.data.source as { readonly kind?: string; readonly purpose?: string }
     if (source.kind !== 'user' && source.kind !== 'team-message') continue
+    // Review/status/blocker chatter must not erase an unfinished assignment's
+    // proof obligation. Only an explicit Team assignment starts a new scope.
+    if (source.kind === 'team-message' && source.purpose !== 'assignment') continue
     const requirement = teamExecutionRequirement(textOf(event.data.content))
     return { seq: event.seq, requirement }
   }
