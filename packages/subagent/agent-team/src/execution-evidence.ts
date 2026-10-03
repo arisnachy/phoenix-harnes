@@ -54,7 +54,7 @@ export function teamExecutionRequirement(text: string): TeamExecutionRequirement
 function latestAssignment(
   events: readonly SessionEvent[],
   upToSeq: number,
-): { readonly seq: number; readonly requirement: TeamExecutionRequirement } | undefined {
+): { readonly seq: number; readonly requirement: TeamExecutionRequirement; readonly text: string } | undefined {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index]
     if (event === undefined || event.seq > upToSeq || event.type !== 'user/message') continue
@@ -63,10 +63,40 @@ function latestAssignment(
     // Review/status/blocker chatter must not erase an unfinished assignment's
     // proof obligation. Only an explicit Team assignment starts a new scope.
     if (source.kind === 'team-message' && source.purpose !== 'assignment') continue
-    const requirement = teamExecutionRequirement(textOf(event.data.content))
-    return { seq: event.seq, requirement }
+    const text = textOf(event.data.content)
+    const requirement = teamExecutionRequirement(text)
+    return { seq: event.seq, requirement, text }
   }
   return undefined
+}
+
+interface ExecutionCall {
+  readonly name: string
+  readonly arguments: string
+}
+
+function toolMatchesAssignment(assignmentText: string, call: ExecutionCall): boolean {
+  const assignment = assignmentText.toLowerCase()
+  const carrier = `${call.name} ${call.arguments}`.toLowerCase()
+  if (/\b(?:email|e-mail|mail|gmail|correo)\b/u.test(assignment)) {
+    return /(?:email|e-mail|mail|gmail)/u.test(carrier)
+  }
+  if (/\b(?:github|repo|repository|repositorio|branch|rama|commit|pull\s+request|pr)\b/u.test(assignment)) {
+    return /(?:github|\bgit\b|repo|branch|commit|pull.request|update_file|create_file|update_ref)/u.test(carrier)
+  }
+  if (/\b(?:calendar|calendario|event|evento)\b/u.test(assignment)) {
+    return /(?:calendar|event|schedule)/u.test(carrier)
+  }
+  if (/\b(?:database|base\s+de\s+datos|sql|table|tabla)\b/u.test(assignment)) {
+    return /(?:database|sql|query|table)/u.test(carrier)
+  }
+  if (/\b(?:drive|document|documento|sheet|spreadsheet)\b/u.test(assignment)) {
+    return /(?:drive|document|docs|sheet|spreadsheet)/u.test(carrier)
+  }
+  if (/\b(?:web|website|sitio|form|formulario)\b/u.test(assignment)) {
+    return /(?:browser|web|page|form|click|fill|submit|navigate)/u.test(carrier)
+  }
+  return true
 }
 
 function successfulTools(
@@ -74,22 +104,27 @@ function successfulTools(
   afterSeq: number,
   upToSeq: number,
   requirement: TeamExecutionRequirement,
+  assignmentText: string,
 ): string[] {
-  const calls = new Map<string, string>()
+  const calls = new Map<string, ExecutionCall>()
   for (const event of events) {
     if (event.seq <= afterSeq || event.seq > upToSeq || event.type !== 'tool/call') continue
-    calls.set(String(event.data.callId), event.data.name)
+    calls.set(String(event.data.callId), {
+      name: event.data.name,
+      arguments: event.data.arguments,
+    })
   }
   const tools: string[] = []
   for (const event of events) {
     if (event.seq <= afterSeq || event.seq > upToSeq || event.type !== 'tool/result'
       || event.data.error !== undefined || event.data.message.content[0].isError) continue
     const callId = String(event.data.message.source.callId)
-    const raw = calls.get(callId)
-    if (raw === undefined) continue
-    const operation = operationName(raw)
+    const call = calls.get(callId)
+    if (call === undefined) continue
+    const operation = operationName(call.name)
     if (COORDINATION_TOOL.test(operation)) continue
     if (requirement === 'effect' && !EFFECT_TOOL.test(operation)) continue
+    if (!toolMatchesAssignment(assignmentText, call)) continue
     tools.push(operation)
   }
   return [...new Set(tools)]
@@ -105,14 +140,16 @@ export function teamExecutionProof(
     readonly upToSeq?: number
     readonly afterSeq?: number
     readonly requirement?: TeamExecutionRequirement
+    readonly assignmentText?: string
   } = {},
 ): TeamExecutionProof {
   const upToSeq = options.upToSeq ?? Number.MAX_SAFE_INTEGER
   const assignment = latestAssignment(events, upToSeq)
   const requirement = options.requirement ?? assignment?.requirement ?? 'none'
+  const assignmentText = options.assignmentText ?? assignment?.text ?? ''
   const boundary = Math.max(options.afterSeq ?? -1, assignment?.seq ?? -1)
   if (requirement === 'none') return { requirement, tools: [], satisfied: true }
-  const tools = successfulTools(events, boundary, upToSeq, requirement)
+  const tools = successfulTools(events, boundary, upToSeq, requirement, assignmentText)
   return {
     requirement,
     ...assignment === undefined ? {} : { assignmentSeq: assignment.seq },
