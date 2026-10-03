@@ -25,6 +25,7 @@ const MIN_POLL_MS = 30 * 60 * 1000
 const REGISTRY_URL = 'https://registry.npmjs.org/@openai%2fcodex/latest'
 const PACKAGE_NAME = '@openai/codex'
 
+/** Normalize the managed Codex updater mode. */
 export function normalizeCodexUpdateMode(value) {
   const mode = String(value).trim().toLowerCase()
   if (!['auto', 'notify', 'off'].includes(mode)) {
@@ -33,6 +34,7 @@ export function normalizeCodexUpdateMode(value) {
   return mode
 }
 
+/** Parse one stable Codex x.y.z version and reject prerelease tags. */
 export function parseStableVersion(value) {
   const match = /^(?<major>\d+)\.(?<minor>\d+)\.(?<patch>\d+)$/u.exec(String(value).trim())
   if (match?.groups === undefined) throw new Error(`invalid stable Codex version ${JSON.stringify(value)}`)
@@ -42,6 +44,7 @@ export function parseStableVersion(value) {
   }
 }
 
+/** Compare two stable Codex semantic versions numerically. */
 export function compareStableVersions(left, right) {
   const a = parseStableVersion(left).parts
   const b = parseStableVersion(right).parts
@@ -77,7 +80,13 @@ function writeJsonAtomic(path, value) {
   mkdirSync(dirname(path), { recursive: true })
   const temporary = `${path}.tmp-${String(process.pid)}`
   writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
-  renameSync(temporary, path)
+  try {
+    renameSync(temporary, path)
+  } catch (error) {
+    if (process.platform !== 'win32' || !['EEXIST', 'EPERM', 'EACCES'].includes(error?.code)) throw error
+    rmSync(path, { force: true })
+    renameSync(temporary, path)
+  }
 }
 
 function saveState(home, state) {
@@ -88,6 +97,7 @@ function saveState(home, state) {
   })
 }
 
+/** Read the active PHOENIX-managed Codex runtime without trusting path traversal. */
 export function readActiveCodexRuntime(home) {
   const root = runtimeRoot(home)
   const path = markerPath(home)
@@ -217,6 +227,7 @@ function activateVersion(home, version, bin) {
   })
 }
 
+/** Remove inactive managed Codex versions and abandoned staging directories. */
 export function pruneManagedCodexVersions(home, activeVersion) {
   const versions = versionsRoot(home)
   if (!existsSync(versions)) return { removed: 0 }
