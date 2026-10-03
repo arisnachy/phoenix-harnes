@@ -46,11 +46,12 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain("case 'isolate':")
   })
 
-  it('runs the watcher from the active runtime so an isolated update becomes the new version baseline', () => {
+  it('loads the active updater but anchors its Git work to the persistent install checkout', () => {
     expect(supervisor).toContain("const activeUpdater = join(runtimeRoot, 'scripts', 'phoenix-auto-update.mjs')")
     expect(supervisor).toContain("const activeShim = join(runtimeRoot, 'scripts', 'phoenix-windows-command-shim.mjs')")
-    expect(supervisor).toContain('cwd: runtimeRoot')
+    expect(supervisor).toContain('cwd: root')
     expect(supervisor).toContain('PHOENIX_RUNTIME_ROOT: runtimeRoot')
+    expect(supervisor).toContain('PHOENIX_INSTALL_ROOT: root')
   })
 
   it('clears the consumed prepared marker before relaunching an isolated runtime', () => {
@@ -82,15 +83,15 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
 
-  it('prunes stale updater storage left by retired checkout identities', () => {
-    expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 48 * 60 * 60 * 1000')
+  it('prunes stale updater storage only after the retention grace period', () => {
+    expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000')
     expect(supervisor).toContain('PHOENIX_UPDATE_STORAGE_RETENTION_MS')
     expect(supervisor).toContain('function runtimeDirectoriesForCleanup()')
     expect(supervisor).toContain('/^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu')
     expect(supervisor).toContain('function runtimeProtectedByOwningCheckout(path)')
-    expect(supervisor).toContain('managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS')
-    expect(supervisor).toContain('STAGE_STORAGE_RETENTION_MS = Math.max(7 * 24 * 60 * 60 * 1000, UPDATE_STORAGE_RETENTION_MS)')
-    expect(supervisor).toContain('function staleStageDirectoriesForCleanup()')
+    expect(supervisor).toContain('if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue')
+    expect(supervisor).toContain('Math.min(UPDATE_STORAGE_RETENTION_MS, 6 * 60 * 60 * 1000)')
+    expect(supervisor).toContain('function stageDirectoriesForCleanup()')
     expect(supervisor).toContain('/^phoenix-stage-[0-9a-f]{10}$/iu')
     expect(supervisor).toContain('removed stale updater staging worktree')
   })

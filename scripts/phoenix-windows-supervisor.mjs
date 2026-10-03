@@ -33,6 +33,8 @@ const PREPARED_FILE = 'phoenix-update-prepared.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
 const HOST_RESTART_REQUEST_FILE = 'phoenix-host-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
+const WATCHER_MAX_RESTART_DELAY_MS = 60_000
+const WATCHER_STABLE_MS = 60_000
 const HOST_RESTART_DELAY_MS = 1000
 const CONTROL_POLL_MS = 500
 const DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000
@@ -182,8 +184,10 @@ function recoverStaleStagingIndexLock() {
 }
 
 function gitControlPath(filename) {
+  const commonDir = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-common-dir']))
   const gitDir = absoluteGitPath(root, gitValue(root, ['rev-parse', '--git-dir']))
-  return gitDir === undefined ? undefined : join(gitDir, filename)
+  const controlDir = commonDir ?? gitDir
+  return controlDir === undefined ? undefined : join(controlDir, filename)
 }
 
 function preparedPath() {
@@ -304,11 +308,6 @@ function stageProtectedByOwningCheckout(path) {
   }
 }
 
-function belongsToCurrentCheckoutRuntime(path) {
-  const prefix = runtimePathKey(join(runtimeBaseDirectory(), `phoenix-runtime-${stageIdentity()}-`))
-  return runtimePathKey(path).startsWith(prefix)
-}
-
 function managedDirectoryAgeMs(path) {
   try {
     return Math.max(0, Date.now() - statSync(path).mtimeMs)
@@ -361,6 +360,10 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
   const active = readActiveRuntimeRecord()
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
   if (runtimeRoot !== root) keep.add(runtimePathKey(runtimeRoot))
+  const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()
+  if (inheritedRuntimeRoot !== undefined && inheritedRuntimeRoot.length > 0) {
+    keep.add(runtimePathKey(inheritedRuntimeRoot))
+  }
 
   let removedRuntimes = 0
   let removedStages = 0
@@ -368,11 +371,12 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
     const key = runtimePathKey(candidate)
     if (keep.has(key)) continue
 
-    const currentCheckout = belongsToCurrentCheckoutRuntime(candidate)
-    if (!currentCheckout) {
-      if (runtimeProtectedByOwningCheckout(candidate)) continue
-      if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue
-    }
+    // Never unregister a live runtime. A cleanup helper may race the safe
+    // handoff before every process has observed the active marker, so both the
+    // owning-checkout marker and the retention grace period are mandatory for
+    // every runtime, including runtimes created by this checkout.
+    if (runtimeProtectedByOwningCheckout(candidate)) continue
+    if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue
 
     if (!removeManagedWorktree(candidate)) continue
     removedRuntimes += 1
@@ -868,6 +872,7 @@ function startWatcher() {
   const watcherEnv = {
     ...process.env,
     PHOENIX_RUNTIME_ROOT: runtimeRoot,
+    PHOENIX_INSTALL_ROOT: root,
     PHOENIX_UPDATE_SUPERVISED: '1',
     ...(updateTemp === undefined || updateTemp.length === 0
       ? {}
@@ -880,7 +885,10 @@ function startWatcher() {
     '--watch',
     '--parent-pid', String(process.pid),
   ], {
-    cwd: runtimeRoot,
+    // Load the updater implementation from the active runtime, but execute it
+    // against the persistent install checkout. If an obsolete runtime is
+    // reclaimed, the watcher must never lose its Git control directory.
+    cwd: root,
     detached: false,
     stdio: 'inherit',
     windowsHide: true,
@@ -892,24 +900,44 @@ function superviseWatcher(host) {
   let watcher
   let restartTimer
   let stopping = false
+  let restartDelay = WATCHER_RESTART_DELAY_MS
+
+  const scheduleRestart = (reason, launchedAt) => {
+    if (stopping || host.exitCode !== null || host.killed || restartTimer !== undefined) return
+    if (Date.now() - launchedAt >= WATCHER_STABLE_MS) restartDelay = WATCHER_RESTART_DELAY_MS
+    const delay = restartDelay
+    restartDelay = Math.min(WATCHER_MAX_RESTART_DELAY_MS, restartDelay * 2)
+    console.error(`[PHOENIX UPDATE] watcher failed (${reason}); restarting in ${String(delay)}ms.`)
+    restartTimer = setTimeout(() => {
+      restartTimer = undefined
+      start()
+    }, delay)
+    restartTimer.unref?.()
+  }
 
   const start = () => {
     if (stopping || host.exitCode !== null || host.killed) return
     const child = startWatcher()
     watcher = child
     if (child === undefined) return
+    const launchedAt = Date.now()
 
     child.once('error', (error) => {
-      console.error(`[PHOENIX UPDATE] watcher launch failed: ${error.message}`)
+      if (watcher !== child) return
+      watcher = undefined
+      scheduleRestart(`launch error: ${error.message}`, launchedAt)
     })
     child.once('exit', (code, signal) => {
       if (watcher !== child) return
       watcher = undefined
       if (stopping || host.exitCode !== null || host.killed) return
+      if (code === 0) {
+        restartDelay = WATCHER_RESTART_DELAY_MS
+        console.error('[PHOENIX UPDATE] watcher exited normally; leaving it stopped until the next Host launch.')
+        return
+      }
       const reason = code === null ? `signal ${signal ?? 'unknown'}` : `exit code ${String(code)}`
-      console.error(`[PHOENIX UPDATE] watcher exited unexpectedly (${reason}); restarting in ${String(WATCHER_RESTART_DELAY_MS)}ms.`)
-      restartTimer = setTimeout(start, WATCHER_RESTART_DELAY_MS)
-      restartTimer.unref?.()
+      scheduleRestart(reason, launchedAt)
     })
   }
 

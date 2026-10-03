@@ -11,11 +11,18 @@ const acpPackage = JSON.parse(readFileSync(resolve('packages/examples/acp-demo/p
 const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrpc-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
 
 describe('PHOENIX Windows updater supervisor resilience', () => {
-  it('restarts the updater watcher when it exits while the host is still alive', () => {
+  it('retries failed updater watchers with capped backoff instead of a one-second hot loop', () => {
     expect(source).toContain('function superviseWatcher(host)')
-    expect(source).toContain('watcher exited unexpectedly')
-    expect(source).toContain('restartTimer = setTimeout(start, WATCHER_RESTART_DELAY_MS)')
+    expect(source).toContain('WATCHER_MAX_RESTART_DELAY_MS')
+    expect(source).toContain('WATCHER_STABLE_MS')
+    expect(source).toContain('scheduleRestart(reason, launchedAt)')
+    expect(source).toContain('restartDelay = Math.min(WATCHER_MAX_RESTART_DELAY_MS, restartDelay * 2)')
     expect(source).toContain('restartTimer.unref?.()')
+  })
+
+  it('does not respawn a watcher that exits normally', () => {
+    expect(source).toContain('if (code === 0)')
+    expect(source).toContain('watcher exited normally; leaving it stopped until the next Host launch')
   })
 
   it('disables watcher respawn before an intentional host/update shutdown', () => {
@@ -215,6 +222,9 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [])')
     expect(source).toContain('const active = readActiveRuntimeRecord()')
     expect(source).toContain('keep.add(runtimePathKey(active.path))')
+    expect(source).toContain("const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()")
+    expect(source).toContain('if (runtimeProtectedByOwningCheckout(candidate)) continue')
+    expect(source).toContain('if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue')
     expect(source).toContain("spawnSync('git', ['worktree', 'remove', '--force', path]")
     expect(source).toContain("spawnSync('git', ['worktree', 'prune', '--expire', 'now']")
     expect(source).toContain('removed obsolete isolated runtime')
