@@ -65,6 +65,8 @@ export function installAssistantMail(ctx: Context,
     enrolling = (async () => {
       const account = await onboarding.status()
       if (account.state !== 'not-configured') return
+      // Never create the provider account until Phoenix can durably retain the returned key.
+      if (ctx.get('credentials') === undefined) return
       const owner = await config.resolveOwnerEmail?.()
       if (owner === undefined || owner.trim().length === 0) return
       // signup persists signup-ambiguous before provider IO, so a timeout is never
