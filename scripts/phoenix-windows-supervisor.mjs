@@ -35,7 +35,7 @@ const HOST_RESTART_REQUEST_FILE = 'phoenix-host-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
 const HOST_RESTART_DELAY_MS = 1000
 const CONTROL_POLL_MS = 500
-const DEFAULT_UPDATE_STORAGE_RETENTION_MS = 48 * 60 * 60 * 1000
+const DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000
 const MIN_UPDATE_STORAGE_RETENTION_MS = 60 * 60 * 1000
 const configuredUpdateStorageRetentionMs = Number.parseInt(
   process.env.PHOENIX_UPDATE_STORAGE_RETENTION_MS ?? '',
