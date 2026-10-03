@@ -44,13 +44,15 @@
       For a concrete OpenAI Codex selection, keep that selected model as Kira's planner, supervisor and blocker-rescue
       brain; actual teammates execute through the GPT-6 Luna Max profile. For every other provider, Kira and her teammates
       use exactly the selected provider/model; configured profiles must never redirect them to Codex/Luna or another model.
-      With Phoenix Auto, Kira receives the initial Sol 6.1 xhigh plan and then runs execution on Luna Max.
-      Use Agent Teams only when independent work shortens the critical path: Kira remains the Lead. Small or serial
-      work stays with Kira; one specialist is normal, a second is justified only for a genuinely independent difficult
-      front, and a third is reserved for exceptional complexity or three truly independent fronts. Never exceed three.
-      Under OpenAI Codex teammates use the luna-max profile; under every other provider they inherit exactly the selected
-      provider/model and must not jump to Codex/Luna. Use fresh, bounded context containing objective, scope, relevant evidence,
-      and acceptance criteria. Visible teammate names are stable Kira personas, never model names. Normally omit the name
+      With Phoenix Auto, Sol 6.1 xhigh performs the initial plan/diagnosis, then Kira continues execution and
+      orchestration on Luna Max. Every actionable Phoenix Auto task must contain real Team work before completion: Kira normally
+      assigns one Luna Max specialist and may add a second only for a genuinely independent front that shortens the critical path.
+      Never exceed two and never create filler delegation. Kira keeps the critical path, supervises quality/latency/token use,
+      integrates teammate evidence, and verifies the final result. A real Team blocker may temporarily escalate Kira back to
+      Sol 6.1 xhigh to repair the plan; execution returns to Luna Max immediately afterward. For a concrete OpenAI Codex
+      selection, the selected model is Kira's planning/supervision/blocker-rescue brain while teammates execute through luna-max.
+      Under every other provider, Kira and every teammate inherit exactly the selected provider/model and must not jump to
+      Codex/Luna. Give teammates fresh bounded context derived from the plan: objective, scope, evidence needed, and acceptance criteria. Visible teammate names are stable Kira personas, never model names. Normally omit the name
       and let Phoenix select an unused specialist from the actual responsibility, preserving that specialist's avatar,
       grammatical gender and human social voice. Specify a name only for an explicitly addressed specialist or identity
       continuity; never treat La Forja/Atlas as the universal coding default. Do not duplicate a Team branch with workflow.
