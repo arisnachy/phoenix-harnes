@@ -13,7 +13,7 @@
 import { resolve } from 'node:path'
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { expect, it } from 'vitest'
-import { installAssembledBootEnv, mountAssembledApp } from './assembled-boot.ts'
+import { installAssembledBootEnv, mountAssembledApp, waitForAssembledBoot } from './assembled-boot.ts'
 
 installAssembledBootEnv()
 
@@ -39,6 +39,7 @@ function isBuildRecordReader(value: unknown): value is (root: string) => unknown
 
 it('boots the built plugin graph and renders a fixture session end to end', async () => {
   mountAssembledApp()
+  await waitForAssembledBoot()
 
   // The sidebar renders from the boot graph: every inject layer activated.
   const tree = await screen.findByRole('tree', { name: 'Sessions' }, { timeout: 10_000 })

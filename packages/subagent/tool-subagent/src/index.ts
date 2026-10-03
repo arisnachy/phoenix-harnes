@@ -383,6 +383,10 @@ function resolveDelegationRun(
 }
 
 export function apply(ctx: Context, config: Config): void {
+  // Direct apply() bypasses Schemastery's numeric constraints. Validate before
+  // touching injected services so malformed config fails with its public
+  // configuration error even when apply() is invoked outside the Loader.
+  if (config.maxDepth !== 'provider-managed') assertSubagentMaxDepth(config.maxDepth)
   const activeBudget = activeBudgetFor(ctx.subagents)
   // Continuable calls return at inbox acceptance, so their reservation is held
   // until that child's residency epoch actually ends.
@@ -393,9 +397,6 @@ export function apply(ctx: Context, config: Config): void {
     activeBudget.continuableReleases.delete(key)
     release()
   })
-  // Direct apply() bypasses Schemastery's numeric constraints. A direct-apply
-  // omission stays capless (the schema default only runs through the loader).
-  if (config.maxDepth !== 'provider-managed') assertSubagentMaxDepth(config.maxDepth)
   // Reject an empty explicit filter at load instead of failing every delegation.
   if (config.toolFilter !== undefined && config.toolFilter.allow === undefined && config.toolFilter.deny === undefined) {
     throw new Error('tool-subagent: `toolFilter` is configured but names neither `allow` nor `deny` — remove the key or fill the filter')

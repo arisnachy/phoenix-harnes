@@ -169,6 +169,7 @@ describe('DeepSeekHarness', () => {
       provider: 'custom-provider',
       model: 'custom-model',
       maxTokens: 4096,
+      protocolVersion: 2,
     }])
   })
 

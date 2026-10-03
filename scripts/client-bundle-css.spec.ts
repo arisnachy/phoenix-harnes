@@ -38,7 +38,7 @@ function loadCss(
 
 function cssPlugin(): CssPlugin {
   const configs = clientBundle(
-    '@phoenix-ai/dsh-client-test',
+    '@phoenix-ai/dsh-client-ui-conversation',
     ['lib/types/index.js', 'lib/types/invariant.js'],
   )({ env: { DSH_BUILD_FACE: 'client' } })
   const client = configs.find(config => config.platform === 'browser')

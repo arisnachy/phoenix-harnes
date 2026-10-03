@@ -7,7 +7,7 @@
  */
 
 import { Context, Service } from '@phoenix-ai/cordis'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, win32 } from 'node:path'
 import { deepFreeze } from '@phoenix-ai/dsh-llm'
 import { scopeOf, scopeTarget } from '@phoenix-ai/dsh-scope'
 import type { Scoped } from '@phoenix-ai/dsh-scope'
@@ -111,7 +111,7 @@ function validateSessionHeader(id: SessionId, input: unknown): SessionHeader {
   }
   if (record.cwd !== undefined) {
     if (typeof record.cwd !== 'string') throw new Error('session header cwd must be a string')
-    if (!isAbsolute(record.cwd)) {
+    if (!isAbsolute(record.cwd) && !win32.isAbsolute(record.cwd)) {
       throw new Error(`session header cwd must be an absolute path, got "${record.cwd}"`)
     }
   }

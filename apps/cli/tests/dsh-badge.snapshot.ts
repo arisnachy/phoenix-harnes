@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { LOADER_SMOKE_TEST_TIMEOUT_MS, runLoaderSmoke } from '@phoenix-ai/dsh-loader-smoke'
 const binScript = fileURLToPath(new URL('./fixtures/dsh-badge/snapshot.ts', import.meta.url))
+const libBinScript = fileURLToPath(new URL('./fixtures/dsh-badge/snapshot.mjs', import.meta.url))
 const configPath = fileURLToPath(new URL('./fixtures/dsh-badge/cordis.yml', import.meta.url))
 const defaultConfigPath = fileURLToPath(new URL('./fixtures/dsh-badge/default.cordis.yml', import.meta.url))
 const tsconfigPath = fileURLToPath(new URL('../../../tsconfig.json', import.meta.url))
@@ -13,7 +14,7 @@ describe('PHOENIX badge assembled snapshot', () => {
       label: 'disabled PHOENIX badge skill snapshot',
       tempDirPrefix: 'headless-snapshot-dsh-badge-disabled-',
       binScript,
-      libBinScript: binScript,
+      libBinScript,
       configPath: defaultConfigPath,
       tsconfigPath,
       // This is a shipped-app snapshot: exercise the built package exports
@@ -24,7 +25,7 @@ describe('PHOENIX badge assembled snapshot', () => {
       label: 'PHOENIX badge skill snapshot',
       tempDirPrefix: 'headless-snapshot-dsh-badge-',
       binScript,
-      libBinScript: binScript,
+      libBinScript,
       configPath,
       tsconfigPath,
       mode: 'lib',
