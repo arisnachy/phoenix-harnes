@@ -62,6 +62,27 @@ it('keeps inherited team messages readable without exposing actions for another 
   expect(react).not.toHaveBeenCalled()
 })
 
+it('pulses a fresh reaction even when it lands with the first projection frame', () => {
+  vi.stubGlobal('matchMedia', () => ({ matches: false }))
+  const originalAnimate = HTMLElement.prototype.animate
+  const animate = vi.fn(() => ({ playState: 'running' }))
+  Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, writable: true, value: animate })
+  try {
+    const fresh: TeamChatReaction = {
+      id: 'fresh-argo', messageId: 'fresh-message', reactorId: 'argo', reactorName: 'Argo',
+      reactorKind: 'agent', emoji: '🔥', createdAt: Date.now(),
+    }
+    render(<View messageId="fresh-message" authorId="user" authorKind="user"
+      useProjection={(key: string) => key === 'teamChatReactions' ? { 'fresh-message': [fresh] } : {}}
+      react={vi.fn()} reply={vi.fn()} t={(key: string) => key} />)
+    expect(animate).toHaveBeenCalled()
+  } finally {
+    Object.defineProperty(HTMLElement.prototype, 'animate', {
+      configurable: true, writable: true, value: originalAnimate,
+    })
+  }
+})
+
 it('pulses only a newly received real reaction and respects reduced motion', () => {
   const first: TeamChatReaction = { id: 'kira-like', messageId: 'human-message', reactorId: 'kira', reactorName: 'Kira',
     reactorKind: 'kira', emoji: '👍', createdAt: 1 }
