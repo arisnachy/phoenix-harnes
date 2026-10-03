@@ -22,24 +22,25 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
 }: ChatNodeSeatProps) {
   const node = useSession(snapshot => snapshot.chat.nodes.get(nodeKey))
   const routedNode = node as ChatNode | undefined
-  if (routedNode === undefined) return null
   // Ordinary assistant actions live in the completed Turn footer beside copy /
   // feedback / speech / branch. The generic per-message slot is only for user
   // and Team transcript rows, where it is passed INTO the renderer so it can
   // share that row's native action strip instead of becoming a detached row.
-  const messageId = (routedNode.kind === 'user' || routedNode.kind === 'steering')
-    ? routedNode.data.messageId
-    : routedNode.kind === 'kira-team-message' ? routedNode.data.messageId : undefined
-  const authorKind = (routedNode.kind === 'user' || routedNode.kind === 'steering') ? 'user' : routedNode.kind === 'kira-team-message'
-    ? routedNode.data.senderKind ?? 'agent' : undefined
-  const authorId = routedNode.kind === 'kira-team-message' ? routedNode.data.senderId : authorKind
+  const messageId = routedNode === undefined ? undefined
+    : (routedNode.kind === 'user' || routedNode.kind === 'steering')
+      ? routedNode.data.messageId
+      : routedNode.kind === 'kira-team-message' ? routedNode.data.messageId : undefined
+  const authorKind = routedNode === undefined ? undefined
+    : (routedNode.kind === 'user' || routedNode.kind === 'steering') ? 'user'
+      : routedNode.kind === 'kira-team-message' ? routedNode.data.senderKind ?? 'agent' : undefined
+  const authorId = routedNode?.kind === 'kira-team-message' ? routedNode.data.senderId : authorKind
   const messageActions = messageId === undefined || authorKind === undefined || authorId === undefined
     ? null
     : renderSlot('conversation.chat.message-actions', {
       messageId,
       authorId,
       authorKind,
-      ...(routedNode.kind === 'kira-team-message'
+      ...(routedNode?.kind === 'kira-team-message'
         ? {
           ...(routedNode.data.missionId === undefined ? {} : { originMissionId: routedNode.data.missionId }),
           authorName: routedNode.data.senderName,
@@ -49,22 +50,25 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
         }
         : {}),
     })
-  const owner = useMemo<ChatNodeOwnerProps>(() => ({
-    selectedCallId,
-    cwd,
-    openFile,
-    inspectCall,
-    forkAt,
-    ...runArtifact === undefined ? {} : { runArtifact },
-    renderMessageImages,
-    ...loadImage === undefined ? {} : { loadImage },
-    fileMentions,
-    workspaceFileMentions,
-    ...(messageActions === null ? {} : { messageActions }),
-  }), [
-    selectedCallId, cwd, openFile, inspectCall, forkAt, renderMessageImages, loadImage, fileMentions, runArtifact,
+  const owner = useMemo<ChatNodeOwnerProps | null>(() => routedNode === undefined
+    ? null
+    : {
+      selectedCallId,
+      cwd,
+      openFile,
+      inspectCall,
+      forkAt,
+      ...runArtifact === undefined ? {} : { runArtifact },
+      renderMessageImages,
+      ...loadImage === undefined ? {} : { loadImage },
+      fileMentions,
+      workspaceFileMentions,
+      ...(messageActions == null ? {} : { messageActions }),
+    }, [
+    routedNode, selectedCallId, cwd, openFile, inspectCall, forkAt, renderMessageImages, loadImage, fileMentions, runArtifact,
     workspaceFileMentions, messageActions,
   ])
+  if (routedNode === undefined || owner === null) return null
   // Runtime dispatch owns the correlation: every Node's discriminant is the
   // keyed-slot entry passed alongside that same Node. TypeScript does not
   // distribute an object containing a union into a union of objects itself.
