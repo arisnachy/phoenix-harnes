@@ -2,6 +2,10 @@
 
 import type {
   VoiceConversationCancelReceipt,
+  VoiceConversationRealtimeStartReceipt,
+  VoiceConversationRealtimeStartRequest,
+  VoiceConversationRealtimeStatus,
+  VoiceConversationRealtimeStopReceipt,
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
@@ -36,6 +40,9 @@ export interface VoiceAssistantRemote {
   conversationStatus(): Promise<VoiceRemoteResult<VoiceConversationStatus>>
   conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceRemoteResult<VoiceConversationSpeakReceipt>>
   conversationCancel(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationCancelReceipt>>
+  conversationRealtimeStatus(): Promise<VoiceRemoteResult<VoiceConversationRealtimeStatus>>
+  conversationRealtimeStart(request: VoiceConversationRealtimeStartRequest): Promise<VoiceRemoteResult<VoiceConversationRealtimeStartReceipt>>
+  conversationRealtimeStop(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationRealtimeStopReceipt>>
 }
 
 interface RemoteSpeechState {
@@ -64,6 +71,26 @@ let voiceAssistantRemote: VoiceAssistantRemote | undefined
 let voiceAssistantRemoteNatural = false
 let voiceAssistantRemoteEpoch = 0
 let remoteSpeech: RemoteSpeechState | undefined
+
+/** Current provider/model route read from the Host only when voice starts. */
+export interface VoiceModelRoute {
+  readonly provider: string
+  readonly model: string
+}
+
+type VoiceModelRouteResolver = (sessionKey: string) => Promise<VoiceModelRoute | undefined>
+
+interface CodexRealtimeVoiceSession {
+  readonly key: string
+  readonly peer: RTCPeerConnection
+  readonly microphone: MediaStream
+  readonly events: RTCDataChannel
+  readonly audio: HTMLAudioElement
+}
+
+let voiceModelRouteResolver: VoiceModelRouteResolver | undefined
+let codexRealtimeVoiceSession: CodexRealtimeVoiceSession | undefined
+let codexRealtimeVoiceGeneration = 0
 
 function publishVoiceAssistant(next: VoiceAssistantSnapshot): void {
   voiceAssistantSnapshot = next
@@ -176,6 +203,210 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
 }
 
 /**
+ * Attach a lightweight current-model resolver. The conversation package stays
+ * independent of the model-selector UI and asks the Host's session.models
+ * endpoint only when the user explicitly starts voice.
+ * @param resolver - Host-backed provider/model resolver.
+ * @returns Disposer for the resolver registration.
+ */
+export function configureVoiceModelRouteResolver(resolver: VoiceModelRouteResolver): () => void {
+  voiceModelRouteResolver = resolver
+  return () => {
+    if (voiceModelRouteResolver === resolver) voiceModelRouteResolver = undefined
+  }
+}
+
+/** Browser primitives required for direct Codex Realtime WebRTC. */
+export function hasCodexRealtimeVoiceSupport(
+  scope: Window | undefined = typeof window === 'undefined' ? undefined : window,
+): boolean {
+  return scope !== undefined
+    && typeof scope.RTCPeerConnection === 'function'
+    && scope.navigator?.mediaDevices?.getUserMedia !== undefined
+}
+
+/** Whether the currently active hands-free session is the direct Codex WebRTC path. */
+export function isCodexRealtimeVoiceActive(): boolean {
+  return codexRealtimeVoiceSession !== undefined
+}
+
+/**
+ * Prefer native Codex realtime when the selected PHOENIX provider is
+ * openai-codex. Returns false without side effects for every other provider so
+ * the existing browser STT/local TTS path remains intact.
+ */
+export async function tryStartCodexRealtimeVoice(sessionKey: string): Promise<boolean> {
+  const remote = voiceAssistantRemote
+  const resolveRoute = voiceModelRouteResolver
+  if (remote === undefined || resolveRoute === undefined || !hasCodexRealtimeVoiceSupport()) return false
+
+  let route: VoiceModelRoute | undefined
+  try {
+    route = await resolveRoute(sessionKey)
+  } catch {
+    return false
+  }
+  if (route?.provider !== 'openai-codex') return false
+
+  try {
+    const capability = await remote.conversationRealtimeStatus()
+    if (!capability.ok || !capability.value.enabled || !capability.value.available
+      || !capability.value.authenticated) return false
+  } catch {
+    return false
+  }
+
+  const generation = ++codexRealtimeVoiceGeneration
+  let microphone: MediaStream | undefined
+  let peer: RTCPeerConnection | undefined
+  let events: RTCDataChannel | undefined
+  let audio: HTMLAudioElement | undefined
+  try {
+    microphone = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    })
+    if (generation !== codexRealtimeVoiceGeneration) {
+      for (const track of microphone.getTracks()) track.stop()
+      return false
+    }
+
+    peer = new RTCPeerConnection()
+    events = peer.createDataChannel('oai-events', { ordered: true })
+    audio = document.createElement('audio')
+    audio.autoplay = true
+    audio.playsInline = true
+    audio.dataset.phoenixCodexVoice = 'true'
+    audio.style.display = 'none'
+    document.body.append(audio)
+
+    for (const track of microphone.getAudioTracks()) peer.addTrack(track, microphone)
+    peer.ontrack = (event) => {
+      if (codexRealtimeVoiceGeneration !== generation || audio === undefined) return
+      const stream = event.streams[0] ?? new MediaStream([event.track])
+      audio.srcObject = stream
+      void audio.play().catch(() => {})
+    }
+    events.onmessage = (event) => {
+      if (codexRealtimeVoiceGeneration !== generation || typeof event.data !== 'string') return
+      updateCodexRealtimePhase(event.data)
+    }
+
+    const offer = await peer.createOffer()
+    await peer.setLocalDescription(offer)
+    await waitForIceGathering(peer)
+    const offerSdp = peer.localDescription?.sdp
+    if (offerSdp === undefined || offerSdp.trim() === '') throw new Error('WebRTC offer contained no SDP')
+
+    const result = await remote.conversationRealtimeStart({
+      key: sessionKey,
+      offerSdp,
+      model: route.model,
+    })
+    if (!result.ok || !result.value.accepted || result.value.answerSdp === undefined) {
+      throw new Error(result.ok ? result.value.reason ?? 'Codex realtime rejected the call' : result.error.message)
+    }
+    await peer.setRemoteDescription({ type: 'answer', sdp: result.value.answerSdp })
+    if (generation !== codexRealtimeVoiceGeneration) throw new Error('Codex realtime start superseded')
+
+    codexRealtimeVoiceSession = { key: sessionKey, peer, microphone, events, audio }
+    setVoiceAssistantActive(true)
+    setVoiceAssistantListening(true)
+
+    peer.onconnectionstatechange = () => {
+      if (codexRealtimeVoiceSession?.peer !== peer) return
+      if (peer?.connectionState === 'failed' || peer?.connectionState === 'closed'
+        || peer?.connectionState === 'disconnected') {
+        void stopCodexRealtimeVoice()
+        setVoiceAssistantActive(false)
+      }
+    }
+    return true
+  } catch {
+    if (peer !== undefined) peer.close()
+    if (microphone !== undefined) {
+      for (const track of microphone.getTracks()) track.stop()
+    }
+    if (audio !== undefined) {
+      audio.pause()
+      audio.srcObject = null
+      audio.remove()
+    }
+    if (events !== undefined && events.readyState !== 'closed') events.close()
+    if (generation === codexRealtimeVoiceGeneration) {
+      void remote.conversationRealtimeStop({ key: sessionKey }).catch(() => {})
+    }
+    return false
+  }
+}
+
+/** Stop the direct Codex call and release mic/audio/WebRTC resources immediately. */
+export async function stopCodexRealtimeVoice(): Promise<boolean> {
+  const session = codexRealtimeVoiceSession
+  codexRealtimeVoiceGeneration += 1
+  codexRealtimeVoiceSession = undefined
+  if (session === undefined) return false
+
+  setVoiceAssistantListening(false)
+  session.events.close()
+  session.peer.close()
+  for (const track of session.microphone.getTracks()) track.stop()
+  session.audio.pause()
+  session.audio.srcObject = null
+  session.audio.remove()
+
+  const remote = voiceAssistantRemote
+  if (remote !== undefined) {
+    await remote.conversationRealtimeStop({ key: session.key }).catch(() => undefined)
+  }
+  return true
+}
+
+function updateCodexRealtimePhase(payload: string): void {
+  if (!voiceAssistantSnapshot.active || codexRealtimeVoiceSession === undefined) return
+  let type = ''
+  try {
+    const value = JSON.parse(payload) as { type?: unknown }
+    if (typeof value.type === 'string') type = value.type
+  } catch {
+    return
+  }
+  if (type.includes('speech_started')) {
+    publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'listening' })
+    return
+  }
+  if (type === 'response.created' || type.includes('output_audio')) {
+    publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
+    return
+  }
+  if (type === 'response.done' || type.includes('speech_stopped')) {
+    publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'listening' })
+  }
+}
+
+async function waitForIceGathering(peer: RTCPeerConnection): Promise<void> {
+  if (peer.iceGatheringState === 'complete') return
+  await new Promise<void>((resolve) => {
+    let settled = false
+    const done = (): void => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timer)
+      peer.removeEventListener('icegatheringstatechange', changed)
+      resolve()
+    }
+    const changed = (): void => {
+      if (peer.iceGatheringState === 'complete') done()
+    }
+    const timer = window.setTimeout(done, 5_000)
+    peer.addEventListener('icegatheringstatechange', changed)
+  })
+}
+
+/**
  * Attach the generated Host voice namespace. Capability probing is asynchronous
  * and never blocks rendering; browser speech remains the fallback until ready.
  * @param remote - Generated Host voice Remote namespace.
@@ -242,6 +473,7 @@ export function getVoiceAssistantSnapshot(): VoiceAssistantSnapshot {
  */
 export function setVoiceAssistantActive(active: boolean): void {
   if (!active) {
+    if (codexRealtimeVoiceSession !== undefined) void stopCodexRealtimeVoice()
     voiceAssistantSpeech?.dispose()
     voiceAssistantSpeech = undefined
     voiceAssistantSpeechKey = undefined
@@ -319,7 +551,8 @@ export function streamVoiceAssistantResponse(
   messageTime: number,
   final = false,
 ): void {
-  if (!voiceAssistantSnapshot.active || text.trim() === '' || messageTime < voiceAssistantSnapshot.activatedAt - 1_000) return
+  if (!voiceAssistantSnapshot.active || codexRealtimeVoiceSession !== undefined
+    || text.trim() === '' || messageTime < voiceAssistantSnapshot.activatedAt - 1_000) return
   if (spokenAssistantMessages.has(messageKey)) return
   voiceAssistantSpokenText = text
 
