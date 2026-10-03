@@ -130,7 +130,9 @@ export function apply(ctx: Context): void {
     ctx.remote.voice,
   )
   const disposeVoiceRoute = configureVoiceModelRouteResolver(async (sessionKey) => {
-    const { result } = await ctx.connection.api.sessions.models({ sessionId: sessionKey as SessionId })
+    const connection = ctx.get('connection') as ConnectionHandle | undefined
+    if (connection === undefined) return undefined
+    const { result } = await connection.api.sessions.models({ sessionId: sessionKey as SessionId })
     return result.ok ? result.value.current : undefined
   })
   ctx.effect(() => () => {
