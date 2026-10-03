@@ -34,7 +34,8 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       ...(value.inboxId === undefined ? {} : { address: value.inboxId }),
       connection: value.connection,
       needs_verification: true,
-      guidance: 'The mailbox already exists. Tell the user the exact address and ask them to finish the six-digit owner verification in Settings. Do not create another mailbox.',
+      guidance: 'The mailbox already exists. Tell the user the exact address and ask them to finish '
+        + 'the six-digit owner verification in Settings. Do not create another mailbox.',
     }
   }
   if (value.state === 'signup-ambiguous') {
@@ -44,7 +45,8 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       state: value.state,
       connection: value.connection,
       needs_verification: false,
-      guidance: 'The provider signup result is ambiguous. Do not retry signup automatically; use the existing-account recovery flow in Settings.',
+      guidance: 'The provider signup result is ambiguous. Do not retry signup automatically; '
+        + 'use the existing-account recovery flow in Settings.',
     }
   }
   return {
@@ -53,7 +55,9 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
     state: value.state,
     connection: value.connection,
     needs_verification: false,
-    guidance: 'Kira does not have a mailbox yet. Use action=ensure. AgentMail signup does not require a pre-existing API key; Phoenix receives the new key from signup and stores it securely. If no owner identity is connected, provide owner_email only for the one-time verification code.',
+    guidance: 'Kira does not have a mailbox yet. Use action=ensure. AgentMail signup does not require '
+      + 'a pre-existing API key; Phoenix receives the new key from signup and stores it securely. '
+      + 'If no owner identity is connected, provide owner_email only for the one-time verification code.',
   }
 }
 
@@ -67,7 +71,11 @@ export function createAssistantMailIdentityTool(
 ): ToolDefinition {
   return defineTool({
     name: 'phoenix_mail_identity',
-    description: 'Read or create Kira/Phoenix\'s own free AgentMail mailbox. Use this whenever the user asks Kira to configure/create/get her own email address, asks what Kira\'s email is, or asks whether her mailbox is ready. This is not Gmail and does not create a Gmail account. action=ensure creates the mailbox only when absent and otherwise reuses the existing enrollment. Never invent an address and never repeat signup after an ambiguous result.',
+    description: 'Read or create Kira/Phoenix\'s own free AgentMail mailbox. Use this whenever the user asks '
+      + 'Kira to configure/create/get her own email address, asks what Kira\'s email is, or asks whether her '
+      + 'mailbox is ready. This is not Gmail and does not create a Gmail account. action=ensure creates the '
+      + 'mailbox only when absent and otherwise reuses the existing enrollment. Never invent an address and '
+      + 'never repeat signup after an ambiguous result.',
     parameters: {
       action: {
         type: 'string',
@@ -77,7 +85,8 @@ export function createAssistantMailIdentityTool(
       },
       owner_email: {
         type: 'string',
-        description: 'Optional owner email for the one-time verification code when Phoenix cannot resolve one from an already connected account. This is not Kira\'s mailbox.',
+        description: 'Optional owner email for the one-time verification code when Phoenix cannot resolve one '
+          + 'from an already connected account. This is not Kira\'s mailbox.',
       },
     },
     output: {
@@ -108,7 +117,8 @@ export function createAssistantMailIdentityTool(
           available: false,
           state: 'unavailable',
           needs_verification: false,
-          guidance: 'The local Kira mailbox runtime is not mounted in this Phoenix process. Do not fall back to Gmail creation or invent an address.',
+          guidance: 'The local Kira mailbox runtime is not mounted in this Phoenix process. '
+            + 'Do not fall back to Gmail creation or invent an address.',
         } satisfies MailIdentityResult
       }
       try {
@@ -121,7 +131,9 @@ export function createAssistantMailIdentityTool(
             available: true,
             state: 'not-configured',
             needs_verification: false,
-            guidance: 'Ask only for the owner email that should receive the one-time verification code, then call action=ensure again with owner_email. Do not ask for an AgentMail API key, do not send the user to AgentMail.to, and do not start Gmail OAuth.',
+            guidance: 'Ask only for the owner email that should receive the one-time verification code, '
+              + 'then call action=ensure again with owner_email. Do not ask for an AgentMail API key, '
+              + 'do not send the user to AgentMail.to, and do not start Gmail OAuth.',
           } satisfies MailIdentityResult
         }
         throw error
