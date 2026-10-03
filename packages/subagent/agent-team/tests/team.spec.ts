@@ -1857,6 +1857,31 @@ describe('visible team conversation', () => {
     await lead.whenIdle()
   })
 
+  it('delivers the exact visible reaction target id with peer messages', async () => {
+    const { ctx, lead } = await setup(['hang'], {}, true)
+    const started = await spawn(ctx, lead, 'zenith')
+    await waitRunning(ctx, started.member.id)
+    const sent = await ctx.agentTeams.sendMessage(lead, {
+      target: 'zenith',
+      purpose: 'review',
+      content: content('Please verify this result.'),
+      delivery: 'quiet',
+      signal: SIGNAL,
+    })
+    const child = ctx.sessions.get(started.member.id)!
+    const delivered = child.events.findLast(event => event.type === 'user/message'
+      && event.data.source.kind === 'team-message'
+      && event.data.source.messageId === sent.messageId)
+    expect(delivered?.type).toBe('user/message')
+    if (delivered?.type !== 'user/message') throw new Error('team message was not delivered')
+    const modelText = delivered.data.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
+    expect(modelText).toContain(`Visible reaction target: ${sent.messageId}`)
+    expect(modelText).toContain('team_chat_react')
+    expect(modelText).toContain('Prefer the reaction over filler prose')
+    ctx.agentTeams.interrupt(lead, 'zenith')
+    await waitNoAgent(ctx, started.member.id)
+  })
+
   it('keeps one multi-target user row across partial delivery retries and attributes all three reactor kinds', async () => {
     const { ctx, lead, adapter } = await setup([
       toolCallResponse('hold-a', 'hold', {}, 'Quality evidence.'),
