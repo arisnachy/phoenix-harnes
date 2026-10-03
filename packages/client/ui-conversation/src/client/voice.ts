@@ -243,32 +243,52 @@ export function isCodexRealtimeVoiceActive(): boolean {
   return codexRealtimeVoiceSession !== undefined
 }
 
+/** Result of one attempt to enter the native Codex realtime voice path. */
+export type CodexRealtimeVoiceStartResult =
+  | { readonly kind: 'started' }
+  | { readonly kind: 'not-codex' }
+  | { readonly kind: 'failed'; readonly reason: string }
+
 /**
  * Prefer native Codex realtime when the selected PHOENIX provider is
- * openai-codex. Returns false without side effects for every other provider so
- * the existing browser STT/local TTS path remains intact.
+ * openai-codex. A Codex route never silently degrades to browser/local speech:
+ * failures stay failures so the UI cannot make a fallback voice sound like
+ * native Codex Realtime.
  */
-export async function tryStartCodexRealtimeVoice(sessionKey: string): Promise<boolean> {
-  const remote = voiceAssistantRemote
+export async function tryStartCodexRealtimeVoice(
+  sessionKey: string,
+): Promise<CodexRealtimeVoiceStartResult> {
   const resolveRoute = voiceModelRouteResolver
-  if (remote === undefined || remote.conversationRealtimeStatus === undefined
-    || remote.conversationRealtimeStart === undefined || resolveRoute === undefined
-    || !hasCodexRealtimeVoiceSupport()) return false
+  if (resolveRoute === undefined) return { kind: 'failed', reason: 'route-unavailable' }
 
   let route: VoiceModelRoute | undefined
   try {
     route = await resolveRoute(sessionKey)
   } catch {
-    return false
+    return { kind: 'failed', reason: 'route-unavailable' }
   }
-  if (route?.provider !== 'openai-codex') return false
+  if (route?.provider !== 'openai-codex') return { kind: 'not-codex' }
+
+  const remote = voiceAssistantRemote
+  if (remote === undefined || remote.conversationRealtimeStatus === undefined
+    || remote.conversationRealtimeStart === undefined) {
+    return { kind: 'failed', reason: 'host-realtime-unavailable' }
+  }
+  if (!hasCodexRealtimeVoiceSupport()) {
+    return { kind: 'failed', reason: 'browser-webrtc-unavailable' }
+  }
 
   try {
     const capability = await remote.conversationRealtimeStatus()
-    if (!capability.ok || !capability.value.enabled || !capability.value.available
-      || !capability.value.authenticated) return false
+    if (!capability.ok) return { kind: 'failed', reason: capability.error.code }
+    if (!capability.value.enabled || !capability.value.available || !capability.value.authenticated) {
+      return {
+        kind: 'failed',
+        reason: capability.value.reason ?? 'codex-realtime-unavailable',
+      }
+    }
   } catch {
-    return false
+    return { kind: 'failed', reason: 'capability-probe-failed' }
   }
 
   const generation = ++codexRealtimeVoiceGeneration
@@ -286,7 +306,7 @@ export async function tryStartCodexRealtimeVoice(sessionKey: string): Promise<bo
     })
     if (generation !== codexRealtimeVoiceGeneration) {
       for (const track of microphone.getTracks()) track.stop()
-      return false
+      return { kind: 'failed', reason: 'start-superseded' }
     }
 
     peer = new RTCPeerConnection()
@@ -313,18 +333,19 @@ export async function tryStartCodexRealtimeVoice(sessionKey: string): Promise<bo
     await peer.setLocalDescription(offer)
     await waitForIceGathering(peer)
     const offerSdp = peer.localDescription?.sdp
-    if (offerSdp === undefined || offerSdp.trim() === '') throw new Error('WebRTC offer contained no SDP')
+    if (offerSdp === undefined || offerSdp.trim() === '') throw new Error('webrtc-offer-empty')
 
     const result = await remote.conversationRealtimeStart({
       key: sessionKey,
       offerSdp,
       model: route.model,
     })
-    if (!result.ok || !result.value.accepted || result.value.answerSdp === undefined) {
-      throw new Error(result.ok ? result.value.reason ?? 'Codex realtime rejected the call' : result.error.message)
+    if (!result.ok) throw new Error(result.error.code)
+    if (!result.value.accepted || result.value.answerSdp === undefined) {
+      throw new Error(result.value.reason ?? 'codex-realtime-rejected')
     }
     await peer.setRemoteDescription({ type: 'answer', sdp: result.value.answerSdp })
-    if (generation !== codexRealtimeVoiceGeneration) throw new Error('Codex realtime start superseded')
+    if (generation !== codexRealtimeVoiceGeneration) throw new Error('start-superseded')
 
     codexRealtimeVoiceSession = { key: sessionKey, peer, microphone, events, audio }
     setVoiceAssistantActive(true)
@@ -338,8 +359,8 @@ export async function tryStartCodexRealtimeVoice(sessionKey: string): Promise<bo
         setVoiceAssistantActive(false)
       }
     }
-    return true
-  } catch {
+    return { kind: 'started' }
+  } catch (error) {
     if (peer !== undefined) peer.close()
     if (microphone !== undefined) {
       for (const track of microphone.getTracks()) track.stop()
@@ -353,7 +374,10 @@ export async function tryStartCodexRealtimeVoice(sessionKey: string): Promise<bo
     if (generation === codexRealtimeVoiceGeneration) {
       void remote.conversationRealtimeStop?.({ key: sessionKey }).catch(() => {})
     }
-    return false
+    return {
+      kind: 'failed',
+      reason: error instanceof Error && error.message !== '' ? error.message : 'realtime-start-failed',
+    }
   }
 }
 
