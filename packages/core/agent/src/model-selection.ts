@@ -631,7 +631,10 @@ export function installModelSelection(
     const assembled = await next()
     selection.assembled = selected
     const hasKiraTeam = assembled.tools.some(tool => tool.name === 'spawn_teammate')
-    const tools = isPhoenixCodexAutoSelection(selected) && hasKiraTeam
+    // Agent Teams is Phoenix's single visible delegation path. Keeping legacy
+    // subagent tools beside it lets provider models bypass Kira identities,
+    // shared chat, reactions and lifecycle state unpredictably.
+    const tools = hasKiraTeam
       ? assembled.tools.filter(tool => tool.name !== 'subagent' && tool.name !== 'subagent_fork')
       : assembled.tools
     selection.assembledToolCount = tools.length
