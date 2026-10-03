@@ -122,3 +122,59 @@ export const TEAM_SKILL_POOLS: Readonly<Record<TeamSkill, readonly (typeof TEAM_
   writing: ['lyra', 'lumen', 'aurora'],
   general: ['argo', 'lumen', 'senda', 'astra', 'lyra'],
 }
+
+/** Stable runtime codename for one Kira specialist. */
+export type TeamPersonaKind = typeof TEAM_PERSONAS[number]['kind']
+
+function stablePersonaOffset(work: string, size: number): number {
+  if (size <= 1) return 0
+  let hash = 2_166_136_261
+  for (const character of personaKey(work)) {
+    hash ^= character.codePointAt(0) ?? 0
+    hash = Math.imul(hash, 16_777_619) >>> 0
+  }
+  return hash % size
+}
+
+function occupiedPersonaKinds(names: readonly string[]): Set<TeamPersonaKind> {
+  const occupied = new Set<TeamPersonaKind>()
+  for (const name of names) {
+    const persona = personaOf(name)
+    if (persona !== undefined) occupied.add(persona.kind)
+  }
+  return occupied
+}
+
+function availableFrom(
+  kinds: readonly TeamPersonaKind[],
+  occupied: ReadonlySet<TeamPersonaKind>,
+  work: string,
+): TeamPersonaKind | undefined {
+  if (kinds.length === 0) return undefined
+  const start = stablePersonaOffset(work, kinds.length)
+  for (let step = 0; step < kinds.length; step++) {
+    const kind = kinds[(start + step) % kinds.length]
+    if (kind !== undefined && !occupied.has(kind)) return kind
+  }
+  return undefined
+}
+
+/** Choose one unused human specialist identity from the responsibility itself.
+ * @param work - concise delegated responsibility used to infer the specialist skill.
+ * @param occupiedNames - durable teammate names already used by this Team.
+ * @returns one unused canonical lower-kebab Kira persona name.
+ */
+export function selectTeamPersonaName(work: string, occupiedNames: readonly string[]): TeamPersonaKind {
+  const occupied = occupiedPersonaKinds(occupiedNames)
+  const skill = inferTeamSkill(work)
+  const preferred = availableFrom(TEAM_SKILL_POOLS[skill], occupied, work)
+  if (preferred !== undefined) return preferred
+
+  const fallback = availableFrom(
+    TEAM_PERSONAS.map(persona => persona.kind),
+    occupied,
+    `${work}:fallback`,
+  )
+  if (fallback !== undefined) return fallback
+  throw new Error('no unused KIRA specialist persona remains in this Team')
+}
