@@ -398,6 +398,25 @@ async function buildModelCatalog(ctx: Context): Promise<{
   }
 }
 
+/**
+ * Decide whether image admission must be refused for the session's selected
+ * route. Phoenix Auto is a synthetic selector row: it never reaches the LLM
+ * directly, so its capability is the intersection of the real planner/worker
+ * routes it may dispatch for the turn.
+ */
+async function selectedRouteRejectsImages(ctx: Context, current: ModelSelection): Promise<boolean> {
+  if (isPhoenixCodexAutoSelection(current)) {
+    const routed = await Promise.all([
+      ctx.llm.resolveModelInfo(current.provider, PHOENIX_CODEX_AUTO_PLANNER_MODEL),
+      ctx.llm.resolveModelInfo(current.provider, PHOENIX_CODEX_AUTO_WORKER_MODEL),
+    ])
+    return routed.some(info =>
+      info.inputModalities !== undefined && !info.inputModalities.includes('image'))
+  }
+  const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
+  return modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')
+}
+
 /** Wrap an error result echoing the request's rpcId. */
 function err<T>(request: RpcRequest<unknown>, error: RpcError): RpcResponse<T> {
   return { rpcId: request.rpcId, result: { ok: false, error } }
@@ -2820,8 +2839,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           try {
             if (hasImage) {
               const current = selectionFor(agent).current
-              const modelInfo = await ctx.llm.resolveModelInfo(current.provider, current.model)
-              if (modelInfo.inputModalities !== undefined && !modelInfo.inputModalities.includes('image')) {
+              if (await selectedRouteRejectsImages(ctx, current)) {
                 const route = await resolveVisionFallbackRoute(ctx, current, defaults.visionFallback ?? {})
                 if (route === undefined) {
                   return err(request, {
