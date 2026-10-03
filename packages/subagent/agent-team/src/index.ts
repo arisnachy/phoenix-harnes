@@ -36,6 +36,8 @@ export type * from './types.ts'
 export type { TeamMembership } from './roster.ts'
 export { TeamId, TeamMessageId, TeamTaskId } from './types.ts'
 export { TeamError } from './error.ts'
+export { teamExecutionProof, teamExecutionRequirement } from './execution-evidence.ts'
+export type { TeamExecutionProof, TeamExecutionRequirement } from './execution-evidence.ts'
 export { foldTeam } from './fold.ts'
 export {
   KIRA_SOCIAL_STYLE,
