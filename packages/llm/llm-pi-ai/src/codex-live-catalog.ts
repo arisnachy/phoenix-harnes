@@ -12,7 +12,7 @@
 import { ReasoningEffortId } from '@phoenix-ai/dsh-llm'
 import type { LlmModelReasoningInfo } from '@phoenix-ai/dsh-llm'
 import { deepEqualJson } from '@phoenix-ai/dsh-settings'
-import { catalogModels, THINKING_LEVELS } from './catalog.ts'
+import { catalogModels, documentedVendorInput, THINKING_LEVELS } from './catalog.ts'
 import type { PiAiModelProfile, PiAiProviderProfile, PiAiReasoningEfforts } from './config.ts'
 import { codexModelListTransport } from './codex-discovery.ts'
 import type { CodexDiscoveredModel, CodexModelListTransport } from './codex-discovery.ts'
@@ -71,12 +71,15 @@ export function codexModelsToProfiles(models: readonly CodexDiscoveredModel[]): 
       }
     }
 
+    const documentedInput = documentedVendorInput(CODEX_PROVIDER, model.id)
     return {
       id: model.id,
       ...model.name === undefined ? {} : { name: model.name },
       ...model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow },
       ...model.maxTokens === undefined ? {} : { maxTokens: model.maxTokens },
-      ...model.inputModalities === undefined ? {} : { input: [...model.inputModalities] },
+      ...documentedInput !== undefined
+        ? { input: [...documentedInput] }
+        : model.inputModalities === undefined ? {} : { input: [...model.inputModalities] },
       ...hasThinking ? { reasoningEfforts } : {},
     }
   })
