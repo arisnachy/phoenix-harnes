@@ -2,7 +2,7 @@
 
 import { Children, isValidElement, type ReactElement, type ReactNode } from 'react'
 
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionId, SessionListState, SessionSummary } from '@phoenix-ai/dsh-client-runtime/client'
 import {
@@ -209,16 +209,16 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(liveActivityTextOf(runtime)).toBe('Estoy revisando la página cargada')
   })
 
-  it('does not duplicate a generic authored word when it equals the visible state', () => {
-    const root = summary({ id: sid('root-duplicate') })
+  it('never mirrors child-authored activity text into the overlay before the transcript', () => {
+    const root = summary({ id: sid('root-chat-first') })
     const child = summary({
-      id: sid('child-duplicate'), parentId: root.id, origin: 'subagent', running: true,
+      id: sid('child-chat-first'), parentId: root.id, origin: 'subagent', running: true,
       projectionValues: {
         subagent: { mode: 'continuable', label: 'support check', seq: 1 },
         subagentActivity: {
           model: 'gpt-5.6-luna',
           phase: 'preparing',
-          text: 'Preparando',
+          text: 'RESPUESTA_REAL_DEL_AGENTE',
         },
       },
     })
@@ -234,8 +234,10 @@ describe('approved KIRA compact live-agent dock', () => {
       t: translate,
     } as unknown as KiraTeamsDockProps
 
-    render(<KiraTeamsDock {...props} />)
-    expect(screen.getAllByText('Preparando')).toHaveLength(1)
+    const { container } = render(<KiraTeamsDock {...props} />)
+    expect(container.textContent).not.toContain('RESPUESTA_REAL_DEL_AGENTE')
+    expect(container.querySelector('[data-kira-activity-strip]')).toBeNull()
+    expect(container.querySelectorAll('[data-kira-agent-rail]')).toHaveLength(1)
   })
 
   it('describes what each running agent is actually doing', () => {
@@ -298,7 +300,7 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(container.querySelector('[data-kira-teams]')).toBeNull()
   })
 
-  it('uses the activity strip and rail for the currently live agent', () => {
+  it('uses a presence-only rail for the currently live agent', () => {
     const root = summary({ id: sid('root') })
     const supervisor = summary({
       id: sid('supervisor-live'), parentId: root.id, origin: 'subagent', running: true,
@@ -326,15 +328,15 @@ describe('approved KIRA compact live-agent dock', () => {
 
     const { container } = render(<KiraTeamsDock {...props} />)
 
-    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('activity-rail')
+    expect(container.querySelector('[data-kira-layout]')?.getAttribute('data-kira-layout')).toBe('agent-rail')
     expect(setWorkspaceOccupant).toHaveBeenCalledWith('subagent', false)
+    expect(container.querySelector('[data-kira-activity-strip]')).toBeNull()
+    expect(container.querySelector('[data-kira-details]')).toBeNull()
     expect(container.querySelectorAll('[data-kira-agent-rail]')).toHaveLength(1)
-    expect(screen.getByText('Coordinación / orquestación')).toBeTruthy()
-    expect(screen.getByText('Preparando')).toBeTruthy()
-    expect(screen.getByText('Coordinaré la revisión breve del agente.')).toBeTruthy()
+    expect(container.textContent).not.toContain('Coordinaré la revisión breve del agente.')
   })
 
-  it('caps the strip stack at three portraits while the rail keeps every live agent selectable', () => {
+  it('keeps every live agent selectable without restoring a duplicate top strip', () => {
     const root = summary({ id: sid('root-many') })
     const children = Array.from({ length: 5 }, (_, index) => summary({
       id: sid(`child-${index}`),
@@ -362,9 +364,9 @@ describe('approved KIRA compact live-agent dock', () => {
 
     const { container } = render(<KiraTeamsDock {...props} />)
 
-    expect(container.querySelectorAll('[data-kira-stack-avatar]')).toHaveLength(3)
-    expect(container.querySelector('[data-kira-stack-overflow]')?.textContent).toBe('+2')
+    expect(container.querySelector('[data-kira-activity-strip]')).toBeNull()
     expect(container.querySelectorAll('[data-kira-agent-rail]')).toHaveLength(5)
+    expect(container.textContent).not.toContain('Revisando fuente 1')
   })
 
 })
