@@ -5,6 +5,7 @@ import z from '@phoenix-ai/schemastery'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
 import { TeamMessageId, TeamTaskId, teamSocialStyle } from '@phoenix-ai/dsh-agent-team'
 import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
+import { foldRequestHeader } from '@phoenix-ai/dsh-session'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { InferValue, ValueSchemaSpec } from '@phoenix-ai/dsh-tools'
 
@@ -300,14 +301,21 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const defaultProfile = configuredDefault === undefined
           ? undefined
           : config.modelProfiles[configuredDefault]
+        // Agent.options is the creation-time route and may be stale after the
+        // user changes the live model selector. The latest request/header is
+        // the authoritative route actually serving this turn/tool call.
+        const requestConfig = foldRequestHeader(agent.session.events)?.config
+        const activeProvider = requestConfig?.provider ?? agent.options.provider
+        const activeModel = requestConfig?.model ?? agent.options.model
+        const activeReasoningEffort = requestConfig?.reasoningEffort ?? agent.options.reasoningEffort
+        const activeMaxTokens = requestConfig?.maxTokens ?? agent.options.maxTokens
         const profileName = explicitProfile
-          ?? (agent.options.provider === 'openai-codex' && defaultProfile?.provider === 'openai-codex'
+          ?? (activeProvider === 'openai-codex' && defaultProfile?.provider === 'openai-codex'
             ? configuredDefault
             : undefined)
         const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
-        const agentOptions: AgentOptions | undefined = profile === undefined
-          ? undefined
-          : {
+        const agentOptions: AgentOptions | undefined = profile !== undefined
+          ? {
             provider: profile.provider,
             model: profile.model,
             ...profile.maxTokens === undefined ? {} : { maxTokens: profile.maxTokens },
@@ -315,6 +323,14 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
               ? {}
               : { reasoningEffort: profile.reasoningEffort as NonNullable<AgentOptions['reasoningEffort']> },
           }
+          : activeProvider === undefined || activeModel === undefined
+            ? undefined
+            : {
+              provider: activeProvider,
+              model: activeModel,
+              ...activeMaxTokens === undefined ? {} : { maxTokens: activeMaxTokens },
+              ...activeReasoningEffort === undefined ? {} : { reasoningEffort: activeReasoningEffort },
+            }
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: args.name,
           description: args.description,
