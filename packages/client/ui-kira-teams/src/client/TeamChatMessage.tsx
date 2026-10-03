@@ -125,7 +125,7 @@ function textOf(content: readonly unknown[]): string {
 type KiraTeamMessageViewProps = PropsRuntime<'conversation.chat.node', 'kira-team-message'> & Partial<PropsLocale<typeof NS>>
 
 export const KiraTeamMessageView = memo(function KiraTeamMessageView({
-  node, t, useProjection,
+  node, t, useProjection, messageActions,
 }: KiraTeamMessageViewProps) {
   const data: KiraTeamMessageChatData = node.data
   const participants = useProjection('teamChatParticipants') ?? {}
@@ -191,6 +191,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
         <div className={css.bubble}>
           <MarkdownText text={text} />
         </div>
+        {messageActions !== undefined && <div className={css.messageActions}>{messageActions}</div>}
       </div>
     </div>
   )
