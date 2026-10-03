@@ -436,7 +436,11 @@ export class VoiceRuntime extends TypertRemoteService {
         return { accepted: false, reason: 'codex-unavailable' }
       }
       this.ctx.logger('voice').warn(`Codex realtime negotiation failed: ${message}`)
-      return { accepted: false, reason: 'negotiation-failed' }
+      return {
+        accepted: false,
+        reason: 'negotiation-failed',
+        detail: codexRealtimeFailureDetail(error),
+      }
     }
   }
 
@@ -706,6 +710,14 @@ export class VoiceRuntime extends TypertRemoteService {
     }
     if (lastError !== undefined) throw lastError
   }
+}
+
+function codexRealtimeFailureDetail(value: unknown): string {
+  const message = (value instanceof Error ? value.message : String(value)).trim()
+  const redacted = message
+    .replace(/\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\b/gu, '[redacted]')
+    .replace(/Bearer\s+[A-Za-z0-9._~+\/-]+=*/giu, 'Bearer [redacted]')
+  return (redacted === '' ? 'Codex realtime negotiation failed' : redacted).slice(0, 1_024)
 }
 
 function orderedProviders<P extends { readonly id: string; readonly priority: number; available(): boolean }>(
