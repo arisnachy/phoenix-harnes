@@ -2,10 +2,11 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { TeamMessageActions } from '../src/client/TeamMessageActions.tsx'
+import { AssistantReactionAction, TeamMessageActions } from '../src/client/TeamMessageActions.tsx'
 import type { TeamChatReaction } from '@phoenix-ai/dsh-agent-team/chat-types'
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 const View = TeamMessageActions as unknown as ComponentType<Record<string, unknown>>
+const AssistantView = AssistantReactionAction as unknown as ComponentType<Record<string, unknown>>
 it('groups actual participants and removes only the user reaction from the selected message', async () => {
   const reactions: TeamChatReaction[] = ['user', 'kira', 'agent'].map((kind, index) => ({
     id: String(index), messageId: 'finding', reactorId: kind, reactorName: kind === 'agent' ? 'Zenith' : kind === 'kira' ? 'Kira' : 'User',
@@ -36,6 +37,20 @@ it('uses the same message identity for a quoted reply and Unicode quick reaction
   await vi.waitFor(() => { expect(react).toHaveBeenCalledWith('finding', '❤️', true) })
 })
 
+it('moves ordinary Kira reaction affordance into the assistant footer toolbar only', () => {
+  const react = vi.fn(async () => {})
+  const ordinary = render(<View sessionId="root" messageId="kira-answer" authorId="kira" authorKind="kira"
+    useProjection={() => undefined} react={react} t={(key: string) => key} />)
+  expect(ordinary.queryByRole('button', { name: 'chat.addReaction' })).toBeNull()
+  ordinary.unmount()
+
+  const footer = render(<AssistantView sessionId="root" messageId="kira-answer"
+    useProjection={() => undefined} react={react} t={(key: string) => key} />)
+  expect(footer.getByRole('button', { name: 'chat.addReaction' })).toBeTruthy()
+  expect(footer.container.querySelector('[data-reaction-placement="assistant-toolbar"]')).toBeTruthy()
+})
+
+
 it('keeps inherited team messages readable without exposing actions for another mission', () => {
   const react = vi.fn()
   const reply = vi.fn()
@@ -45,6 +60,26 @@ it('keeps inherited team messages readable without exposing actions for another 
   expect(action.hasAttribute('disabled')).toBe(true)
   fireEvent.click(action)
   expect(react).not.toHaveBeenCalled()
+})
+
+it('pulses a fresh reaction even when it lands with the first projection frame', () => {
+  vi.stubGlobal('matchMedia', () => ({ matches: false }))
+  const originalAnimate = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'animate')
+  const animate = vi.fn(() => ({ playState: 'running' }))
+  Object.defineProperty(HTMLElement.prototype, 'animate', { configurable: true, writable: true, value: animate })
+  try {
+    const fresh: TeamChatReaction = {
+      id: 'fresh-argo', messageId: 'fresh-message', reactorId: 'argo', reactorName: 'Argo',
+      reactorKind: 'agent', emoji: '🔥', createdAt: Date.now(),
+    }
+    render(<View messageId="fresh-message" authorId="user" authorKind="user"
+      useProjection={(key: string) => key === 'teamChatReactions' ? { 'fresh-message': [fresh] } : {}}
+      react={vi.fn()} reply={vi.fn()} t={(key: string) => key} />)
+    expect(animate).toHaveBeenCalled()
+  } finally {
+    if (originalAnimate === undefined) delete (HTMLElement.prototype as { animate?: unknown }).animate
+    else Object.defineProperty(HTMLElement.prototype, 'animate', originalAnimate)
+  }
 })
 
 it('pulses only a newly received real reaction and respects reduced motion', () => {

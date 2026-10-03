@@ -59,7 +59,8 @@ export class TeamChat {
     const reactions = new Map<string, TeamChatReaction>()
     for (const event of root.events) {
       if (event.type === 'team/member' && chatVersion(event.data.version)
-        && event.data.teamId === TeamId(root.id) && event.data.member.phase === 'active') {
+        && event.data.teamId === TeamId(root.id)
+        && (event.data.member.phase === 'provisioning' || event.data.member.phase === 'active')) {
         const member = event.data.member
         rows.set(`team-member:${member.id}`, {
           id: `team-member:${member.id}`, senderId: root.id, senderName: 'Kira', senderKind: 'kira',
