@@ -13,10 +13,16 @@ import type {} from '@phoenix-ai/dsh-session'
 import type {
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
+  VoiceConversationRealtimeStartReceipt,
+  VoiceConversationRealtimeStartRequest,
+  VoiceConversationRealtimeStatus,
+  VoiceConversationRealtimeStopReceipt,
+  VoiceConversationRealtimeStopRequest,
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
 } from './types.ts'
+import { CodexRealtimeBridge } from './codex-realtime.ts'
 
 export type * from './types.ts'
 
@@ -118,6 +124,7 @@ export interface VoiceRuntimeStatus {
   readonly ttsProvider?: string
   /** Selected STT provider id, when currently available. */
   readonly sttProvider?: string
+  readonly codexRealtime: boolean
 }
 
 /** Configurable limits and provider preference for one host. */
@@ -134,6 +141,8 @@ export interface VoiceRuntimeConfig {
   readonly ttsProvider?: string
   /** Preferred STT provider. */
   readonly sttProvider?: string
+  /** Native Codex/ChatGPT realtime voice, using Codex login rather than API keys. */
+  readonly codexRealtime?: boolean
 }
 
 interface ResolvedVoiceRuntimeConfig {
@@ -250,6 +259,7 @@ export class VoiceRuntime extends TypertRemoteService {
     maxChars: z.number().default(480),
     ttsProvider: z.string(),
     sttProvider: z.string(),
+    codexRealtime: z.boolean().default(true),
   })
 
   private readonly config: ResolvedVoiceRuntimeConfig
@@ -260,6 +270,7 @@ export class VoiceRuntime extends TypertRemoteService {
   private current: QueuedAnnouncement | undefined
   private draining = false
   private readonly conversationSpeech = new Map<string, ConversationSpeechChannel>()
+  private codexRealtime: CodexRealtimeBridge | undefined
 
   constructor(ctx: Context, config: VoiceRuntimeConfig = {}) {
     super(ctx, 'voice')
@@ -270,6 +281,7 @@ export class VoiceRuntime extends TypertRemoteService {
       maxChars: positiveInteger(config.maxChars ?? 480, 'maxChars'),
       ...config.ttsProvider?.trim() ? { ttsProvider: config.ttsProvider.trim() } : {},
       ...config.sttProvider?.trim() ? { sttProvider: config.sttProvider.trim() } : {},
+      codexRealtime: config.codexRealtime ?? true,
     }
     ctx.on('voice/important', (event) => { void this.announce(event) })
     ctx.on('session/event', (_session, event) => {
@@ -291,6 +303,90 @@ export class VoiceRuntime extends TypertRemoteService {
       natural: this.config.enabled && provider?.id === 'phoenix-natural',
       ...(provider === undefined ? {} : { provider: provider.id }),
     }
+  }
+
+  /**
+   * Probe the native Codex realtime sidecar. This is separate from ordinary TTS
+   * so non-Codex providers can keep the existing browser/local voice route.
+   */
+  @Remote('conversationRealtimeStatus')
+  async conversationRealtimeStatus(): Promise<VoiceConversationRealtimeStatus> {
+    if (!this.config.enabled || !this.config.codexRealtime) {
+      return {
+        enabled: false,
+        available: false,
+        authenticated: false,
+        provider: 'openai-codex',
+        reason: 'disabled',
+      }
+    }
+    const probe = await this.codexRealtimeBridge().probe()
+    return {
+      enabled: true,
+      available: probe.available,
+      authenticated: probe.authenticated,
+      provider: 'openai-codex',
+      ...(probe.reason === undefined ? {} : { reason: probe.reason }),
+    }
+  }
+
+  /**
+   * Negotiate browser WebRTC directly with Codex Realtime through the locally
+   * authenticated app-server. No API key is accepted by this path.
+   */
+  @Remote('conversationRealtimeStart')
+  async conversationRealtimeStart(
+    request: VoiceConversationRealtimeStartRequest,
+  ): Promise<VoiceConversationRealtimeStartReceipt> {
+    if (!this.config.enabled || !this.config.codexRealtime) {
+      return { accepted: false, reason: 'disabled' }
+    }
+    const key = request.key.trim()
+    const offerSdp = request.offerSdp.trim()
+    const model = request.model?.trim()
+    if (key === '' || key.length > 256 || offerSdp === '' || offerSdp.length > 131_072
+      || (model !== undefined && (model === '' || model.length > 128))) {
+      return { accepted: false, reason: 'invalid' }
+    }
+    try {
+      const probe = await this.codexRealtimeBridge().probe()
+      if (!probe.available || !probe.authenticated) {
+        return {
+          accepted: false,
+          reason: probe.reason ?? (probe.available ? 'codex-login-required' : 'codex-unavailable'),
+        }
+      }
+      const result = await this.codexRealtimeBridge().start({
+        key,
+        offerSdp,
+        ...(model === undefined ? {} : { model }),
+      })
+      return {
+        accepted: true,
+        threadId: result.threadId,
+        answerSdp: result.answerSdp,
+      }
+    } catch (error) {
+      const message = String(error)
+      if (/chatgpt login|required|not authenticated|account/i.test(message)) {
+        return { accepted: false, reason: 'codex-login-required' }
+      }
+      if (/not found|enoent|could not start|spawn/i.test(message)) {
+        return { accepted: false, reason: 'codex-unavailable' }
+      }
+      this.ctx.logger('voice').warn(`Codex realtime negotiation failed: ${message}`)
+      return { accepted: false, reason: 'negotiation-failed' }
+    }
+  }
+
+  /** Stop one browser-owned Codex realtime call. */
+  @Remote('conversationRealtimeStop')
+  async conversationRealtimeStop(
+    request: VoiceConversationRealtimeStopRequest,
+  ): Promise<VoiceConversationRealtimeStopReceipt> {
+    const key = request.key.trim()
+    if (key === '' || key.length > 256 || this.codexRealtime === undefined) return { stopped: false }
+    return { stopped: await this.codexRealtime.stop(key).catch(() => false) }
   }
 
   /**
@@ -445,6 +541,8 @@ export class VoiceRuntime extends TypertRemoteService {
       for (const controller of channel.controllers) controller.abort('voice stopped')
     }
     this.conversationSpeech.clear()
+    this.codexRealtime?.close()
+    this.codexRealtime = undefined
   }
 
   /**
@@ -473,6 +571,11 @@ export class VoiceRuntime extends TypertRemoteService {
       ...ttsProvider === undefined ? {} : { ttsProvider: ttsProvider.id },
       ...sttProvider === undefined ? {} : { sttProvider: sttProvider.id },
     }
+  }
+
+  private codexRealtimeBridge(): CodexRealtimeBridge {
+    this.codexRealtime ??= new CodexRealtimeBridge()
+    return this.codexRealtime
   }
 
   private registerProvider<P extends { readonly id: string }>(store: Map<string, P>, provider: P): () => void {
