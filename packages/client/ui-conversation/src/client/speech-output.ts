@@ -1,6 +1,8 @@
 /** Browser-native speech output used by assistant message actions. */
 
 export type SpeechOutputState = 'idle' | 'speaking' | 'unsupported'
+/** Assistant presentation used to choose a matching installed browser voice. */
+export type SpeechVoiceGender = 'masculine' | 'feminine' | 'neutral'
 
 /** Minimal synthesis utterance surface used by the adapter and its tests. */
 export interface SpeechSynthesisUtteranceLike {
@@ -97,22 +99,36 @@ export function conversationalSpeechText(text: string): string {
     .trim()
 }
 
-/** Choose the closest installed voice, strongly preferring neural/natural voices. */
-function bestVoice(synthesis: SpeechSynthesisLike, language: string): SpeechSynthesisVoiceLike | undefined {
+const FEMININE_VOICE_HINTS = [
+  'aria', 'samantha', 'sofia', 'sofía', 'jenny', 'sabina', 'zira', 'karen', 'susan',
+  'helena', 'luciana', 'marisol', 'paulina', 'ava', 'emma', 'laura', 'female', 'feminine', 'mujer',
+]
+const MASCULINE_VOICE_HINTS = [
+  'david', 'mark', 'guy', 'raul', 'raúl', 'pablo', 'jorge', 'diego', 'carlos', 'male', 'masculine', 'hombre',
+]
+const NEUTRAL_VOICE_HINTS = ['alloy', 'neutral', 'androgynous']
+
+/** Choose the closest installed voice while honoring the assistant presentation selected by the user. */
+function bestVoice(
+  synthesis: SpeechSynthesisLike,
+  language: string,
+  gender: SpeechVoiceGender,
+): SpeechSynthesisVoiceLike | undefined {
   const voices = synthesis.getVoices?.() ?? []
   const target = language.toLowerCase()
   const base = target.split('-')[0]
+  const hints = gender === 'masculine'
+    ? MASCULINE_VOICE_HINTS
+    : gender === 'neutral' ? NEUTRAL_VOICE_HINTS : FEMININE_VOICE_HINTS
   let best: { voice: SpeechSynthesisVoiceLike; score: number } | undefined
   for (const voice of voices) {
     const voiceLanguage = voice.lang.toLowerCase()
     const voiceBase = voiceLanguage.split('-')[0]
     if (voiceBase !== base) continue
+    const name = voice.name.toLowerCase()
     const natural = /natural|neural|premium|enhanced/i.test(voice.name) ? 60 : 0
-    const feminine = [
-      'aria', 'samantha', 'sofia', 'sofía', 'jenny', 'sabina', 'zira', 'karen', 'susan',
-      'helena', 'luciana', 'marisol', 'paulina', 'ava', 'emma', 'laura', 'female', 'feminine', 'mujer',
-    ].some(name => voice.name.toLowerCase().includes(name)) ? 50 : 0
-    const score = natural + feminine
+    const presentation = hints.some(hint => name.includes(hint)) ? 50 : 0
+    const score = natural + presentation
       + (voiceLanguage === target ? 18 : 10)
       + (voice.localService === true ? 3 : 0)
     if (best === undefined || score > best.score) best = { voice, score }
@@ -193,12 +209,14 @@ export function hasSpeechOutput(scope?: SpeechOutputScope): boolean {
  * @param onState - Receives only durable UI states for this control.
  * @param language - Optional BCP 47 language tag; defaults to browser language.
  * @param scope - Optional browser-like scope for tests or an embedded client.
+ * @param gender - Assistant presentation chosen by the user.
  * @returns Cancellable speech-output handle.
  */
 export function createSpeechOutput(
   onState: (state: SpeechOutputState) => void,
   language?: string,
   scope?: SpeechOutputScope,
+  gender: SpeechVoiceGender = 'feminine',
 ): SpeechOutput {
   const resolved = resolveScope(scope)
   const synthesis = resolved?.speechSynthesis
@@ -242,7 +260,7 @@ export function createSpeechOutput(
     const utterance = new Utterance(segment)
     utterance.lang = selectedLanguage
     configureProsody(utterance, segment)
-    const voice = bestVoice(synthesis, selectedLanguage)
+    const voice = bestVoice(synthesis, selectedLanguage, gender)
     if (voice !== undefined) utterance.voice = voice
     utterance.onend = () => { finishOne(current) }
     utterance.onerror = () => { finishOne(current) }
