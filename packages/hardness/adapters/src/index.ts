@@ -3,6 +3,7 @@ import { mailAddress } from './assistant-mail-store.ts'
 import { installAssistantMail } from './assistant-mail-runtime.ts'
 import type { AssistantMailControl } from './assistant-mail-runtime.ts'
 import { createAssistantMailIdentityTool } from './assistant-mail-tool.ts'
+import { createAssistantMailOperationsTool } from './assistant-mail-operations-tool.ts'
 import { installAssistantMailProtocol } from './assistant-mail-protocol.ts'
 import { AttentionStore } from './proactivity-attention-store.ts'
 import { homedir } from 'node:os'
@@ -399,6 +400,9 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
       disposers.push(ctx.tools.register(createRealitySnapshotTool(reality.engine, ctx)))
       disposers.push(ctx.tools.register(createAssistantMailIdentityTool(() => (
+        (ctx.get as unknown as (name: string) => unknown)('assistantMail') as AssistantMailControl | undefined
+      ))))
+      disposers.push(ctx.tools.register(createAssistantMailOperationsTool(() => (
         (ctx.get as unknown as (name: string) => unknown)('assistantMail') as AssistantMailControl | undefined
       ))))
       for (const tool of createProactivityTools(proactivity.engine, {

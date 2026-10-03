@@ -44,14 +44,42 @@ describe('AgentMail transport', () => {
   })
 })
 
-it('reports a socket closing exactly once and contains disposal callbacks', async () => {
-  const sockets: EventTarget[] = []
-  class Socket extends EventTarget { constructor(_url: string) { super(); sockets.push(this) } send(_data: string): void {} close(): void { this.dispatchEvent(new Event('close')) } }
+it('waits for subscription confirmation, wakes only on received mail, and reports disconnect once', async () => {
+  const sockets: Socket[] = []
+  class Socket extends EventTarget {
+    readonly sent: string[] = []
+    constructor(_url: string) {
+      super()
+      sockets.push(this)
+      queueMicrotask(() => { this.dispatchEvent(new Event('open')) })
+    }
+    send(data: string): void { this.sent.push(data) }
+    close(): void { this.dispatchEvent(new Event('close')) }
+    emit(data: unknown): void {
+      const event = new Event('message') as Event & { readonly data: string }
+      Object.defineProperty(event, 'data', { value: JSON.stringify(data) })
+      this.dispatchEvent(event)
+    }
+  }
   vi.stubGlobal('WebSocket', Socket)
   try {
     let disconnected = 0
+    let wakes = 0
     const transport = new AgentMailTransport(async () => 'secret', 'kira@agentmail.to', 1000)
-    const dispose = await transport.subscribe(() => {}, () => { disconnected++ })
+    const subscribing = transport.subscribe(() => { wakes++ }, () => { disconnected++ })
+    await vi.waitFor(() => { expect(sockets[0]?.sent).toHaveLength(1) })
+    expect(JSON.parse(sockets[0]?.sent[0] ?? '{}')).toEqual({
+      type: 'subscribe',
+      inbox_ids: ['kira@agentmail.to'],
+      event_types: ['message.received'],
+    })
+    sockets[0]?.emit({ type: 'subscribed', inbox_ids: ['kira@agentmail.to'] })
+    const dispose = await subscribing
+    expect(wakes).toBe(0)
+    sockets[0]?.emit({ type: 'event', eventType: 'message.received' })
+    expect(wakes).toBe(1)
+    sockets[0]?.emit({ type: 'subscribed', inbox_ids: ['kira@agentmail.to'] })
+    expect(wakes).toBe(1)
     sockets[0]?.dispatchEvent(new Event('close'))
     sockets[0]?.dispatchEvent(new Event('error'))
     expect(disconnected).toBe(1)

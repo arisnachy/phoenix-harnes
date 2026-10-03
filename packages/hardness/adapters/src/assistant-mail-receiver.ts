@@ -73,6 +73,12 @@ export class MailReceiver {
           finished = await this.journal.transition(job.id, 'reply-pending', { summary: result.summary, evidence: result.evidence })
         } catch {
           if (this.isStopped()) return
+          const latest = (await this.journal.list()).find(row => row.id === job.id)
+          if (latest?.state === 'pending') {
+            // No execution checkpoint was committed, so no external effect is known to have
+            // started. Keep this job retryable for late-mounted startup services or next poll.
+            continue
+          }
           await this.journal.transition(job.id, 'blocked', { error: 'work interrupted or approval required; inspect the persisted conversation before retrying' })
           continue
         }

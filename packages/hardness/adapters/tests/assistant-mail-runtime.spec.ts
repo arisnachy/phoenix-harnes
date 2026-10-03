@@ -139,3 +139,105 @@ describe('owned durable outgoing mail', () => {
   })
 
 })
+
+
+it('runs another reconciliation when live mail arrives during an active wake pass', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-runtime-wake-'))
+  await writeFile(join(directory, 'account.json'), JSON.stringify({
+    state: 'ready',
+    inboxId: 'kira@agentmail.to',
+    ownerEmail: input.to,
+    contacts: [],
+  }))
+  let socket: Socket | undefined
+  class Socket extends EventTarget {
+    constructor(_url: string) {
+      super()
+      socket = this
+      queueMicrotask(() => { this.dispatchEvent(new Event('open')) })
+    }
+    send(data: string): void {
+      const row = JSON.parse(data) as { type?: string; inbox_ids?: string[] }
+      if (row.type !== 'subscribe') return
+      queueMicrotask(() => {
+        const event = new Event('message') as Event & { readonly data: string }
+        Object.defineProperty(event, 'data', {
+          value: JSON.stringify({ type: 'subscribed', inbox_ids: row.inbox_ids }),
+        })
+        this.dispatchEvent(event)
+      })
+    }
+    close(): void {}
+    emitReceived(): void {
+      const event = new Event('message') as Event & { readonly data: string }
+      Object.defineProperty(event, 'data', {
+        value: JSON.stringify({ type: 'event', eventType: 'message.received' }),
+      })
+      this.dispatchEvent(event)
+    }
+  }
+  let listCalls = 0
+  let releaseSecond: (() => void) | undefined
+  const fetcher = vi.fn(async (request: RequestInfo | URL) => {
+    const url = typeof request === 'string' ? request : request instanceof URL ? request.href : request.url
+    if (!url.includes('/messages?')) throw new Error(`unexpected request: ${url}`)
+    listCalls++
+    if (listCalls === 2) await new Promise<void>((resolve) => { releaseSecond = resolve })
+    return Response.json({ messages: [] })
+  })
+  vi.stubGlobal('WebSocket', Socket)
+  vi.stubGlobal('fetch', fetcher)
+  const ctx = {
+    get: (name: string) => name === 'credentials' ? { resolve: async () => ({ value: 'secret' }) } : undefined,
+    on: () => () => {},
+    effect: () => {},
+  }
+  const runtime = installAssistantMail(ctx as never, {
+    directory,
+    authorizeOutgoing: async () => true,
+    credentialRef: 'MAIL_KEY',
+    pollMs: 60_000,
+    timeoutMs: 1000,
+    workTimeoutMs: 1000,
+  }, {
+    pollMs: 60_000,
+    privateWorkProvider: 'spawn',
+    privateWorkResultChars: 1000,
+  })
+  try {
+    await vi.waitFor(() => {
+      expect(socket).toBeDefined()
+      expect(listCalls).toBe(1)
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+    socket?.emitReceived()
+    await vi.waitFor(() => { expect(listCalls).toBe(2) })
+    socket?.emitReceived()
+    releaseSecond?.()
+    await vi.waitFor(() => { expect(listCalls).toBe(3) })
+  } finally {
+    await runtime.dispose()
+    vi.unstubAllGlobals()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+
+it('keeps AgentMail model operations behind the resident credential and recipient allowlist', async () => {
+  const source = await readFile(new URL('../src/assistant-mail-runtime.ts', import.meta.url), 'utf8')
+  expect(source).toContain("case 'list_messages'")
+  expect(source).toContain("case 'search_messages'")
+  expect(source).toContain("case 'send_message'")
+  expect(source).toContain("case 'reply_message'")
+  expect(source).toContain("case 'reply_all'")
+  expect(source).toContain("case 'forward_message'")
+  expect(source).toContain("case 'create_draft'")
+  expect(source).toContain("case 'send_draft'")
+  expect(source).toContain("case 'create_inbox'")
+  expect(source).toContain("case 'delete_inbox'")
+  expect(source).toContain('authorizeRecipients(account')
+  expect(source).toContain('confirm_permanent=true')
+  expect(source).toContain('confirm_primary_inbox=true')
+  expect(source).toContain('agentMailRequest(path, key, config.timeoutMs')
+})
