@@ -32,11 +32,19 @@ function AddReactionIcon() {
 }
 export interface TeamMessageActionsInjected {
   react: (messageId: string, emoji: string, active: boolean) => Promise<void>
-  reply: (messageId: string, authorId: string, authorName: string, preview: string) => void
+  reply?: (messageId: string, authorId: string, authorName: string, preview: string) => void
 }
-type Props = PropsRuntime<'conversation.chat.message-actions'> & TeamMessageActionsInjected & PropsLocale<typeof NS>
+type Props = PropsRuntime<'conversation.chat.assistant-actions'> & TeamMessageActionsInjected & PropsLocale<typeof NS> & {
+  authorId?: string
+  authorKind?: 'user' | 'kira' | 'agent'
+  authorName?: string
+  replyPreview?: string
+  originMissionId?: string
+  placement?: 'message' | 'assistant-toolbar'
+}
 export function TeamMessageActions({
-  messageId, authorId, authorKind, authorName, replyPreview, originMissionId, sessionId, useProjection, react, reply, t,
+  messageId, authorId = 'kira', authorKind = 'kira', authorName, replyPreview, originMissionId,
+  sessionId, useProjection, react, reply, t, placement = 'message',
 }: Props) {
   const reactionProjection = useProjection('teamChatReactions')
   const reactions = reactionProjection?.[messageId] ?? []
@@ -47,29 +55,38 @@ export function TeamMessageActions({
     const received = new Set(reactions.map(item => item.id))
     const earlier = previous.current
     previous.current = received
-    if (earlier === undefined) return
-    const added = new Set(reactions.filter(item => !earlier.has(item.id)).map(item => item.emoji))
+    const now = Date.now()
+    const added = new Set(reactions.filter(item => earlier === undefined
+      ? Math.abs(now - item.createdAt) <= 5_000
+      : !earlier.has(item.id)).map(item => item.emoji))
     if (added.size === 0 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
     for (const emoji of added) {
       const chip = buttons.current.get(emoji)
-      chip?.animate([
-        { transform: 'translateY(2px) scale(.82)', opacity: .35 },
-        { transform: 'translateY(-3px) scale(1.2)', opacity: 1, offset: .42 },
-        { transform: 'translateY(0) scale(.97)', opacity: 1, offset: .72 },
-        { transform: 'translateY(0) scale(1)', opacity: 1 },
-      ], { duration: 560, easing: 'cubic-bezier(.2,.9,.25,1)' })
+      if (typeof chip?.animate === 'function') chip.animate([
+        { transform: 'translateY(2px) scale(.76)', opacity: .35, boxShadow: '0 0 0 0 transparent' },
+        { transform: 'translateY(-4px) scale(1.34)', opacity: 1,
+          boxShadow: '0 0 0 8px color-mix(in srgb, var(--dsw-specific-phoenix-accent) 18%, transparent)', offset: .28 },
+        { transform: 'translateY(0) scale(.96)', opacity: 1, boxShadow: '0 0 0 2px transparent', offset: .52 },
+        { transform: 'translateY(-1px) scale(1.14)', opacity: 1,
+          boxShadow: '0 0 0 5px color-mix(in srgb, var(--dsw-specific-phoenix-accent) 12%, transparent)', offset: .72 },
+        { transform: 'translateY(0) scale(1)', opacity: 1, boxShadow: '0 0 0 0 transparent' },
+      ], { duration: 980, easing: 'cubic-bezier(.2,.9,.25,1)' })
       const emojiNode = chip?.querySelector<HTMLElement>('[data-reaction-emoji]')
       if (typeof emojiNode?.animate === 'function') emojiNode.animate([
-        { transform: 'rotate(-8deg) scale(.72)' },
-        { transform: 'rotate(7deg) scale(1.42)', offset: .45 },
+        { transform: 'rotate(-10deg) scale(.68)' },
+        { transform: 'rotate(9deg) scale(1.55)', offset: .32 },
+        { transform: 'rotate(-4deg) scale(.94)', offset: .58 },
+        { transform: 'rotate(4deg) scale(1.18)', offset: .76 },
         { transform: 'rotate(0deg) scale(1)' },
-      ], { duration: 620, easing: 'cubic-bezier(.2,.9,.25,1)' })
+      ], { duration: 1_020, easing: 'cubic-bezier(.2,.9,.25,1)' })
       for (const avatar of chip?.querySelectorAll<HTMLElement>('[data-reaction-reactor]') ?? []) {
         if (typeof avatar.animate === 'function') avatar.animate([
-          { transform: 'scale(.65)', opacity: .45 },
-          { transform: 'scale(1.22)', opacity: 1, offset: .5 },
-          { transform: 'scale(1)', opacity: 1 },
-        ], { duration: 520, easing: 'ease-out' })
+          { transform: 'scale(.58)', opacity: .35, boxShadow: '0 0 0 0 transparent' },
+          { transform: 'scale(1.28)', opacity: 1,
+            boxShadow: '0 0 0 5px color-mix(in srgb, var(--dsw-specific-phoenix-accent) 20%, transparent)', offset: .36 },
+          { transform: 'scale(.96)', opacity: 1, boxShadow: '0 0 0 1px transparent', offset: .66 },
+          { transform: 'scale(1)', opacity: 1, boxShadow: '0 0 0 0 transparent' },
+        ], { duration: 900, easing: 'ease-out' })
       }
     }
   }, [reactionProjection, reactions])
@@ -91,7 +108,12 @@ export function TeamMessageActions({
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Error') }
     finally { setPending(false) }
   }
-  return <div className={css.reactions} data-team-reactions={messageId} data-author-kind={authorKind}>
+  if (authorKind === 'kira' && placement !== 'assistant-toolbar') return null
+  const rootClass = placement === 'assistant-toolbar'
+    ? `${css.reactions} ${css.reactionsToolbar}`
+    : css.reactions
+  return <div className={rootClass} data-team-reactions={messageId} data-author-kind={authorKind}
+    data-reaction-placement={placement}>
     {[...groups].map(([emoji, people]) => {
       const names = people.map(item => item.reactorKind === 'user' ? item.reactorName
         : participants[item.reactorId]?.name ?? teamIdentityOf(item.reactorName, item.reactorId).name)
@@ -118,7 +140,7 @@ export function TeamMessageActions({
     <button type="button" className={css.reactionAdd} aria-label={t('chat.addReaction')} disabled={historical}
       title={historical ? t('chat.historical') : t('chat.addReaction')} aria-expanded={open}
       data-add-reaction onClick={() => { setOpen(!open) }}><AddReactionIcon /></button>
-    {authorKind === 'agent' && <button type="button" className={css.reaction} disabled={historical} onClick={() => { reply(messageId, authorId, authorName ?? '', replyPreview ?? '') }}>{t('chat.reply')}</button>}
+    {authorKind === 'agent' && reply !== undefined && <button type="button" className={css.reaction} disabled={historical} onClick={() => { reply(messageId, authorId, authorName ?? '', replyPreview ?? '') }}>{t('chat.reply')}</button>}
     {open && <div className={css.emojiMenu}>
       {QUICK.map(emoji => <button type="button" key={emoji} disabled={pending || historical} onClick={() => { void toggle(emoji) }}>{emoji}</button>)}
       <button type="button" onClick={() => { setFull(!full) }}>+</button>
@@ -126,4 +148,11 @@ export function TeamMessageActions({
     </div>}
     {error !== '' && <span role="alert">{error}</span>}
   </div>
+}
+
+
+/** Put Kira's reaction affordance inside the completed assistant IconActions row. */
+export function AssistantReactionAction(props: PropsRuntime<'conversation.chat.assistant-actions'>
+  & Pick<TeamMessageActionsInjected, 'react'> & PropsLocale<typeof NS>) {
+  return <TeamMessageActions {...props} placement="assistant-toolbar" authorId="kira" authorKind="kira" />
 }
