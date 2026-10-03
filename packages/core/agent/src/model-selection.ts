@@ -532,6 +532,29 @@ function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number):
   state.lastTeamEscalationMessageId = undefined
 }
 
+function directCodexPlannerRescue(
+  selection: ModelSelection,
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+  step: number,
+  state: PhoenixAutoRouterState,
+): ModelSelection | undefined {
+  if (selection.provider !== 'openai-codex' || !isCodexPlannerModel(selection.model) || step <= 1) return undefined
+  resetPhoenixAutoTurnState(state, turn)
+  const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
+  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
+    state.lastTeamEscalationMessageId = teamSignal.messageId
+    state.lastRescueStep = step
+    return selection
+  }
+  if (isPhoenixCodexAutoStalled(agent, turn)
+    && (state.lastRescueStep === 0 || step - state.lastRescueStep >= 2)) {
+    state.lastRescueStep = step
+    return selection
+  }
+  return undefined
+}
+
 function phoenixAutoRoute(
   agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
   turn: number,
@@ -728,7 +751,15 @@ export function installModelSelection(
         && isToolAcquisitionRequest(directText)
         ? defaultToolAcquisitionSelection(selected)
         : undefined
-      const candidateRoute = conversation
+      const plannerRescue = directCodexPlannerRescue(
+        selected,
+        _payload.agent,
+        _payload.turn,
+        _payload.step,
+        phoenixAutoState,
+      )
+      const candidateRoute = plannerRescue
+        ?? conversation
         ?? acquisition
         ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
           ? resolvedHandoff.selection
