@@ -246,8 +246,8 @@ export class CodexRealtimeBridge {
     // Codex can exit between an RPC write and Node flushing the pipe. Own the
     // stream error so an EPIPE cannot become an uncaught Host-fatal event.
     child.stdin.on('error', () => {})
-    child.stdout.on('data', chunk => { this.consumeStdout(String(chunk)) })
-    child.stderr.on('data', chunk => {
+    child.stdout.on('data', (chunk) => { this.consumeStdout(String(chunk)) })
+    child.stderr.on('data', (chunk) => {
       for (const line of String(chunk).split(/\r?\n/u)) {
         const trimmed = line.trim()
         if (trimmed === '') continue
@@ -255,7 +255,7 @@ export class CodexRealtimeBridge {
         if (this.stderrTail.length > 30) this.stderrTail.shift()
       }
     })
-    child.once('error', error => {
+    child.once('error', (error) => {
       this.failProcess(new Error(`Codex realtime process error: ${error.message}`))
     })
     child.once('exit', (code, signal) => {
@@ -383,6 +383,7 @@ export class CodexRealtimeBridge {
   private routeMessage(value: unknown): void {
     if (!isRecord(value)) return
     if (value.id !== undefined && (value.result !== undefined || value.error !== undefined)) {
+      if (typeof value.id !== 'string' && typeof value.id !== 'number') return
       const id = String(value.id)
       const pending = this.pending.get(id)
       if (pending === undefined) return
