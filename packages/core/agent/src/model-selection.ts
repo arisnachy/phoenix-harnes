@@ -191,6 +191,13 @@ const AUTO_EXECUTION_CONTINUATION =
   'Execute the next concrete action instead of only saying what you will do, ' +
   'and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
 
+const AUTO_TEAM_ADMISSION_CONTINUATION =
+  'Phoenix Auto actionable work requires real Kira Team participation before completion. ' +
+  'Continue as Kira on Luna Max and delegate one bounded responsibility from the Sol plan with spawn_teammate, ' +
+  'or wake an existing appropriate teammate. Add a second teammate only when a genuinely independent front shortens the critical path. ' +
+  'Keep the critical path and supervision with Kira, communicate through Team tools, wait for a real teammate result or blocker, ' +
+  'inspect its evidence, integrate it, and verify the final result. Do not create filler work merely to satisfy this gate.'
+
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
 const FAST_SOCIAL_OPEN = /^(?:cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|tell\s+me\s+something(?:\s+good)?)$/iu
@@ -371,6 +378,21 @@ function phoenixAutoTeamSignalForTurn(
   return undefined
 }
 
+/** Whether the current actionable turn already contains a material teammate outcome. */
+function phoenixAutoHasTeamOutcomeForTurn(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): boolean {
+  return turnEvents(agent, turn).some((event) => {
+    if (event.type !== 'user/message') return false
+    const data = event.data as {
+      readonly source?: { readonly kind?: string; readonly purpose?: string }
+    }
+    return data.source?.kind === 'team-message'
+      && (data.source.purpose === 'result' || data.source.purpose === 'blocker')
+  })
+}
+
 function stableFingerprint(value: unknown): string {
   let serialized: string
   try {
@@ -491,6 +513,8 @@ interface PhoenixAutoRouterState {
   rescueCount: number
   continuationCount: number
   lastContinuationStep: number
+  teamAdmissionCount: number
+  lastTeamAdmissionStep: number
   forcePlannerNext: boolean
   lastTeamEscalationMessageId: string | undefined
 }
@@ -502,6 +526,8 @@ function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number):
   state.rescueCount = 0
   state.continuationCount = 0
   state.lastContinuationStep = 0
+  state.teamAdmissionCount = 0
+  state.lastTeamAdmissionStep = 0
   state.forcePlannerNext = false
   state.lastTeamEscalationMessageId = undefined
 }
@@ -607,12 +633,15 @@ export function installModelSelection(
   selection: ModelSelectionRef,
   handoff?: ModelSelectionHandoff | ModelSelectionHandoffResolver,
 ): () => void {
+  let phoenixAutoTeamAvailable = false
   const phoenixAutoState: PhoenixAutoRouterState = {
     turn: 0,
     lastRescueStep: 0,
     rescueCount: 0,
     continuationCount: 0,
     lastContinuationStep: 0,
+    teamAdmissionCount: 0,
+    lastTeamAdmissionStep: 0,
     forcePlannerNext: false,
     lastTeamEscalationMessageId: undefined,
   }
@@ -631,6 +660,7 @@ export function installModelSelection(
     const assembled = await next()
     selection.assembled = selected
     const hasKiraTeam = assembled.tools.some(tool => tool.name === 'spawn_teammate')
+    phoenixAutoTeamAvailable = hasKiraTeam
     // Agent Teams is Phoenix's single visible delegation path. Keeping legacy
     // subagent tools beside it lets provider models bypass Kira identities,
     // shared chat, reactions and lifecycle state unpredictably.
@@ -728,7 +758,28 @@ export function installModelSelection(
     resetPhoenixAutoTurnState(phoenixAutoState, turn)
 
     const latest = latestPhoenixAutoAssistantStop(agent, turn)
-    if (latest === undefined || phoenixAutoState.lastContinuationStep === latest.step) return
+    if (latest === undefined) return
+
+    if (phoenixAutoTeamAvailable && !phoenixAutoHasTeamOutcomeForTurn(agent, turn)
+      && phoenixAutoState.lastTeamAdmissionStep !== latest.step) {
+      phoenixAutoState.teamAdmissionCount += 1
+      phoenixAutoState.lastTeamAdmissionStep = latest.step
+      // Repeatedly trying to close without a real teammate outcome is itself
+      // a coordination stall. Let Sol xhigh repair the delegation strategy once.
+      if (phoenixAutoState.teamAdmissionCount >= 2) phoenixAutoState.forcePlannerNext = true
+      agent.steer(createUserMessage({
+        content: [{ type: 'text', text: AUTO_TEAM_ADMISSION_CONTINUATION }],
+        source: {
+          kind: 'plugin',
+          plugin: 'model-selection',
+          form: 'notice',
+          summary: 'Phoenix Auto team admission',
+        },
+      }))
+      return
+    }
+
+    if (phoenixAutoState.lastContinuationStep === latest.step) return
     const events = turnEvents(agent, turn)
     const latestStepHasToolActivity = events.some((event) => {
       if (event.type !== 'tool/call' && event.type !== 'tool/result') return false
