@@ -40,9 +40,10 @@ export interface VoiceAssistantRemote {
   conversationStatus(): Promise<VoiceRemoteResult<VoiceConversationStatus>>
   conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceRemoteResult<VoiceConversationSpeakReceipt>>
   conversationCancel(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationCancelReceipt>>
-  conversationRealtimeStatus(): Promise<VoiceRemoteResult<VoiceConversationRealtimeStatus>>
-  conversationRealtimeStart(request: VoiceConversationRealtimeStartRequest): Promise<VoiceRemoteResult<VoiceConversationRealtimeStartReceipt>>
-  conversationRealtimeStop(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationRealtimeStopReceipt>>
+  /** Newer Hosts expose native Codex realtime; optional keeps rolling upgrades compatible. */
+  conversationRealtimeStatus?(): Promise<VoiceRemoteResult<VoiceConversationRealtimeStatus>>
+  conversationRealtimeStart?(request: VoiceConversationRealtimeStartRequest): Promise<VoiceRemoteResult<VoiceConversationRealtimeStartReceipt>>
+  conversationRealtimeStop?(request: { readonly key: string }): Promise<VoiceRemoteResult<VoiceConversationRealtimeStopReceipt>>
 }
 
 interface RemoteSpeechState {
@@ -238,7 +239,9 @@ export function isCodexRealtimeVoiceActive(): boolean {
 export async function tryStartCodexRealtimeVoice(sessionKey: string): Promise<boolean> {
   const remote = voiceAssistantRemote
   const resolveRoute = voiceModelRouteResolver
-  if (remote === undefined || resolveRoute === undefined || !hasCodexRealtimeVoiceSupport()) return false
+  if (remote === undefined || remote.conversationRealtimeStatus === undefined
+    || remote.conversationRealtimeStart === undefined || resolveRoute === undefined
+    || !hasCodexRealtimeVoiceSupport()) return false
 
   let route: VoiceModelRoute | undefined
   try {
@@ -336,7 +339,7 @@ export async function tryStartCodexRealtimeVoice(sessionKey: string): Promise<bo
     }
     if (events !== undefined && events.readyState !== 'closed') events.close()
     if (generation === codexRealtimeVoiceGeneration) {
-      void remote.conversationRealtimeStop({ key: sessionKey }).catch(() => {})
+      void remote.conversationRealtimeStop?.({ key: sessionKey }).catch(() => {})
     }
     return false
   }
@@ -359,7 +362,7 @@ export async function stopCodexRealtimeVoice(): Promise<boolean> {
 
   const remote = voiceAssistantRemote
   if (remote !== undefined) {
-    await remote.conversationRealtimeStop({ key: session.key }).catch(() => undefined)
+    await remote.conversationRealtimeStop?.({ key: session.key }).catch(() => undefined)
   }
   return true
 }
