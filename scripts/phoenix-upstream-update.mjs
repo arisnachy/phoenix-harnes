@@ -518,10 +518,17 @@ function sleep(ms) {
   return new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 }
 
+async function waitForPollOrParentExit(parentPid, waitMs) {
+  const deadline = Date.now() + waitMs
+  while (parentAlive(parentPid) && Date.now() < deadline) {
+    await sleep(Math.min(1_000, Math.max(0, deadline - Date.now())))
+  }
+}
+
 async function watch(home, mode, parentPid) {
   while (parentAlive(parentPid)) {
     await cycle(home, mode, { apply: mode === 'auto', quiet: true })
-    await sleep(pollInterval())
+    await waitForPollOrParentExit(parentPid, pollInterval())
   }
 }
 
