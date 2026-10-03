@@ -35,7 +35,8 @@ export const zh = {
   'input.send': '发送消息',
   'input.voice.start': '开始语音助手',
   'input.voice.stop': '停止语音助手',
-  'input.voice.codexRealtimeFailed': 'Codex 实时语音未启动；PHOENIX 没有切换到备用语音。请检查 Codex 登录或更新。',
+  'input.voice.codexRealtimeFailed':
+    'Codex 实时语音未启动；PHOENIX 没有切换到备用语音。请检查 Codex 登录或更新。',
   'placeholder.steerQueue': 'Cmd/Ctrl+Enter 插话发送全部排队消息',
   'input.accessMode': '访问模式，当前：{name}',
   'image.dropTitle': '图片拖动到此处即可添加',
@@ -243,7 +244,8 @@ export const en = {
   'input.send': 'Send message',
   'input.voice.start': 'Start voice assistant',
   'input.voice.stop': 'Stop voice assistant',
-  'input.voice.codexRealtimeFailed': 'Codex Realtime did not start; PHOENIX did not switch to fallback speech. Check Codex login or update.',
+  'input.voice.codexRealtimeFailed':
+    'Codex Realtime did not start; PHOENIX did not switch to fallback speech. Check Codex login or update.',
   'placeholder.steerQueue': 'Cmd/Ctrl+Enter steers all queued messages',
   'input.accessMode': 'Access mode, current: {name}',
   'image.dropTitle': 'Drag images here to add them',
@@ -447,7 +449,9 @@ export const es = {
   'input.send': 'Enviar mensaje',
   'input.voice.start': 'Iniciar asistente de voz',
   'input.voice.stop': 'Detener asistente de voz',
-  'input.voice.codexRealtimeFailed': 'Codex Realtime no inició; PHOENIX no cambió a la voz de respaldo. Revisa el inicio de sesión o la actualización de Codex.',
+  'input.voice.codexRealtimeFailed':
+    'Codex Realtime no inició; PHOENIX no cambió a la voz de respaldo. ' +
+    'Revisa el inicio de sesión o la actualización de Codex.',
   'message.stopped': 'Detenido',
   'message.turnError': 'Este turno falló',
   'reasoning.title': 'Razonamiento',
