@@ -42,6 +42,8 @@ function operationName(toolName: string): string {
 /**
  * Classify whether a delegated instruction needs runtime evidence before a
  * teammate may visibly claim a result.
+ * @param text Delegated instruction.
+ * @returns Required execution evidence classification.
  */
 export function teamExecutionRequirement(text: string): TeamExecutionRequirement {
   const candidate = text.trim()
@@ -136,6 +138,9 @@ function successfulTools(
 /**
  * Resolve actual successful tool receipts for the latest operational
  * assignment. Prose, assistant intent, and Team coordination calls never count.
+ * @param events Session events containing assignments and tool receipts.
+ * @param options Event range and assignment evidence requirements.
+ * @returns Successful tool receipts for the selected assignment.
  */
 export function teamExecutionProof(
   events: readonly SessionEvent[],

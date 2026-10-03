@@ -29,8 +29,8 @@
           {
             "type": "tool-call",
             "id": "<identity>",
-            "name": "phoenix_mail_complete",
-            "arguments": "{\"outcome\":\"completed\",\"summary\":\"El encargo fue revisado.\",\"evidence\":\"La comprobación solicitada terminó correctamente.\"}"
+            "name": "phoenix_mail_identity",
+            "arguments": "{\"action\":\"refresh\"}"
           }
         ],
         "source": {
@@ -52,6 +52,72 @@
       "turn": 1,
       "step": 1,
       "callId": "<identity>",
+      "name": "phoenix_mail_identity",
+      "arguments": "{\"action\":\"refresh\"}"
+    }
+  },
+  {
+    "type": "tool/result",
+    "data": {
+      "turn": 1,
+      "step": 1,
+      "message": {
+        "source": {
+          "kind": "tool",
+          "callId": "<identity>"
+        },
+        "content": [
+          {
+            "type": "tool-result",
+            "toolCallId": "<identity>",
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"kind\":\"kira_mail_identity\",\"available\":true,\"state\":\"ready\",\"address\":\"kira-keyless@agentmail.to\",\"connection\":\"connecting\",\"owner_email\":\"owner@example.com\",\"needs_verification\":false,\"guidance\":\"Use phoenix_mail_send to send an explicitly requested message to the verified owner. Use action=refresh to reconcile incoming tasks. Tell the user Kira's exact mailbox address. This is Kira's own AgentMail inbox, not Gmail.\"}"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "role": "user",
+        "id": "<identity>"
+      }
+    }
+  },
+  {
+    "type": "assistant/message",
+    "data": {
+      "turn": 1,
+      "step": 2,
+      "message": {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool-call",
+            "id": "<identity>",
+            "name": "phoenix_mail_complete",
+            "arguments": "{\"outcome\":\"completed\",\"summary\":\"El encargo fue revisado.\",\"evidence\":\"La comprobación solicitada terminó correctamente.\"}"
+          }
+        ],
+        "source": {
+          "kind": "model",
+          "provider": "mail-test",
+          "model": "mail-test"
+        },
+        "id": "<identity>"
+      },
+      "usage": {
+        "inputTokens": 10,
+        "outputTokens": 5
+      }
+    }
+  },
+  {
+    "type": "tool/call",
+    "data": {
+      "turn": 1,
+      "step": 2,
+      "callId": "<identity>",
       "name": "phoenix_mail_complete",
       "arguments": "{\"outcome\":\"completed\",\"summary\":\"El encargo fue revisado.\",\"evidence\":\"La comprobación solicitada terminó correctamente.\"}"
     }
@@ -60,7 +126,7 @@
     "type": "tool/result",
     "data": {
       "turn": 1,
-      "step": 1,
+      "step": 2,
       "message": {
         "source": {
           "kind": "tool",
@@ -88,7 +154,7 @@
     "type": "assistant/message",
     "data": {
       "turn": 1,
-      "step": 2,
+      "step": 3,
       "message": {
         "role": "assistant",
         "content": [

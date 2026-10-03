@@ -1,5 +1,6 @@
 import {
   defineTool,
+  ToolArgsError,
   type ToolDefinition,
 } from '@phoenix-ai/dsh-tools'
 import type { AssistantMailControl, AssistantMailIdentity } from './assistant-mail-runtime.ts'
@@ -10,6 +11,7 @@ type MailIdentityResult = {
   state: AssistantMailIdentity['state'] | 'unavailable'
   address?: string
   connection?: string
+  owner_email?: string
   needs_verification: boolean
   guidance: string
 }
@@ -22,8 +24,9 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       state: value.state,
       ...(value.inboxId === undefined ? {} : { address: value.inboxId }),
       connection: value.connection,
+      ...(value.ownerEmail === undefined ? {} : { owner_email: value.ownerEmail }),
       needs_verification: false,
-      guidance: 'Tell the user Kira\'s exact mailbox address. This is Kira\'s own AgentMail inbox, not Gmail.',
+      guidance: 'Use phoenix_mail_send to send an explicitly requested message to the verified owner. Use action=refresh to reconcile incoming tasks. Tell the user Kira\'s exact mailbox address. This is Kira\'s own AgentMail inbox, not Gmail.',
     }
   }
   if (value.state === 'pending-verification') {
@@ -35,7 +38,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       connection: value.connection,
       needs_verification: true,
       guidance: 'The mailbox already exists. Tell the user the exact address and ask them to finish '
-        + 'the six-digit owner verification in Settings. Do not create another mailbox.',
+        + 'the six-digit owner verification with action=verify and the code they received, or in Settings. Do not create another mailbox.',
     }
   }
   if (value.state === 'signup-ambiguous') {
@@ -79,10 +82,11 @@ export function createAssistantMailIdentityTool(
     parameters: {
       action: {
         type: 'string',
-        enum: ['status', 'ensure'],
+        enum: ['status', 'ensure', 'verify', 'refresh'],
         required: true,
-        description: 'status reads the current real mailbox; ensure creates it once if absent and then returns the real provider address.',
+        description: 'status reads the mailbox; ensure creates it once if absent; verify activates the existing inbox with the owner code; refresh requests an incoming check without waiting for task completion.',
       },
+      code: { type: 'string', description: 'Six-digit owner verification code; required only for action=verify. Never invent or guess it.' },
       owner_email: {
         type: 'string',
         description: 'Optional owner email for the one-time verification code when Phoenix cannot resolve one '
@@ -103,6 +107,7 @@ export function createAssistantMailIdentityTool(
           },
           address: { type: 'string' },
           connection: { type: 'string' },
+          owner_email: { type: 'string' },
           needs_verification: { type: 'boolean', required: true },
           guidance: { type: 'string', required: true },
         },
@@ -122,6 +127,11 @@ export function createAssistantMailIdentityTool(
         } satisfies MailIdentityResult
       }
       try {
+        if (args.action === 'verify') {
+          if (args.code === undefined) throw new ToolArgsError(['verification requires the six-digit code received by the owner'])
+          return project(await service.verify(args.code))
+        }
+        if (args.action === 'refresh') return project(await service.refresh())
         return project(args.action === 'ensure' ? await service.ensure(args.owner_email) : await service.status())
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
@@ -146,5 +156,34 @@ export function createAssistantMailIdentityTool(
         kind: args.action === 'ensure' ? 'execute' : 'read',
       }
     },
+  })
+}
+
+/** Expose confirmed sending from Kira's mailbox to its verified owner.
+ * @param resolve Resident mailbox service resolver.
+ * @returns Owner-only send tool using the originating logged call for deduplication.
+ */
+export function createAssistantMailSendTool(resolve: () => AssistantMailControl | undefined): ToolDefinition {
+  return defineTool({
+    name: 'phoenix_mail_send',
+    description: 'Send an explicitly requested email or test message from Kira’s own AgentMail mailbox to its verified owner. '
+      + 'This uses the mailbox credential already stored by Phoenix, not Gmail or a separately connected sending service. '
+      + 'Only a confirmed provider receipt means sent. Pending confirmation means wait for recovery, not create another send. '
+      + 'Use phoenix_mail_identity first when verification or readiness is uncertain. For future mail use phoenix_task_create.',
+    parameters: {
+      subject: { type: 'string', required: true, description: 'Email subject, at most 1024 characters.' },
+      text: { type: 'string', required: true, description: 'Exact requested email body, at most 64000 characters.' },
+    },
+    output: { schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
+    async execute(args, execution) {
+      const service = resolve()
+      if (service === undefined) throw new Error('Kira mailbox runtime is unavailable in this process')
+      if (execution.agent === undefined) throw new Error('mail sending requires the originating chat agent')
+      const receipt = await service.sendToOwner(args.subject, args.text,
+        `phoenix-chat-mail-${execution.agent.id}-${execution.callId}`)
+      return { state: 'sent', ...receipt }
+    },
+    presentCall(args) { return { card: 'generic', title: `Correo de Kira: ${args.subject}`, kind: 'execute' } },
   })
 }

@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-02-phoenix-local-mail-assistant.md
-2026-10-02-phoenix-local-mail-assistant.md: 84a242fe8d7f67ffa12959ef086dc77c20e41f67
-2026-10-02-phoenix-local-mail-assistant.zh.md: ac757e6ada0005aead4dfc83ebeb2f7b6562425e
+2026-10-02-phoenix-local-mail-assistant.md: 2e81502dc41212201cc1cb75f1064983727f980e
+2026-10-02-phoenix-local-mail-assistant.zh.md: 11b2b5686527dec2cba92ae71b43f9e259715c3a

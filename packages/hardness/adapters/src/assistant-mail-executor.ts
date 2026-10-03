@@ -9,6 +9,7 @@ import type { MailAccount, MailJob } from './assistant-mail-types.ts'
 import type { MailWorkResult } from './assistant-mail-receiver.ts'
 import type { MailJournal } from './assistant-mail-journal.ts'
 import { mailRecord, mailString } from './assistant-mail-store.ts'
+import { ProactivityDeferredError } from './proactivity-engine.ts'
 import { acquireExecutionAgent, type ProactivityRuntimeConfig } from './proactivity-runtime.ts'
 
 /** Validate work completion at the model tool boundary.
@@ -79,7 +80,8 @@ export function createMailExecutor(ctx: Context,
   const execute = async (job: MailJob): Promise<MailWorkResult> => {
     const agents = ctx.get('agents')
     const persistence = ctx.get('sessionPersistence')
-    if (agents === undefined || persistence === undefined || job.sessionId === undefined) throw new Error('mail missions require agent and session persistence services')
+    if (agents === undefined || persistence === undefined) throw new ProactivityDeferredError('mail execution services are not ready')
+    if (job.sessionId === undefined) throw new Error('mail mission has no persisted session identity')
     const sessionId = job.sessionId
     let proposal: MailWorkResult | undefined
     const setup = async (agentCtx: Context): Promise<void> => {

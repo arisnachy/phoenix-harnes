@@ -1,0 +1,78 @@
+[
+  {
+    "type": "tool/call",
+    "data": {
+      "turn": 1,
+      "step": 1,
+      "callId": "<identity>",
+      "name": "phoenix_mail_identity",
+      "arguments": "{\"action\":\"status\"}"
+    }
+  },
+  {
+    "type": "tool/result",
+    "data": {
+      "turn": 1,
+      "step": 1,
+      "message": {
+        "source": {
+          "kind": "tool",
+          "callId": "<identity>"
+        },
+        "content": [
+          {
+            "type": "tool-result",
+            "toolCallId": "<identity>",
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"kind\":\"kira_mail_identity\",\"available\":true,\"state\":\"ready\",\"address\":\"kira-keyless@agentmail.to\",\"connection\":\"connected\",\"owner_email\":\"owner@example.com\",\"needs_verification\":false,\"guidance\":\"Use phoenix_mail_send to send an explicitly requested message to the verified owner. Use action=refresh to reconcile incoming tasks. Tell the user Kira's exact mailbox address. This is Kira's own AgentMail inbox, not Gmail.\"}"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "role": "user",
+        "id": "<identity>"
+      }
+    }
+  },
+  {
+    "type": "tool/call",
+    "data": {
+      "turn": 1,
+      "step": 2,
+      "callId": "<identity>",
+      "name": "phoenix_mail_send",
+      "arguments": "{\"subject\":\"Prueba del buzón propio\",\"text\":\"Kira responde desde su correo propio.\"}"
+    }
+  },
+  {
+    "type": "tool/result",
+    "data": {
+      "turn": 1,
+      "step": 2,
+      "message": {
+        "source": {
+          "kind": "tool",
+          "callId": "<identity>"
+        },
+        "content": [
+          {
+            "type": "tool-result",
+            "toolCallId": "<identity>",
+            "content": [
+              {
+                "type": "text",
+                "text": "{\"state\":\"sent\",\"messageId\":\"owner-send-1\",\"threadId\":\"owner-thread-1\",\"from\":\"kira-keyless@agentmail.to\",\"to\":\"owner@example.com\"}"
+              }
+            ],
+            "isError": false
+          }
+        ],
+        "role": "user",
+        "id": "<identity>"
+      }
+    }
+  }
+]

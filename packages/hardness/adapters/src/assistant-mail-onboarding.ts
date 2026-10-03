@@ -111,6 +111,15 @@ export class MailOnboarding {
     }
     return this.status()
   }
+  /** Bind the first execution workspace without replacing owner-selected state.
+   * @param sessionId Automatically nominated persisted session.
+   * @returns Account retaining current contacts and any explicit workspace selection.
+   */
+  async bindSessionIfUnset(sessionId: SessionId): Promise<MailAccount> {
+    const session = SessionId(mailString(sessionId))
+    await this.file.change(current => current.sessionId === undefined ? { ...current, sessionId: session } : current)
+    return this.status()
+  }
   /** Configure authorized contacts and the persisted workspace session for background work.
    * @param contacts Owner-authorized senders.
    * @param sessionId Persisted original session identity.

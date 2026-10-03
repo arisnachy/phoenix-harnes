@@ -18,6 +18,12 @@ export const ASSISTANT_MAIL_PROTOCOL = [
     + 'that only the one-time owner verification remains in Settings. Do not create a second mailbox.',
   '- If signup is ambiguous, never repeat signup automatically. Direct the user to the existing-account '
     + 'recovery flow in Settings.',
+  '- For an explicitly requested test or immediate email to the owner, call phoenix_mail_send with subject and text. '
+    + 'The stored AgentMail credential is already the sending connection; no separate service, Gmail login or new API key is needed. '
+    + 'Report sent only when the tool returns state=sent and a provider messageId. If confirmation is pending, do not issue another send.',
+  '- For incoming mail, use phoenix_mail_identity action "refresh" to reconcile now. The resident host also checks automatically. '
+    + 'If verification is pending, ask only for the six-digit owner code and call action "verify" with code, then refresh. '
+    + 'Do not claim the mailbox is active merely because an address exists, and do not treat an unverified sender as the owner.',
   '- Settings is the management and recovery surface, not the primary conversational setup path. A normal '
     + 'request like "Kira, configura tu correo y dámelo" should be handled by the tool directly.',
   '- If Phoenix cannot resolve an owner email automatically, ask the user for only the email address that '

@@ -16,7 +16,7 @@ import { MailOutbox } from './assistant-mail-outbox.ts'
 import { MailReceiver } from './assistant-mail-receiver.ts'
 import { createMailExecutor } from './assistant-mail-executor.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
-import type { MailAccount, MailOutgoingOwnership, MailOutgoingMessage } from './assistant-mail-types.ts'
+import type { MailAccount, MailDelivery, MailOutgoingOwnership, MailOutgoingMessage } from './assistant-mail-types.ts'
 import type { ProactivityAttentionItem, ProactivityRuntimeConfig } from './proactivity-runtime.ts'
 
 /** Local mail runtime deployment settings. */
@@ -37,6 +37,7 @@ export interface AssistantMailIdentity {
   readonly state: MailAccount['state']
   readonly inboxId?: string
   readonly connection: string
+  readonly ownerEmail?: string
 }
 
 /** Host service used by Kira to inspect or create her own mailbox without touching Gmail setup. */
@@ -47,16 +48,40 @@ export interface AssistantMailControl {
    * @param ownerEmail Optional explicit owner email when no connected account identity is available.
    */
   ensure(ownerEmail?: string): Promise<AssistantMailIdentity>
+  /** Activate the existing mailbox using the owner's one-time verification code.
+   * @param code Six-digit code received by the owner.
+   * @returns Verified mailbox identity.
+   */
+  verify(code: string): Promise<AssistantMailIdentity>
+  /** Request immediate incoming reconciliation without waiting for mail missions.
+   * @returns Current mailbox identity and connection status.
+   */
+  refresh(): Promise<AssistantMailIdentity>
+  /** Send an explicitly requested message only to the verified mailbox owner.
+   * @param subject Message subject.
+   * @param text Exact message body.
+   * @param idempotencyKey Stable originating chat call identity.
+   * @returns Confirmed provider receipt with actual sender and recipient.
+   */
+  sendToOwner(subject: string, text: string, idempotencyKey: string): Promise<MailDelivery & { from: string; to: string }>
 }
 
 class AssistantMailControlService extends Service implements AssistantMailControl {
   constructor(ctx: Context,
     private readonly read: () => Promise<AssistantMailIdentity>,
-    private readonly create: (ownerEmail?: string) => Promise<AssistantMailIdentity>) {
+    private readonly create: (ownerEmail?: string) => Promise<AssistantMailIdentity>,
+    private readonly activate: AssistantMailControl['verify'],
+    private readonly reconcile: AssistantMailControl['refresh'],
+    private readonly send: AssistantMailControl['sendToOwner']) {
     super(ctx, 'assistantMail')
   }
   status(): Promise<AssistantMailIdentity> { return this.read() }
   ensure(ownerEmail?: string): Promise<AssistantMailIdentity> { return this.create(ownerEmail) }
+  verify(code: string): Promise<AssistantMailIdentity> { return this.activate(code) }
+  refresh(): Promise<AssistantMailIdentity> { return this.reconcile() }
+  sendToOwner(subject: string, text: string, key: string): Promise<MailDelivery & { from: string; to: string }> {
+    return this.send(subject, text, key)
+  }
 }
 
 /** Mail host projection consumed by normal home attention. */
@@ -140,6 +165,7 @@ export function installAssistantMail(ctx: Context,
   }
   const isDisposed = (): boolean => disposed
   let pumping: Promise<void> | undefined
+  let repumpRequested = false
   const outbox = new MailOutbox(join(config.directory, 'outbox.json'), async (reply) => {
     assertActive()
     const account = await onboarding.status()
@@ -164,6 +190,42 @@ export function installAssistantMail(ctx: Context,
       throw error
     }
   }, ownership => config.authorizeOutgoing(ownership))
+  const ownerOutbox = new MailOutbox(join(config.directory, 'owner-outbox.json'), async () => {
+    throw new Error('owner outbox does not accept incoming replies')
+  }, Date.now, async (message) => {
+    assertActive()
+    const account = await onboarding.status()
+    assertActive()
+    if (account.state !== 'ready' || account.inboxId !== message.inboxId || account.ownerEmail !== message.to) {
+      throw new ProactivityDeferredError('Kira mailbox owner verification is required')
+    }
+    return new AgentMailTransport(resolveKey, message.inboxId, config.timeoutMs, fetch, controller.signal)
+      .send(message.to, message.subject, message.text, message.idempotencyKey)
+  }, async (message) => {
+    const account = await onboarding.status()
+    return account.state === 'ready' && account.ownerEmail === message.to
+  })
+  const sendToOwner: AssistantMailControl['sendToOwner'] = (subject, text, key) => owned(async () => {
+    const account = await onboarding.status()
+    assertActive()
+    if (account.state !== 'ready' || account.inboxId === undefined || account.ownerEmail === undefined) {
+      throw new ProactivityDeferredError('Verify the existing Kira mailbox with the owner code before sending')
+    }
+    if (await resolveKey() === undefined) throw new ProactivityDeferredError('Kira mailbox credential is unavailable')
+    const previous = (await ownerOutbox.list()).find(row => row.reply.idempotencyKey === key)
+    await ownerOutbox.enqueueMessage({ inboxId: account.inboxId, to: account.ownerEmail,
+      taskId: mailString(key), scheduledFor: previous !== undefined && 'scheduledFor' in previous.reply
+        ? previous.reply.scheduledFor : new Date().toISOString(),
+      subject: mailString(subject, 1024), text: mailString(text, 64_000), idempotencyKey: mailString(key) })
+    assertActive()
+    await ownerOutbox.flush()
+    const row = (await ownerOutbox.list()).find(row => row.reply.idempotencyKey === key)
+    if (row?.state === 'ambiguous') throw new Error('mail delivery requires owner review; do not resend with another identity')
+    if (row?.state !== 'sent' || row.delivery === undefined) {
+      throw new ProactivityDeferredError('Email is retained for retry; provider confirmation is pending. Do not claim it was sent or create another send.')
+    }
+    return { ...row.delivery, from: account.inboxId, to: account.ownerEmail }
+  })
   const delivery = async (key: string): Promise<string | undefined> => {
     const row = (await outbox.list()).find(row => row.reply.idempotencyKey === key)
     if (row === undefined) return undefined
@@ -187,6 +249,9 @@ export function installAssistantMail(ctx: Context,
     const account = await onboarding.status()
     if (isDisposed() || account.state !== 'ready' || account.inboxId === undefined) return
     status = 'connecting'
+    const root = ctx.get('agents')?.roots()[0]
+    if (account.sessionId === undefined && root !== undefined) await onboarding.bindSessionIfUnset(root.id)
+    await ownerOutbox.flush()
     if (receiver === undefined || transportInbox !== account.inboxId || socketDispose === undefined) {
       socketDispose?.()
       await receiver?.stop()
@@ -207,12 +272,24 @@ export function installAssistantMail(ctx: Context,
   }
   const pump = (): Promise<void> => {
     if (isDisposed()) return Promise.resolve()
-    if (pumping !== undefined) return pumping
-    pumping = recover().catch((error: unknown) => {
-      status = error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
-      socketDispose?.(); socketDispose = undefined
-      // A failed subscription is recovered by the next polling interval without dropping the job journal.
-    }).finally(() => { pumping = undefined })
+    if (pumping !== undefined) {
+      repumpRequested = true
+      return pumping
+    }
+    pumping = (async () => {
+      do {
+        repumpRequested = false
+        try { await recover() } catch (error) {
+          status = error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
+          socketDispose?.(); socketDispose = undefined
+          // Keep durable work for the queued wake or the next polling interval.
+        }
+      } while (repumpRequested && !isDisposed())
+    })().finally(() => {
+      pumping = undefined
+      // A notification may land between the final loop check and promise settlement.
+      if (repumpRequested && !isDisposed()) void pump()
+    })
     return pumping
   }
   const identity = async (): Promise<AssistantMailIdentity> => {
@@ -221,6 +298,7 @@ export function installAssistantMail(ctx: Context,
       state: account.state,
       ...(account.inboxId === undefined ? {} : { inboxId: account.inboxId }),
       connection: status,
+      ...(account.ownerEmail === undefined ? {} : { ownerEmail: account.ownerEmail }),
     }
   }
   const serviceContext = ctx as unknown as { readonly reflect?: unknown }
@@ -233,11 +311,14 @@ export function installAssistantMail(ctx: Context,
         const account = await onboarding.status()
         const root = ctx.get('agents')?.roots()[0]
         if (account.sessionId === undefined && root !== undefined) {
-          await onboarding.configure(account.contacts, root.id)
+          await onboarding.bindSessionIfUnset(root.id)
         }
         if (account.state === 'ready') void pump()
         return identity()
       },
+      async (code) => { await onboarding.verify(code); void pump(); return identity() },
+      async () => { void pump(); return identity() },
+      sendToOwner,
     )
   }
   let connection: HostConnectionHandle | undefined
@@ -267,7 +348,7 @@ export function installAssistantMail(ctx: Context,
         if (endpoint !== 'status') {
           const account = await onboarding.status()
           const root = ctx.get('agents')?.roots()[0]
-          if (account.sessionId === undefined && root !== undefined) await onboarding.configure(account.contacts, root.id)
+          if (account.sessionId === undefined && root !== undefined) await onboarding.bindSessionIfUnset(root.id)
           if (endpoint === 'refresh') await pump()
           else void pump()
         }
@@ -291,7 +372,11 @@ export function installAssistantMail(ctx: Context,
     }, { authority: 'loopback' })
   }
   syncRpc()
-  const unbind = ctx.on('internal/service', (name) => { if (name === 'connection') syncRpc() })
+  const unbind = ctx.on('internal/service', (name) => {
+    if (name === 'connection') syncRpc()
+    if (name === 'agents' || name === 'sessionPersistence' || name === 'credentials') void pump()
+  })
+  const unbindCreated = ctx.on('agent/created', () => { void pump() })
   const timer = setInterval(() => { void pump() }, config.pollMs)
   void pump()
   let disposing: Promise<void> | undefined
@@ -301,9 +386,10 @@ export function installAssistantMail(ctx: Context,
     controller.abort()
     clearInterval(timer)
     unbind()
+    unbindCreated()
     socketDispose?.()
     // Stop reception before cancellation; both disposal callers share the same cleanup settlement.
-    const outboxStopped = outbox.stop()
+    const outboxStopped = Promise.all([outbox.stop(), ownerOutbox.stop()])
     const receiverStopped = receiver?.stop().catch(() => { /* The pump already owns reporting transport failure. */ })
     disposing = (async () => {
       await executor.stop()
