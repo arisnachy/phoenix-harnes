@@ -108,7 +108,7 @@ export function TeamMessageActions({
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Error') }
     finally { setPending(false) }
   }
-  if (authorKind === 'kira' && placement !== 'assistant-toolbar') return null
+  if (authorKind === 'kira' && originMissionId === undefined && placement !== 'assistant-toolbar') return null
   const rootClass = placement === 'assistant-toolbar'
     ? `${css.reactions} ${css.reactionsToolbar}`
     : css.reactions
