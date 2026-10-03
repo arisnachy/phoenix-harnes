@@ -2779,7 +2779,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
 
 ### `team_chat_react`
 
-Optionally add/remove your Unicode emoji reaction to a real user/Kira/agent message. Any valid Unicode emoji is allowed; you are not restricted to the visible quick-reaction set. React only when the message genuinely warrants it, choose from context, and never use a fixed default or react by routine.
+Add/remove your visible Unicode emoji reaction to a real user/Kira/agent message in the shared transcript. This is the canonical reaction tool. Direct messages, material results, approvals, thanks, jokes, and useful findings should normally receive one natural reaction when appropriate. Any valid Unicode emoji is allowed; never react to your own message, never use a fixed default, and never react by routine.
 
 ```json
 {
@@ -2825,7 +2825,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
 
 ### `team_react`
 
-React once to another Team member's durable message without generating a prose acknowledgement.
+Legacy semantic reaction for another Team member's durable peer message. Prefer team_chat_react for the visible shared transcript; this tool remains for compatibility and its semantic reaction is projected into the same emoji UI.
 
 ```json
 {

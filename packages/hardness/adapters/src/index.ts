@@ -1,4 +1,5 @@
 import { dirname } from 'node:path'
+import { mailAddress } from './assistant-mail-store.ts'
 import { installAssistantMail } from './assistant-mail-runtime.ts'
 import { AttentionStore } from './proactivity-attention-store.ts'
 import { homedir } from 'node:os'
@@ -432,10 +433,22 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         timeoutMs: config.mailTimeoutMs ?? 30_000,
         workTimeoutMs: config.mailWorkTimeoutMs ?? 600_000,
         resolveOwnerEmail: () => connectedGoogleEmail(authorization),
+        authorizeOutgoing: async (ownership) => {
+          const task = await proactivity.engine.get(ownership.taskId)
+          if (task === undefined || (task.status !== 'scheduled' && task.status !== 'running')
+            || task.delivery !== 'email' || task.senderIdentity === 'user') return false
+          if (ownership.idempotencyKey !== `${task.id}:deliver:${ownership.scheduledFor}`
+            || Date.parse(ownership.scheduledFor) < Date.parse(task.nextRunAt)) return false
+          if (task.history.some(row => row.phase === 'deliver' && row.scheduledFor === ownership.scheduledFor && row.status === 'completed')) return false
+          return task.recipient === undefined || mailAddress(task.recipient) === ownership.to
+        },
       }, baseRuntimeConfig)
       const runtimeConfig = {
         ...baseRuntimeConfig,
+        mailReady: (key: string) => mailbox.preflight(key),
         sendMail: async (input: {
+          readonly taskId: string
+          readonly scheduledFor: string
           readonly to: string
           readonly subject: string
           readonly text: string

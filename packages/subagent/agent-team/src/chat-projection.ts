@@ -2,6 +2,7 @@
 import z from 'zod'
 import type { ProjectionDefinition } from '@phoenix-ai/dsh-session-projection'
 import type { TeamChatReaction } from './chat-types.ts'
+import { TeamId } from './types.ts'
 
 declare module '@phoenix-ai/dsh-session-projection/types' {
   interface SessionProjectionMap { teamChatReactions: Record<string, TeamChatReaction[]> }
@@ -20,18 +21,17 @@ const LEGACY_REACTION_EMOJI = {
 } as const
 /** Fold idempotent actor/emoji mutations into the ordinary Session projection. */
 export const teamChatReactionsDefinition = {
-  key: 'teamChatReactions', stateVersion: 1, stateSchema: schema, init: () => ({}),
+  key: 'teamChatReactions', stateVersion: 2, stateSchema: schema, init: () => ({}),
   apply: (state, event) => {
     if (event.type === 'team/reaction' && z.literal(1).safeParse(event.data.version).success) {
       const value = event.data.reaction
       const emoji = LEGACY_REACTION_EMOJI[value.reaction]
-      if (emoji === undefined) return state
       const parsed = chatReactionSchema.safeParse({
         id: `legacy:${value.messageId}:${value.reactorId}`,
         messageId: value.messageId,
         reactorId: value.reactorId,
         reactorName: value.reactorName,
-        reactorKind: String(value.reactorId) === String(event.data.teamId) ? 'kira' : 'agent',
+        reactorKind: TeamId(value.reactorId) === event.data.teamId ? 'kira' : 'agent',
         emoji,
         createdAt: event.time,
       })

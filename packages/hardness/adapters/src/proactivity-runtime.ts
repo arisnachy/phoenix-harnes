@@ -34,11 +34,18 @@ export interface ProactivityRuntimeConfig {
   readonly resolveDefaultMailRecipient?: () => Promise<string | undefined>
   /** Host-owned Kira mailbox sender used for verified email delivery when available. */
   readonly sendMail?: (input: {
+    readonly taskId: string
+    readonly scheduledFor: string
     readonly to: string
     readonly subject: string
     readonly text: string
     readonly idempotencyKey: string
   }) => Promise<void>
+  /** Verify host mail availability and recover a previously persisted occurrence before model work.
+   * @param idempotencyKey Stable scheduled occurrence identity.
+   * @returns Previously confirmed message body, or undefined for a new occurrence.
+   */
+  readonly mailReady?: (idempotencyKey: string) => Promise<string | undefined>
   /**
    * Re-compose a persisted session before a scheduler-owned resume is published.
    * This restores the same preset/tool world the original conversation used.
@@ -341,29 +348,38 @@ export function createProactivityExecutor(
             'scheduled email has no recipient and the connected account email is unavailable',
           )
         }
+        const hostMail = input.phase === 'deliver' && input.task.delivery === 'email' && input.task.senderIdentity !== 'user' && config.sendMail !== undefined
+        if (hostMail) {
+          const previous = await config.mailReady?.(input.idempotencyKey)
+          if (previous !== undefined) return { summary: `email sent to ${resolvedRecipient}: ${previous}`, ...(input.task.condition === undefined ? {} : { terminal: true }) }
+        }
+        let conditionEvidence: string | undefined
         if (input.phase === 'deliver' && input.task.condition !== undefined) {
           const decision = await evaluateConditionWatch(input, parent, subagents, config.privateWorkProvider)
           if (!decision.met) return { summary: `condition not met: ${decision.evidence}` }
-          parent.followup(createUserMessage({
-            content: [{ type: 'text', text: proactivePrompt(input, config, decision.evidence, resolvedRecipient) }],
-            source: {
-              kind: 'plugin',
-              plugin: 'hardness-adapters',
-              form: 'notice',
-              summary: boundContextSummary(`Condition met: ${input.task.title}`),
-            },
-          }))
-          await parent.whenIdle()
-          return {
-            summary: `condition met and notification accepted: ${decision.evidence}`,
-            terminal: true,
+          conditionEvidence = decision.evidence
+          if (input.task.delivery !== 'email') {
+            parent.followup(createUserMessage({
+              content: [{ type: 'text', text: proactivePrompt(input, config, decision.evidence, resolvedRecipient) }],
+              source: {
+                kind: 'plugin',
+                plugin: 'hardness-adapters',
+                form: 'notice',
+                summary: boundContextSummary(`Condition met: ${input.task.title}`),
+              },
+            }))
+            await parent.whenIdle()
+            return {
+              summary: `condition met and notification accepted: ${decision.evidence}`,
+              terminal: true,
+            }
           }
         }
 
         const privateWork = input.phase === 'prepare' || input.task.delivery === 'email' || input.task.delivery === 'work'
         if (!privateWork) {
           parent.followup(createUserMessage({
-            content: [{ type: 'text', text: proactivePrompt(input, config, undefined, resolvedRecipient) }],
+            content: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence, resolvedRecipient) }],
             source: {
               kind: 'plugin',
               plugin: 'hardness-adapters',
@@ -381,7 +397,7 @@ export function createProactivityExecutor(
         const controller = new AbortController()
         const run = await subagents.start(config.privateWorkProvider, {
           label: input.phase === 'prepare' ? `Prepare: ${input.task.title}` : `Scheduled: ${input.task.title}`,
-          prompt: [{ type: 'text', text: proactivePrompt(input, config, undefined, resolvedRecipient) }],
+          prompt: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence, resolvedRecipient) }],
           parent,
           signal: controller.signal,
         })
@@ -395,14 +411,16 @@ export function createProactivityExecutor(
             if (summary.length === 0) throw new Error('scheduled email produced no message body')
             if (resolvedRecipient === undefined) throw new ProactivityDeferredError('scheduled email has no recipient')
             await config.sendMail({
+              taskId: input.task.id,
+              scheduledFor: input.scheduledFor,
               to: resolvedRecipient,
               subject: input.task.title,
               text: summary,
               idempotencyKey: input.idempotencyKey,
             })
-            return { summary: `email sent to ${resolvedRecipient}: ${summary}` }
+            return { summary: `email sent to ${resolvedRecipient}: ${summary}`, ...(conditionEvidence === undefined ? {} : { terminal: true }) }
           }
-          return { summary }
+          return { summary, ...(conditionEvidence === undefined ? {} : { terminal: true }) }
         } finally {
           await run.dispose()
         }

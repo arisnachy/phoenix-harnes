@@ -9,7 +9,8 @@ import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
  * @param timeoutMs Request deadline.
  * @param fetcher HTTP transport.
  * @param body Optional JSON body.
- * @param idempotencyKey Immutable reply identity.
+ * @param idempotencyKey Immutable outgoing identity.
+ * @param signal Optional owner cancellation, combined with the request deadline.
  * @returns Parsed provider JSON.
  */
 export async function agentMailRequest(path: string,
@@ -17,12 +18,13 @@ export async function agentMailRequest(path: string,
   timeoutMs: number,
   fetcher: typeof fetch,
   body?: unknown,
-  idempotencyKey?: string): Promise<unknown> {
+  idempotencyKey?: string,
+  signal?: AbortSignal): Promise<unknown> {
   const response = await fetcher(`https://api.agentmail.to/v0${path}`, {
     method: body === undefined ? 'GET' : 'POST',
     headers: { 'Content-Type': 'application/json', ...(key === undefined ? {} : { Authorization: `Bearer ${key}` }), ...(idempotencyKey === undefined ? {} : { 'Idempotency-Key': idempotencyKey }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
   })
   if (!response.ok) throw new Error(response.status === 429 ? 'mail quota reached; no paid upgrade will be requested' : `mail provider request failed (${response.status})`)
   const text = await response.text()
@@ -36,11 +38,12 @@ export class AgentMailTransport implements AssistantMailTransport {
   constructor(private readonly key: () => Promise<string | undefined>,
     private readonly inboxId: string,
     private readonly timeoutMs: number,
-    private readonly fetcher: typeof fetch = fetch) {}
+    private readonly fetcher: typeof fetch = fetch,
+    private readonly signal?: AbortSignal) {}
   private async request(path: string, body?: unknown, idempotencyKey?: string): Promise<unknown> {
     const key = await this.key()
     if (key === undefined) throw new Error('mail credential is unavailable')
-    return agentMailRequest(path, key, this.timeoutMs, this.fetcher, body, idempotencyKey)
+    return agentMailRequest(path, key, this.timeoutMs, this.fetcher, body, idempotencyKey, this.signal)
   }
   private messagesPath(): string { return `/inboxes/${encodeURIComponent(this.inboxId)}/messages` }
   /** List provider-filtered authenticated candidates.

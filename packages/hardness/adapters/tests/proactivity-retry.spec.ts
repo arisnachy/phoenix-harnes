@@ -70,4 +70,15 @@ describe('proactivity automatic retry', () => {
     })).toBe(0)
     expect((await engine.get('bounded'))?.status).toBe('failed')
   })
+  it('parks expired ambiguous mail for owner review without automatic retries', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-09-13T16:00:00.000Z'))
+    const engine = new ProactivityEngine(new MemoryProactivityStore(), { execute: async () => { throw new Error('mail delivery requires manual review: provider confirmation missing beyond its retry window') } }, { id: () => 'parked' })
+    await engine.create({ title: 'Ambiguous mail', instruction: 'Send.', runAt: '2026-09-13T15:00:00.000Z', createdBy: 'user' })
+    await engine.runDue(new Date())
+    vi.setSystemTime(new Date('2026-09-15T16:00:00.000Z'))
+    expect(await retryFailedProactivityTasks(engine)).toBe(0)
+    expect((await engine.get('parked'))?.status).toBe('failed')
+  })
+
 })

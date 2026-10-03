@@ -16,9 +16,11 @@ Capability index 不会执行 tools、加载 skill 正文或授予权限；每�
 
 收件由本地 host 持有，不由浏览器持有。关闭聊天后 host 继续运行；关闭 PC 后停止执行。启动时轮询补收邮件并恢复持久任务。出站 WebSocket 通知降低延迟，断线后重新连接。单封邮件读取失败不会阻塞其他任务；后续轮询会重试。Windows 桌面安装可选择创建或删除仅由 Phoenix 持有的 **PHOENIX Assistant** 登录快捷方式，从持久安装目录隐藏启动后台进程，不打开浏览器。
 
-本地配置：`mailDirectory` 默认为 task ledger 旁的 `phoenix-mail`；`mailCredentialRef` 默认为 `PHOENIX_AGENTMAIL_API_KEY`；`mailPollMs`、`mailTimeoutMs`、`mailWorkTimeoutMs` 默认分别为 60,000、30,000、600,000 毫秒。账户、任务和 outbox 使用串行原子私有文件写入。已有账户验证在 24 小时或十次尝试后失效。注册结果不确定时不会自动重复注册。回复重试保持相同正文与幂等键；超过服务商 24 小时幂等窗口仍未确认的发送会等待所有者核查，避免重复邮件。达到免费额度时停止，不升级付费。模型仍遵守原有费用与限制。
+本地配置：`mailDirectory` 默认为 task ledger 旁的 `phoenix-mail`；`mailCredentialRef` 默认为 `PHOENIX_AGENTMAIL_API_KEY`；`mailPollMs`、`mailTimeoutMs`、`mailWorkTimeoutMs` 默认分别为 60,000、30,000、600,000 毫秒。账户、任务和 outbox 使用串行原子私有文件写入。已有账户验证在 24 小时或十次尝试后失效。注册结果不确定时不会自动重复注册。回复和定时邮件重试保持相同的持久化正文与幂等键；超过服务商 24 小时幂等窗口仍未确认的发送会等待所有者核查，避免重复邮件。达到免费额度时停止，不升级付费。模型仍遵守原有费用与限制。
 
 主页提示的处理回执保存在 task ledger 旁。打开或关闭当前提示后，同一版本在刷新后仍被隐藏；新的实质版本仍可出现。先过滤回执，再限制 endpoint 最多返回八行。较新成功运行会取代旧错误。邮件结果与具体阻塞原因加入现有主页，不增加新仪表盘。
+
+驻留 host 在调用模型前检查邮箱是否可用，并复用已持久化的邮件内容，不重新生成正文。每封出站邮件保留任务与执行周期标识。每次重试重新检查持久任务状态和收件人授权；暂停、取消、完成或缺失的任务不能发送待处理邮件，已有尝试证据仍予保留。条件邮件仅在服务商确认发送后完成。超过服务商 24 小时幂等窗口仍未确认的邮件需要所有者核查，不会自动重试任务。Host 销毁会取消服务商请求、等待已有发送结束并拒绝新发送。用户选择的发件身份继续使用受治理的连接器。
 
 ## 持久主动任务
 
@@ -107,6 +109,7 @@ protocol section 和 capability metadata 会增加模型 token；单纯索引源
 #### KV Cache effect
 
 只要源 schema、extension metadata 与验证状态保持不变，投影 catalog 就保持良好的 KV cache 复用特性。
+
 
 ## Known Limitations and Deferred Work
 

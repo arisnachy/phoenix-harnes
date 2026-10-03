@@ -44,4 +44,27 @@ describe('durable reply outbox', () => {
       expect((await outbox.list())[0]?.state).toBe('ambiguous')
     } finally { await rm(directory, { recursive: true, force: true }) }
   })
+  it('recovers new messages from immutable payloads, preserves reply routing, and parks at the exact expiry', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-outgoing-'))
+    try {
+      const path = join(directory, 'outbox.json')
+      const message = { taskId: 'mail-task', scheduledFor: '2026-09-28T02:53:29.000Z', inboxId: reply.inboxId, to: reply.to, subject: 'Report', text: 'Saved body', idempotencyKey: 'new-message' }
+      let now = 0
+      const seen: typeof message[] = []
+      const send = async (request: typeof message) => { seen.push(request); throw new Error('lost confirmation') }
+      const first = new MailOutbox(path, async () => { throw new Error('not a reply') }, () => now, send)
+      await first.enqueueMessage(message)
+      await first.flush()
+      const restarted = new MailOutbox(path, async () => { throw new Error('not a reply') }, () => now, send)
+      await expect(restarted.enqueueMessage({ ...message, text: 'Regenerated' })).rejects.toThrow('different content')
+      now = 86_399_999
+      await restarted.flush()
+      expect(seen).toEqual([message, message])
+      now = 86_400_000
+      await restarted.flush()
+      expect(seen).toHaveLength(2)
+      expect((await restarted.list())[0]?.state).toBe('ambiguous')
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+
 })

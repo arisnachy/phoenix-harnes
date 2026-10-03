@@ -2786,7 +2786,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 
 ### `team_chat_react`
 
-可选择在真实的用户/Kira/agent 消息上添加或移除你的 Unicode emoji 反应。允许使用任何有效的 Unicode emoji，不受界面可见快捷反应集合限制。仅在消息确实值得反应时使用，并根据上下文选择；绝不要使用固定默认值，也不要例行反应。
+在共享对话记录中，为真实的用户/Kira/agent 消息添加或移除可见的 Unicode emoji 反应。这是规范的反应工具。直接消息、实质结果、批准、感谢、玩笑和有用发现，在适当时通常应收到一个自然反应。允许使用任何有效的 Unicode emoji；绝不要对自己的消息反应，绝不要使用固定默认值，也不要例行反应。
 
 ```json
 {
@@ -2832,7 +2832,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
 
 ### `team_react`
 
-对另一名 Team member 的持久消息做一次轻量 reaction，而不生成额外的文字确认。
+对另一名 Team member 的持久对等消息使用旧版语义反应。共享对话记录中的可见反应优先使用 team_chat_react；本工具保留兼容性，其语义反应投影到相同的 emoji 界面。
 
 ```json
 {

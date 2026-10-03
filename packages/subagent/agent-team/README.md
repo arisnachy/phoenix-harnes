@@ -6,7 +6,7 @@ Implicit-root Agent Teams domain. `ctx.agentTeams` owns a flat Lead/teammate ros
 
 ## Main chat
 
-The service publishes actual direct-child text in the root transcript, excluding inherited history, replacement output, reasoning and tool blocks. `teamChatParticipants` retains mission-owned names, portraits and operational states after completion. Capture and Unicode reaction set/remove mutations never wake a model.
+The service publishes actual direct-child text in the root transcript, excluding inherited history, replacement output, reasoning and tool blocks. `teamChatParticipants` retains mission-owned names, portraits and operational states after completion. Capture and Unicode reaction set/remove mutations never wake a model. Reaction projection version 2 replays historical semantic Team reactions into the canonical emoji stream when restoring version 1 checkpoints, preserving the Lead or teammate reactor identity.
 
 The generated `chatMessages`, `chatReact` and `chatReply` remotes use exact root and message identities. Replies address existing continuable direct children, preserve quoted context, publish one human row and keep durable per-target admission receipts. `requestId` is retained across retries; `queued` distinguishes pending deliveries. Root recovery resumes pending admission and supervisory context. Model-facing reads share one configured `maxMessageBytes` budget. See the [conversation contracts](../../../docs/subsystems/agent-team.md#main-conversation) and [ownership decision](../../../.agents/notes/implemented/feature/2026-10-01-kira-main-chat.md).
 ## Config

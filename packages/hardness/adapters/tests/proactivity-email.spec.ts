@@ -202,6 +202,8 @@ describe('scheduled email execution', () => {
     })
     expect(sendMail).toHaveBeenCalledTimes(1)
     expect(sendMail).toHaveBeenCalledWith({
+      taskId: 'mail-task',
+      scheduledFor: '2026-09-28T02:53:29.000Z',
       to: 'owner@example.com',
       subject: 'Scheduled self email',
       text: 'Informe terminado y adjunto disponible en Drive.',
@@ -277,4 +279,37 @@ describe('scheduled email execution', () => {
     expect(prompt).toContain('Recipient: saved@example.com')
     expect(prompt).not.toContain('Recipient: other@example.com')
   })
+  it('sends a verified conditional email before marking its watch terminal', async () => {
+    const sendMail = vi.fn(async () => {})
+    const followup = vi.fn()
+    const parent = { id: 'agent-a', followup, whenIdle: async () => {} }
+    const start = vi.fn(async () => ({ result: Promise.resolve({ stopReason: 'completed', structured: { met: true, evidence: 'Confirmed' }, output: [{ type: 'text', text: 'Verified result' }] }), dispose: async () => {} }))
+    const executor = createProactivityExecutor({ get: () => parent } as never, { getProvider: () => ({ capabilities: { outputSchema: true, toolFilter: true } }), start } as never, { pollMs: 1000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000, sendMail })
+    await expect(executor.execute(execution({ condition: 'Ready', recipient: 'owner@example.com' }))).resolves.toMatchObject({ terminal: true })
+    expect(sendMail).toHaveBeenCalledOnce()
+    expect(start).toHaveBeenCalledTimes(2)
+    expect(followup).not.toHaveBeenCalled()
+  })
+
+  it('defers unverified host mail before any model run while preserving user connector delivery', async () => {
+    const start = vi.fn(async () => ({ result: Promise.resolve({ stopReason: 'completed', output: [{ type: 'text', text: 'Sent by connector' }] }), dispose: async () => {} }))
+    const mailReady = vi.fn(async () => { throw new ProactivityDeferredError('mail not verified') })
+    const executor = createProactivityExecutor({ get: () => ({ id: 'agent-a' }) } as never, { getProvider: () => ({ capabilities: {} }), start } as never, { pollMs: 1000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000, sendMail: async () => {}, mailReady })
+    await expect(executor.execute(execution({ recipient: 'owner@example.com' }))).rejects.toBeInstanceOf(ProactivityDeferredError)
+    expect(start).not.toHaveBeenCalled()
+    await executor.execute(execution({ recipient: 'owner@example.com', senderIdentity: 'user' }))
+    expect(start).toHaveBeenCalledOnce()
+    expect(mailReady).toHaveBeenCalledOnce()
+  })
+
+  it('recovers confirmed email without running the model or condition again', async () => {
+    const start = vi.fn()
+    const sendMail = vi.fn()
+    const mailReady = vi.fn(async () => 'Persisted body')
+    const executor = createProactivityExecutor({ get: () => ({ id: 'agent-a' }) } as never, { getProvider: () => ({ capabilities: {} }), start } as never, { pollMs: 1000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000, sendMail, mailReady })
+    await expect(executor.execute(execution({ condition: 'Ready', recipient: 'owner@example.com' }))).resolves.toEqual({ summary: 'email sent to owner@example.com: Persisted body', terminal: true })
+    expect(start).not.toHaveBeenCalled()
+    expect(sendMail).not.toHaveBeenCalled()
+  })
+
 })

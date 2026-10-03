@@ -47,6 +47,19 @@ export interface MailReply {
   readonly text: string
   readonly idempotencyKey: string
 }
+/** Persisted scheduled occurrence and recipient whose authorization is rechecked before each attempt. */
+export interface MailOutgoingOwnership {
+  readonly taskId: string
+  readonly scheduledFor: string
+  readonly to: string
+  readonly idempotencyKey: string
+}
+/** Immutable new message retained before provider IO. */
+export interface MailOutgoingMessage extends MailOutgoingOwnership {
+  readonly inboxId: string
+  readonly subject: string
+  readonly text: string
+}
 /** Provider confirmation, distinct from mail merely queued locally. */
 export interface MailDelivery { readonly messageId: MailMessageId; readonly threadId: MailThreadId }
 /** Provider IO, independent of agent/model execution. */

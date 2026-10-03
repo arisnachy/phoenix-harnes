@@ -20,7 +20,7 @@
       judge: { provider: anthropic, model: claude-sonnet-4 }
 ```
 
-`freshProvider` 与 `forkProvider` 选择已注册的 continuable-subagent transport。`modelProfiles` 是可选 LLM 路由 allowlist；配置后，`spawn_teammate.model_profile` 选择一条路由，省略时继承 Lead 路由。provider id 与 model id 是普通 harness 配置路由，不是 OpenAI 专属角色名称。
+`freshProvider` 与 `forkProvider` 选择已注册的 continuable-subagent transport。在 OpenAI Codex 下，`modelProfiles` 提供配置的 worker 路由；省略 `spawn_teammate.model_profile` 时，`defaultModelProfile` 选择受限的执行路由。在 OpenAI Codex 以外，即使请求 profile，每个 teammate 也继承当前选择的准确 provider 和 model。Kira 保留所选模型用于监督和最终验证；worker 的模型路由不会改变其可见名称或 persona。
 
 Team 策略只有在 JUDGE 报告的 `modelProvider` 或 `model` 与 Lead 不同时，才称其具备认知独立性。同一路由上的 fresh child 仅具备运行独立性，仍有相关性，必须明确报告。
 
