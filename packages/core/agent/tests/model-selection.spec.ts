@@ -82,7 +82,7 @@ describe('installModelSelection()', () => {
     expect(isConversationalFastPathText('https://example.com')).toBe(false)
   })
 
-  it('keeps Phoenix Auto specialist delegation inside the real Kira Team path', async () => {
+  it('keeps every provider specialist delegation inside the real Kira Team path', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -105,12 +105,11 @@ describe('installModelSelection()', () => {
 
     selection.current = { provider: 'openai-codex', model: 'gpt-6-luna' }
     const explicitAssembly = await ctx.systemPrompt.assemble()
-    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual([
-      'read',
-      'spawn_teammate',
-      'subagent',
-      'subagent_fork',
-    ])
+    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
+
+    selection.current = { provider: 'deepseek', model: 'deepseek-v4-pro' }
+    const nonCodexAssembly = await ctx.systemPrompt.assemble()
+    expect(nonCodexAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
 
     dispose()
     await ctx.fiber.dispose()
