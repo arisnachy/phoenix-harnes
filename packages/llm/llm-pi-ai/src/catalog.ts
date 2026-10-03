@@ -147,6 +147,10 @@ const CHAT_TEMPLATE_VAR_GATE: Record<PiAiChatTemplateVar, true> = {
 export const CHAT_TEMPLATE_VARS = Object.keys(CHAT_TEMPLATE_VAR_GATE) as readonly PiAiChatTemplateVar[]
 
 const DEEPSEEK_CANONICAL_FLASH_ID = 'deepseek-flash'
+const PHOENIX_CODEX_VISION_IDS = new Set([
+  'gpt-6.1-sol',
+  'gpt-6-luna',
+])
 const DEEPSEEK_FLASH_VISION_IDS = new Set([
   DEEPSEEK_CANONICAL_FLASH_ID,
   'deepseek-v4-flash',
@@ -155,13 +159,32 @@ const DEEPSEEK_FLASH_VISION_IDS = new Set([
   'deepseek-v4.1-flash',
 ])
 
-function documentedVendorInput(provider: string, modelId: string): Model<Api>['input'] | undefined {
+/**
+ * Return vendor-documented input modalities Phoenix must preserve even when a
+ * transient upstream catalog under-claims them.
+ *
+ * GPT-6.1 Sol and GPT-6 Luna are the two concrete routes behind Phoenix Auto;
+ * both accept image input. Treating either as text-only makes the synthetic
+ * router reject images before the request ever reaches Codex.
+ *
+ * @param provider - provider route id.
+ * @param modelId - provider-owned model id.
+ * @returns documented modalities, or undefined when Phoenix has no override.
+ */
+export function documentedVendorInput(provider: string, modelId: string): Model<Api>['input'] | undefined {
+  if (provider === 'openai-codex' && PHOENIX_CODEX_VISION_IDS.has(modelId)) return ['text', 'image']
   return provider === 'deepseek' && DEEPSEEK_FLASH_VISION_IDS.has(modelId)
     ? ['text', 'image']
     : undefined
 }
 
 function normalizeVendorCatalog(provider: string, models: Model<Api>[]): Model<Api>[] {
+  if (provider === 'openai-codex') {
+    return models.map(model => ({
+      ...model,
+      ...(PHOENIX_CODEX_VISION_IDS.has(model.id) ? { input: ['text', 'image'] as Model<Api>['input'] } : {}),
+    }))
+  }
   if (provider !== 'deepseek') return models
   const normalized = models.map(model => ({
     ...model,
