@@ -108,6 +108,18 @@ describe('Team execution evidence', () => {
       .toEqual({ requirement: 'none', tools: [], satisfied: true })
   })
 
+  it('does not carry an old operational requirement across a newer model-only follow-up', () => {
+    const events = [
+      userEvent(0, 'Envía un correo de prueba por Gmail.'),
+      userEvent(1, 'Ahora redacta una explicación breve para el usuario.'),
+    ]
+    expect(teamExecutionProof(events)).toEqual({
+      requirement: 'none',
+      tools: [],
+      satisfied: true,
+    })
+  })
+
   it('does not let later evidence retroactively legitimize an earlier theatrical reply', () => {
     const events = [
       userEvent(0, 'Envía un correo de prueba por Gmail.'),
