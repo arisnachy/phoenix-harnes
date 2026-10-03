@@ -23,7 +23,7 @@ import type {
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
-  type VoiceAssistantGender,
+  VoiceAssistantGender,
 } from './types.ts'
 import { CodexRealtimeBridge, type CodexRealtimeInitialItem } from './codex-realtime.ts'
 
