@@ -210,14 +210,23 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('garbage-collects obsolete isolated runtimes without deleting the active runtime', () => {
-    expect(source).toContain('function runtimeDirectoriesForCurrentCheckout()')
+    expect(source).toContain('function runtimeDirectoriesForCleanup()')
     expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [])')
     expect(source).toContain('const active = readActiveRuntimeRecord()')
     expect(source).toContain('keep.add(runtimePathKey(active.path))')
     expect(source).toContain("spawnSync('git', ['worktree', 'remove', '--force', path]")
     expect(source).toContain("spawnSync('git', ['worktree', 'prune', '--expire', 'now']")
     expect(source).toContain('removed obsolete isolated runtime')
-    expect(source).toContain('runtime cleanup removed')
+    expect(source).toContain('storage cleanup removed')
+  })
+
+  it('reclaims updater stages after their prepared marker is consumed while protecting live preparations', () => {
+    expect(source).toContain('function stageDirectoriesForCleanup()')
+    expect(source).toContain('function stageProtectedByOwningCheckout(path)')
+    expect(source).toContain("const marker = join(common, PREPARED_FILE)")
+    expect(source).toContain('if (stageProtectedByOwningCheckout(candidate)) continue')
+    expect(source).toContain('key !== currentStage && managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS')
+    expect(source).toContain('removed stale updater staging worktree')
   })
 
   it('runs runtime garbage collection at startup and after safe runtime handoff paths', () => {
