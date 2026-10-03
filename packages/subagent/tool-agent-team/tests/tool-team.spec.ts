@@ -199,6 +199,36 @@ describe('dsh-tool-team', () => {
     await waitNoAgent(ctx, childId)
   })
 
+  it('auto-selects distinct human specialist identities when the Lead omits a name', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang'])
+    const security = await execute(ctx, lead, 'spawn_teammate', {
+      description: 'security audit authentication risk',
+      prompt: 'inspect the authentication boundary and report concrete exposure',
+    })
+    expect(security.isError).toBe(false)
+    const securityValue = JSON.parse(text(security)) as { member: { id: string; name: string } }
+    expect(['cobalto', 'eclipse', 'zenith']).toContain(securityValue.member.name)
+    const securityChild = await waitRunning(ctx, SessionId(securityValue.member.id))
+    const securityPrompt = renderPrompt(await assembly(ctx, securityChild))
+    expect(securityPrompt).toContain(`Your Team name is ${securityValue.member.name}`)
+    expect(securityPrompt).not.toContain('Natural, concise, collegial')
+
+    const design = await execute(ctx, lead, 'spawn_teammate', {
+      description: 'responsive UX visual design and animation',
+      prompt: 'review the interface and return specific visual improvements',
+    })
+    expect(design.isError).toBe(false)
+    const designValue = JSON.parse(text(design)) as { member: { id: string; name: string } }
+    expect(['vega', 'aurora', 'prisma']).toContain(designValue.member.name)
+    expect(designValue.member.name).not.toBe(securityValue.member.name)
+    await waitRunning(ctx, SessionId(designValue.member.id))
+
+    await execute(ctx, lead, 'interrupt_agent', { target: securityValue.member.name })
+    await execute(ctx, lead, 'interrupt_agent', { target: designValue.member.name })
+    await waitNoAgent(ctx, SessionId(securityValue.member.id))
+    await waitNoAgent(ctx, SessionId(designValue.member.id))
+  })
+
   it('does not let an explicit model profile override a non-Codex selected route', async () => {
     const { ctx, lead } = await setup(['hang'], false, {
       defaultModelProfile: 'judge',
