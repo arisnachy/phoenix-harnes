@@ -14,7 +14,7 @@ import { MailJournal } from './assistant-mail-journal.ts'
 import { MailOutbox } from './assistant-mail-outbox.ts'
 import { MailReceiver } from './assistant-mail-receiver.ts'
 import { createMailExecutor } from './assistant-mail-executor.ts'
-import { mailRecord, mailString } from './assistant-mail-store.ts'
+import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 import type { ProactivityAttentionItem, ProactivityRuntimeConfig } from './proactivity-runtime.ts'
 
 /** Local mail runtime deployment settings. */
@@ -22,13 +22,19 @@ export interface AssistantMailConfig { readonly directory: string
   readonly credentialRef: string
   readonly pollMs: number
   readonly timeoutMs: number
-  readonly workTimeoutMs: number }
+  readonly workTimeoutMs: number
+  /** Resolve the already-connected owner email used for automatic first-run enrollment. */
+  readonly resolveOwnerEmail?: () => Promise<string | undefined> }
 /** Mail host projection consumed by normal home attention. */
 export interface AssistantMailRuntime {
   /** Read material blocked/completed mail outcomes.
    * @returns Browser-safe home feed rows.
    */
   attention(): Promise<ProactivityAttentionItem[]>
+  /** Send a new idempotent message from Kira's verified mailbox.
+   * @param input Authorized recipient, subject, body and stable deduplication key.
+   */
+  send(input: { readonly to: string; readonly subject: string; readonly text: string; readonly idempotencyKey: string }): Promise<void>
   /** Stop socket, timers and owned work, then await cleanup. */
   dispose(): Promise<void>
 }
@@ -53,6 +59,20 @@ export function installAssistantMail(ctx: Context,
     if (credentials === undefined) throw new Error('mail setup requires the credential service')
     await credentials.set(ref, key)
   } })
+  let enrolling: Promise<void> | undefined
+  const ensureEnrollment = (): Promise<void> => {
+    if (enrolling !== undefined) return enrolling
+    enrolling = (async () => {
+      const account = await onboarding.status()
+      if (account.state !== 'not-configured') return
+      const owner = await config.resolveOwnerEmail?.()
+      if (owner === undefined || owner.trim().length === 0) return
+      // signup persists signup-ambiguous before provider IO, so a timeout is never
+      // silently retried and cannot rotate/lose the first account key.
+      await onboarding.signup(owner, `kira-${randomUUID().slice(0, 8)}`)
+    })().finally(() => { enrolling = undefined })
+    return enrolling
+  }
   const journal = new MailJournal(join(config.directory, 'jobs.json'))
   const executor = createMailExecutor(ctx, journal, () => onboarding.status(), workConfig, config.workTimeoutMs)
   let receiver: MailReceiver | undefined
@@ -71,6 +91,7 @@ export function installAssistantMail(ctx: Context,
     }
   })
   const recover = async (): Promise<void> => {
+    await ensureEnrollment()
     const account = await onboarding.status()
     if (isDisposed() || account.state !== 'ready' || account.inboxId === undefined) return
     status = 'connecting'
@@ -174,7 +195,21 @@ export function installAssistantMail(ctx: Context,
     return disposing
   }
   ctx.effect(() => dispose, 'assistant-mail: owned local receiver')
-  return { dispose, async attention() {
+  return { dispose,
+    async send(input) {
+      const account = await onboarding.status()
+      if (account.state !== 'ready' || account.inboxId === undefined) throw new Error('Kira mail is not verified yet')
+      const to = mailAddress(input.to)
+      if (![account.ownerEmail, ...account.contacts].includes(to)) throw new Error('mail recipient is not authorized')
+      const transport = new AgentMailTransport(resolveKey, account.inboxId, config.timeoutMs)
+      try {
+        await transport.send(to, mailString(input.subject, 1024), mailString(input.text, 64_000), mailString(input.idempotencyKey))
+      } catch (error) {
+        status = error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
+        throw error
+      }
+    },
+    async attention() {
     const rows: ProactivityAttentionItem[] = []
     for (const job of await journal.list()) {
       if (job.state !== 'replied' && job.state !== 'blocked') continue
