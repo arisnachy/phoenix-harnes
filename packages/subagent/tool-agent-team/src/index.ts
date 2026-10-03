@@ -286,7 +286,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           model_profile: {
             type: 'string' as const,
             enum: Object.keys(config.modelProfiles),
-            description: 'Deployment-configured LLM route. Omit to inherit the Lead route.',
+            description: 'Deployment-configured worker route for OpenAI Codex. Outside OpenAI Codex this is ignored and the exact live selected provider/model is inherited.',
           },
         },
       },
@@ -309,10 +309,10 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const activeModel = requestConfig?.model ?? agent.options.model
         const activeReasoningEffort = requestConfig?.reasoningEffort ?? agent.options.reasoningEffort
         const activeMaxTokens = requestConfig?.maxTokens ?? agent.options.maxTokens
-        const profileName = explicitProfile
-          ?? (activeProvider === 'openai-codex' && defaultProfile?.provider === 'openai-codex'
-            ? configuredDefault
-            : undefined)
+        const profileName = activeProvider === 'openai-codex'
+          ? explicitProfile
+            ?? (defaultProfile?.provider === 'openai-codex' ? configuredDefault : undefined)
+          : undefined
         const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
         const agentOptions: AgentOptions | undefined = profile !== undefined
           ? {
