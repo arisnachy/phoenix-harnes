@@ -7,6 +7,7 @@ import VoiceRuntime, {
   type VoiceImportantEvent,
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
+import { CodexRealtimeBridge } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
   ctx: Context
@@ -143,6 +144,60 @@ describe('Codex realtime compact context', () => {
     expect(phoenixMessagesToCodexRealtimeInitialItems(history).map(item => item.text)).toEqual([
       'mensaje-4', 'mensaje-5', 'mensaje-6', 'mensaje-7', 'mensaje-8', 'mensaje-9',
     ])
+  })
+})
+
+describe('Codex realtime app-server notifications', () => {
+  it('surfaces an async startup error immediately instead of waiting for a missing SDP', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      waitForNotification(
+        method: string,
+        predicate: (params: unknown) => boolean,
+        timeoutMs: number,
+      ): { readonly promise: Promise<unknown>; readonly cancel: () => void }
+      routeMessage(value: unknown): void
+    }
+    const expected = { threadId: 'thread-voice', message: 'realtime backend rejected the call' }
+    const wait = internal.waitForNotification(
+      'thread/realtime/error',
+      params => typeof params === 'object' && params !== null
+        && 'threadId' in params && params.threadId === expected.threadId,
+      1_000,
+    )
+    internal.routeMessage({ method: 'thread/realtime/error', params: expected })
+    await expect(wait.promise).resolves.toEqual(expected)
+    wait.cancel()
+    bridge.close()
+  })
+
+  it('keeps unrelated realtime notifications isolated by thread', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      waitForNotification(
+        method: string,
+        predicate: (params: unknown) => boolean,
+        timeoutMs: number,
+      ): { readonly promise: Promise<unknown>; readonly cancel: () => void }
+      routeMessage(value: unknown): void
+    }
+    const wait = internal.waitForNotification(
+      'thread/realtime/sdp',
+      params => typeof params === 'object' && params !== null
+        && 'threadId' in params && params.threadId === 'thread-target',
+      1_000,
+    )
+    internal.routeMessage({
+      method: 'thread/realtime/sdp',
+      params: { threadId: 'thread-other', sdp: 'wrong' },
+    })
+    internal.routeMessage({
+      method: 'thread/realtime/sdp',
+      params: { threadId: 'thread-target', sdp: 'v=0' },
+    })
+    await expect(wait.promise).resolves.toEqual({ threadId: 'thread-target', sdp: 'v=0' })
+    wait.cancel()
+    bridge.close()
   })
 })
 
