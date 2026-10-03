@@ -110,9 +110,9 @@ export class CodexRealtimeBridge {
     // is now active negotiation and must own the sidecar until it settles.
     this.clearIdleClose()
 
-    const threadId = await this.startVoiceThread(options.model)
-
+    let threadId: string | undefined
     try {
+      threadId = await this.startVoiceThread(options.model)
       let answerSdp: string
       try {
         answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
@@ -128,7 +128,9 @@ export class CodexRealtimeBridge {
       this.sessions.set(options.key, threadId)
       return { threadId, answerSdp }
     } catch (error) {
-      await this.request('thread/realtime/stop', { threadId }).catch(() => {})
+      if (threadId !== undefined) {
+        await this.request('thread/realtime/stop', { threadId }).catch(() => {})
+      }
       throw error
     } finally {
       if (!this.sessions.has(options.key) && this.sessions.size === 0) this.armIdleClose()
