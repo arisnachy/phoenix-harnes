@@ -16,11 +16,11 @@
 - text: {{clock}}
 - button "Copy":
   - img
-- button "Add reaction": 🙂+
+- button "Add reaction"
 - strong: Kira
 - text: Coordination / orchestration
 - paragraph: CORDIS_UI_READY
-- button "Add reaction": 🙂+
+- button "Add reaction"
 - button "Tools" [expanded]
 - button "Context injection System internal":
   - img
@@ -91,7 +91,7 @@
 - strong: Kira
 - text: Coordination / orchestration
 - paragraph: The Cordis Plugin is running.
-- button "Add reaction": 🙂+
+- button "Add reaction"
 - button "Tools" [expanded]
 - button "Context injection cordis-host-runner":
   - img
@@ -111,11 +111,11 @@
 - text: {{clock}}
 - button "Copy":
   - img
-- button "Add reaction": 🙂+
+- button "Add reaction"
 - strong: Kira
 - text: Coordination / orchestration
 - paragraph: CORDIS_UI_DONE
-- button "Add reaction": 🙂+
+- button "Add reaction"
 - button "Tools" [expanded]
 - img
 - text: Stop Cordis Plugin snap-1
