@@ -102,16 +102,6 @@ export function liveActivityTextOf(summary: SessionSummary, maxLength = 72): str
   return authored === undefined ? '' : compactAgentAuthoredText(authored, maxLength)
 }
 
-function visibleLiveActivityTextOf(
-  summary: SessionSummary,
-  actionKey: KiraTeamsKey,
-  t: TranslateNS<typeof NS>,
-): string {
-  const authored = liveActivityTextOf(summary)
-  if (authored.length === 0) return ''
-  return authored.toLocaleLowerCase() === t(actionKey).trim().toLocaleLowerCase() ? '' : authored
-}
-
 function normalizedWorkText(summary: SessionSummary): string {
   const subagentLabel = summary.projectionValues?.subagent?.label ?? ''
   return [
