@@ -55,7 +55,6 @@ it('preserves contact revocation and explicit workspace selection during automat
     const path = join(directory, 'account.json')
     await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'kira@agentmail.to', ownerEmail: 'owner@example.com', contacts: ['revoked@example.com'] }))
     const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {} })
-    expect(account.bindSessionIfUnset).toBeTypeOf('function')
     await Promise.all([
       account.configure([], SessionId('owner-selected')),
       account.bindSessionIfUnset(SessionId('automatic-root')),

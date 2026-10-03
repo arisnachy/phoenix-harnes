@@ -78,7 +78,8 @@ describe('Kira mailbox identity tool', () => {
 })
 
 it('exposes a real owner send and reports only the confirmed provider receipt', async () => {
-  const sendToOwner = vi.fn(control().sendToOwner)
+  const service = control()
+  const sendToOwner = vi.fn(service.sendToOwner.bind(service))
   const tool = createAssistantMailSendTool(() => control({ sendToOwner }))
   const result = await tool.execute({ subject: 'Prueba', text: 'Hola' },
     { agent: { id: 'lead' }, callId: 'call-owner-mail', rootCallId: 'outer-code-call' } as never)
@@ -86,9 +87,10 @@ it('exposes a real owner send and reports only the confirmed provider receipt', 
   expect(result).toMatchObject({ state: 'sent', from: 'kira-real@agentmail.to', to: 'owner@example.com', messageId: 'sent' })
 })
 it('can activate and refresh the existing mailbox without signup', async () => {
-  const verify = vi.fn(control().verify)
-  const refresh = vi.fn(control().refresh)
-  const ensure = vi.fn(control().ensure)
+  const service = control()
+  const verify = vi.fn(service.verify.bind(service))
+  const refresh = vi.fn(service.refresh.bind(service))
+  const ensure = vi.fn(service.ensure.bind(service))
   const tool = createAssistantMailIdentityTool(() => control({ verify, refresh, ensure }))
   await tool.execute({ action: 'verify', code: '123456' }, {} as never)
   await tool.execute({ action: 'refresh' }, {} as never)
@@ -98,7 +100,8 @@ it('can activate and refresh the existing mailbox without signup', async () => {
 })
 
 it('keeps two nested sends distinct while sharing a code-mode root', async () => {
-  const sendToOwner = vi.fn(control().sendToOwner)
+  const service = control()
+  const sendToOwner = vi.fn(service.sendToOwner.bind(service))
   const tool = createAssistantMailSendTool(() => control({ sendToOwner }))
   for (const callId of ['outer:code:1', 'outer:code:2']) {
     await tool.execute({ subject: 'Prueba', text: 'Hola' },

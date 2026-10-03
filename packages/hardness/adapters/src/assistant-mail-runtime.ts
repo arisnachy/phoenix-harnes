@@ -166,6 +166,7 @@ export function installAssistantMail(ctx: Context,
   const isDisposed = (): boolean => disposed
   let pumping: Promise<void> | undefined
   let repumpRequested = false
+  const hasQueuedWake = (): boolean => repumpRequested
   const outbox = new MailOutbox(join(config.directory, 'outbox.json'), async (reply) => {
     assertActive()
     const account = await onboarding.status()
@@ -190,21 +191,20 @@ export function installAssistantMail(ctx: Context,
       throw error
     }
   }, ownership => config.authorizeOutgoing(ownership))
-  const ownerOutbox = new MailOutbox(join(config.directory, 'owner-outbox.json'), async () => {
-    throw new Error('owner outbox does not accept incoming replies')
-  }, Date.now, async (message) => {
-    assertActive()
-    const account = await onboarding.status()
-    assertActive()
-    if (account.state !== 'ready' || account.inboxId !== message.inboxId || account.ownerEmail !== message.to) {
-      throw new ProactivityDeferredError('Kira mailbox owner verification is required')
-    }
-    return new AgentMailTransport(resolveKey, message.inboxId, config.timeoutMs, fetch, controller.signal)
-      .send(message.to, message.subject, message.text, message.idempotencyKey)
-  }, async (message) => {
-    const account = await onboarding.status()
-    return account.state === 'ready' && account.ownerEmail === message.to
-  })
+  const ownerOutbox = new MailOutbox(join(config.directory, 'owner-outbox.json'),
+    () => Promise.reject(new Error('owner outbox does not accept incoming replies')), Date.now, async (message) => {
+      assertActive()
+      const account = await onboarding.status()
+      assertActive()
+      if (account.state !== 'ready' || account.inboxId !== message.inboxId || account.ownerEmail !== message.to) {
+        throw new ProactivityDeferredError('Kira mailbox owner verification is required')
+      }
+      return new AgentMailTransport(resolveKey, message.inboxId, config.timeoutMs, fetch, controller.signal)
+        .send(message.to, message.subject, message.text, message.idempotencyKey)
+    }, async (message) => {
+      const account = await onboarding.status()
+      return account.state === 'ready' && account.ownerEmail === message.to
+    })
   const sendToOwner: AssistantMailControl['sendToOwner'] = (subject, text, key) => owned(async () => {
     const account = await onboarding.status()
     assertActive()
@@ -284,11 +284,11 @@ export function installAssistantMail(ctx: Context,
           socketDispose?.(); socketDispose = undefined
           // Keep durable work for the queued wake or the next polling interval.
         }
-      } while (repumpRequested && !isDisposed())
+      } while (hasQueuedWake() && !isDisposed())
     })().finally(() => {
       pumping = undefined
       // A notification may land between the final loop check and promise settlement.
-      if (repumpRequested && !isDisposed()) void pump()
+      if (hasQueuedWake() && !isDisposed()) void pump()
     })
     return pumping
   }
