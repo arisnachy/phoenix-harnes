@@ -10,7 +10,6 @@ import {
 } from './ModelActivityAvatar.tsx'
 import type {
   KiraTeamMessageChatData,
-  KiraTeamReactionChatData,
 } from '@phoenix-ai/dsh-client-ui-conversation/client'
 import { NS, type KiraTeamsKey } from './locales.ts'
 import css from './TeamChatMessage.module.css'
@@ -70,14 +69,6 @@ export function teamIdentityOf(name: string, id: string): TeamIdentity {
   }
 }
 
-const REACTION_ICON: Readonly<Record<KiraTeamReactionChatData['reaction'], string>> = {
-  ack: '👍',
-  agree: '✓',
-  insight: '💡',
-  blocked: '⚠',
-  done: '✅',
-}
-
 const PURPOSE_LABEL: Readonly<Record<NonNullable<KiraTeamMessageChatData['purpose']>, string>> = {
   assignment: 'Asignación',
   question: 'Pregunta',
@@ -128,23 +119,6 @@ function textOf(content: readonly unknown[]): string {
     const value = block as { type?: unknown; text?: unknown }
     return value.type === 'text' && typeof value.text === 'string' ? [value.text] : []
   }).join('\n')
-}
-
-function ReactionChip({ reaction, identity }: { reaction: KiraTeamReactionChatData; identity: TeamIdentity }) {
-  return (
-    <span className={css.reaction} title={`${identity.name}: ${reaction.reaction}`}>
-      <span className={css.reactionAvatar}>
-        <ModelActivityAvatar
-          kind={identity.kind}
-          activity={undefined}
-          running={false}
-          pending={false}
-          ready
-        />
-      </span>
-      <span aria-hidden="true">{REACTION_ICON[reaction.reaction]}</span>
-    </span>
-  )
 }
 
 /** Render one actual Agent Teams peer message inside Phoenix's existing chat column. */
@@ -217,13 +191,6 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
         <div className={css.bubble}>
           <MarkdownText text={text} />
         </div>
-        {data.reactions.length > 0 && (
-          <div className={css.reactions} aria-label="Reacciones del equipo">
-            {data.reactions.map(item => (
-              <ReactionChip key={`${item.reactorId}:${item.reaction}`} reaction={item} identity={identityFor(item.reactorName, item.reactorId)} />
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )

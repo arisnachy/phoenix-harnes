@@ -11,10 +11,35 @@ declare module '@phoenix-ai/dsh-session-projection/types' {
 export const chatReactionSchema = z.object({ id: z.string(), messageId: z.string(), reactorId: z.string(),
   reactorName: z.string(), reactorKind: z.enum(['user', 'kira', 'agent']), emoji: z.string(), createdAt: z.number() }).strict()
 const schema = z.record(z.string(), z.array(chatReactionSchema))
+const LEGACY_REACTION_EMOJI = {
+  ack: '👍',
+  agree: '🤝',
+  insight: '💡',
+  blocked: '⚠️',
+  done: '✅',
+} as const
 /** Fold idempotent actor/emoji mutations into the ordinary Session projection. */
 export const teamChatReactionsDefinition = {
   key: 'teamChatReactions', stateVersion: 1, stateSchema: schema, init: () => ({}),
   apply: (state, event) => {
+    if (event.type === 'team/reaction' && z.literal(1).safeParse(event.data.version).success) {
+      const value = event.data.reaction
+      const emoji = LEGACY_REACTION_EMOJI[value.reaction]
+      if (emoji === undefined) return state
+      const parsed = chatReactionSchema.safeParse({
+        id: `legacy:${value.messageId}:${value.reactorId}`,
+        messageId: value.messageId,
+        reactorId: value.reactorId,
+        reactorName: value.reactorName,
+        reactorKind: value.reactorId === event.data.teamId ? 'kira' : 'agent',
+        emoji,
+        createdAt: event.time,
+      })
+      if (!parsed.success) return state
+      const prior = state[value.messageId] ?? []
+      const remaining = prior.filter(item => item.reactorId !== value.reactorId || item.emoji !== emoji)
+      return { ...state, [value.messageId]: [...remaining, parsed.data] }
+    }
     if (event.type !== 'team/chat-reaction' || !z.literal(1).safeParse(event.data.version).success) return state
     const value = event.data.reaction
     const parsed = chatReactionSchema.safeParse(value)

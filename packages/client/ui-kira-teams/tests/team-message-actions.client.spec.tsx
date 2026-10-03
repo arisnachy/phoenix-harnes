@@ -15,7 +15,7 @@ it('groups actual participants and removes only the user reaction from the selec
   render(<View messageId="finding" authorId="agent" authorKind="agent" authorName="Zenith" replyPreview="Finding"
     useProjection={(key: string) => key === 'teamChatReactions' ? { finding: reactions } : { agent: { id: 'agent', name: 'Zenith', avatar: 'zenith' } }}
     react={react} reply={vi.fn()} t={(key: string) => key} />)
-  const chip = screen.getByRole('button', { name: '👩🏽‍💻 3' })
+  const chip = screen.getByRole('button', { name: '👩🏽‍💻 · User, Kira, Zenith' })
   expect(chip.getAttribute('title')).toBe('User, Kira, Zenith')
   expect(chip.getAttribute('aria-pressed')).toBe('true')
   fireEvent.click(chip)
@@ -55,7 +55,7 @@ it('pulses only a newly received real reaction and respects reduced motion', () 
   vi.stubGlobal('matchMedia', () => ({ matches: false }))
   const props = { messageId: 'human-message', authorId: 'user', authorKind: 'user', react: vi.fn(), reply: vi.fn(), t: (key: string) => key }
   const view = render(<View {...props} useProjection={projection([first])} />)
-  const button = screen.getByRole('button', { name: '👍 1' })
+  const button = screen.getByRole('button', { name: '👍 · Kira' })
   const animate = vi.fn()
   button.animate = animate
   view.rerender(<View {...props} useProjection={projection([first])} />)
