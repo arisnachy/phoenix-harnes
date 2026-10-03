@@ -6,7 +6,7 @@
  * credentials.
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process'
 
 interface RpcPending {
   readonly resolve: (value: unknown) => void
@@ -174,7 +174,18 @@ export class CodexRealtimeBridge {
     this.startup = undefined
     this.sessions.clear()
     if (child !== undefined && !child.killed) {
-      child.kill()
+      // On Windows the npm-installed Codex executable is normally a .cmd shim
+      // launched through cmd.exe. Killing only the shell orphans app-server,
+      // which keeps its stdio/SQLite workers alive and accumulates background
+      // processes across voice sessions. Reap the entire process tree.
+      if (process.platform === 'win32' && child.pid !== undefined) {
+        spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], {
+          windowsHide: true,
+          stdio: 'ignore',
+        })
+      } else {
+        child.kill()
+      }
     }
     const error = new Error('Codex realtime app-server closed')
     for (const pending of this.pending.values()) {
@@ -232,6 +243,9 @@ export class CodexRealtimeBridge {
 
     child.stdout.setEncoding('utf8')
     child.stderr.setEncoding('utf8')
+    // Codex can exit between an RPC write and Node flushing the pipe. Own the
+    // stream error so an EPIPE cannot become an uncaught Host-fatal event.
+    child.stdin.on('error', () => {})
     child.stdout.on('data', chunk => { this.consumeStdout(String(chunk)) })
     child.stderr.on('data', chunk => {
       for (const line of String(chunk).split(/\r?\n/u)) {
@@ -285,8 +299,16 @@ export class CodexRealtimeBridge {
         reject(new Error(`Codex realtime RPC timed out: ${method}`))
       }, timeoutMs)
       this.pending.set(id, { resolve, reject, timer })
+      const frame = `${JSON.stringify({ id, method, ...(params === undefined ? {} : { params }) })}\n`
       try {
-        child.stdin.write(`${JSON.stringify({ id, method, ...(params === undefined ? {} : { params }) })}\n`)
+        child.stdin.write(frame, (error) => {
+          if (error === null || error === undefined) return
+          const active = this.pending.get(id)
+          if (active === undefined) return
+          clearTimeout(active.timer)
+          this.pending.delete(id)
+          active.reject(new Error(`Codex realtime RPC write failed: ${errorText(error)}`))
+        })
       } catch (error) {
         clearTimeout(timer)
         this.pending.delete(id)
@@ -297,8 +319,16 @@ export class CodexRealtimeBridge {
 
   private notify(method: string, params?: unknown): void {
     const child = this.child
-    if (child === undefined || child.stdin.destroyed) return
-    child.stdin.write(`${JSON.stringify({ method, ...(params === undefined ? {} : { params }) })}\n`)
+    if (child === undefined || child.stdin.destroyed || child.stdin.writableEnded) return
+    try {
+      child.stdin.write(
+        `${JSON.stringify({ method, ...(params === undefined ? {} : { params }) })}\n`,
+        () => {},
+      )
+    } catch {
+      // Notifications are best-effort during startup/teardown. Request RPCs
+      // carry their own explicit failure path.
+    }
   }
 
   private waitForNotification(
