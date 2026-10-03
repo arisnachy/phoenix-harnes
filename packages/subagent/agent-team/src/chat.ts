@@ -12,6 +12,7 @@ import emojiRegex from 'emoji-regex'
 import { inferTeamSkill, TEAM_PERSONAS, TEAM_SKILL_POOLS } from './personas.ts'
 import { chatMessageSchema, chatParticipantSchema, chatReactionSchema } from './chat-projection.ts'
 import { foldTeam } from './fold.ts'
+import { teamExecutionProof } from './execution-evidence.ts'
 import { TeamId } from './types.ts'
 import type { TeamJournal } from './journal.ts'
 import type { TeamChatMessage, TeamChatParticipant, TeamChatReadResult, TeamChatReaction, TeamChatReactRequest, TeamChatReplyRequest } from './chat-types.ts'
@@ -179,12 +180,20 @@ export class TeamChat {
         const id = `${header.id}:${event.data.message.id}`
         const text = textOf(event.data.message.content)
         if (known.has(id) || text.trim() === '') continue
+        const proof = teamExecutionProof(events, { upToSeq: event.seq })
+        // An operational teammate response is not user-visible until the
+        // durable child log contains a successful non-Team tool receipt. This
+        // prevents prose such as "sent" or "updated" from masquerading as work.
+        if (proof.requirement !== 'none' && !proof.satisfied) continue
+        const visibleText = proof.requirement === 'none' || proof.tools.length === 0
+          ? text
+          : `${text}\n\n✓ Evidencia ejecutada: ${proof.tools.join(', ')}`
         // Bound copied text by the same configured mailbox limit, without splitting a Unicode scalar.
-        let bounded = text
-        if (Buffer.byteLength(text) > this.maxBytes) {
+        let bounded = visibleText
+        if (Buffer.byteLength(visibleText) > this.maxBytes) {
           let used = 0
           bounded = ''
-          for (const char of text) {
+          for (const char of visibleText) {
             const bytes = Buffer.byteLength(char)
             if (used + bytes > this.maxBytes) break
             bounded += char
