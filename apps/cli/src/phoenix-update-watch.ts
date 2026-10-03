@@ -32,18 +32,26 @@ export function startPhoenixUpdateWatcher(): void {
     if (process.env.PHOENIX_AUTO_UPDATE !== '0' && updateMode === 'auto' && existsSync(bridge)) {
       startWatcher(root, bridge, 'PHOENIX UPDATE', ['--parent-pid', String(process.pid)])
     }
-    return
+  } else {
+    const stableWorker = resolve(root, 'scripts', 'phoenix-auto-update.mjs')
+    if (process.env.PHOENIX_AUTO_UPDATE !== '0' && updateMode !== 'off' && existsSync(stableWorker)) {
+      startWatcher(root, stableWorker, 'PHOENIX UPDATE', ['--watch', '--parent-pid', String(process.pid)])
+    }
   }
 
-  const stableWorker = resolve(root, 'scripts', 'phoenix-auto-update.mjs')
-  if (process.env.PHOENIX_AUTO_UPDATE !== '0' && updateMode !== 'off' && existsSync(stableWorker)) {
-    startWatcher(root, stableWorker, 'PHOENIX UPDATE', ['--watch', '--parent-pid', String(process.pid)])
-  }
-
+  // Upstream/plugin and Codex CLI intake belong to the live Host even when
+  // the Windows supervisor owns source updates. Do not return early in
+  // supervised mode: that previously disabled both background intake paths.
   const upstreamMode = (process.env.PHOENIX_UPSTREAM_UPDATE_MODE ?? 'auto').trim().toLowerCase()
   const upstreamWorker = resolve(root, 'scripts', 'phoenix-upstream-update.mjs')
   if (upstreamMode !== 'off' && existsSync(upstreamWorker)) {
     startWatcher(root, upstreamWorker, 'PHOENIX UPSTREAM UPDATE', ['--watch', '--parent-pid', String(process.pid)])
+  }
+
+  const codexMode = (process.env.PHOENIX_CODEX_UPDATE_MODE ?? 'auto').trim().toLowerCase()
+  const codexWorker = resolve(root, 'scripts', 'phoenix-codex-cli-update.mjs')
+  if (codexMode !== 'off' && existsSync(codexWorker)) {
+    startWatcher(root, codexWorker, 'PHOENIX CODEX UPDATE', ['--watch', '--parent-pid', String(process.pid)])
   }
 }
 
