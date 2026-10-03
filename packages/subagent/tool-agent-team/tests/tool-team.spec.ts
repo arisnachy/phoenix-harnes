@@ -196,7 +196,7 @@ describe('dsh-tool-team', () => {
     await waitNoAgent(ctx, childId)
   })
 
-  it('routes teammates through provider-neutral model profiles', async () => {
+  it('honors explicitly requested provider-neutral model profiles', async () => {
     const { ctx, lead } = await setup(['hang'], false, {
       defaultModelProfile: 'judge',
       modelProfiles: {
@@ -210,6 +210,7 @@ describe('dsh-tool-team', () => {
       name: 'judge',
       description: 'independent acceptance review',
       prompt: 'review the evidence',
+      model_profile: 'judge',
     })
     expect(spawned.isError).toBe(false)
     const child = await waitRunning(ctx, spawnedChildId(spawned))
@@ -222,6 +223,36 @@ describe('dsh-tool-team', () => {
       model: 'independent-judge',
     } })
     await execute(ctx, lead, 'interrupt_agent', { target: 'judge' })
+  })
+
+  it('does not let a same-provider default profile change the selected non-Codex model', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang'], false, {
+      defaultModelProfile: 'other-mock-model',
+      modelProfiles: {
+        'other-mock-model': { provider: 'mock', model: 'different-model' },
+      },
+    })
+
+    const inherited = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'inherited-same-model',
+      description: 'must keep the selected non-Codex model',
+      prompt: 'wait',
+    })
+    const inheritedChild = await waitRunning(ctx, spawnedChildId(inherited))
+    expect(inheritedChild.options).toMatchObject({ provider: 'mock', model: 'mock' })
+    expect(inheritedChild.options.model).not.toBe('different-model')
+
+    const explicit = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'explicit-other-model',
+      description: 'explicit profile override',
+      prompt: 'wait',
+      model_profile: 'other-mock-model',
+    })
+    const explicitChild = await waitRunning(ctx, spawnedChildId(explicit))
+    expect(explicitChild.options).toMatchObject({ provider: 'mock', model: 'different-model' })
+
+    await execute(ctx, lead, 'interrupt_agent', { target: 'inherited-same-model' })
+    await execute(ctx, lead, 'interrupt_agent', { target: 'explicit-other-model' })
   })
 
   it('keeps the selected Codex planner while real teammates execute on Luna Max', async () => {
