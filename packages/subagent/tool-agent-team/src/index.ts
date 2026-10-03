@@ -272,8 +272,12 @@ function executionProofText(tools: readonly string[]): string {
 function requireExecutionProof(
   agent: Agent,
   requirement?: ReturnType<typeof teamExecutionRequirement>,
+  assignmentText?: string,
 ): readonly string[] {
-  const proof = teamExecutionProof(agent.session.events, { ...requirement === undefined ? {} : { requirement } })
+  const proof = teamExecutionProof(agent.session.events, {
+    ...requirement === undefined ? {} : { requirement },
+    ...assignmentText === undefined ? {} : { assignmentText },
+  })
   if (proof.requirement !== 'none' && !proof.satisfied) {
     throw new TeamError(
       'Operational result rejected: no successful non-Team tool receipt exists for the current assignment. '
@@ -594,8 +598,9 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const actor = callingAgent(exec.agent, 'team_task_update')
         if (args.action === 'complete') {
           const task = ctx.agentTeams.getTask(actor, TeamTaskId(args.task_id))
-          const requirement = teamExecutionRequirement(`${task.subject}\n${task.description}`)
-          requireExecutionProof(actor, requirement)
+          const taskText = `${task.subject}\n${task.description}`
+          const requirement = teamExecutionRequirement(taskText)
+          requireExecutionProof(actor, requirement, taskText)
         }
         return await ctx.agentTeams.updateTask(actor, {
           taskId: TeamTaskId(args.task_id),
