@@ -70,11 +70,22 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   }
   const labels: Readonly<Record<string, string>> = { connected: 'Conectado', connecting: 'Conectando', disconnected: 'Sin conexión', 'not-configured': 'Sin configurar', 'quota-reached': 'Límite gratuito alcanzado', received: 'Recibido', pending: 'Pendiente', running: 'Kira está trabajando', verifying: 'Verificando resultado', 'reply-pending': 'Respuesta pendiente', replied: 'Respuesta enviada', blocked: 'Necesita tu atención' }
   const state = snapshot?.account.state
+  const kiraInbox = snapshot?.account.inboxId
+  const copyKiraInbox = (): void => {
+    if (kiraInbox === undefined) return
+    void globalThis.navigator.clipboard.writeText(kiraInbox)
+  }
   return <section className={styles.block} aria-label="Correo propio de Phoenix">
     <div className={styles.heading}><h3>Correo propio de Phoenix</h3></div>
-    <p>Recibe encargos y contesta cuando Phoenix está ejecutándose en tu PC. Si la PC está apagada, el proveedor conserva los correos y Phoenix recupera únicamente los nuevos al volver a arrancar.
-      Buzón del plan gratuito; los modelos mantienen sus límites y costes habituales.</p>
-    {snapshot?.account.inboxId === undefined ? null : <p><span>Correo de Kira: </span><strong>{snapshot.account.inboxId}</strong>{' '}<button type="button" disabled={busy} aria-label="Copiar correo de Kira" onClick={() => { void globalThis.navigator?.clipboard?.writeText(snapshot.account.inboxId!) }}>Copiar</button></p>}
+    <p>
+      Recibe encargos y contesta cuando Phoenix está ejecutándose en tu PC. Si la PC está apagada,
+      el proveedor conserva los correos y Phoenix recupera únicamente los nuevos al volver a arrancar.
+      Buzón del plan gratuito; los modelos mantienen sus límites y costes habituales.
+    </p>
+    {kiraInbox === undefined ? null : <p>
+      <span>Correo de Kira: </span><strong>{kiraInbox}</strong>{' '}
+      <button type="button" disabled={busy} aria-label="Copiar correo de Kira" onClick={copyKiraInbox}>Copiar</button>
+    </p>}
     <p role="status">{state === 'ready' ? 'Correo verificado' : state === 'pending-verification' ? 'Pendiente de verificación' : state === 'signup-ambiguous' ? 'Alta sin confirmar: recupera la clave de la cuenta existente.' : 'Sin configurar'}{state === 'ready' ? ` · ${labels[snapshot?.connection ?? 'disconnected'] ?? 'Sin conexión'}` : ''}</p>
     <label>Correo del propietario <input type="email" value={owner} onChange={(event) => { setOwner(event.target.value) }} disabled={busy || state === 'ready'} /></label>
     {state === 'ready' ? null : <>
