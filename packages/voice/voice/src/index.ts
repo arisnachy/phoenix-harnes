@@ -124,8 +124,6 @@ export interface VoiceRuntimeStatus {
   readonly ttsProvider?: string
   /** Selected STT provider id, when currently available. */
   readonly sttProvider?: string
-  /** Whether native Codex realtime voice is enabled for eligible sessions. */
-  readonly codexRealtime: boolean
 }
 
 /** Configurable limits and provider preference for one host. */
@@ -628,7 +626,6 @@ export class VoiceRuntime extends TypertRemoteService {
     const sttProvider = this.selectSttProvider()
     return {
       enabled: this.config.enabled,
-      codexRealtime: this.config.codexRealtime,
       queued: this.queue.length,
       speaking: this.current !== undefined
         || [...this.conversationSpeech.values()].some(channel => channel.controllers.size > 0),
