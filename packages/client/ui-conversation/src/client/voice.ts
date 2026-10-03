@@ -217,9 +217,17 @@ export function configureVoiceModelRouteResolver(resolver: VoiceModelRouteResolv
   }
 }
 
+/** Minimal browser surface needed to capability-probe Codex Realtime WebRTC. */
+export interface CodexRealtimeVoiceWindow {
+  readonly RTCPeerConnection?: typeof RTCPeerConnection
+  readonly navigator?: Navigator
+}
+
 /** Browser primitives required for direct Codex Realtime WebRTC. */
 export function hasCodexRealtimeVoiceSupport(
-  scope: Window | undefined = typeof window === 'undefined' ? undefined : window,
+  scope: CodexRealtimeVoiceWindow | undefined = typeof window === 'undefined'
+    ? undefined
+    : window as unknown as CodexRealtimeVoiceWindow,
 ): boolean {
   return scope !== undefined
     && typeof scope.RTCPeerConnection === 'function'
