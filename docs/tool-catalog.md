@@ -2779,7 +2779,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
 
 ### `team_chat_react`
 
-Add/remove your Unicode emoji reaction to a real user/Kira/agent message. Use naturally, without spam or an extra prose turn.
+Optionally add/remove your Unicode emoji reaction to a real user/Kira/agent message. Any valid Unicode emoji is allowed; you are not restricted to the visible quick-reaction set. React only when the message genuinely warrants it, choose from context, and never use a fixed default or react by routine.
 
 ```json
 {

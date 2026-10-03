@@ -17,6 +17,7 @@ export function parseProactivityAttention(value: unknown): readonly ProactivityA
   for (const raw of value.slice(0, 8)) {
     if (!isRecord(raw)
       || typeof raw.id !== 'string' || raw.id.length === 0
+      || typeof raw.revision !== 'string' || raw.revision.length === 0
       || typeof raw.taskId !== 'string' || raw.taskId.length === 0
       || (raw.kind !== 'result' && raw.kind !== 'failure' && raw.kind !== 'upcoming')
       || typeof raw.title !== 'string' || raw.title.trim().length === 0
@@ -25,6 +26,7 @@ export function parseProactivityAttention(value: unknown): readonly ProactivityA
       || typeof raw.score !== 'number' || !Number.isFinite(raw.score)) return undefined
     rows.push({
       id: raw.id,
+      revision: raw.revision,
       taskId: raw.taskId,
       kind: raw.kind,
       title: raw.title.trim(),
@@ -44,6 +46,7 @@ function sameAttention(
     const candidate = right[index]
     return candidate !== undefined
       && item.id === candidate.id
+      && item.revision === candidate.revision
       && item.taskId === candidate.taskId
       && item.kind === candidate.kind
       && item.title === candidate.title
@@ -71,5 +74,26 @@ export async function refreshProactivityAttention(
     store.set(next)
   } catch {
     // Hero attention is best-effort local chrome; reconnect/poll retries it without replacing healthy state.
+  }
+}
+
+/** Persist an acknowledgement before removing the selected row.
+ * @param connection Current local host connection.
+ * @param store Home-feed store.
+ * @param item Exact material revision selected.
+ * @param state User action on the revision.
+ */
+export async function recordProactivityAttention(
+  connection: ConnectionHandle | undefined,
+  store: SnapshotStore<readonly ProactivityAttentionItem[]>,
+  item: ProactivityAttentionItem,
+  state: 'handled' | 'dismissed',
+): Promise<void> {
+  if (connection?.rpc === undefined) return
+  try {
+    const response = await connection.rpc.call('/phoenix-tasks', 'attention-record', { itemId: item.id, revision: item.revision, state })
+    if (response.ok) store.set(store.getSnapshot().filter(row => row.id !== item.id || row.revision !== item.revision))
+  } catch {
+    // A failed acknowledgement keeps the row available for retry.
   }
 }

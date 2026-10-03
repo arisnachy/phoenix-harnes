@@ -774,12 +774,22 @@ export interface Config {
   privateWorkResultChars?: number
   /** Configured mail identity reference used for office mail sent on the user's behalf. */
   userMailIdentity?: string
+  /** Local mailbox settings; no provider activity until an owner enrolls. */
+  mailDirectory?: string
+  /** Credential service reference for the local AgentMail key; never a secret value. */
+  mailCredentialRef?: string
+  /** Local mailbox reconciliation interval in milliseconds; defaults to 60,000. */
+  mailPollMs?: number
+  /** Provider request deadline in milliseconds; defaults to 30,000. */
+  mailTimeoutMs?: number
+  /** Active mail mission deadline in milliseconds; defaults to 600,000 before owner review. */
+  mailWorkTimeoutMs?: number
   /** Configured mail identity reference Phoenix uses when communicating as itself. */
   harnessMailIdentity?: string
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:162`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:165`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 

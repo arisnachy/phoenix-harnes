@@ -1,3 +1,4 @@
+import { AssistantMailPanel, type AssistantMailClient } from './AssistantMailPanel.tsx'
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
@@ -161,6 +162,7 @@ export interface AuthorizationPanelProps {
 }
 
 export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps {
+  assistantMail?: AssistantMailClient
   connectorT: (key: ConnectorKey) => string
   chatGptWeb?: ChatGptWebBridgeClient
   settings?: ChatGptWebSettingsClient
@@ -586,7 +588,14 @@ export function AuthorizationPanel(_props: AuthorizationPanelProps): ReactNode {
 }
 
 /** Dedicated account and MCP/app connector settings page. */
-export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, settings, mcpRegistry, onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
+export function ConnectorsSettingsSection({ api,
+  t,
+  connectorT,
+  chatGptWeb,
+  settings,
+  mcpRegistry,
+  assistantMail,
+  onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
@@ -833,6 +842,7 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
         </div>
       </div>
       <p className={hubStyles['safetyNote']}>{connectorT('setupHint')}</p>
+      {assistantMail === undefined ? null : <AssistantMailPanel client={assistantMail} />}
 
       {chatGptWeb === undefined || settings === undefined ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('chatgptWebTitle')}>
@@ -950,7 +960,8 @@ export function ConnectorsSettingsSection({ api, t, connectorT, chatGptWeb, sett
         </section>
       )}
 
-      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer} submitAnswer={submitAnswer} cancel={cancel} t={t} />
+      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
+        submitAnswer={submitAnswer} cancel={cancel} t={t} />
       {failure === undefined ? null : <p className={styles['error']}>{failure}</p>}
       {catalogFailure === undefined ? null : <p className={styles['error']}>{catalogFailure}</p>}
 

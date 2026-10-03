@@ -2786,7 +2786,7 @@ memory_search and memory_remember expose only bounded, provenance-preserving lea
 
 ### `team_chat_react`
 
-Add/remove your Unicode emoji reaction to a real user/Kira/agent message. Use naturally, without spam or an extra prose turn.
+可选择在真实的用户/Kira/agent 消息上添加或移除你的 Unicode emoji 反应。允许使用任何有效的 Unicode emoji，不受界面可见快捷反应集合限制。仅在消息确实值得反应时使用，并根据上下文选择；绝不要使用固定默认值，也不要例行反应。
 
 ```json
 {

@@ -308,3 +308,23 @@
     line-height: 18px;
   }
 }
+
+.attentionEntry {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.attentionDismiss {
+  flex: 0 0 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.attentionDismiss:hover {
+  background: var(--dsw-alias-background-secondary);
+}

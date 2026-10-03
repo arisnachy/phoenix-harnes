@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([switch]$Background)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -31,6 +31,8 @@ try {
   Set-Location -LiteralPath $rootPath
   $env:PHOENIX_DESKTOP_LAUNCH = '1'
   $env:PHOENIX_DESKTOP_CONSOLE = '0'
+  $launchArgs = @()
+  if ($Background) { $launchArgs = @('--no-open') }
 
   $corepack = Get-Command 'corepack.cmd' -ErrorAction SilentlyContinue
   if ($null -eq $corepack) {
@@ -38,7 +40,7 @@ try {
   }
 
   if ($null -ne $corepack) {
-    & $corepack.Source pnpm phoenix *>> $logPath
+    & $corepack.Source pnpm phoenix @launchArgs *>> $logPath
     $exitCode = $LASTEXITCODE
   }
   else {
@@ -49,7 +51,7 @@ try {
     if ($null -eq $pnpm) {
       throw 'No se encontró Corepack ni pnpm en PATH. Abre PowerShell, instala/activa pnpm y vuelve a intentar.'
     }
-    & $pnpm.Source phoenix *>> $logPath
+    & $pnpm.Source phoenix @launchArgs *>> $logPath
     $exitCode = $LASTEXITCODE
   }
 

@@ -95,3 +95,19 @@ describe('proactivity home attention ranking', () => {
     ])
   })
 })
+
+it('does not surface an old failure after a successful delivery, but surfaces a new recurrence', () => {
+  const history: ProactivityTask['history'] = [
+    { phase: 'deliver', scheduledFor: '2026-09-29T14:00:00.000Z', idempotencyKey: 'failed', startedAt: '2026-09-29T14:00:00.000Z', finishedAt: '2026-09-29T14:01:00.000Z', status: 'failed', error: 'offline' },
+    { phase: 'deliver', scheduledFor: '2026-09-29T15:00:00.000Z', idempotencyKey: 'success', startedAt: '2026-09-29T15:00:00.000Z', finishedAt: '2026-09-29T15:01:00.000Z', status: 'completed', summary: 'Recovered with new evidence.' },
+  ]
+  const recovered = task({ attentionText: 'Check connection', history })
+  expect(buildProactivityAttentionItems([recovered], NOW).map(row => row.kind)).toEqual(['result'])
+  const failedAgain = task({ ...recovered, history: [...history, { ...history[0]!, idempotencyKey: 'again', finishedAt: '2026-09-29T15:30:00.000Z' }] })
+  expect(buildProactivityAttentionItems([failedAgain], NOW).map(row => row.kind)).toEqual(['failure'])
+})
+
+it('retains lower-ranked candidates until persisted acknowledgments have been applied', () => {
+  const tasks = Array.from({ length: 12 }, (_, index) => task({ id: `candidate-${index}`, recurrence: { kind: 'once' } }))
+  expect(buildProactivityAttentionItems(tasks, NOW)).toHaveLength(12)
+})

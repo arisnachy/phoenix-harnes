@@ -141,31 +141,35 @@ export function heroAttentionPrompt(item: ProactivityAttentionItem): string {
 export function HeroAttentionList({
   attention,
   onSelect,
+  onDismiss,
 }: {
   attention: readonly ProactivityAttentionItem[]
   onSelect?: (item: ProactivityAttentionItem) => void
+  onDismiss?: (item: ProactivityAttentionItem) => void
 }) {
   if (attention.length === 0) return null
   return (
     <div className={css.attention} aria-label="Atención proactiva de Phoenix">
       {attention.slice(0, 3).map(item => (
-        <button
-          type="button"
-          className={css.attentionRow}
-          key={item.id}
-          onClick={() => { onSelect?.(item) }}
-        >
-          <span className={css.attentionIconWrap} aria-hidden="true">
-            {item.kind === 'failure'
-              ? <IconWarningOutline16 className={css.attentionIcon} size={16} />
-              : <IconSparkle16 className={css.attentionIcon} size={16} />}
-          </span>
-          <span className={css.attentionCopy}>
-            <span className={css.attentionTitle}>{item.title}</span>
-            <span className={css.attentionDetail}>{heroAttentionDetail(item)}</span>
-          </span>
-          <IconChevronRightOutline14 className={css.attentionArrow} size={14} />
-        </button>
+        <div className={css.attentionEntry} key={item.id}>
+          <button
+            type="button"
+            className={css.attentionRow}
+            onClick={() => { onSelect?.(item) }}
+          >
+            <span className={css.attentionIconWrap} aria-hidden="true">
+              {item.kind === 'failure'
+                ? <IconWarningOutline16 className={css.attentionIcon} size={16} />
+                : <IconSparkle16 className={css.attentionIcon} size={16} />}
+            </span>
+            <span className={css.attentionCopy}>
+              <span className={css.attentionTitle}>{item.title}</span>
+              <span className={css.attentionDetail}>{heroAttentionDetail(item)}</span>
+            </span>
+            <IconChevronRightOutline14 className={css.attentionArrow} size={14} />
+          </button>
+          {onDismiss === undefined ? null : <button type="button" className={css.attentionDismiss} aria-label={`Descartar ${item.title}`} onClick={() => { onDismiss(item) }}>×</button>}
+        </div>
       ))}
     </div>
   )

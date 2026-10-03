@@ -34,7 +34,7 @@ import { ApprovalPanel } from './skeleton/ApprovalPanel.tsx'
 import { todoDockEntry } from './skeleton/TodoPanel.tsx'
 import { queueDockEntry } from './queue/QueueDock.tsx'
 import { ConversationRoot } from './skeleton/ConversationRoot.tsx'
-import { refreshProactivityAttention } from './skeleton/ProactivityAttention.ts'
+import { recordProactivityAttention, refreshProactivityAttention } from './skeleton/ProactivityAttention.ts'
 import { ConversationSession, ConversationSessionHeader } from './skeleton/ConversationSession.tsx'
 import { DetailsPanel } from './skeleton/DetailsPanel.tsx'
 import { en, es, NS, zh, type ConversationKey } from './locales.ts'
@@ -255,6 +255,7 @@ export function apply(ctx: Context): void {
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
+      recordAttention: (item, state) => recordProactivityAttention(ctx.get('connection') as ConnectionHandle | undefined, proactivityAttention, item, state),
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
         userProfile,

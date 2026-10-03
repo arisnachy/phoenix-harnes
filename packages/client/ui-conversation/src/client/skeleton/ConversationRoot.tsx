@@ -42,7 +42,7 @@ const SessionBodyOutlet = memo(function SessionBodyOutlet({
 
 export function ConversationRoot({
   sessionId, useSession, useSessions, useWorkspaces, useInput, inputActions, useComposerBlock, useUserProfile,
-  useProactivityAttention, renderSlot, renderSlotChain, selectWorkspace, t,
+  useProactivityAttention, recordAttention, renderSlot, renderSlotChain, selectWorkspace, t,
 }: ConversationRootProps) {
   const openState = useSession(s => s.openState)
   const composerPhase = useSession(s => s.composerPhase)
@@ -66,10 +66,11 @@ export function ConversationRoot({
   const selectAttention = useCallback((item: (typeof proactiveAttention)[number]): void => {
     if (inputActions === undefined) return
     inputActions.setDraft(heroAttentionPrompt(item))
+    void recordAttention(item, 'handled')
     requestAnimationFrame(() => {
       rootRef.current?.querySelector('textarea')?.focus()
     })
-  }, [inputActions])
+  }, [inputActions, recordAttention])
 
   // Publishes the seat's live height as --dsh-composer-height on the scroll
   // body so floating controls (ChatView back-to-bottom) clear the composer as
@@ -202,7 +203,7 @@ export function ConversationRoot({
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
-      {hero && <HeroAttentionList attention={proactiveAttention} onSelect={selectAttention} />}
+      {hero && <HeroAttentionList attention={proactiveAttention} onSelect={selectAttention} onDismiss={(item) => { void recordAttention(item, 'dismissed') }} />}
     </div>
   )
 

@@ -31,7 +31,11 @@ function personaKey(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').trim().toLocaleLowerCase()
 }
 
-/** Return only the active member's compact social style so unused personalities cost no prompt tokens. */
+/** Return only the active member's compact social style so unused personalities cost no prompt tokens.
+ * @param name - active Team member display name or persona alias.
+ * @param role - active Team membership role.
+ * @returns compact social-style guidance for the active member.
+ */
 export function teamSocialStyle(name: string, role: 'lead' | 'teammate'): string {
   if (role === 'lead' || personaKey(name) === 'kira' || personaKey(name) === 'lead') {
     return `${KIRA_SOCIAL_STYLE} ${SOCIAL_BASE}`
