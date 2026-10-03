@@ -154,7 +154,7 @@ describe('Kira team in the existing main chat', () => {
     await zenithRow.waitFor()
     await argoRow.waitFor()
     await peerRow.waitFor()
-    await expect.poll(() => actions.getByRole('button', { name: /👍 1/ }).count()).toBe(1)
+    await expect.poll(() => actions.getByRole('button', { name: '👍 · User', exact: true }).count()).toBe(1)
     expect(await page.locator('[data-team-sender-id="user"]').filter({ hasText: 'USER_FOCUS_12' }).count()).toBe(1)
     expect(adapter.requests).toHaveLength(calls)
     await humanActions.locator('button[title="Kira"]').waitFor()
