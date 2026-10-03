@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
+import type { TeamChatReaction } from '../src/chat-types.ts'
 import { teamChatReactionsDefinition } from '../src/chat-projection.ts'
 
 describe('team chat reaction projection', () => {
   it('maps legacy semantic Kira reactions into the canonical visible emoji stream', () => {
-    const state = teamChatReactionsDefinition.init()
+    const state: Record<string, TeamChatReaction[]> = {}
     const next = teamChatReactionsDefinition.apply(state, {
       type: 'team/reaction',
       seq: 7,
