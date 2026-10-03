@@ -249,10 +249,18 @@ export function InputBar({
     voiceStartingRef.current = true
     void (async () => {
       try {
-        // The realtime path checks the Host-reported session provider. A
-        // non-Codex route returns false without opening a microphone.
-        if (await tryStartCodexRealtimeVoice(String(sessionId))) {
+        // Codex routes are strict: if native Realtime fails, do not make
+        // browser/local speech sound as though Realtime succeeded. Fallback is
+        // reserved for genuinely non-Codex providers.
+        const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
+        if (realtime.kind === 'started') {
           setVoiceState('listening')
+          return
+        }
+        if (realtime.kind === 'failed') {
+          setVoiceAssistantActive(false)
+          setVoiceState('error')
+          showToast(`${t('input.voice.codexRealtimeFailed')} (${realtime.reason})`)
           return
         }
 
@@ -278,7 +286,7 @@ export function InputBar({
         voiceStartingRef.current = false
       }
     })()
-  }, [appendVoiceText, locked, machineBusy, sessionId, startVoiceRecognition, voiceEnabled])
+  }, [appendVoiceText, locked, machineBusy, sessionId, showToast, startVoiceRecognition, t, voiceEnabled])
 
   // A final recognition fragment is a complete voice turn. Waiting for the
   // machine's published draft avoids submitting the previous draft snapshot.
