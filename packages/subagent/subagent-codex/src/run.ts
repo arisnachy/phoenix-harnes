@@ -8,10 +8,10 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, sep } from 'node:path'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import {
@@ -51,6 +51,41 @@ const CODEX_PACKAGE_BIN = resolve(
   dirname(codexPackageJsonPath),
   codexPackageManifest.bin.codex,
 )
+
+function resolvedDshHome(): string {
+  const configured = process.env.DSH_HOME?.trim()
+  return configured && configured.length > 0 ? resolve(configured) : join(homedir(), '.dsh')
+}
+
+/**
+ * Resolve the PHOENIX-managed stable Codex CLI selected by the background
+ * updater. The marker contains only a version and a path relative to DSH_HOME;
+ * malformed or missing state falls back to the package-pinned CLI.
+ */
+export function managedCodexPackageBin(): string | undefined {
+  const runtimeRoot = join(resolvedDshHome(), 'codex-cli')
+  const markerPath = join(runtimeRoot, 'active.json')
+  if (!existsSync(markerPath)) return undefined
+  try {
+    const marker = JSON.parse(readFileSync(markerPath, 'utf8')) as {
+      schema?: unknown
+      version?: unknown
+      bin?: unknown
+    }
+    if (marker.schema !== 1 || typeof marker.version !== 'string'
+      || !/^\d+\.\d+\.\d+$/u.test(marker.version) || typeof marker.bin !== 'string') return undefined
+    const candidate = resolve(runtimeRoot, marker.bin)
+    const boundary = runtimeRoot.endsWith(sep) ? runtimeRoot : `${runtimeRoot}${sep}`
+    if (candidate !== runtimeRoot && !candidate.startsWith(boundary)) return undefined
+    return existsSync(candidate) ? candidate : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function activeCodexPackageBin(): string {
+  return managedCodexPackageBin() ?? CODEX_PACKAGE_BIN
+}
 
 /** Profile-selectable non-interactive Codex permission mode. */
 export type CodexPermissionMode =
@@ -131,7 +166,7 @@ export function codexStartupFailure(cause: unknown): Error {
  * @returns Node, the official wrapper, and the fixed app-server arguments.
  */
 export function codexAppServerArgv(): string[] {
-  return [process.execPath, CODEX_PACKAGE_BIN, 'app-server', '--stdio']
+  return [process.execPath, activeCodexPackageBin(), 'app-server', '--stdio']
 }
 
 /**
@@ -147,7 +182,7 @@ export function codexAppServerArgv(): string[] {
 export function codexMetadataAppServerArgv(sqliteHome?: string): string[] {
   return [
     process.execPath,
-    CODEX_PACKAGE_BIN,
+    activeCodexPackageBin(),
     '-c',
     'features.plugins=false',
     '-c',
