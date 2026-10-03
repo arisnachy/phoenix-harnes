@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { SessionId } from '@phoenix-ai/dsh-session'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -45,5 +46,22 @@ it('bounds existing-account verification attempts and never leaks the challenge 
     for (let attempt = 0; attempt < 10; attempt++) await expect(account.verify(wrong)).rejects.toThrow('verification')
     await expect(account.verify(sentCode)).rejects.toThrow('expired')
     expect((await account.status()).state).toBe('pending-verification')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('preserves contact revocation and explicit workspace selection during automatic binding', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-binding-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'kira@agentmail.to', ownerEmail: 'owner@example.com', contacts: ['revoked@example.com'] }))
+    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {} })
+    await Promise.all([
+      account.configure([], SessionId('owner-selected')),
+      account.bindSessionIfUnset(SessionId('automatic-root')),
+    ])
+    expect(await account.status()).toMatchObject({ contacts: [], sessionId: 'owner-selected' })
+    await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'kira@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
+    await account.bindSessionIfUnset(SessionId('automatic-root'))
+    expect(await account.status()).toMatchObject({ contacts: [], sessionId: 'automatic-root' })
   } finally { await rm(directory, { recursive: true, force: true }) }
 })

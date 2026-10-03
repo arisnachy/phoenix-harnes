@@ -1,4 +1,5 @@
 /** Serial local mailbox catch-up, job recovery and reply confirmation. */
+import { ProactivityDeferredError } from './proactivity-engine.ts'
 import { MailJobId } from './assistant-mail-types.ts'
 import type { AssistantMailTransport, MailAccount, MailJob, MailMessage } from './assistant-mail-types.ts'
 import type { MailJournal } from './assistant-mail-journal.ts'
@@ -71,8 +72,9 @@ export class MailReceiver {
             continue
           }
           finished = await this.journal.transition(job.id, 'reply-pending', { summary: result.summary, evidence: result.evidence })
-        } catch {
+        } catch (error) {
           if (this.isStopped()) return
+          if (error instanceof ProactivityDeferredError) continue
           await this.journal.transition(job.id, 'blocked', { error: 'work interrupted or approval required; inspect the persisted conversation before retrying' })
           continue
         }

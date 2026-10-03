@@ -1,6 +1,7 @@
 /** Real Loader, host, credentials, Kira loop and Chromium; only the external mail/model providers are deterministic. */
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type { SessionId } from '@phoenix-ai/dsh-session'
 import { chromium, type Browser, type Page } from 'playwright'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
@@ -9,8 +10,9 @@ import { MailOutbox } from '../../../packages/hardness/adapters/src/assistant-ma
 import { launchWebScaffold, compareOrRefreshGolden, type WebScaffold } from './scaffold.ts'
 import { connectFreshWorkspace, newEnglishPage } from './support.ts'
 
+const mailSockets: MailSocket[] = []
 class MailSocket extends EventTarget {
-  constructor(_url: string) { super(); queueMicrotask(() => { this.dispatchEvent(new Event('open')) }) }
+  constructor(_url: string) { super(); mailSockets.push(this); queueMicrotask(() => { this.dispatchEvent(new Event('open')) }) }
   send(_data: string): void {}
   close(): void {}
 }
@@ -22,18 +24,31 @@ describe('Phoenix local email assistant', () => {
   let incoming = false
   let requestId = 'request-1'
   const replies = new Map<string, string>()
+  const sends = new Map<string, { text: string; to: string[] }>()
   const originalFetch = globalThis.fetch
   const adapter = new MockAdapter([
+    toolCallResponse('mail-refresh-within-mission', 'phoenix_mail_identity', { action: 'refresh' }),
     toolCallResponse('mail-complete', 'phoenix_mail_complete', { outcome: 'completed', summary: 'El encargo fue revisado.', evidence: 'La comprobación solicitada terminó correctamente.' }),
     textResponse('MAIL_VERIFICATION_COMPLETED'),
     toolCallResponse('mail-complete-next', 'phoenix_mail_complete', { outcome: 'completed', summary: 'Segundo encargo revisado.', evidence: 'La segunda comprobación terminó correctamente.' }),
     textResponse('MAIL_NEXT_VERIFICATION_COMPLETED'),
+    toolCallResponse('owner-mail-status', 'phoenix_mail_identity', { action: 'status' }),
+    toolCallResponse('owner-mail-send', 'phoenix_mail_send', { subject: 'Prueba del buzón propio', text: 'Kira responde desde su correo propio.' }),
+    textResponse('OWNER_MAIL_PROVIDER_CONFIRMED'),
   ])
   const providerFetch: typeof fetch = async (url, init) => {
     const address = (typeof url === 'string' ? url : url instanceof URL ? url.href : url.url)
     if (!address.startsWith('https://api.agentmail.to/')) return originalFetch(url, init)
     if (address.endsWith('/agent/sign-up')) return Response.json({ api_key: 'keyless-mail-secret', inbox_id: 'kira-keyless@agentmail.to' })
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer keyless-mail-secret')
     if (address.endsWith('/agent/verify')) return Response.json({ verified: true })
+    if (address.endsWith('/messages/send')) {
+      const key = new Headers(init?.headers).get('Idempotency-Key')!
+      const body = JSON.parse(init?.body as string) as { text: string; to: string[] }
+      expect(body.to).toEqual(['owner@example.com'])
+      sends.set(key, body)
+      return Response.json({ message_id: 'owner-send-1', thread_id: 'owner-thread-1' })
+    }
     if (address.includes('/messages?')) return Response.json({ count: incoming ? 1 : 0, messages: incoming ? [{ message_id: requestId }] : [] })
     if (address.endsWith(`/messages/${requestId}`)) return Response.json({ inbox_id: 'kira-keyless@agentmail.to', message_id: requestId, thread_id: 'thread-1', labels: ['received'], from: 'owner@example.com', subject: requestId === 'request-1' ? 'Encargo local' : 'Encargo nuevo', text: 'Revisa el encargo y entrega un resumen de la comprobación.', headers: {} })
     if (address.endsWith(`/messages/${requestId}/reply`)) {
@@ -75,8 +90,10 @@ describe('Phoenix local email assistant', () => {
     await page.getByLabel('Código de verificación').fill('123456')
     await page.getByRole('button', { name: 'Verificar y activar' }).click()
     await page.getByText(/Correo verificado/u).waitFor()
+    await expect.poll(() => mailSockets.length).toBeGreaterThan(0)
     await page.close()
     incoming = true
+    mailSockets.at(-1)!.dispatchEvent(new Event('message'))
     const connection = { rpc: { call: async (_channel: string,
       method: string,
       payload: unknown): Promise<{ ok: boolean
@@ -85,9 +102,7 @@ describe('Phoenix local email assistant', () => {
       const result = await response.json() as { result: { ok: boolean; value?: unknown } }
       return result.result
     } } }
-    const recovered = await connection.rpc.call('/phoenix-mail', 'refresh', {})
-    expect(recovered.ok).toBe(true)
-    expect(replies.size).toBe(1)
+    await expect.poll(() => replies.size, { timeout: 15_000 }).toBe(1)
     expect([...replies.values()]).toEqual(['El encargo fue revisado.'])
     const repeated = await connection.rpc.call('/phoenix-mail', 'refresh', {})
     expect(repeated.ok).toBe(true)
@@ -129,8 +144,8 @@ describe('Phoenix local email assistant', () => {
     expect(await result.count()).toBe(0)
     expect(await page.getByRole('textbox').count()).toBeGreaterThan(0)
     requestId = 'request-2'
-    expect((await connection.rpc.call('/phoenix-mail', 'refresh', {})).ok).toBe(true)
-    expect(replies.size).toBe(2)
+    mailSockets.at(-1)!.dispatchEvent(new Event('message'))
+    await expect.poll(() => replies.size, { timeout: 15_000 }).toBe(2)
     await page.reload()
     const fresh = page.getByRole('button', { name: /Encargo nuevo.*Segundo encargo revisado/u })
     await fresh.waitFor()
@@ -145,4 +160,18 @@ describe('Phoenix local email assistant', () => {
     expect(await fresh.count()).toBe(0)
 
   }, 90_000)
+  it('sends from the existing Kira inbox through the real chat tool without a Gmail connection', async () => {
+    const lead = scaffold.ctx.agents.roots()[0]!
+    const start = lead.session.events.length
+    lead.followup(createUserMessage({ content: [{ type: 'text', text: 'Kira, envíame un correo de prueba desde tu buzón propio.' }], source: { kind: 'user' } }))
+    await lead.whenIdle()
+    expect(sends.size).toBe(1)
+    expect([...sends.values()]).toEqual([{ text: 'Kira responde desde su correo propio.', to: ['owner@example.com'], subject: 'Prueba del buzón propio', headers: { 'Auto-Submitted': 'auto-generated' } }])
+    const events = lead.session.events.slice(start).filter(event => ['tool/call', 'tool/result'].includes(event.type))
+      .map(event => ({ type: event.type, data: event.data }))
+    const transcript = JSON.stringify(events, (key, value: unknown) => ['id', 'callId', 'toolCallId', 'turnId', 'stepId', 'surfaceId'].includes(key) ? '<identity>' : value, 2)
+    expect(transcript).toContain('owner-send-1')
+    expect(transcript).not.toContain('keyless-mail-secret')
+    await compareOrRefreshGolden(fileURLToPath(new URL('./snapshots/phoenix-assistant-email/owner-send.expected.json', import.meta.url)), transcript, scaffold.mode)
+  }, 30_000)
 })

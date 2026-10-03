@@ -10,13 +10,15 @@ Capability index 不会执行 tools、加载 skill 正文或授予权限；每�
 
 ## 本地助手邮箱
 
+Kira 可通过 `phoenix_mail_identity` 查询、创建、验证及刷新自己的邮箱。`phoenix_mail_send` 使用已保存的 AgentMail 凭据，从该邮箱向已验证所有者发送明确请求的即时邮件，不需要另接发送服务。成功结果包含服务商回执；未确认邮件持久保存，不得声称已送达。定时邮件使用 `phoenix_task_create`。
+
 驻留 Web host 可在 Settings → Connectors → Correo propio de Phoenix 中注册 Phoenix 自有邮箱，使用 AgentMail 免费方案包含的 `agentmail.to` 域名。注册显示服务商实际返回的地址；指定的人类所有者必须先完成邮件验证，收到的邮件才会成为任务。已有免费域名账户可用 API key 连接，再单独验证所有者。密钥保存在 credential service 中，不进入聊天、账户文件或状态响应。不创建自定义域名、付费升级或公开 webhook。
 
 只有经服务商认证、来自已验证所有者或显式授权联系人的入站邮件才能创建任务。自动邮件、Phoenix 自身邮件、被阻止、垃圾、未认证邮件及未授权发件人不会调用模型。邮件正文不能授予权限。Kira 使用所选协调者的模型、工作目录和 preset，在独立持久会话中执行任务；沿用现有子代理选择、审批及正常回合完成规则。`phoenix_mail_complete` 只记录经验证的回复提议，不能发送邮件，也不能完成其他会话的任务。回复仅发给授权发件人，覆盖 Reply-To 并排除 CC。
 
-收件由本地 host 持有，不由浏览器持有。关闭聊天后 host 继续运行；关闭 PC 后停止执行。启动时轮询补收邮件并恢复持久任务。出站 WebSocket 通知降低延迟，断线后重新连接。单封邮件读取失败不会阻塞其他任务；后续轮询会重试。Windows 桌面安装可选择创建或删除仅由 Phoenix 持有的 **PHOENIX Assistant** 登录快捷方式，从持久安装目录隐藏启动后台进程，不打开浏览器。
+收件由本地 host 持有，不由浏览器持有。关闭聊天后 host 继续运行；关闭 PC 后停止执行。启动时轮询补收邮件并恢复持久任务。工作区尚未就绪时任务保持待处理，不变为永久阻塞；创建代理会再次触发检查，并保存所选工作区以便重启恢复。出站 WebSocket 通知降低延迟，断线后重新连接。单封邮件读取失败不会阻塞其他任务；后续轮询会重试。Windows 桌面安装可选择创建或删除仅由 Phoenix 持有的 **PHOENIX Assistant** 登录快捷方式，从持久安装目录隐藏启动后台进程，不打开浏览器。
 
-本地配置：`mailDirectory` 默认为 task ledger 旁的 `phoenix-mail`；`mailCredentialRef` 默认为 `PHOENIX_AGENTMAIL_API_KEY`；`mailPollMs`、`mailTimeoutMs`、`mailWorkTimeoutMs` 默认分别为 60,000、30,000、600,000 毫秒。账户、任务和 outbox 使用串行原子私有文件写入。已有账户验证在 24 小时或十次尝试后失效。注册结果不确定时不会自动重复注册。回复和定时邮件重试保持相同的持久化正文与幂等键；超过服务商 24 小时幂等窗口仍未确认的发送会等待所有者核查，避免重复邮件。达到免费额度时停止，不升级付费。模型仍遵守原有费用与限制。
+本地配置：`mailDirectory` 默认为 task ledger 旁的 `phoenix-mail`；`mailCredentialRef` 默认为 `PHOENIX_AGENTMAIL_API_KEY`；`mailPollMs`、`mailTimeoutMs`、`mailWorkTimeoutMs` 默认分别为 60,000、30,000、600,000 毫秒。账户、任务、回复/定时 outbox 及仅发送给所有者的聊天 outbox 使用串行原子私有文件写入。已有账户验证在 24 小时或十次尝试后失效。注册结果不确定时不会自动重复注册。回复和定时邮件重试保持相同的持久化正文与幂等键；超过服务商 24 小时幂等窗口仍未确认的发送会等待所有者核查，避免重复邮件。达到免费额度时停止，不升级付费。模型仍遵守原有费用与限制。
 
 主页提示的处理回执保存在 task ledger 旁。打开或关闭当前提示后，同一版本在刷新后仍被隐藏；新的实质版本仍可出现。先过滤回执，再限制 endpoint 最多返回八行。较新成功运行会取代旧错误。邮件结果与具体阻塞原因加入现有主页，不增加新仪表盘。
 

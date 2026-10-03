@@ -139,3 +139,29 @@ describe('owned durable outgoing mail', () => {
   })
 
 })
+
+it('retains a wake arriving during an active inbox check without waiting for the poll timer', async () => {
+  const sockets: EventTarget[] = []
+  class Socket extends EventTarget {
+    constructor(_url: string) { super(); sockets.push(this); queueMicrotask(() => { this.dispatchEvent(new Event('open')) }) }
+    send(_data: string): void {}
+    close(): void {}
+  }
+  let calls = 0
+  let release!: () => void
+  vi.stubGlobal('WebSocket', Socket)
+  vi.stubGlobal('fetch', async () => {
+    calls++
+    if (calls === 2) await new Promise<void>((resolve) => { release = resolve })
+    return Response.json({ messages: [] })
+  })
+  const { runtime, directory } = await fixture()
+  try {
+    await vi.waitFor(() => { expect(sockets).toHaveLength(1); expect(calls).toBe(1) })
+    sockets[0]!.dispatchEvent(new Event('message'))
+    await vi.waitFor(() => { expect(calls).toBe(2) })
+    sockets[0]!.dispatchEvent(new Event('message'))
+    release()
+    await vi.waitFor(() => { expect(calls).toBe(3) })
+  } finally { release?.(); await runtime.dispose(); vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }) }
+})

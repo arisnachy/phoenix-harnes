@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { MailJournal } from '../src/assistant-mail-journal.ts'
 import { MailOutbox } from '../src/assistant-mail-outbox.ts'
+import { ProactivityDeferredError } from '../src/proactivity-engine.ts'
 import { MailReceiver } from '../src/assistant-mail-receiver.ts'
 import type { AssistantMailTransport, MailMessage } from '../src/assistant-mail-types.ts'
 const message: MailMessage = { inboxId: 'kira@agentmail.to', messageId: MailMessageId('incoming'), threadId: MailThreadId('thread'), from: 'owner@example.com', subject: 'Review', text: 'Review this task', authenticated: true, automatic: false }
@@ -68,5 +69,33 @@ it('retains the running checkpoint when its owner stops', async () => {
     rejectWork(new Error('owner stopped'))
     await Promise.all([running, stopping])
     expect((await journal.list())[0]?.state).toBe('running')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('keeps a mail task pending until its selected workspace can start', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-receiver-startup-'))
+  try {
+    let available = false
+    let executions = 0
+    const journal = new MailJournal(join(directory, 'jobs.json'))
+    const transport: AssistantMailTransport = {
+      listMessages: async () => ({ ids: [message.messageId] }), readMessage: async () => message,
+      reply: async () => ({ messageId: MailMessageId('sent'), threadId: message.threadId }),
+      subscribe: async () => () => {},
+    }
+    const receiver = new MailReceiver(transport, journal,
+      new MailOutbox(join(directory, 'outbox.json'), input => transport.reply(input)),
+      async () => ({ state: 'ready', ownerEmail: message.from, inboxId: message.inboxId, contacts: [] }),
+      async () => {
+        if (!available) throw new ProactivityDeferredError('workspace not ready')
+        executions++
+        return { outcome: 'completed', summary: 'Done', evidence: 'Checked' }
+      })
+    await receiver.reconcile()
+    expect((await journal.list())[0]?.state).toBe('pending')
+    available = true
+    await receiver.reconcile()
+    expect((await journal.list())[0]?.state).toBe('replied')
+    expect(executions).toBe(1)
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
