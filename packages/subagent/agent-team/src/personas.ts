@@ -31,6 +31,7 @@ function personaKey(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').trim().toLocaleLowerCase()
 }
 
+/** Canonical persona gender used only for natural grammatical self-reference. */
 export type TeamPersonaGender = 'male' | 'female'
 
 function personaOf(name: string): typeof TEAM_PERSONAS[number] | undefined {
