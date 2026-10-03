@@ -152,6 +152,7 @@ interface ResolvedVoiceRuntimeConfig {
   readonly maxChars: number
   readonly ttsProvider?: string
   readonly sttProvider?: string
+  readonly codexRealtime: boolean
 }
 
 interface QueuedAnnouncement {
