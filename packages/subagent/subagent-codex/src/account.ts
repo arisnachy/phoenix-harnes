@@ -40,6 +40,7 @@ const ACCOUNT_RATE_LIMIT_TIMEOUT_MS = 12_000
 const ACCOUNT_USAGE_TIMEOUT_MS = 5_000
 /** Minimum bounded wait for asynchronous Windows taskkill /T /F cleanup. */
 const ACCOUNT_CLOSE_MIN_TIMEOUT_MS = 4_000
+const ACCOUNT_NATURAL_EXIT_GRACE_MS = 750
 /** Small teardown headroom beyond the configured subprocess grace. */
 const ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS = 1_000
 
@@ -338,7 +339,14 @@ class CodexAccountConnection {
     } catch {
       // A concurrently closed protocol pipe does not change tree ownership.
     }
-    this.child.terminate()
+
+    // Codex persists the refreshed model catalog on a background Tokio task.
+    // EOF is the normal app-server shutdown path, so first let the process
+    // finish naturally instead of immediately cancelling that cache writer.
+    const naturalExit = await this.child.waitForExit(
+      AbortSignal.timeout(ACCOUNT_NATURAL_EXIT_GRACE_MS),
+    ).catch(() => false)
+    if (!naturalExit) this.child.terminate()
 
     // Windows tree teardown is intentionally asynchronous in dsh-subprocess-local
     // so taskkill /T /F cannot freeze the Host event loop. Give that OS cleanup
@@ -348,7 +356,7 @@ class CodexAccountConnection {
       ACCOUNT_CLOSE_MIN_TIMEOUT_MS,
       Math.ceil(this.disposeGraceMs + ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS),
     )
-    const exited = await this.child.waitForExit(AbortSignal.timeout(closeTimeoutMs))
+    const exited = naturalExit || await this.child.waitForExit(AbortSignal.timeout(closeTimeoutMs))
     if (!exited) {
       this.warn(
         `subagent-codex account: app-server process tree is still terminating after ${closeTimeoutMs}ms; continuing without failing the Host`,
