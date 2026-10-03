@@ -3,7 +3,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
-import { TeamMessageId, TeamTaskId, teamSocialStyle } from '@phoenix-ai/dsh-agent-team'
+import { selectTeamPersonaName, TeamMessageId, TeamTaskId, teamSocialStyle } from '@phoenix-ai/dsh-agent-team'
 import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
 import { foldRequestHeader } from '@phoenix-ai/dsh-session'
 import { defineTool } from '@phoenix-ai/dsh-tools'
@@ -52,7 +52,7 @@ export const Config: z<Config> = z.object({
 })
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
-const POLICY = `Agent Teams is real shared work, not role-play. Kira may delegate bounded independent work when it materially improves quality or latency. Use the adaptive teammate ladder: one teammate is normal for substantive delegated work, a second is justified only for a genuinely independent difficult front, and a third is reserved for exceptional complexity or three truly independent fronts; never exceed three. Reuse existing teammates before creating another. Phoenix Auto is explicitly authorized to use this Team path when independent specialist work materially improves quality or latency; in that mode prefer spawn_teammate over legacy subagent delegation. Never spawn a teammate only to make the interface look busy. When practical, name Phoenix Auto teammates with one unused KIRA codename that matches the duty (vortice, aurora, atlas, nova, lumen, helix, prisma, orion, vega, eclipse, argo, solaria, nexo, astra, lyra, zenith, cobalto, quasar, senda, orbita) so the same visible persona follows the teammate across the dock, chat and reactions.
+const POLICY = `Agent Teams is real shared work, not role-play. Kira may delegate bounded independent work when it materially improves quality or latency. Use the adaptive teammate ladder: one teammate is normal for substantive delegated work, a second is justified only for a genuinely independent difficult front, and a third is reserved for exceptional complexity or three truly independent fronts; never exceed three. Reuse existing teammates before creating another. Phoenix Auto is explicitly authorized to use this Team path when independent specialist work materially improves quality or latency; in that mode prefer spawn_teammate over legacy subagent delegation. Never spawn a teammate only to make the interface look busy. For ordinary delegation, omit the teammate name and let the runtime choose one unused KIRA codename from the actual responsibility (vortice, aurora, atlas, nova, lumen, helix, prisma, orion, vega, eclipse, argo, solaria, nexo, astra, lyra, zenith, cobalto, quasar, senda, orbita), so engineering, research, QA, design, security, data, integration, automation and other work naturally reach different specialists. Specify a name only when the user explicitly addresses a specialist or continuity with an existing identity matters. Never use La Forja/Atlas as a universal default.
 
 Keep collaboration sparse and consequential. A peer message should assign work, ask a needed question, report evidence, declare a real blocker, hand off a result, or request review. Do not generate greetings, praise, status filler, or narrated tool use. Your ordinary text outputs and peer messages appear under your own identity in the main user chat. Address operational questions to peers with send_message/followup_task; the Lead remains responsible for the mission and final answer. User-directed replies preserve their original context. The shared transcript reaction system is part of the real conversation: use team_chat_react for visible Unicode emoji reactions to the user, Kira, or another teammate. For a direct assignment, material result, review request, approval, thanks, joke, or useful finding from another participant, emit exactly one natural reaction unless it would be socially inappropriate or redundant; prefer that reaction over filler prose. Routine status updates are exempt. Kira should acknowledge a teammate's useful completed result with one contextual reaction, and a teammate should acknowledge Kira's direct assignment or a user's direct message when appropriate. Never react to your own message, never react to every routine status update, and never repeat one fixed emoji mechanically. Use a message id already present in the delivered Team marker when available; call team_chat_read only when you need to recover the exact visible message id. Choose any valid Unicode emoji from context; the full Unicode repertoire is available and is not limited to the user's quick set. Set the message purpose truthfully on every send; blocker is reserved for an obstacle that requires the Lead to change strategy, because Phoenix Auto may escalate that turn to its strategic model.
 
@@ -274,7 +274,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       name: 'spawn_teammate',
       description: 'Create one named, durable teammate. Only the Team Lead may call this tool.',
       parameters: {
-        name: { type: 'string', required: true, description: 'Unique lower-kebab-case teammate name.' },
+        name: { type: 'string', description: 'Optional unique lower-kebab-case teammate name. Omit for automatic specialist selection from the delegated responsibility.' },
         description: { type: 'string', required: true, description: 'Short description of the delegated responsibility.' },
         prompt: { type: 'string', required: true, description: 'Complete initial task for the teammate.' },
         context: {
@@ -331,8 +331,12 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
               ...activeMaxTokens === undefined ? {} : { maxTokens: activeMaxTokens },
               ...activeReasoningEffort === undefined ? {} : { reasoningEffort: activeReasoningEffort },
             }
+        const occupiedNames = ctx.agentTeams.listMembers(agent)
+          .filter(member => member.role === 'teammate')
+          .map(member => member.name)
+        const memberName = args.name ?? selectTeamPersonaName(args.description, occupiedNames)
         return await ctx.agentTeams.spawnTeammate(agent, {
-          name: args.name,
+          name: memberName,
           description: args.description,
           prompt: [{ type: 'text', text: args.prompt }],
           context,
