@@ -196,31 +196,27 @@ describe('dsh-tool-team', () => {
     await waitNoAgent(ctx, childId)
   })
 
-  it('honors explicitly requested provider-neutral model profiles', async () => {
+  it('does not let an explicit model profile override a non-Codex selected route', async () => {
     const { ctx, lead } = await setup(['hang'], false, {
       defaultModelProfile: 'judge',
       modelProfiles: {
-        judge: { provider: 'mock', model: 'independent-judge', maxTokens: 8192, reasoningEffort: 'high' },
+        judge: { provider: 'other-provider', model: 'independent-judge', maxTokens: 8192, reasoningEffort: 'high' },
       },
-    }, {
-      efforts: [{ id: ReasoningEffortId('high'), name: 'High' }],
-      defaultEffort: ReasoningEffortId('high'),
     })
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'judge',
-      description: 'independent acceptance review',
+      description: 'stay on the exact selected non-Codex model',
       prompt: 'review the evidence',
       model_profile: 'judge',
     })
     expect(spawned.isError).toBe(false)
     const child = await waitRunning(ctx, spawnedChildId(spawned))
-    expect(child.options).toMatchObject({
-      provider: 'mock', model: 'independent-judge', maxTokens: 8192, reasoningEffort: 'high',
-    })
+    expect(child.options).toMatchObject({ provider: 'mock', model: 'mock' })
+    expect(child.options.model).not.toBe('independent-judge')
     const rosterMember: unknown = JSON.parse(text(spawned))
     expect(rosterMember).toMatchObject({ member: {
       modelProvider: 'mock',
-      model: 'independent-judge',
+      model: 'mock',
     } })
     await execute(ctx, lead, 'interrupt_agent', { target: 'judge' })
   })
@@ -249,7 +245,8 @@ describe('dsh-tool-team', () => {
       model_profile: 'other-mock-model',
     })
     const explicitChild = await waitRunning(ctx, spawnedChildId(explicit))
-    expect(explicitChild.options).toMatchObject({ provider: 'mock', model: 'different-model' })
+    expect(explicitChild.options).toMatchObject({ provider: 'mock', model: 'mock' })
+    expect(explicitChild.options.model).not.toBe('different-model')
 
     await execute(ctx, lead, 'interrupt_agent', { target: 'inherited-same-model' })
     await execute(ctx, lead, 'interrupt_agent', { target: 'explicit-other-model' })
@@ -275,7 +272,7 @@ describe('dsh-tool-team', () => {
     lead.session.append('turn/start', { turn: 1 })
     lead.session.append('request/header', {
       header: { config: { provider: 'mock', model: 'mock' } },
-      reason: 'change',
+      reason: 'initial',
     })
 
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
@@ -313,7 +310,7 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'luna-worker' })
   })
 
-  it('inherits the Lead route when a default profile belongs to another provider and honors explicit profiles', async () => {
+  it('inherits the exact non-Codex Lead route even when foreign profiles are configured or requested', async () => {
     const { ctx, lead } = await setup(['hang', 'hang'], false, {
       defaultModelProfile: 'foreign',
       modelProfiles: {
@@ -337,7 +334,8 @@ describe('dsh-tool-team', () => {
       model_profile: 'explicit',
     })
     const explicitChild = await waitRunning(ctx, spawnedChildId(explicit))
-    expect(explicitChild.options).toMatchObject({ provider: 'mock', model: 'explicit-model' })
+    expect(explicitChild.options).toMatchObject({ provider: 'mock', model: 'mock' })
+    expect(explicitChild.options.model).not.toBe('explicit-model')
     expect(explicitChild.options.maxTokens).toBeUndefined()
     expect(explicitChild.options.reasoningEffort).toBeUndefined()
 
