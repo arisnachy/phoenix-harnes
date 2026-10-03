@@ -10,6 +10,7 @@ import { Context } from '@phoenix-ai/cordis'
 import { Remote, TypertRemoteService } from '@phoenix-ai/dsh-typert-protocol'
 import z from '@phoenix-ai/schemastery'
 import { SessionId } from '@phoenix-ai/dsh-session'
+import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import type {
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
@@ -698,12 +699,10 @@ export class VoiceRuntime extends TypertRemoteService {
       const turn = nextRealtimeTurn(session.events)
       const step = 1
       session.append('turn/start', { turn })
-      session.append('user/message', {
-        id: randomUUID(),
-        role: 'user',
+      session.append('user/message', createUserMessage({
         source: { kind: 'user' },
         content: [{ type: 'text', text }],
-      }, { surfaceOp: 'append' })
+      }), { surfaceOp: 'append' })
       session.append('step/start', { turn, step })
       this.realtimeTranscriptTurns.set(key, { turn, step })
       void store?.flush(session).catch((error: unknown) => {
@@ -722,16 +721,13 @@ export class VoiceRuntime extends TypertRemoteService {
     session.append('assistant/message', {
       turn: state.turn,
       step: state.step,
-      message: {
-        id: randomUUID(),
-        role: 'assistant',
+      message: createAssistantMessage({
         source: {
-          kind: 'model',
           provider: 'openai-codex',
           model: model?.trim() || 'codex-realtime',
         },
         content: [{ type: 'text', text }],
-      },
+      }),
     }, { surfaceOp: 'append' })
     session.append('step/end', state)
     session.append('turn/end', { turn: state.turn, reason: { kind: 'completed' } })
