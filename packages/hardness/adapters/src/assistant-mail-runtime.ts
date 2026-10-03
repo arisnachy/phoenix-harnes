@@ -39,6 +39,18 @@ export interface AssistantMailIdentity {
   readonly connection: string
 }
 
+/** AgentMail Free-plan telemetry retained without exposing provider credentials. */
+export interface AssistantMailQuotaSnapshot {
+  readonly plan: 'free'
+  readonly limits: { readonly inboxes: 3; readonly monthlyEmails: 3000; readonly storageBytes: 3221225472 }
+  readonly used: { readonly inboxes: number; readonly monthlyEmails: number; readonly storageBytes: number; readonly storedMessages: number; readonly threads: number }
+  readonly remaining: { readonly inboxes: number; readonly monthlyEmails: number; readonly storageBytes: number }
+  readonly utilization: { readonly inboxes: number; readonly monthlyEmails: number; readonly storage: number }
+  readonly level: 'ok' | 'watch' | 'high' | 'critical'
+  readonly measuredAt: string
+  readonly resetsAt: string
+}
+
 /** Host service used by Kira to inspect or create her own mailbox without touching Gmail setup. */
 export interface AssistantMailControl {
   /** Read the current Kira mailbox identity. */
@@ -318,6 +330,134 @@ export function installAssistantMail(ctx: Context,
     if (key === undefined) throw new Error('mail credential is unavailable')
     return agentMailRequest(path, key, config.timeoutMs, fetch, body, idempotencyKey, controller.signal, method)
   }
+  const FREE_INBOX_LIMIT = 3 as const
+  const FREE_MONTHLY_EMAIL_LIMIT = 3_000 as const
+  const FREE_STORAGE_BYTES = 3 * 1024 * 1024 * 1024 as 3221225472
+  const FREE_EMAIL_RESERVE = 100
+  const QUOTA_CACHE_MS = 60_000
+  let quotaCache: AssistantMailQuotaSnapshot | undefined
+  let quotaCacheAt = 0
+  const metricValue = (value: unknown, key: string): number => {
+    const root = mailRecord(value)
+    const series = root[key]
+    if (!Array.isArray(series) || series.length === 0) return 0
+    let latest = 0
+    for (const item of series) {
+      const row = mailRecord(item)
+      if (typeof row.value === 'number' && Number.isFinite(row.value)) latest = Math.max(latest, row.value)
+    }
+    return Math.max(0, latest)
+  }
+  const eventCount = (value: unknown, key: string): number => {
+    const root = mailRecord(value)
+    const series = root[key]
+    if (!Array.isArray(series)) return 0
+    return series.reduce((total, item) => {
+      const row = mailRecord(item)
+      return total + (typeof row.count === 'number' && Number.isFinite(row.count) ? Math.max(0, row.count) : 0)
+    }, 0)
+  }
+  const quotaLevel = (snapshot: Pick<AssistantMailQuotaSnapshot, 'utilization'>): AssistantMailQuotaSnapshot['level'] => {
+    const max = Math.max(snapshot.utilization.inboxes, snapshot.utilization.monthlyEmails, snapshot.utilization.storage)
+    return max >= 0.95 ? 'critical' : max >= 0.9 ? 'high' : max >= 0.8 ? 'watch' : 'ok'
+  }
+  const quotaSnapshot = async (force = false): Promise<AssistantMailQuotaSnapshot> => {
+    if (!force && quotaCache !== undefined && Date.now() - quotaCacheAt < QUOTA_CACHE_MS) return quotaCache
+    const now = new Date()
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    const resetsAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+    const usageQuery = new URLSearchParams({ descending: 'true', limit: '1', period: '86400' })
+    for (const type of ['storage_bytes', 'message_count', 'thread_count']) usageQuery.append('usage_types', type)
+    const eventQuery = new URLSearchParams({
+      start: monthStart.toISOString(),
+      end: now.toISOString(),
+      period: '86400',
+      limit: '40',
+    })
+    eventQuery.append('event_types', 'message.sent')
+    eventQuery.append('event_types', 'message.received')
+    const [organizationRaw, usageRaw, eventsRaw] = await Promise.all([
+      providerOperation('/organizations'),
+      providerOperation(`/metrics/usage?${usageQuery}`),
+      providerOperation(`/metrics/events?${eventQuery}`),
+    ])
+    const organization = mailRecord(organizationRaw)
+    const inboxes = typeof organization.inbox_count === 'number' && Number.isFinite(organization.inbox_count)
+      ? Math.max(0, organization.inbox_count)
+      : 0
+    const storageBytes = metricValue(usageRaw, 'storage_bytes')
+    const storedMessages = metricValue(usageRaw, 'message_count')
+    const threads = metricValue(usageRaw, 'thread_count')
+    // Free counts send + receive against the shared monthly email allowance. Using both event
+    // streams is intentionally conservative so Kira preserves headroom for inbound work.
+    const monthlyEmails = eventCount(eventsRaw, 'message.sent') + eventCount(eventsRaw, 'message.received')
+    const utilization = {
+      inboxes: inboxes / FREE_INBOX_LIMIT,
+      monthlyEmails: monthlyEmails / FREE_MONTHLY_EMAIL_LIMIT,
+      storage: storageBytes / FREE_STORAGE_BYTES,
+    }
+    const base = {
+      plan: 'free' as const,
+      limits: { inboxes: FREE_INBOX_LIMIT, monthlyEmails: FREE_MONTHLY_EMAIL_LIMIT, storageBytes: FREE_STORAGE_BYTES },
+      used: { inboxes, monthlyEmails, storageBytes, storedMessages, threads },
+      remaining: {
+        inboxes: Math.max(0, FREE_INBOX_LIMIT - inboxes),
+        monthlyEmails: Math.max(0, FREE_MONTHLY_EMAIL_LIMIT - monthlyEmails),
+        storageBytes: Math.max(0, FREE_STORAGE_BYTES - storageBytes),
+      },
+      utilization,
+      measuredAt: now.toISOString(),
+      resetsAt: resetsAt.toISOString(),
+    }
+    quotaCache = { ...base, level: quotaLevel(base) }
+    quotaCacheAt = Date.now()
+    return quotaCache
+  }
+  const assertFreeSendHeadroom = async (): Promise<void> => {
+    const quota = await quotaSnapshot()
+    if (quota.used.monthlyEmails >= FREE_MONTHLY_EMAIL_LIMIT - FREE_EMAIL_RESERVE) {
+      throw new Error(`AgentMail Free guard paused outbound mail at ${quota.used.monthlyEmails}/${FREE_MONTHLY_EMAIL_LIMIT} emails to preserve ${FREE_EMAIL_RESERVE} messages of inbound headroom until ${quota.resetsAt}`)
+    }
+  }
+  const cleanupTrash = async (input: Record<string, unknown>, execute: boolean): Promise<Record<string, unknown>> => {
+    const account = await onboarding.status()
+    if (account.state !== 'ready' || account.inboxId === undefined) throw new Error('Kira mail is not verified yet')
+    const days = input.older_than_days === undefined ? 7 : Number(input.older_than_days)
+    const maxDelete = input.max_delete === undefined ? 100 : Number(input.max_delete)
+    if (!Number.isInteger(days) || days < 1 || days > 3650) throw new Error('older_than_days must be an integer from 1 to 3650')
+    if (!Number.isInteger(maxDelete) || maxDelete < 1 || maxDelete > 100) throw new Error('max_delete must be an integer from 1 to 100')
+    if (execute && input.confirm_cleanup !== true) throw new Error('cleanup requires confirm_cleanup=true after an explicit user request')
+    const cutoff = new Date(Date.now() - days * 86_400_000).toISOString()
+    const query = new URLSearchParams({
+      limit: String(maxDelete),
+      labels: 'trash',
+      before: cutoff,
+      ascending: 'true',
+      include_trash: 'true',
+    })
+    const listed = mailRecord(await providerOperation(`/inboxes/${encodeURIComponent(account.inboxId)}/messages?${query}`))
+    const messages = Array.isArray(listed.messages) ? listed.messages.map(value => mailRecord(value)) : []
+    const candidates = messages.flatMap(row => typeof row.message_id === 'string' ? [{
+      messageId: row.message_id,
+      subject: typeof row.subject === 'string' ? row.subject.slice(0, 180) : '',
+      timestamp: typeof row.timestamp === 'string' ? row.timestamp : undefined,
+    }] : [])
+    if (!execute) return { mode: 'preview', olderThanDays: days, candidateCount: candidates.length, candidates }
+    let deleted = 0
+    const failed: string[] = []
+    for (const candidate of candidates) {
+      try {
+        await providerOperation(`/inboxes/${encodeURIComponent(account.inboxId)}/messages/${encodeURIComponent(candidate.messageId)}`, 'DELETE')
+        deleted++
+      } catch {
+        failed.push(candidate.messageId)
+      }
+    }
+    quotaCache = undefined
+    quotaCacheAt = 0
+    const quota = await quotaSnapshot(true)
+    return { mode: 'execute', olderThanDays: days, candidateCount: candidates.length, deleted, failed, quota }
+  }
   const readyAccount = async (): Promise<MailAccount & { readonly inboxId: string }> => {
     const account = await onboarding.status()
     if (account.state !== 'ready' || account.inboxId === undefined) throw new Error('Kira mail is not verified yet')
@@ -396,6 +536,7 @@ export function installAssistantMail(ctx: Context,
         })
       }
       case 'send_message':
+        await assertFreeSendHeadroom()
         return providerOperation(`/inboxes/${encodedInbox}/messages/send`, 'POST', messageBody(input, account), idempotency)
       case 'reply_message':
       case 'reply_all': {
@@ -412,6 +553,7 @@ export function installAssistantMail(ctx: Context,
         } else {
           authorizeRecipients(account, [sender])
         }
+        await assertFreeSendHeadroom()
         const body = messageBody({ ...input, to: undefined, cc: undefined, bcc: undefined, subject: undefined }, account)
         if (action === 'reply_message') {
           // Pin the reply to the authenticated sender. Do not let an untrusted Reply-To
@@ -427,6 +569,7 @@ export function installAssistantMail(ctx: Context,
         )
       }
       case 'forward_message':
+        await assertFreeSendHeadroom()
         return providerOperation(`/inboxes/${encodedInbox}/messages/${messageId()}/forward`, 'POST', messageBody(input, account), idempotency)
       case 'delete_message':
         requirePermanent(input, 'message')
@@ -489,6 +632,7 @@ export function installAssistantMail(ctx: Context,
         return providerOperation(`/inboxes/${encodedInbox}/drafts/${draftId()}`, 'PATCH', body)
       }
       case 'send_draft': {
+        await assertFreeSendHeadroom()
         const draft = mailRecord(await providerOperation(`/inboxes/${encodedInbox}/drafts/${draftId()}`))
         authorizeRecipients(account,
           operationAddresses(draft.to, 'draft.to'),
@@ -531,6 +675,8 @@ export function installAssistantMail(ctx: Context,
         return providerOperation(`/inboxes/${encodedInbox}`)
       case 'create_inbox': {
         requireInboxAdmin(input)
+        const quota = await quotaSnapshot()
+        if (quota.used.inboxes >= FREE_INBOX_LIMIT) throw new Error('AgentMail Free inbox limit reached (3/3); delete an unused inbox before creating another')
         const body: Record<string, unknown> = {}
         if (input.username !== undefined) body.username = operationString(input.username, 'username', 128)
         if (input.domain !== undefined) body.domain = operationString(input.domain, 'domain', 320)
@@ -554,6 +700,12 @@ export function installAssistantMail(ctx: Context,
         if (Object.keys(body).length === 0) throw new Error('inbox update needs display_name, metadata, or status')
         return providerOperation(`/inboxes/${encodedInbox}`, 'PATCH', body)
       }
+      case 'quota_status':
+        return quotaSnapshot(input.refresh === true)
+      case 'cleanup_preview':
+        return cleanupTrash(input, false)
+      case 'cleanup_execute':
+        return cleanupTrash(input, true)
       case 'delete_inbox':
         requireInboxAdmin(input)
         requirePermanent(input, 'inbox')
@@ -605,18 +757,30 @@ export function installAssistantMail(ctx: Context,
           const child = subprocess.spawn(mailStartupSpec(installRoot, args.enabled, process.env))
           const outcome = await child.done
           if (outcome.exitCode !== 0) throw new Error('could not configure local Windows startup')
-        } else if (endpoint !== 'status' && endpoint !== 'refresh') throw new Error('unknown mail operation')
-        if (endpoint !== 'status') {
+        } else if (endpoint !== 'status' && endpoint !== 'refresh' && endpoint !== 'cleanup-preview' && endpoint !== 'cleanup-trash') throw new Error('unknown mail operation')
+        let cleanup: Record<string, unknown> | undefined
+        if (endpoint === 'cleanup-preview') cleanup = await cleanupTrash(args, false)
+        else if (endpoint === 'cleanup-trash') cleanup = await cleanupTrash({ ...args, confirm_cleanup: true }, true)
+        if (endpoint !== 'status' && endpoint !== 'cleanup-preview' && endpoint !== 'cleanup-trash') {
           const account = await onboarding.status()
           const root = ctx.get('agents')?.roots()[0]
           if (account.sessionId === undefined && root !== undefined) await onboarding.configure(account.contacts, root.id)
-          if (endpoint === 'refresh') await pump()
-          else void pump()
+          if (endpoint === 'refresh') {
+            await pump()
+            quotaCache = undefined
+            quotaCacheAt = 0
+          } else void pump()
         }
+        const account = await onboarding.status()
+        const quota = account.state === 'ready'
+          ? await quotaSnapshot(endpoint === 'refresh' || endpoint === 'cleanup-trash')
+          : undefined
         const jobs = await journal.list()
         return { ok: true as const,
-          value: { account: await onboarding.status(),
+          value: { account,
             connection: status,
+            quota,
+            ...(cleanup === undefined ? {} : { cleanup }),
             startup: { supported: startupSupported,
               enabled: startupPath !== undefined && existsSync(startupPath) },
             jobs: jobs.map(job => ({ id: job.id,
@@ -668,6 +832,7 @@ export function installAssistantMail(ctx: Context,
       const account = await onboarding.status()
       assertActive()
       if (account.state !== 'ready' || account.inboxId === undefined) throw new ProactivityDeferredError('Kira mail is not verified yet')
+      await assertFreeSendHeadroom()
       const to = mailAddress(input.to)
       if (![account.ownerEmail, ...account.contacts].includes(to)) throw new Error('mail recipient is not authorized')
       if (!await config.authorizeOutgoing({ ...input, to })) throw new ProactivityDeferredError('mail task authorization is no longer active')
@@ -681,6 +846,27 @@ export function installAssistantMail(ctx: Context,
     }) },
     async attention() {
       const rows: ProactivityAttentionItem[] = []
+      try {
+        const account = await onboarding.status()
+        if (account.state === 'ready') {
+          const quota = await quotaSnapshot()
+          if (quota.level !== 'ok') {
+            const detail = `Free: ${quota.used.inboxes}/3 inboxes · ${quota.used.monthlyEmails}/3000 emails este mes · ${(quota.used.storageBytes / (1024 ** 3)).toFixed(2)}/3.00 GB. Quedan ${quota.remaining.monthlyEmails} emails y ${(quota.remaining.storageBytes / (1024 ** 3)).toFixed(2)} GB.`
+            rows.push({
+              id: 'mail:quota-free',
+              revision: createHash('sha256').update(JSON.stringify([quota.level, quota.used])).digest('hex'),
+              taskId: 'mail:quota-free',
+              kind: quota.level === 'critical' ? 'failure' : 'upcoming',
+              title: 'AgentMail Free · control de capacidad',
+              detail,
+              at: quota.measuredAt,
+              score: quota.level === 'critical' ? 145 : quota.level === 'high' ? 125 : 90,
+            })
+          }
+        }
+      } catch {
+        // Quota telemetry is advisory for attention; mailbox delivery owns its own hard send guard.
+      }
       for (const job of await journal.list()) {
         if (job.state !== 'replied' && job.state !== 'blocked') continue
         const detail = job.state === 'replied' ? job.summary : job.error

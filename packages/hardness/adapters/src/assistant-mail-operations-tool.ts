@@ -8,13 +8,14 @@ const ACTIONS = [
   'list_threads', 'search_threads', 'get_thread', 'get_thread_attachment', 'update_thread_labels', 'delete_thread',
   'list_drafts', 'get_draft', 'get_draft_attachment', 'create_draft', 'update_draft', 'send_draft', 'delete_draft',
   'list_inboxes', 'search_inboxes', 'get_inbox', 'create_inbox', 'update_inbox', 'delete_inbox',
+  'quota_status', 'cleanup_preview', 'cleanup_execute',
 ] as const
 
 const WRITES = new Set<string>([
   'update_message_labels', 'batch_update_message_labels', 'send_message', 'reply_message', 'reply_all',
   'forward_message', 'delete_message', 'update_thread_labels', 'delete_thread',
   'create_draft', 'update_draft', 'send_draft', 'delete_draft',
-  'create_inbox', 'update_inbox', 'delete_inbox',
+  'create_inbox', 'update_inbox', 'delete_inbox', 'cleanup_execute',
 ])
 
 /**
@@ -36,7 +37,10 @@ export function createAssistantMailOperationsTool(
       + 'Kira\'s primary inbox. Sending is restricted to the owner and explicitly authorized contacts. Inbox '
       + 'create/update/delete requires confirm_inbox_admin=true from an explicit owner request. Permanent '
       + 'deletions require confirm_permanent=true and deleting Kira\'s primary inbox additionally requires '
-      + 'confirm_primary_inbox=true; set those flags only after an explicit user request.',
+      + 'confirm_primary_inbox=true; set those flags only after an explicit user request. quota_status reads the '
+      + 'Free-plan telemetry (3 inboxes, 3000 emails/month, 3 GB) and remaining capacity. cleanup_preview finds '
+      + 'trashed mail older than the retention window; cleanup_execute permanently removes only those trash '
+      + 'candidates and requires confirm_cleanup=true.',
     parameters: {
       action: { type: 'string', enum: [...ACTIONS], required: true },
       inbox_id: { type: 'string', description: 'Optional target inbox. Omit for Kira\'s primary inbox.' },
@@ -80,6 +84,10 @@ export function createAssistantMailOperationsTool(
       confirm_inbox_admin: { type: 'boolean' },
       confirm_permanent: { type: 'boolean' },
       confirm_primary_inbox: { type: 'boolean' },
+      refresh: { type: 'boolean' },
+      older_than_days: { type: 'integer' },
+      max_delete: { type: 'integer' },
+      confirm_cleanup: { type: 'boolean' },
     },
     output: {
       schema: { type: 'object', additionalProperties: true },

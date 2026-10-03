@@ -29,6 +29,13 @@ export const ASSISTANT_MAIL_PROTOCOL = [
   '- Sending from Kira uses the owner/authorized-contact allowlist enforced by the resident host. Direct replies '
     + 'are pinned to the authenticated sender rather than trusting Reply-To. Inbox administration and permanent '
     + 'deletes require explicit confirmation flags; never set those from inference or background mail.',
+  '- AgentMail Free is treated as a hard operating budget: 3 inboxes, 3000 sent+received emails per month, '
+    + 'and 3 GB stored. Kira should call phoenix_agentmail quota_status when discussing capacity. Phoenix preserves '
+    + '100 monthly-email slots as inbound headroom before pausing new outbound sends, and blocks creation beyond '
+    + '3 inboxes. At 80/90/95% utilization it surfaces progressively stronger attention.',
+  '- Cleanup never pretends to reset monthly email usage. cleanup_preview/cleanup_execute only reclaim storage by '
+    + 'permanently deleting messages already in trash and older than the selected age; cleanup_execute requires an '
+    + 'explicit user confirmation. Inbox deletion remains separately protected.',
   '- Incoming authenticated owner/authorized-contact mail is a real Phoenix work trigger. While Phoenix is running, '
     + 'the resident AgentMail WebSocket wakes reconciliation immediately; polling remains recovery authority. Mail '
     + 'received while the PC is off remains at the provider, and startup catch-up resumes new durable message IDs '
