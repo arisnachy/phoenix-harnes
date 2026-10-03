@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { Context } from '@phoenix-ai/cordis'
 import { Remote, TypertRemoteService } from '@phoenix-ai/dsh-typert-protocol'
 import z from '@phoenix-ai/schemastery'
-import type {} from '@phoenix-ai/dsh-session'
+import { SessionId } from '@phoenix-ai/dsh-session'
 import type {
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
@@ -22,7 +22,7 @@ import type {
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
 } from './types.ts'
-import { CodexRealtimeBridge } from './codex-realtime.ts'
+import { CodexRealtimeBridge, type CodexRealtimeInitialItem } from './codex-realtime.ts'
 
 export type * from './types.ts'
 
@@ -251,6 +251,62 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
   }
 }
 
+const CODEX_REALTIME_CONTEXT_MAX_ITEMS = 6
+const CODEX_REALTIME_CONTEXT_MAX_CHARS = 6_000
+const CODEX_REALTIME_CONTEXT_MAX_ITEM_CHARS = 1_800
+
+/**
+ * Project only recent visible user/assistant prose into Codex Realtime V3
+ * initialItems. Tool calls, tool results, reasoning, images, files, system
+ * context, and plugin injections stay out so voice does not repay the full
+ * Phoenix prompt on every activation.
+ * @param messages - PHOENIX derived message history, accepted as unknown for a
+ *   dependency-light voice package boundary.
+ * @returns Oldest-first compact role/text items bounded to a small token proxy.
+ */
+export function phoenixMessagesToCodexRealtimeInitialItems(
+  messages: readonly unknown[],
+): CodexRealtimeInitialItem[] {
+  const newestFirst: CodexRealtimeInitialItem[] = []
+  let remaining = CODEX_REALTIME_CONTEXT_MAX_CHARS
+
+  for (let index = messages.length - 1; index >= 0 && newestFirst.length < CODEX_REALTIME_CONTEXT_MAX_ITEMS && remaining > 0; index -= 1) {
+    const message = messages[index]
+    if (!isRecord(message) || (message.role !== 'user' && message.role !== 'assistant')
+      || !isRecord(message.source)) continue
+    if (message.role === 'user' && message.source.kind !== 'user') continue
+    if (message.role === 'assistant' && message.source.kind !== 'model') continue
+    if (!Array.isArray(message.content)) continue
+
+    const text = message.content
+      .filter((block): block is UnknownRecord => isRecord(block) && block.type === 'text' && typeof block.text === 'string')
+      .map(block => String(block.text))
+      .join('\n')
+      .replace(/\s+/gu, ' ')
+      .trim()
+    if (text === '') continue
+
+    const itemLimit = Math.min(CODEX_REALTIME_CONTEXT_MAX_ITEM_CHARS, remaining)
+    const bounded = compactRealtimeContextText(text, itemLimit)
+    if (bounded === '') continue
+    newestFirst.push({ role: message.role, text: bounded })
+    remaining -= bounded.length
+  }
+
+  return newestFirst.reverse()
+}
+
+function compactRealtimeContextText(text: string, limit: number): string {
+  if (limit <= 0) return ''
+  if (text.length <= limit) return text
+  if (limit < 24) return text.slice(-limit)
+  const separator = ' … '
+  const content = limit - separator.length
+  const head = Math.ceil(content / 2)
+  const tail = content - head
+  return `${text.slice(0, head)}${separator}${text.slice(-tail)}`
+}
+
 /** Provider registry and non-blocking important-event announcement queue. */
 export class VoiceRuntime extends TypertRemoteService {
   static Config: z<VoiceRuntimeConfig> = z.object({
@@ -357,10 +413,15 @@ export class VoiceRuntime extends TypertRemoteService {
           reason: probe.reason ?? (probe.available ? 'codex-login-required' : 'codex-unavailable'),
         }
       }
+      const session = this.ctx.sessions.get(SessionId(key))
+      const initialItems = session === undefined
+        ? []
+        : phoenixMessagesToCodexRealtimeInitialItems(session.deriveMessages())
       const result = await this.codexRealtimeBridge().start({
         key,
         offerSdp,
         ...(model === undefined ? {} : { model }),
+        ...(initialItems.length === 0 ? {} : { initialItems }),
       })
       return {
         accepted: true,
