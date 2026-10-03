@@ -88,13 +88,13 @@ const PURPOSE_LABEL: Readonly<Record<NonNullable<KiraTeamMessageChatData['purpos
   update: 'Actualización',
 }
 
-const STATUS_FALLBACK: Readonly<Record<KiraTeamsKey, string>> = {
+const STATUS_FALLBACK: Partial<Record<KiraTeamsKey, string>> = {
   'status.preparing': 'preparando',
   'status.running': 'trabajando',
   'status.waiting': 'en espera',
   'status.done': 'terminó',
   'status.failed': 'falló',
-} as Partial<Record<KiraTeamsKey, string>> as Readonly<Record<KiraTeamsKey, string>>
+}
 
 function assignmentStatusKey(status: string | undefined): KiraTeamsKey {
   switch (status?.toLocaleLowerCase()) {
@@ -208,7 +208,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
               role="status"
             >
               <span className={css.statusDot} aria-hidden="true" />
-              {t?.(targetStatusKey) ?? STATUS_FALLBACK[targetStatusKey]}
+              {t?.(targetStatusKey) ?? STATUS_FALLBACK[targetStatusKey] ?? targetStatusKey}
             </span>
           )}
         </div>
