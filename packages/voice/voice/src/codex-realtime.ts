@@ -204,17 +204,21 @@ export class CodexRealtimeBridge {
   }
 
   private async startProcess(): Promise<void> {
-    const command = process.platform === 'win32' ? 'codex.cmd' : 'codex'
+    const codexArgs = [
+      '--config', "forced_login_method='chatgpt'",
+      'app-server', '--listen', 'stdio://',
+    ]
+    const command = process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : 'codex'
+    const args = process.platform === 'win32'
+      ? ['/d', '/s', '/c', 'codex', ...codexArgs]
+      : codexArgs
     const env = { ...process.env }
     // Never allow this voice path to fall back to a separately billed API key.
     delete env.OPENAI_API_KEY
 
     let child: ChildProcessWithoutNullStreams
     try {
-      child = spawn(command, [
-        '--config', 'forced_login_method="chatgpt"',
-        'app-server', '--listen', 'stdio://',
-      ], {
+      child = spawn(command, args, {
         env,
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
