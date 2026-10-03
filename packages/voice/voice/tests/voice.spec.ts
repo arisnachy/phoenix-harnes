@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import VoiceRuntime, {
   displayOutputToVoiceText,
+  phoenixMessagesToCodexRealtimeInitialItems,
   sessionEventToVoiceEvent,
   type VoiceImportantEvent,
   type VoiceTextToSpeechProvider,
@@ -111,6 +112,37 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     expect(natural).toHaveBeenCalledTimes(1)
     expect(kokoro).toHaveBeenCalledTimes(1)
     expect(system).not.toHaveBeenCalled()
+  })
+})
+
+describe('Codex realtime compact context', () => {
+  it('keeps only recent visible user and assistant prose in chronological order', () => {
+    const items = phoenixMessagesToCodexRealtimeInitialItems([
+      { role: 'system', source: { kind: 'plugin' }, content: [{ type: 'text', text: 'large system context' }] },
+      { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'Primera pregunta.' }] },
+      { role: 'assistant', source: { kind: 'model' }, content: [
+        { type: 'reasoning', text: 'private reasoning' },
+        { type: 'text', text: 'Primera respuesta.' },
+      ] },
+      { role: 'user', source: { kind: 'tool' }, content: [{ type: 'text', text: 'tool noise' }] },
+      { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'Pregunta actual.' }] },
+    ])
+    expect(items).toEqual([
+      { role: 'user', text: 'Primera pregunta.' },
+      { role: 'assistant', text: 'Primera respuesta.' },
+      { role: 'user', text: 'Pregunta actual.' },
+    ])
+  })
+
+  it('bounds history to six role-bearing items', () => {
+    const history = Array.from({ length: 10 }, (_, index) => ({
+      role: index % 2 === 0 ? 'user' : 'assistant',
+      source: { kind: index % 2 === 0 ? 'user' : 'model' },
+      content: [{ type: 'text', text: `mensaje-${index}` }],
+    }))
+    expect(phoenixMessagesToCodexRealtimeInitialItems(history).map(item => item.text)).toEqual([
+      'mensaje-4', 'mensaje-5', 'mensaje-6', 'mensaje-7', 'mensaje-8', 'mensaje-9',
+    ])
   })
 })
 
