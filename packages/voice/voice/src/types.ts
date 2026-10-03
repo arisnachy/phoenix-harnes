@@ -57,6 +57,8 @@ export interface VoiceConversationRealtimeStartReceipt {
   readonly threadId?: string
   readonly answerSdp?: string
   readonly reason?: 'disabled' | 'invalid' | 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable' | 'negotiation-failed'
+  /** Bounded sanitized startup diagnostic when native Codex negotiation fails. */
+  readonly detail?: string
 }
 
 /** Stop one native Codex realtime session addressed by its PHOENIX session key. */
