@@ -415,7 +415,11 @@ export class VoiceRuntime extends TypertRemoteService {
           reason: probe.reason ?? (probe.available ? 'codex-login-required' : 'codex-unavailable'),
         }
       }
-      const session = this.ctx.sessions.get(SessionId(key))
+      // Session history is optional context enrichment for Realtime. Voice must not
+      // depend on SessionStore injection order: Cordis explicitly allows ctx.get()
+      // for optional/late-bound services, while direct ctx.sessions access throws
+      // "cannot get property \"sessions\" without inject" from this plugin fiber.
+      const session = this.ctx.get('sessions')?.get(SessionId(key))
       const initialItems = session === undefined
         ? []
         : phoenixMessagesToCodexRealtimeInitialItems(session.deriveMessages())

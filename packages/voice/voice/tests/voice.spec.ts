@@ -201,6 +201,44 @@ describe('Codex realtime app-server notifications', () => {
   })
 })
 
+describe('Codex realtime optional session context', () => {
+  it('starts native Codex Realtime even when SessionStore is not injected into the voice plugin', async () => {
+    const { voice } = await mountVoice()
+    const internal = voice as unknown as {
+      codexRealtimeBridge(): {
+        probe(): Promise<{ available: boolean; authenticated: boolean }>
+        start(input: {
+          key: string
+          offerSdp: string
+          model?: string
+          initialItems?: readonly unknown[]
+        }): Promise<{ threadId: string; answerSdp: string }>
+      }
+    }
+    const bridge = {
+      probe: vi.fn(async () => ({ available: true, authenticated: true })),
+      start: vi.fn(async () => ({ threadId: 'thread-native-voice', answerSdp: 'v=0\\r\\nanswer' })),
+    }
+    vi.spyOn(internal, 'codexRealtimeBridge').mockReturnValue(bridge)
+
+    await expect(voice.conversationRealtimeStart({
+      key: 'session-without-injected-store',
+      offerSdp: 'v=0\\r\\noffer',
+      model: 'gpt-6-luna',
+    })).resolves.toEqual({
+      accepted: true,
+      threadId: 'thread-native-voice',
+      answerSdp: 'v=0\\r\\nanswer',
+    })
+    expect(bridge.probe).toHaveBeenCalledTimes(1)
+    expect(bridge.start).toHaveBeenCalledWith({
+      key: 'session-without-injected-store',
+      offerSdp: 'v=0\\r\\noffer',
+      model: 'gpt-6-luna',
+    })
+  })
+})
+
 describe('Codex realtime safety gate', () => {
   it('stays fully disabled without starting Codex when the feature is turned off', async () => {
     const { voice } = await mountVoice({ codexRealtime: false })
