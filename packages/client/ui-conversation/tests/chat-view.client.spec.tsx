@@ -343,6 +343,25 @@ function installScrollMetrics(element: HTMLElement, initialHeight: number, clien
 
 describe('Chat node rendering', () => {
 
+  it('composes user message plugin actions into the same icon row as copy', () => {
+    const h = makeHarness({ nodes: [user(1, 'hola')] })
+    const original = h.props.renderSlot as unknown as
+      (key: string, owner: object, opts?: object) => React.ReactNode
+    h.props.renderSlot = ((key: string, owner: object, opts?: object) => {
+      if (key === 'conversation.chat.message-actions') {
+        return <button type="button" data-testid="inline-reaction">react</button>
+      }
+      return original(key, owner, opts)
+    }) as unknown as ChatViewSlotProps['renderSlot']
+
+    const view = render(<h.ChatView {...h.props} />)
+    const reaction = view.getByTestId('inline-reaction')
+    const row = reaction.closest('[data-message-actions-row]')
+    expect(row).not.toBeNull()
+    expect(row?.contains(reaction)).toBe(true)
+    expect(view.container.querySelectorAll('[data-message-actions-row]')).toHaveLength(1)
+  })
+
   it('threads the injected file-mention vocabulary into the closing prose only', () => {
     const wrote = (seq: number, callId: string, path: string): ToolResultNode => ({
       ...toolResult(seq, callId, 'write'),

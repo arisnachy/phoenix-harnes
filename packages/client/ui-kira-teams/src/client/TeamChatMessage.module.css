@@ -120,6 +120,18 @@
 .bubble :global(.markdown) > :first-child { margin-top: 0; }
 .bubble :global(.markdown) > :last-child { margin-bottom: 0; }
 
+.messageActions {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  margin-top: 4px;
+}
+
+.messageActions .reactions {
+  margin-top: 0;
+  padding-left: 0;
+}
+
 .reactions {
   display: flex;
   align-items: center;
@@ -131,10 +143,13 @@
 
 [data-chat-flow-kind="user"] .reactions[data-author-kind="user"] {
   justify-content: flex-end;
+  flex-wrap: nowrap;
+  margin-top: 0;
+  padding-left: 0;
 }
 
 [data-chat-flow-kind="kira-team-message"] .reactions {
-  padding-left: 48px;
+  padding-left: 0;
 }
 
 .reaction {
@@ -198,7 +213,19 @@
   height: 28px;
 }
 
-.reactionsToolbar .reactionAdd {
+.reactionsToolbar [data-chat-flow-kind="user"] .reactions .reactionAdd,
+.messageActions .reactionAdd {
+  width: 28px;
+  height: 28px;
+}
+
+[data-chat-flow-kind="user"] .reactions .reactionAdd svg,
+.messageActions .reactionAdd svg {
+  width: 18px;
+  height: 18px;
+}
+
+.reactionAdd {
   width: 28px;
   height: 28px;
 }
