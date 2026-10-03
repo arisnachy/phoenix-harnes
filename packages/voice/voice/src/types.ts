@@ -8,7 +8,7 @@ export interface VoiceConversationStatus {
   readonly enabled: boolean
   readonly natural: boolean
   /** Assistant identity preference that browser/local fallback must honor too. */
-  readonly assistantGender: VoiceAssistantGender
+  readonly assistantGender?: VoiceAssistantGender
   readonly provider?: string
 }
 
