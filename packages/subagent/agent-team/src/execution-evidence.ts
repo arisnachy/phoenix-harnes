@@ -55,7 +55,7 @@ function latestAssignment(
     const source = event.data.source as { readonly kind?: string }
     if (source.kind !== 'user' && source.kind !== 'team-message') continue
     const requirement = teamExecutionRequirement(textOf(event.data.content))
-    if (requirement !== 'none') return { seq: event.seq, requirement }
+    return { seq: event.seq, requirement }
   }
   return undefined
 }
