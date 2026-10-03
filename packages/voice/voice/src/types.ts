@@ -32,3 +32,39 @@ export interface VoiceConversationCancelRequest {
 export interface VoiceConversationCancelReceipt {
   readonly cancelled: number
 }
+
+
+/** Capability of the native Codex/ChatGPT realtime voice sidecar. */
+export interface VoiceConversationRealtimeStatus {
+  readonly enabled: boolean
+  readonly available: boolean
+  readonly authenticated: boolean
+  readonly provider: 'openai-codex'
+  readonly reason?: 'disabled' | 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable'
+}
+
+/** Browser WebRTC offer for one PHOENIX session using its current Codex route. */
+export interface VoiceConversationRealtimeStartRequest {
+  readonly key: string
+  readonly offerSdp: string
+  /** Current direct Codex model. Phoenix Auto omits its synthetic id. */
+  readonly model?: string
+}
+
+/** WebRTC answer returned after Codex app-server negotiated the realtime call. */
+export interface VoiceConversationRealtimeStartReceipt {
+  readonly accepted: boolean
+  readonly threadId?: string
+  readonly answerSdp?: string
+  readonly reason?: 'disabled' | 'invalid' | 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable' | 'negotiation-failed'
+}
+
+/** Stop one native Codex realtime session addressed by its PHOENIX session key. */
+export interface VoiceConversationRealtimeStopRequest {
+  readonly key: string
+}
+
+/** Whether a native Codex realtime session was active and stopped. */
+export interface VoiceConversationRealtimeStopReceipt {
+  readonly stopped: boolean
+}
