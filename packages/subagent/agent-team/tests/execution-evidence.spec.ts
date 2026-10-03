@@ -85,6 +85,26 @@ describe('Team execution evidence', () => {
     })
   })
 
+  it('distinguishes a real connector send_message from the local Team coordination tool', () => {
+    const assignment = userEvent(0, 'Envía un mensaje por Slack y confirma el envío.')
+    const local = [
+      assignment,
+      toolCall(1, 'local-send', 'send_message'),
+      toolResult(2, 'local-send'),
+    ]
+    expect(teamExecutionProof(local)).toMatchObject({ satisfied: false, tools: [] })
+
+    const external = [
+      assignment,
+      toolCall(1, 'slack-send', 'mcp__Slack__send_message'),
+      toolResult(2, 'slack-send'),
+    ]
+    expect(teamExecutionProof(external)).toMatchObject({
+      satisfied: true,
+      tools: ['send_message'],
+    })
+  })
+
   it('does not accept failed action calls or Team coordination as proof', () => {
     const events = [
       userEvent(0, 'Actualiza el archivo package.json.'),
