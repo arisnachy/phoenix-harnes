@@ -474,7 +474,7 @@ export class VoiceRuntime extends TypertRemoteService {
         accepted: true,
         threadId: result.threadId,
         answerSdp: result.answerSdp,
-        voice: result.voice,
+        ...(result.voice === undefined ? {} : { voice: result.voice }),
       }
     } catch (error) {
       const message = String(error)
