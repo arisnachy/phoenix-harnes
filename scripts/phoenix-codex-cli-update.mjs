@@ -127,8 +127,13 @@ async function latestStableVersion() {
   return parseStableVersion(payload?.version).text
 }
 
-function npmBin() {
-  return process.platform === 'win32' ? 'npm.cmd' : 'npm'
+function npmInvocation(args) {
+  if (process.platform !== 'win32') return { bin: 'npm', args }
+  const bundledNpm = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
+  if (existsSync(bundledNpm)) return { bin: process.execPath, args: [bundledNpm, ...args] }
+  const shell = process.env.ComSpec ?? 'cmd.exe'
+  const quote = value => `"${String(value).replaceAll('"', '""').replaceAll('%', '%%')}"`
+  return { bin: shell, args: ['/d', '/s', '/c', ['npm', ...args].map(quote).join(' ')] }
 }
 
 function run(bin, args, options = {}) {
@@ -192,7 +197,7 @@ function installVersion(home, version) {
   rmSync(staging, { recursive: true, force: true })
   mkdirSync(staging, { recursive: true })
   try {
-    run(npmBin(), [
+    const npm = npmInvocation([
       'install',
       '--prefix', staging,
       '--no-package-lock',
@@ -200,7 +205,8 @@ function installVersion(home, version) {
       '--no-audit',
       '--no-fund',
       `${PACKAGE_NAME}@${version}`,
-    ], { inherit: true, timeout: 5 * 60 * 1000 })
+    ])
+    run(npm.bin, npm.args, { inherit: true, timeout: 5 * 60 * 1000 })
     const installed = packageBin(staging)
     if (installed.version !== version) {
       throw new Error(`npm installed Codex ${installed.version}, expected ${version}`)
