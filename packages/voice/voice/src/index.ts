@@ -10,10 +10,12 @@ import { Context } from '@phoenix-ai/cordis'
 import { Remote, TypertRemoteService } from '@phoenix-ai/dsh-typert-protocol'
 import z from '@phoenix-ai/schemastery'
 import { SessionId } from '@phoenix-ai/dsh-session'
-import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import type {
   VoiceConversationCancelReceipt,
   VoiceConversationCancelRequest,
+  VoiceConversationRealtimeSpeakReceipt,
+  VoiceConversationRealtimeSpeakRequest,
   VoiceConversationRealtimeStartReceipt,
   VoiceConversationRealtimeStartRequest,
   VoiceConversationRealtimeStatus,
@@ -22,12 +24,12 @@ import type {
   VoiceConversationSpeakReceipt,
   VoiceConversationSpeakRequest,
   VoiceConversationStatus,
+  VoiceAssistantGender,
 } from './types.ts'
 import {
   CodexRealtimeBridge,
   type CodexRealtimeInitialItem,
   type CodexRealtimeTranscript,
-  type CodexRealtimeVoice,
 } from './codex-realtime.ts'
 
 export type * from './types.ts'
@@ -177,17 +179,17 @@ interface UnknownRecord {
   readonly [key: string]: unknown
 }
 
-type RealtimeAssistantGender = 'masculine' | 'feminine' | 'neutral'
-
 interface RealtimeAssistantIdentity {
   readonly name: string
-  readonly gender: RealtimeAssistantGender
-  readonly voice: CodexRealtimeVoice
+  readonly gender: VoiceAssistantGender
 }
 
-interface RealtimeTranscriptTurn {
-  readonly turn: number
-  readonly step: number
+interface RealtimeAgentLike {
+  followup(message: UserMessage): void
+}
+
+interface RealtimeAgentRegistryLike {
+  get(id: SessionId): RealtimeAgentLike | undefined
 }
 
 declare module '@phoenix-ai/cordis' {
@@ -345,7 +347,6 @@ export class VoiceRuntime extends TypertRemoteService {
   private current: QueuedAnnouncement | undefined
   private draining = false
   private readonly conversationSpeech = new Map<string, ConversationSpeechChannel>()
-  private readonly realtimeTranscriptTurns = new Map<string, RealtimeTranscriptTurn>()
   private codexRealtime: CodexRealtimeBridge | undefined
 
   constructor(ctx: Context, config: VoiceRuntimeConfig = {}) {
@@ -360,9 +361,18 @@ export class VoiceRuntime extends TypertRemoteService {
       codexRealtime: config.codexRealtime ?? true,
     }
     ctx.on('voice/important', (event) => { void this.announce(event) })
-    ctx.on('session/event', (_session, event) => {
+    ctx.on('session/event', (session, event) => {
       const important = sessionEventToVoiceEvent(event)
-      if (important !== undefined) void this.announce(important)
+      if (important === undefined) return
+      const key = String(session.id)
+      const text = displayOutputToVoiceText(important.displayOutput, this.config.maxChars)
+      if (text !== '' && this.codexRealtime?.has(key) === true) {
+        void this.codexRealtime.speak(key, text).catch((error: unknown) => {
+          this.ctx.logger('voice').warn(`realtime important-event speech failed: ${String(error)}`)
+        })
+        return
+      }
+      void this.announce(important)
     })
     ctx.effect(() => () => { this.stop() }, 'voice queue teardown')
   }
@@ -377,6 +387,7 @@ export class VoiceRuntime extends TypertRemoteService {
     return {
       enabled: this.config.enabled,
       natural: this.config.enabled && provider?.id === 'phoenix-natural',
+      assistantGender: realtimeAssistantIdentity(this.ctx).gender,
       ...(provider === undefined ? {} : { provider: provider.id }),
     }
   }
@@ -455,15 +466,15 @@ export class VoiceRuntime extends TypertRemoteService {
         ...(initialItems.length === 0 ? {} : { initialItems }),
         assistantName: identity.name,
         assistantGender: identity.gender,
-        voice: identity.voice,
         onTranscript: (transcript) => {
-          this.appendRealtimeTranscript(key, model, transcript)
+          if (transcript.role === 'user') this.submitRealtimeTranscript(key, transcript)
         },
       })
       return {
         accepted: true,
         threadId: result.threadId,
         answerSdp: result.answerSdp,
+        ...(result.voice === undefined ? {} : { voice: result.voice }),
       }
     } catch (error) {
       const message = String(error)
@@ -482,6 +493,35 @@ export class VoiceRuntime extends TypertRemoteService {
     }
   }
 
+  /**
+   * Read Phoenix-owned chat/task prose through the already-active native
+   * Realtime call. Realtime is transport only; the real Phoenix agent owns the
+   * work that produced this text.
+   * @param request Phoenix session key and bounded prose to speak.
+   * @returns Whether the active Realtime transport accepted the speech.
+   */
+  @Remote('conversationRealtimeSpeak')
+  async conversationRealtimeSpeak(
+    request: VoiceConversationRealtimeSpeakRequest,
+  ): Promise<VoiceConversationRealtimeSpeakReceipt> {
+    if (!this.config.enabled || !this.config.codexRealtime) {
+      return { accepted: false, reason: 'disabled' }
+    }
+    const key = request.key.trim()
+    if (key === '' || key.length > 256 || request.text.length > 4_096) {
+      return { accepted: false, reason: 'invalid' }
+    }
+    const text = displayOutputToVoiceText(request.text, Math.min(this.config.maxChars, 360))
+    if (text === '') return { accepted: false, reason: 'invalid' }
+    if (this.codexRealtime?.has(key) !== true) return { accepted: false, reason: 'not-active' }
+    try {
+      return { accepted: await this.codexRealtime.speak(key, text) }
+    } catch (error) {
+      this.ctx.logger('voice').warn(`Codex realtime appendSpeech failed: ${String(error)}`)
+      return { accepted: false, reason: 'speak-failed' }
+    }
+  }
+
   /** Stop one browser-owned Codex realtime call.
    * @param request Browser-owned call identity to stop.
    * @returns Whether an active call was stopped; invalid or unknown identities return false.
@@ -492,7 +532,6 @@ export class VoiceRuntime extends TypertRemoteService {
   ): Promise<VoiceConversationRealtimeStopReceipt> {
     const key = request.key.trim()
     if (key === '' || key.length > 256 || this.codexRealtime === undefined) return { stopped: false }
-    this.closeRealtimeTranscriptTurn(key, 'interrupted')
     return { stopped: await this.codexRealtime.stop(key).catch(() => false) }
   }
 
@@ -648,9 +687,6 @@ export class VoiceRuntime extends TypertRemoteService {
       for (const controller of channel.controllers) controller.abort('voice stopped')
     }
     this.conversationSpeech.clear()
-    for (const key of [...this.realtimeTranscriptTurns.keys()]) {
-      this.closeRealtimeTranscriptTurn(key, 'interrupted')
-    }
     this.codexRealtime?.close()
     this.codexRealtime = undefined
   }
@@ -683,77 +719,26 @@ export class VoiceRuntime extends TypertRemoteService {
     }
   }
 
-  private appendRealtimeTranscript(
-    key: string,
-    model: string | undefined,
-    transcript: CodexRealtimeTranscript,
-  ): void {
-    const store = this.ctx.get('sessions')
-    const session = store?.get(SessionId(key))
-    if (session === undefined) return
+  /**
+   * Forward one finalized human Realtime utterance into the live Phoenix Agent.
+   * The normal agent loop then owns planning, tools, delegation, tasks, durable
+   * transcript events, and completion exactly like a typed chat turn.
+   */
+  private submitRealtimeTranscript(key: string, transcript: CodexRealtimeTranscript): void {
     const text = transcript.text.trim()
-    if (text === '') return
-
-    if (transcript.role === 'user') {
-      this.closeRealtimeTranscriptTurn(key, 'user')
-      const turn = nextRealtimeTurn(session.events)
-      const step = 1
-      session.append('turn/start', { turn })
-      session.append('user/message', createUserMessage({
-        source: { kind: 'user' },
-        content: [{ type: 'text', text }],
-      }), { surfaceOp: 'append' })
-      session.append('step/start', { turn, step })
-      this.realtimeTranscriptTurns.set(key, { turn, step })
-      void store?.flush(session).catch((error: unknown) => {
-        this.ctx.logger('voice').warn(`realtime user transcript flush failed: ${String(error)}`)
-      })
+    if (transcript.role !== 'user' || text === '') return
+    const registry = (this.ctx as unknown as {
+      get(name: string, required?: boolean): unknown
+    }).get('agents', false) as RealtimeAgentRegistryLike | undefined
+    const agent = registry?.get(SessionId(key))
+    if (agent === undefined) {
+      this.ctx.logger('voice').warn(`realtime transcript ignored: no live Phoenix agent for session "${key}"`)
       return
     }
-
-    let state = this.realtimeTranscriptTurns.get(key)
-    if (state === undefined) {
-      state = { turn: nextRealtimeTurn(session.events), step: 1 }
-      session.append('turn/start', { turn: state.turn })
-      session.append('step/start', state)
-      this.realtimeTranscriptTurns.set(key, state)
-    }
-    session.append('assistant/message', {
-      turn: state.turn,
-      step: state.step,
-      message: createAssistantMessage({
-        source: {
-          provider: 'openai-codex',
-          model: model?.trim() || 'codex-realtime',
-        },
-        content: [{ type: 'text', text }],
-      }),
-    }, { surfaceOp: 'append' })
-    session.append('step/end', state)
-    session.append('turn/end', { turn: state.turn, reason: { kind: 'completed' } })
-    this.realtimeTranscriptTurns.delete(key)
-    void store?.flush(session).catch((error: unknown) => {
-      this.ctx.logger('voice').warn(`realtime assistant transcript flush failed: ${String(error)}`)
-    })
-  }
-
-  private closeRealtimeTranscriptTurn(key: string, reason: 'user' | 'interrupted'): void {
-    const state = this.realtimeTranscriptTurns.get(key)
-    if (state === undefined) return
-    const store = this.ctx.get('sessions')
-    const session = store?.get(SessionId(key))
-    this.realtimeTranscriptTurns.delete(key)
-    if (session === undefined) return
-    session.append('step/end', state)
-    session.append('turn/end', {
-      turn: state.turn,
-      reason: reason === 'user'
-        ? { kind: 'aborted', reason: { kind: 'user' } }
-        : { kind: 'interrupted' },
-    })
-    void store?.flush(session).catch((error: unknown) => {
-      this.ctx.logger('voice').warn(`realtime transcript close flush failed: ${String(error)}`)
-    })
+    agent.followup(createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text }],
+    }))
   }
 
   private codexRealtimeBridge(): CodexRealtimeBridge {
@@ -831,35 +816,21 @@ export class VoiceRuntime extends TypertRemoteService {
 }
 
 function realtimeAssistantIdentity(ctx: Context): RealtimeAssistantIdentity {
-  const service = ctx.get('userProfile') as {
+  const service = (ctx as unknown as {
+    get(name: string, required?: boolean): unknown
+  }).get('userProfile', false) as {
     getAssistantIdentity?: () => { name?: unknown; gender?: unknown }
   } | undefined
   const configured = service?.getAssistantIdentity?.()
   const name = typeof configured?.name === 'string' && configured.name.trim() !== ''
     ? configured.name.trim().slice(0, 120)
     : 'KIRA'
-  const gender: RealtimeAssistantGender = configured?.gender === 'masculine'
+  const gender: VoiceAssistantGender = configured?.gender === 'masculine'
     || configured?.gender === 'neutral'
     || configured?.gender === 'feminine'
     ? configured.gender
     : 'feminine'
-  return {
-    name,
-    gender,
-    // Codex V1/V3 currently share this voice family. Pinning a voice prevents
-    // provider defaults from silently changing the configured presentation.
-    voice: gender === 'feminine' ? 'juniper' : gender === 'masculine' ? 'cove' : 'breeze',
-  }
-}
-
-function nextRealtimeTurn(events: readonly { readonly type: string; readonly data: unknown }[]): number {
-  let maximum = 0
-  for (const event of events) {
-    if (typeof event.data !== 'object' || event.data === null || !('turn' in event.data)) continue
-    const turn = (event.data as { readonly turn?: unknown }).turn
-    if (typeof turn === 'number' && Number.isSafeInteger(turn) && turn > maximum) maximum = turn
-  }
-  return maximum + 1
+  return { name, gender }
 }
 
 function codexRealtimeFailureDetail(value: unknown): string {
