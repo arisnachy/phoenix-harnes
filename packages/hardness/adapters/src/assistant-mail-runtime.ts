@@ -100,7 +100,7 @@ export function installAssistantMail(ctx: Context,
     await credentials.set(ref, key)
   } })
   let enrolling: Promise<void> | undefined
-  const ensureEnrollment = (explicitOwnerEmail?: string): Promise<void> => {
+  const ensureEnrollment = (explicitOwnerEmail?: string, requireOwner = false): Promise<void> => {
     if (enrolling !== undefined) return enrolling
     enrolling = (async () => {
       const account = await onboarding.status()
@@ -109,7 +109,8 @@ export function installAssistantMail(ctx: Context,
       if (ctx.get('credentials') === undefined) throw new Error('secure credential storage is unavailable')
       const resolvedOwner = explicitOwnerEmail?.trim() || await config.resolveOwnerEmail?.()
       if (resolvedOwner === undefined || resolvedOwner.length === 0) {
-        throw new Error('owner email required for one-time mailbox verification')
+        if (requireOwner) throw new Error('owner email required for one-time mailbox verification')
+        return
       }
       const owner = mailAddress(resolvedOwner)
       // AgentMail creates the mailbox without a pre-existing API key. The signup
@@ -226,7 +227,7 @@ export function installAssistantMail(ctx: Context,
     ctx,
     identity,
     async (ownerEmail) => {
-      await ensureEnrollment(ownerEmail)
+      await ensureEnrollment(ownerEmail, true)
       const account = await onboarding.status()
       const root = ctx.get('agents')?.roots()[0]
       if (account.sessionId === undefined && root !== undefined) {
