@@ -31,8 +31,9 @@ import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
-  createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, interruptVoiceAssistantSpeech,
-  isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
+  createVoiceRecognition, getVoiceAssistantSnapshot, hasCodexRealtimeVoiceSupport, hasVoiceRecognition,
+  interruptVoiceAssistantSpeech, isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho,
+  setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant, tryStartCodexRealtimeVoice,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -189,11 +190,10 @@ export function InputBar({
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
-  // Voice is an explicit browser capability. Hands-free mode keeps the browser
-  // recognizer alive across turns, submits each final transcript automatically,
-  // and lets the assistant tail speak the next completed response.
+  // Voice prefers native Codex Realtime for OpenAI Codex sessions. Other
+  // providers retain the existing browser-STT + local/browser-TTS path.
   const [voiceState, setVoiceState] = useState<VoiceInputState>(() => (
-    hasVoiceRecognition() ? 'idle' : 'unsupported'
+    hasVoiceRecognition() || hasCodexRealtimeVoiceSupport() ? 'idle' : 'unsupported'
   ))
   const voiceAssistant = useSyncExternalStore(
     subscribeVoiceAssistant,
@@ -203,6 +203,7 @@ export function InputBar({
   const voiceEnabled = voiceAssistant.active
   const voiceRef = useRef<VoiceRecognitionLike | null>(null)
   const voiceSubmitPendingRef = useRef(false)
+  const voiceStartingRef = useRef(false)
   const appendVoiceText = useCallback((text: string): void => {
     if (keyboard === undefined || locked || machineBusy) return
     if (isLikelyVoiceAssistantEcho(text)) return
@@ -221,7 +222,7 @@ export function InputBar({
   }, [keyboard, locked, machineBusy])
   const startVoiceRecognition = useCallback((): void => {
     const recognition = voiceRef.current
-    if (recognition === null || voiceState === 'listening' || locked || machineBusy
+    if (recognition === null || isCodexRealtimeVoiceActive() || voiceState === 'listening' || locked || machineBusy
       || (running && voiceAssistant.phase !== 'speaking')) return
     try {
       recognition.start()
@@ -232,36 +233,52 @@ export function InputBar({
     }
   }, [locked, machineBusy, running, voiceAssistant.phase, voiceState])
   useEffect(() => () => {
+    voiceStartingRef.current = false
     setVoiceAssistantActive(false)
     voiceRef.current?.abort()
     voiceRef.current = null
   }, [])
   const toggleVoice = useCallback((): void => {
-    if (locked || machineBusy) return
+    if (locked || machineBusy || voiceStartingRef.current) return
     if (voiceEnabled) {
       setVoiceAssistantActive(false)
       voiceRef.current?.stop()
       return
     }
-    const recognition = createVoiceRecognition(
-      appendVoiceText,
-      (next) => {
-        setVoiceState(next)
-        setVoiceAssistantListening(next === 'listening')
-        if (next === 'permission-denied' || next === 'error') {
-          setVoiceAssistantActive(false)
-          voiceRef.current = null
+
+    voiceStartingRef.current = true
+    void (async () => {
+      try {
+        // The realtime path checks the Host-reported session provider. A
+        // non-Codex route returns false without opening a microphone.
+        if (await tryStartCodexRealtimeVoice(String(sessionId))) {
+          setVoiceState('listening')
+          return
         }
-      },
-    )
-    if (recognition === undefined) {
-      setVoiceState('unsupported')
-      return
-    }
-    setVoiceAssistantActive(true)
-    voiceRef.current = recognition
-    startVoiceRecognition()
-  }, [appendVoiceText, locked, machineBusy, startVoiceRecognition, voiceEnabled])
+
+        const recognition = createVoiceRecognition(
+          appendVoiceText,
+          (next) => {
+            setVoiceState(next)
+            setVoiceAssistantListening(next === 'listening')
+            if (next === 'permission-denied' || next === 'error') {
+              setVoiceAssistantActive(false)
+              voiceRef.current = null
+            }
+          },
+        )
+        if (recognition === undefined) {
+          setVoiceState('unsupported')
+          return
+        }
+        setVoiceAssistantActive(true)
+        voiceRef.current = recognition
+        startVoiceRecognition()
+      } finally {
+        voiceStartingRef.current = false
+      }
+    })()
+  }, [appendVoiceText, locked, machineBusy, sessionId, startVoiceRecognition, voiceEnabled])
 
   // A final recognition fragment is a complete voice turn. Waiting for the
   // machine's published draft avoids submitting the previous draft snapshot.
