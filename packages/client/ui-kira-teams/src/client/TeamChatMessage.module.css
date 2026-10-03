@@ -203,6 +203,11 @@
   height: 28px;
 }
 
+.reactionsToolbar .reactionAdd svg {
+  width: 18px;
+  height: 18px;
+}
+
 .reactionsToolbar .emojiMenu {
   position: absolute;
   z-index: 120;
