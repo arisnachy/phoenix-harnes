@@ -42,7 +42,7 @@ import { registerConversationNodes } from './conversation-nodes/register.ts'
 import { registerChatNodeRenderers } from './chat/register-node-renderers.ts'
 import { CONVERSATION_SETTINGS_NAMESPACE, type ConversationSettings } from '../submission-settings.ts'
 import {
-  configureVoiceAssistantRemote, refreshVoiceAssistantRemote,
+  configureVoiceAssistantRemote, configureVoiceModelRouteResolver, refreshVoiceAssistantRemote,
 } from './voice.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {
@@ -129,7 +129,14 @@ export function apply(ctx: Context): void {
   const disposeVoiceRemote = configureVoiceAssistantRemote(
     ctx.remote.voice,
   )
-  ctx.effect(() => disposeVoiceRemote, 'ui-conversation: host voice remote')
+  const disposeVoiceRoute = configureVoiceModelRouteResolver(async (sessionKey) => {
+    const { result } = await ctx.connection.api.sessions.models({ sessionId: sessionKey as SessionId })
+    return result.ok ? result.value.current : undefined
+  })
+  ctx.effect(() => () => {
+    disposeVoiceRoute()
+    disposeVoiceRemote()
+  }, 'ui-conversation: host voice remote')
   ctx.on('connection/reset', () => { void refreshVoiceAssistantRemote() })
 
   registerConversationNodes(ctx)
