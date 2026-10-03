@@ -166,6 +166,52 @@ describe('scheduled email execution', () => {
     expect(dispose).toHaveBeenCalledTimes(1)
   })
 
+  it('uses the verified Kira mailbox for host-owned email delivery exactly once per occurrence key', async () => {
+    const sendMail = vi.fn(async () => {})
+    const start = vi.fn(async (_provider: string, request: { prompt: Array<{ type: string; text: string }> }) => ({
+      id: 'child',
+      result: Promise.resolve({
+        output: [{ type: 'text', text: 'Informe terminado y adjunto disponible en Drive.' }],
+        stopReason: 'completed',
+      }),
+      dispose: async () => {},
+      request,
+    }))
+    const parent = { id: 'agent-a' }
+    const executor = createProactivityExecutor(
+      {
+        get: vi.fn(() => parent),
+        roots: vi.fn(() => [parent]),
+        list: vi.fn(() => [parent]),
+      } as never,
+      {
+        getProvider: vi.fn(() => ({ capabilities: {} })),
+        start,
+      } as never,
+      {
+        pollMs: 15_000,
+        privateWorkProvider: 'spawn',
+        privateWorkResultChars: 12_000,
+        resolveDefaultMailRecipient: async () => 'owner@example.com',
+        sendMail,
+      },
+    )
+
+    await expect(executor.execute(execution())).resolves.toEqual({
+      summary: 'email sent to owner@example.com: Informe terminado y adjunto disponible en Drive.',
+    })
+    expect(sendMail).toHaveBeenCalledTimes(1)
+    expect(sendMail).toHaveBeenCalledWith({
+      to: 'owner@example.com',
+      subject: 'Scheduled self email',
+      text: 'Informe terminado y adjunto disponible en Drive.',
+      idempotencyKey: 'mail-task:deliver:2026-09-28T02:53:29.000Z',
+    })
+    const prompt = start.mock.calls[0]?.[1]?.prompt[0]?.text ?? ''
+    expect(prompt).toContain('Phoenix owns a verified Kira mailbox')
+    expect(prompt).toContain('Do not call a mail connector yourself')
+  })
+
   it('keeps an undeliverable legacy email occurrence pending instead of pretending it was sent', async () => {
     const start = vi.fn()
     const parent = { id: 'agent-a' }

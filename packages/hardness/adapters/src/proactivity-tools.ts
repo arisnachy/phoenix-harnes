@@ -126,7 +126,7 @@ export function createProactivityCreateTool(
 ): ToolDefinition {
   return defineTool({
     name: 'phoenix_task_create',
-    description: 'Create durable scheduled work for Phoenix. Use it for reminders, follow-ups, recurring background intelligence, future office tasks, annual dates such as birthdays, and private surprise preparation. delivery=work can maintain an ongoing user objective in the background. Tasks survive Phoenix restarts and catch up after the computer was off.',
+    description: 'Create durable scheduled work for Phoenix. Use it for reminders, follow-ups, recurring background intelligence, future office tasks, annual dates such as birthdays, private surprise preparation, and explicitly requested email delivery. For "send/email this now", use a one-shot task with runAt set to the current time and delivery=email. delivery=work can maintain an ongoing user objective in the background. Tasks survive Phoenix restarts and catch up after the computer was off.',
     parameters: {
       title: { type: 'string', required: true },
       instruction: { type: 'string', required: true },
