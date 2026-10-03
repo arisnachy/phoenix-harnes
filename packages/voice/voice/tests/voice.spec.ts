@@ -7,7 +7,7 @@ import VoiceRuntime, {
   type VoiceImportantEvent,
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
-import { CodexRealtimeBridge } from '../src/codex-realtime.ts'
+import { CodexRealtimeBridge, realtimeVoiceForGender } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
   ctx: Context
@@ -147,6 +147,34 @@ describe('Codex realtime compact context', () => {
   })
 })
 
+describe('Codex realtime assistant presentation', () => {
+  it('maps the configured assistant presentation to stable v3 and v1 voices', () => {
+    expect(realtimeVoiceForGender('feminine', 'v3')).toBe('marin')
+    expect(realtimeVoiceForGender('masculine', 'v3')).toBe('cedar')
+    expect(realtimeVoiceForGender('neutral', 'v3')).toBe('alloy')
+    expect(realtimeVoiceForGender('feminine', 'v1')).toBe('juniper')
+    expect(realtimeVoiceForGender('masculine', 'v1')).toBe('cove')
+    expect(realtimeVoiceForGender('neutral', 'v1')).toBe('breeze')
+  })
+
+  it('serializes Phoenix-owned speech through thread/realtime/appendSpeech', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      sessions: Map<string, string>
+      request(method: string, params?: unknown): Promise<unknown>
+    }
+    internal.sessions.set('session-1', 'thread-1')
+    const request = vi.spyOn(internal, 'request').mockResolvedValue({})
+    await expect(bridge.speak('session-1', 'Trabajo terminado.')).resolves.toBe(true)
+    expect(request).toHaveBeenCalledWith('thread/realtime/appendSpeech', {
+      threadId: 'thread-1',
+      text: 'Trabajo terminado.',
+    })
+    await expect(bridge.speak('missing', 'Nada')).resolves.toBe(false)
+    bridge.close()
+  })
+})
+
 describe('Codex realtime app-server notifications', () => {
   it('surfaces an async startup error immediately instead of waiting for a missing SDP', async () => {
     const bridge = new CodexRealtimeBridge()
@@ -212,6 +240,7 @@ describe('Codex realtime optional session context', () => {
           offerSdp: string
           model?: string
           initialItems?: readonly unknown[]
+          assistantGender?: 'masculine' | 'feminine' | 'neutral'
         }): Promise<{ threadId: string; answerSdp: string }>
       }
     }
@@ -235,6 +264,7 @@ describe('Codex realtime optional session context', () => {
       key: 'session-without-injected-store',
       offerSdp: 'v=0\\r\\noffer\\r\\n',
       model: 'gpt-6-luna',
+      assistantGender: 'feminine',
     })
   })
 })
@@ -263,6 +293,7 @@ describe('Codex realtime safety gate', () => {
         start(input: {
           key: string
           offerSdp: string
+          assistantGender?: 'masculine' | 'feminine' | 'neutral'
         }): Promise<{ threadId: string; answerSdp: string }>
       }
     }
