@@ -62,10 +62,15 @@ try {
 finally {
   $sha256.Dispose()
 }
-$iconPath = Join-Path $phoenixState "phoenix-browser-$iconHash.ico"
+$iconRevision = 'v2'
+$iconPath = Join-Path $phoenixState "phoenix-browser-$iconRevision-$iconHash.ico"
 if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
   [IO.File]::WriteAllBytes($iconPath, $iconBytes)
 }
+# A versioned icon path forces Explorer to stop reusing the old PowerShell/EXE icon cache.
+Get-ChildItem -LiteralPath $phoenixState -Filter 'phoenix-browser-*.ico' -File -ErrorAction SilentlyContinue |
+  Where-Object { $_.FullName -ne $iconPath } |
+  Remove-Item -Force -ErrorAction SilentlyContinue
 
 $powerShellExe = Join-Path $PSHOME 'powershell.exe'
 $targetPath = $powerShellExe
@@ -222,6 +227,16 @@ public static class PhoenixShellNotify {
 }
 catch {
   # Explorer will still discover the rewritten shortcut on its next refresh.
+}
+
+try {
+  $ie4uinit = Join-Path $env:SystemRoot 'System32\ie4uinit.exe'
+  if (Test-Path -LiteralPath $ie4uinit -PathType Leaf) {
+    Start-Process -FilePath $ie4uinit -ArgumentList '-show' -WindowStyle Hidden -Wait
+  }
+}
+catch {
+  # Cache refresh is best effort; the versioned icon path already forces a miss.
 }
 
 Write-Output $shortcutPath
