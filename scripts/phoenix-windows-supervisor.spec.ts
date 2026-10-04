@@ -242,7 +242,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('function stageProtectedByOwningCheckout(path)')
     expect(source).toContain('const marker = join(common, PREPARED_FILE)')
     expect(source).toContain('const statePath = join(common, UPDATE_STATE_FILE)')
-    expect(source).toContain(`state?.status === 'preparing'`)
+    expect(source).toContain('state?.status === \'preparing\'')
     expect(source).toContain('/^[0-9a-f]{40}$/iu.test(state.target)')
     expect(source).toContain('if (key === currentStage) continue')
     expect(source).toContain('if (stageProtectedByOwningCheckout(candidate)) continue')
