@@ -69,8 +69,9 @@
   white-space: nowrap;
 }
 
-/* Full-viewport layer (figma Mask 501:29946 #000@24%): mask tokens match the
-   Modal primitive (--dsw-alias-bg-mask-1 + --dsw-mask-blur). */
+/* Full-viewport layer (figma Mask 501:29946 #000@24%). Keep the mask opaque
+   enough for focus without a full-window backdrop blur: that blur forces large
+   GPU repaints while the settings body scrolls or swaps sections on Windows. */
 .overlay {
   position: fixed;
   inset: 0;
@@ -84,7 +85,6 @@
   position: absolute;
   inset: 0;
   background: var(--dsw-alias-bg-mask-1);
-  backdrop-filter: var(--dsw-mask-blur);
 }
 
 /* Panel (figma Settings 501:29947): r24, white, lv3 shadow (figma effects
@@ -258,6 +258,7 @@
   border-radius: 28px;
   background: var(--dsw-alias-bg-layer-2);
   box-shadow: 0 24px 70px rgb(0 0 0 / 16%), var(--dsw-shadow-lv3);
+  contain: layout paint;
 }
 
 .nav {
