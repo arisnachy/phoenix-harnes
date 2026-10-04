@@ -258,7 +258,6 @@
   border-radius: 28px;
   background: var(--dsw-alias-bg-layer-2);
   box-shadow: 0 24px 70px rgb(0 0 0 / 16%), var(--dsw-shadow-lv3);
-  contain: layout paint;
 }
 
 .nav {
