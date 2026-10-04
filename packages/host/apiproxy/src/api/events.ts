@@ -41,6 +41,12 @@ export interface QueuedInboxItem {
   placement: 'queued' | 'steering' | 'context'
   /** Complete pending message; it is not durable until the Agent claims it. */
   message: Message
+  /**
+   * Session-event sequence immediately after which this pending occurrence was
+   * inserted. Steering uses it to keep the user's bubble at the real
+   * conversational position while the durable user/message handoff is pending.
+   */
+  anchorSeq?: number
 }
 
 /** Streaming face of the contract: the two logical stream openers (mux + host). */
