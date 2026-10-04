@@ -1303,6 +1303,8 @@ while (true) {
 
   const requestedTarget = restartRequestTarget()
   if (requestedTarget !== undefined) {
+    await watcherSupervisor.stop()
+    watcherSupervisor = undefined
     const alreadyActive = healthyRuntimeForTarget(requestedTarget)
     if (alreadyActive !== undefined) {
       runtimeRoot = alreadyActive.path
