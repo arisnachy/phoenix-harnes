@@ -26,7 +26,7 @@ export interface AssistantMailSnapshot {
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
-   * @param action Status, signup, new-signup, connect, verify, configure or refresh.
+   * @param action Status, signup, recover, create-inbox, verify, configure or refresh.
    * @param input Operation properties; secrets are accepted only by connect.
    * @returns Secret-free account and job status.
    */
@@ -50,8 +50,6 @@ const JOB_LABELS: Readonly<Record<string, string>> = {
 export function AssistantMailPanel({ client }: { readonly client: AssistantMailClient }): ReactNode {
   const [snapshot, setSnapshot] = useState<AssistantMailSnapshot>()
   const [owner, setOwner] = useState('')
-  const [inbox, setInbox] = useState('')
-  const [key, setKey] = useState('')
   const [code, setCode] = useState('')
   const [contacts, setContacts] = useState('')
   const [failure, setFailure] = useState<string>()
@@ -91,7 +89,6 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     setFailure(undefined)
     try {
       setSnapshot(await client.call(action, input))
-      setKey('')
       setCode('')
     } catch (error) {
       setFailure(error instanceof Error ? error.message : 'No se pudo completar la operación de correo.')
@@ -213,6 +210,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       >
         Verificar y activar
       </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={() => { void operate('recover') }}>
+        Recuperar acceso
+      </button>
     </div> : null}
 
     {ready ? <>
@@ -220,6 +221,17 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         Si la PC está apagada, el proveedor conserva los mensajes. Al volver a encender Phoenix,
         Kira recupera los nuevos y evita volver a ejecutar los ya procesados.
       </p>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={() => { void operate('create-inbox') }}>
+        Crear otro buzón
+      </button>
+      <p className={styles.help}>
+        Creará otra dirección en la misma cuenta, si la cuota disponible lo permite. No borra el buzón anterior.
+      </p>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={() => { void operate('recover') }}>
+        Recuperar acceso
+      </button>
       <details className={styles.advanced}>
         <summary>Opciones</summary>
         <div className={styles.advancedBody}>
@@ -270,69 +282,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
 
     {ambiguous ? <div className={styles.setup}>
       <p className={styles.failure}>
-        El alta pudo haberse completado, pero Phoenix no recibió la confirmación. Por seguridad
-        no la repetirá y no creará otro buzón.
+        Phoenix no pudo confirmar el alta. Puedes recuperar el mismo buzón de {snapshot?.account.ownerEmail ?? 'tu correo'}
+        y continuar con la verificación, sin contraseña ni clave API. La recuperación renueva el acceso a esa cuenta.
       </p>
-      <div className={styles.actions}>
-        <button
-          type="button"
-          className={styles.button}
-          disabled={busy || owner.trim().length === 0}
-          onClick={() => { void operate('new-signup', { ownerEmail: owner }) }}
-        >
-          Crear otro buzón
-        </button>
-      </div>
-      <p className={styles.note}>
-        Esto crea una identidad nueva. Usa la recuperación avanzada si quieres conservar
-        el buzón que pudo haberse creado en el intento anterior.
-      </p>
-      <details className={styles.advanced}>
-        <summary>Recuperación avanzada</summary>
-        <div className={styles.advancedBody}>
-          <label>
-            <span className={styles.fieldLabel}>Correo del propietario</span>
-            <input
-              className={styles.field}
-              type="email"
-              value={owner}
-              onChange={(event) => { setOwner(event.target.value) }}
-              disabled={busy}
-            />
-          </label>
-          <label>
-            <span className={styles.fieldLabel}>Dirección existente de Kira</span>
-            <input
-              className={styles.field}
-              type="email"
-              value={inbox}
-              onChange={(event) => { setInbox(event.target.value) }}
-              disabled={busy}
-            />
-          </label>
-          <label>
-            <span className={styles.fieldLabel}>Clave de recuperación de AgentMail</span>
-            <input
-              className={styles.field}
-              type="password"
-              autoComplete="off"
-              value={key}
-              onChange={(event) => { setKey(event.target.value) }}
-              disabled={busy}
-            />
-          </label>
-          <button
-            type="button"
-            className={styles.secondaryButton}
-            disabled={busy || !owner || !inbox || !key}
-            onClick={() => {
-              void operate('connect', { ownerEmail: owner, inboxId: inbox, apiKey: key })
-            }}
-          >
-            Recuperar buzón existente
-          </button>
-        </div>
-      </details>
+      <button type="button" className={styles.button} disabled={busy}
+        onClick={() => { void operate('recover') }}>
+        Recuperar y continuar
+      </button>
     </div> : null}
 
     {failure === undefined ? null : <p className={styles.failure} role="alert">{failure}</p>}

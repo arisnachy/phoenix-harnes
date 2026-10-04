@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-04-dsh-profile-runtime-build.md
-2026-10-04-dsh-profile-runtime-build.md: 141ca32af3148f2349404df42e934d8fdfa4ca2a
-2026-10-04-dsh-profile-runtime-build.zh.md: a6ca99acb9a3255f829e50ca45268e07a7e7f53f
+2026-10-04-dsh-profile-runtime-build.md: 2e9a6bbb639ed3b5a918a3baf951321f29af9b50
+2026-10-04-dsh-profile-runtime-build.zh.md: 6eee4334502baec226ff4556680ec68c63265f8a

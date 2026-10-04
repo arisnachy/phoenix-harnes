@@ -2,6 +2,9 @@
 
 Status: implemented
 
+English | [中文](2026-10-04-profile-runtime-artifact-recovery.zh.md)
+
+
 ## Problem
 
 The Windows supervisor already detected missing compiled modules under the shared profile fallback and knew how to run a full Phoenix rebuild, but it trusted the `web --dump-config` preflight before starting that repair. That preflight can succeed without importing every configured plugin, so a package such as `@phoenix-ai/dsh-tool-google-workspace` could have a valid package manifest but no compiled `lib/index.js`. The real Host then failed with `ERR_MODULE_NOT_FOUND`, while the supervisor restarted it and the updater repeatedly prepared the same stable revision.

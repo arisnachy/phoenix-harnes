@@ -180,7 +180,7 @@ function directoryEntries(
   const declare = (provider: string, displayName: string): void => {
     entries.set(provider, {
       provider,
-      displayName,
+      displayName: provider === 'openai-codex' && displayName === provider ? 'OpenAI Codex' : displayName,
       settingsNs: NS,
       settingsPath: ['providers', provider],
       declared: provider === CHATGPT_WEB_PROVIDER || !knownRoutes.has(provider),

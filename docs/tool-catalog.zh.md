@@ -32,6 +32,7 @@
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`、`grep` | `ctx.tools`、`ctx.subprocess`、`ctx.systemPrompt` | `tool/call`、`tool/result` | - | glob 和 grep 是无条件可用的发现工具，通过 ctx.subprocess spawn 随包提供的 ripgrep 二进制文件（`@vscode/ripgrep`），并作为普通前台调用运行，绝不作为后台任务；无需在宿主机安装 `rg`，也不经过 shell 层。本目录使用 `sampleOverCapGlobResults: true`；部署必须显式选择该行为。结果超过上限时，会通过可选的 ctx.spillStore 后端保存完整的格式化列表；在共置部署中，如果后端公开本地路径，返回的定位信息可供后续读取／搜索。 |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`、`terminal_list`、`terminal_open`、`terminal_read`、`terminal_send`、`terminal_signal` | `ctx.tools`、`ctx.terminals`、`ctx.systemPrompt`、`ctx.jobs at call time for run_in_background` | `tool/call`、`tool/result` | - | 这 6 个终端工具需要选择启用，用于补充一次性 bash／文件系统工具。`terminal_send(run_in_background: true)` 会注册到 `ctx.jobs`；schema 不包含 TUI、具名按键序列、BEL、调整尺寸、自动启动和跨 agent 共享。 |
 | `@phoenix-ai/dsh-tool-goal` | `create_goal`、`get_goal`、`specialist_lab`、`update_goal` | `ctx.tools`、`ctx.agents`、`ctx.goals`、`ctx.systemPrompt`、`a calling Agent in an authorized open turn` | `tool/call`、`goal/change for mutations`、`tool/result` | - | create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。 |
+| `@phoenix-ai/dsh-tool-google-workspace` | `gmail_read`, `gmail_search`, `gmail_send`, `google_calendar_create_event`, `google_calendar_list_events`, `google_drive_search`, `google_workspace_request` | `ctx.tools`, `ctx.googleApi` | `tool/call`, `bounded Google Workspace request through the host OAuth broker`, `tool/result` | - | schema 提取提供不联网的 googleApi seam。实时调用始终在 Host 拥有的 OAuth broker 内执行：它固定 Google 服务根地址和 scope，仅在 fetch 时注入 Bearer token，绝不向面向模型的工具包暴露 OAuth 材料。 |
 | `@phoenix-ai/dsh-tool-home-gateway` | `home_control`、`home_list_devices` | `ctx.tools`、`ctx.home`、`ctx.systemPrompt` | `tool/call`、`tool/result`、`Home Assistant request at execution time` | - | schema harvest 使用私有 fake endpoint，绝不发起请求。Live 部署在操作员提供私有 endpoint、token 变量和两个 allowlist 前保持禁用。 |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`、`schedule_delete`、`schedule_list` | `ctx.tools`、`ctx.sessions`、Session 持久化、未来创建的 live 根 Agent | `tool/call`、`schedule/change create or delete`、`tool/result` | - | 仅在选择启用的 Schedule 插件加载后创建的 live 根 Agent scope 内注册。版本 1 接受 after_seconds、显式绝对 at 和有界固定速率 every_seconds，并披露 session-local 交付；管理读取与变更必须通过共享的 Session 持久化 barrier。 |
 | `@phoenix-ai/dsh-tool-living` | `living_act`、`living_forget_creation`、`living_get_connector_kit`、`living_inspect_creation`、`living_list_creations`、`living_read_state`、`living_register_creation`、`living_verify_creation` | `ctx.tools`、`ctx.living`、`ctx.systemPrompt` | `tool/call`、`durable living creation manifest`、`live creation state/actions/events through ctx.living`、`tool/result` | - | 通用、领域无关的控制表面：任意未来创建物类型自行描述状态、动作、事件、资源、参与者及目标集成级别；低于目标级别时验证会拒绝交付。 |
@@ -1561,6 +1562,249 @@ Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/
 来源：[`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
 
 create、edit、pause 和 resume 要求直接来自人类的根权限；complete 和 blocked 也接受确切的当前 Goal Round。blocked 的默认下限是 3 个获准的 Round。
+
+<a id="phoenix-aidsh-tool-google-workspace"></a>
+
+## `@phoenix-ai/dsh-tool-google-workspace`
+
+### `gmail_read`
+
+按 ID 从已连接的邮箱读取一封 Gmail 邮件。full 格式包含邮件头和 MIME 正文部分。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string"
+    },
+    "format": {
+      "type": "string",
+      "description": "minimal, full, metadata, or raw. Defaults to full."
+    }
+  },
+  "required": [
+    "message_id"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `gmail_search`
+
+使用 Gmail 查询语法搜索已连接的 Gmail 邮箱。此工具用于账户邮件，不用于公开网页搜索。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Gmail search query such as is:unread newer_than:7d."
+    },
+    "max_results": {
+      "type": "number",
+      "description": "Maximum messages to return, 1-100. Defaults to 20."
+    },
+    "page_token": {
+      "type": "string",
+      "description": "Optional Gmail pagination token."
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `gmail_send`
+
+从已连接的 Gmail 账户发送邮件。仅在用户要求发送或批准邮件内容时调用。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "to": {
+      "type": "string",
+      "description": "Recipient address or comma-separated recipient addresses."
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "cc": {
+      "type": "string",
+      "description": "Optional comma-separated CC addresses."
+    },
+    "bcc": {
+      "type": "string",
+      "description": "Optional comma-separated BCC addresses."
+    },
+    "html": {
+      "type": "boolean",
+      "description": "Send body as text/html instead of text/plain."
+    }
+  },
+  "required": [
+    "to",
+    "subject",
+    "body"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_calendar_create_event`
+
+在已连接的 Google Calendar 中创建活动。仅在用户要求安排或创建活动时使用。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "start": {
+      "type": "string",
+      "description": "RFC3339 start date-time."
+    },
+    "end": {
+      "type": "string",
+      "description": "RFC3339 end date-time."
+    },
+    "calendar_id": {
+      "type": "string",
+      "description": "Calendar id. Defaults to primary."
+    },
+    "time_zone": {
+      "type": "string",
+      "description": "Optional IANA time zone, such as America/Santo_Domingo."
+    },
+    "description": {
+      "type": "string"
+    },
+    "attendees": {
+      "type": "array",
+      "description": "Optional attendee email addresses.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "summary",
+    "start",
+    "end"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_calendar_list_events`
+
+列出已连接的 Google Calendar 中的活动，可选用 RFC3339 开始和结束时间限定范围。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "calendar_id": {
+      "type": "string",
+      "description": "Calendar id. Defaults to primary."
+    },
+    "time_min": {
+      "type": "string",
+      "description": "Optional RFC3339 lower bound."
+    },
+    "time_max": {
+      "type": "string",
+      "description": "Optional RFC3339 upper bound."
+    },
+    "max_results": {
+      "type": "number",
+      "description": "Maximum events, 1-250. Defaults to 50."
+    }
+  }
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_drive_search`
+
+使用 Drive v3 q 语法搜索或列出已连接的 Google Drive 中的文件。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Optional Drive v3 q expression."
+    },
+    "page_size": {
+      "type": "number",
+      "description": "Maximum files, 1-100. Defaults to 50."
+    },
+    "page_token": {
+      "type": "string"
+    }
+  }
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_workspace_request`
+
+通过 PHOENIX OAuth 执行高级受限 Google Workspace REST 调用。仅在专用 Gmail、Calendar 或 Drive 工具无法完成任务时使用。service 限于 gmail、calendar、drive、docs、sheets、slides、contacts；path 必须是相对路径，禁止调用方提供认证请求头。
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "service": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string",
+      "description": "GET, POST, PUT, PATCH, DELETE. Defaults to GET."
+    },
+    "body": {
+      "type": "string",
+      "description": "Optional request body, normally JSON text."
+    },
+    "content_type": {
+      "type": "string",
+      "description": "Defaults to application/json when body is present."
+    },
+    "upload": {
+      "type": "boolean",
+      "description": "Use the fixed upload API for Gmail/Drive."
+    }
+  },
+  "required": [
+    "service",
+    "path"
+  ]
+}
+```
+
+来源：[`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+schema 提取提供不联网的 googleApi seam。实时调用始终在 Host 拥有的 OAuth broker 内执行：它固定 Google 服务根地址和 scope，仅在 fetch 时注入 Bearer token，绝不向面向模型的工具包暴露 OAuth 材料。
 
 <a id="phoenix-aidsh-tool-home-gateway"></a>
 

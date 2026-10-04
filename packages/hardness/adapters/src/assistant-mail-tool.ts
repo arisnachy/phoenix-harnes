@@ -49,7 +49,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       connection: value.connection,
       needs_verification: false,
       guidance: 'The provider signup result is ambiguous. Do not retry signup automatically; '
-        + 'use the existing-account recovery flow in Settings.',
+        + 'use action=recover only when the user requests recovery, or recover in Settings. Recovery reuses the persisted owner and does not need a manually supplied API key.',
     }
   }
   return {
@@ -78,11 +78,11 @@ export function createAssistantMailIdentityTool(
       + 'Kira to configure/create/get her own email address, asks what Kira\'s email is, or asks whether her '
       + 'mailbox is ready. This is not Gmail and does not create a Gmail account. action=ensure creates the '
       + 'mailbox only when absent and otherwise reuses the existing enrollment. Never invent an address and '
-      + 'never repeat signup after an ambiguous result.',
+      + 'never retry recovery automatically; action=recover renews access to the same owner account. Use action=create-inbox only for an explicit request for another mailbox, after owner verification; provider quota may refuse it.',
     parameters: {
       action: {
         type: 'string',
-        enum: ['status', 'ensure', 'verify', 'refresh'],
+        enum: ['status', 'ensure', 'recover', 'create-inbox', 'verify', 'refresh'],
         required: true,
         description: 'status reads the mailbox; ensure creates it once if absent; verify activates the existing inbox with the owner code; refresh requests an incoming check without waiting for task completion.',
       },
@@ -127,6 +127,8 @@ export function createAssistantMailIdentityTool(
         } satisfies MailIdentityResult
       }
       try {
+        if (args.action === 'recover') return project(await service.recover())
+        if (args.action === 'create-inbox') return project(await service.createInbox())
         if (args.action === 'verify') {
           if (args.code === undefined) throw new ToolArgsError(['verification requires the six-digit code received by the owner'])
           return project(await service.verify(args.code))
@@ -153,7 +155,7 @@ export function createAssistantMailIdentityTool(
       return {
         card: 'generic',
         title: args.action === 'ensure' ? 'Configurar correo de Kira' : 'Correo de Kira',
-        kind: args.action === 'ensure' ? 'execute' : 'read',
+        kind: ['ensure', 'recover', 'create-inbox', 'verify'].includes(args.action) ? 'execute' : 'read',
       }
     },
   })

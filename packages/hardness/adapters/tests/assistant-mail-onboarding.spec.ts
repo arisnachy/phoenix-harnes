@@ -5,6 +5,14 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { MailOnboarding } from '../src/assistant-mail-onboarding.ts'
 
+function requestBody(init: RequestInit | undefined): unknown {
+  if (typeof init?.body !== 'string') throw new Error('expected JSON request body')
+  return JSON.parse(init.body) as unknown
+}
+function requestAddress(url: Parameters<typeof fetch>[0]): string {
+  return typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+}
+
 describe('mail onboarding', () => {
   it('persists ambiguous signup without retrying or claiming a verified inbox', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-'))
@@ -19,7 +27,7 @@ describe('mail onboarding', () => {
       expect(calls).toBe(1)
     } finally { await rm(directory, { recursive: true, force: true }) }
   })
-  it('allows a deliberate second mailbox after an ambiguous provider result', async () => {
+  it('recovers the existing mailbox after an ambiguous provider result', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-'))
     try {
       let calls = 0
@@ -39,7 +47,7 @@ describe('mail onboarding', () => {
       await expect(account.signup('owner@example.com', 'kira-hidden-retry')).rejects.toThrow('existing')
       expect(calls).toBe(1)
 
-      const second = await account.signupAnother('owner@example.com', 'kira-second')
+      const second = await account.recover()
       expect(second).toMatchObject({
         state: 'pending-verification',
         inboxId: 'second@agentmail.to',
@@ -93,5 +101,151 @@ it('preserves contact revocation and explicit workspace selection during automat
     await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'kira@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
     await account.bindSessionIfUnset(SessionId('automatic-root'))
     expect(await account.status()).toMatchObject({ contacts: [], sessionId: 'automatic-root' })
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+
+it('keeps a confirmed signup rejection retryable instead of labelling it a lost confirmation', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-rejected-'))
+  try {
+    const account = new MailOnboarding({ path: join(directory, 'account.json'), timeoutMs: 1000, saveKey: async () => {}, fetch: async () => Response.json({ error: 'private provider details' }, { status: 400 }) })
+    await expect(account.signup('owner@example.com', 'kira-local')).rejects.toThrow('400')
+    expect((await account.status()).state).toBe('not-configured')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('recovers the same persisted owner through official signup without a manually supplied key', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-recover-'))
+  try {
+    const path = join(directory, 'account.json')
+    let calls = 0
+    let saved = 0
+    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => { saved++ }, fetch: async (_url, init) => {
+      calls++
+      if (calls === 1) throw new Error('lost response')
+      const request: unknown = requestBody(init)
+      expect(request).toMatchObject({ human_email: 'owner@example.com', username: 'kira-original' })
+      return Response.json({ api_key: 'new-test-key', inbox_id: 'existing@agentmail.to' })
+    } })
+    await expect(account.signup('owner@example.com', 'kira-original')).rejects.toThrow('ambiguous')
+    await account.configure(['contact@example.com'], SessionId('original-workspace'))
+    await expect(account.signup('someone-else@example.com', 'kira-other')).rejects.toThrow('existing')
+    const recover = account as unknown as { recover(): Promise<unknown> }
+    await expect(recover.recover()).resolves.toMatchObject({ state: 'pending-verification', ownerEmail: 'owner@example.com', inboxId: 'existing@agentmail.to', contacts: ['contact@example.com'], sessionId: 'original-workspace' })
+    expect(saved).toBe(1)
+    expect(calls).toBe(2)
+    expect(JSON.stringify(await account.status())).not.toContain('new-test-key')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('creates a separate inbox while retaining the verified owner, contacts and workspace', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-new-inbox-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: ['contact@example.com'], sessionId: 'original-workspace' }))
+    let calls = 0
+    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => 'test-secret', fetch: async (url, init) => {
+      expect(requestAddress(url)).toBe('https://api.agentmail.to/v0/inboxes')
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer test-secret')
+      const request = requestBody(init) as { username: string; client_id: string }
+      calls++
+      return Response.json({ inbox_id: `${request.username}@agentmail.to`, client_id: request.client_id })
+    } })
+    const result = await account.createInbox()
+    expect(result).toMatchObject({ state: 'ready', ownerEmail: 'owner@example.com', contacts: ['contact@example.com'], sessionId: 'original-workspace' })
+    expect(result.inboxId).not.toBe('original@agentmail.to')
+    expect(calls).toBe(1)
+    expect(JSON.stringify(result)).not.toMatch(/clientId|newInboxRequest|test-secret/u)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('reconciles an uncertain inbox creation after restart without repeating POST', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-inbox-reconcile-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
+    let request: { username: string; client_id: string } | undefined
+    const options = { path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => 'test-secret', fetch: async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        expect(request).toBeUndefined()
+        request = requestBody(init) as typeof request
+        throw new Error('provider created inbox but response was lost')
+      }
+      expect(requestAddress(url)).toContain(`${request!.username}%40agentmail.to`)
+      return Response.json({ inbox_id: `${request!.username}@agentmail.to`, client_id: request!.client_id })
+    } }
+    const account = new MailOnboarding(options)
+    await expect(account.createInbox()).rejects.toThrow('ambiguous')
+    expect((await account.status()).inboxId).toBe('original@agentmail.to')
+    const restarted = new MailOnboarding(options)
+    expect((await restarted.createInbox()).inboxId).toBe(`${request!.username}@agentmail.to`)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('keeps the existing inbox when a response belongs to another creation request', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-inbox-mismatch-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
+    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => 'test-secret', fetch: async () => Response.json({ inbox_id: 'someone-else@agentmail.to', client_id: 'different-request' }) })
+    await expect(account.createInbox()).rejects.toThrow('identity')
+    expect((await account.status()).inboxId).toBe('original@agentmail.to')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('serializes connection and recovery while a provider request is in flight', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-enrollment-lock-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({ state: 'signup-ambiguous', ownerEmail: 'owner@example.com', contacts: [] }))
+    let respond!: (response: Response) => void
+    let announce!: () => void
+    const started = new Promise<void>((resolve) => { announce = resolve })
+    const response = new Promise<Response>((resolve) => { respond = resolve })
+    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {}, fetch: async (_url, init) => {
+      if (init?.method === 'POST') return Response.json({})
+      announce()
+      return response
+    } })
+    const connecting = account.connect('owner@example.com', 'original@agentmail.to', 'test-secret')
+    await started
+    await expect(account.recover()).rejects.toThrow('in progress')
+    respond(Response.json({ inbox_id: 'original@agentmail.to' }))
+    await connecting
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('retries a confirmed absent inbox with the same address and client identity', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-inbox-absent-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
+    const requests: Array<{ username: string; client_id: string }> = []
+    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => 'test-secret', fetch: async (_url, init) => {
+      if (init?.method !== 'POST') return Response.json({}, { status: 404 })
+      const request = requestBody(init) as { username: string; client_id: string }
+      requests.push(request)
+      if (requests.length === 1) throw new Error('request did not reach provider')
+      return Response.json({ inbox_id: `${request.username}@agentmail.to`, client_id: request.client_id })
+    } })
+    await expect(account.createInbox()).rejects.toThrow('ambiguous')
+    expect((await account.createInbox()).inboxId).toBe(`${requests[0]!.username}@agentmail.to`)
+    expect(requests).toHaveLength(2)
+    expect(requests[1]).toEqual(requests[0])
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('recovers missing access to a previously verified mailbox through its persisted owner', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-ready-recover-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
+    let key = ''
+    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async (value) => { key = value }, fetch: async (_url, init) => {
+      expect(requestBody(init)).toMatchObject({ human_email: 'owner@example.com' })
+      return Response.json({ api_key: 'rotated-test-secret', inbox_id: 'original@agentmail.to' })
+    } })
+    expect(await account.recover()).toMatchObject({ state: 'pending-verification', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com' })
+    expect(key).toBe('rotated-test-secret')
   } finally { await rm(directory, { recursive: true, force: true }) }
 })

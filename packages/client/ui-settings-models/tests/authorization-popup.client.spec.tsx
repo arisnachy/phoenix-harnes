@@ -118,13 +118,14 @@ describe('authorization consent window', () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     const api = panelApi(pendingForever)
+    const begin = vi.spyOn(api, 'begin')
 
     renderPanel(api)
     await clickAuthorize()
 
     // Same tick as the gesture: this is what the popup blocker checks.
     expect(open).toHaveBeenCalledWith('', '_blank')
-    expect(api.begin).toHaveBeenCalledWith({ key: KEY, method: 'oauth' })
+    expect(begin).toHaveBeenCalledWith({ key: KEY, method: 'oauth' })
     open.mockRestore()
   })
 
@@ -202,4 +203,59 @@ describe('authorization consent window', () => {
     expect(reserved.location.replace).not.toHaveBeenCalled()
     open.mockRestore()
   })
+})
+
+
+describe('authorization popup isolation and pre-consent prompts', () => {
+  it('keeps polling when COOP severs a consent window handle', async () => {
+    const reserved = reservedWindow()
+    reserved.location.replace.mockImplementation(() => { reserved.closed = true })
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    const api = panelApi(async () => ok({ attemptId: 'attempt-1', status: 'pending', nextSeq: 1,
+      notices: [{ notice: { message: 'Approve in the tab', url: CONSENT_URL } }] }))
+    const cancel = vi.fn(async () => ok({}))
+    api.cancel = cancel as typeof api.cancel
+    const status = vi.spyOn(api, 'status')
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => { expect(status).toHaveBeenCalledTimes(5) }, { timeout: 5000 })
+      expect(cancel).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
+
+  it('closes an unused reservation to show a prerequisite prompt, then retains a manual consent link', async () => {
+    const reserved = reservedWindow()
+    reserved.close.mockImplementation(() => { reserved.closed = true })
+    const open = vi.spyOn(window, 'open').mockReturnValueOnce(reserved as unknown as Window).mockReturnValue(null)
+    let answered = false
+    const api = panelApi(async () => answered ? ok({ attemptId: 'attempt-1', status: 'pending', nextSeq: 2,
+      notices: [{ notice: { message: 'Approve in the tab', url: CONSENT_URL } }, { notice: { message: 'Waiting for consent' } }] }) : ok({
+      attemptId: 'attempt-1', status: 'pending', nextSeq: 1, notices: [],
+      prompt: { promptId: 'client-id', kind: 'text', message: 'Google Desktop OAuth client ID' },
+    }))
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => { expect(reserved.close).toHaveBeenCalledOnce() }, { timeout: 3000 })
+      expect(screen.getByText('Google Desktop OAuth client ID')).toBeTruthy()
+      answered = true
+      await waitFor(() => { expect(screen.getByRole('link', { name: /open/i }).getAttribute('href')).toBe(CONSENT_URL) }, { timeout: 3000 })
+      expect(open).toHaveBeenLastCalledWith(CONSENT_URL, '_blank')
+    } finally { open.mockRestore() }
+  })
+})
+
+
+it('shows a rejected explicit cancellation without an unhandled rejection', async () => {
+  const reserved = reservedWindow()
+  const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+  const api = panelApi(consentNotice)
+  api.cancel = vi.fn(async () => { throw new Error('cancel transport failed') })
+  try {
+    renderPanel(api)
+    await clickAuthorize()
+    fireEvent.click(await screen.findByRole('button', { name: en.cancel }))
+    expect(await screen.findByText(/cancel transport failed/)).toBeTruthy()
+  } finally { open.mockRestore() }
 })

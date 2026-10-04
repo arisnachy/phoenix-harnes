@@ -2,6 +2,9 @@
 
 Status: implemented
 
+[English](2026-10-04-profile-runtime-artifact-recovery.md) | 中文
+
+
 ## Problem
 
 Windows supervisor 已经能够检测共享资料 fallback 中缺失的编译模块，也知道如何执行完整 Phoenix 重建，但旧逻辑在开始修复前先信任 `web --dump-config` 预检。该预检可能在没有导入所有已配置插件时成功，因此像 `@phoenix-ai/dsh-tool-google-workspace` 这样的包可能拥有有效的 package manifest，却缺少编译后的 `lib/index.js`。真正的 Host 随后以 `ERR_MODULE_NOT_FOUND` 失败，而 supervisor 会继续重启 Host，updater 也会反复准备同一个 stable 版本。

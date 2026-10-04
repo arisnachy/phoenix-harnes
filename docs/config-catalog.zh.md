@@ -3778,6 +3778,7 @@ These load from a `cordis.yml` entry with no `config:` block; they declare no co
 - `@phoenix-ai/dsh-terminal` ([`packages/terminal/terminal/src/index.ts`](../packages/terminal/terminal/src/index.ts))
 - `@phoenix-ai/dsh-tool-ask-user` — requires `tools` · `userQuestions` ([`packages/interaction/tool-ask-user/src/index.ts`](../packages/interaction/tool-ask-user/src/index.ts))
 - `@phoenix-ai/dsh-tool-cordis` — requires `tools` · `systemPrompt` · `dynamicCordisRunner` · `cordisInspect` ([`packages/extensions/tool-cordis/src/index.ts`](../packages/extensions/tool-cordis/src/index.ts))
+- `@phoenix-ai/dsh-tool-google-workspace` — 需要 `tools` · `googleApi` ([`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts))
 - `@phoenix-ai/dsh-tool-home-gateway` — requires `tools` · `home` · `systemPrompt` ([`packages/home/tool-home-gateway/src/index.ts`](../packages/home/tool-home-gateway/src/index.ts))
 - `@phoenix-ai/dsh-tool-living` — requires `living` · `tools` · `systemPrompt` ([`packages/core/tool-living/src/index.ts`](../packages/core/tool-living/src/index.ts))
 - `@phoenix-ai/dsh-tool-subagent-control` — requires `tools` · `subagents` ([`packages/subagent/tool-subagent-control/src/index.ts`](../packages/subagent/tool-subagent-control/src/index.ts))

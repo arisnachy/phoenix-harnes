@@ -2,6 +2,9 @@
 
 Status: implemented
 
+English | [中文](2026-10-04-settings-profile-hydration-navigation.zh.md)
+
+
 ## Problem
 
 The Profile form could receive its first durable settings snapshot after construction, assign that snapshot as the comparison source, and then mistake the still-empty draft for a local edit. The visible form therefore stayed empty even though the Host already held the saved profile. The settings shell also used generic glyphs for Profile and Connectors and paid the cost of a full-viewport backdrop blur while switching potentially heavy sections.

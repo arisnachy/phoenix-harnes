@@ -180,7 +180,7 @@ async function mountSection(options: Parameters<typeof scriptedFace>[0] = {}) {
 
 /** Open the editor of one configured row and expand its customized fold. */
 function openEditor(provider: string): void {
-  const row = screen.getByText(provider).closest('li')
+  const row = screen.getByText(provider === 'openai-codex' ? 'OpenAI Codex' : provider).closest('li')
   if (row === null) throw new Error(`no row for ${provider}`)
   fireEvent.click(within_(row, en.edit))
   const summary = document.querySelector('summary')
@@ -689,7 +689,7 @@ describe('provider rows', () => {
     })
 
     const rowOf = (provider: string): HTMLElement => {
-      const row = screen.getByText(provider).closest('li')
+      const row = screen.getByText(provider === 'openai-codex' ? 'OpenAI Codex' : provider).closest('li')
       if (row === null) throw new Error(`no row for ${provider}`)
       return row
     }
@@ -1513,10 +1513,11 @@ describe('provider account sign-in', () => {
         begin,
       },
     })
+    expect(await screen.findByRole('img', { name: 'Account connected (AUTH)' })).toBeTruthy()
     openEditor('openai-codex')
 
     expect(screen.queryByLabelText(en.keyInput)).toBeNull()
-    expect(screen.getByText(en.accountSignedIn)).toBeTruthy()
+    expect(screen.getAllByText(en.accountSignedIn).length).toBeGreaterThan(0)
 
     const edit = screen.getByRole('button', { name: en.editProvider.replace('{provider}', 'openai-codex') })
     const row = edit.closest('li')
@@ -1539,7 +1540,7 @@ describe('provider account sign-in', () => {
     // Account-only: the OAuth grant never routes through an API-key input.
     expect(screen.queryByLabelText(en.keyInput)).toBeNull()
     // The stored grant is visible as state, never as a value.
-    expect(screen.getByText(en.accountSignedIn)).toBeTruthy()
+    expect(screen.getAllByText(en.accountSignedIn).length).toBeGreaterThan(0)
 
     // The row name repeats in the editor header, so address the row by its
     // Edit action instead of its text.
@@ -1552,7 +1553,7 @@ describe('provider account sign-in', () => {
     expect(screen.getAllByText(en.signingIn).length).toBeGreaterThan(0)
   })
 
-  it('keeps the key field when the flow also offers an api-key method', async () => {
+  it('keeps Codex account-only even when a stale flow offers an api-key method', async () => {
     await mountSection({
       providers: { 'openai-codex': {} },
       authorization: {
@@ -1564,7 +1565,7 @@ describe('provider account sign-in', () => {
     })
     openEditor('openai-codex')
 
-    expect(screen.getByLabelText(en.keyInput)).toBeTruthy()
+    expect(screen.queryByLabelText(en.keyInput)).toBeNull()
     // No stored record yet, so no signed-in chip either.
     expect(screen.queryByText(en.accountSignedIn)).toBeNull()
   })
@@ -1582,4 +1583,11 @@ describe('provider account sign-in', () => {
     await waitFor(() => { expect(input.disabled).toBe(true) })
     expect(screen.getByText(en.keyEnvHint.replace('{ref}', deriveKeyRef('openai')))).toBeTruthy()
   })
+})
+
+it('keeps Codex account-only when its authorization flow is unavailable', async () => {
+  await mountSection({ providers: { 'openai-codex': { apiKeyEnv: 'STALE_CODEX_API_KEY' } } })
+  openEditor('openai-codex')
+  expect(screen.queryByLabelText(en.keyInput)).toBeNull()
+  expect(screen.getByRole('status').textContent).toMatch(/account.*unavailable/i)
 })

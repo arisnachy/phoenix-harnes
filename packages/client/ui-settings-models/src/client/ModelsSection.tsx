@@ -404,7 +404,9 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
             )
           }
           const open = !adding && editing?.provider === row.entry.provider
-          const credentialConfigured = row.credential?.configured === true
+          const isCodex = row.entry.provider === CODEX_PROVIDER
+          const accountConnected = accountFlowFor(row.entry.provider)?.connected === true
+          const credentialConfigured = !isCodex && row.credential?.configured === true
           const credentialMissing = !credentialConfigured
             && row.apiKeyEnv !== undefined
             && row.credential?.configured === false
@@ -412,7 +414,14 @@ function Loaded({ injected }: { injected: ModelsSectionFace }): ReactNode {
             <li key={row.entry.provider} className={styles['rowCard']}>
               <div className={styles['rowHead']}>
                 <span className={styles['rowIdentity']}>
-                  <span className={styles['rowName']}>{row.entry.displayName}</span>
+                  <span className={styles['rowName']}>{isCodex && row.entry.displayName === CODEX_PROVIDER ? 'OpenAI Codex' : row.entry.displayName}</span>
+                  {isCodex ? (
+                    <span role="img" className={styles['rowTag']}
+                      aria-label={t(accountConnected ? 'accountAuthConnected' : 'accountAuthMissing')}
+                      title={t(accountConnected ? 'accountAuthConnected' : 'accountAuthMissing')}>
+                      AUTH
+                    </span>
+                  ) : null}
                   {/* Only the adapter can tell a hand-declared route from a
                       shipped one it also has a stored profile for, so the tag
                       follows its answer and stays off when it gives none. */}

@@ -722,8 +722,9 @@ function resolveModelReasoning(
   entry: PiAiModelProfile,
   base: Model<Api> | undefined,
 ): ModelReasoning {
-  const efforts = entry.reasoningEfforts
-    ?? (provider === 'openai-codex' && base === undefined ? CODEX_MANUAL_REASONING_EFFORTS : undefined)
+  const efforts = entry.reasoningEfforts !== undefined
+    ? entry.reasoningEfforts
+    : (provider === 'openai-codex' && base === undefined ? CODEX_MANUAL_REASONING_EFFORTS : undefined)
   if (efforts === undefined) {
     // Reasoning rides the installed entry or is absent: a bare capability flag
     // would make pi-ai advertise effort levels with no `thinkingLevelMap` to

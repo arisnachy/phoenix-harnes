@@ -3,6 +3,14 @@ import { MailMessageId, MailThreadId } from './assistant-mail-types.ts'
 import type { AssistantMailTransport, MailDelivery, MailMessage, MailPage, MailReply } from './assistant-mail-types.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 
+/** Confirmed HTTP rejection, excluding provider response bodies and credentials. */
+export class AgentMailHttpError extends Error {
+  override readonly name = 'AgentMailHttpError'
+  constructor(readonly status: number) {
+    super(status === 429 ? 'mail quota reached; no paid upgrade will be requested' : `mail provider request failed (${status})`)
+  }
+}
+
 /** Official provider API; errors deliberately exclude provider bodies and secrets.
  * @param path API path relative to /v0.
  * @param key Resolved API key, omitted only for initial signup.
@@ -26,7 +34,7 @@ export async function agentMailRequest(path: string,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
   })
-  if (!response.ok) throw new Error(response.status === 429 ? 'mail quota reached; no paid upgrade will be requested' : `mail provider request failed (${response.status})`)
+  if (!response.ok) throw new AgentMailHttpError(response.status)
   const text = await response.text()
   if (text.length > 2_000_000) throw new Error('mail provider response exceeds limit')
   try { return JSON.parse(text) as unknown } catch { throw new Error('invalid mail provider JSON response') }
