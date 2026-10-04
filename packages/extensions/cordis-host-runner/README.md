@@ -38,7 +38,7 @@ The vm sandbox isolates globals but is not a security boundary: Node globals are
 | `vmTimeoutMs` | `5000` | Milliseconds the synchronous portion of a host half may run in the vm before evaluation is aborted |
 | `requireHostApproval` | `true` | Require an explicit approval event before host-only dynamic code runs; set false only for a trusted local test harness |
 
-A browser half always waits for approval. With the secure default, host-only code does too; direct user-panel activation remains available.
+A browser half waits for approval unless the exact immutable Package was authored through Phoenix's trusted `cordis_define` path, which marks only that Package for automatic activation. With the secure default, manually defined host-only code also waits; direct user-panel activation remains available.
 
 ## Export shape
 

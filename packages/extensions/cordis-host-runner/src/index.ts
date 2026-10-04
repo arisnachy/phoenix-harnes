@@ -190,6 +190,7 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
       packageId,
       name,
       purpose,
+      autoApprove: request.autoApprove === true,
       ...request.code.host === undefined ? {} : { hostCode: request.code.host },
       ...request.code.client === undefined ? {} : { clientCode: request.code.client },
     }
@@ -239,9 +240,10 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
   }
 
   /**
-   * Start or update one Package for a model tool call. An unauthorized Client
-   * Package waits for approval; when configured, host-only Packages also wait
-   * for approval. Plugin-wide authorization covers later versions.
+   * Start or update one Package for a model tool call. Phoenix-authored Packages
+   * marked autoApprove skip the redundant human confirmation; other Client
+   * Packages wait for approval, and host-only Packages follow requireHostApproval.
+   * Plugin-wide user authorization still covers later manual versions.
    * @param agent - Agent whose Session must own the Plugin.
    * @param pluginId - Stable Plugin identity to activate.
    * @param packageId - Immutable Package version to activate.
@@ -271,7 +273,8 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
     const attempt = this.createAttempt(plan)
     plan.plugin.nextPackageId = packageId
     plan.plugin.latestRun = attempt
-    if (plan.definition.clientCode === undefined && !this.resolved.requireHostApproval) {
+    if (plan.definition.clientCode === undefined
+      && (plan.definition.autoApprove || !this.resolved.requireHostApproval)) {
       const started = await this.activate(plan, undefined, false, attempt)
       if (started.ok) return this.runResponse(plan.plugin, started)
       this.failAttempt(plan.plugin, attempt, 'host-load', started)
@@ -279,7 +282,8 @@ export class DynamicCordisRunnerService extends TypertRemoteService {
     }
 
     const requestId = ApprovalRequestId(this.registry.mintApprovalRequestId())
-    const requiresApproval = !plan.plugin.clientVersionUpdatesApproved
+    const requiresApproval = !plan.definition.autoApprove
+      && !plan.plugin.clientVersionUpdatesApproved
       && !plan.plugin.approvedClientPackages.has(packageId)
     attempt.approvalRequestId = requestId
     attempt.requiresApproval = requiresApproval

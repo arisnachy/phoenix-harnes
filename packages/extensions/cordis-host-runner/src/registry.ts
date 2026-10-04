@@ -41,6 +41,8 @@ export interface DynamicCordisDefinition {
   name: string
   /** User-facing purpose. */
   purpose: string
+  /** Whether Phoenix itself pre-authorized this exact immutable Package. */
+  autoApprove: boolean
   /** Host source. */
   hostCode?: string
   /** Client source. */
@@ -95,6 +97,11 @@ export interface DynamicCordisDefineRequest {
   purpose: string
   /** At least one source half. */
   code: { host?: string; client?: string }
+  /**
+   * Trust marker for an internal Phoenix-authored Package.
+   * Omitted/false stays fail-closed and follows normal human approval policy.
+   */
+  autoApprove?: boolean
 }
 
 /** Successful `define` result. */
