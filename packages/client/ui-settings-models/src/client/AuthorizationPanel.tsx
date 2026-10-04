@@ -585,15 +585,15 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, repai
   onInstall, onRepair, onRemove }: {
   candidate: McpRegistryCandidateView
   stale: boolean
-  managed?: ManagedMcpConnectorView
-  runtime?: McpConnectorRuntimeView
+  managed?: ManagedMcpConnectorView | undefined
+  runtime?: McpConnectorRuntimeView | undefined
   installing: boolean
   repairing: boolean
   removing: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onInstall: (candidate: McpRegistryCandidateView) => void
-  onRepair?: (connector: ManagedMcpConnectorView) => void
-  onRemove?: (connector: ManagedMcpConnectorView) => void
+  onRepair?: ((connector: ManagedMcpConnectorView) => void) | undefined
+  onRemove?: ((connector: ManagedMcpConnectorView) => void) | undefined
 }): ReactNode {
   const source = safeExternalHref(candidate.repositoryUrl) ?? safeExternalHref(candidate.websiteUrl)
   const logoUrl = registryCandidateLogo(candidate)
@@ -1325,10 +1325,9 @@ export function ConnectorsSettingsSection({ api,
           {registrySnapshot === undefined || registrySnapshot.candidates.length === 0 ? null : (
             <div className={connectorStyles['connectorGrid']}>
               {registrySnapshot.candidates.map((candidate) => {
-                const managed = candidate.remoteUrl === undefined
-                  ? undefined
-                  : mcpHub.managed.find(connector => connector.url === candidate.remoteUrl
-                    || (connector.source?.kind === 'registry' && connector.source.name === candidate.name))
+                const managed = mcpHub.managed.find(connector =>
+                  (connector.source?.kind === 'registry' && connector.source.name === candidate.name)
+                  || (candidate.remoteUrl !== undefined && connector.url === candidate.remoteUrl))
                 const runtime = managed === undefined
                   ? undefined
                   : mcpHub.runtime.find(entry => entry.serverName === managed.serverName)
