@@ -12,6 +12,17 @@ import {
 
 type ConnectorListService = Pick<AuthorizationService, 'list' | 'inspect'>
 type McpConnectorListService = Pick<McpConnectorRegistry, 'list'>
+type OpenClawConnectorListService = {
+  openClawConnectorState(): Promise<{
+    connectors: readonly {
+      id: 'google-workspace' | 'github'
+      source: 'openclaw'
+      skill: 'gog' | 'github'
+      runtime: 'gog' | 'gh'
+      status: 'ready' | 'auth-required' | 'missing-runtime' | 'failed'
+    }[]
+  }>
+}
 type AuthorizationStatus = 'connected' | 'not-connected' | 'unknown'
 type ConnectorStatus = AuthorizationStatus | McpConnectorEntry['status']
 type ConnectorRecommendedAction = 'use' | 'connect-or-reconnect' | 'wait' | 'repair' | 'inspect'
@@ -167,15 +178,51 @@ function projectMcpEntry(entry: McpConnectorEntry): McpConnector {
   }
 }
 
+function openClawServices(
+  connector: Awaited<ReturnType<OpenClawConnectorListService['openClawConnectorState']>>['connectors'][number],
+): JsonValue[] {
+  const callable = connector.status === 'ready'
+  if (connector.id === 'google-workspace') {
+    return [
+      { id: 'gmail', name: 'Gmail', accessible: true, enabled: true, installed: true, callable },
+      { id: 'google-calendar', name: 'Google Calendar', accessible: true, enabled: true, installed: true, callable },
+      { id: 'google-drive', name: 'Google Drive', accessible: true, enabled: true, installed: true, callable },
+      { id: 'google-contacts', name: 'Google Contacts', accessible: true, enabled: true, installed: true, callable },
+      { id: 'openclaw-gog', name: 'OpenClaw gog', accessible: true, enabled: true, installed: true, callable },
+    ]
+  }
+  return [
+    { id: 'github', name: 'GitHub repositories', accessible: true, enabled: true, installed: true, callable },
+    { id: 'openclaw-github', name: 'OpenClaw GitHub', accessible: true, enabled: true, installed: true, callable },
+  ]
+}
+
+function projectOpenClaw(
+  connector: Awaited<ReturnType<OpenClawConnectorListService['openClawConnectorState']>>['connectors'][number],
+): AuthorizationConnector {
+  const connected = connector.status === 'ready'
+  return {
+    id: `openclaw:${connector.id}`,
+    label: connector.id === 'google-workspace' ? 'Google Workspace' : 'GitHub',
+    methods: connected ? [] : [{ id: 'openclaw', label: 'Authorize in Settings → Connectors' }],
+    status: connected ? 'connected' : 'not-connected',
+    recommended_action: connected ? 'use' : 'connect-or-reconnect',
+    in_flight: false,
+    services: openClawServices(connector),
+  }
+}
+
 /**
  * Create the model-facing, read-only connector inventory tool.
  * @param authorization - optional authorization service owning provider flows and safe telemetry.
  * @param mcpConnectors - optional registry owning secret-free MCP lifecycle state.
+ * @param openClaw - optional Host bridge for operational OpenClaw connector runtimes.
  * @returns Tool definition that reports connector state without credential values.
  */
 export function createConnectorListTool(
   authorization?: ConnectorListService,
   mcpConnectors?: McpConnectorListService,
+  openClaw?: OpenClawConnectorListService,
 ): ToolDefinition {
   return defineTool({
     name: 'connector_list',
@@ -245,7 +292,15 @@ export function createConnectorListTool(
         ? []
         : await Promise.all(authorization.list().map(entry => projectEntry(authorization, entry)))
       const mcpEntries = mcpConnectors?.list().map(projectMcpEntry) ?? []
-      const entries = [...authorizationEntries, ...mcpEntries]
+      let openClawEntries: AuthorizationConnector[] = []
+      if (openClaw !== undefined) {
+        try {
+          openClawEntries = (await openClaw.openClawConnectorState()).connectors.map(projectOpenClaw)
+        } catch {
+          // Optional OpenClaw inventory must never make connector_list itself fail.
+        }
+      }
+      const entries = [...authorizationEntries, ...mcpEntries, ...openClawEntries]
       const target = args.target?.trim()
       if (target === undefined || target.length === 0) {
         return { kind: 'connector_list', connectors: entries } satisfies ConnectorListResult
