@@ -14,7 +14,7 @@ Status: implemented
 
 Codex realtime 的最终用户转录解析精确的实时 Phoenix Agent，并进入其普通 follow-up inbox。该 Agent 仍是唯一的规划与执行来源，因此工具、hardness 策略、持久化、验证和聊天输出与键盘输入走同一路径。浏览器 realtime 通道关闭 VAD 自动创建的独立响应，并把 Phoenix 最终助手响应交给实时音频渲染；没有实时 Agent 的独立 voice 组合仍保留转录日志作为兼容降级。
 
-AgentMail 的歧义注册仍不会自动重试，但所有者可以显式选择 **Crear otro buzón**。该操作只清除歧义的本地 enrollment，并使用新的随机邮箱名执行一次新的注册；如果要保留之前的邮箱，高级恢复路径仍然可用。
+AgentMail 的歧义注册仍不会自动重试，但所有者可以显式选择 **Crear otro buzón**。该操作在执行一次新的随机邮箱注册期间继续保持 enrollment 为歧义状态，从而避免首次运行的自动 pump 与所有者明确选择的第二次尝试发生竞争；如果要保留之前的邮箱，高级恢复路径仍然可用。
 
 ## 考虑过的替代方案
 
