@@ -17,11 +17,13 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { Service, type Context } from '@phoenix-ai/cordis'
-import { credentialKey, type CredentialKey } from '@phoenix-ai/dsh-credentials'
+import { credentialKey, credentialRef, type CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
 
 /** Secret-free durable marker for the process-local Google account. */
 export const GOOGLE_ACCOUNT_KEY: CredentialKey = credentialKey('authorization-google', 'account')
+/** Durable public OAuth application id used when deployment env does not provide one. */
+export const GOOGLE_CLIENT_ID_REF = credentialRef('PHOENIX_GOOGLE_OAUTH_CLIENT_ID')
 
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
@@ -181,6 +183,17 @@ interface LoopbackReceiver {
 
 function nonEmpty(value: unknown): value is string {
   return typeof value === 'string' && value.trim() !== ''
+}
+
+function normalizeGoogleClientId(value: string): string {
+  const clientId = value.trim()
+  if (!/^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$/u.test(clientId)) {
+    throw new AuthorizationError(
+      'Google OAuth client id must be a Desktop OAuth client id ending in .apps.googleusercontent.com',
+      'GOOGLE_CLIENT_INVALID',
+    )
+  }
+  return clientId
 }
 
 function gmailProfileEmail(body: string): string | undefined {
@@ -562,13 +575,7 @@ export default class GoogleApiBroker extends Service {
 
   private async authorize(session: AuthorizationSession): Promise<void> {
     await this.startupCleanup
-    const clientId = this.spec.clientId
-    if (clientId === undefined) {
-      throw new AuthorizationError(
-        'Google OAuth is not configured. Set PHOENIX_GOOGLE_OAUTH_CLIENT_ID to a Google Desktop OAuth client id and restart PHOENIX.',
-        'GOOGLE_CLIENT_UNCONFIGURED',
-      )
-    }
+    const clientId = await this.resolveClientId(session)
     const state = base64url(randomBytes(32))
     const pkce = createPkce()
     const receiver = await internals.openLoopback(state, session.signal)
@@ -626,7 +633,7 @@ export default class GoogleApiBroker extends Service {
     return this.refresh(current, requiredScope, signal)
   }
 
-  private refresh(current: GoogleGrant, requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
+  private async refresh(current: GoogleGrant, requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
     const checkScope = (next: GoogleGrant): GoogleGrant => {
       if (!next.scopes.includes(requiredScope)) {
         throw new AuthorizationError('Google permission for this capability was not granted', 'GOOGLE_SCOPE_DENIED')
@@ -634,17 +641,42 @@ export default class GoogleApiBroker extends Service {
       return next
     }
     if (this.refreshInFlight !== undefined) return this.refreshInFlight.then(checkScope)
-    const clientId = this.spec.clientId
     const refreshToken = current.refreshToken
-    if (clientId === undefined || refreshToken === undefined) {
-      return Promise.reject(new AuthorizationError(
-        'Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED'))
+    if (refreshToken === undefined) {
+      throw new AuthorizationError('Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED')
     }
+    const clientId = await this.resolveClientId()
     const running = this.refreshGrant(current, clientId, refreshToken, signal).finally(() => {
       if (this.refreshInFlight === running) this.refreshInFlight = undefined
     })
     this.refreshInFlight = running
     return running.then(checkScope)
+  }
+
+  private async resolveClientId(session?: AuthorizationSession): Promise<string> {
+    if (this.spec.clientId !== undefined) return normalizeGoogleClientId(this.spec.clientId)
+
+    const stored = await this.ctx.credentials.resolve(GOOGLE_CLIENT_ID_REF)
+    if (stored !== undefined) return normalizeGoogleClientId(stored.value)
+
+    if (session === undefined) {
+      throw new AuthorizationError(
+        'Google OAuth application is not configured; authorize Google Workspace again to configure it.',
+        'GOOGLE_CLIENT_UNCONFIGURED',
+      )
+    }
+
+    session.notify({
+      message: 'Google Workspace needs a Google Desktop OAuth client id once. Phoenix will store this public application id locally, then open Google authorization.',
+    })
+    const entered = await session.prompt({
+      kind: 'text',
+      message: 'Google Desktop OAuth client ID',
+      placeholder: '1234567890-abc.apps.googleusercontent.com',
+    })
+    const clientId = normalizeGoogleClientId(entered)
+    await this.ctx.credentials.set(GOOGLE_CLIENT_ID_REF, clientId)
+    return clientId
   }
 
   private async refreshGrant(
