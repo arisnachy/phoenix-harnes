@@ -335,6 +335,27 @@ export async function tryStartCodexRealtimeVoice(
       if (codexRealtimeVoiceGeneration !== generation || typeof event.data !== 'string') return
       updateCodexRealtimePhase(event.data)
     }
+    events.onopen = () => {
+      if (codexRealtimeVoiceGeneration !== generation || events === undefined) return
+      // The realtime model supplies low-latency audio and transcription only.
+      // Phoenix's live Agent must own the actual turn so every spoken request
+      // uses the same harness, tools, policies, persistence, and verification
+      // as a typed message. Disable VAD-created autonomous model responses.
+      try {
+        events.send(JSON.stringify({
+          type: 'session.update',
+          session: {
+            turn_detection: {
+              type: 'server_vad',
+              create_response: false,
+              interrupt_response: true,
+            },
+          },
+        }))
+      } catch {
+        // A concurrently closing channel is handled by the peer-state cleanup.
+      }
+    }
 
     const offer = await peer.createOffer()
     await peer.setLocalDescription(offer)
@@ -557,12 +578,17 @@ export function interruptVoiceAssistantSpeech(): boolean {
   if (!voiceAssistantSnapshot.active) return false
   const hadBrowserSpeech = voiceAssistantSpeech !== undefined
   const hadRemoteSpeech = remoteSpeech !== undefined
+  const realtime = codexRealtimeVoiceSession
+  const hadRealtimeSpeech = realtime !== undefined && voiceAssistantSnapshot.phase === 'speaking'
+  if (hadRealtimeSpeech && realtime.events.readyState === 'open') {
+    try { realtime.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* peer cleanup owns closure */ }
+  }
   voiceAssistantSpeech?.dispose()
   voiceAssistantSpeech = undefined
   voiceAssistantSpeechKey = undefined
   resetRemoteSpeech(true)
-  if (hadBrowserSpeech || hadRemoteSpeech) publishVoiceIdle()
-  return hadBrowserSpeech || hadRemoteSpeech
+  if (hadBrowserSpeech || hadRemoteSpeech || hadRealtimeSpeech) publishVoiceIdle()
+  return hadBrowserSpeech || hadRemoteSpeech || hadRealtimeSpeech
 }
 
 /**
@@ -598,10 +624,34 @@ export function streamVoiceAssistantResponse(
   messageTime: number,
   final = false,
 ): void {
-  if (!voiceAssistantSnapshot.active || codexRealtimeVoiceSession !== undefined
+  if (!voiceAssistantSnapshot.active
     || text.trim() === '' || messageTime < voiceAssistantSnapshot.activatedAt - 1_000) return
   if (spokenAssistantMessages.has(messageKey)) return
   voiceAssistantSpokenText = text
+
+  const realtime = codexRealtimeVoiceSession
+  if (realtime !== undefined) {
+    // While native realtime is active, the text Agent remains authoritative.
+    // Streamed partials stay in chat; the finalized harness answer is handed
+    // back to the realtime channel only for spoken rendering.
+    if (!final) return
+    if (realtime.events.readyState === 'open') {
+      try {
+        realtime.events.send(JSON.stringify({
+          type: 'response.create',
+          response: {
+            instructions: `Speak the following PHOENIX assistant response faithfully. Do not add claims, actions, or extra content.\n\n${conversationalSpeechText(text)}`,
+          },
+        }))
+        spokenAssistantMessages.add(messageKey)
+        publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
+        return
+      } catch {
+        // Fall through to the normal Host/browser speech path if the live
+        // channel races with closure after the peer-state check.
+      }
+    }
+  }
 
   if (streamRemoteSpeech(messageKey, text, final)) {
     voiceAssistantSpeech?.dispose()

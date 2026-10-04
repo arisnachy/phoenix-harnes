@@ -55,13 +55,13 @@ describe('Google Workspace runtime guards', () => {
       code: Promise.resolve('authorization-code'),
       close: () => Promise.resolve(),
     })
-    internals.fetch = (async () => new Response(JSON.stringify({
+    internals.fetch = async () => new Response(JSON.stringify({
       access_token: 'access-token',
       refresh_token: 'refresh-token',
       expires_in: 3600,
       token_type: 'Bearer',
       scope: DRIVE_SCOPE,
-    }), { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
 
     await expect(ctx.authorization.begin({
       key: GOOGLE_ACCOUNT_KEY,

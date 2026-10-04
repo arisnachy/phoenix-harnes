@@ -1,7 +1,9 @@
 /** Provider-neutral asynchronous voice capability for PHOENIX.
  *
- * Voice is an optional side channel. It consumes important durable events and
- * never participates in execution, planning, or completion decisions.
+ * Voice is an optional side channel for announcements and speech output. A
+ * finalized realtime user transcript is ordinary conversation input: when its
+ * Phoenix Agent is live it enters that Agent's inbox, so planning, tools,
+ * hardness policy, persistence, and completion all stay on the normal harness.
  * @module @phoenix-ai/dsh-voice
  */
 
@@ -688,11 +690,36 @@ export class VoiceRuntime extends TypertRemoteService {
     model: string | undefined,
     transcript: CodexRealtimeTranscript,
   ): void {
-    const store = this.ctx.get('sessions')
-    const session = store?.get(SessionId(key))
-    if (session === undefined) return
     const text = transcript.text.trim()
     if (text === '') return
+
+    // Realtime voice is an input/output transport, not a second agent loop.
+    // Route final human speech through the exact live Phoenix Agent so the
+    // normal harness owns planning, tools, hardness, durable events, and the
+    // assistant response. Ignore the realtime model's independent assistant
+    // transcript in this case; the live Agent is the single source of truth.
+    const sessionId = SessionId(key)
+    const agents = this.ctx.get('agents') as unknown as {
+      get(id: SessionId): { followup(message: ReturnType<typeof createUserMessage>): void } | undefined
+    } | undefined
+    const agent = agents?.get(sessionId)
+    if (agent !== undefined) {
+      if (transcript.role === 'user') {
+        this.closeRealtimeTranscriptTurn(key, 'user')
+        agent.followup(createUserMessage({
+          source: { kind: 'user' },
+          content: [{ type: 'text', text }],
+        }))
+      }
+      return
+    }
+
+    // Standalone voice compositions can intentionally omit an Agent registry.
+    // Keep their legacy transcript journal so the package still degrades to a
+    // useful conversation record instead of dropping speech.
+    const store = this.ctx.get('sessions')
+    const session = store?.get(sessionId)
+    if (session === undefined) return
 
     if (transcript.role === 'user') {
       this.closeRealtimeTranscriptTurn(key, 'user')

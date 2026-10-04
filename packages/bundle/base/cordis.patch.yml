@@ -147,6 +147,10 @@
       name: '@phoenix-ai/dsh-llm-pi-ai'
       config:
         providers:
+          # Native subscription-backed Codex is the primary first-run cloud
+          # route. Authentication belongs to the official Codex/ChatGPT session;
+          # no OPENAI_API_KEY is accepted for this provider.
+          openai-codex: {}
           openrouter:
             apiKeyEnv: OPENROUTER_API_KEY
           # Optional local ChatGPT Web bridge. It exposes selectable bridge
@@ -440,6 +444,12 @@
 
     - id: subagent
       name: '@phoenix-ai/dsh-subagent'
+
+    # Mount native Codex account ownership in every base composition so a fresh
+    # Phoenix install can authorize ChatGPT/Codex from Settings before any
+    # per-agent delegation preset is selected.
+    - id: subagent-codex
+      name: '@phoenix-ai/dsh-subagent-codex'
 
     - id: subagent-spawn-in-process
       name: '@phoenix-ai/dsh-subagent-spawn-in-process'

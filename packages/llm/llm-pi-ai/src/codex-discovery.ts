@@ -396,7 +396,7 @@ async function waitForNaturalCodexExit(
     }
     const onExit = (): void => { finish(true) }
     const timer = setTimeout(() => { finish(false) }, timeoutMs)
-    timer.unref?.()
+    timer.unref()
     child.once('exit', onExit)
   })
 }

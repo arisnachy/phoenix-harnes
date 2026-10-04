@@ -167,7 +167,7 @@ async function readFromCodex(): Promise<string> {
     }))
     return readCodexNativeAuthStatus(await nextResponse(iterator, 2))
   } finally {
-    terminateCodexProcess(child, lines)
+    await terminateCodexProcess(child, lines)
   }
 }
 

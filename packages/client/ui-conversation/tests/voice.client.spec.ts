@@ -14,6 +14,7 @@ import {
   setVoiceAssistantListening,
   speakVoiceAssistantResponse,
   streamVoiceAssistantResponse,
+  stopCodexRealtimeVoice,
   tryStartCodexRealtimeVoice,
   type VoiceRecognitionLike,
 } from '../src/client/voice.ts'
@@ -75,6 +76,129 @@ describe('browser voice adapter', () => {
     }
   })
 
+
+  it('uses native realtime only as speech transport while Phoenix harness owns the answer', async () => {
+    class FakeDataChannel {
+      static instance: FakeDataChannel | undefined
+      readyState: 'open' | 'closed' = 'open'
+      onopen: (() => void) | null = null
+      onmessage: ((event: { data: string }) => void) | null = null
+      readonly send = vi.fn((_payload: string) => undefined)
+      close(): void { this.readyState = 'closed' }
+      constructor() { FakeDataChannel.instance = this }
+    }
+    class FakePeer {
+      iceGatheringState = 'complete'
+      connectionState = 'connected'
+      localDescription: { type: 'offer'; sdp: string } | null = null
+      ontrack: ((event: { streams: MediaStream[]; track: MediaStreamTrack }) => void) | null = null
+      onconnectionstatechange: (() => void) | null = null
+      createDataChannel(): FakeDataChannel { return new FakeDataChannel() }
+      addTrack(): void {}
+      async createOffer(): Promise<{ type: 'offer'; sdp: string }> {
+        return { type: 'offer', sdp: 'v=0\r\n' }
+      }
+      async setLocalDescription(value: { type: 'offer'; sdp: string }): Promise<void> {
+        this.localDescription = value
+      }
+      async setRemoteDescription(): Promise<void> {}
+      close(): void { this.connectionState = 'closed' }
+    }
+
+    const rtcDescriptor = Object.getOwnPropertyDescriptor(window, 'RTCPeerConnection')
+    const mediaDescriptor = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices')
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined)
+    Object.defineProperty(window, 'RTCPeerConnection', {
+      configurable: true,
+      value: FakePeer,
+    })
+    Object.defineProperty(navigator, 'mediaDevices', {
+      configurable: true,
+      value: {
+        getUserMedia: vi.fn(async () => ({
+          getTracks: () => [{ stop: vi.fn() }],
+          getAudioTracks: () => [{ stop: vi.fn() }],
+        })),
+      },
+    })
+    const disposeRoute = configureVoiceModelRouteResolver(async () => ({
+      provider: 'openai-codex',
+      model: 'gpt-6-luna',
+    }))
+    const disposeRemote = configureVoiceAssistantRemote({
+      conversationStatus: async () => ({
+        ok: true,
+        value: { enabled: true, natural: false },
+      }),
+      conversationSpeak: async () => ({
+        ok: true,
+        value: { accepted: false, reason: 'natural-unavailable' },
+      }),
+      conversationCancel: async () => ({
+        ok: true,
+        value: { cancelled: 0 },
+      }),
+      conversationRealtimeStatus: async () => ({
+        ok: true,
+        value: {
+          enabled: true,
+          available: true,
+          authenticated: true,
+          provider: 'openai-codex',
+        },
+      }),
+      conversationRealtimeStart: async () => ({
+        ok: true,
+        value: {
+          accepted: true,
+          threadId: 'thread-harness',
+          answerSdp: 'v=0\r\n',
+        },
+      }),
+      conversationRealtimeStop: async () => ({
+        ok: true,
+        value: { stopped: true },
+      }),
+    })
+    try {
+      await expect(tryStartCodexRealtimeVoice('session-harness')).resolves.toEqual({ kind: 'started' })
+      const channel = FakeDataChannel.instance
+      expect(channel).toBeDefined()
+      channel?.onopen?.()
+      const sessionUpdate = JSON.parse(String(channel?.send.mock.calls[0]?.[0])) as {
+        type: string
+        session: { turn_detection: { create_response: boolean } }
+      }
+      expect(sessionUpdate.type).toBe('session.update')
+      expect(sessionUpdate.session.turn_detection.create_response).toBe(false)
+
+      const activatedAt = getVoiceAssistantSnapshot().activatedAt
+      streamVoiceAssistantResponse(
+        'assistant:harness:1',
+        'La tarea terminó correctamente.',
+        activatedAt,
+        true,
+      )
+      const spoken = JSON.parse(String(channel?.send.mock.calls[1]?.[0])) as {
+        type: string
+        response: { instructions: string }
+      }
+      expect(spoken.type).toBe('response.create')
+      expect(spoken.response.instructions).toContain('La tarea terminó correctamente.')
+
+      expect(interruptVoiceAssistantSpeech()).toBe(true)
+      expect(JSON.parse(String(channel?.send.mock.calls[2]?.[0]))).toEqual({ type: 'response.cancel' })
+    } finally {
+      await stopCodexRealtimeVoice()
+      disposeRemote()
+      disposeRoute()
+      pause.mockRestore()
+      if (rtcDescriptor === undefined) Reflect.deleteProperty(window, 'RTCPeerConnection')
+      else Object.defineProperty(window, 'RTCPeerConnection', rtcDescriptor)
+      if (mediaDescriptor === undefined) Reflect.deleteProperty(navigator, 'mediaDevices')
+      else Object.defineProperty(navigator, 'mediaDevices', mediaDescriptor)
+    }
+  })
 
   it('configures one explicit recognition session and forwards final text', () => {
     const transcripts: string[] = []

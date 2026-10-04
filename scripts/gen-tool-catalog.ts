@@ -54,6 +54,7 @@ import * as ToolStrReplaceEditor from '@phoenix-ai/dsh-tool-str-replace-editor'
 import TerminalSessionService from '@phoenix-ai/dsh-terminal'
 import * as ToolPty from '@phoenix-ai/dsh-tool-terminal'
 import * as ToolGoal from '@phoenix-ai/dsh-tool-goal'
+import * as ToolGoogleWorkspace from '@phoenix-ai/dsh-tool-google-workspace'
 import HomeAssistantGatewayService from '@phoenix-ai/dsh-home-gateway'
 import * as ToolHomeGateway from '@phoenix-ai/dsh-tool-home-gateway'
 import * as ToolSchedule from '@phoenix-ai/dsh-schedule'
@@ -377,6 +378,21 @@ const TOOL_PACKAGES: ToolPackage[] = [
     },
     note:
       'create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds.',
+  },
+  {
+    pkg: '@phoenix-ai/dsh-tool-google-workspace',
+    dir: 'tool-google-workspace',
+    source: 'packages/credentials/tool-google-workspace/src/index.ts',
+    requires: ['ctx.tools', 'ctx.googleApi'],
+    writes: ['tool/call', 'bounded Google Workspace request through the host OAuth broker', 'tool/result'],
+    async mount(ctx) {
+      ctx.provide('googleApi', {
+        request: () => Promise.reject(new Error('tool-catalog Google API request is unreachable')),
+      } as unknown as Context['googleApi'])
+      await ctx.plugin(ToolGoogleWorkspace)
+    },
+    note:
+      'The schema harvest supplies a non-networking googleApi seam. Live calls stay inside the Host-owned OAuth broker, which fixes the Google service root and scope, injects the Bearer token only at fetch time, and never exposes OAuth material to the model-facing tool package.',
   },
   {
     pkg: '@phoenix-ai/dsh-tool-home-gateway',
