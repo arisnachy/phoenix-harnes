@@ -92,11 +92,17 @@ export interface McpConnectorRuntimeEntry {
   readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
 }
 
+/** Trusted reconstruction source for one PHOENIX-managed MCP. */
+export type ManagedMcpSource =
+  | { readonly kind: 'registry'; readonly name: string; readonly version?: string }
+  | { readonly kind: 'curated'; readonly connectorId: string }
+
 /** One PHOENIX-managed remote MCP persisted in the managed overlay. */
 export interface ManagedMcpConnector {
   readonly entryId: string
   readonly serverName: string
   readonly url: string
+  readonly source?: ManagedMcpSource
 }
 
 /** Combined MCP state used by Settings without exposing credentials or headers. */
