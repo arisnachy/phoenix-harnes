@@ -66,6 +66,14 @@ const CRITICAL_CONFIG_PATHS = [
   'codex/enabled.patch.yml',
 ]
 
+const PROFILE_REQUIRED_RUNTIME_PACKAGES = [
+  '@phoenix-ai/dsh-authorization',
+  '@phoenix-ai/dsh-mcp-client',
+  '@phoenix-ai/dsh-mcp-connector-registry',
+  '@phoenix-ai/dsh-tool-google-workspace',
+  '@phoenix-ai/dsh-host-plugin-inventory',
+] as const
+
 function repairDesktopShortcut() {
   if (process.platform !== 'win32') return
   try {
@@ -562,10 +570,26 @@ function profileFallbackHasMissingRuntimeArtifact() {
   const dshHome = configuredHome !== undefined && configuredHome.length > 0
     ? configuredHome
     : join(homedir(), '.dsh')
-  const scopeDir = join(dshHome, 'profiles', 'node_modules', '@phoenix-ai')
-  if (!existsSync(scopeDir)) return false
+  const modulesDir = join(dshHome, 'profiles', 'node_modules')
+  const scopeDir = join(modulesDir, '@phoenix-ai')
+  // A fresh/cleaned DSH_HOME must trigger one profile preflight. That preflight
+  // calls prepareProfile(), which rebuilds the lightweight shared junction farm
+  // from the installed runtime instead of copying packages into user storage.
+  if (!existsSync(modulesDir) || !existsSync(scopeDir)) return true
 
   try {
+    // Connector/OAuth essentials are required even when the rest of the shared
+    // fallback looks healthy. Missing one entirely used to go unnoticed because
+    // the scanner only inspected entries that already existed.
+    for (const packageName of PROFILE_REQUIRED_RUNTIME_PACKAGES) {
+      const packageDir = join(modulesDir, ...packageName.split('/'))
+      const manifestPath = join(packageDir, 'package.json')
+      if (!existsSync(manifestPath)) return true
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+      const main = typeof manifest?.main === 'string' ? manifest.main.trim() : ''
+      if (main.length > 0 && !existsSync(join(packageDir, main))) return true
+    }
+
     for (const entry of readdirSync(scopeDir, { withFileTypes: true })) {
       if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
       const packageDir = join(scopeDir, entry.name)
