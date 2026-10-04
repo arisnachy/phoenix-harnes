@@ -265,7 +265,7 @@ describe('healProfilesModuleFallback', () => {
     // and symlinkSync. Simulated by pre-creating the correct link and calling
     // the internal path through a stale-lstat shim is not possible from
     // outside, so probe the observable contract: healing twice concurrently
-    // is a no-op, and a foreign REAL directory still fails loud.
+    // is a no-op once the managed junction already points at the right target.
     const anchor = stageInstallation({})
     const home = tmp()
     healProfilesModuleFallback(anchor, home)
