@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { codexAccountTelemetry } from '../src/account.ts'
+import { codexAccountTelemetry, mergeCodexRateLimitsUpdate } from '../src/account.ts'
 
 const accountSource = readFileSync(
   fileURLToPath(new URL('../src/account.ts', import.meta.url)),
@@ -158,6 +158,33 @@ describe('native Codex managed-account boundary', () => {
       primaryLimit: { usedPercent: 25, windowDurationMins: 300, resetsAt: 1_800_000_000 },
     })
     expect(telemetry).not.toHaveProperty('usage')
+  })
+
+  it('merges sparse live Codex quota updates without clearing unchanged windows', () => {
+    const merged = mergeCodexRateLimitsUpdate({
+      account: { type: 'chatgpt', planType: 'plus' },
+      requiresOpenaiAuth: true,
+      rateLimits: {
+        rateLimitsByLimitId: {
+          codex: {
+            primary: { usedPercent: 10, windowDurationMins: 300 },
+            secondary: { usedPercent: 20, windowDurationMins: 10080 },
+          },
+        },
+      },
+    }, {
+      primary: { usedPercent: 37, windowDurationMins: 300 },
+      secondary: null,
+    })
+
+    const telemetry = codexAccountTelemetry(merged)
+    expect(telemetry?.primaryLimit?.usedPercent).toBe(37)
+    expect(telemetry?.secondaryLimit?.usedPercent).toBe(20)
+  })
+
+  it('keeps an event-driven observer for official account/rateLimits/updated notifications', () => {
+    expect(accountSource).toContain('observeCodexRateLimitsUpdate')
+    expect(accountSource).toContain('withObservedCodexRateLimits')
   })
 
   it('prefers the modern Codex rateLimitsByLimitId bucket over an empty legacy snapshot', () => {
