@@ -16,7 +16,7 @@ import {
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
-import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
+import { gitSafeDirectoryEnvironment, persistGitSafeDirectory } from './phoenix-git-safe-directory.mjs'
 import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
@@ -87,6 +87,21 @@ function repairDesktopShortcut() {
   }
 }
 
+function officialPhoenixRemote() {
+  const value = gitValue(root, ['remote', 'get-url', 'origin'])
+  if (value === undefined) return false
+  const normalized = value.replaceAll('\\', '/').replace(/\.git$/iu, '').toLowerCase()
+  return normalized.endsWith('github.com/arisnachy/phoenix-harnes')
+    || normalized.endsWith('github.com:arisnachy/phoenix-harnes')
+}
+
+function repairUserGitSafeDirectory() {
+  if (process.platform !== 'win32' || !officialPhoenixRemote()) return
+  if (!persistGitSafeDirectory(root)) {
+    console.error('[PHOENIX] warning: could not persist the exact Git safe.directory for this checkout; Phoenix internal Git remains process-scoped.')
+  }
+}
+
 function gitValue(cwd, args) {
   const result = spawnSync('git', args, {
     cwd,
@@ -108,6 +123,8 @@ function gitSucceeds(cwd, args) {
   })
   return result.status === 0
 }
+
+repairUserGitSafeDirectory()
 
 function preparedTargetIsDivergent(target) {
   const current = gitValue(root, ['rev-parse', 'HEAD'])
