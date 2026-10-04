@@ -556,6 +556,61 @@ function runtimeBootPreflight(path) {
   return { ok: result.error === undefined && result.status === 0, detail }
 }
 
+
+function profileFallbackHasMissingRuntimeArtifact() {
+  const configuredHome = process.env.DSH_HOME?.trim()
+  const dshHome = configuredHome !== undefined && configuredHome.length > 0
+    ? configuredHome
+    : join(homedir(), '.dsh')
+  const scopeDir = join(dshHome, 'profiles', 'node_modules', '@phoenix-ai')
+  if (!existsSync(scopeDir)) return false
+
+  try {
+    for (const entry of readdirSync(scopeDir, { withFileTypes: true })) {
+      if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
+      const packageDir = join(scopeDir, entry.name)
+      const manifestPath = join(packageDir, 'package.json')
+      if (!existsSync(manifestPath)) return true
+      const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+      const main = typeof manifest?.main === 'string' ? manifest.main.trim() : ''
+      if (main.length > 0 && !existsSync(join(packageDir, main))) return true
+    }
+  } catch {
+    return true
+  }
+  return false
+}
+
+function isMissingProfileRuntimeArtifact(detail) {
+  const normalized = detail.replaceAll('\\', '/').toLowerCase()
+  return (normalized.includes('err_module_not_found') || normalized.includes('cannot find module'))
+    && normalized.includes('/profiles/node_modules/')
+    && normalized.includes('/lib/')
+}
+
+function repairMissingProfileRuntimeArtifact(path, initialPreflight) {
+  if (initialPreflight.ok || !isMissingProfileRuntimeArtifact(initialPreflight.detail)) return initialPreflight
+
+  console.error('[PHOENIX RECOVERY] a compiled profile module is missing; rebuilding Host artifacts once before relaunch.')
+  try {
+    runPnpm(path, ['run', 'build:lib:host'], 'repair missing profile runtime artifacts')
+  } catch (error) {
+    return {
+      ok: false,
+      detail: [
+        initialPreflight.detail,
+        `profile artifact repair failed: ${error instanceof Error ? error.message : String(error)}`,
+      ].filter(Boolean).join('\n'),
+    }
+  }
+
+  const retried = runtimeBootPreflight(path)
+  if (retried.ok) {
+    console.error('[PHOENIX RECOVERY] missing profile runtime artifacts rebuilt successfully; boot preflight passed.')
+  }
+  return retried
+}
+
 function writeActiveRuntime(target, path) {
   const markerPath = activeRuntimePath()
   if (markerPath === undefined) throw new Error('could not resolve active runtime marker path')
@@ -1126,6 +1181,19 @@ restoreActiveRuntime()
 cleanupObsoleteRuntimes()
 recoverConfigurationBeforeFirstBoot()
 
+if (profileFallbackHasMissingRuntimeArtifact()) {
+  const startupPreflight = runtimeBootPreflight(runtimeRoot)
+  if (!startupPreflight.ok && isMissingProfileRuntimeArtifact(startupPreflight.detail)) {
+    const repaired = repairMissingProfileRuntimeArtifact(runtimeRoot, startupPreflight)
+    if (!repaired.ok) {
+      writeConfigurationRecoveryReport('startup-profile-artifact-repair-failed', repaired.detail)
+      console.error('[PHOENIX RECOVERY] startup profile artifact repair failed; refusing an automatic relaunch loop.')
+      if (repaired.detail.length > 0) console.error(`[PHOENIX RECOVERY] ${repaired.detail}`)
+      process.exit(1)
+    }
+  }
+}
+
 let finalCode = 0
 while (true) {
   const launchConfiguration = captureBootCriticalConfiguration()
@@ -1296,6 +1364,20 @@ while (true) {
       + 'retired its active marker and falling back to the source checkout instead of relaunching a broken update.',
     )
     continue
+  }
+
+  const crashPreflight = runtimeBootPreflight(runtimeRoot)
+  if (!crashPreflight.ok && isMissingProfileRuntimeArtifact(crashPreflight.detail)) {
+    const repaired = repairMissingProfileRuntimeArtifact(runtimeRoot, crashPreflight)
+    if (repaired.ok) {
+      console.error('[PHOENIX RECOVERY] repaired missing profile artifacts after Host exit; relaunching PHOENIX.')
+      continue
+    }
+    writeConfigurationRecoveryReport('profile-artifact-repair-failed', repaired.detail)
+    console.error('[PHOENIX RECOVERY] profile artifact repair failed; refusing an automatic relaunch loop.')
+    if (repaired.detail.length > 0) console.error(`[PHOENIX RECOVERY] ${repaired.detail}`)
+    finalCode = hostExit.code ?? 1
+    break
   }
 
   const reason = hostExit.code === null ? `signal ${hostExit.signal ?? 'unknown'}` : `exit code ${String(hostExit.code)}`
