@@ -308,4 +308,5 @@ export function apply(ctx: Context): void {
   }))
 }
 
+/** Cordis plugin descriptor for model-facing Google Workspace tools. */
 export default { name, inject, apply }
