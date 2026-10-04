@@ -34,7 +34,7 @@ const KEY = 'mcp-client/notion-notion'
 const LABEL = 'MCP notion-notion'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
 
-function panelApi(status: () => Promise<RpcResponse<unknown>>) {
+function panelApi(statusResult: () => Promise<RpcResponse<unknown>>) {
   return {
     list: vi.fn(() => Promise.resolve(ok({
       entries: [{
@@ -45,11 +45,11 @@ function panelApi(status: () => Promise<RpcResponse<unknown>>) {
       }],
     }))),
     begin: vi.fn(() => Promise.resolve(ok({ attemptId: 'attempt-1', status: 'pending' as const }))),
-    status: vi.fn(status),
+    status: vi.fn(statusResult),
     answer: vi.fn(),
     cancel: vi.fn(),
     disconnect: vi.fn(),
-  } as unknown as IApiClient['authorization']
+  }
 }
 
 function pendingForever(): Promise<RpcResponse<unknown>> {
@@ -65,10 +65,10 @@ function consentNotice(): Promise<RpcResponse<unknown>> {
   }))
 }
 
-function renderPanel(api: IApiClient['authorization']) {
+function renderPanel(api: ReturnType<typeof panelApi>) {
   return render(
     <ConnectorsSettingsSection
-      api={api}
+      api={api as unknown as IApiClient['authorization']}
       t={key => en[key]}
       connectorT={key => connectorEn[key]}
       onAuthorized={vi.fn()}
