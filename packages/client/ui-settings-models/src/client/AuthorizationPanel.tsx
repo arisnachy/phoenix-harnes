@@ -404,6 +404,14 @@ function accountPresentation(entry: Entry): {
   return { name, technical }
 }
 
+function managedAuthorizationEntry(
+  connector: ManagedMcpConnectorView,
+  entries: readonly Entry[],
+): Entry | undefined {
+  const id = connector.serverName.toLowerCase().replaceAll('_', '-')
+  return entries.find(entry => entry.key === `mcp-client/${id}`)
+}
+
 function runtimeForEntry(
   entry: Entry,
   runtime: readonly McpConnectorRuntimeView[],
@@ -1012,9 +1020,23 @@ export function ConnectorsSettingsSection({ api,
   const removeManagedConnector = (connector: ManagedMcpConnectorView): void => {
     const remove = mcpRegistry?.remove
     if (remove === undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
+    const account = managedAuthorizationEntry(connector, entries)
+    if (account?.stored !== undefined && account.disconnectable !== true) {
+      setCatalogFailure(connectorT('uninstallAuthCleanupUnavailable'))
+      return
+    }
     setCatalogFailure(undefined)
     setRemovingEntryId(connector.entryId)
-    void remove({ entryId: connector.entryId }).then(
+
+    const clearAccount = account?.stored === undefined || api === undefined
+      ? Promise.resolve()
+      : api.disconnect({ key: account.key }).then((response) => {
+        if (!response.result.ok) throw new Error(response.result.error.message)
+      })
+
+    void clearAccount.then(
+      () => remove({ entryId: connector.entryId }),
+    ).then(
       (result) => {
         if (result.removed && !result.liveUnloaded) {
           setCatalogFailure(connectorT('uninstallRestartRequired'))
