@@ -1159,6 +1159,16 @@ export function ConnectorsSettingsSection({ api,
                       )}
                     </div>
                   </div>
+                  {attempt?.key === entry.key ? (
+                    <AuthorizationAttemptProgress
+                      attempt={attempt}
+                      answer={answer}
+                      setAnswer={setAnswer}
+                      submitAnswer={submitAnswer}
+                      cancel={cancel}
+                      t={t}
+                    />
+                  ) : null}
                 </article>
               )
             })}
@@ -1166,8 +1176,6 @@ export function ConnectorsSettingsSection({ api,
         </section>
       )}
 
-      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
-        submitAnswer={submitAnswer} cancel={cancel} t={t} />
       {failure === undefined ? null : <p className={styles['error']}>{failure}</p>}
       {catalogFailure === undefined ? null : <p className={styles['error']}>{catalogFailure}</p>}
 
