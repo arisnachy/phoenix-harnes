@@ -88,6 +88,19 @@ describe('PHOENIX managed Windows installation', () => {
     expect(iss).toContain('RestartApplications=no')
   })
 
+  it('keeps fresh managed installs on the promoted stable channel with process-scoped Git trust', () => {
+    const installer = read('install-phoenix.ps1')
+    const managedUpdater = read('scripts/phoenix-managed-update.mjs')
+    expect(installer).toContain("git clone --branch $stableSourceBranch --single-branch")
+    expect(installer).toContain("Add-PhoenixGitSafeDirectory $resolvedInstallDirectory")
+    expect(installer).toContain("GIT_CONFIG_KEY_$count")
+    expect(installer).toContain("'safe.directory'")
+    expect(managedUpdater).toContain("import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'")
+    expect(managedUpdater).toContain("const env = bin === 'git'")
+    expect(managedUpdater).toContain("gitSafeDirectoryEnvironment(process.env, [cwd])")
+    expect(managedUpdater).toContain("refs/heads/${STABLE_SOURCE_BRANCH}")
+  })
+
   it('delegates safe automatic checks to the managed stable updater', () => {
     const updater = read('update-phoenix.ps1')
     expect(updater).toContain("'.phoenix-managed-install'")
