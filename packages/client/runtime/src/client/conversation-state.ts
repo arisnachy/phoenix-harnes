@@ -322,6 +322,8 @@ export interface QueuedMessage {
   readonly placement: 'queued' | 'steering' | 'context'
   /** Complete content used to render pending steering before it becomes durable. */
   readonly content: readonly ContentBlock[]
+  /** Durable insertion boundary for exact in-turn placement of pending steering. */
+  readonly anchorSeq?: number
   readonly preview: string
   /** Complete editable text; null when the message contains non-text blocks. */
   readonly text: string | null
