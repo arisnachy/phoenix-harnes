@@ -110,30 +110,16 @@
     - id: authorization
       name: '@phoenix-ai/dsh-authorization'
 
-    # Google Workspace authorization uses a Desktop OAuth client id. A deployment
-    # may supply it through PHOENIX_GOOGLE_OAUTH_CLIENT_ID; otherwise the first
-    # Connect action asks for the public Desktop client id once and stores that
-    # application identity in Phoenix credentials. Access/refresh tokens remain
-    # Host-process-only and never enter model context or the credential file.
-    # Google installed apps do not support incremental authorization, so the
-    # enabled provider requests exactly the shipped Workspace capability set.
-    - id: authorization-google
-      name: '@phoenix-ai/dsh-authorization/google'
-      config:
-        clientId: !!js process.env.PHOENIX_GOOGLE_OAUTH_CLIENT_ID
-        scopes:
-          - https://www.googleapis.com/auth/gmail.modify
-          - https://www.googleapis.com/auth/calendar
-          - https://www.googleapis.com/auth/drive
-          - https://www.googleapis.com/auth/documents
-          - https://www.googleapis.com/auth/spreadsheets
-          - https://www.googleapis.com/auth/presentations
-          - https://www.googleapis.com/auth/contacts
+    # Google Workspace and GitHub authorization adopt verified sessions from
+    # the official OpenClaw-recommended CLIs (gog and gh). Phoenix keeps only
+    # its own non-secret account marker; Disconnect never logs the user out of
+    # those shared CLIs. This replaces the older Phoenix-specific Google OAuth
+    # exchange, avoiding two independent Google sessions and token stores.
+    - id: authorization-openclaw-cli
+      name: '@phoenix-ai/dsh-authorization/openclaw-cli'
 
-    # Real model-facing Workspace capability backed by the host-owned OAuth
-    # broker above. This replaces the old profile-local Google MCP fragments:
-    # Gmail, Calendar and Drive remain available after a clean Phoenix install,
-    # and Docs/Sheets/Slides/Contacts use the same governed account grant.
+    # Model-facing Gmail/Calendar/Drive tools use the same adopted gog account
+    # as the authorization flow above. One account, one tool namespace.
     - id: tool-google-workspace
       name: '@phoenix-ai/dsh-tool-google-workspace'
 
