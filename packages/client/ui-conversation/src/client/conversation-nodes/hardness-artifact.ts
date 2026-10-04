@@ -72,7 +72,9 @@ function artifactFrom(match: ConversationMatch): HardnessArtifactChatData | unde
     mime: artifact.mime,
     title,
     data: artifact.data,
-    executable: artifact.executable === true,
+    executable: typeof artifact.executable === 'boolean'
+      ? artifact.executable
+      : artifact.mime === 'text/html' || artifact.mime === 'application/vnd.hardness.app+html',
     ...typeof artifact.language === 'string' ? { language: artifact.language } : {},
     seq: match.event.seq,
     time: match.event.time,
