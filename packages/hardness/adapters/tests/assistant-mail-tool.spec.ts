@@ -4,6 +4,8 @@ import type { AssistantMailControl } from '../src/assistant-mail-runtime.ts'
 
 function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailControl {
   return {
+    recover: overrides.recover ?? (async () => ({ state: 'pending-verification', inboxId: 'kira-real@agentmail.to', connection: 'disconnected' })),
+    createInbox: overrides.createInbox ?? (async () => ({ state: 'ready', inboxId: 'kira-another@agentmail.to', connection: 'disconnected' })),
     verify: overrides.verify ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     refresh: overrides.refresh ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     sendToOwner: overrides.sendToOwner ?? (async () => ({ from: 'kira-real@agentmail.to', to: 'owner@example.com', messageId: 'sent' as never, threadId: 'thread' as never })),

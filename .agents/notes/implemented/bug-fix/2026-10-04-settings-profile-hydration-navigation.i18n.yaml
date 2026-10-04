@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-04-settings-profile-hydration-navigation.md
-2026-10-04-settings-profile-hydration-navigation.md: f2a5a5ed40f3b64addfcea6bb9b1306eb1a8e778
-2026-10-04-settings-profile-hydration-navigation.zh.md: c3af37819e488776c7b445159b307c7ae665c51c
+2026-10-04-settings-profile-hydration-navigation.md: d28bed563db7d2a160a6b3fddab6ccfd4b02d49c
+2026-10-04-settings-profile-hydration-navigation.zh.md: 81de058cb820a372530ac5ddbc05942eed1afa28

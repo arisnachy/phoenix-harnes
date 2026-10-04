@@ -48,13 +48,11 @@
       - 'button "上移提供方: OpenAI Codex" [disabled]': ↑
       - 'button "下移提供方: OpenAI Codex"': ↓
       - button "编辑 OpenAI Codex (openai-codex)": 编辑
-    - listitem:
-      - text: minimax-cn
-      - img "API 密钥已配置"
-      - 'button "上移提供方: minimax-cn"': ↑
-      - 'button "下移提供方: minimax-cn"': ↓
-      - button "编辑 minimax-cn": 编辑
-      - button "删除 minimax-cn": 删除
+      - text: OpenAI Codex openai-codex
+      - status: Codex 账号授权不可用。请确认已启用原生 Codex 连接。
+      - group: 自定义设置
+      - button "取消"
+      - button "保存"
     - listitem:
       - text: openrouter
       - img "API 密钥缺失"
@@ -64,46 +62,8 @@
     - listitem:
       - text: ChatGPT Web 自定义
       - 'button "上移提供方: ChatGPT Web"': ↑
-      - 'button "下移提供方: ChatGPT Web"': ↓
+      - 'button "下移提供方: ChatGPT Web" [disabled]': ↓
       - button "编辑 ChatGPT Web (chatgpt-web)": 编辑
-    - listitem:
-      - text: Acme Gateway 自定义
-      - 'button "上移提供方: Acme Gateway"': ↑
-      - 'button "下移提供方: Acme Gateway" [disabled]': ↓
-      - button "编辑 Acme Gateway (acme-gateway)": 编辑
-      - button "删除 Acme Gateway (acme-gateway)": 删除
-      - text: Acme Gateway acme-gateway API 密钥
-      - textbox "API 密钥":
-        - /placeholder: 输入 API 密钥，或留空使用环境认证
-      - group:
-        - text: 自定义设置 显示名称
-        - textbox "显示名称":
-          - /placeholder: acme-gateway
-          - text: Acme Gateway
-        - text: API 地址
-        - textbox "API 地址":
-          - /placeholder: https://gateway.acme.example/v1
-          - text: https://gateway.acme.example/v1
-        - text: API 协议
-        - combobox "API 协议":
-          - option "openai-completions" [selected]
-          - option "openai-responses"
-          - option "anthropic-messages"
-        - region "模型目录":
-          - text: 模型目录 已自定义模型目录
-          - button "恢复默认模型"
-          - button "获取可用模型"
-          - button "恢复提供方目录"
-          - textbox "模型 ID 1":
-            - /placeholder: 模型 ID
-            - text: acme-large
-          - textbox "显示名称 1":
-            - /placeholder: 显示名称
-          - button "容量 1"
-          - button "删除模型 1"
-          - button "添加模型"
-      - button "取消"
-      - button "保存"
   - button "添加提供方":
     - img
     - text: 添加提供方

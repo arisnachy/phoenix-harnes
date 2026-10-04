@@ -63,13 +63,8 @@ export function useAuthorizationAttempt(
     if (api === undefined || attempt?.status !== 'pending') return
     let stale = false
     const timer = window.setTimeout(() => {
-      // OAuth providers commonly close the consent tab as soon as the redirect
-      // reaches the loopback callback, while the Host still exchanges the code
-      // and commits the grant. Popup closure is therefore not cancellation.
-      // Only the explicit Cancel action owns api.cancel(); keep polling the Host
-      // until it reports authorized, failed, or cancelled.
-      if (popupRef.current?.closed === true) popupRef.current = null
-
+      // Cross-origin isolation can report an open consent window as closed.
+      // Only the provider outcome or explicit Cancel ends authorization.
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
         if (stale) return
         if (!response.result.ok) {
@@ -80,17 +75,19 @@ export function useAuthorizationAttempt(
         }
         const view = response.result.value
         const latest = view.notices.at(-1)?.notice
-        if (latest?.url !== undefined && !opened.current.has(latest.url)) {
-          opened.current.add(latest.url)
+        const consent = view.notices.findLast(item => item.notice.url !== undefined)?.notice
+        if (view.prompt !== undefined && consent?.url === undefined && attempt.url === undefined) closeReservedPopup()
+        if (consent?.url !== undefined && !opened.current.has(consent.url)) {
+          opened.current.add(consent.url)
           if (popupRef.current !== null && !popupRef.current.closed) {
-            popupRef.current.location.replace(latest.url)
+            popupRef.current.location.replace(consent.url)
           } else {
-            popupRef.current = window.open(latest.url, '_blank')
+            popupRef.current = window.open(consent.url, '_blank')
           }
         }
         const message = latest?.message ?? attempt.message
-        const url = latest?.url ?? attempt.url
-        const code = latest?.code ?? attempt.code
+        const url = consent?.url ?? attempt.url
+        const code = view.notices.findLast(item => item.notice.code !== undefined)?.notice.code ?? attempt.code
         setAttempt({
           id: view.attemptId,
           key: attempt.key,
@@ -170,13 +167,17 @@ export function useAuthorizationAttempt(
   const cancel = (): void => {
     if (api === undefined || attempt === undefined) return
     closeReservedPopup()
-    void api.cancel({ attemptId: attempt.id }).finally(() => {
+    void api.cancel({ attemptId: attempt.id }).then((response) => {
+      if (!response.result.ok) {
+        setFailure(response.result.error.message)
+        return
+      }
       setAttempt((current) => {
         if (current === undefined) return current
         const { prompt: _prompt, ...rest } = current
         return { ...rest, status: 'cancelled' }
       })
-    })
+    }, (error: unknown) => { setFailure(String(error)) })
   }
 
   return { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel }

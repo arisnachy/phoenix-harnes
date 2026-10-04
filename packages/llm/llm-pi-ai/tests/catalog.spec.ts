@@ -13,6 +13,7 @@ import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import { createModels, getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import type { Api, Model, OpenAICompletionsCompat, Provider } from '@earendil-works/pi-ai'
 import { resolveProfiles } from '../src/config.ts'
+import { catalogModels } from '../src/catalog.ts'
 import { buildProvider, supportedProtocols } from '../src/provider.ts'
 import { assemble } from './assemble.ts'
 import { memoryAuth } from './auth-double.ts'
@@ -282,7 +283,7 @@ describe('hand-declared providers', () => {
       },
     })
     expect(resolved.get('acme-gateway')?.piProvider.getModels()[0]?.input).toEqual(['text'])
-    expect(resolved.get('deepseek')?.piProvider.getModels()[0]?.input).toEqual(catalogModel.input)
+    expect(resolved.get('deepseek')?.piProvider.getModels()[0]?.input).toEqual(['text', 'image'])
 
     // Nothing sits below the route value, so its empty list states no answer
     // anything could take, and is refused where it is written.
@@ -416,13 +417,14 @@ describe('catalog routes with per-model configuration', () => {
     expect(resolved?.piProvider.getModels().some(model => model.id === 'openrouter/free')).toBe(true)
   })
 
-  it('serves the installed catalog untouched when the profile lists no models', async () => {
+  it('serves the vendor catalog with the canonical Phoenix Flash route when no models are configured', async () => {
     const server = await mockServer([])
     const ctx = await harness({ providers: { deepseek: { baseURL: server.url } } })
 
     const listed = await ctx.llm.listModels('deepseek')
     expect(listed.map(model => model.id).sort())
-      .toEqual(getBuiltinModels('deepseek').map(model => model.id).sort())
+      .toEqual([...catalogModels('deepseek').keys()].sort())
+    expect(listed.some(model => model.id === 'deepseek-flash')).toBe(true)
   })
 
   it('overrides one catalog model field and defaults the rest from the catalog', async () => {
@@ -625,12 +627,9 @@ describe('catalog routes with per-model configuration', () => {
     expect(auth?.auth.apiKey).toBe('codex-token')
   })
 
-  it('leaves an OAuth-only catalog route unconfigured when its profile names no key', () => {
-    // Nothing to add: this adapter resolves credentials through its own seam
-    // and holds no OAuth store, so declaring the provider configured would
-    // trade a truthful refusal for an endpoint's 401.
+  it('uses native Codex account resolution when its profile names no API key', () => {
     const resolved = resolveProfiles({ 'openai-codex': {} })
-    expect(resolved.get('openai-codex')?.piProvider.auth.apiKey).toBeUndefined()
+    expect(resolved.get('openai-codex')?.piProvider.auth.apiKey?.name).toBe('Codex native ChatGPT session')
   })
 })
 
@@ -751,7 +750,7 @@ describe('modelOverrides', () => {
   }
 
   it('reshapes one catalog model while the rest of the catalog keeps serving', () => {
-    const catalogSize = getBuiltinModels('deepseek').length
+    const catalogSize = catalogModels('deepseek').size
     const target = deepseekModel()
     const resolved = resolveProfiles({
       deepseek: {
@@ -777,7 +776,7 @@ describe('modelOverrides', () => {
     // default exactly as a models entry's would.
     expect(resolved.get('deepseek')?.configuredMaxTokens.get(target.id)).toBe(4096)
     // A sibling the overrides do not name is byte-identical to the catalog.
-    const sibling = models.find(model => model.id !== target.id)
+    const sibling = models.find(model => model.id !== target.id && model.id !== 'deepseek-flash')
     expect(sibling?.maxTokens).toBe(getBuiltinModels('deepseek').find(model => model.id === sibling?.id)?.maxTokens)
   })
 
@@ -1233,6 +1232,7 @@ describe('configurable-provider directory', () => {
     // carries a durable credential store and a login flow writes into it, so
     // the route has a posture that works rather than only one that fails.
     expect(offered).toContain('openai-codex')
+    expect(ctx.llm.listConfigurableProviders().find(entry => entry.provider === 'openai-codex')?.displayName).toBe('OpenAI Codex')
     expect(offered).toContain('anthropic')
     expect(offered).toContain('openai')
   })
@@ -1244,7 +1244,7 @@ describe('configurable-provider directory', () => {
 
     expect(ctx.llm.listConfigurableProviders()).toContainEqual({
       provider: 'openai-codex',
-      displayName: 'openai-codex',
+      displayName: 'OpenAI Codex',
       settingsNs: 'llm-pi-ai',
       settingsPath: ['providers', 'openai-codex'],
       declared: false,

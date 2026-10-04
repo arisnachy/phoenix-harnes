@@ -2,6 +2,9 @@
 
 Status: implemented
 
+[English](2026-10-04-settings-profile-hydration-navigation.md) | 中文
+
+
 ## Problem
 
 资料表单可能在构造后才收到第一份持久化设置快照；旧逻辑先把该快照设为比较来源，再把仍为空的草稿误判成用户本地修改，因此宿主已经保存的数据重新打开时仍显示为空。设置外壳还为「资料」与「连接器」使用通用图标，并在切换可能较重的分区时承担全屏 backdrop blur 的合成成本。

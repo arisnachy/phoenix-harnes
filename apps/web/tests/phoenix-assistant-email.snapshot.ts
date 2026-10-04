@@ -23,6 +23,8 @@ describe('Phoenix local email assistant', () => {
   let page: Page
   let incoming = false
   let requestId = 'request-1'
+  let signupAttempts = 0
+  let inboxCreations = 0
   const replies = new Map<string, string>()
   const sends = new Map<string, { text: string; to: string[] }>()
   const originalFetch = globalThis.fetch
@@ -39,8 +41,18 @@ describe('Phoenix local email assistant', () => {
   const providerFetch: typeof fetch = async (url, init) => {
     const address = (typeof url === 'string' ? url : url instanceof URL ? url.href : url.url)
     if (!address.startsWith('https://api.agentmail.to/')) return originalFetch(url, init)
-    if (address.endsWith('/agent/sign-up')) return Response.json({ api_key: 'keyless-mail-secret', inbox_id: 'kira-keyless@agentmail.to' })
+    if (address.endsWith('/agent/sign-up')) {
+      signupAttempts++
+      if (signupAttempts === 1) throw new Error('provider accepted signup but the response was lost')
+      expect(JSON.parse(init?.body as string) as unknown).toMatchObject({ human_email: 'owner@example.com' })
+      return Response.json({ api_key: 'keyless-mail-secret', inbox_id: 'kira-keyless@agentmail.to' })
+    }
     expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer keyless-mail-secret')
+    if (address.endsWith('/inboxes') && init?.method === 'POST') {
+      const request = JSON.parse(init.body as string) as { username: string; client_id: string }
+      inboxCreations++
+      return Response.json({ inbox_id: `${request.username}@agentmail.to`, client_id: request.client_id })
+    }
     if (address.endsWith('/agent/verify')) return Response.json({ verified: true })
     if (address.endsWith('/messages/send')) {
       const key = new Headers(init?.headers).get('Idempotency-Key')!
@@ -86,6 +98,8 @@ describe('Phoenix local email assistant', () => {
     await dialog.getByRole('button', { name: 'Connectors', exact: true }).click()
     await page.getByLabel('Tu correo para recibir el código de verificación').fill('owner@example.com')
     await page.getByRole('button', { name: 'Configurar correo de Kira' }).click({ timeout: 10_000 })
+    await page.getByRole('button', { name: 'Recuperar y continuar' }).click({ timeout: 10_000 })
+    expect(signupAttempts).toBe(2)
     await page.getByText('kira-keyless@agentmail.to', { exact: true }).waitFor()
     await page.getByLabel('Código de verificación').fill('123456')
     await page.getByRole('button', { name: 'Verificar y activar' }).click()
@@ -173,5 +187,21 @@ describe('Phoenix local email assistant', () => {
     expect(transcript).toContain('owner-send-1')
     expect(transcript).not.toContain('keyless-mail-secret')
     await compareOrRefreshGolden(fileURLToPath(new URL('./snapshots/phoenix-assistant-email/owner-send.expected.json', import.meta.url)), transcript, scaffold.mode)
+  }, 30_000)
+  it('creates another verified-account inbox through Settings while retaining the owner and workspace', async () => {
+    await page.setViewportSize({ width: 1680, height: 1000 })
+    await page.getByRole('button', { name: /^Settings/u }).click({ timeout: 10_000 })
+    await page.getByRole('dialog').getByRole('button', { name: 'Connectors', exact: true }).click()
+    await page.getByRole('button', { name: 'Crear otro buzón', exact: true }).click()
+    await expect.poll(() => inboxCreations).toBe(1)
+    await expect.poll(() => page.locator('[class*="addressRow"] strong').textContent()).toMatch(/^kira-[a-f0-9]{8}@agentmail\.to$/u)
+    const response = await originalFetch(`${scaffold.baseUrl}/phoenix-mail/status`, { method: 'POST', headers: { 'content-type': 'application/json', origin: scaffold.baseUrl }, body: JSON.stringify({ type: 'client-request', rpcId: 'new-inbox-status', method: 'status', payload: {} }) })
+    const status = await response.json() as {
+      result: { ok: boolean; value: { account: { state: string; ownerEmail: string; sessionId?: string } } }
+    }
+    expect(status.result.ok).toBe(true)
+    expect(status.result.value.account).toMatchObject({ state: 'ready', ownerEmail: 'owner@example.com' })
+    expect(status.result.value.account.sessionId).toBe(scaffold.ctx.agents.roots()[0]!.id)
+    expect(JSON.stringify(status)).not.toContain('keyless-mail-secret')
   }, 30_000)
 })

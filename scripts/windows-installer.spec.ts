@@ -91,7 +91,7 @@ describe('PHOENIX managed Windows installation', () => {
   it('prepares the lightweight local DSH profile before a managed install is marked ready', () => {
     const bootstrap = read('installer/windows/bootstrap-runtime.ps1')
     const build = read('scripts/build.ts')
-    expect(bootstrap).toContain("[PHOENIX BOOTSTRAP] preparing local DSH profile")
+    expect(bootstrap).toContain('[PHOENIX BOOTSTRAP] preparing local DSH profile')
     expect(bootstrap).toContain('apps/cli/src/bin.ts --profile web --dump-default-config')
     expect(bootstrap).toContain("throw 'Phoenix local DSH profile bootstrap failed'")
     expect(bootstrap).toContain('profiles\\\\node_modules junction farm')
@@ -104,14 +104,14 @@ describe('PHOENIX managed Windows installation', () => {
   it('keeps fresh managed installs on the promoted stable channel with process-scoped Git trust', () => {
     const installer = read('install-phoenix.ps1')
     const managedUpdater = read('scripts/phoenix-managed-update.mjs')
-    expect(installer).toContain("git clone --branch $stableSourceBranch --single-branch")
-    expect(installer).toContain("Add-PhoenixGitSafeDirectory $resolvedInstallDirectory")
-    expect(installer).toContain("GIT_CONFIG_KEY_$count")
+    expect(installer).toContain('git clone --branch $stableSourceBranch --single-branch')
+    expect(installer).toContain('Add-PhoenixGitSafeDirectory $resolvedInstallDirectory')
+    expect(installer).toContain('GIT_CONFIG_KEY_$count')
     expect(installer).toContain("'safe.directory'")
     expect(managedUpdater).toContain("import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'")
     expect(managedUpdater).toContain("const env = bin === 'git'")
-    expect(managedUpdater).toContain("gitSafeDirectoryEnvironment(process.env, [cwd])")
-    expect(managedUpdater).toContain("refs/heads/${STABLE_SOURCE_BRANCH}")
+    expect(managedUpdater).toContain('gitSafeDirectoryEnvironment(process.env, [cwd])')
+    expect(managedUpdater).toContain('refs/heads/${STABLE_SOURCE_BRANCH}')
   })
 
   it('delegates safe automatic checks to the managed stable updater', () => {

@@ -48,6 +48,14 @@ export interface AssistantMailControl {
    * @param ownerEmail Optional explicit owner email when no connected account identity is available.
    */
   ensure(ownerEmail?: string): Promise<AssistantMailIdentity>
+  /** Recover the persisted owner account without a manually supplied key.
+   * @returns Existing inbox pending owner verification.
+   */
+  recover(): Promise<AssistantMailIdentity>
+  /** Create a separate included-domain inbox for the verified owner, subject to provider quota.
+   * @returns Confirmed new inbox identity.
+   */
+  createInbox(): Promise<AssistantMailIdentity>
   /** Activate the existing mailbox using the owner's one-time verification code.
    * @param code Six-digit code received by the owner.
    * @returns Verified mailbox identity.
@@ -72,11 +80,15 @@ class AssistantMailControlService extends Service implements AssistantMailContro
     private readonly create: (ownerEmail?: string) => Promise<AssistantMailIdentity>,
     private readonly activate: AssistantMailControl['verify'],
     private readonly reconcile: AssistantMailControl['refresh'],
-    private readonly send: AssistantMailControl['sendToOwner']) {
+    private readonly send: AssistantMailControl['sendToOwner'],
+    private readonly restore: AssistantMailControl['recover'],
+    private readonly replaceInbox: AssistantMailControl['createInbox']) {
     super(ctx, 'assistantMail')
   }
   status(): Promise<AssistantMailIdentity> { return this.read() }
   ensure(ownerEmail?: string): Promise<AssistantMailIdentity> { return this.create(ownerEmail) }
+  recover(): Promise<AssistantMailIdentity> { return this.restore() }
+  createInbox(): Promise<AssistantMailIdentity> { return this.replaceInbox() }
   verify(code: string): Promise<AssistantMailIdentity> { return this.activate(code) }
   refresh(): Promise<AssistantMailIdentity> { return this.reconcile() }
   sendToOwner(subject: string, text: string, key: string): Promise<MailDelivery & { from: string; to: string }> {
@@ -319,6 +331,8 @@ export function installAssistantMail(ctx: Context,
       async (code) => { await onboarding.verify(code); void pump(); return identity() },
       async () => { void pump(); return identity() },
       sendToOwner,
+      async () => { await onboarding.recover(); return identity() },
+      async () => { await onboarding.createInbox(); void pump(); return identity() },
     )
   }
   let connection: HostConnectionHandle | undefined
@@ -332,9 +346,12 @@ export function installAssistantMail(ctx: Context,
       try {
         const args = input === undefined ? {} : mailRecord(input)
         if (endpoint === 'signup') await onboarding.signup(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
-        else if (endpoint === 'new-signup') {
-          await onboarding.signupAnother(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
-        } else if (endpoint === 'connect') await onboarding.connect(mailString(args.ownerEmail), mailString(args.inboxId), mailString(args.apiKey, 8192))
+        else if (endpoint === 'recover' || endpoint === 'create-inbox') {
+          if (Object.keys(args).length > 0) throw new Error('mail recovery and inbox creation use only the verified persisted owner')
+          if (endpoint === 'recover') await onboarding.recover()
+          else await onboarding.createInbox()
+        }
+        else if (endpoint === 'connect') await onboarding.connect(mailString(args.ownerEmail), mailString(args.inboxId), mailString(args.apiKey, 8192))
         else if (endpoint === 'verify') await onboarding.verify(mailString(args.code))
         else if (endpoint === 'configure') {
           if (!Array.isArray(args.contacts) || args.contacts.some(value => typeof value !== 'string')) throw new Error('invalid authorized contacts')

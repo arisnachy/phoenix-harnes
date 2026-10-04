@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-04-profile-runtime-artifact-recovery.md
-2026-10-04-profile-runtime-artifact-recovery.md: 00b2a6609378117c50ec8572584edb0917f63bd7
-2026-10-04-profile-runtime-artifact-recovery.zh.md: 075bd78621848d622ae113b30ff9e555fc5fb77a
+2026-10-04-profile-runtime-artifact-recovery.md: d6ceae9bb545b91eea4e881e88e80a928d737f2c
+2026-10-04-profile-runtime-artifact-recovery.zh.md: a1e7e1657343b628d888719afa890a314007f593

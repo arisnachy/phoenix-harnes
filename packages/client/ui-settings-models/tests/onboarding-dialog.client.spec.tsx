@@ -210,19 +210,15 @@ describe('DeepSeekOnboardingDialog', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('keeps native Codex account auth separate from the main chat provider', async () => {
+  it('lets a connected Codex account continue into PHOENIX without configuring an API key', async () => {
     const h = harness({ codexAuthorization: true, codexConnected: true })
     render(<DeepSeekOnboardingDialog {...h.props} />)
     expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
     expect(screen.getByText(en.onboardingCodexConnected)).toBeTruthy()
-    expect(screen.getByText(en.onboardingChooseChatProvider)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: en.onboardingCodex })).toBeNull()
+    expect(screen.queryByText(/configure a separate API model provider/i)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Continue to PHOENIX' }))
+    expect(h.complete).toHaveBeenCalledOnce()
     expect(h.mutate).not.toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: en.onboardingUseApiKey }))
-    expect(await screen.findByLabelText(en.keyInput)).toBeTruthy()
-    expect(h.mutate).not.toHaveBeenCalled()
-    expect(h.complete).not.toHaveBeenCalled()
   })
 
   it('loads a credential-only modal, inerts the product, and focuses the key', async () => {

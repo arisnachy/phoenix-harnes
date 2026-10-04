@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { AssistantMailPanel } from '../src/client/AssistantMailPanel.tsx'
 afterEach(cleanup)
 describe('local assistant mailbox settings', () => {
@@ -10,27 +10,23 @@ describe('local assistant mailbox settings', () => {
     expect(await screen.findByText('actual@agentmail.to')).toBeTruthy()
     expect(screen.getByText('Dirección de Kira')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Copiar correo de Kira' })).toBeTruthy()
-    expect(screen.getByText('Pendiente de verificación')).toBeTruthy()
+    expect(screen.getByText('Verifica una vez')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Código de verificación'), { target: { value: '123456' } })
     fireEvent.click(screen.getByRole('button', { name: 'Verificar y activar' }))
     expect(await screen.findByText(/Correo verificado/u)).toBeTruthy()
   })
 })
 
-it('offers a deliberate new mailbox after an ambiguous signup', async () => {
-  const call = vi.fn(async (action: string) => ({
-    account: action === 'new-signup'
-      ? { state: 'pending-verification', inboxId: 'second@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }
-      : { state: 'signup-ambiguous', ownerEmail: 'owner@example.com', contacts: [] },
-    connection: 'disconnected',
-    jobs: [],
-  }))
-  render(<AssistantMailPanel client={{ call }} />)
-  const create = await screen.findByRole('button', { name: 'Crear otro buzón' })
-  fireEvent.click(create)
-  await act(async () => { await Promise.resolve() })
-  expect(call).toHaveBeenCalledWith('new-signup', { ownerEmail: 'owner@example.com' })
+it('creates another mailbox only from the verified account', async () => {
+  const calls: string[] = []
+  const client = { call: async (action: string) => {
+    calls.push(action)
+    return { account: { state: 'ready', inboxId: action === 'create-inbox' ? 'second@agentmail.to' : 'first@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }, connection: 'disconnected', jobs: [] }
+  } }
+  render(<AssistantMailPanel client={client} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Crear otro buzón' }))
   expect(await screen.findByText('second@agentmail.to')).toBeTruthy()
+  expect(calls).toContain('create-inbox')
 })
 
 it('preserves owner input typed before the initial host status resolves', async () => {
@@ -56,3 +52,17 @@ it('preserves owner input typed before the initial host status resolves', async 
   expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Configurar correo de Kira' }).disabled).toBe(false)
 })
 
+
+
+it('offers owner-bound recovery without requiring an API key', async () => {
+  const calls: string[] = []
+  const client = { call: async (action: string) => {
+    calls.push(action)
+    return { account: { state: action === 'recover' ? 'pending-verification' : 'signup-ambiguous', ownerEmail: 'owner@example.com', ...(action === 'recover' ? { inboxId: 'existing@agentmail.to' } : {}), contacts: [] }, connection: 'disconnected', jobs: [] }
+  } }
+  render(<AssistantMailPanel client={client} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Recuperar y continuar' }))
+  expect(await screen.findByText('existing@agentmail.to')).toBeTruthy()
+  expect(calls).toContain('recover')
+  expect(screen.queryByLabelText('Clave de recuperación de AgentMail')).toBeNull()
+})
