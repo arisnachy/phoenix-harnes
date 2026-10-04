@@ -362,18 +362,20 @@ function removeManagedWorktree(path) {
     stdio: ['ignore', 'pipe', 'pipe'],
   })
 
-  if (result.status !== 0 && existsSync(path)) {
-    try {
-      rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })
-    } catch (error) {
-      console.error(
-        `[PHOENIX UPDATE] warning: could not remove obsolete managed worktree ${path}: `
-        + `${error instanceof Error ? error.message : String(error)}`,
-      )
-      return false
-    }
-  }
-  return !existsSync(path)
+  if (result.status === 0 || !existsSync(path)) return true
+
+  // On Windows an updater/build process can still own cwd, DLL, node_modules,
+  // or compiler handles for a managed worktree. Never fall back to recursive
+  // deletion after git reports that removal failed: rmSync can partially erase
+  // a live tree before eventually throwing EBUSY, which turns a harmless
+  // cleanup race into a missing-path build failure. Cleanup is opportunistic;
+  // leave the intact worktree for a later pass after all handles are released.
+  const detail = typeof result.stderr === 'string' ? result.stderr.trim() : ''
+  console.error(
+    `[PHOENIX UPDATE] deferred managed worktree cleanup while it is still in use: ${path}`
+    + (detail.length > 0 ? ` (${detail})` : ''),
+  )
+  return false
 }
 
 function cleanupObsoleteRuntimes(extraKeep = []) {
@@ -407,11 +409,14 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
   const currentStage = runtimePathKey(persistentStage())
   for (const candidate of stageDirectoriesForCleanup()) {
     const key = runtimePathKey(candidate)
+    // This checkout deliberately owns one persistent short-path staging
+    // worktree. The updater reuses it between candidates, so deleting it from
+    // the supervisor creates a cross-process race with reset/install/build.
+    // Keep it unconditionally; only stages belonging to other/old checkouts are
+    // eligible for age-bounded garbage collection.
+    if (key === currentStage) continue
     if (stageProtectedByOwningCheckout(candidate)) continue
-    // The current checkout's stage is disposable as soon as its prepared
-    // marker is consumed. Other checkout stages get a short grace window so a
-    // concurrent Phoenix clone can finish its own handoff before we reclaim it.
-    if (key !== currentStage && managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
+    if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
     if (!removeManagedWorktree(candidate)) continue
     removedStages += 1
     console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
