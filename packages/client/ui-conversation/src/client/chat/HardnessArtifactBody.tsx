@@ -115,6 +115,16 @@ function autoLoadable(value: string): boolean {
     || value.startsWith('blob:') || value.startsWith('data:')
 }
 
+function safeWebPreviewUrl(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const candidate = value.trim()
+  if (candidate === '') return undefined
+  if (/^https?:\/\//i.test(candidate) || candidate.startsWith('/') || candidate.startsWith('./') || candidate.startsWith('../') || candidate.startsWith('blob:')) {
+    return candidate
+  }
+  return undefined
+}
+
 function imageAttachment(value: unknown): ImageAttachmentRef | undefined {
   if (!isRecord(value)) return undefined
   if (typeof value.attachmentId !== 'string' || value.attachmentId.trim() === '') return undefined
@@ -292,6 +302,23 @@ function MiniApp({ html, title, executable = false }: MiniAppProps) {
   )
 }
 
+function WebPagePreview({ url, title }: { readonly url: string; readonly title: string }) {
+  return (
+    <div className={styles.stack}>
+      <iframe
+        className={styles.frame}
+        title={title}
+        src={url}
+        sandbox="allow-scripts allow-forms allow-popups allow-modals"
+        referrerPolicy="no-referrer"
+        loading="lazy"
+        style={{ minHeight: 420, height: 'min(70vh, 720px)' }}
+      />
+      <a className={styles.link} href={url} target="_blank" rel="noreferrer">Open page</a>
+    </div>
+  )
+}
+
 function DocumentPreview({ mime, url, textContent, expanded, title }: {
   readonly mime: string
   readonly url?: string
@@ -322,6 +349,12 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
       ? <img className={styles.image} key={index} src={src} alt={text(block.alt) ?? 'Artifact image'} />
       : <a className={styles.link} key={index} href={src} target="_blank" rel="noreferrer">Open image</a>
   }
+  if (type === 'web-preview' || type === 'page' || type === 'webpage') {
+    const url = safeWebPreviewUrl(block.url)
+    return url === undefined
+      ? <p className={styles.note} key={index}>Page preview URL was rejected.</p>
+      : <WebPagePreview key={index} url={url} title={text(block.title) ?? text(block.label) ?? 'Page preview'} />
+  }
   if (type === 'document' || type === 'file') {
     const url = safeHref(block.url)
     const textContent = text(block.text)
@@ -342,7 +375,7 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
     const html = typeof entryFile === 'string' ? entryFile : text(block.html)
     return html === undefined
       ? <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
-      : <MiniApp key={index} html={html} title="HARDNESS mini-app" />
+      : <MiniApp key={index} html={html} title="HARDNESS mini-app" executable />
   }
   return <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
 }
@@ -360,6 +393,11 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
       attachment={attachment}
       {...renderMessageImages === undefined ? {} : { renderMessageImages }}
     />
+  }
+  if (mime === 'application/vnd.phoenix.web-preview+json' || mime === 'application/vnd.hardness.web-preview+json') {
+    const url = safeWebPreviewUrl(record.url)
+    if (url !== undefined) return <WebPagePreview url={url} title={text(record.title) ?? title} />
+    return <p className={styles.note}>Page preview URL was rejected.</p>
   }
   if (Array.isArray(record.blocks)) {
     return (
@@ -380,14 +418,22 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
     || visual !== undefined) return <PhoenixVisualizer spec={visual ?? record} />
   if (typeof record.entry === 'string' && isRecord(record.files)) {
     const html = typeof record.files[record.entry] === 'string' ? record.files[record.entry] as string : undefined
-    if (html !== undefined) return <MiniApp html={html} title={title} />
+    if (html !== undefined) return <MiniApp html={html} title={title} executable />
   }
   return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
 }
 
 export function HardnessArtifactBody({ mime, data, expanded, title, executable = false, renderMessageImages }: ArtifactBodyProps) {
   if (typeof data === 'string') {
-    if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') return <MiniApp html={data} title={title} executable={executable} />
+    if (mime === 'application/vnd.phoenix.web-preview+json' || mime === 'application/vnd.hardness.web-preview+json') {
+      const url = safeWebPreviewUrl(data)
+      return url === undefined ? <p className={styles.note}>Page preview URL was rejected.</p> : <WebPagePreview url={url} title={title} />
+    }
+    if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') {
+      const pageUrl = safeWebPreviewUrl(data)
+      if (pageUrl !== undefined && !data.includes('<')) return <WebPagePreview url={pageUrl} title={title} />
+      return <MiniApp html={data} title={title} executable={executable} />
+    }
     if (mime.startsWith('image/')) {
       const src = safeHref(data)
       if (src === undefined) return <p className={styles.note}>Image source was rejected.</p>
