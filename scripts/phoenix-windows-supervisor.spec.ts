@@ -185,6 +185,15 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('continue')
   })
 
+  it('repairs missing compiled profile artifacts once and refuses an endless restart loop if repair fails', () => {
+    expect(source).toContain('function profileFallbackHasMissingRuntimeArtifact()')
+    expect(source).toContain('function isMissingProfileRuntimeArtifact(detail)')
+    expect(source).toContain("normalized.includes('/profiles/node_modules/')")
+    expect(source).toContain("['run', 'build:lib:host']")
+    expect(source).toContain('repairMissingProfileRuntimeArtifact(runtimeRoot, crashPreflight)')
+    expect(source).toContain('profile artifact repair failed; refusing an automatic relaunch loop')
+  })
+
   it('distinguishes Ctrl-C/termination from a model or host crash', () => {
     expect(source).toContain("process.once('SIGINT', requestShutdown)")
     expect(source).toContain("process.once('SIGTERM', requestShutdown)")
