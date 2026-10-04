@@ -7,6 +7,7 @@ function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailCo
     recover: overrides.recover ?? (async () => ({ state: 'pending-verification', inboxId: 'kira-real@agentmail.to', connection: 'disconnected' })),
     createInbox: overrides.createInbox ?? (async () => ({ state: 'ready', inboxId: 'kira-another@agentmail.to', connection: 'disconnected' })),
     discard: overrides.discard ?? (async () => ({ state: 'not-configured', connection: 'not-configured' })),
+    replace: overrides.replace ?? (async (ownerEmail?: string) => ({ state: 'pending-verification', inboxId: 'kira-replacement@agentmail.to', connection: 'not-configured', ...(ownerEmail === undefined ? {} : { ownerEmail }) })),
     verify: overrides.verify ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     refresh: overrides.refresh ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     sendToOwner: overrides.sendToOwner ?? (async () => ({ from: 'kira-real@agentmail.to', to: 'owner@example.com', messageId: 'sent' as never, threadId: 'thread' as never })),
@@ -131,4 +132,21 @@ it('supports the mailbox discard action', async () => {
     needs_verification: false,
   })
   expect(discard).toHaveBeenCalledOnce()
+})
+
+
+it('replaces a stale mailbox in one model action while forwarding an optional owner email', async () => {
+  const replace = vi.fn(async (ownerEmail?: string) => ({
+    state: 'pending-verification' as const,
+    inboxId: 'kira-replacement@agentmail.to',
+    connection: 'not-configured',
+    ...(ownerEmail === undefined ? {} : { ownerEmail }),
+  }))
+  const tool = createAssistantMailIdentityTool(() => control({ replace }))
+  await expect(tool.execute({ action: 'replace', owner_email: 'owner@example.com' }, {} as never)).resolves.toMatchObject({
+    state: 'pending-verification',
+    address: 'kira-replacement@agentmail.to',
+    needs_verification: true,
+  })
+  expect(replace).toHaveBeenCalledWith('owner@example.com')
 })
