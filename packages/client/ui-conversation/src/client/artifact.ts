@@ -20,7 +20,10 @@ export interface UniversalArtifactEnvelope {
 
 /** Select a stable renderer kind without inspecting executable content. */
 function artifactKind(mime: string, data: HardnessArtifactValue): ArtifactKind {
-  if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') return 'html'
+  if (mime === 'text/html'
+    || mime === 'application/vnd.hardness.app+html'
+    || mime === 'application/vnd.phoenix.web-preview+json'
+    || mime === 'application/vnd.hardness.web-preview+json') return 'html'
   if (mime.startsWith('image/')) return 'image'
   if (mime === 'application/vnd.phoenix.visual+json'
     || mime === 'application/vnd.hardness.visual+json'
