@@ -355,7 +355,7 @@ describe('Chat node rendering', () => {
         slotOwner: object,
         slotOpts?: object,
       ) => React.ReactNode)(key, owner, opts)
-    }) as unknown as ChatViewSlotProps['renderSlot']
+    })
 
     const view = render(<h.ChatView {...h.props} />)
     const reaction = view.getByTestId('inline-reaction')
