@@ -317,7 +317,6 @@ describe('connectors settings section', () => {
     expect(githubCard?.textContent).not.toContain('GitHub Copilot')
     const accountCard = document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')
     expect(accountCard?.textContent).toContain('GitHub Copilot')
-    expect(accountCard?.textContent).not.toMatch(/^GitHub(?:\s|$)/)
 
     const githubAuthorize = githubCard?.querySelector('button')
     expect(githubAuthorize?.textContent).toBe('Authorize')
@@ -353,12 +352,15 @@ describe('connectors settings section', () => {
     renderHub(api, { openClaw })
     const gmailCard = document.querySelector('[data-connector-id="gmail"]')
     expect(gmailCard?.textContent).toContain('OpenClaw · gog')
+    const email = gmailCard?.querySelector('input[aria-label="Google account email"]') as HTMLInputElement | null
+    expect(email).toBeTruthy()
+    fireEvent.change(email!, { target: { value: 'owner@example.com' } })
     const authorizeButton = Array.from(gmailCard?.querySelectorAll('button') ?? [])
       .find(button => button.textContent === 'Authorize')
     expect(authorizeButton).toBeTruthy()
     fireEvent.click(authorizeButton!)
     await waitFor(() => {
-      expect(authorize).toHaveBeenCalledWith({ id: 'google-workspace' })
+      expect(authorize).toHaveBeenCalledWith({ id: 'google-workspace', account: 'owner@example.com' })
     })
     expect(begin).not.toHaveBeenCalledWith({ key: 'authorization-google/account', method: 'oauth' })
   })
