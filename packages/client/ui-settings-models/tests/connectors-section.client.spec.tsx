@@ -125,7 +125,8 @@ describe('connectors settings section', () => {
     expect(screen.getByText('Devpost')).toBeTruthy()
     expect(screen.getByText('Microsoft Teams')).toBeTruthy()
     expect(screen.getByText('Firebase')).toBeTruthy()
-    expect(screen.getAllByText('Adapter not installed').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Official adapter not available in this build').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Find official / install' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Find / install' }).length).toBeGreaterThan(0)
   })
 
@@ -457,20 +458,20 @@ describe('connectors settings section', () => {
     } as unknown as IApiClient['authorization']
     const install = vi.fn(async () => ({
       status: 'installed' as const,
-      connector: { entryId: 'managed-calendar', serverName: 'calendar-a1b2c3d', url: 'https://mcp.example.com/calendar' },
+      connector: { entryId: 'managed-calendar', serverName: 'calendar-a1b2c3d', url: 'https://mcp.example.com/registry-fixture' },
     }))
     const mcpRegistry = {
       state: vi.fn(async () => ({ runtime: [], managed: [] })),
       install,
       search: vi.fn(async () => ({
         source: 'official-mcp-registry' as const,
-        query: 'calendar',
+        query: 'registry-fixture',
         fetchedAt: '2026-09-18T12:00:00.000Z',
         stale: false,
         candidates: [{
-          name: 'io.example/calendar',
-          title: 'Example Calendar MCP',
-          description: 'Calendar tools.',
+          name: 'io.example/registry-fixture',
+          title: 'Registry Fixture MCP',
+          description: 'Registry fixture tools.',
           version: '1.0.0',
           status: 'active' as const,
           trust: 'registry-listed' as const,
@@ -482,27 +483,27 @@ describe('connectors settings section', () => {
           transports: ['streamable-http' as const],
           packages: [],
           repositoryUrl: 'https://github.com/example/calendar-mcp',
-          remoteUrl: 'https://mcp.example.com/calendar',
+          remoteUrl: 'https://mcp.example.com/registry-fixture',
         }],
       })),
     }
 
     renderHub(api, { mcpRegistry })
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'calendar' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
 
-    expect(await screen.findByText('Example Calendar MCP')).toBeTruthy()
-    expect(mcpRegistry.search).toHaveBeenCalledWith({ query: 'calendar', limit: 12 })
-    expect(screen.getByText('Registry-listed · approval required')).toBeTruthy()
+    expect(await screen.findByText('Registry Fixture MCP')).toBeTruthy()
+    expect(mcpRegistry.search).toHaveBeenCalledWith({ query: 'registry-fixture', limit: 12 })
+    expect(screen.getByText('Registry-listed · vendor not verified')).toBeTruthy()
     expect(screen.getByText('streamable-http')).toBeTruthy()
-    const logo = document.querySelector('article[data-registry-server="io.example/calendar"] img')
+    const logo = document.querySelector('article[data-registry-server="io.example/registry-fixture"] img')
     expect(logo?.getAttribute('src')).toBe('https://cdn.example.com/calendar.png')
     expect(logo?.getAttribute('referrerpolicy')).toBe('no-referrer')
     expect(screen.getByRole('link', { name: 'View source' }).getAttribute('href'))
       .toBe('https://github.com/example/calendar-mcp')
     fireEvent.click(screen.getByRole('button', { name: 'Install' }))
     await waitFor(() => {
-      expect(install).toHaveBeenCalledWith({ name: 'io.example/calendar', version: '1.0.0' })
+      expect(install).toHaveBeenCalledWith({ name: 'io.example/registry-fixture', version: '1.0.0' })
     })
   })
 
@@ -548,31 +549,31 @@ describe('connectors settings section', () => {
     const mcpRegistry = {
       state: vi.fn(async () => ({
         runtime: [],
-        managed: [{ entryId: 'x', serverName: 'calendar-x', url: 'https://mcp.example.com/calendar' }],
+        managed: [{ entryId: 'x', serverName: 'registry-fixture-x', url: 'https://mcp.example.com/registry-fixture' }],
       })),
       install: vi.fn(),
       search: vi.fn(async () => ({
         source: 'official-mcp-registry' as const,
-        query: 'calendar',
+        query: 'registry-fixture',
         fetchedAt: '2026-09-18T12:00:00.000Z',
         stale: false,
         candidates: [{
-          name: 'io.example/calendar',
-          title: 'Calendar',
-          description: 'Calendar tools.',
+          name: 'io.example/registry-fixture',
+          title: 'Registry Fixture',
+          description: 'Registry fixture tools.',
           version: '1.0.0',
           status: 'active' as const,
           trust: 'registry-listed' as const,
           icons: [],
           transports: ['streamable-http' as const],
           packages: [],
-          remoteUrl: 'https://mcp.example.com/calendar',
+          remoteUrl: 'https://mcp.example.com/registry-fixture',
         }],
       })),
     }
     renderHub(api, { mcpRegistry })
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'calendar' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
     expect(await screen.findByText('Installed')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
   })
