@@ -10,6 +10,7 @@ function props(data: {
   readonly mime: string
   readonly title: string
   readonly data: string | Readonly<Record<string, unknown>>
+  readonly executable?: boolean
 }) {
   return {
     node: {
@@ -224,7 +225,7 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByText(/"labels"/)).toBeNull()
   })
 
-  it('keeps static HTML scripts disabled without exposing sandbox controls', () => {
+  it('runs HTML scripts by default so generated mini-app controls stay interactive', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'app-1',
       mime: 'text/html',
@@ -233,9 +234,38 @@ describe('HARDNESS inline artifact renderer', () => {
     })} />)
 
     const frame = screen.getByTitle('Mini calculator')
-    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin')
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")
     expect(screen.queryByRole('button', { name: /sandboxed interaction/i })).toBeNull()
-    expect(screen.queryByText(/Mini-app scripts run only/i)).toBeNull()
+  })
+
+  it('preserves an explicit static HTML opt-out with scripts disabled', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'app-static',
+      mime: 'text/html',
+      title: 'Static report',
+      data: '<button>Decorative only</button><script>document.body.dataset.clicked="1"</script>',
+      executable: false,
+    })} />)
+
+    const frame = screen.getByTitle('Static report')
+    expect(frame.getAttribute('sandbox')).toBe('allow-same-origin')
+  })
+
+  it('renders a live web page inside the same artifact viewer when Phoenix emits a page preview', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'page-1',
+      mime: 'application/vnd.phoenix.web-preview+json',
+      title: 'Phoenix page preview',
+      data: { url: 'https://example.test/app', title: 'Example app' },
+    })} />)
+
+    const frame = screen.getByTitle('Example app')
+    expect(frame.getAttribute('src')).toBe('https://example.test/app')
+    expect(frame.getAttribute('sandbox')).toContain('allow-scripts')
+    expect(frame.getAttribute('sandbox')).toContain('allow-forms')
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin')
+    expect(screen.getByRole('link', { name: 'Open page' }).getAttribute('href')).toBe('https://example.test/app')
   })
 
   it('renders HTML with only the filename and content, without preview chrome', () => {
