@@ -29,14 +29,14 @@ export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
  * real Codex usage. The UI may poll the cheap authorization catalog more often;
  * this TTL bounds native app-server probes to at most twice per minute.
  */
-const ACCOUNT_INSPECTION_TTL_MS = 30_000
+const ACCOUNT_INSPECTION_TTL_MS = 10_000
 /**
  * A failed native probe is retried later, not once per UI subscriber/render.
  * Native Codex can spend its whole 30 s startup gate on a state-db backfill;
  * leave a larger quiet interval so Phoenix never turns that failure into a
  * self-sustaining app-server restart loop.
  */
-const ACCOUNT_FAILURE_COOLDOWN_MS = 120_000
+const ACCOUNT_FAILURE_COOLDOWN_MS = 15_000
 /** Shared probe must outlive Codex's own 30 s state-db startup/backfill window. */
 const ACCOUNT_PROBE_TIMEOUT_MS = 45_000
 /** Optional quota metadata may be slower than account/read but must not stall Host boot. */
