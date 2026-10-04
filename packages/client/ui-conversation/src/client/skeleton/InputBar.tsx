@@ -31,9 +31,8 @@ import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
-  createVoiceRecognition, getVoiceAssistantSnapshot, hasCodexRealtimeVoiceSupport, hasVoiceRecognition,
-  interruptVoiceAssistantSpeech, isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho,
-  setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant, tryStartCodexRealtimeVoice,
+  createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, interruptVoiceAssistantSpeech,
+  isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -190,10 +189,14 @@ export function InputBar({
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
-  // Voice prefers native Codex Realtime for OpenAI Codex sessions. Other
-  // providers retain the existing browser-STT + local/browser-TTS path.
+  // Voice is an input/output layer over the ordinary composer path. Every
+  // finalized transcript is submitted through the same queue admission as
+  // typed text so the selected PHOENIX agent keeps its full harness: tools,
+  // planning, approvals, policies, and orchestration. Native Codex Realtime is
+  // intentionally not the composer transport because its direct model session
+  // can speak but does not own the PHOENIX execution loop.
   const [voiceState, setVoiceState] = useState<VoiceInputState>(() => (
-    hasVoiceRecognition() || hasCodexRealtimeVoiceSupport() ? 'idle' : 'unsupported'
+    hasVoiceRecognition() ? 'idle' : 'unsupported'
   ))
   const voiceAssistant = useSyncExternalStore(
     subscribeVoiceAssistant,
@@ -222,7 +225,7 @@ export function InputBar({
   }, [keyboard, locked, machineBusy])
   const startVoiceRecognition = useCallback((): void => {
     const recognition = voiceRef.current
-    if (recognition === null || isCodexRealtimeVoiceActive() || voiceState === 'listening' || locked || machineBusy
+    if (recognition === null || voiceState === 'listening' || locked || machineBusy
       || (running && voiceAssistant.phase !== 'speaking')) return
     try {
       recognition.start()
@@ -247,46 +250,29 @@ export function InputBar({
     }
 
     voiceStartingRef.current = true
-    void (async () => {
-      try {
-        // Codex routes are strict: if native Realtime fails, do not make
-        // browser/local speech sound as though Realtime succeeded. Fallback is
-        // reserved for genuinely non-Codex providers.
-        const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
-        if (realtime.kind === 'started') {
-          setVoiceState('listening')
-          return
-        }
-        if (realtime.kind === 'failed') {
-          setVoiceAssistantActive(false)
-          setVoiceState('error')
-          showToast(`${t('input.voice.codexRealtimeFailed')} (${realtime.reason})`)
-          return
-        }
-
-        const recognition = createVoiceRecognition(
-          appendVoiceText,
-          (next) => {
-            setVoiceState(next)
-            setVoiceAssistantListening(next === 'listening')
-            if (next === 'permission-denied' || next === 'error') {
-              setVoiceAssistantActive(false)
-              voiceRef.current = null
-            }
-          },
-        )
-        if (recognition === undefined) {
-          setVoiceState('unsupported')
-          return
-        }
-        setVoiceAssistantActive(true)
-        voiceRef.current = recognition
-        startVoiceRecognition()
-      } finally {
-        voiceStartingRef.current = false
+    try {
+      const recognition = createVoiceRecognition(
+        appendVoiceText,
+        (next) => {
+          setVoiceState(next)
+          setVoiceAssistantListening(next === 'listening')
+          if (next === 'permission-denied' || next === 'error') {
+            setVoiceAssistantActive(false)
+            voiceRef.current = null
+          }
+        },
+      )
+      if (recognition === undefined) {
+        setVoiceState('unsupported')
+        return
       }
-    })()
-  }, [appendVoiceText, locked, machineBusy, sessionId, showToast, startVoiceRecognition, t, voiceEnabled])
+      setVoiceAssistantActive(true)
+      voiceRef.current = recognition
+      startVoiceRecognition()
+    } finally {
+      voiceStartingRef.current = false
+    }
+  }, [appendVoiceText, locked, machineBusy, startVoiceRecognition, voiceEnabled])
 
   // A final recognition fragment is a complete voice turn. Waiting for the
   // machine's published draft avoids submitting the previous draft snapshot.
