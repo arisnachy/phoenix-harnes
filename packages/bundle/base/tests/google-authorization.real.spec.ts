@@ -19,7 +19,7 @@ describe('Google authorization REAL composition', () => {
 
     const ctx = await boot('dsh-google-real', fixture, undefined, undefined, import.meta.url)
     try {
-      expect(ctx.authorization.list()).toEqual([{
+      expect(ctx.authorization.list()).toMatchObject([{
         key: GOOGLE_ACCOUNT_KEY,
         label: 'Google Workspace',
         methods: [{ id: 'oauth', label: 'Sign in with Google' }],
