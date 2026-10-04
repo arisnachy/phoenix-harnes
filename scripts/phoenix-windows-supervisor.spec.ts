@@ -237,16 +237,24 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('storage cleanup removed')
   })
 
-  it('reclaims updater stages after their prepared marker is consumed while protecting live preparations', () => {
+  it('keeps this checkout persistent updater stage and protects live preparations', () => {
     expect(source).toContain('function stageDirectoriesForCleanup()')
     expect(source).toContain('function stageProtectedByOwningCheckout(path)')
     expect(source).toContain("const marker = join(common, PREPARED_FILE)")
     expect(source).toContain("const statePath = join(common, UPDATE_STATE_FILE)")
     expect(source).toContain("state?.status === 'preparing'")
     expect(source).toContain("/^[0-9a-f]{40}$/iu.test(state.target)")
+    expect(source).toContain('if (key === currentStage) continue')
     expect(source).toContain('if (stageProtectedByOwningCheckout(candidate)) continue')
-    expect(source).toContain('key !== currentStage && managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS')
+    expect(source).toContain('if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue')
     expect(source).toContain('removed stale updater staging worktree')
+  })
+
+  it('defers Windows worktree cleanup instead of recursively deleting a busy tree', () => {
+    expect(source).toContain("spawnSync('git', ['worktree', 'remove', '--force', path]")
+    expect(source).toContain('if (result.status === 0 || !existsSync(path)) return true')
+    expect(source).toContain('deferred managed worktree cleanup while it is still in use')
+    expect(source).not.toContain('rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })')
   })
 
   it('repairs an incompletely materialized updater stage before running the build', () => {
