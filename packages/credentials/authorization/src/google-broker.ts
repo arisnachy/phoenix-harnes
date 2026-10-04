@@ -2,14 +2,15 @@
  * Host-only Google Workspace OAuth broker.
  *
  * The browser ceremony uses Google's Desktop/installed-application flow with a
- * loopback redirect, PKCE S256, and state. Access and refresh tokens remain
- * private fields of this Host Service and are never written to the file-backed
- * credential provider. The credential store receives only a secret-free marker
- * so the neutral authorization seam can observe a completed human login.
+ * loopback redirect, PKCE S256, and state. Access and refresh tokens are stored
+ * as an owner-private grant in Phoenix's credential provider so a completed
+ * Google login survives Host restarts. Browser/model-facing surfaces still see
+ * only secret-free record presence and sanitized account telemetry.
  *
  * API callers choose a fixed Google service rather than supplying an arbitrary
- * URL or OAuth scope. A PHOENIX restart intentionally requires Google login
- * again until a credential backend isolated from same-UID tool processes exists.
+ * URL or OAuth scope. Stored grants are validated on load, restricted to the
+ * currently configured scope set, refreshed through Google, and removed when
+ * invalid or explicitly disconnected.
  *
  * @module @phoenix-ai/dsh-authorization/google
  */
@@ -20,7 +21,7 @@ import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialKey, credentialRef, type CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
 
-/** Secret-free durable marker for the process-local Google account. */
+/** Durable owner-private OAuth grant for the authorized Google account. */
 export const GOOGLE_ACCOUNT_KEY: CredentialKey = credentialKey('authorization-google', 'account')
 /** Durable public OAuth application id used when deployment env does not provide one. */
 export const GOOGLE_CLIENT_ID_REF = credentialRef('PHOENIX_GOOGLE_OAUTH_CLIENT_ID')
@@ -50,6 +51,24 @@ interface GoogleGrant {
   refreshToken?: string
   expiresAt: number
   scopes: readonly string[]
+}
+
+function storedGoogleGrant(payload: unknown): GoogleGrant | undefined {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return undefined
+  const value = payload as Record<string, unknown>
+  if (typeof value.accessToken !== 'string' || value.accessToken.length === 0) return undefined
+  if (value.refreshToken !== undefined && (typeof value.refreshToken !== 'string' || value.refreshToken.length === 0)) {
+    return undefined
+  }
+  if (typeof value.expiresAt !== 'number' || !Number.isFinite(value.expiresAt) || value.expiresAt < 0) return undefined
+  if (!Array.isArray(value.scopes)
+    || !value.scopes.every(scope => typeof scope === 'string' && scope.trim().length > 0)) return undefined
+  return {
+    accessToken: value.accessToken,
+    ...(value.refreshToken === undefined ? {} : { refreshToken: value.refreshToken as string }),
+    expiresAt: value.expiresAt,
+    scopes: [...value.scopes] as string[],
+  }
 }
 
 interface TokenResponse {
@@ -467,12 +486,12 @@ declare module '@phoenix-ai/cordis' {
   }
 }
 
-/** Google Host broker. OAuth material never leaves this service instance. */
+/** Google Host broker. OAuth material stays inside the Host credential boundary. */
 export default class GoogleApiBroker extends Service {
   static inject = ['authorization', 'credentials']
 
   private readonly spec: ResolvedSpec
-  private readonly startupCleanup: Promise<void>
+  private readonly startupRestore: Promise<void>
   private grant: GoogleGrant | undefined
   private refreshInFlight: Promise<GoogleGrant> | undefined
   private accountEmail: string | undefined
@@ -481,12 +500,12 @@ export default class GoogleApiBroker extends Service {
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
     this.spec = resolveGoogleSpec(config)
-    this.startupCleanup = this.purgeStaleRecord()
-    // Cleanup starts at construction so a secret grant or marker left by an
-    // earlier process cannot be mistaken for this process's live session.
-    // Attach a rejection handler immediately to avoid an unhandled rejection;
-    // every public operation still awaits the original promise and fails loud.
-    void this.startupCleanup.catch(() => {})
+    this.startupRestore = this.restoreStoredGrant()
+    // Hydration starts at construction so authorization telemetry and Google
+    // tools share one restored account view. Attach a rejection handler
+    // immediately; every public operation still awaits the original promise
+    // and therefore fails loud if credential storage itself is unavailable.
+    void this.startupRestore.catch(() => {})
     ctx.effect(() => ctx.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Workspace',
@@ -504,7 +523,7 @@ export default class GoogleApiBroker extends Service {
    * @returns sanitized Google account and service capability telemetry, when connected.
    */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
-    await this.startupCleanup
+    await this.startupRestore
     const grant = this.grant
     if (grant === undefined) return undefined
     const email = await this.inspectAccountEmail(grant)
@@ -562,7 +581,7 @@ export default class GoogleApiBroker extends Service {
    * @returns whether Google acknowledged token revocation.
    */
   async disconnect(): Promise<{ revoked: boolean }> {
-    await this.startupCleanup
+    await this.startupRestore
     const grant = this.grant
     this.grant = undefined
     this.refreshInFlight = undefined
@@ -587,14 +606,14 @@ export default class GoogleApiBroker extends Service {
   }
 
   private async authorize(session: AuthorizationSession): Promise<void> {
-    await this.startupCleanup
+    await this.startupRestore
     const clientId = await this.resolveClientId(session)
     const state = base64url(randomBytes(32))
     const pkce = createPkce()
     const receiver = await internals.openLoopback(state, session.signal)
     try {
       session.notify({
-        message: 'Continue with Google in your browser. PHOENIX keeps OAuth tokens inside the Host process.',
+        message: 'Continue with Google in your browser. PHOENIX stores the OAuth grant only in its Host credential vault.',
         url: createAuthorizationUrl({ ...this.spec, clientId }, receiver.redirectUri, state, pkce.challenge),
       })
       const code = await receiver.code
@@ -624,7 +643,10 @@ export default class GoogleApiBroker extends Service {
         expiresAt: internals.now() + token.expires_in * 1000,
         scopes: parseGrantedScopes(token.scope),
       }
-      await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
+      await this.ctx.credentials.modifyRecord(
+        GOOGLE_ACCOUNT_KEY,
+        () => Promise.resolve({ kind: 'grant', payload: next }),
+      )
       this.accountEmail = undefined
       this.emailLookupInFlight = undefined
       this.grant = next
@@ -634,7 +656,7 @@ export default class GoogleApiBroker extends Service {
   }
 
   private async usableGrant(requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
-    await this.startupCleanup
+    await this.startupRestore
     const current = this.grant
     if (current === undefined) {
       throw new AuthorizationError('Google is not signed in for this PHOENIX process', 'GOOGLE_REAUTH_REQUIRED')
@@ -723,14 +745,31 @@ export default class GoogleApiBroker extends Service {
       expiresAt: internals.now() + token.expires_in * 1000,
       scopes: token.scope === undefined ? current.scopes : parseGrantedScopes(token.scope),
     }
+    await this.ctx.credentials.modifyRecord(
+      GOOGLE_ACCOUNT_KEY,
+      () => Promise.resolve({ kind: 'grant', payload: next }),
+    )
     this.grant = next
     return next
   }
 
-  /** Remove any Google credential record that predates this process-local broker instance. */
-  private async purgeStaleRecord(): Promise<void> {
-    const info = await this.ctx.credentials.describeRecord(GOOGLE_ACCOUNT_KEY)
-    if (info.configured) await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
+  /** Restore a valid owner-private Google grant and discard legacy/corrupt records. */
+  private async restoreStoredGrant(): Promise<void> {
+    const record = await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
+    if (record === undefined) return
+    if (record.kind !== 'grant') {
+      await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
+      return
+    }
+    const stored = storedGoogleGrant(record.payload)
+    if (stored === undefined) {
+      await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
+      return
+    }
+    this.grant = {
+      ...stored,
+      scopes: stored.scopes.filter(scope => this.spec.scopes.includes(scope)),
+    }
   }
 }
 
