@@ -248,6 +248,7 @@ export function codexAccountEnvironment(
   explicit: Readonly<Record<string, string>>,
 ): Record<string, string> & { CODEX_HOME: string; CODEX_SQLITE_HOME: string } {
   const home = resolvedCodexHome(explicit)
+  mkdirSync(home, { recursive: true })
   const env: Record<string, string> & {
     CODEX_HOME: string
     CODEX_SQLITE_HOME: string
