@@ -14,6 +14,7 @@ import { settingsSchema } from './settings-schema.client.ts'
 
 afterEach(() => {
   cleanup()
+  window.localStorage.clear()
   document.getElementById('root')?.remove()
 })
 
@@ -184,6 +185,29 @@ describe('DeepSeekOnboardingDialog', () => {
     await waitFor(() => { expect(screen.queryByLabelText(en.keyInput)).toBeNull() })
     expect(screen.getByRole('button', { name: en.onboardingCodex })).toBeTruthy()
     expect(h.complete).not.toHaveBeenCalled()
+  })
+
+  it('keeps the Codex activation prompt visible even when another provider is usable', async () => {
+    const h = harness({ codexAuthorization: true, configured: () => true })
+    render(<DeepSeekOnboardingDialog {...h.props} />)
+    expect(await screen.findByRole('dialog', { name: en.onboardingTitle })).toBeTruthy()
+    expect(screen.getByRole('button', { name: en.onboardingCodex })).toBeTruthy()
+    expect(h.complete).not.toHaveBeenCalled()
+  })
+
+  it('persists the explicit Codex reminder mute choice', async () => {
+    const first = harness({ codexAuthorization: true, configured: () => true })
+    const view = render(<DeepSeekOnboardingDialog {...first.props} />)
+    expect(await screen.findByRole('button', { name: en.onboardingMuteCodex })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: en.onboardingMuteCodex }))
+    expect(first.complete).toHaveBeenCalledOnce()
+    view.unmount()
+
+    const second = harness({ codexAuthorization: true, configured: () => true })
+    render(<DeepSeekOnboardingDialog {...second.props} />)
+    await act(async () => { await second.controller.load() })
+    await waitFor(() => { expect(second.complete).toHaveBeenCalledOnce() })
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
   it('keeps native Codex account auth separate from the main chat provider', async () => {
