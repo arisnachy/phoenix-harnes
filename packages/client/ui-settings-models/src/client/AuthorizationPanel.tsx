@@ -579,24 +579,33 @@ function registryCandidateLogo(candidate: McpRegistryCandidateView): string | un
     .find((src): src is string => src !== undefined)
 }
 
-function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall }: {
+function OfficialMcpCard({ candidate, stale, managed, runtime, installing, repairing, removing, t,
+  onInstall, onRepair, onRemove }: {
   candidate: McpRegistryCandidateView
   stale: boolean
-  installed: boolean
+  managed?: ManagedMcpConnectorView
+  runtime?: McpConnectorRuntimeView
   installing: boolean
+  repairing: boolean
+  removing: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onInstall: (candidate: McpRegistryCandidateView) => void
+  onRepair?: (connector: ManagedMcpConnectorView) => void
+  onRemove?: (connector: ManagedMcpConnectorView) => void
 }): ReactNode {
   const source = safeExternalHref(candidate.repositoryUrl) ?? safeExternalHref(candidate.websiteUrl)
   const logoUrl = registryCandidateLogo(candidate)
   const displayName = candidate.title
   const technicalName = normalize(displayName) === normalize(candidate.name) ? undefined : candidate.name
   const installable = candidate.status === 'active' && candidate.remoteUrl !== undefined
-  const status = installed
-    ? t('installedStatus')
-    : candidate.status === 'deprecated' || candidate.status === 'deleted'
-      ? t('registryDeprecatedStatus')
-      : t('registryListedStatus')
+  const broken = managed !== undefined && (runtime === undefined || runtime.status === 'failed')
+  const status = broken
+    ? t('brokenStatus')
+    : managed !== undefined
+      ? t('installedStatus')
+      : candidate.status === 'deprecated' || candidate.status === 'deleted'
+        ? t('registryDeprecatedStatus')
+        : t('registryListedStatus')
   return (
     <article className={`${connectorStyles['connectorCard'] ?? ''} ${connectorStyles['registryCard'] ?? ''}`.trim()} data-registry-server={candidate.name}>
       <div className={connectorStyles['connectorTop']}>
@@ -628,14 +637,14 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
       </div>
       <p className={connectorStyles['connectorDescription']}>{candidate.description}</p>
       <div className={connectorStyles['connectorFooter']}>
-        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${installed ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
+        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${broken ? connectorStyles['connectorStatusError'] ?? '' : managed !== undefined ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
           {status}{stale ? ` · ${t('registryCachedStatus')}` : ''}
         </span>
         <div className={connectorStyles['connectorActions']}>
           {source === undefined ? null : (
             <a className={connectorStyles['connectorLink']} href={source} target="_blank" rel="noreferrer">{t('viewSource')}</a>
           )}
-          {installed || !installable ? null : (
+          {managed === undefined && installable ? (
             <button
               type="button"
               className={connectorStyles['connectorPrimaryButton']}
@@ -644,7 +653,27 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
             >
               {installing ? t('installing') : t('install')}
             </button>
-          )}
+          ) : null}
+          {broken && managed?.source !== undefined && onRepair !== undefined ? (
+            <button
+              type="button"
+              className={hubStyles['compactButton']}
+              disabled={repairing || removing}
+              onClick={() => { onRepair(managed) }}
+            >
+              {repairing ? t('repairing') : t('repair')}
+            </button>
+          ) : null}
+          {managed !== undefined && onRemove !== undefined ? (
+            <button
+              type="button"
+              className={connectorStyles['connectorSecondaryButton']}
+              disabled={repairing || removing}
+              onClick={() => { onRemove(managed) }}
+            >
+              {removing ? t('uninstalling') : t('uninstall')}
+            </button>
+          ) : null}
         </div>
       </div>
     </article>
@@ -652,11 +681,9 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
 }
 
 /**
- * Compact model-account surface. Settings → Connectors still owns the full
- * connector inventory, but Models must expose provider authentication where
- * the user chooses models. This is especially important for openai-codex:
- * the route is keyless at the provider layer and is usable only when the
- * official Codex account flow is authenticated.
+ * Legacy compact account surface retained for compatibility tests. Product
+ * authentication is owned by Settings → Connectors; Models no longer renders
+ * this component.
  */
 export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
@@ -1295,17 +1322,31 @@ export function ConnectorsSettingsSection({ api,
             : null}
           {registrySnapshot === undefined || registrySnapshot.candidates.length === 0 ? null : (
             <div className={connectorStyles['connectorGrid']}>
-              {registrySnapshot.candidates.map(candidate => (
-                <OfficialMcpCard
-                  key={`${candidate.name}@${candidate.version}`}
-                  candidate={candidate}
-                  stale={registrySnapshot.stale}
-                  installed={candidate.remoteUrl !== undefined && mcpHub.managed.some(connector => connector.url === candidate.remoteUrl)}
-                  installing={installingRegistryName === candidate.name}
-                  t={connectorT}
-                  onInstall={installRegistryCandidate}
-                />
-              ))}
+              {registrySnapshot.candidates.map((candidate) => {
+                const managed = candidate.remoteUrl === undefined
+                  ? undefined
+                  : mcpHub.managed.find(connector => connector.url === candidate.remoteUrl
+                    || (connector.source?.kind === 'registry' && connector.source.name === candidate.name))
+                const runtime = managed === undefined
+                  ? undefined
+                  : mcpHub.runtime.find(entry => entry.serverName === managed.serverName)
+                return (
+                  <OfficialMcpCard
+                    key={`${candidate.name}@${candidate.version}`}
+                    candidate={candidate}
+                    stale={registrySnapshot.stale}
+                    managed={managed}
+                    runtime={runtime}
+                    installing={installingRegistryName === candidate.name}
+                    repairing={managed !== undefined && repairingEntryId === managed.entryId}
+                    removing={managed !== undefined && removingEntryId === managed.entryId}
+                    t={connectorT}
+                    onInstall={installRegistryCandidate}
+                    onRepair={mcpRegistry.repair === undefined ? undefined : repairManagedConnector}
+                    onRemove={mcpRegistry.remove === undefined ? undefined : removeManagedConnector}
+                  />
+                )
+              })}
             </div>
           )}
         </section>
