@@ -26,6 +26,33 @@ const HOST_REMOTE_SENTINEL = resolve(
   'typert.remote-client.d.ts',
 )
 
+const PROFILE_RUNTIME_PACKAGE_DIRS = [
+  'packages/credentials/authorization',
+  'packages/mcp/mcp-client',
+  'packages/mcp/mcp-registry',
+  'packages/credentials/tool-google-workspace',
+  'packages/host/plugin-inventory',
+] as const
+
+function verifyProfileRuntimeArtifacts(root: string): void {
+  const missing: string[] = []
+  for (const relativeDir of PROFILE_RUNTIME_PACKAGE_DIRS) {
+    const manifestPath = resolve(root, relativeDir, 'package.json')
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as { name?: unknown; main?: unknown }
+    const name = typeof manifest.name === 'string' ? manifest.name : relativeDir
+    const main = typeof manifest.main === 'string' ? manifest.main.trim() : ''
+    if (main.length === 0 || !existsSync(resolve(root, relativeDir, main))) {
+      missing.push(`${name}: ${main.length === 0 ? 'package.json has no main' : main}`)
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      'build: profile runtime is incomplete; required compiled artifact(s) are missing:\n'
+      + missing.map(value => `  - ${value}`).join('\n'),
+    )
+  }
+}
+
 /** Resolve the repository-pinned pnpm package-manager specifier. */
 function projectPnpmSpecifier(root: string): string {
   const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { packageManager?: unknown }
@@ -150,6 +177,7 @@ function main(): void {
   rmSync(resolve(root, CLIENT_BUILD_RECORD_PATH), { force: true })
   if (scope === 'full') {
     runScript('build:lib', buildEnvironment)
+    verifyProfileRuntimeArtifacts(root)
   } else {
     ensureClientHostPrerequisites(buildEnvironment)
     runScript('build:lib:client', buildEnvironment)
