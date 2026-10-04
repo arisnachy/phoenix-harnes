@@ -19,6 +19,13 @@ export const hostDescribeValueSchema = z.object({
   attachedSessions: z.number().int().nonnegative(),
   home: z.string(),
   canOpenPath: z.boolean(),
+  diagnostics: z.object({
+    available: z.boolean(),
+    logPath: z.string(),
+    directory: z.string(),
+    recentErrors: z.array(z.string()),
+    updatedAt: z.number().nonnegative().optional(),
+  }).optional(),
 }) satisfies z.ZodType<Wire<ResponseValue<'host.describe'>>>
 
 /** host.pickDirectory request payload (empty object literal). */
