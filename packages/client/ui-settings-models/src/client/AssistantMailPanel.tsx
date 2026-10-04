@@ -26,7 +26,7 @@ export interface AssistantMailSnapshot {
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
-   * @param action Status, signup, connect, verify, configure or refresh.
+   * @param action Status, signup, new-signup, connect, verify, configure or refresh.
    * @param input Operation properties; secrets are accepted only by connect.
    * @returns Secret-free account and job status.
    */
@@ -272,6 +272,20 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       <p className={styles.failure}>
         El alta pudo haberse completado, pero Phoenix no recibió la confirmación. Por seguridad
         no la repetirá y no creará otro buzón.
+      </p>
+      <div className={styles.actions}>
+        <button
+          type="button"
+          className={styles.button}
+          disabled={busy || owner.trim().length === 0}
+          onClick={() => { void operate('new-signup', { ownerEmail: owner }) }}
+        >
+          Crear otro buzón
+        </button>
+      </div>
+      <p className={styles.note}>
+        Esto crea una identidad nueva. Usa la recuperación avanzada si quieres conservar
+        el buzón que pudo haberse creado en el intento anterior.
       </p>
       <details className={styles.advanced}>
         <summary>Recuperación avanzada</summary>
