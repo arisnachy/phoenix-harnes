@@ -13,10 +13,12 @@
  * @module @phoenix-ai/dsh-mcp-client
  */
 
+import { spawn } from 'node:child_process'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
-import { credentialRef } from '@phoenix-ai/dsh-credentials'
+import { credentialKey, credentialRef } from '@phoenix-ai/dsh-credentials'
+import { scrubbedParentEnv } from '@phoenix-ai/dsh-subprocess'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { McpOAuthController } from './oauth.ts'
@@ -72,6 +74,26 @@ const activeServerNames = new WeakMap<Context, Set<string>>()
 
 // ---- Config ----
 
+/** One credential the stdio server's explicit authorization command may collect. */
+export interface StdioAuthorizationCredential {
+  /** Environment variable supplied to the authorization subprocess. */
+  env: string
+  /** PHOENIX credential reference where the value is stored. */
+  ref: string
+  /** Human-facing prompt shown when the reference is not configured. */
+  label: string
+  /** Mask the browser input while collecting this value. */
+  secret?: boolean
+}
+
+/** Optional explicit authorization command for a stdio MCP server. */
+export interface StdioAuthorizationConfig {
+  /** Arguments passed to the same executable used by the MCP server. */
+  args: string[]
+  /** Credentials required by the authorization command and normal MCP process. */
+  credentials: StdioAuthorizationCredential[]
+}
+
 /** Config for connecting to an MCP server via a spawned child process over stdio. */
 export interface StdioConfig {
   /** Selects child-process stdio transport. */
@@ -93,6 +115,8 @@ export interface StdioConfig {
    * each connection generation and never persist in Loader configuration.
    */
   envCredentialRefs?: Record<string, string>
+  /** Optional browser/device authorization command owned by this stdio server. */
+  authorization?: StdioAuthorizationConfig
   /** Working directory for the child process. */
   cwd: string
   /** Host platforms on which this stdio server may run; omission is cross-platform unless Phoenix knows the server is platform-bound. */
@@ -142,6 +166,18 @@ export interface StreamableHttpConfig {
 /** Configuration for one stdio or Streamable HTTP MCP server. */
 export type Config = StdioConfig | StreamableHttpConfig
 
+const StdioAuthorizationCredentialSchema = z.object({
+  env: z.string().required(),
+  ref: z.string().required(),
+  label: z.string().required(),
+  secret: z.boolean().default(false),
+})
+
+const StdioAuthorizationSchema = z.object({
+  args: z.array(String).default([]),
+  credentials: z.array(StdioAuthorizationCredentialSchema).default([]),
+})
+
 const Reconnect: z<ReconnectConfig> = z.object({
   enabled: z.boolean().default(RECONNECT_DEFAULTS.enabled),
   initialDelayMs: z.number().min(1).max(MAX_TIMER_DELAY_MS).default(RECONNECT_DEFAULTS.initialDelayMs),
@@ -157,6 +193,7 @@ export const Config = z.union([
     args: z.array(String).default([]),
     env: z.dict(String).default({}),
     envCredentialRefs: z.dict(String).default({}),
+    authorization: StdioAuthorizationSchema,
     cwd: z.string().default(''),
     supportedPlatforms: z.array(String).default([]),
     toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
@@ -279,6 +316,95 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   const connection = startConnection(ctx, effectiveConnectionConfig(config), reconnect, registration, transportOptions)
   reconnectRef.current = () => { connection.reconnect() }
+
+  if (config.transport === 'stdio'
+    && config.authorization !== undefined
+    && authorization !== undefined
+    && credentials !== undefined) {
+    const flowKey = credentialKey(
+      'mcp-client',
+      config.serverName.toLowerCase().replaceAll('_', '-'),
+    )
+    const runAuthorizationCommand = async (session: {
+      signal: AbortSignal
+      notify(notice: { message: string }): void
+      prompt(prompt: { kind: 'text' | 'secret'; message: string; placeholder?: string }): Promise<string>
+    }): Promise<void> => {
+      const explicitCredentialEnv: Record<string, string> = {}
+      for (const item of config.authorization!.credentials) {
+        const ref = credentialRef(item.ref)
+        let resolved = await credentials.resolve(ref)
+        if (resolved === undefined) {
+          const value = (await session.prompt({
+            kind: item.secret === true ? 'secret' : 'text',
+            message: item.label,
+            placeholder: item.secret === true ? undefined : item.ref,
+          })).trim()
+          if (value === '') throw new Error(`${item.label} cannot be blank`)
+          await credentials.set(ref, value)
+          resolved = await credentials.resolve(ref)
+        }
+        if (resolved === undefined) throw new Error(`credential reference "${item.ref}" could not be stored`)
+        explicitCredentialEnv[item.env] = resolved.value
+      }
+
+      for (const [envName, refName] of Object.entries(config.envCredentialRefs ?? {})) {
+        if (explicitCredentialEnv[envName] !== undefined) continue
+        const value = await credentials.resolve(credentialRef(refName))
+        if (value === undefined) {
+          throw new Error(`credential reference "${refName}" is not configured`)
+        }
+        explicitCredentialEnv[envName] = value.value
+      }
+
+      session.notify({
+        message: `Complete ${config.serverName} authorization in the browser window opened by the connector.`,
+      })
+
+      await new Promise<void>((resolve, reject) => {
+        const child = spawn(config.command, config.authorization!.args, {
+          cwd: config.cwd === '' ? undefined : config.cwd,
+          env: { ...scrubbedParentEnv(), ...config.env, ...explicitCredentialEnv },
+          stdio: ['ignore', 'ignore', 'ignore'],
+          windowsHide: true,
+        })
+        let settled = false
+        const finish = (error?: Error): void => {
+          if (settled) return
+          settled = true
+          session.signal.removeEventListener('abort', abort)
+          if (error === undefined) resolve()
+          else reject(error)
+        }
+        const abort = (): void => {
+          child.kill()
+          finish(new Error(`${config.serverName} authorization cancelled`))
+        }
+        session.signal.addEventListener('abort', abort, { once: true })
+        child.once('error', error => { finish(error) })
+        child.once('close', (code) => {
+          if (code === 0) finish()
+          else finish(new Error(`${config.serverName} authorization exited with code ${String(code)}`))
+        })
+      })
+
+      await credentials.modifyRecord(flowKey, () => Promise.resolve({ kind: 'api-key' }))
+      connection.reconnect()
+    }
+
+    ctx.effect(() => authorization.registerFlow({
+      key: flowKey,
+      label: `MCP ${config.serverName}`,
+      methods: [{ id: 'oauth', label: `Authorize ${config.serverName}` }],
+      inspect: async () => {
+        const lifecycle = mcpConnectors?.list().find(entry => entry.serverName === config.serverName)
+        return lifecycle?.status === 'ready'
+          ? { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'oauth' }
+          : undefined
+      },
+      run: runAuthorizationCommand,
+    }), 'mcp-client.stdio-authorization-flow')
+  }
 
   if (oauthController !== undefined && authorization !== undefined && credentials !== undefined) {
     const controller = oauthController
