@@ -164,6 +164,38 @@ describe('connectors settings section', () => {
     expect(screen.queryByText(/access-token|refresh-token|password/i)).toBeNull()
   })
 
+  it('uses the authorization method registered by a connector instead of forcing OAuth', async () => {
+    const begin = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546099', status: 'pending' as const,
+    })))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/github',
+        label: 'GitHub',
+        methods: [{ id: 'device', label: 'Sign in with GitHub' }],
+        inFlight: false,
+      }] }))),
+      begin,
+      status: vi.fn(() => new Promise(() => undefined)),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    renderHub(api)
+    const accountButton = await waitFor(() => {
+      const button = document.querySelector<HTMLButtonElement>(
+        'article[data-authorization-key="mcp-client/github"] button',
+      )
+      expect(button).not.toBeNull()
+      return button!
+    })
+    fireEvent.click(accountButton)
+
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/github', method: 'device' })
+    })
+    expect(window.open).not.toHaveBeenCalled()
+  })
+
   it('cancels a pending OAuth attempt when the user closes the consent window and restores connector actions', async () => {
     vi.useFakeTimers()
     const popup = {
