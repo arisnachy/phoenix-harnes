@@ -349,7 +349,9 @@ export function installAssistantMail(ctx: Context,
   }
   const replaceEnrollment = async (explicitOwnerEmail?: string): Promise<AssistantMailIdentity> => {
     const previous = await onboarding.status()
-    const owner = explicitOwnerEmail?.trim() || previous.ownerEmail || await config.resolveOwnerEmail?.()
+    const resolvedOwner = explicitOwnerEmail?.trim() || previous.ownerEmail || await config.resolveOwnerEmail?.()
+    if (resolvedOwner === undefined || resolvedOwner.length === 0) throw new Error('owner email required for one-time mailbox verification')
+    const owner = mailAddress(resolvedOwner)
     await discardEnrollment()
     await ensureEnrollment(owner, true)
     const account = await onboarding.status()
