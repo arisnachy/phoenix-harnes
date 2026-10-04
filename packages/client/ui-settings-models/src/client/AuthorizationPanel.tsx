@@ -299,20 +299,20 @@ function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDe
   return ids.includes(liveId) || ids.includes(liveName) || normalize(definition.name) === liveName
 }
 
-function runtimeMatchesDefinition(runtime: McpConnectorRuntimeView, definition: ConnectorDefinition): boolean {
-  const server = normalize(runtime.serverName)
+function serverNameMatchesDefinition(serverName: string, definition: ConnectorDefinition): boolean {
+  const server = normalize(serverName)
   const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
     .map(normalize)
     .filter(value => value.length >= 3)
   return needles.some(needle => server === needle || server.includes(needle) || needle.includes(server))
 }
 
+function runtimeMatchesDefinition(runtime: McpConnectorRuntimeView, definition: ConnectorDefinition): boolean {
+  return serverNameMatchesDefinition(runtime.serverName, definition)
+}
+
 function managedMatchesDefinition(managed: { serverName: string; url: string }, definition: ConnectorDefinition): boolean {
-  const server = normalize(managed.serverName)
-  const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
-    .map(normalize)
-    .filter(value => value.length >= 3)
-  return needles.some(needle => server === needle || server.includes(needle) || needle.includes(server))
+  return serverNameMatchesDefinition(managed.serverName, definition)
 }
 
 
@@ -693,6 +693,40 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
   )
 }
 
+function useAuthorizationEntries(
+  api: IApiClient['authorization'] | undefined,
+  refresh: number,
+  oauthOnly: boolean,
+): {
+  entries: Entry[]
+  catalogFailure: string | undefined
+  setCatalogFailure: (value: string | undefined) => void
+} {
+  const [entries, setEntries] = useState<Entry[]>([])
+  const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
+
+  useEffect(() => {
+    if (api === undefined) return
+    let stale = false
+    setCatalogFailure(undefined)
+    void api.list({}).then((response) => {
+      if (stale) return
+      if (!response.result.ok) {
+        setCatalogFailure(response.result.error.message)
+        return
+      }
+      const next = response.result.value.entries.filter(entry =>
+        !oauthOnly || entry.methods.some(method => method.id === 'oauth'))
+      setEntries(next as Entry[])
+    }, (error: unknown) => {
+      if (!stale) setCatalogFailure(String(error))
+    })
+    return () => { stale = true }
+  }, [api, oauthOnly, refresh])
+
+  return { entries, catalogFailure, setCatalogFailure }
+}
+
 /** Dedicated account and MCP/app connector settings page. */
 export function ConnectorsSettingsSection({ api,
   t,
@@ -702,8 +736,6 @@ export function ConnectorsSettingsSection({ api,
   mcpRegistry,
   assistantMail,
   onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
-  const [entries, setEntries] = useState<Entry[]>([])
-  const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
@@ -721,6 +753,7 @@ export function ConnectorsSettingsSection({ api,
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
+  const { entries, catalogFailure, setCatalogFailure } = useAuthorizationEntries(api, refresh, false)
   const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } = useAuthorizationAttempt(api, () => {
     setRefresh(current => current + 1)
     onAuthorized()
@@ -740,21 +773,6 @@ export function ConnectorsSettingsSection({ api,
     )
     return () => { stale = true }
   }, [chatGptWeb])
-
-  useEffect(() => {
-    if (api === undefined) return
-    let stale = false
-    setCatalogFailure(undefined)
-    void api.list({}).then((response) => {
-      if (stale) return
-      if (!response.result.ok) {
-        setCatalogFailure(response.result.error.message)
-        return
-      }
-      setEntries(response.result.value.entries.filter(entry => entry.methods.some(method => method.id === 'oauth')) as Entry[])
-    }, (error: unknown) => { if (!stale) setCatalogFailure(String(error)) })
-    return () => { stale = true }
-  }, [api, refresh])
 
   useEffect(() => {
     if (mcpRegistry === undefined) return
