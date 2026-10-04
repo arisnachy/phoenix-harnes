@@ -232,6 +232,35 @@ abstract deleteRecord(key: CredentialKey): Promise<void>
 
 Source: [`packages/credentials/credentials/src/index.ts`](../../packages/credentials/credentials/src/index.ts)
 
+<a id="ctxgoogleapi--googleapibroker"></a>
+
+### `ctx.googleApi` — `GoogleApiBroker`
+
+Google Host broker. OAuth material never leaves this service instance.
+
+```ts cordis-catalog
+/**
+ * Secret-free telemetry exists only while this process owns a live grant.
+ * @returns sanitized Google account and service capability telemetry, when connected.
+ */
+async inspect(): Promise<AuthorizationTelemetry | undefined>
+
+/**
+ * Execute one request inside a fixed Google service boundary.
+ * @param request - bounded Google service request.
+ * @returns the bounded response without credential-bearing headers.
+ */
+async request(request: GoogleApiRequest): Promise<GoogleApiResponse>
+
+/**
+ * Clear the process grant and secret-free marker even when provider revocation fails.
+ * @returns whether Google acknowledged token revocation.
+ */
+async disconnect(): Promise<{ revoked: boolean }>
+```
+
+Source: [`packages/credentials/authorization/src/google-broker.ts`](../../packages/credentials/authorization/src/google-broker.ts)
+
 <a id="authorization-events"></a>
 
 ### `authorization/*` events
