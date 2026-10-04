@@ -108,9 +108,9 @@ export interface McpRegistryClient {
     connector: ManagedMcpConnectorView
   }>
   /** Remove one exact PHOENIX-managed MCP. */
-  remove(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }>
+  remove?(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }>
   /** Repair one managed MCP strictly from its persisted trusted source. */
-  repair(request: { entryId: string }): Promise<{
+  repair?(request: { entryId: string }): Promise<{
     status: 'installed' | 'already-installed'
     connector: ManagedMcpConnectorView
   }>
@@ -967,10 +967,11 @@ export function ConnectorsSettingsSection({ api,
   }
 
   const repairManagedConnector = (connector: ManagedMcpConnectorView): void => {
-    if (mcpRegistry === undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
+    const repair = mcpRegistry?.repair
+    if (repair === undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
     setCatalogFailure(undefined)
     setRepairingEntryId(connector.entryId)
-    void mcpRegistry.repair({ entryId: connector.entryId }).then(
+    void repair({ entryId: connector.entryId }).then(
       () => {
         setRefresh(current => current + 1)
         onAuthorized()
@@ -980,10 +981,11 @@ export function ConnectorsSettingsSection({ api,
   }
 
   const removeManagedConnector = (connector: ManagedMcpConnectorView): void => {
-    if (mcpRegistry === undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
+    const remove = mcpRegistry?.remove
+    if (remove === undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
     setCatalogFailure(undefined)
     setRemovingEntryId(connector.entryId)
-    void mcpRegistry.remove({ entryId: connector.entryId }).then(
+    void remove({ entryId: connector.entryId }).then(
       (result) => {
         if (result.removed && !result.liveUnloaded) {
           setCatalogFailure(connectorT('uninstallRestartRequired'))
@@ -1211,8 +1213,8 @@ export function ConnectorsSettingsSection({ api,
                     setFilter('available')
                     setQuery(row.definition.name)
                   }}
-                onRepair={mcpRegistry === undefined ? undefined : repairManagedConnector}
-                onRemove={mcpRegistry === undefined ? undefined : removeManagedConnector}
+                onRepair={mcpRegistry?.repair === undefined ? undefined : repairManagedConnector}
+                onRemove={mcpRegistry?.remove === undefined ? undefined : removeManagedConnector}
                 onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
                   setJevFailure(undefined)
                   setJevSetupOpen(true)
