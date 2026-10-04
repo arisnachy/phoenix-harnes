@@ -137,19 +137,24 @@ const SERVICES: Readonly<Record<GoogleWorkspaceService, ServiceSpec>> = {
   },
 }
 
+function serviceCatalog(): NonNullable<Extract<AuthorizationTelemetry, { kind: 'account' }>['connectors']> {
+  return (Object.entries(SERVICES) as Array<[GoogleWorkspaceService, ServiceSpec]>).map(([id, spec]) => ({
+    id,
+    name: spec.name,
+    description: spec.description,
+    category: spec.category,
+    accessible: true,
+    enabled: true,
+    installed: true,
+    callable: false,
+  }))
+}
+
 function serviceTelemetry(grant: GoogleGrant): NonNullable<Extract<AuthorizationTelemetry, { kind: 'account' }>['connectors']> {
-  return (Object.entries(SERVICES) as Array<[GoogleWorkspaceService, ServiceSpec]>).map(([id, spec]) => {
+  return serviceCatalog().map((connector) => {
+    const spec = SERVICES[connector.id as GoogleWorkspaceService]
     const granted = grant.scopes.includes(spec.scope)
-    return {
-      id,
-      name: spec.name,
-      description: spec.description,
-      category: spec.category,
-      accessible: true,
-      enabled: true,
-      installed: granted,
-      callable: granted,
-    }
+    return { ...connector, callable: granted }
   })
 }
 
@@ -484,6 +489,7 @@ export default class GoogleApiBroker extends Service {
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Workspace',
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+      connectors: serviceCatalog(),
       inspect: () => this.inspect(),
       disconnect: () => this.disconnect().then(() => undefined),
       run: session => this.authorize(session),
