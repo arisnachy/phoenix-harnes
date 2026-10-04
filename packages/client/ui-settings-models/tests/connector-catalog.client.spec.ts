@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CONNECTOR_CATALOG, CONNECTOR_PRESETS } from '../src/client/connector-catalog.ts'
 
 const REQUIRED_CONNECTORS = [
-  'gmail', 'google-calendar', 'google-drive', 'google-contacts',
+  'google-workspace',
   'outlook-mail', 'outlook-calendar', 'onedrive', 'sharepoint', 'box', 'notion',
   'slack', 'microsoft-teams', 'zoom', 'github', 'linear', 'vercel', 'firebase',
   'supabase', 'neon', 'posthog', 'hugging-face', 'canva', 'heygen', 'magnific',
@@ -25,6 +25,8 @@ describe('connector catalog', () => {
     const byId = new Map(CONNECTOR_CATALOG.map(connector => [connector.id, connector]))
     expect(byId.get('canva')?.provenance).toBe('vendor-official')
     expect(byId.get('github')?.provenance).toBe('vendor-official')
+    expect(byId.get('google-workspace')?.provenance).toBe('vendor-official')
+    expect(CONNECTOR_CATALOG.some(connector => ['gmail', 'google-calendar', 'google-drive', 'google-contacts'].includes(connector.id))).toBe(false)
     expect(byId.get('evolucionrd')?.provenance).toBe('private-owner')
     expect(byId.get('kira-juancito-secure')?.provenance).toBe('private-owner')
     expect(byId.get('openclaw')?.provenance).toBe('native')

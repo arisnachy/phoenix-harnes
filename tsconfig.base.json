@@ -92,7 +92,7 @@
       "@phoenix-ai/dsh-jobs/brand": ["./packages/jobs/jobs/src/brand.ts"],
       "@phoenix-ai/dsh-credentials/types": ["./packages/credentials/credentials/src/types.ts"],
       "@phoenix-ai/dsh-authorization": ["./packages/credentials/authorization/src/index.ts"],
-      "@phoenix-ai/dsh-authorization/google": ["./packages/credentials/authorization/src/google-broker.ts"],
+      "@phoenix-ai/dsh-authorization/google": ["./packages/credentials/authorization/src/openclaw-cli.ts"],
       "@phoenix-ai/dsh-authorization/types": ["./packages/credentials/authorization/src/types.ts"],
       "@phoenix-ai/dsh-settings/types": ["./packages/settings/settings/src/types.ts"],
       "@phoenix-ai/dsh-api-remotes/types": ["./packages/api/remotes/src/types.ts"],

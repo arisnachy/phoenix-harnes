@@ -7,6 +7,7 @@ import type { ConnectorKey } from './connectors-locales.ts'
 import { CONNECTOR_CATALOG } from './connector-catalog.ts'
 import type { ConnectorDefinition } from './connector-catalog.ts'
 import { AuthorizationAttemptProgress, useAuthorizationAttempt } from './authorization-attempt.tsx'
+import type { AuthorizationAttempt } from './authorization-attempt.tsx'
 import connectorStyles from './CodexConnectors.module.css'
 import hubStyles from './ConnectorsSection.module.css'
 import styles from './ModelsSection.module.css'
@@ -305,10 +306,19 @@ function connectorStatus(
   return { text: t('availableStatus'), className: '' }
 }
 
-function entryMatchesFamily(entry: Entry, family: string | undefined): boolean {
-  if (family === undefined) return false
-  const needle = normalize(family)
-  return [entry.key, entry.label, entry.telemetry?.provider ?? ''].some(value => normalize(value).includes(needle))
+function entryMatchesDefinition(entry: Entry, definition: ConnectorDefinition): boolean {
+  if ((entry.telemetry?.connectors ?? []).some(connector => liveMatchesDefinition(connector, definition))) {
+    return true
+  }
+  const keyId = entry.key.includes('/') ? entry.key.slice(entry.key.lastIndexOf('/') + 1) : entry.key
+  const values = [keyId, entry.label, entry.telemetry?.provider ?? ''].map(normalize)
+  const identities = [
+    definition.id,
+    definition.name,
+    definition.providerFamily ?? '',
+    ...(definition.aliases ?? []),
+  ].map(normalize).filter(Boolean)
+  return values.some(value => identities.includes(value))
 }
 
 function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDefinition): boolean {
@@ -378,15 +388,17 @@ function collapsedTechnicalName(value: string): string {
   return raw
 }
 
+function catalogDefinitionForEntry(entry: Entry): ConnectorDefinition | undefined {
+  return CONNECTOR_CATALOG.find(definition => entryMatchesDefinition(entry, definition))
+}
+
 function accountPresentation(entry: Entry): {
   name: string
   description?: string
   logoUrl?: string
   technical?: string
 } {
-  const definition = catalogDefinitionForText(
-    `${entry.label} ${entry.key} ${entry.telemetry?.provider ?? ''}`,
-  )
+  const definition = catalogDefinitionForEntry(entry)
   const technical = collapsedTechnicalName(entry.telemetry?.provider ?? entry.label)
   if (definition !== undefined) {
     return {
@@ -449,22 +461,27 @@ function accountStatus(
   return { text: t('authorizationRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
 }
 
-function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
+function accountGrantConnectsCatalogEntry(
+  account: Entry | undefined,
+  definition: ConnectorDefinition,
+): boolean {
   if (account?.stored === undefined) return false
   const scopedConnectors = account.telemetry?.connectors
-  return scopedConnectors === undefined || scopedConnectors.length === 0
+  if (scopedConnectors === undefined || scopedConnectors.length === 0) return true
+  return scopedConnectors.some(connector => liveMatchesDefinition(connector, definition))
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, connected, t, onAuthorize, onConfigure,
-  onFindOfficial, onFindRegistry, onRepair, onRemove, pending, repairing, removing }: {
+function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuthorize, onDisconnect, onConfigure,
+  onFindOfficial, onFindRegistry, onRepair, onRemove, pending, repairing, removing, disconnecting,
+  attempt, answer, setAnswer, submitAnswer, cancel, authorizationT }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
   mcpRuntime?: McpConnectorRuntimeView | undefined
   managed?: ManagedMcpConnectorView | undefined
-  connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
+  onDisconnect?: ((key: string) => void) | undefined
   onConfigure?: (() => void) | undefined
   onFindOfficial?: (() => void) | undefined
   onFindRegistry?: (() => void) | undefined
@@ -473,8 +490,15 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
   pending: boolean
   repairing: boolean
   removing: boolean
+  disconnecting: boolean
+  attempt?: AuthorizationAttempt | undefined
+  answer: string
+  setAnswer: (value: string) => void
+  submitAnswer: () => void
+  cancel: () => void
+  authorizationT: (key: keyof typeof en) => string
 }): ReactNode {
-  const connectedByAccount = accountGrantConnectsCatalogEntry(account)
+  const connectedByAccount = accountGrantConnectsCatalogEntry(account, definition)
   const installUrl = safeExternalHref(live?.installUrl)
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
   const mcpStatus = mcpRuntime?.status === 'ready'
@@ -542,9 +566,19 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
           ) : installUrl !== undefined ? (
             <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
           ) : null}
-          {oauthAccount !== undefined && !connectedByAccount ? (
-            <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
-              {connected ? t('reauthorize') : t('authorize')}
+          {oauthAccount !== undefined ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight || disconnecting} onClick={() => { onAuthorize(oauthAccount) }}>
+              {connectedByAccount ? t('reauthorize') : t('authorize')}
+            </button>
+          ) : null}
+          {oauthAccount?.stored !== undefined && oauthAccount.disconnectable === true && onDisconnect !== undefined ? (
+            <button
+              className={connectorStyles['connectorSecondaryButton']}
+              type="button"
+              disabled={pending || oauthAccount.inFlight || disconnecting}
+              onClick={() => { onDisconnect(oauthAccount.key) }}
+            >
+              {disconnecting ? t('disconnecting') : t('disconnect')}
             </button>
           ) : null}
           {canRepair ? (
@@ -579,6 +613,16 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
           ) : null}
         </div>
       </div>
+      {account !== undefined && attempt?.key === account.key ? (
+        <AuthorizationAttemptProgress
+          attempt={attempt}
+          answer={answer}
+          setAnswer={setAnswer}
+          submitAnswer={submitAnswer}
+          cancel={cancel}
+          t={authorizationT}
+        />
+      ) : null}
     </article>
   )
 }
@@ -916,7 +960,6 @@ export function ConnectorsSettingsSection({ api,
 
   const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
-    const account = entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
     const mcpRuntime = definition.id === 'binance'
       ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
       : definition.id === 'jev'
@@ -928,13 +971,24 @@ export function ConnectorsSettingsSection({ api,
       : definition.id === 'jev'
         ? mcpHub.managed.find(candidate => candidate.serverName === 'jev')
         : mcpHub.managed.find(candidate => managedMatchesDefinition(candidate, definition))
+    const account = entries.find(entry => entryMatchesDefinition(entry, definition))
+      ?? (managed === undefined ? undefined : managedAuthorizationEntry(managed, entries))
     const connected = live?.installed === true
       || live?.callable === true
-      || accountGrantConnectsCatalogEntry(account)
+      || accountGrantConnectsCatalogEntry(account, definition)
       || mcpRuntime?.status === 'ready'
       || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, connected }
   }), [entries, liveConnectors, mcpHub])
+
+  const catalogAccountKeys = useMemo(
+    () => new Set(catalogRows.flatMap(row => row.account === undefined ? [] : [row.account.key])),
+    [catalogRows],
+  )
+  const standaloneEntries = useMemo(
+    () => entries.filter(entry => !catalogAccountKeys.has(entry.key)),
+    [entries, catalogAccountKeys],
+  )
 
   const visibleRows = catalogRows.filter(({ definition, connected }) => {
     if (filter === 'connected' && !connected) return false
@@ -1146,14 +1200,14 @@ export function ConnectorsSettingsSection({ api,
         </section>
       )}
 
-      {entries.length === 0 ? null : (
+      {standaloneEntries.length === 0 ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('accounts')}>
           <div className={hubStyles['heading']}>
             <h3>{connectorT('accounts')}</h3>
             <p>{connectorT('accountsHint')}</p>
           </div>
           <div className={connectorStyles['connectorGrid']}>
-            {entries.map((entry) => {
+            {standaloneEntries.map((entry) => {
               const lines = telemetryLines(entry.telemetry)
               const presentation = accountPresentation(entry)
               const runtime = runtimeForEntry(entry, mcpHub.runtime)
@@ -1255,12 +1309,19 @@ export function ConnectorsSettingsSection({ api,
                 account={row.account}
                 mcpRuntime={row.mcpRuntime}
                 managed={row.managed}
-                connected={row.connected}
                 t={connectorT}
                 pending={attempt?.status === 'pending' || jevBusy}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                 removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
                 onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
+                onDisconnect={api === undefined ? undefined : disconnect}
+                disconnecting={row.account !== undefined && disconnectingKey === row.account.key}
+                attempt={attempt}
+                answer={answer}
+                setAnswer={setAnswer}
+                submitAnswer={submitAnswer}
+                cancel={cancel}
+                authorizationT={t}
                 onFindOfficial={mcpRegistry === undefined || row.definition.registryName === undefined
                   ? undefined
                   : () => { findOfficialConnector(row.definition) }}

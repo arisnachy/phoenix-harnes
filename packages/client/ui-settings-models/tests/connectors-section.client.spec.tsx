@@ -295,7 +295,7 @@ describe('connectors settings section', () => {
     })))
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'authorization-google/account',
+        key: 'openclaw-cli/google-workspace',
         label: 'Google Workspace',
         methods: [{ id: 'oauth', label: 'Sign in with Google' }],
         inFlight: false,
@@ -303,7 +303,7 @@ describe('connectors settings section', () => {
           kind: 'account' as const,
           provider: 'Google Workspace',
           connectors: [{
-            id: 'gmail', name: 'Gmail', description: 'Read and send mail.',
+            id: 'google-workspace', name: 'Google Workspace', description: 'Workspace tools.',
             category: 'Communication', accessible: true, enabled: true,
             installed: false, callable: false,
           }],
@@ -318,7 +318,7 @@ describe('connectors settings section', () => {
     const authorize = await screen.findAllByRole('button', { name: 'Authorize' })
     fireEvent.click(authorize[0]!)
     await waitFor(() => {
-      expect(begin).toHaveBeenCalledWith({ key: 'authorization-google/account', method: 'oauth' })
+      expect(begin).toHaveBeenCalledWith({ key: 'openclaw-cli/google-workspace', method: 'oauth' })
     })
     expect(screen.getByText('Permission needed')).toBeTruthy()
     expect(screen.queryByText(/access-token|refresh-token|password/i)).toBeNull()
@@ -344,7 +344,7 @@ describe('connectors settings section', () => {
     })))
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'authorization-google/account',
+        key: 'openclaw-cli/google-workspace',
         label: 'Google Workspace',
         methods: [{ id: 'oauth', label: 'Sign in with Google' }],
         inFlight: false,
@@ -399,7 +399,7 @@ describe('connectors settings section', () => {
     })))
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'authorization-google/account',
+        key: 'openclaw-cli/google-workspace',
         label: 'Google Workspace',
         methods: [{ id: 'oauth', label: 'Sign in with Google' }],
         inFlight: false,
@@ -436,7 +436,7 @@ describe('connectors settings section', () => {
   it('marks only service-level live telemetry as connected', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'authorization-google/account',
+        key: 'openclaw-cli/google-workspace',
         label: 'Google Workspace',
         methods: [{ id: 'oauth', label: 'Sign in with Google' }],
         inFlight: false,
@@ -445,7 +445,7 @@ describe('connectors settings section', () => {
           kind: 'account' as const,
           provider: 'Google Workspace',
           connectors: [{
-            id: 'gmail', name: 'Gmail', description: 'Read and send mail.',
+            id: 'google-workspace', name: 'Google Workspace', description: 'Workspace tools.',
             category: 'Communication', accessible: true, enabled: true,
             installed: true, callable: true,
           }],
@@ -457,7 +457,7 @@ describe('connectors settings section', () => {
     renderHub(api)
     await screen.findAllByText('Connected · callable')
     fireEvent.click(screen.getByRole('button', { name: 'Connected' }))
-    expect(screen.getByText('Gmail')).toBeTruthy()
+    expect(screen.getByText('Google Workspace')).toBeTruthy()
     expect(screen.queryByText('Firebase')).toBeNull()
     expect(screen.queryByText('BigQuery')).toBeNull()
   })
@@ -653,6 +653,43 @@ describe('connectors settings section', () => {
     await waitFor(() => { expect(remove).toHaveBeenCalledWith({ entryId: 'x' }) })
   })
 
+  it('keeps GitHub Copilot separate from the GitHub repository connector', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [
+        {
+          key: 'llm-pi-ai/github-copilot',
+          label: 'GitHub Copilot',
+          methods: [{ id: 'oauth', label: 'GitHub Copilot' }],
+          inFlight: false,
+        },
+        {
+          key: 'openclaw-cli/github',
+          label: 'GitHub',
+          methods: [{ id: 'oauth', label: 'Authorize GitHub' }],
+          inFlight: false,
+          telemetry: {
+            kind: 'account' as const,
+            provider: 'GitHub',
+            connectors: [{
+              id: 'github', name: 'GitHub', description: 'Repositories.',
+              category: 'Development', accessible: true, enabled: true,
+              installed: true, callable: true,
+            }],
+          },
+        },
+      ] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    renderHub(api)
+
+    expect((await screen.findAllByText('GitHub')).length).toBeGreaterThan(0)
+    expect(screen.getByText('GitHub Copilot')).toBeTruthy()
+    expect(document.querySelectorAll('[data-connector-id="github"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-authorization-key="llm-pi-ai/github-copilot"]')).toHaveLength(1)
+    expect(document.querySelector('[data-authorization-key="openclaw-cli/github"]')).toBeNull()
+  })
+
   it('rejects unsafe connector links instead of opening a blank or custom-scheme window', () => {
     expect(safeExternalHref('javascript:alert(1)')).toBeUndefined()
     expect(safeExternalHref('http://example.com/setup')).toBeUndefined()
@@ -669,6 +706,6 @@ describe('connectors settings section', () => {
     const search = screen.getByRole('searchbox', { name: 'Search connectors' })
     fireEvent.change(search, { target: { value: 'hackathons' } })
     expect(screen.getByText('Devpost')).toBeTruthy()
-    expect(screen.queryByText('Gmail')).toBeNull()
+    expect(screen.queryByText('Google Workspace')).toBeNull()
   })
 })
