@@ -628,6 +628,19 @@ export const IconApiOutline14 = ({ size = 14, className }: IconProps) => (
   </svg>
 )
 
+/** Plug glyph for account and app connector navigation. */
+export const IconPlugOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path
+      d="M5 1.25V4.25M11 1.25V4.25M3.25 4.25H12.75V6.25C12.75 8.87335 10.6234 11 8 11C5.37665 11 3.25 8.87335 3.25 6.25V4.25ZM8 11V14.75"
+      stroke="currentColor"
+      strokeWidth="1.35"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+)
+
 /** ic_ds_personalization_outline_16 (figma extract) */
 export const IconPersonalizationOutline16 = ({ size = 16, className }: IconProps) => (
   <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none">
