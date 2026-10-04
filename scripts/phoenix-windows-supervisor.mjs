@@ -16,7 +16,7 @@ import {
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
-import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
+import { gitSafeDirectoryEnvironment, persistGitSafeDirectory } from './phoenix-git-safe-directory.mjs'
 import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
@@ -98,6 +98,21 @@ function repairDesktopShortcut() {
   }
 }
 
+function officialPhoenixRemote() {
+  const value = gitValue(root, ['remote', 'get-url', 'origin'])
+  if (value === undefined) return false
+  const normalized = value.replaceAll('\\', '/').replace(/\.git$/iu, '').toLowerCase()
+  return normalized === 'https://github.com/arisnachy/phoenix-harnes'
+    || normalized === 'git@github.com:arisnachy/phoenix-harnes'
+}
+
+function repairUserGitSafeDirectory() {
+  if (process.platform !== 'win32' || !officialPhoenixRemote()) return
+  if (!persistGitSafeDirectory(root)) {
+    console.error('[PHOENIX] warning: could not persist the exact Git safe.directory for this checkout; Phoenix internal Git remains process-scoped.')
+  }
+}
+
 function gitValue(cwd, args) {
   const result = spawnSync('git', args, {
     cwd,
@@ -119,6 +134,8 @@ function gitSucceeds(cwd, args) {
   })
   return result.status === 0
 }
+
+repairUserGitSafeDirectory()
 
 function preparedTargetIsDivergent(target) {
   const current = gitValue(root, ['rev-parse', 'HEAD'])
@@ -307,7 +324,7 @@ async function waitForPreparedUpdateAfterHostCrash() {
     : undefined
   console.error(
     '[PHOENIX UPDATE] Host exited while a stable update is still preparing; '
-    + 'keeping the updater alive instead of restarting the broken Host.',
+    + 'keeping Phoenix down briefly so the verified replacement can finish instead of restarting the broken Host.',
   )
 
   const deadline = Date.now() + CRASH_UPDATE_RECOVERY_WAIT_MS
@@ -317,9 +334,7 @@ async function waitForPreparedUpdateAfterHostCrash() {
       prepared !== undefined
       && (target === undefined || prepared.target === target)
       && preparedStageForTarget(prepared.target) !== undefined
-    ) {
-      return prepared
-    }
+    ) return prepared
 
     state = readUpdateState()
     if (state?.status === 'error' || state?.status === 'paused' || state?.status === 'off') {
@@ -1103,14 +1118,14 @@ function startWatcher() {
   })
 }
 
-function superviseWatcher(host) {
+function superviseWatcher() {
   let watcher
   let restartTimer
   let stopping = false
   let restartDelay = WATCHER_RESTART_DELAY_MS
 
   const scheduleRestart = (reason, launchedAt) => {
-    if (stopping || host.exitCode !== null || host.killed || restartTimer !== undefined) return
+    if (stopping || shutdownRequested || restartTimer !== undefined) return
     if (Date.now() - launchedAt >= WATCHER_STABLE_MS) restartDelay = WATCHER_RESTART_DELAY_MS
     const delay = restartDelay
     restartDelay = Math.min(WATCHER_MAX_RESTART_DELAY_MS, restartDelay * 2)
@@ -1123,7 +1138,7 @@ function superviseWatcher(host) {
   }
 
   const start = () => {
-    if (stopping || host.exitCode !== null || host.killed) return
+    if (stopping || shutdownRequested) return
     const child = startWatcher()
     watcher = child
     if (child === undefined) return
@@ -1137,7 +1152,7 @@ function superviseWatcher(host) {
     child.once('exit', (code, signal) => {
       if (watcher !== child) return
       watcher = undefined
-      if (stopping || host.exitCode !== null || host.killed) return
+      if (stopping || shutdownRequested) return
       const reason = code === 0
         ? 'unexpected clean exit'
         : code === null
@@ -1315,8 +1330,10 @@ if (startupFallbackMissing) {
   }
 }
 
+let watcherSupervisor = superviseWatcher()
 let finalCode = 0
 while (true) {
+  if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()
   const launchConfiguration = captureBootCriticalConfiguration()
   let lastObservedFingerprint = configurationFingerprint(launchConfiguration)
   const startedAt = Date.now()
@@ -1328,8 +1345,6 @@ while (true) {
   const hostExitPromise = new Promise(resolveExit => {
     host.once('exit', (code, signal) => resolveExit({ code, signal }))
   })
-  const watcherSupervisor = superviseWatcher(host)
-  let watcherStopped = false
   let healthyCheckpointWritten = false
   const stableTimer = setTimeout(() => {
     if (host.exitCode !== null || shutdownRequested) return
@@ -1352,7 +1367,7 @@ while (true) {
   if (hostEvent.kind === 'safe-restart' || hostEvent.kind === 'safe-update-handoff') {
     plannedHostRestart = true
     await watcherSupervisor.stop()
-    watcherStopped = true
+    watcherSupervisor = undefined
     if (hostEvent.kind === 'safe-update-handoff') {
       console.error('[PHOENIX UPDATE] replacement runtime is fully ready; handing off from the current Host.')
     } else {
@@ -1363,17 +1378,15 @@ while (true) {
   } else {
     hostExit = hostEvent.exit
     if (!shutdownRequested) {
-      // The stable updater is owned by this supervisor, not by the Host. When
-      // the Host dies during preparation, stopping the watcher here resets the
-      // same staging work on every 1s relaunch and the fixed stable version can
-      // never become active. Keep that one updater alive until it either
-      // produces a verified prepared marker or reports that preparation failed.
+      // The updater intentionally survives Host crashes. If it is already
+      // preparing a newer stable version, do not hammer the same broken Host
+      // every second while that repair is building. Wait for its verified
+      // prepared marker and take over from the external supervisor.
       crashPreparedUpdate = await waitForPreparedUpdateAfterHostCrash()
     }
   }
 
   clearTimeout(stableTimer)
-  if (!watcherStopped) await watcherSupervisor.stop()
   activeHost = undefined
 
   if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()
@@ -1385,6 +1398,8 @@ while (true) {
 
   if (crashPreparedUpdate !== undefined) {
     try {
+      await watcherSupervisor.stop()
+      watcherSupervisor = undefined
       console.error(
         '[PHOENIX UPDATE] prepared stable ' + crashPreparedUpdate.target.slice(0, 12)
         + ' completed while the Host was unavailable; activating its verified isolated runtime '
@@ -1403,6 +1418,10 @@ while (true) {
       )
       continue
     } catch (error) {
+      if (watcherSupervisor !== undefined) {
+        await watcherSupervisor.stop()
+        watcherSupervisor = undefined
+      }
       clearPreparedRecord()
       clearRestartRequest()
       clearHostRestartRequest()
@@ -1419,6 +1438,8 @@ while (true) {
 
   const requestedTarget = restartRequestTarget()
   if (requestedTarget !== undefined) {
+    await watcherSupervisor.stop()
+    watcherSupervisor = undefined
     const alreadyActive = healthyRuntimeForTarget(requestedTarget)
     if (alreadyActive !== undefined) {
       runtimeRoot = alreadyActive.path
@@ -1551,4 +1572,5 @@ while (true) {
   continue
 }
 
+if (watcherSupervisor !== undefined) await watcherSupervisor.stop()
 process.exitCode = finalCode
