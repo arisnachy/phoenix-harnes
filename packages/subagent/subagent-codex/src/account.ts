@@ -143,6 +143,56 @@ function categoryOf(app: JsonObject): string | undefined {
   return categories.find((value): value is string => typeof value === 'string' && value.length > 0)
 }
 
+/**
+ * Merge one sparse live Codex rate-limit notification into a full account
+ * snapshot. Null fields mean "unchanged" and never erase the last value.
+ */
+export function mergeCodexRateLimitsUpdate(
+  snapshot: CodexAccountSnapshot,
+  update: unknown,
+): CodexAccountSnapshot {
+  const next = maybeObject(update)
+  if (next === undefined) return snapshot
+  const response = maybeObject(snapshot.rateLimits) ?? {}
+  const buckets = maybeObject(response.rateLimitsByLimitId) ?? {}
+  const current = maybeObject(buckets.codex) ?? maybeObject(response.rateLimits) ?? {}
+  const merged: JsonObject = { ...current }
+  for (const [key, value] of Object.entries(next)) {
+    if (value !== undefined && value !== null) merged[key] = value
+  }
+  return {
+    ...snapshot,
+    rateLimits: {
+      ...response,
+      rateLimitsByLimitId: { ...buckets, codex: merged },
+    },
+  }
+}
+
+let observedCodexRateLimits:
+  | { readonly value: JsonObject; readonly at: number }
+  | undefined
+
+/** Observe the official app-server account/rateLimits/updated notification. */
+export function observeCodexRateLimitsUpdate(update: unknown): void {
+  const next = maybeObject(update)
+  if (next === undefined) return
+  const merged: JsonObject = { ...(observedCodexRateLimits?.value ?? {}) }
+  for (const [key, value] of Object.entries(next)) {
+    if (value !== undefined && value !== null) merged[key] = value
+  }
+  observedCodexRateLimits = { value: merged, at: Date.now() }
+}
+
+function withObservedCodexRateLimits(
+  snapshot: CodexAccountSnapshot,
+  sampledAfter: number,
+): CodexAccountSnapshot {
+  const observed = observedCodexRateLimits
+  if (observed === undefined || observed.at <= sampledAfter) return snapshot
+  return mergeCodexRateLimitsUpdate(snapshot, observed.value)
+}
+
 function connectorTelemetry(
   appsValue: unknown,
   installedValue: unknown,
@@ -607,7 +657,11 @@ export function registerCodexAccountFlow(
   config: CodexAccountBridgeConfig,
 ): () => void {
   const lifecycle = new AbortController()
-  let cached: { readonly snapshot: CodexAccountSnapshot; readonly at: number } | undefined
+  let cached: {
+    readonly snapshot: CodexAccountSnapshot
+    readonly at: number
+    readonly probeStartedAt: number
+  } | undefined
   let failed: { readonly error: unknown; readonly at: number } | undefined
   let inFlightSnapshot: Promise<CodexAccountSnapshot> | undefined
 
@@ -628,7 +682,7 @@ export function registerCodexAccountFlow(
   const inspectSnapshot = async (signal: AbortSignal): Promise<CodexAccountSnapshot> => {
     const now = Date.now()
     if (cached !== undefined && now - cached.at < ACCOUNT_INSPECTION_TTL_MS) {
-      return cached.snapshot
+      return withObservedCodexRateLimits(cached.snapshot, cached.probeStartedAt)
     }
 
     if (inFlightSnapshot === undefined
@@ -640,9 +694,10 @@ export function registerCodexAccountFlow(
         lifecycle.signal,
         AbortSignal.timeout(ACCOUNT_PROBE_TIMEOUT_MS),
       ])
+      const probeStartedAt = Date.now()
       const job = readCodexAccountSnapshot(ctx, config, probeSignal).then(
         (snapshot) => {
-          cached = { snapshot, at: Date.now() }
+          cached = { snapshot, at: Date.now(), probeStartedAt }
           failed = undefined
           return snapshot
         },
@@ -664,7 +719,9 @@ export function registerCodexAccountFlow(
     // Once Phoenix has one good account snapshot, never make UI telemetry wait
     // behind a refresh/backfill. Serve the last sanitized snapshot immediately
     // while the single shared native probe refreshes it in the background.
-    if (cached !== undefined) return cached.snapshot
+    if (cached !== undefined) {
+      return withObservedCodexRateLimits(cached.snapshot, cached.probeStartedAt)
+    }
     if (inFlightSnapshot !== undefined) {
       return await waitForSharedSnapshot(inFlightSnapshot, signal)
     }
@@ -675,6 +732,7 @@ export function registerCodexAccountFlow(
   const invalidateInspection = (): void => {
     cached = undefined
     failed = undefined
+    observedCodexRateLimits = undefined
   }
 
   const unregister = ctx.authorization.registerFlow({
