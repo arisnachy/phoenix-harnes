@@ -61,6 +61,7 @@ export const muxFrameSchema = z.discriminatedUnion('type', [
       id: messageIdSchema,
       placement: z.union([z.literal('queued'), z.literal('steering'), z.literal('context')]),
       message: messageSchema,
+      anchorSeq: z.number().int().nonnegative().optional(),
     })),
   }),
   z.object({ type: z.literal('session/jobs'), sessionId: sessionIdSchema, jobs: z.array(taskViewSchema) }),
