@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { ContentBlock } from '@phoenix-ai/dsh-llm/types'
 import { PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
@@ -19,10 +20,26 @@ interface OrderedChatNode {
   readonly key: string
   readonly kind: string
   readonly data: unknown
+  /** Durable event ordering position of this rendered node. */
+  readonly anchorSeq: number
+}
+
+interface PendingSteeringFlowItem {
+  /** Stable pending occurrence identity. */
+  readonly key: string
+  readonly content: readonly ContentBlock[]
+  /** Durable inbox-insertion event seq; absent only for legacy/unanchored frames. */
+  readonly anchorSeq?: number
 }
 
 interface ToolActivityFlowProps extends SeatProps {
   readonly nodes: readonly OrderedChatNode[]
+  /**
+   * Host-accepted steering that is not durable as user/message yet. Anchored
+   * items are interleaved at their true session-event boundary so later Kira
+   * output can never render above the user's interjection.
+   */
+  readonly pendingSteering?: readonly PendingSteeringFlowItem[] | undefined
   /** Ordinary prompt admitted locally but not yet present in the durable transcript. */
   readonly optimisticSubmit?: { readonly text: string } | undefined
   readonly turnStatus: {
@@ -55,6 +72,11 @@ type FlowItem =
     readonly kind: 'images'
     readonly key: string
     readonly images: readonly { readonly attachment: ImageAttachmentRef }[]
+  }
+  | {
+    readonly kind: 'pending-steering'
+    readonly key: string
+    readonly content: readonly ContentBlock[]
   }
 
 function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
@@ -120,10 +142,14 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
   })
 }
 
-function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
+function buildFlow(
+  nodes: readonly OrderedChatNode[],
+  pendingSteering: readonly PendingSteeringFlowItem[],
+): FlowItem[] {
   const flow: FlowItem[] = []
   let pending: ActivityItem[] = []
   let pendingAnchorKey: string | undefined
+  let steeringIndex = 0
 
   const flush = (avoidAnchorKey?: string): void => {
     const first = pending[0]
@@ -139,7 +165,22 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     pendingAnchorKey = undefined
   }
 
+  const flushSteeringBefore = (anchorSeq: number): void => {
+    while (steeringIndex < pendingSteering.length) {
+      const steering = pendingSteering[steeringIndex]
+      if (steering === undefined || steering.anchorSeq === undefined || steering.anchorSeq >= anchorSeq) return
+      flush()
+      flow.push({
+        kind: 'pending-steering',
+        key: `pending-steering:${steering.key}`,
+        content: steering.content,
+      })
+      steeringIndex += 1
+    }
+  }
+
   for (const node of nodes) {
+    flushSteeringBefore(node.anchorSeq)
     // Connector authorization is a user action, not background tool telemetry.
     // Keep its compact Connect/Reconnect card directly in the chat flow instead
     // of burying it inside the collapsed Tools disclosure.
@@ -179,6 +220,19 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   }
 
   flush()
+  // Items newer than every durable node (and legacy frames without an anchor)
+  // belong at the current tail. FIFO order is already the Host inbox order.
+  while (steeringIndex < pendingSteering.length) {
+    const steering = pendingSteering[steeringIndex]
+    if (steering !== undefined) {
+      flow.push({
+        kind: 'pending-steering',
+        key: `pending-steering:${steering.key}`,
+        content: steering.content,
+      })
+    }
+    steeringIndex += 1
+  }
   return flow
 }
 
@@ -349,13 +403,17 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
 /**
  * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
  * Visible assistant prose precedes its technical activity, and the running status precedes a trailing Tools group.
- * An ordinary locally admitted send stays at the transcript tail ahead of the current turn status until its durable user node arrives.
- * Running Tool rows stay live above the disclosure and join history once settled.
+ * An ordinary locally admitted send stays at the transcript tail until Host admission.
+ * Host-accepted steering is then interleaved at its durable inbox-insertion boundary, so later
+ * assistant/tool output cannot jump ahead of the user's interjection. Running Tool rows stay
+ * live above the disclosure and join history once settled.
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
-export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
-  const flow = useMemo(() => buildFlow(nodes), [nodes])
+export function ToolActivityFlow({
+  nodes, pendingSteering = [], optimisticSubmit, turnStatus, ...seatProps
+}: ToolActivityFlowProps) {
+  const flow = useMemo(() => buildFlow(nodes, pendingSteering), [nodes, pendingSteering])
   const hasOptimisticSubmit = optimisticSubmit !== undefined && optimisticSubmit.text !== ''
   const statusBeforeIndex = hasOptimisticSubmit || turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
     ? -1
@@ -380,13 +438,21 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
                   {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
                 </div>
               )
-              : (
-                <ToolActivityGroup
-                  items={item.items}
-                  anchorKey={item.anchorKey}
-                  {...seatProps}
-                />
-              )}
+              : item.kind === 'pending-steering'
+                ? (
+                  <PendingSteeringBubble
+                    content={item.content}
+                    renderMessageImages={seatProps.renderMessageImages}
+                    t={seatProps.t}
+                  />
+                )
+                : (
+                  <ToolActivityGroup
+                    items={item.items}
+                    anchorKey={item.anchorKey}
+                    {...seatProps}
+                  />
+                )}
         </Fragment>
       ))}
       {hasOptimisticSubmit && (
