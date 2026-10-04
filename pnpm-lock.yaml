@@ -4104,6 +4104,9 @@ importers:
       '@phoenix-ai/dsh-llm':
         specifier: workspace:^
         version: link:../../llm/llm
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../tools/tools
 
   packages/credentials/credentials:
     devDependencies:
