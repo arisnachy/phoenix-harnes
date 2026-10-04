@@ -13,12 +13,25 @@ const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrp
 
 describe('PHOENIX Windows updater supervisor resilience', () => {
   it('retries failed updater watchers with capped backoff instead of a one-second hot loop', () => {
-    expect(source).toContain('function superviseWatcher(host)')
+    expect(source).toContain('function superviseWatcher()')
     expect(source).toContain('WATCHER_MAX_RESTART_DELAY_MS')
     expect(source).toContain('WATCHER_STABLE_MS')
     expect(source).toContain('scheduleRestart(reason, launchedAt)')
     expect(source).toContain('restartDelay = Math.min(WATCHER_MAX_RESTART_DELAY_MS, restartDelay * 2)')
     expect(source).toContain('restartTimer.unref?.()')
+  })
+
+  it('keeps the updater watcher alive across unexpected Host crashes', () => {
+    expect(source).toContain('function superviseWatcher()')
+    expect(source).toContain('if (stopping || shutdownRequested || restartTimer !== undefined) return')
+    expect(source).toContain('if (stopping || shutdownRequested) return')
+    expect(source).not.toContain('host.exitCode !== null || host.killed')
+    expect(source).toContain('let watcherSupervisor = superviseWatcher()')
+    expect(source).toContain('if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()')
+    expect(source).toContain('watcherSupervisor = undefined')
+    expect(source).toContain('const requestedTarget = restartRequestTarget()')
+    expect(source).toContain('if (requestedTarget !== undefined) {\n    await watcherSupervisor.stop()\n    watcherSupervisor = undefined')
+    expect(source).toContain('if (watcherSupervisor !== undefined) await watcherSupervisor.stop()')
   })
 
   it('respawns a watcher that exits while the Host is still alive, even with code 0', () => {

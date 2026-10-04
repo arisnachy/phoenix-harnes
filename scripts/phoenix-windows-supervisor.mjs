@@ -1031,14 +1031,14 @@ function startWatcher() {
   })
 }
 
-function superviseWatcher(host) {
+function superviseWatcher() {
   let watcher
   let restartTimer
   let stopping = false
   let restartDelay = WATCHER_RESTART_DELAY_MS
 
   const scheduleRestart = (reason, launchedAt) => {
-    if (stopping || host.exitCode !== null || host.killed || restartTimer !== undefined) return
+    if (stopping || shutdownRequested || restartTimer !== undefined) return
     if (Date.now() - launchedAt >= WATCHER_STABLE_MS) restartDelay = WATCHER_RESTART_DELAY_MS
     const delay = restartDelay
     restartDelay = Math.min(WATCHER_MAX_RESTART_DELAY_MS, restartDelay * 2)
@@ -1051,7 +1051,7 @@ function superviseWatcher(host) {
   }
 
   const start = () => {
-    if (stopping || host.exitCode !== null || host.killed) return
+    if (stopping || shutdownRequested) return
     const child = startWatcher()
     watcher = child
     if (child === undefined) return
@@ -1065,7 +1065,7 @@ function superviseWatcher(host) {
     child.once('exit', (code, signal) => {
       if (watcher !== child) return
       watcher = undefined
-      if (stopping || host.exitCode !== null || host.killed) return
+      if (stopping || shutdownRequested) return
       const reason = code === 0
         ? 'unexpected clean exit'
         : code === null
@@ -1243,8 +1243,10 @@ if (startupFallbackMissing) {
   }
 }
 
+let watcherSupervisor = superviseWatcher()
 let finalCode = 0
 while (true) {
+  if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()
   const launchConfiguration = captureBootCriticalConfiguration()
   let lastObservedFingerprint = configurationFingerprint(launchConfiguration)
   const startedAt = Date.now()
@@ -1256,8 +1258,6 @@ while (true) {
   const hostExitPromise = new Promise(resolveExit => {
     host.once('exit', (code, signal) => resolveExit({ code, signal }))
   })
-  const watcherSupervisor = superviseWatcher(host)
-  let watcherStopped = false
   let healthyCheckpointWritten = false
   const stableTimer = setTimeout(() => {
     if (host.exitCode !== null || shutdownRequested) return
@@ -1279,7 +1279,7 @@ while (true) {
   if (hostEvent.kind === 'safe-restart' || hostEvent.kind === 'safe-update-handoff') {
     plannedHostRestart = true
     await watcherSupervisor.stop()
-    watcherStopped = true
+    watcherSupervisor = undefined
     if (hostEvent.kind === 'safe-update-handoff') {
       console.error('[PHOENIX UPDATE] replacement runtime is fully ready; handing off from the current Host.')
     } else {
@@ -1292,7 +1292,6 @@ while (true) {
   }
 
   clearTimeout(stableTimer)
-  if (!watcherStopped) await watcherSupervisor.stop()
   activeHost = undefined
 
   if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()
@@ -1304,6 +1303,8 @@ while (true) {
 
   const requestedTarget = restartRequestTarget()
   if (requestedTarget !== undefined) {
+    await watcherSupervisor.stop()
+    watcherSupervisor = undefined
     const alreadyActive = healthyRuntimeForTarget(requestedTarget)
     if (alreadyActive !== undefined) {
       runtimeRoot = alreadyActive.path
@@ -1436,4 +1437,5 @@ while (true) {
   continue
 }
 
+if (watcherSupervisor !== undefined) await watcherSupervisor.stop()
 process.exitCode = finalCode
