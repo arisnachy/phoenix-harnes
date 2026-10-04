@@ -5,6 +5,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import CredentialsLocal from '@phoenix-ai/dsh-credentials-local'
+import AuthorizationService from '@phoenix-ai/dsh-authorization'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime from '@phoenix-ai/dsh-tools'
 import McpConnectorRegistry from '@phoenix-ai/dsh-mcp-connector-registry/src/index.ts'
@@ -472,6 +473,38 @@ describe('apply (plugin lifecycle)', () => {
     } finally {
       delete process.env.X_TEST_CLIENT_ID
     }
+  })
+
+  it('defers an explicit OAuth remote until authorization services are available', async () => {
+    const httpConfig: Config = {
+      transport: 'streamable-http',
+      serverName: 'late-oauth',
+      url: 'https://mcp.example.com/oauth',
+      headers: {},
+      oauth: true,
+      toolCallTimeoutMs: 30_000,
+      failOnStartupError: false,
+      reconnect: { enabled: false },
+    }
+
+    await apply(ctx, httpConfig)
+    expect(mockConnect).not.toHaveBeenCalled()
+
+    await ctx.plugin(CredentialsLocal, {
+      path: `${process.cwd()}/.tmp-mcp-client-oauth-${process.pid}.yaml`,
+      watch: false,
+    })
+    await ctx.plugin(AuthorizationService)
+
+    await vi.waitFor(() => { expect(mockConnect).toHaveBeenCalled() })
+    await vi.waitFor(() => {
+      expect(ctx.authorization.list()).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          key: 'mcp-client/late-oauth',
+          methods: [{ id: 'oauth', label: 'Authorize late-oauth' }],
+        }),
+      ]))
+    })
   })
 
   it('uses streamable-http config path', async () => {
