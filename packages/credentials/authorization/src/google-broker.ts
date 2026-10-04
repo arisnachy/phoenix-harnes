@@ -18,6 +18,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialKey, credentialRef, type CredentialKey } from '@phoenix-ai/dsh-credentials'
+import { defineTool } from '@phoenix-ai/dsh-tools'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
 
 /** Secret-free durable marker for the process-local Google account. */
@@ -78,6 +79,9 @@ interface ServiceSpec {
   description: string
   category: string
 }
+
+const GOOGLE_TOOL_BODY_LIMIT = 200_000
+const GOOGLE_TOOL_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 
 const SERVICES: Readonly<Record<GoogleWorkspaceService, ServiceSpec>> = {
   gmail: {
@@ -484,6 +488,105 @@ export default class GoogleApiBroker extends Service {
       disconnect: () => this.disconnect().then(() => undefined),
       run: session => this.authorize(session),
     }))
+
+    // The OAuth broker already owns the destination and scope boundary, so the
+    // model-facing tool can expose Google Workspace without a second MCP OAuth
+    // stack or a duplicated token store. The tools service is optional here:
+    // headless compositions can mount authorization without model tools.
+    ctx.inject(['tools'], (toolCtx) => {
+      toolCtx.tools.register(defineTool({
+        name: 'google_workspace_request',
+        description: 'Call an official Google Workspace API through the user-authorized PHOENIX Google broker. '
+          + 'The destination is restricted to Gmail, Calendar, Drive, Docs, Sheets, Slides, or Contacts; '
+          + 'the path must be relative to that service API and authentication headers cannot be supplied. '
+          + 'Useful examples: Gmail search users/me/messages?q=is:unread, Gmail read users/me/messages/{id}?format=full, '
+          + 'Calendar calendars/primary/events, Drive files, Docs documents/{id}, Sheets spreadsheets/{id}/values/{range}.',
+        parameters: {
+          service: {
+            type: 'string',
+            required: true,
+            description: 'One of gmail, calendar, drive, docs, sheets, slides, contacts.',
+          },
+          path: {
+            type: 'string',
+            required: true,
+            description: 'Relative REST path below the selected Google service root, including query parameters when needed.',
+          },
+          method: {
+            type: 'string',
+            description: 'HTTP method: GET, POST, PUT, PATCH, or DELETE. Defaults to GET.',
+          },
+          body: {
+            type: 'string',
+            description: 'Optional request body. For normal API writes, pass JSON text.',
+          },
+          content_type: {
+            type: 'string',
+            description: 'Optional Content-Type for a body. Defaults to application/json.',
+          },
+          upload: {
+            type: 'boolean',
+            description: 'Use the fixed upload endpoint for Gmail or Drive when the API operation requires it.',
+          },
+        },
+        output: {
+          schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              status: { type: 'integer', required: true },
+              ok: { type: 'boolean', required: true },
+              content_type: { type: 'string' },
+              body: { type: 'string', required: true },
+              truncated: { type: 'boolean', required: true },
+            },
+          },
+          render: (_args, value: {
+            status: number
+            ok: boolean
+            content_type?: string
+            body: string
+            truncated: boolean
+          }) => [{ type: 'text' as const, text: JSON.stringify(value) }],
+        },
+        execute: async (args, exec) => {
+          const service = args.service as GoogleWorkspaceService
+          if (!Object.hasOwn(SERVICES, service)) {
+            throw new AuthorizationError(
+              `Unknown Google Workspace service "${String(args.service)}"`,
+              'GOOGLE_SERVICE_DENIED',
+            )
+          }
+          const method = (args.method ?? 'GET').trim().toUpperCase()
+          if (!GOOGLE_TOOL_METHODS.has(method)) {
+            throw new AuthorizationError(
+              `Google Workspace method "${method}" is not allowed`,
+              'GOOGLE_METHOD_DENIED',
+            )
+          }
+          const body = args.body
+          const response = await this.request({
+            service,
+            path: args.path,
+            method,
+            ...(body === undefined ? {} : {
+              body,
+              headers: { 'content-type': args.content_type ?? 'application/json' },
+            }),
+            ...(args.upload === true ? { upload: true } : {}),
+            signal: exec.signal,
+          })
+          const truncated = response.body.length > GOOGLE_TOOL_BODY_LIMIT
+          return {
+            status: response.status,
+            ok: response.ok,
+            ...(response.contentType === undefined ? {} : { content_type: response.contentType }),
+            body: truncated ? response.body.slice(0, GOOGLE_TOOL_BODY_LIMIT) : response.body,
+            truncated,
+          }
+        },
+      }))
+    })
   }
 
   /**
