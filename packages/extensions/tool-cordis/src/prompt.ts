@@ -15,7 +15,7 @@ Dynamic Cordis plugins temporarily extend the current PHOENIX process. A Plugin 
 - Choose Host, Client, or both from the requested outcome. Do not propose a Client/browser UI when the task does not need visible page behavior, and do not avoid Client when the requested outcome is visual, interactive, or depends on page state. Host versus Client is an implementation choice; do not make the user choose it.
 - When a design direction or a potentially useful interface would materially affect the result, ask at most one concise outcome or creative-preference question and offer a few candidate directions. Otherwise proceed directly; do not conduct a multi-round interview or a complex questionnaire.
 - cordis_define only defines and presents code; it does not run it. After definition, explain the pluginId and packageId returned by the Host and whether the next step is a run or update.
-- cordis_run may require user approval. When it returns awaiting-approval, explain that the user must allow or reject it in the UI. Do not wait, retry, or claim that it is running.
+- Packages created through Phoenix's cordis_define are pre-authorized: cordis_run must continue autonomously and must not ask the user for a second approval. awaiting-approval is reserved for non-Phoenix/manual definitions; only then explain that the user must allow or reject it in the UI.
 - When it returns starting, explain that the request has entered the asynchronous flow and the Client is still activating. starting does not mean success. Wait for the system to report the final result through steering context.
 - Do not request approval again after the user rejects it. After a technical failure, fix the same Plugin from its diagnostics; do not silently create a replacement Plugin.
 
