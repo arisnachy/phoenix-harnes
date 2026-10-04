@@ -443,6 +443,42 @@ function pruneStaleWorkspaceShells(stage) {
   }
 }
 
+function missingTrackedFiles(stage, limit = 32) {
+  const listed = git(stage, ['ls-files'], { allowFailure: true })
+  if (!listed.ok) throw new Error(`could not enumerate tracked files in staging worktree: ${listed.stderr || 'git ls-files failed'}`)
+
+  const missing = []
+  for (const relativePath of listed.stdout.split(/\r?\n/u)) {
+    if (relativePath.length === 0) continue
+    if (existsSync(join(stage, relativePath))) continue
+    missing.push(relativePath)
+    if (missing.length >= limit) break
+  }
+  return missing
+}
+
+function ensureStagingMaterialized(stage, target) {
+  let missing = missingTrackedFiles(stage)
+  if (missing.length === 0) return
+
+  console.error(
+    `[PHOENIX UPDATE] staging worktree is incomplete (${String(missing.length)}+ tracked file(s) missing); restoring it before build...`,
+  )
+  // A stale sparse-checkout/skip-worktree state can leave a linked worktree
+  // partially materialized even when HEAD/index are correct. Disable it for the
+  // updater-only worktree, then force the target tree back onto disk.
+  git(stage, ['sparse-checkout', 'disable'], { allowFailure: true })
+  git(stage, ['reset', '--hard', target], { inherit: true })
+
+  missing = missingTrackedFiles(stage)
+  if (missing.length > 0) {
+    throw new Error(
+      `staging worktree remains incomplete after repair: ${missing.join(', ')}`,
+    )
+  }
+  console.error('[PHOENIX UPDATE] staging worktree materialization repaired successfully.')
+}
+
 function ensureStagingWorktree(root, target) {
   const stage = stageDirectory(root)
   if (existsSync(stage)) {
@@ -453,10 +489,12 @@ function ensureStagingWorktree(root, target) {
     git(stage, ['reset', '--hard', target], { inherit: true })
     git(stage, ['clean', '-fd'], { allowFailure: true })
     pruneStaleWorkspaceShells(stage)
+    ensureStagingMaterialized(stage, target)
     return stage
   }
   console.error(`[PHOENIX UPDATE] creating persistent staging worktree ${stage}`)
   git(root, ['worktree', 'add', '--detach', '--force', stage, target], { inherit: true })
+  ensureStagingMaterialized(stage, target)
   return stage
 }
 
