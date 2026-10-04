@@ -615,6 +615,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   McpConnectorRegistration: 'MCP connector registration handle is owned by packages/mcp/mcp-registry/README.md',
   McpConnectorRegistrationInput: 'MCP connector registration input is owned by packages/mcp/mcp-registry/README.md',
   McpConnectorListener: 'MCP connector lifecycle listener is owned by packages/mcp/mcp-registry/README.md',
+  GoogleApiRequest: 'Google Workspace broker request contract is owned by packages/credentials/authorization/src/google-broker.ts',
+  GoogleApiResponse: 'Google Workspace broker response contract is owned by packages/credentials/authorization/src/google-broker.ts',
   BeginCommandRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   InsertReferenceRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
   ConsumeTokenRequest: 'event-local request contract is owned by packages/client/ui-input-trigger/src/types.ts',
