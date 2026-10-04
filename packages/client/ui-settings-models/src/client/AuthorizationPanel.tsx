@@ -496,7 +496,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
               ? { text: t('apiKeyStatus'), className: '' }
               : account !== undefined
                 ? { text: t('availableStatus'), className: '' }
-                : { text: t('officialAdapterUnavailableStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
+                : definition.registryName !== undefined
+                  ? { text: t('officialInstallAvailableStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
+                  : { text: t('officialAdapterUnavailableStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
   const oauthAccount = account !== undefined && account.methods.some(candidate => candidate.id === 'oauth')
     ? account
     : undefined
