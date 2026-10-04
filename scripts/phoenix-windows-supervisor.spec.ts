@@ -185,6 +185,17 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('continue')
   })
 
+  it('lets a stable update finish and self-activate when the Host crashes before its bridge can run', () => {
+    expect(source).toContain('function readUpdateState()')
+    expect(source).toContain('async function waitForPreparedUpdateAfterHostCrash()')
+    expect(source).toContain("state?.status !== 'preparing'")
+    expect(source).toContain('Host exited while a stable update is still preparing')
+    expect(source).toContain('crashPreparedUpdate = await waitForPreparedUpdateAfterHostCrash()')
+    expect(source).toContain('activatePreparedRuntime(crashPreparedUpdate.target)')
+    expect(source).toContain('without waiting for a Host-side restart bridge')
+    expect(source).toContain('relaunching PHOENIX from the verified runtime')
+  })
+
   it('repairs missing compiled profile artifacts even when dump-config does not load the broken plugin', () => {
     expect(source).toContain('function profileFallbackHasMissingRuntimeArtifact()')
     expect(source).toContain('PROFILE_REQUIRED_RUNTIME_PACKAGES')
