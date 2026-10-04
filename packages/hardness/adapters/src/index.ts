@@ -237,7 +237,19 @@ function requiredServices(ctx: Context) {
   const authorization = ctx.get('authorization')
   const mcpConnectors = ctx.get('mcpConnectors')
   const pluginInventory = (ctx.get as (name: string) => unknown)('pluginInventory') as
-    | (McpRegistryDiscoveryService & Partial<McpRegistryInstallerService & BinanceAgentOsHostService & XMcpHostService>)
+    | (McpRegistryDiscoveryService
+      & Partial<McpRegistryInstallerService & BinanceAgentOsHostService & XMcpHostService>
+      & Partial<{
+        openClawConnectorState(): Promise<{
+          connectors: readonly {
+            id: 'google-workspace' | 'github'
+            source: 'openclaw'
+            skill: 'gog' | 'github'
+            runtime: 'gog' | 'gh'
+            status: 'ready' | 'auth-required' | 'missing-runtime' | 'failed'
+          }[]
+        }>
+      }>)
     | undefined
   if (hardness === undefined || tools === undefined || skills === undefined
     || agents === undefined || approval === undefined || systemPrompt === undefined) {
@@ -366,7 +378,11 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory/discovery
       // tools; the host remains the sole owner of the HARDNESS capability index.
-      disposers.push(ctx.tools.register(createConnectorListTool(authorization, mcpConnectors)))
+      disposers.push(ctx.tools.register(createConnectorListTool(
+        authorization,
+        mcpConnectors,
+        pluginInventory?.openClawConnectorState === undefined ? undefined : pluginInventory,
+      )))
       disposers.push(ctx.tools.register(createConnectorDiscoverTool(mcpConnectors, pluginInventory)))
       if (pluginInventory?.installMcpRegistryServer !== undefined) {
         disposers.push(ctx.tools.register(createConnectorInstallTool(approval, pluginInventory as McpRegistryInstallerService)))
