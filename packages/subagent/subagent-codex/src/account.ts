@@ -23,8 +23,13 @@ import { codexAccountEnvironment, codexMetadataAppServerArgv } from './run.ts'
 /** Credential marker for the Codex-managed ChatGPT account session. */
 export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
 
-/** Keep Settings/telemetry re-renders from spawning a Codex app-server storm. */
-const ACCOUNT_INSPECTION_TTL_MS = 60_000
+/**
+ * Keep Settings/telemetry re-renders from spawning a Codex app-server storm
+ * while still letting the visible quota converge within tens of seconds after
+ * real Codex usage. The UI may poll the cheap authorization catalog more often;
+ * this TTL bounds native app-server probes to at most twice per minute.
+ */
+const ACCOUNT_INSPECTION_TTL_MS = 30_000
 /**
  * A failed native probe is retried later, not once per UI subscriber/render.
  * Native Codex can spend its whole 30 s startup gate on a state-db backfill;
