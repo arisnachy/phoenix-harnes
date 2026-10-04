@@ -146,6 +146,9 @@ function categoryOf(app: JsonObject): string | undefined {
 /**
  * Merge one sparse live Codex rate-limit notification into a full account
  * snapshot. Null fields mean "unchanged" and never erase the last value.
+ * @param snapshot - last authoritative account snapshot.
+ * @param update - sparse rate-limit payload from Codex app-server.
+ * @returns account snapshot with the newest known Codex quota windows.
  */
 export function mergeCodexRateLimitsUpdate(
   snapshot: CodexAccountSnapshot,
@@ -173,7 +176,10 @@ let observedCodexRateLimits:
   | { readonly value: JsonObject; readonly at: number }
   | undefined
 
-/** Observe the official app-server account/rateLimits/updated notification. */
+/**
+ * Observe the official app-server account/rateLimits/updated notification.
+ * @param update - sparse rate-limit payload emitted by Codex.
+ */
 export function observeCodexRateLimitsUpdate(update: unknown): void {
   const next = maybeObject(update)
   if (next === undefined) return
