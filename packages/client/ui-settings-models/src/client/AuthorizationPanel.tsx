@@ -447,18 +447,24 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, connected, t, onAuthorize, onConfigure, onFind, pending }: {
+function CatalogCard({ definition, live, account, mcpRuntime, managed, connected, t, onAuthorize, onConfigure,
+  onFindOfficial, onFindRegistry, onRepair, onRemove, pending, repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
   mcpRuntime?: McpConnectorRuntimeView | undefined
-  managed?: boolean
+  managed?: ManagedMcpConnectorView | undefined
   connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
   onConfigure?: (() => void) | undefined
-  onFind?: (() => void) | undefined
+  onFindOfficial?: (() => void) | undefined
+  onFindRegistry?: (() => void) | undefined
+  onRepair?: ((connector: ManagedMcpConnectorView) => void) | undefined
+  onRemove?: ((connector: ManagedMcpConnectorView) => void) | undefined
   pending: boolean
+  repairing: boolean
+  removing: boolean
 }): ReactNode {
   const connectedByAccount = accountGrantConnectsCatalogEntry(account)
   const installUrl = safeExternalHref(live?.installUrl)
@@ -473,23 +479,29 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
           ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
           : mcpRuntime?.status === 'disconnected'
             ? { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
-            : managed === true
-              ? { text: t('jevConfiguredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
+            : managed !== undefined
+              ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
               : undefined
   const status = liveStatus ?? mcpStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
       ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
-      : definition.mode === 'mcp'
-        ? { text: definition.id === 'jev' ? t('jevOptionalStatus') : t('mcpReadyStatus'), className: '' }
-        : definition.mode === 'api-key'
-          ? { text: t('apiKeyStatus'), className: '' }
-          : account !== undefined
-            ? { text: t('availableStatus'), className: '' }
-            : { text: t('adapterNeededStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
+      : definition.provenance === 'private-owner'
+        ? { text: t('privateOwnerStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
+        : definition.mode === 'native'
+          ? { text: t('availableStatus'), className: '' }
+          : definition.mode === 'mcp'
+            ? { text: t('mcpReadyStatus'), className: '' }
+            : definition.mode === 'api-key'
+              ? { text: t('apiKeyStatus'), className: '' }
+              : account !== undefined
+                ? { text: t('availableStatus'), className: '' }
+                : { text: t('officialAdapterUnavailableStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
   const oauthAccount = account !== undefined && account.methods.some(candidate => candidate.id === 'oauth')
     ? account
     : undefined
+  const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed')
+  const canRepair = brokenManaged && managed?.source !== undefined && onRepair !== undefined
   return (
     <article className={connectorStyles['connectorCard']} data-connector-id={definition.id}>
       <div className={connectorStyles['connectorTop']}>
@@ -512,41 +524,59 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
-        {onConfigure !== undefined ? (
-          <button className={connectorStyles['connectorPrimaryButton']} type="button" disabled={pending} onClick={onConfigure}>
-            {t('configure')}
-          </button>
-        ) : installUrl !== undefined ? (
-          <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
-        ) : oauthAccount !== undefined && !connectedByAccount ? (
-          <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
-            {connected ? t('reauthorize') : t('authorize')}
-          </button>
-        ) : !connected && onFind !== undefined && definition.mode !== 'native' ? (
-          <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFind}>
-            {t('findConnector')}
-          </button>
-        ) : null}
+        <div className={connectorStyles['connectorActions']}>
+          {onConfigure !== undefined ? (
+            <button className={connectorStyles['connectorPrimaryButton']} type="button" disabled={pending} onClick={onConfigure}>
+              {t('configure')}
+            </button>
+          ) : installUrl !== undefined ? (
+            <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
+          ) : null}
+          {oauthAccount !== undefined && !connectedByAccount ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
+              {connected ? t('reauthorize') : t('authorize')}
+            </button>
+          ) : null}
+          {canRepair ? (
+            <button
+              className={hubStyles['compactButton']}
+              type="button"
+              disabled={pending || repairing || removing}
+              onClick={() => { if (managed !== undefined) onRepair?.(managed) }}
+            >
+              {repairing ? t('repairing') : t('repair')}
+            </button>
+          ) : null}
+          {managed !== undefined && onRemove !== undefined ? (
+            <button
+              className={connectorStyles['connectorSecondaryButton']}
+              type="button"
+              disabled={pending || repairing || removing}
+              onClick={() => { onRemove(managed) }}
+            >
+              {removing ? t('uninstalling') : t('uninstall')}
+            </button>
+          ) : null}
+          {managed === undefined && oauthAccount === undefined && definition.registryName !== undefined && onFindOfficial !== undefined ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
+              {t('findOfficialConnector')}
+            </button>
+          ) : null}
+          {managed === undefined && oauthAccount === undefined && definition.provenance === 'registry-listed' && onFindRegistry !== undefined ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindRegistry}>
+              {t('findConnector')}
+            </button>
+          ) : null}
+        </div>
       </div>
     </article>
   )
 }
 
 function registryCandidateLogo(candidate: McpRegistryCandidateView): string | undefined {
-  const registryIcon = candidate.icons
+  return candidate.icons
     .map(icon => safeExternalHref(icon.src))
     .find((src): src is string => src !== undefined)
-  if (registryIcon !== undefined) return registryIcon
-
-  const haystack = normalize(`${candidate.name} ${candidate.title}`)
-  const catalogMatch = CONNECTOR_CATALOG.find((definition) => {
-    const aliases = [definition.id, definition.name, ...(definition.aliases ?? [])]
-    return aliases.some((alias) => {
-      const needle = normalize(alias)
-      return needle.length >= 3 && haystack.includes(needle)
-    })
-  })
-  return safeExternalHref(catalogMatch?.logoUrl)
 }
 
 function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall }: {
@@ -559,10 +589,8 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
 }): ReactNode {
   const source = safeExternalHref(candidate.repositoryUrl) ?? safeExternalHref(candidate.websiteUrl)
   const logoUrl = registryCandidateLogo(candidate)
-  const definition = catalogDefinitionForText(`${candidate.name} ${candidate.title}`)
-  const displayName = definition?.name ?? candidate.title
+  const displayName = candidate.title
   const technicalName = normalize(displayName) === normalize(candidate.name) ? undefined : candidate.name
-  const configurePinnedJev = definition?.id === 'jev'
   const installable = candidate.status === 'active' && candidate.remoteUrl !== undefined
   const status = installed
     ? t('installedStatus')
@@ -614,7 +642,7 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
               disabled={installing}
               onClick={() => { onInstall(candidate) }}
             >
-              {installing ? t('installing') : configurePinnedJev ? t('configure') : t('install')}
+              {installing ? t('installing') : t('install')}
             </button>
           )}
         </div>
