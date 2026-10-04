@@ -78,7 +78,25 @@ type PluginInventoryMcpRegistryRemote = {
   mcpConnectorHubState(): Promise<PluginInventoryRemoteResult<McpConnectorHubSnapshot>>
   installMcpRegistryServer(request: { name: string; version?: string }): Promise<PluginInventoryRemoteResult<{
     status: 'installed' | 'already-installed'
-    connector: { entryId: string; serverName: string; url: string }
+    connector: {
+      entryId: string
+      serverName: string
+      url: string
+      source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
+    }
+  }>>
+  removeManagedMcpConnector(request: { entryId: string }): Promise<PluginInventoryRemoteResult<{
+    removed: boolean
+    liveUnloaded: boolean
+  }>>
+  repairManagedMcpConnector(request: { entryId: string }): Promise<PluginInventoryRemoteResult<{
+    status: 'installed' | 'already-installed'
+    connector: {
+      entryId: string
+      serverName: string
+      url: string
+      source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
+    }
   }>>
 }
 
@@ -123,6 +141,14 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     install: async request => unwrapPluginInventory(
       'installMcpRegistryServer',
       await remote().installMcpRegistryServer(request),
+    ),
+    remove: async request => unwrapPluginInventory(
+      'removeManagedMcpConnector',
+      await remote().removeManagedMcpConnector(request),
+    ),
+    repair: async request => unwrapPluginInventory(
+      'repairManagedMcpConnector',
+      await remote().repairManagedMcpConnector(request),
     ),
   }
 }
