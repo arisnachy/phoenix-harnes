@@ -574,7 +574,7 @@ function CatalogCard({ definition, live, account, openClaw, googleAccount, mcpRu
       {openClaw?.id === 'google-workspace' && openClaw.status !== 'ready' ? (
         <input
           aria-label={t('googleAccountEmailLabel')}
-          className={styles['advancedInput']}
+          className={styles['input']}
           value={googleAccount}
           placeholder={t('googleAccountEmailPlaceholder')}
           onChange={(event) => { onGoogleAccountChange(event.currentTarget.value) }}
@@ -1198,6 +1198,10 @@ export function ConnectorsSettingsSection({ api,
       .finally(() => { setDisconnectingKey(undefined) })
   }
 
+  const accountEntries = openClaw === undefined
+    ? entries
+    : entries.filter(entry => entry.key !== 'authorization-google/account')
+
   return (
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
@@ -1261,14 +1265,14 @@ export function ConnectorsSettingsSection({ api,
         </section>
       )}
 
-      {entries.length === 0 ? null : (
+      {accountEntries.length === 0 ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('accounts')}>
           <div className={hubStyles['heading']}>
             <h3>{connectorT('accounts')}</h3>
             <p>{connectorT('accountsHint')}</p>
           </div>
           <div className={connectorStyles['connectorGrid']}>
-            {entries.map((entry) => {
+            {accountEntries.map((entry) => {
               const lines = telemetryLines(entry.telemetry)
               const presentation = accountPresentation(entry)
               const runtime = runtimeForEntry(entry, mcpHub.runtime)
