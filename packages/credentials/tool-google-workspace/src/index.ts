@@ -1,29 +1,22 @@
-/** Model-facing Google Workspace tools backed by the host-owned OAuth broker. */
+/** Model-facing Google Workspace tools backed by OpenClaw's official gog CLI session. */
 
-import { Buffer } from 'node:buffer'
 import type { Context } from '@phoenix-ai/cordis'
-import type {
-  GoogleApiRequest,
-  GoogleApiResponse,
-  GoogleWorkspaceService,
-} from '@phoenix-ai/dsh-authorization/google'
+import {
+  OPENCLAW_GOOGLE_ACCOUNT_KEY,
+  runOpenClawCli,
+} from '@phoenix-ai/dsh-authorization/openclaw-cli'
 import {
   defineTool,
   ToolArgsError,
   type JsonValue,
 } from '@phoenix-ai/dsh-tools'
-import type {} from '@phoenix-ai/dsh-authorization/google'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-google-workspace'
-/** Google OAuth and the tool registry must both be present before tools register. */
-export const inject = ['tools', 'googleApi']
+/** The tool registry, Phoenix marker store, and governed subprocess runtime are required. */
+export const inject = ['tools', 'credentials', 'subprocess']
 
 const MAX_RESPONSE_CHARS = 200_000
-const SERVICES = new Set<GoogleWorkspaceService>([
-  'gmail', 'calendar', 'drive', 'docs', 'sheets', 'slides', 'contacts',
-])
-const METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
 const GMAIL_FORMATS = new Set(['minimal', 'full', 'metadata', 'raw'])
 
 interface WorkspaceToolResult {
@@ -31,22 +24,6 @@ interface WorkspaceToolResult {
   ok: boolean
   data: JsonValue
   truncated: boolean
-}
-
-function projectResponse(response: GoogleApiResponse): WorkspaceToolResult {
-  const truncated = response.body.length > MAX_RESPONSE_CHARS
-  const text = truncated ? response.body.slice(0, MAX_RESPONSE_CHARS) : response.body
-  let data: JsonValue = text
-  if (!truncated && text.trim() !== '') {
-    try {
-      data = JSON.parse(text) as JsonValue
-    } catch {
-      data = text
-    }
-  } else if (text.trim() === '') {
-    data = null
-  }
-  return { status: response.status, ok: response.ok, data, truncated }
 }
 
 const OUTPUT = {
@@ -66,25 +43,25 @@ const OUTPUT = {
   }],
 }
 
-function requireHeaderValue(label: string, value: string): string {
-  const trimmed = value.trim()
-  if (trimmed === '') throw new ToolArgsError([`${label} must not be blank`])
-  if (/\r|\n/u.test(trimmed)) throw new ToolArgsError([`${label} must not contain line breaks`])
-  return trimmed
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
 }
 
-function encodedSubject(value: string): string {
-  const subject = requireHeaderValue('subject', value)
-  return /^[\x20-\x7E]*$/u.test(subject)
-    ? subject
-    : `=?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`
-}
-
-function base64url(value: string): string {
-  return Buffer.from(value, 'utf8').toString('base64')
-    .replace(/\+/gu, '-')
-    .replace(/\//gu, '_')
-    .replace(/=+$/gu, '')
+async function connectedAccount(ctx: Context): Promise<string> {
+  const stored = await ctx.credentials.readRecord(OPENCLAW_GOOGLE_ACCOUNT_KEY)
+  const top = record(stored)
+  const payload = record(top?.payload)
+  const account = top?.kind === 'grant'
+    && payload?.provider === 'openclaw-gog'
+    && typeof payload.account === 'string'
+    ? payload.account.trim()
+    : ''
+  if (account.length === 0) {
+    throw new Error('Google Workspace is not connected to Phoenix. Authorize it in Settings → Connectors.')
+  }
+  return account
 }
 
 function clampInteger(value: number | undefined, fallback: number, min: number, max: number): number {
@@ -93,15 +70,51 @@ function clampInteger(value: number | undefined, fallback: number, min: number, 
   return Math.min(max, Math.max(min, Math.trunc(resolved)))
 }
 
-async function call(ctx: Context, request: GoogleApiRequest): Promise<WorkspaceToolResult> {
-  return projectResponse(await ctx.googleApi.request(request))
+function requireNonBlank(label: string, value: string): string {
+  const trimmed = value.trim()
+  if (trimmed.length === 0) throw new ToolArgsError([`${label} must not be blank`])
+  return trimmed
 }
 
-/** Register practical Gmail/Calendar/Drive tools plus one bounded advanced Workspace request tool. */
+function projectJson(text: string): WorkspaceToolResult {
+  const truncated = text.length > MAX_RESPONSE_CHARS
+  const body = truncated ? text.slice(0, MAX_RESPONSE_CHARS) : text
+  let data: JsonValue = body
+  if (!truncated && body.trim().length > 0) {
+    try {
+      data = JSON.parse(body) as JsonValue
+    } catch {
+      data = body
+    }
+  } else if (body.trim().length === 0) {
+    data = null
+  }
+  return { status: 200, ok: true, data, truncated }
+}
+
+async function gog(
+  ctx: Context,
+  args: readonly string[],
+  signal?: AbortSignal,
+  options: { force?: boolean; wrapUntrusted?: boolean } = {},
+): Promise<WorkspaceToolResult> {
+  const account = await connectedAccount(ctx)
+  const result = await runOpenClawCli(ctx, 'gog', [
+    ...args,
+    '--account', account,
+    '--json',
+    '--no-input',
+    ...(options.force === true ? ['--force'] : []),
+    ...(options.wrapUntrusted === false ? [] : ['--wrap-untrusted']),
+  ], { signal })
+  return projectJson(result.stdout)
+}
+
+/** Register practical Gmail, Calendar, and Drive tools through the adopted OpenClaw gog account. */
 export function apply(ctx: Context): void {
   ctx.tools.register(defineTool({
     name: 'gmail_search',
-    description: 'Search the connected Gmail mailbox using Gmail query syntax. Use this for account mail, not public web search.',
+    description: 'Search the connected Gmail mailbox using Gmail query syntax through OpenClaw gog.',
     parameters: {
       query: { type: 'string', required: true, description: 'Gmail search query such as is:unread newer_than:7d.' },
       max_results: { type: 'number', description: 'Maximum messages to return, 1-100. Defaults to 20.' },
@@ -109,79 +122,62 @@ export function apply(ctx: Context): void {
     },
     output: OUTPUT,
     async execute(args, exec) {
-      const params = new URLSearchParams()
-      params.set('q', args.query)
-      params.set('maxResults', String(clampInteger(args.max_results, 20, 1, 100)))
-      if (args.page_token !== undefined && args.page_token.trim() !== '') params.set('pageToken', args.page_token)
-      return call(ctx, {
-        service: 'gmail',
-        path: `users/me/messages?${params.toString()}`,
-        signal: exec.signal,
-      })
+      const command = [
+        'gmail', 'messages', 'search', args.query,
+        '--max', String(clampInteger(args.max_results, 20, 1, 100)),
+        ...(args.page_token === undefined || args.page_token.trim() === '' ? [] : ['--page', args.page_token.trim()]),
+      ]
+      return gog(ctx, command, exec.signal)
     },
     presentCall: args => ({ card: 'generic', title: 'Search Gmail', kind: 'search', rawInput: args.query }),
   }))
 
   ctx.tools.register(defineTool({
     name: 'gmail_read',
-    description: 'Read one Gmail message by id from the connected mailbox. Full format includes headers and MIME body parts.',
+    description: 'Read one Gmail message by id from the connected OpenClaw gog account.',
     parameters: {
       message_id: { type: 'string', required: true },
       format: { type: 'string', description: 'minimal, full, metadata, or raw. Defaults to full.' },
     },
     output: OUTPUT,
     async execute(args, exec) {
-      const id = encodeURIComponent(args.message_id.trim())
-      if (id === '') throw new ToolArgsError(['message_id must not be blank'])
+      const id = requireNonBlank('message_id', args.message_id)
       const format = (args.format ?? 'full').toLowerCase()
       if (!GMAIL_FORMATS.has(format)) throw new ToolArgsError(['format must be minimal, full, metadata, or raw'])
-      return call(ctx, {
-        service: 'gmail',
-        path: `users/me/messages/${id}?format=${encodeURIComponent(format)}`,
-        signal: exec.signal,
-      })
+      return gog(ctx, ['gmail', 'get', id, '--format', format], exec.signal)
     },
     presentCall: args => ({ card: 'generic', title: 'Read Gmail message', kind: 'read', rawInput: args.message_id }),
   }))
 
   ctx.tools.register(defineTool({
     name: 'gmail_send',
-    description: 'Send an email from the connected Gmail account. Call only when the user asked to send or approved the message content.',
+    description: 'Send an email from the connected Gmail account through OpenClaw gog. Call only when the user asked to send or approved the message content.',
     parameters: {
-      to: { type: 'string', required: true, description: 'Recipient address or comma-separated recipient addresses.' },
+      to: { type: 'string', required: true },
       subject: { type: 'string', required: true },
       body: { type: 'string', required: true },
-      cc: { type: 'string', description: 'Optional comma-separated CC addresses.' },
-      bcc: { type: 'string', description: 'Optional comma-separated BCC addresses.' },
-      html: { type: 'boolean', description: 'Send body as text/html instead of text/plain.' },
+      cc: { type: 'string' },
+      bcc: { type: 'string' },
+      html: { type: 'boolean' },
     },
     output: OUTPUT,
     async execute(args, exec) {
-      const headers = [
-        `To: ${requireHeaderValue('to', args.to)}`,
-        ...(args.cc === undefined || args.cc.trim() === '' ? [] : [`Cc: ${requireHeaderValue('cc', args.cc)}`]),
-        ...(args.bcc === undefined || args.bcc.trim() === '' ? [] : [`Bcc: ${requireHeaderValue('bcc', args.bcc)}`]),
-        `Subject: ${encodedSubject(args.subject)}`,
-        'MIME-Version: 1.0',
-        `Content-Type: ${args.html === true ? 'text/html' : 'text/plain'}; charset=UTF-8`,
-        'Content-Transfer-Encoding: 8bit',
+      const command = [
+        'gmail', 'send',
+        '--to', requireNonBlank('to', args.to),
+        '--subject', requireNonBlank('subject', args.subject),
+        ...(args.html === true ? ['--body-html', args.body] : ['--body', args.body]),
+        ...(args.cc === undefined || args.cc.trim() === '' ? [] : ['--cc', args.cc.trim()]),
+        ...(args.bcc === undefined || args.bcc.trim() === '' ? [] : ['--bcc', args.bcc.trim()]),
       ]
-      const raw = base64url(`${headers.join('\r\n')}\r\n\r\n${args.body}`)
-      return call(ctx, {
-        service: 'gmail',
-        path: 'users/me/messages/send',
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ raw }),
-        signal: exec.signal,
-      })
+      return gog(ctx, command, exec.signal, { force: true, wrapUntrusted: false })
     },
     presentCall: args => ({ card: 'generic', title: 'Send Gmail message', kind: 'execute', rawInput: { to: args.to, subject: args.subject } }),
   }))
 
   ctx.tools.register(defineTool({
     name: 'google_calendar_list_events',
-    description: 'List events from the connected Google Calendar, optionally bounded by RFC3339 start/end times.',
+    description: 'List events from the connected Google Calendar through OpenClaw gog.',
     parameters: {
       calendar_id: { type: 'string', description: 'Calendar id. Defaults to primary.' },
       time_min: { type: 'string', description: 'Optional RFC3339 lower bound.' },
@@ -190,68 +186,48 @@ export function apply(ctx: Context): void {
     },
     output: OUTPUT,
     async execute(args, exec) {
-      const calendarId = encodeURIComponent(args.calendar_id?.trim() || 'primary')
-      const params = new URLSearchParams({
-        maxResults: String(clampInteger(args.max_results, 50, 1, 250)),
-        singleEvents: 'true',
-        orderBy: 'startTime',
-      })
-      if (args.time_min !== undefined && args.time_min.trim() !== '') params.set('timeMin', args.time_min.trim())
-      if (args.time_max !== undefined && args.time_max.trim() !== '') params.set('timeMax', args.time_max.trim())
-      return call(ctx, {
-        service: 'calendar',
-        path: `calendars/${calendarId}/events?${params.toString()}`,
-        signal: exec.signal,
-      })
+      const command = [
+        'calendar', 'events', args.calendar_id?.trim() || 'primary',
+        '--max', String(clampInteger(args.max_results, 50, 1, 250)),
+        ...(args.time_min === undefined || args.time_min.trim() === '' ? [] : ['--from', args.time_min.trim()]),
+        ...(args.time_max === undefined || args.time_max.trim() === '' ? [] : ['--to', args.time_max.trim()]),
+      ]
+      return gog(ctx, command, exec.signal)
     },
     presentCall: () => ({ card: 'generic', title: 'List Google Calendar events', kind: 'read' }),
   }))
 
   ctx.tools.register(defineTool({
     name: 'google_calendar_create_event',
-    description: 'Create an event in the connected Google Calendar. Use only when the user asked to schedule/create it.',
+    description: 'Create an event in the connected Google Calendar through OpenClaw gog.',
     parameters: {
       summary: { type: 'string', required: true },
-      start: { type: 'string', required: true, description: 'RFC3339 start date-time.' },
-      end: { type: 'string', required: true, description: 'RFC3339 end date-time.' },
-      calendar_id: { type: 'string', description: 'Calendar id. Defaults to primary.' },
-      time_zone: { type: 'string', description: 'Optional IANA time zone, such as America/Santo_Domingo.' },
+      start: { type: 'string', required: true },
+      end: { type: 'string', required: true },
+      calendar_id: { type: 'string' },
+      time_zone: { type: 'string' },
       description: { type: 'string' },
-      attendees: { type: 'array', items: { type: 'string' }, description: 'Optional attendee email addresses.' },
+      attendees: { type: 'array', items: { type: 'string' } },
     },
     output: OUTPUT,
     async execute(args, exec) {
-      const calendarId = encodeURIComponent(args.calendar_id?.trim() || 'primary')
-      const body = {
-        summary: args.summary,
-        ...(args.description === undefined ? {} : { description: args.description }),
-        start: {
-          dateTime: args.start,
-          ...(args.time_zone === undefined ? {} : { timeZone: args.time_zone }),
-        },
-        end: {
-          dateTime: args.end,
-          ...(args.time_zone === undefined ? {} : { timeZone: args.time_zone }),
-        },
-        ...(args.attendees === undefined ? {} : {
-          attendees: args.attendees.map(email => ({ email: requireHeaderValue('attendee email', email) })),
-        }),
-      }
-      return call(ctx, {
-        service: 'calendar',
-        path: `calendars/${calendarId}/events`,
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: exec.signal,
-      })
+      const command = [
+        'calendar', 'create', args.calendar_id?.trim() || 'primary',
+        '--summary', requireNonBlank('summary', args.summary),
+        '--from', requireNonBlank('start', args.start),
+        '--to', requireNonBlank('end', args.end),
+        ...(args.time_zone === undefined || args.time_zone.trim() === '' ? [] : ['--timezone', args.time_zone.trim()]),
+        ...(args.description === undefined ? [] : ['--description', args.description]),
+        ...(args.attendees === undefined || args.attendees.length === 0 ? [] : ['--attendees', args.attendees.join(',')]),
+      ]
+      return gog(ctx, command, exec.signal, { force: true, wrapUntrusted: false })
     },
     presentCall: args => ({ card: 'generic', title: 'Create Google Calendar event', kind: 'execute', rawInput: args.summary }),
   }))
 
   ctx.tools.register(defineTool({
     name: 'google_drive_search',
-    description: 'Search/list files in the connected Google Drive using Drive v3 q syntax.',
+    description: 'Search/list files in the connected Google Drive using Drive v3 q syntax through OpenClaw gog.',
     parameters: {
       query: { type: 'string', description: 'Optional Drive v3 q expression.' },
       page_size: { type: 'number', description: 'Maximum files, 1-100. Defaults to 50.' },
@@ -259,52 +235,15 @@ export function apply(ctx: Context): void {
     },
     output: OUTPUT,
     async execute(args, exec) {
-      const params = new URLSearchParams({
-        pageSize: String(clampInteger(args.page_size, 50, 1, 100)),
-        fields: 'nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink,parents,size)',
-      })
-      if (args.query !== undefined && args.query.trim() !== '') params.set('q', args.query.trim())
-      if (args.page_token !== undefined && args.page_token.trim() !== '') params.set('pageToken', args.page_token.trim())
-      return call(ctx, {
-        service: 'drive',
-        path: `files?${params.toString()}`,
-        signal: exec.signal,
-      })
+      const command = [
+        'drive', 'ls',
+        '--max', String(clampInteger(args.page_size, 50, 1, 100)),
+        ...(args.query === undefined || args.query.trim() === '' ? [] : ['--query', args.query.trim()]),
+        ...(args.page_token === undefined || args.page_token.trim() === '' ? [] : ['--page', args.page_token.trim()]),
+      ]
+      return gog(ctx, command, exec.signal)
     },
     presentCall: args => ({ card: 'generic', title: 'Search Google Drive', kind: 'search', rawInput: args.query ?? '' }),
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'google_workspace_request',
-    description: 'Advanced bounded Google Workspace REST call through PHOENIX OAuth. Use only when a dedicated Gmail/Calendar/Drive tool does not cover the task. '
-      + 'service is restricted to gmail, calendar, drive, docs, sheets, slides, contacts; path must be relative and caller authentication headers are forbidden.',
-    parameters: {
-      service: { type: 'string', required: true },
-      path: { type: 'string', required: true },
-      method: { type: 'string', description: 'GET, POST, PUT, PATCH, DELETE. Defaults to GET.' },
-      body: { type: 'string', description: 'Optional request body, normally JSON text.' },
-      content_type: { type: 'string', description: 'Defaults to application/json when body is present.' },
-      upload: { type: 'boolean', description: 'Use the fixed upload API for Gmail/Drive.' },
-    },
-    output: OUTPUT,
-    async execute(args, exec) {
-      const service = args.service as GoogleWorkspaceService
-      if (!SERVICES.has(service)) throw new ToolArgsError(['service must be gmail, calendar, drive, docs, sheets, slides, or contacts'])
-      const method = (args.method ?? 'GET').trim().toUpperCase()
-      if (!METHODS.has(method)) throw new ToolArgsError(['method must be GET, POST, PUT, PATCH, or DELETE'])
-      return call(ctx, {
-        service,
-        path: args.path,
-        method,
-        ...(args.body === undefined ? {} : {
-          body: args.body,
-          headers: { 'content-type': args.content_type ?? 'application/json' },
-        }),
-        ...(args.upload === true ? { upload: true } : {}),
-        signal: exec.signal,
-      })
-    },
-    presentCall: args => ({ card: 'generic', title: `Google Workspace: ${args.service}`, kind: 'execute', rawInput: { path: args.path, method: args.method ?? 'GET' } }),
   }))
 }
 
