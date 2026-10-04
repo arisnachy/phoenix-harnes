@@ -6,6 +6,7 @@ import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import type {
   ManagedMcpConnector,
+  ManagedMcpSource,
   McpRegistryCandidate,
   McpRegistryInstallReceipt,
   McpRegistryInstallRequest,
@@ -88,6 +89,7 @@ interface ManagedMcpRow {
   id: string
   name: typeof MCP_CLIENT_PACKAGE
   config: ManagedMcpConfig
+  source?: ManagedMcpSource
 }
 
 interface ManagedMcpPatch {
@@ -225,6 +227,18 @@ function validConfig(value: unknown): value is ManagedMcpConfig {
   return value.transport === 'streamable-http' && validHttpConfig(value)
 }
 
+function validManagedSource(value: unknown): value is ManagedMcpSource {
+  if (!isRecord(value)) return false
+  if (value.kind === 'registry') {
+    return typeof value.name === 'string'
+      && value.name.trim().length >= 2
+      && (value.version === undefined || (typeof value.version === 'string' && value.version.trim().length > 0))
+  }
+  return value.kind === 'curated'
+    && typeof value.connectorId === 'string'
+    && value.connectorId.trim().length > 0
+}
+
 function parseManagedRows(raw: string): ManagedMcpRow[] {
   const document: unknown = JSON.parse(raw)
   if (!Array.isArray(document) || document.length !== 1) {
@@ -238,10 +252,14 @@ function parseManagedRows(raw: string): ManagedMcpRow[] {
     if (!isRecord(value) || typeof value.id !== 'string' || value.name !== MCP_CLIENT_PACKAGE || !validConfig(value.config)) {
       throw new Error(`managed MCP patch row ${index} is invalid`)
     }
+    if (value.source !== undefined && !validManagedSource(value.source)) {
+      throw new Error(`managed MCP patch row ${index} has an invalid source`)
+    }
     return {
       id: value.id,
       name: MCP_CLIENT_PACKAGE,
       config: value.config,
+      ...(value.source === undefined ? {} : { source: value.source }),
     }
   })
 }
@@ -269,6 +287,7 @@ function connectorOf(row: ManagedMcpRow): ManagedMcpConnector {
     entryId: row.id,
     serverName: row.config.serverName,
     url: row.config.transport === 'streamable-http' ? row.config.url : X_API_MCP_URL,
+    ...(row.source === undefined ? {} : { source: row.source }),
   }
 }
 
@@ -355,6 +374,7 @@ export class ManagedMcpController {
   private async installManagedConfig(
     config: ManagedMcpConfig,
     label: string,
+    source?: ManagedMcpSource,
   ): Promise<McpRegistryInstallReceipt> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
@@ -364,7 +384,12 @@ export class ManagedMcpController {
         return { status: 'already-installed', connector: connectorOf(existing) }
       }
       const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
-      const row: ManagedMcpRow = { id: entryId, name: MCP_CLIENT_PACKAGE, config }
+      const row: ManagedMcpRow = {
+        id: entryId,
+        name: MCP_CLIENT_PACKAGE,
+        config,
+        ...(source === undefined ? {} : { source }),
+      }
       try {
         await writeManagedRows(this.path, [...rows, row])
       } catch (error) {
@@ -382,35 +407,41 @@ export class ManagedMcpController {
     }, { waitMs: 15_000 })
   }
 
-  private async removeManagedRows(
+  private async removeManagedRowsReceipt(
     matches: (row: ManagedMcpRow) => boolean,
-    label: string,
-  ): Promise<boolean> {
+  ): Promise<{ removed: boolean; liveUnloaded: boolean }> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
       const rows = await readManagedRows(this.path)
       const removed = rows.filter(matches)
-      if (removed.length === 0) return false
+      if (removed.length === 0) return { removed: false, liveUnloaded: true }
 
       // Persist removal first so a failed live unload cannot resurrect access
       // on the next Phoenix start.
       await writeManagedRows(this.path, rows.filter(row => !matches(row)))
-      const failures: unknown[] = []
+      let liveUnloaded = true
       for (const row of removed) {
         try {
           await this.loader.remove(row.id)
-        } catch (error: unknown) {
-          failures.push(error)
+        } catch {
+          liveUnloaded = false
         }
       }
-      if (failures.length > 0) {
-        throw new AggregateError(
-          failures,
-          `${label} was removed from persistent MCP config but one or more live entries could not be unloaded`,
-        )
-      }
-      return true
+      return { removed: true, liveUnloaded }
     }, { waitMs: 15_000 })
+  }
+
+  private async removeManagedRows(
+    matches: (row: ManagedMcpRow) => boolean,
+    label: string,
+  ): Promise<boolean> {
+    const result = await this.removeManagedRowsReceipt(matches)
+    if (result.removed && !result.liveUnloaded) {
+      throw new Error(
+        `${label} was removed from persistent MCP config but one or more live entries could not be unloaded`,
+      )
+    }
+    return result.removed
   }
 
   /**
@@ -421,6 +452,68 @@ export class ManagedMcpController {
     return (await readManagedRows(this.path))
       .filter(row => !isRetiredJevManagedRow(row))
       .map(connectorOf)
+  }
+
+  /**
+   * Remove exactly one PHOENIX-managed connector. Persistence is authoritative:
+   * a failed live unload never restores the entry to the managed overlay.
+   * @param request - Exact managed entry id to remove.
+   * @returns Whether persistence was removed and whether live unload also completed.
+   */
+  async remove(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }> {
+    const entryId = request.entryId.trim()
+    if (entryId.length === 0) throw new Error('managed MCP removal requires a valid entry id')
+    return this.removeManagedRowsReceipt(row => row.id === entryId)
+  }
+
+  /**
+   * Repair a managed registry connector from its persisted trusted source.
+   * Legacy rows without source metadata stay removable but are not guessed.
+   * @param request - Exact managed entry id to repair.
+   * @returns Installation receipt for the freshly re-resolved connector.
+   */
+  async repair(request: { entryId: string }): Promise<McpRegistryInstallReceipt> {
+    const entryId = request.entryId.trim()
+    if (entryId.length === 0) throw new Error('managed MCP repair requires a valid entry id')
+    const row = (await readManagedRows(this.path)).find(candidate => candidate.id === entryId)
+    if (row === undefined) throw new Error(`managed MCP entry "${entryId}" is not installed`)
+    if (row.source === undefined) {
+      throw new Error(`managed MCP entry "${entryId}" has no trusted repair source`)
+    }
+    if (row.source.kind !== 'registry') {
+      throw new Error(`managed MCP entry "${entryId}" uses an unsupported curated repair source`)
+    }
+
+    const snapshot = await this.registrySearch({ query: row.source.name, limit: 20 })
+    const candidate = selectInstallableCandidate(snapshot, {
+      name: row.source.name,
+      ...(row.source.version === undefined ? {} : { version: row.source.version }),
+    })
+    if (isRetiredJevCandidate(candidate)) {
+      throw new Error('Jev integration is retired and cannot be repaired through the Official MCP Registry')
+    }
+    const remoteUrl = candidate.remoteUrl
+    if (remoteUrl === undefined) throw new Error('Registry candidate no longer exposes a Streamable HTTP endpoint')
+
+    const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
+    if (!removed.removed) throw new Error(`managed MCP entry "${entryId}" disappeared during repair`)
+    if (!removed.liveUnloaded) {
+      throw new Error(
+        `managed MCP entry "${entryId}" was removed from persistence but its live runtime could not be unloaded; restart Phoenix before retrying repair`,
+      )
+    }
+
+    return this.installManagedConfig({
+      transport: 'streamable-http',
+      serverName: serverNameFor(candidate),
+      url: remoteUrl,
+      headers: {},
+      oauth: true,
+    }, candidate.name, {
+      kind: 'registry',
+      name: candidate.name,
+      version: candidate.version,
+    })
   }
 
   /**
@@ -514,7 +607,11 @@ export class ManagedMcpController {
       url: remoteUrl,
       headers: {},
       oauth: true,
-    }, candidate.name)
+    }, candidate.name, {
+      kind: 'registry',
+      name: candidate.name,
+      version: candidate.version,
+    })
   }
 }
 

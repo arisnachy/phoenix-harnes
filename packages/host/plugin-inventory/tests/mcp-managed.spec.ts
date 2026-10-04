@@ -78,6 +78,7 @@ describe('ManagedMcpController', () => {
       connector: {
         entryId: 'live-entry-id',
         url: 'https://mcp.example.com/calendar',
+        source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
       },
     })
     expect(installed.connector.serverName).toMatch(/^calendar-[a-f0-9]{7}$/)
@@ -98,6 +99,7 @@ describe('ManagedMcpController', () => {
       entryId: 'live-entry-id',
       serverName: installed.connector.serverName,
       url: 'https://mcp.example.com/calendar',
+      source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
     }])
 
     await expect(controller.install({ name: 'io.example/calendar' })).resolves.toMatchObject({
@@ -316,6 +318,94 @@ describe('ManagedMcpController', () => {
     expect(persisted).not.toContain('jevai.org')
     expect(persisted).toContain('calendar-managed')
     await expect(controller.retireJev()).resolves.toBe(false)
+  })
+
+  it('removes one exact managed connector from persistence and the live loader', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([candidate()]) })
+    const installed = await controller.install({ name: 'io.example/calendar', version: '1.0.0' })
+
+    await expect(controller.remove({ entryId: installed.connector.entryId })).resolves.toEqual({
+      removed: true,
+      liveUnloaded: true,
+    })
+    expect(live.remove).toHaveBeenCalledWith(installed.connector.entryId)
+    await expect(controller.snapshot()).resolves.toEqual([])
+    await expect(controller.remove({ entryId: installed.connector.entryId })).resolves.toEqual({
+      removed: false,
+      liveUnloaded: true,
+    })
+  })
+
+  it('keeps generic uninstall persistence-first when live unload fails', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([candidate()]) })
+    const installed = await controller.install({ name: 'io.example/calendar', version: '1.0.0' })
+    live.remove.mockRejectedValueOnce(new Error('live unload failed'))
+
+    await expect(controller.remove({ entryId: installed.connector.entryId })).resolves.toEqual({
+      removed: true,
+      liveUnloaded: false,
+    })
+    await expect(controller.snapshot()).resolves.toEqual([])
+    expect(readFileSync(patchPath, 'utf8')).not.toContain(installed.connector.entryId)
+  })
+
+  it('repairs a registry-managed connector by re-resolving its exact registry source', async () => {
+    const patchPath = tempPatch()
+    let values: readonly McpRegistryCandidate[] = [candidate()]
+    const search = vi.fn(async ({ query }: { query: string; limit?: number }): Promise<McpRegistrySearchSnapshot> => ({
+      source: 'official-mcp-registry',
+      query,
+      fetchedAt: '2026-10-04T12:00:00.000Z',
+      stale: false,
+      candidates: [...values],
+    }))
+    const live = loader()
+    live.create
+      .mockResolvedValueOnce('old-entry')
+      .mockResolvedValueOnce('repaired-entry')
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
+    const installed = await controller.install({ name: 'io.example/calendar', version: '1.0.0' })
+
+    values = [candidate({ remoteUrl: 'https://mcp.example.com/calendar-v2' })]
+    const repaired = await controller.repair({ entryId: installed.connector.entryId })
+
+    expect(live.remove).toHaveBeenCalledWith('old-entry')
+    expect(repaired).toMatchObject({
+      status: 'installed',
+      connector: {
+        entryId: 'repaired-entry',
+        url: 'https://mcp.example.com/calendar-v2',
+        source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
+      },
+    })
+    expect(search).toHaveBeenLastCalledWith({ query: 'io.example/calendar', limit: 20 })
+  })
+
+  it('does not invent a repair source for legacy managed rows', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{
+      insert: [{
+        id: 'legacy-calendar',
+        name: '@phoenix-ai/dsh-mcp-client',
+        config: {
+          transport: 'streamable-http',
+          serverName: 'calendar-legacy',
+          url: 'https://mcp.example.com/calendar',
+          headers: {},
+          oauth: true,
+        },
+      }],
+    }]))
+    const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([candidate()]) })
+
+    await expect(controller.repair({ entryId: 'legacy-calendar' }))
+      .rejects.toThrow('has no trusted repair source')
+    await expect(controller.snapshot()).resolves.toHaveLength(1)
   })
 
   it('refuses to configure or reinstall retired Jev', async () => {

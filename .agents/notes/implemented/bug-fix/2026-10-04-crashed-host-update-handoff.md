@@ -2,6 +2,8 @@
 
 Status: implemented
 
+English | [中文](2026-10-04-crashed-host-update-handoff.zh.md)
+
 ## Problem
 
 The Windows supervisor now keeps the stable updater alive across Host crashes, so a candidate can finish dependency refresh, build, and smoke even when the current Host cannot boot. One deadlock remained: activation still depended on the Host-side restart bridge. A failure such as a missing profile runtime module can happen before that bridge ever starts, so the updater reaches a verified prepared state while the supervisor continues relaunching the same broken Host and nobody requests activation.

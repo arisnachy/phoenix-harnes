@@ -267,6 +267,33 @@ describe('PluginInventoryGateway', () => {
     })
   })
 
+  it('delegates generic managed connector uninstall and repair by exact entry id', async () => {
+    const { inventory } = await harness()
+    const managed = (inventory as unknown as {
+      managedMcp: {
+        remove(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }>
+        repair(request: { entryId: string }): Promise<unknown>
+      }
+    }).managedMcp
+    const remove = vi.spyOn(managed, 'remove').mockResolvedValue({ removed: true, liveUnloaded: true })
+    const repair = vi.spyOn(managed, 'repair').mockResolvedValue({
+      status: 'installed',
+      connector: {
+        entryId: 'repaired-id',
+        serverName: 'canva-a1b2c3d',
+        url: 'https://mcp.canva.example/',
+        source: { kind: 'registry', name: 'com.canva.mcp/mcp', version: '1.0.0' },
+      },
+    })
+
+    await expect(inventory.removeManagedMcpConnector({ entryId: 'managed-id' }))
+      .resolves.toEqual({ removed: true, liveUnloaded: true })
+    await expect(inventory.repairManagedMcpConnector({ entryId: 'managed-id' }))
+      .resolves.toMatchObject({ status: 'installed', connector: { entryId: 'repaired-id' } })
+    expect(remove).toHaveBeenCalledWith({ entryId: 'managed-id' })
+    expect(repair).toHaveBeenCalledWith({ entryId: 'managed-id' })
+  })
+
   it('reads idle updater state and refuses an unprepared restart without scheduling exit', async () => {
     const { root } = updateRepository()
     process.env.PHOENIX_RUNTIME_ROOT = root

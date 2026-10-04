@@ -36,6 +36,8 @@ import type {
   ChatGptWebSnapshot,
   JevMcpConfigureRequest,
   JevMcpSnapshot,
+  ManagedMcpEntryRequest,
+  ManagedMcpRemoveReceipt,
   McpConnectorHubSnapshot,
   McpConnectorRuntimeEntry,
   McpRegistryInstallReceipt,
@@ -232,6 +234,28 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('installMcpRegistryServer')
   async installMcpRegistryServer(request: McpRegistryInstallRequest): Promise<McpRegistryInstallReceipt> {
     return this.managedMcp.install(request)
+  }
+
+  /**
+   * Remove one exact PHOENIX-managed MCP from persistence and the live Loader.
+   * The browser supplies only the managed entry id.
+   * @param request - Exact PHOENIX-managed entry id to remove.
+   * @returns Persistent/live removal result.
+   */
+  @Remote('removeManagedMcpConnector')
+  async removeManagedMcpConnector(request: ManagedMcpEntryRequest): Promise<ManagedMcpRemoveReceipt> {
+    return this.managedMcp.remove(request)
+  }
+
+  /**
+   * Repair one PHOENIX-managed MCP strictly from its persisted trusted source.
+   * No browser-provided URL, package, command, or environment is accepted.
+   * @param request - Exact PHOENIX-managed entry id to repair.
+   * @returns Managed connector installation receipt after trusted re-resolution.
+   */
+  @Remote('repairManagedMcpConnector')
+  async repairManagedMcpConnector(request: ManagedMcpEntryRequest): Promise<McpRegistryInstallReceipt> {
+    return this.managedMcp.repair(request)
   }
 
   /**

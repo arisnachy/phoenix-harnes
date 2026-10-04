@@ -125,10 +125,170 @@ describe('connectors settings section', () => {
     expect(screen.getByText('Devpost')).toBeTruthy()
     expect(screen.getByText('Microsoft Teams')).toBeTruthy()
     expect(screen.getByText('Firebase')).toBeTruthy()
-    expect(screen.getAllByText('Adapter not installed').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Official adapter not available in this build').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Find official / install' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Find / install' }).length).toBeGreaterThan(0)
   })
 
+  it('shows an explicit official lookup even when the search box is empty', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const search = vi.fn(async () => ({
+      source: 'official-mcp-registry' as const,
+      query: 'com.canva.mcp/mcp',
+      fetchedAt: '2026-10-04T00:00:00.000Z',
+      stale: false,
+      candidates: [{
+        name: 'com.canva.mcp/mcp', title: 'Canva', description: 'Canva tools.', version: '1.0.0',
+        status: 'active' as const, trust: 'registry-listed' as const, icons: [],
+        transports: ['streamable-http' as const], packages: [], remoteUrl: 'https://mcp.canva.com/mcp',
+      }],
+    }))
+    const mcpRegistry = { state: vi.fn(async () => ({ runtime: [], managed: [] })), install: vi.fn(), search }
+
+    renderHub(api, { mcpRegistry })
+    const officialButtons = await screen.findAllByRole('button', { name: 'Find official / install' })
+    const canvaCard = document.querySelector('[data-connector-id="canva"]')
+    const canvaButton = Array.from(canvaCard?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Find official / install')
+    expect(canvaButton).toBeTruthy()
+    fireEvent.click(canvaButton!)
+
+    expect(await screen.findByText('Registry-listed · vendor not verified')).toBeTruthy()
+    expect(search).toHaveBeenCalledWith({ query: 'com.canva.mcp/mcp', limit: 12 })
+    expect(officialButtons.length).toBeGreaterThan(0)
+  })
+  it('keeps known Canva on its curated official identity instead of generic registry search', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const search = vi.fn(async ({ query }: { query: string }) => ({
+      source: 'official-mcp-registry' as const,
+      query,
+      fetchedAt: '2026-10-04T00:00:00.000Z',
+      stale: false,
+      candidates: [{
+        name: 'com.canva.mcp/mcp',
+        title: 'Canva',
+        description: 'Official Canva MCP.',
+        version: '1.0.0',
+        status: 'active' as const,
+        trust: 'registry-listed' as const,
+        icons: [],
+        transports: ['streamable-http' as const],
+        packages: [],
+        remoteUrl: 'https://mcp.canva.com/mcp',
+      }],
+    }))
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      remove: vi.fn(),
+      repair: vi.fn(),
+      search,
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'Canva' },
+    })
+    await act(async () => { await Promise.resolve() })
+    expect(screen.getByText('Canva')).toBeTruthy()
+    expect(search).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Find official / install' }))
+    await waitFor(() => {
+      expect(search).toHaveBeenCalledWith({ query: 'com.canva.mcp/mcp', limit: 12 })
+    })
+    expect(await screen.findByText('Registry-listed · vendor not verified')).toBeTruthy()
+  })
+
+  it('shows broken managed connectors with repair and uninstall actions', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const repair = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'new-id', serverName: 'supabase-new', url: 'https://mcp.supabase.com/mcp',
+        source: { kind: 'registry' as const, name: 'com.supabase/mcp', version: '0.13.0' },
+      },
+    }))
+    const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'broken-id',
+          serverName: 'supabase-broken',
+          url: 'https://mcp.supabase.com/mcp',
+          source: { kind: 'registry' as const, name: 'com.supabase/mcp', version: '0.13.0' },
+        }],
+        runtime: [{
+          serverName: 'supabase-broken',
+          transport: 'streamable-http' as const,
+          status: 'failed' as const,
+          reasonCode: 'connection-failed' as const,
+          toolNames: [],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(), repair, remove,
+    }
+
+    renderHub(api, { mcpRegistry })
+    const card = (await screen.findByText('Supabase')).closest('article')
+    expect(card?.textContent).toContain('Broken')
+    const repairButton = screen.getByRole('button', { name: 'Repair' })
+    const uninstallButton = screen.getByRole('button', { name: 'Uninstall' })
+    fireEvent.click(repairButton)
+    await waitFor(() => { expect(repair).toHaveBeenCalledWith({ entryId: 'broken-id' }) })
+    fireEvent.click(uninstallButton)
+    await waitFor(() => { expect(remove).toHaveBeenCalledWith({ entryId: 'broken-id' }) })
+  })
+
+  it('disconnects an installed MCP account before removing the managed connector', async () => {
+    const disconnect = vi.fn(() => Promise.resolve(ok({})))
+    const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/supabase-broken',
+        label: 'MCP supabase-broken',
+        methods: [{ id: 'oauth', label: 'Authorize supabase-broken' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+        disconnectable: true as const,
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect,
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-supabase',
+          serverName: 'supabase-broken',
+          url: 'https://mcp.supabase.com/mcp',
+          source: { kind: 'registry' as const, name: 'com.supabase/mcp', version: '1.0.0' },
+        }],
+        runtime: [{
+          serverName: 'supabase-broken', transport: 'streamable-http' as const,
+          status: 'failed' as const, reasonCode: 'connection-failed' as const, toolNames: [],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove,
+    }
+
+    renderHub(api, { mcpRegistry })
+    expect((await screen.findAllByText('Supabase')).length).toBeGreaterThan(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
+
+    await waitFor(() => {
+      expect(disconnect).toHaveBeenCalledWith({ key: 'mcp-client/supabase-broken' })
+      expect(remove).toHaveBeenCalledWith({ entryId: 'managed-supabase' })
+    })
+    expect(disconnect.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]!)
+  })
   it('reuses registered OAuth flows and live connector telemetry', async () => {
     const begin = vi.fn(() => Promise.resolve(ok({
       attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546014', status: 'pending' as const,
@@ -368,20 +528,20 @@ describe('connectors settings section', () => {
     } as unknown as IApiClient['authorization']
     const install = vi.fn(async () => ({
       status: 'installed' as const,
-      connector: { entryId: 'managed-calendar', serverName: 'calendar-a1b2c3d', url: 'https://mcp.example.com/calendar' },
+      connector: { entryId: 'managed-calendar', serverName: 'calendar-a1b2c3d', url: 'https://mcp.example.com/registry-fixture' },
     }))
     const mcpRegistry = {
       state: vi.fn(async () => ({ runtime: [], managed: [] })),
       install,
       search: vi.fn(async () => ({
         source: 'official-mcp-registry' as const,
-        query: 'calendar',
+        query: 'registry-fixture',
         fetchedAt: '2026-09-18T12:00:00.000Z',
         stale: false,
         candidates: [{
-          name: 'io.example/calendar',
-          title: 'Example Calendar MCP',
-          description: 'Calendar tools.',
+          name: 'io.example/registry-fixture',
+          title: 'Registry Fixture MCP',
+          description: 'Registry fixture tools.',
           version: '1.0.0',
           status: 'active' as const,
           trust: 'registry-listed' as const,
@@ -393,27 +553,27 @@ describe('connectors settings section', () => {
           transports: ['streamable-http' as const],
           packages: [],
           repositoryUrl: 'https://github.com/example/calendar-mcp',
-          remoteUrl: 'https://mcp.example.com/calendar',
+          remoteUrl: 'https://mcp.example.com/registry-fixture',
         }],
       })),
     }
 
     renderHub(api, { mcpRegistry })
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'calendar' } })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
 
-    expect(await screen.findByText('Example Calendar MCP')).toBeTruthy()
-    expect(mcpRegistry.search).toHaveBeenCalledWith({ query: 'calendar', limit: 12 })
-    expect(screen.getByText('Registry-listed · approval required')).toBeTruthy()
+    expect(await screen.findByText('Registry Fixture MCP')).toBeTruthy()
+    expect(mcpRegistry.search).toHaveBeenCalledWith({ query: 'registry-fixture', limit: 12 })
+    expect(screen.getByText('Registry-listed · vendor not verified')).toBeTruthy()
     expect(screen.getByText('streamable-http')).toBeTruthy()
-    const logo = document.querySelector('article[data-registry-server="io.example/calendar"] img')
+    const logo = document.querySelector('article[data-registry-server="io.example/registry-fixture"] img')
     expect(logo?.getAttribute('src')).toBe('https://cdn.example.com/calendar.png')
     expect(logo?.getAttribute('referrerpolicy')).toBe('no-referrer')
     expect(screen.getByRole('link', { name: 'View source' }).getAttribute('href'))
       .toBe('https://github.com/example/calendar-mcp')
     fireEvent.click(screen.getByRole('button', { name: 'Install' }))
     await waitFor(() => {
-      expect(install).toHaveBeenCalledWith({ name: 'io.example/calendar', version: '1.0.0' })
+      expect(install).toHaveBeenCalledWith({ name: 'io.example/registry-fixture', version: '1.0.0' })
     })
   })
 
@@ -451,41 +611,46 @@ describe('connectors settings section', () => {
     expect(screen.getByRole('button', { name: 'Reauthorize' })).toBeTruthy()
   })
 
-  it('marks an already managed registry remote as installed instead of offering another install', async () => {
+  it('marks a persisted registry connector with no runtime as broken and removable', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
+    const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
     const mcpRegistry = {
       state: vi.fn(async () => ({
         runtime: [],
-        managed: [{ entryId: 'x', serverName: 'calendar-x', url: 'https://mcp.example.com/calendar' }],
+        managed: [{ entryId: 'x', serverName: 'registry-fixture-x', url: 'https://mcp.example.com/registry-fixture' }],
       })),
       install: vi.fn(),
+      remove,
       search: vi.fn(async () => ({
         source: 'official-mcp-registry' as const,
-        query: 'calendar',
+        query: 'registry-fixture',
         fetchedAt: '2026-09-18T12:00:00.000Z',
         stale: false,
         candidates: [{
-          name: 'io.example/calendar',
-          title: 'Calendar',
-          description: 'Calendar tools.',
+          name: 'io.example/registry-fixture',
+          title: 'Registry Fixture',
+          description: 'Registry fixture tools.',
           version: '1.0.0',
           status: 'active' as const,
           trust: 'registry-listed' as const,
           icons: [],
           transports: ['streamable-http' as const],
           packages: [],
-          remoteUrl: 'https://mcp.example.com/calendar',
+          remoteUrl: 'https://mcp.example.com/registry-fixture',
         }],
       })),
     }
     renderHub(api, { mcpRegistry })
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'calendar' } })
-    expect(await screen.findByText('Installed')).toBeTruthy()
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
+    expect(await screen.findByText('Broken')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Repair' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
+    await waitFor(() => { expect(remove).toHaveBeenCalledWith({ entryId: 'x' }) })
   })
 
   it('rejects unsafe connector links instead of opening a blank or custom-scheme window', () => {
