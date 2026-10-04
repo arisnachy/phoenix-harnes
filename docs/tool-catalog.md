@@ -28,6 +28,7 @@ This table connects model-visible tool names to the plugin package and service s
 | `@phoenix-ai/dsh-tool-fs-search` | `glob`, `grep` | `ctx.tools`, `ctx.subprocess`, `ctx.systemPrompt` | `tool/call`, `tool/result` | - | glob and grep are unconditional discovery tools that spawn the packaged ripgrep binary (`@vscode/ripgrep`) through ctx.subprocess as ordinary foreground calls (never background jobs) — no host `rg` install and no shell layer. The catalog uses `sampleOverCapGlobResults: true`; deployments must choose that behavior explicitly. Capped results save the complete formatted list through the optional ctx.spillStore backend; returned locators are follow-up-readable/searchable when the backend exposes local paths in co-located deployments. |
 | `@phoenix-ai/dsh-tool-terminal` | `terminal_close`, `terminal_list`, `terminal_open`, `terminal_read`, `terminal_send`, `terminal_signal` | `ctx.tools`, `ctx.terminals`, `ctx.systemPrompt`, `ctx.jobs at call time for run_in_background` | `tool/call`, `tool/result` | - | The six terminal tools are opt-in and complement one-shot shell/filesystem tools. `terminal_send(run_in_background: true)` registers with `ctx.jobs`; TUI, named key sequences, BEL, resize, auto-start, and cross-agent sharing are absent from the schema. |
 | `@phoenix-ai/dsh-tool-goal` | `create_goal`, `get_goal`, `organization_forge`, `specialist_lab`, `update_goal` | `ctx.tools`, `ctx.agents`, `ctx.goals`, `ctx.systemPrompt`, `a calling Agent in an authorized open turn` | `tool/call`, `goal/change for mutations`, `tool/result` | - | create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds. |
+| `@phoenix-ai/dsh-tool-google-workspace` | `gmail_read`, `gmail_search`, `gmail_send`, `google_calendar_create_event`, `google_calendar_list_events`, `google_drive_search`, `google_workspace_request` | `ctx.tools`, `ctx.googleApi` | `tool/call`, `bounded Google Workspace request through the host OAuth broker`, `tool/result` | - | The schema harvest supplies a non-networking googleApi seam. Live calls stay inside the Host-owned OAuth broker, which fixes the Google service root and scope, injects the Bearer token only at fetch time, and never exposes OAuth material to the model-facing tool package. |
 | `@phoenix-ai/dsh-tool-home-gateway` | `home_control`, `home_list_devices` | `ctx.tools`, `ctx.home`, `ctx.systemPrompt` | `tool/call`, `tool/result`, `Home Assistant request at execution time` | - | The schema harvest uses a private fake endpoint and never performs a request. Live deployments remain disabled until the operator supplies a private endpoint, token variable, and both allowlists. |
 | `@phoenix-ai/dsh-schedule` | `schedule_create`, `schedule_delete`, `schedule_list` | `ctx.tools`, `ctx.sessions`, `Session persistence`, `a future live root Agent` | `tool/call`, `schedule/change create or delete`, `tool/result` | - | Registered only inside live root Agent scopes created after the opt-in Schedule plugin loads. Version 1 accepts after_seconds, explicit absolute at, and bounded fixed-rate every_seconds, and discloses session-local delivery; management reads and mutations require the shared Session persistence barrier. |
 | `@phoenix-ai/dsh-tool-living` | `living_act`, `living_forget_creation`, `living_get_connector_kit`, `living_inspect_creation`, `living_list_creations`, `living_read_state`, `living_register_creation`, `living_verify_creation` | `ctx.tools`, `ctx.living`, `ctx.systemPrompt` | `tool/call`, `durable living creation manifest`, `live creation state/actions/events through ctx.living`, `tool/result` | - | Universal domain-neutral control surface: arbitrary future creation kinds describe their own state, actions, events, resources, actors, and target integration level; verification refuses delivery below that target. |
@@ -1555,6 +1556,249 @@ Update the exact current goal revision. edit, pause, and resume require a direct
 Source: [`packages/goal/tool-goal/src/index.ts`](../packages/goal/tool-goal/src/index.ts)
 
 create, edit, pause, and resume require direct-human root authority; complete and blocked also accept the exact current goal round. The default blocked lower bound is three admitted rounds.
+
+<a id="phoenix-aidsh-tool-google-workspace"></a>
+
+## `@phoenix-ai/dsh-tool-google-workspace`
+
+### `gmail_read`
+
+Read one Gmail message by id from the connected mailbox. Full format includes headers and MIME body parts.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "message_id": {
+      "type": "string"
+    },
+    "format": {
+      "type": "string",
+      "description": "minimal, full, metadata, or raw. Defaults to full."
+    }
+  },
+  "required": [
+    "message_id"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `gmail_search`
+
+Search the connected Gmail mailbox using Gmail query syntax. Use this for account mail, not public web search.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Gmail search query such as is:unread newer_than:7d."
+    },
+    "max_results": {
+      "type": "number",
+      "description": "Maximum messages to return, 1-100. Defaults to 20."
+    },
+    "page_token": {
+      "type": "string",
+      "description": "Optional Gmail pagination token."
+    }
+  },
+  "required": [
+    "query"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `gmail_send`
+
+Send an email from the connected Gmail account. Call only when the user asked to send or approved the message content.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "to": {
+      "type": "string",
+      "description": "Recipient address or comma-separated recipient addresses."
+    },
+    "subject": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "cc": {
+      "type": "string",
+      "description": "Optional comma-separated CC addresses."
+    },
+    "bcc": {
+      "type": "string",
+      "description": "Optional comma-separated BCC addresses."
+    },
+    "html": {
+      "type": "boolean",
+      "description": "Send body as text/html instead of text/plain."
+    }
+  },
+  "required": [
+    "to",
+    "subject",
+    "body"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_calendar_create_event`
+
+Create an event in the connected Google Calendar. Use only when the user asked to schedule/create it.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "summary": {
+      "type": "string"
+    },
+    "start": {
+      "type": "string",
+      "description": "RFC3339 start date-time."
+    },
+    "end": {
+      "type": "string",
+      "description": "RFC3339 end date-time."
+    },
+    "calendar_id": {
+      "type": "string",
+      "description": "Calendar id. Defaults to primary."
+    },
+    "time_zone": {
+      "type": "string",
+      "description": "Optional IANA time zone, such as America/Santo_Domingo."
+    },
+    "description": {
+      "type": "string"
+    },
+    "attendees": {
+      "type": "array",
+      "description": "Optional attendee email addresses.",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "summary",
+    "start",
+    "end"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_calendar_list_events`
+
+List events from the connected Google Calendar, optionally bounded by RFC3339 start/end times.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "calendar_id": {
+      "type": "string",
+      "description": "Calendar id. Defaults to primary."
+    },
+    "time_min": {
+      "type": "string",
+      "description": "Optional RFC3339 lower bound."
+    },
+    "time_max": {
+      "type": "string",
+      "description": "Optional RFC3339 upper bound."
+    },
+    "max_results": {
+      "type": "number",
+      "description": "Maximum events, 1-250. Defaults to 50."
+    }
+  }
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_drive_search`
+
+Search/list files in the connected Google Drive using Drive v3 q syntax.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Optional Drive v3 q expression."
+    },
+    "page_size": {
+      "type": "number",
+      "description": "Maximum files, 1-100. Defaults to 50."
+    },
+    "page_token": {
+      "type": "string"
+    }
+  }
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+### `google_workspace_request`
+
+Advanced bounded Google Workspace REST call through PHOENIX OAuth. Use only when a dedicated Gmail/Calendar/Drive tool does not cover the task. service is restricted to gmail, calendar, drive, docs, sheets, slides, contacts; path must be relative and caller authentication headers are forbidden.
+
+```json
+{
+  "type": "object",
+  "properties": {
+    "service": {
+      "type": "string"
+    },
+    "path": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string",
+      "description": "GET, POST, PUT, PATCH, DELETE. Defaults to GET."
+    },
+    "body": {
+      "type": "string",
+      "description": "Optional request body, normally JSON text."
+    },
+    "content_type": {
+      "type": "string",
+      "description": "Defaults to application/json when body is present."
+    },
+    "upload": {
+      "type": "boolean",
+      "description": "Use the fixed upload API for Gmail/Drive."
+    }
+  },
+  "required": [
+    "service",
+    "path"
+  ]
+}
+```
+
+Source: [`packages/credentials/tool-google-workspace/src/index.ts`](../packages/credentials/tool-google-workspace/src/index.ts)
+
+The schema harvest supplies a non-networking googleApi seam. Live calls stay inside the Host-owned OAuth broker, which fixes the Google service root and scope, injects the Bearer token only at fetch time, and never exposes OAuth material to the model-facing tool package.
 
 <a id="phoenix-aidsh-tool-home-gateway"></a>
 
