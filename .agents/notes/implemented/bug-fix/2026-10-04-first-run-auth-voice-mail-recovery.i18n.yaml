@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-04-first-run-auth-voice-mail-recovery.md
-2026-10-04-first-run-auth-voice-mail-recovery.md: 8700abf218c99996643bc5d4937ef4867a2486e7
-2026-10-04-first-run-auth-voice-mail-recovery.zh.md: 17e3d24c1aaf6f1f63ec5a0c517989d04edd8a4b
+2026-10-04-first-run-auth-voice-mail-recovery.md: 678de8511df620f0e86908489f57c59ac73ce42b
+2026-10-04-first-run-auth-voice-mail-recovery.zh.md: 969d2fbe995afa3e405efac3dabcf92f69aba994
