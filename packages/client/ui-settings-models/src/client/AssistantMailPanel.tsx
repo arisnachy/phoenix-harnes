@@ -57,27 +57,21 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
 
   useEffect(() => {
     let stopped = false
-    void client.call('status').then((value) => {
-      if (stopped) return
-      setSnapshot(value)
-      setOwner(current => current.trim().length > 0 ? current : value.account.ownerEmail ?? '')
-      setContacts(current => current.trim().length > 0 ? current : value.account.contacts.join(', '))
-    }, () => {
-      if (!stopped) setFailure('El correo de Kira no está disponible en este host.')
-    })
-    return () => { stopped = true }
-  }, [client])
-
-  useEffect(() => {
-    let stopped = false
-    const timer = globalThis.setInterval(() => {
-      void client.call('status').then((value) => {
+    const refresh = async (reportFailure: boolean): Promise<void> => {
+      try {
+        const value = await client.call('status')
         if (stopped) return
         setSnapshot(value)
         setOwner(current => current.trim().length > 0 ? current : value.account.ownerEmail ?? '')
         setContacts(current => current.trim().length > 0 ? current : value.account.contacts.join(', '))
-      }, () => { /* Background status refresh is best-effort. */ })
-    }, 5_000)
+      } catch {
+        if (reportFailure && !stopped) {
+          setFailure('El correo de Kira no está disponible en este host.')
+        }
+      }
+    }
+    void refresh(true)
+    const timer = globalThis.setInterval(() => { void refresh(false) }, 5_000)
     return () => {
       stopped = true
       globalThis.clearInterval(timer)
