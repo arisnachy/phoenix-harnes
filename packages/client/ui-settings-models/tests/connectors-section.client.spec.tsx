@@ -224,9 +224,9 @@ describe('connectors settings section', () => {
     const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'mcp-client/example-service',
-        label: 'MCP example-service',
-        methods: [{ id: 'oauth', label: 'Authorize example-service' }],
+        key: 'mcp-client/supabase-broken',
+        label: 'MCP supabase-broken',
+        methods: [{ id: 'oauth', label: 'Authorize supabase-broken' }],
         inFlight: false,
         stored: { kind: 'grant' as const },
         disconnectable: true as const,
@@ -236,13 +236,13 @@ describe('connectors settings section', () => {
     const mcpRegistry = {
       state: vi.fn(async () => ({
         managed: [{
-          entryId: 'managed-example',
-          serverName: 'example-service',
-          url: 'https://example.invalid/mcp',
-          source: { kind: 'registry' as const, name: 'io.example/service', version: '1.0.0' },
+          entryId: 'managed-supabase',
+          serverName: 'supabase-broken',
+          url: 'https://mcp.supabase.com/mcp',
+          source: { kind: 'registry' as const, name: 'com.supabase/mcp', version: '1.0.0' },
         }],
         runtime: [{
-          serverName: 'example-service', transport: 'streamable-http' as const,
+          serverName: 'supabase-broken', transport: 'streamable-http' as const,
           status: 'failed' as const, reasonCode: 'connection-failed' as const, toolNames: [],
         }],
       })),
@@ -250,13 +250,12 @@ describe('connectors settings section', () => {
     }
 
     renderHub(api, { mcpRegistry })
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'example-service' } })
-    await act(async () => { await Promise.resolve() })
+    await screen.findByText('Supabase')
     fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
 
     await waitFor(() => {
-      expect(disconnect).toHaveBeenCalledWith({ key: 'mcp-client/example-service' })
-      expect(remove).toHaveBeenCalledWith({ entryId: 'managed-example' })
+      expect(disconnect).toHaveBeenCalledWith({ key: 'mcp-client/supabase-broken' })
+      expect(remove).toHaveBeenCalledWith({ entryId: 'managed-supabase' })
     })
     expect(disconnect.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]!)
   })
