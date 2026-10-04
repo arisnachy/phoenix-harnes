@@ -103,10 +103,12 @@ export class ReactLoopAgent implements Agent {
   readonly inbox: Inbox
   private phase: Phase
   private activityDone: Promise<void> = Promise.resolve()
-  /** True only while the current step is waiting on a model stream. */
-  private modelBoundaryActive = false
-  /** True only while the current step is waiting on model-requested tool work. */
-  private toolBoundaryActive = false
+  /**
+   * True after a step has durably admitted its claimed messages and until that
+   * step settles. User steering may safely preempt anywhere in this window,
+   * including request preparation/TTFT before a stream starts.
+   */
+  private stepExecutionActive = false
 
   /** The agent-scoped registration boundary; the lifecycle owner unwinds it after the driver exits. */
   readonly scope: Scope
@@ -168,16 +170,18 @@ export class ReactLoopAgent implements Agent {
 
   steer(input: UserMessage): void {
     const shouldInterruptActiveWork = this.phase.kind === 'running'
-      && (this.modelBoundaryActive || this.toolBoundaryActive)
+      && this.stepExecutionActive
       && !this.phase.abort.signal.aborted
     this.send(input, 'next-step', true)
     if (!shouldInterruptActiveWork || this.phase.kind !== 'running' || this.phase.abort.signal.aborted) return
 
-    // "Steer" is the interactive path, distinct from Queue. A user message
-    // must not sit behind a long model TTFT/stream or an unbounded
-    // Blender/PowerShell/browser call. Keep the steering inbox item,
-    // cooperatively abort the active model/tool boundary, and latch a fresh
-    // turn; the normal abort drain still owns cleanup and replay.
+    // "Steer" is the interactive path, distinct from Queue. Once the current
+    // step's claimed messages are durable, fresh human input takes priority
+    // across the whole execution window: request preparation, model TTFT/stream,
+    // and tool work. Aborting before step admission would lose claimed input,
+    // so pre-step remains atomic. Keep the steering inbox item and latch a
+    // fresh turn; the durable goal driver resumes any still-active mission
+    // after the human interruption is handled.
     this.phase.wakeRequested = true
     this.phase.abort.abort({ kind: 'user' })
   }
@@ -393,10 +397,15 @@ export class ReactLoopAgent implements Agent {
           }
           // max-tokens is sticky: once any step hits the ceiling, later steps
           // that complete normally must not downgrade the turn outcome.
-          const stepEnd = await this.step(decision.assembly)
-          // max-tokens stays sticky: a later completed step must not
-          // downgrade the turn outcome.
-          if (turnEnds === null || turnEnds.kind !== 'max-tokens') turnEnds = stepEnd
+          this.stepExecutionActive = true
+          try {
+            const stepEnd = await this.step(decision.assembly)
+            // max-tokens stays sticky: a later completed step must not
+            // downgrade the turn outcome.
+            if (turnEnds === null || turnEnds.kind !== 'max-tokens') turnEnds = stepEnd
+          } finally {
+            this.stepExecutionActive = false
+          }
         } finally {
           this.session.append('step/end', { turn, step })
         }
@@ -453,7 +462,6 @@ export class ReactLoopAgent implements Agent {
       )
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
-      this.modelBoundaryActive = true
       try {
         const stream = preparedCall?.stream(request) ?? this.loopCtx.llm.stream(request)
         signal.throwIfAborted()
@@ -480,8 +488,6 @@ export class ReactLoopAgent implements Agent {
           }
         }
         throw error
-      } finally {
-        this.modelBoundaryActive = false
       }
       const finish = assembler.finish
       if (finish.kind === 'error' || finish.kind === 'aborted') {
@@ -527,15 +533,10 @@ export class ReactLoopAgent implements Agent {
       if (toolCalls.length === 0) return { kind: 'completed' }
       const hasVisibleProgress = message.content.some(block => block.type === 'text' && block.text.trim().length > 0)
       let concluded = false
-      this.toolBoundaryActive = true
-      try {
-        ;({ concluded } = await executeToolCalls(
-          this.loopCtx, turn, step, toolCalls, signal,
-          context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
-        ))
-      } finally {
-        this.toolBoundaryActive = false
-      }
+      ;({ concluded } = await executeToolCalls(
+        this.loopCtx, turn, step, toolCalls, signal,
+        context => this.inbox.splice('next-step', this.inbox.nextStep.length, 0, [context]),
+      ))
       // Some providers jump straight from hidden reasoning into tool calls.
       // Nudge the next model step to narrate safe, user-visible progress instead
       // of letting a long tool chain remain opaque. This is an internal prompt,
