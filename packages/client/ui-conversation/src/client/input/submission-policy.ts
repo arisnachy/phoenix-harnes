@@ -1,7 +1,9 @@
 /**
- * Composer submission policy. It owns the live busy-Enter
- * preference and resolves keyboard gestures into queue/steer delivery modes;
- * Host and Agent keep the actual delivery-window authority.
+ * Composer submission policy. Plain Enter is always an interjection while the
+ * addressed Agent is running and supports steering; Cmd/Ctrl+Enter is the
+ * explicit "queue for later" gesture. The legacy busy-Enter preference remains
+ * readable for settings/backward compatibility but no longer overrides this
+ * interactive contract. Host and Agent keep the actual delivery-window authority.
  */
 import {
   createSnapshotStore, type SettingsScope, type SnapshotStore,
@@ -16,8 +18,9 @@ export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
 
 /**
  * Busy-Enter policy used by both the composer inject face and its Settings row.
- * Direct `steer` is intentionally best-effort: AgentLoop turns a closed-window
- * submission into the next waking Queue item.
+ * Direct `steer` is the normal busy-session path: AgentLoop interrupts active
+ * cooperative model/tool work, preserves the task inbox, handles the new user
+ * instruction, then continues.
  */
 export class ComposerSubmissionPolicy {
   /** Reactive preference source for the Settings row. */
@@ -51,9 +54,10 @@ export class ComposerSubmissionPolicy {
     steeringAvailable: boolean,
   ): InputSubmitMode {
     if (!running || !steeringAvailable) return 'queue'
-    const preferred = this.busyEnter.getSnapshot()
-    if (gesture === 'enter') return preferred
-    return preferred === 'queue' ? 'steer' : 'queue'
+    // User input during active work is an interjection, never an accidental
+    // next-turn queue caused by a stale persisted preference. Queue remains
+    // explicit on the accelerated chord.
+    return gesture === 'enter' ? 'steer' : 'queue'
   }
 
   /**
