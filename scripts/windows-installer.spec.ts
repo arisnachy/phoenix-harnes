@@ -88,6 +88,15 @@ describe('PHOENIX managed Windows installation', () => {
     expect(iss).toContain('RestartApplications=no')
   })
 
+  it('prepares the lightweight local DSH profile before a managed install is marked ready', () => {
+    const bootstrap = read('installer/windows/bootstrap-runtime.ps1')
+    expect(bootstrap).toContain("[PHOENIX BOOTSTRAP] preparing local DSH profile")
+    expect(bootstrap).toContain('apps/cli/src/bin.ts --profile web --dump-default-config')
+    expect(bootstrap).toContain("throw 'Phoenix local DSH profile bootstrap failed'")
+    expect(bootstrap).toContain('profiles\\\\node_modules junction farm')
+    expect(bootstrap).not.toContain('dsh plugin --profile web add')
+  })
+
   it('keeps fresh managed installs on the promoted stable channel with process-scoped Git trust', () => {
     const installer = read('install-phoenix.ps1')
     const managedUpdater = read('scripts/phoenix-managed-update.mjs')
