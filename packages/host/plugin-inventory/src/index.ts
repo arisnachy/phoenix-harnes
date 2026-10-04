@@ -19,6 +19,7 @@ import {
   type LocalModelRuntimeSnapshot,
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
+import { OpenClawConnectorController } from './openclaw-connectors.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
   BINANCE_AGENT_OS_URL,
@@ -44,6 +45,9 @@ import type {
   McpRegistryInstallRequest,
   McpRegistrySearchRequest,
   McpRegistrySearchSnapshot,
+  OpenClawConnectorAuthorizeReceipt,
+  OpenClawConnectorAuthorizeRequest,
+  OpenClawConnectorHubSnapshot,
   PhoenixLocalEndpointReceipt,
   PhoenixLocalModeRequest,
   PhoenixLocalModelRequest,
@@ -112,12 +116,14 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly localModel: Promise<LocalModelRuntimeManager>
   private readonly chatGptWeb: ChatGptWebIntegration
   private readonly managedMcp: ManagedMcpController
+  private readonly openClawConnectors: OpenClawConnectorController
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
     this.localModel = createNodeLocalModelRuntimeManager()
     this.chatGptWeb = createChatGptWebIntegration()
     this.managedMcp = new ManagedMcpController(ctx.loader)
+    this.openClawConnectors = new OpenClawConnectorController()
     void ctx.effect(async () => {
       try {
         await this.managedMcp.retireJev()
@@ -189,6 +195,27 @@ export class PluginInventoryGateway extends TypertRemoteService {
     return publicLocalSnapshot((await this.localModel).snapshot())
   }
 
+
+  /**
+   * Read whitelisted operational OpenClaw connector state without exposing secrets.
+   * @returns Google Workspace and GitHub OpenClaw runtime state.
+   */
+  @Remote('openClawConnectorState')
+  async openClawConnectorState(): Promise<OpenClawConnectorHubSnapshot> {
+    return this.openClawConnectors.snapshot()
+  }
+
+  /**
+   * Start one exact OpenClaw connector authorization workflow.
+   * @param request - Whitelisted connector id and optional validated account email.
+   * @returns Receipt after the Host has started the provider-owned browser flow.
+   */
+  @Remote('authorizeOpenClawConnector')
+  async authorizeOpenClawConnector(
+    request: OpenClawConnectorAuthorizeRequest,
+  ): Promise<OpenClawConnectorAuthorizeReceipt> {
+    return this.openClawConnectors.authorize(request)
+  }
 
   /**
    * Search the public Official MCP Registry from the Host. The browser never
