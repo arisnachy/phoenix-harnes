@@ -75,10 +75,10 @@ export function DiagnosticsRow({ host, t }: DiagnosticsRowProps): ReactNode {
         ? <div className={css.notice} role="alert">{t('diagnostics.loadError')}</div>
         : recent.length > 0
           ? (
-              <div className={css.errors} role="status">
-                {recent.map((line, index) => <code key={`${String(index)}-${line}`}>{line}</code>)}
-              </div>
-            )
+            <div className={css.errors} role="status">
+              {recent.map((line, index) => <code key={`${String(index)}-${line}`}>{line}</code>)}
+            </div>
+          )
           : <div className={css.notice}>{diagnostics?.available === true ? t('diagnostics.clean') : t('diagnostics.noLog')}</div>}
 
       {openFailed ? <div className={css.notice} role="alert">{t('diagnostics.openError')}</div> : null}
