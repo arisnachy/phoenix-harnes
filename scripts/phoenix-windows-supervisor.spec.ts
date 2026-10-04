@@ -7,6 +7,7 @@ const restartBridgeSource = readFileSync(resolve('scripts/phoenix-prepared-resta
 const activatorSource = readFileSync(resolve('scripts/phoenix-activate-prepared.mjs'), 'utf8')
 const cliSource = readFileSync(resolve('apps/cli/src/bin.ts'), 'utf8')
 const updateWatchSource = readFileSync(resolve('apps/cli/src/phoenix-update-watch.ts'), 'utf8')
+const autoUpdateSource = readFileSync(resolve('scripts/phoenix-auto-update.mjs'), 'utf8')
 const acpPackage = JSON.parse(readFileSync(resolve('packages/examples/acp-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
 const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrpc-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
 
@@ -240,9 +241,21 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('function stageDirectoriesForCleanup()')
     expect(source).toContain('function stageProtectedByOwningCheckout(path)')
     expect(source).toContain("const marker = join(common, PREPARED_FILE)")
+    expect(source).toContain("const statePath = join(common, UPDATE_STATE_FILE)")
+    expect(source).toContain("state?.status === 'preparing'")
+    expect(source).toContain('state.target === head')
     expect(source).toContain('if (stageProtectedByOwningCheckout(candidate)) continue')
     expect(source).toContain('key !== currentStage && managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS')
     expect(source).toContain('removed stale updater staging worktree')
+  })
+
+  it('repairs an incompletely materialized updater stage before running the build', () => {
+    expect(autoUpdateSource).toContain('function missingTrackedFiles(stage, limit = 32)')
+    expect(autoUpdateSource).toContain('function ensureStagingMaterialized(stage, target)')
+    expect(autoUpdateSource).toContain("['sparse-checkout', 'disable']")
+    expect(autoUpdateSource).toContain("['reset', '--hard', target]")
+    expect(autoUpdateSource).toContain('ensureStagingMaterialized(stage, target)')
+    expect(autoUpdateSource).toContain('staging worktree remains incomplete after repair')
   })
 
   it('offers a cleanup-only supervisor mode and invokes it from each new Windows Host', () => {
