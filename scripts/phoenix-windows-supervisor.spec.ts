@@ -185,7 +185,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('continue')
   })
 
-  it('repairs missing compiled profile artifacts once and refuses an endless restart loop if repair fails', () => {
+  it('repairs missing compiled profile artifacts even when dump-config does not load the broken plugin', () => {
     expect(source).toContain('function profileFallbackHasMissingRuntimeArtifact()')
     expect(source).toContain('PROFILE_REQUIRED_RUNTIME_PACKAGES')
     expect(source).toContain("'@phoenix-ai/dsh-mcp-client'")
@@ -194,10 +194,16 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain("'@phoenix-ai/dsh-tool-google-workspace'")
     expect(source).toContain('if (!existsSync(modulesDir) || !existsSync(scopeDir)) return true')
     expect(source).toContain('for (const packageName of PROFILE_REQUIRED_RUNTIME_PACKAGES)')
+    expect(source).toContain('if (!existsSync(manifestPath)) continue')
     expect(source).toContain('function isMissingProfileRuntimeArtifact(detail)')
     expect(source).toContain("normalized.includes('/profiles/node_modules/')")
+    expect(source).toContain('const startupFallbackMissing = profileFallbackHasMissingRuntimeArtifact()')
+    expect(source).toContain('repairMissingProfileRuntimeArtifact(runtimeRoot, startupPreflight, startupFallbackMissing)')
+    expect(source).toContain('const crashFallbackMissing = profileFallbackHasMissingRuntimeArtifact()')
+    expect(source).toContain('repairMissingProfileRuntimeArtifact(runtimeRoot, crashPreflight, crashFallbackMissing)')
     expect(source).toContain("['exec', 'tsx', 'scripts/build.ts']")
-    expect(source).toContain('repairMissingProfileRuntimeArtifact(runtimeRoot, crashPreflight)')
+    expect(source).toContain('const fallbackStillMissing = profileFallbackHasMissingRuntimeArtifact()')
+    expect(source).toContain('a linked package still lacks its declared main artifact')
     expect(source).toContain('profile artifact repair failed; refusing an automatic relaunch loop')
   })
 

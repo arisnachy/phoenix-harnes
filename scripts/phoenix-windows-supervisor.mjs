@@ -594,7 +594,10 @@ function profileFallbackHasMissingRuntimeArtifact() {
       if (!entry.isDirectory() && !entry.isSymbolicLink()) continue
       const packageDir = join(scopeDir, entry.name)
       const manifestPath = join(packageDir, 'package.json')
-      if (!existsSync(manifestPath)) return true
+      // The profile healer deliberately tolerates stale links for packages no
+      // longer present in the current installation. Without a manifest they
+      // cannot be loader-visible, so they are not a missing compiled artifact.
+      if (!existsSync(manifestPath)) continue
       const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
       const main = typeof manifest?.main === 'string' ? manifest.main.trim() : ''
       if (main.length > 0 && !existsSync(join(packageDir, main))) return true
@@ -612,10 +615,17 @@ function isMissingProfileRuntimeArtifact(detail) {
     && normalized.includes('/lib/')
 }
 
-function repairMissingProfileRuntimeArtifact(path, initialPreflight) {
-  if (initialPreflight.ok || !isMissingProfileRuntimeArtifact(initialPreflight.detail)) return initialPreflight
+function repairMissingProfileRuntimeArtifact(
+  path,
+  initialPreflight,
+  fallbackMissing = profileFallbackHasMissingRuntimeArtifact(),
+) {
+  if (!fallbackMissing
+    && (initialPreflight.ok || !isMissingProfileRuntimeArtifact(initialPreflight.detail))) {
+    return initialPreflight
+  }
 
-  console.error('[PHOENIX RECOVERY] a compiled profile module is missing; rebuilding Host artifacts once before relaunch.')
+  console.error('[PHOENIX RECOVERY] a compiled profile module is missing; rebuilding the full runtime once before relaunch.')
   try {
     runPnpm(path, ['exec', 'tsx', 'scripts/build.ts'], 'repair missing profile runtime artifacts')
   } catch (error) {
@@ -628,9 +638,21 @@ function repairMissingProfileRuntimeArtifact(path, initialPreflight) {
     }
   }
 
+  const fallbackStillMissing = profileFallbackHasMissingRuntimeArtifact()
   const retried = runtimeBootPreflight(path)
-  if (retried.ok) {
+  if (!fallbackStillMissing && retried.ok) {
     console.error('[PHOENIX RECOVERY] missing profile runtime artifacts rebuilt successfully; boot preflight passed.')
+    return retried
+  }
+  if (fallbackStillMissing) {
+    return {
+      ok: false,
+      detail: [
+        initialPreflight.detail,
+        retried.detail,
+        'profile artifact repair completed but a linked package still lacks its declared main artifact',
+      ].filter(Boolean).join('\n'),
+    }
   }
   return retried
 }
@@ -1205,16 +1227,15 @@ restoreActiveRuntime()
 cleanupObsoleteRuntimes()
 recoverConfigurationBeforeFirstBoot()
 
-if (profileFallbackHasMissingRuntimeArtifact()) {
+const startupFallbackMissing = profileFallbackHasMissingRuntimeArtifact()
+if (startupFallbackMissing) {
   const startupPreflight = runtimeBootPreflight(runtimeRoot)
-  if (!startupPreflight.ok && isMissingProfileRuntimeArtifact(startupPreflight.detail)) {
-    const repaired = repairMissingProfileRuntimeArtifact(runtimeRoot, startupPreflight)
-    if (!repaired.ok) {
-      writeConfigurationRecoveryReport('startup-profile-artifact-repair-failed', repaired.detail)
-      console.error('[PHOENIX RECOVERY] startup profile artifact repair failed; refusing an automatic relaunch loop.')
-      if (repaired.detail.length > 0) console.error(`[PHOENIX RECOVERY] ${repaired.detail}`)
-      process.exit(1)
-    }
+  const repaired = repairMissingProfileRuntimeArtifact(runtimeRoot, startupPreflight, startupFallbackMissing)
+  if (!repaired.ok) {
+    writeConfigurationRecoveryReport('startup-profile-artifact-repair-failed', repaired.detail)
+    console.error('[PHOENIX RECOVERY] startup profile artifact repair failed; refusing an automatic relaunch loop.')
+    if (repaired.detail.length > 0) console.error(`[PHOENIX RECOVERY] ${repaired.detail}`)
+    process.exit(1)
   }
 }
 
@@ -1391,8 +1412,9 @@ while (true) {
   }
 
   const crashPreflight = runtimeBootPreflight(runtimeRoot)
-  if (!crashPreflight.ok && isMissingProfileRuntimeArtifact(crashPreflight.detail)) {
-    const repaired = repairMissingProfileRuntimeArtifact(runtimeRoot, crashPreflight)
+  const crashFallbackMissing = profileFallbackHasMissingRuntimeArtifact()
+  if (crashFallbackMissing || (!crashPreflight.ok && isMissingProfileRuntimeArtifact(crashPreflight.detail))) {
+    const repaired = repairMissingProfileRuntimeArtifact(runtimeRoot, crashPreflight, crashFallbackMissing)
     if (repaired.ok) {
       console.error('[PHOENIX RECOVERY] repaired missing profile artifacts after Host exit; relaunching PHOENIX.')
       continue
