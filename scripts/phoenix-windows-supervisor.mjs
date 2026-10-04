@@ -593,7 +593,7 @@ function repairMissingProfileRuntimeArtifact(path, initialPreflight) {
 
   console.error('[PHOENIX RECOVERY] a compiled profile module is missing; rebuilding Host artifacts once before relaunch.')
   try {
-    runPnpm(path, ['run', 'build:lib:host'], 'repair missing profile runtime artifacts')
+    runPnpm(path, ['exec', 'tsx', 'scripts/build.ts'], 'repair missing profile runtime artifacts')
   } catch (error) {
     return {
       ok: false,
