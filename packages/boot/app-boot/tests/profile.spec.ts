@@ -239,11 +239,15 @@ describe('healProfilesModuleFallback', () => {
     expect(before).toContain('dep-of-a')
   })
 
-  it('throws when a fallback entry is a real directory', () => {
+  it('replaces a legacy real fallback directory with the managed installation link', () => {
     const anchor = stageInstallation({})
     const home = tmp()
-    mkdirSync(join(home, 'profiles', 'node_modules', 'dsh-app'), { recursive: true })
-    expect(() => { healProfilesModuleFallback(anchor, home) }).toThrow('is not a symlink')
+    const legacy = join(home, 'profiles', 'node_modules', 'dsh-app')
+    mkdirSync(legacy, { recursive: true })
+    writeFileSync(join(legacy, 'stale.txt'), 'old copied runtime')
+    healProfilesModuleFallback(anchor, home)
+    expect(lstatSync(legacy).isSymbolicLink()).toBe(true)
+    expect(readlinkSync(legacy)).toContain('app')
   })
 
   it('replaces a wrong symlink', () => {
