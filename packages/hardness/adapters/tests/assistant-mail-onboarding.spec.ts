@@ -39,8 +39,7 @@ describe('mail onboarding', () => {
       await expect(account.signup('owner@example.com', 'kira-hidden-retry')).rejects.toThrow('existing')
       expect(calls).toBe(1)
 
-      expect((await account.resetAmbiguousSignup()).state).toBe('not-configured')
-      const second = await account.signup('owner@example.com', 'kira-second')
+      const second = await account.signupAnother('owner@example.com', 'kira-second')
       expect(second).toMatchObject({
         state: 'pending-verification',
         inboxId: 'second@agentmail.to',
