@@ -16,7 +16,11 @@ export const name = 'authorization-openclaw-cli'
 /** Authorization/credential ownership plus the governed local subprocess seam. */
 export const inject = ['authorization', 'credentials', 'subprocess']
 
+/** Phoenix marker for the adopted OpenClaw gog Google Workspace account. */
 export const OPENCLAW_GOOGLE_ACCOUNT_KEY = credentialKey('openclaw-cli', 'google-workspace')
+/** Backward-compatible Google authorization key export for the public /google entry point. */
+export const GOOGLE_ACCOUNT_KEY = OPENCLAW_GOOGLE_ACCOUNT_KEY
+/** Phoenix marker for the adopted official GitHub CLI account. */
 export const OPENCLAW_GITHUB_ACCOUNT_KEY = credentialKey('openclaw-cli', 'github')
 
 const GOOGLE_SERVICES = 'gmail,calendar,drive,docs,sheets,slides,contacts'
@@ -367,7 +371,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.authorization.registerFlow({
     key: OPENCLAW_GOOGLE_ACCOUNT_KEY,
     label: 'Google Workspace',
-    methods: [{ id: 'oauth', label: 'Authorize Google Workspace' }],
+    methods: [{ id: 'oauth', label: 'Sign in with Google' }],
     connectors: GOOGLE_CONNECTORS,
     inspect: signal => inspectGoogle(ctx, signal),
     disconnect: async () => {
@@ -405,4 +409,5 @@ export const internals: {
   run: runOpenClawCli,
 }
 
+/** Cordis plugin descriptor for OpenClaw-backed Google Workspace and GitHub authorization. */
 export default { name, inject, apply }
