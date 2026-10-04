@@ -1,5 +1,6 @@
 /** General Settings row for local PHOENIX diagnostics without a visible console. */
 import { useCallback, useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import css from './DiagnosticsRow.module.css'
@@ -23,8 +24,12 @@ export type DiagnosticsRowProps =
   & PropsLocale<'settings'>
   & InjectFace<DiagnosticsRowInjected>
 
-/** Show recent hidden-launch errors and open the full local log on demand. */
-export function DiagnosticsRow({ host, t }: DiagnosticsRowProps) {
+/**
+ * Show recent hidden-launch errors and open the full local log on demand.
+ * @param props - Host diagnostics API and localized settings copy.
+ * @returns the diagnostics row rendered in General Settings.
+ */
+export function DiagnosticsRow({ host, t }: DiagnosticsRowProps): ReactNode {
   const [diagnostics, setDiagnostics] = useState<Diagnostics | undefined>()
   const [loadFailed, setLoadFailed] = useState(false)
   const [openFailed, setOpenFailed] = useState(false)
