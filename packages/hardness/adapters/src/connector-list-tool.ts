@@ -288,18 +288,33 @@ export function createConnectorListTool(
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args) {
-      const authorizationEntries = authorization === undefined
-        ? []
-        : await Promise.all(authorization.list().map(entry => projectEntry(authorization, entry)))
-      const mcpEntries = mcpConnectors?.list().map(projectMcpEntry) ?? []
-      let openClawEntries: AuthorizationConnector[] = []
+      let openClawSnapshot: Awaited<ReturnType<OpenClawConnectorListService['openClawConnectorState']>> | undefined
       if (openClaw !== undefined) {
         try {
-          openClawEntries = (await openClaw.openClawConnectorState()).connectors.map(projectOpenClaw)
+          openClawSnapshot = await openClaw.openClawConnectorState()
         } catch {
           // Optional OpenClaw inventory must never make connector_list itself fail.
         }
       }
+      const operationalOpenClaw = new Set(
+        (openClawSnapshot?.connectors ?? [])
+          .filter(connector => connector.status !== 'missing-runtime')
+          .map(connector => connector.id),
+      )
+      const authorizationEntries = authorization === undefined
+        ? []
+        : await Promise.all(authorization.list()
+          .filter((entry) => {
+            const key = String(entry.key).toLowerCase()
+            const label = entry.label.toLowerCase()
+            if (operationalOpenClaw.has('google-workspace') && key === 'authorization-google/account') return false
+            if (operationalOpenClaw.has('github')
+              && (key.includes('github-copilot') || label === 'github copilot')) return false
+            return true
+          })
+          .map(entry => projectEntry(authorization, entry)))
+      const mcpEntries = mcpConnectors?.list().map(projectMcpEntry) ?? []
+      const openClawEntries = (openClawSnapshot?.connectors ?? []).map(projectOpenClaw)
       const entries = [...authorizationEntries, ...mcpEntries, ...openClawEntries]
       const target = args.target?.trim()
       if (target === undefined || target.length === 0) {
