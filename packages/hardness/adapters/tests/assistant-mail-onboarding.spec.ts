@@ -249,3 +249,39 @@ it('recovers missing access to a previously verified mailbox through its persist
     expect(key).toBe('rotated-test-secret')
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
+
+
+it('deletes a reachable old inbox and clears the enrollment so signup can start again', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-discard-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'old@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
+    const requests: { url: string; method?: string }[] = []
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      resolveKey: async () => 'test-secret',
+      fetch: async (url, init) => {
+        requests.push({ url: requestAddress(url), method: init?.method })
+        if (init?.method === 'DELETE') return new Response(null, { status: 204 })
+        return Response.json({ api_key: 'new-secret', inbox_id: 'new@agentmail.to' })
+      },
+    })
+    await expect(account.discard()).resolves.toMatchObject({ state: 'not-configured', contacts: [] })
+    expect(requests[0]).toEqual({ url: 'https://api.agentmail.to/v0/inboxes/old%40agentmail.to', method: 'DELETE' })
+    await expect(account.signup('owner@example.com', 'kira-new')).resolves.toMatchObject({ state: 'pending-verification', inboxId: 'new@agentmail.to' })
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('clears an unrecoverable local enrollment even when its credential is already gone', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-discard-lost-key-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({ state: 'signup-ambiguous', ownerEmail: 'owner@example.com', contacts: [] }))
+    const fetch = vi.fn()
+    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => undefined, fetch })
+    await expect(account.discard()).resolves.toMatchObject({ state: 'not-configured', contacts: [] })
+    expect(fetch).not.toHaveBeenCalled()
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
