@@ -699,7 +699,10 @@ export class VoiceRuntime extends TypertRemoteService {
     // assistant response. Ignore the realtime model's independent assistant
     // transcript in this case; the live Agent is the single source of truth.
     const sessionId = SessionId(key)
-    const agent = this.ctx.get('agents')?.get(sessionId)
+    const agents = this.ctx.get('agents') as unknown as {
+      get(id: SessionId): { followup(message: ReturnType<typeof createUserMessage>): void } | undefined
+    } | undefined
+    const agent = agents?.get(sessionId)
     if (agent !== undefined) {
       if (transcript.role === 'user') {
         this.closeRealtimeTranscriptTurn(key, 'user')
