@@ -44,7 +44,7 @@ function appendBounded(current: string, chunk: unknown): string {
   return next.length <= MAX_CLI_OUTPUT ? next : next.slice(-MAX_CLI_OUTPUT)
 }
 
-async function runCli(
+export async function runOpenClawCli(
   ctx: Context,
   command: string,
   args: readonly string[],
@@ -390,9 +390,9 @@ export function apply(ctx: Context): void {
 
 /** Test seam for official CLI execution. */
 export const internals: {
-  run: typeof runCli
+  run: typeof runOpenClawCli
 } = {
-  run: runCli,
+  run: runOpenClawCli,
 }
 
 export default { name, inject, apply }
