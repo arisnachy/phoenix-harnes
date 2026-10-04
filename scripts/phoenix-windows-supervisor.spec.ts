@@ -187,6 +187,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
 
   it('repairs missing compiled profile artifacts once and refuses an endless restart loop if repair fails', () => {
     expect(source).toContain('function profileFallbackHasMissingRuntimeArtifact()')
+    expect(source).toContain('PROFILE_REQUIRED_RUNTIME_PACKAGES')
+    expect(source).toContain("'@phoenix-ai/dsh-mcp-client'")
+    expect(source).toContain("'@phoenix-ai/dsh-mcp-connector-registry'")
+    expect(source).toContain("'@phoenix-ai/dsh-authorization'")
+    expect(source).toContain("'@phoenix-ai/dsh-tool-google-workspace'")
+    expect(source).toContain('if (!existsSync(modulesDir) || !existsSync(scopeDir)) return true')
+    expect(source).toContain('for (const packageName of PROFILE_REQUIRED_RUNTIME_PACKAGES)')
     expect(source).toContain('function isMissingProfileRuntimeArtifact(detail)')
     expect(source).toContain("normalized.includes('/profiles/node_modules/')")
     expect(source).toContain("['exec', 'tsx', 'scripts/build.ts']")
