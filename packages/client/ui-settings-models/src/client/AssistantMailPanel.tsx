@@ -26,7 +26,7 @@ export interface AssistantMailSnapshot {
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
-   * @param action Status, signup, recover, create-inbox, verify, configure or refresh.
+   * @param action Status, signup, recover, create-inbox, discard, verify, configure or refresh.
    * @param input Operation properties; secrets are accepted only by connect.
    * @returns Secret-free account and job status.
    */
@@ -115,6 +115,11 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const copyKiraInbox = (): void => {
     if (kiraInbox === undefined) return
     void globalThis.navigator.clipboard.writeText(kiraInbox)
+  }
+  const discardMailbox = (): void => {
+    const label = kiraInbox ?? 'el buzón guardado'
+    if (!globalThis.confirm(`Phoenix dejará de usar ${label}. Si la credencial aún funciona, también intentará borrarlo de AgentMail. ¿Crear un buzón nuevo desde cero?`)) return
+    void operate('discard')
   }
 
   return <section className={styles.mailCard} aria-label="Correo de Kira">
@@ -208,6 +213,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         onClick={() => { void operate('recover') }}>
         Recuperar acceso
       </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={discardMailbox}>
+        Eliminar buzón viejo y empezar de nuevo
+      </button>
     </div> : null}
 
     {ready ? <>
@@ -270,6 +279,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           >
             Actualizar estado
           </button>
+          <button type="button" className={styles.secondaryButton} disabled={busy}
+            onClick={discardMailbox}>
+            Eliminar este buzón y empezar de nuevo
+          </button>
         </div>
       </details>
     </> : null}
@@ -283,6 +296,14 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         onClick={() => { void operate('recover') }}>
         Recuperar y continuar
       </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={discardMailbox}>
+        No se puede recuperar: crear uno nuevo
+      </button>
+      <p className={styles.help}>
+        Phoenix intentará borrar el buzón anterior si conserva acceso. Si la credencial ya no sirve,
+        olvidará ese buzón localmente para que no bloquee una configuración nueva.
+      </p>
     </div> : null}
 
     {failure === undefined ? null : <p className={styles.failure} role="alert">{failure}</p>}
