@@ -61,10 +61,20 @@ export interface McpConnectorRuntimeView {
   reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
 }
 
+/** Secret-free PHOENIX-managed MCP identity and trusted reconstruction source. */
+export interface ManagedMcpConnectorView {
+  entryId: string
+  serverName: string
+  url: string
+  source?:
+    | { kind: 'registry'; name: string; version?: string }
+    | { kind: 'curated'; connectorId: string }
+}
+
 /** Combined runtime + managed MCP state returned by the Host. */
 export interface McpConnectorHubSnapshot {
   runtime: McpConnectorRuntimeView[]
-  managed: Array<{ entryId: string; serverName: string; url: string }>
+  managed: ManagedMcpConnectorView[]
 }
 
 /** Secret-free Jev setup/runtime projection. */
@@ -95,7 +105,14 @@ export interface McpRegistryClient {
    */
   install(request: { name: string; version?: string }): Promise<{
     status: 'installed' | 'already-installed'
-    connector: { entryId: string; serverName: string; url: string }
+    connector: ManagedMcpConnectorView
+  }>
+  /** Remove one exact PHOENIX-managed MCP. */
+  remove(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }>
+  /** Repair one managed MCP strictly from its persisted trusted source. */
+  repair(request: { entryId: string }): Promise<{
+    status: 'installed' | 'already-installed'
+    connector: ManagedMcpConnectorView
   }>
   /** Read Jev setup/runtime state without exposing its secret. Optional for older hosts. */
   jevState?(): Promise<JevMcpSnapshot>
@@ -309,7 +326,11 @@ function runtimeMatchesDefinition(runtime: McpConnectorRuntimeView, definition: 
   return needles.some(needle => server === needle || server.includes(needle) || needle.includes(server))
 }
 
-function managedMatchesDefinition(managed: { serverName: string; url: string }, definition: ConnectorDefinition): boolean {
+function managedMatchesDefinition(managed: ManagedMcpConnectorView, definition: ConnectorDefinition): boolean {
+  if (managed.source?.kind === 'curated') return managed.source.connectorId === definition.id
+  if (managed.source?.kind === 'registry' && definition.registryName !== undefined) {
+    return managed.source.name === definition.registryName
+  }
   const server = normalize(managed.serverName)
   const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
     .map(normalize)
