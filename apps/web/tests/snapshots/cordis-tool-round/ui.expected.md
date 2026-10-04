@@ -20,7 +20,6 @@
 - strong: Kira
 - text: Coordination / orchestration
 - paragraph: CORDIS_UI_READY
-- button "Add reaction"
 - button "Tools" [expanded]
 - button "Context injection System internal":
   - img
@@ -80,6 +79,7 @@
   - text: Reasoning Internal reasoning hidden
 - button "Copy":
   - img
+- button "Add reaction"
 - button "Good response":
   - img
 - button "Bad response":
@@ -91,7 +91,6 @@
 - strong: Kira
 - text: Coordination / orchestration
 - paragraph: The Cordis Plugin is running.
-- button "Add reaction"
 - button "Tools" [expanded]
 - button "Context injection cordis-host-runner":
   - img
@@ -99,6 +98,7 @@
   - text: Context injection cordis-host-runner
 - button "Copy":
   - img
+- button "Add reaction"
 - button "Good response":
   - img
 - button "Bad response":
@@ -115,7 +115,6 @@
 - strong: Kira
 - text: Coordination / orchestration
 - paragraph: CORDIS_UI_DONE
-- button "Add reaction"
 - button "Tools" [expanded]
 - img
 - text: Stop Cordis Plugin snap-1
@@ -127,6 +126,7 @@
   - text: Context injection agent-loop
 - button "Copy":
   - img
+- button "Add reaction"
 - button "Good response":
   - img
 - button "Bad response":
