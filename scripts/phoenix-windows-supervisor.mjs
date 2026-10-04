@@ -40,6 +40,17 @@ const WATCHER_MAX_RESTART_DELAY_MS = 60_000
 const WATCHER_STABLE_MS = 60_000
 const HOST_RESTART_DELAY_MS = 1000
 const CONTROL_POLL_MS = 500
+const DEFAULT_CRASH_UPDATE_RECOVERY_WAIT_MS = 5 * 60 * 1000
+const configuredCrashUpdateRecoveryWaitMs = Number.parseInt(
+  process.env.PHOENIX_CRASH_UPDATE_RECOVERY_WAIT_MS ?? '',
+  10,
+)
+const CRASH_UPDATE_RECOVERY_WAIT_MS = Math.max(
+  5_000,
+  Number.isFinite(configuredCrashUpdateRecoveryWaitMs) && configuredCrashUpdateRecoveryWaitMs > 0
+    ? configuredCrashUpdateRecoveryWaitMs
+    : DEFAULT_CRASH_UPDATE_RECOVERY_WAIT_MS,
+)
 const DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000
 const MIN_UPDATE_STORAGE_RETENTION_MS = 60 * 60 * 1000
 const configuredUpdateStorageRetentionMs = Number.parseInt(
@@ -205,6 +216,21 @@ function preparedPath() {
   return gitControlPath(PREPARED_FILE)
 }
 
+function updateStatePath() {
+  return gitControlPath(UPDATE_STATE_FILE)
+}
+
+function readUpdateState() {
+  const path = updateStatePath()
+  if (path === undefined || !existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function clearPreparedRecord() {
   const path = preparedPath()
   if (path === undefined) return
@@ -267,6 +293,52 @@ function readPreparedRecord() {
   } catch {
     return undefined
   }
+}
+
+async function waitForPreparedUpdateAfterHostCrash() {
+  const immediate = readPreparedRecord()
+  if (immediate !== undefined && preparedStageForTarget(immediate.target) !== undefined) return immediate
+
+  let state = readUpdateState()
+  if (state?.status !== 'preparing') return undefined
+
+  const target = typeof state.target === 'string' && /^[0-9a-f]{40}$/iu.test(state.target)
+    ? state.target
+    : undefined
+  console.error(
+    '[PHOENIX UPDATE] Host exited while a stable update is still preparing; '
+    + 'keeping the updater alive instead of restarting the broken Host.',
+  )
+
+  const deadline = Date.now() + CRASH_UPDATE_RECOVERY_WAIT_MS
+  while (!shutdownRequested && Date.now() < deadline) {
+    const prepared = readPreparedRecord()
+    if (
+      prepared !== undefined
+      && (target === undefined || prepared.target === target)
+      && preparedStageForTarget(prepared.target) !== undefined
+    ) {
+      return prepared
+    }
+
+    state = readUpdateState()
+    if (state?.status === 'error' || state?.status === 'paused' || state?.status === 'off') {
+      console.error(
+        '[PHOENIX UPDATE] crash recovery stopped waiting because updater state became ' + String(state.status) + '.',
+      )
+      return undefined
+    }
+    if (state?.status !== 'preparing' && state?.status !== 'ready') return undefined
+    await sleep(CONTROL_POLL_MS)
+  }
+
+  if (!shutdownRequested) {
+    console.error(
+      '[PHOENIX UPDATE] crash recovery timed out after ' + String(CRASH_UPDATE_RECOVERY_WAIT_MS)
+      + 'ms; falling back to ordinary Host recovery.',
+    )
+  }
+  return undefined
 }
 
 function runtimeBaseDirectory() {
@@ -1275,6 +1347,7 @@ while (true) {
   lastObservedFingerprint = hostEvent.lastObservedFingerprint
   let plannedHostRestart = false
   let hostExit
+  let crashPreparedUpdate
 
   if (hostEvent.kind === 'safe-restart' || hostEvent.kind === 'safe-update-handoff') {
     plannedHostRestart = true
@@ -1289,6 +1362,14 @@ while (true) {
     hostExit = await hostExitPromise
   } else {
     hostExit = hostEvent.exit
+    if (!shutdownRequested) {
+      // The stable updater is owned by this supervisor, not by the Host. When
+      // the Host dies during preparation, stopping the watcher here resets the
+      // same staging work on every 1s relaunch and the fixed stable version can
+      // never become active. Keep that one updater alive until it either
+      // produces a verified prepared marker or reports that preparation failed.
+      crashPreparedUpdate = await waitForPreparedUpdateAfterHostCrash()
+    }
   }
 
   clearTimeout(stableTimer)
@@ -1300,6 +1381,40 @@ while (true) {
   if (shutdownRequested) {
     finalCode = hostExit.code ?? (hostExit.signal === null ? 0 : 0)
     break
+  }
+
+  if (crashPreparedUpdate !== undefined) {
+    try {
+      console.error(
+        '[PHOENIX UPDATE] prepared stable ' + crashPreparedUpdate.target.slice(0, 12)
+        + ' completed while the Host was unavailable; activating its verified isolated runtime '
+        + 'without waiting for a Host-side restart bridge.',
+      )
+      const runtime = activatePreparedRuntime(crashPreparedUpdate.target)
+      runtimeRoot = runtime.path
+      repairDesktopShortcut()
+      clearPreparedRecord()
+      clearRestartRequest()
+      clearHostRestartRequest()
+      cleanupObsoleteRuntimes()
+      console.error(
+        '[PHOENIX UPDATE] recovered onto stable ' + runtime.target.slice(0, 12)
+        + '; relaunching PHOENIX from the verified runtime.',
+      )
+      continue
+    } catch (error) {
+      clearPreparedRecord()
+      clearRestartRequest()
+      clearHostRestartRequest()
+      writeConfigurationRecoveryReport(
+        'crashed-host-prepared-update-activation-failed',
+        error instanceof Error ? error.message : String(error),
+      )
+      console.error(
+        '[PHOENIX UPDATE] prepared crash-recovery runtime failed validation: '
+        + (error instanceof Error ? error.message : String(error)),
+      )
+    }
   }
 
   const requestedTarget = restartRequestTarget()
