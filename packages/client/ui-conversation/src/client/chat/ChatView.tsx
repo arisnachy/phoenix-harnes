@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
-  ConversationTimelineSnapshot, UserMessageNode,
+  ConversationTimelineSnapshot, SteeringMessageNode, UserMessageNode,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
@@ -114,7 +114,7 @@ function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | 
 }
 
 /** Plain-text projection used only to disambiguate Host/browser clock jitter during optimistic handoff. */
-function userMessageText(node: UserMessageNode): string {
+function humanMessageText(node: UserMessageNode | SteeringMessageNode): string {
   return node.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
 }
 
@@ -216,10 +216,12 @@ export function ChatView({
     if (pendingSubmit === undefined) return false
     const floor = pendingSubmit.startedAt - 1_000
     return chatNodes.some((node) => {
-      if (node.kind !== 'user') return false
-      const user = node.data as UserMessageNode
+      // A busy-turn send is admitted as durable steering rather than an
+      // ordinary user node. Either durable form owns the optimistic handoff.
+      if (node.kind !== 'user' && node.kind !== 'steering') return false
+      const human = node.data as UserMessageNode | SteeringMessageNode
       const expectedText = pendingSubmit.modelText ?? pendingSubmit.text
-      return user.time >= floor && userMessageText(user) === expectedText
+      return human.time >= floor && humanMessageText(human) === expectedText
     })
   }, [chatNodes, pendingSubmit])
   // Host queue acknowledgement can arrive before the durable transcript node.
