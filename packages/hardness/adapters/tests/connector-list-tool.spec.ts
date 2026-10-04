@@ -241,6 +241,64 @@ describe('connector_list tool', () => {
     })
   })
 
+  it('projects authenticated OpenClaw Google and GitHub routes as callable connector services', async () => {
+    const openClaw = {
+      openClawConnectorState: vi.fn(async () => ({
+        connectors: [
+          {
+            id: 'google-workspace' as const,
+            source: 'openclaw' as const,
+            skill: 'gog' as const,
+            runtime: 'gog' as const,
+            status: 'ready' as const,
+            account: 'owner@example.com',
+          },
+          {
+            id: 'github' as const,
+            source: 'openclaw' as const,
+            skill: 'github' as const,
+            runtime: 'gh' as const,
+            status: 'ready' as const,
+            account: 'owner',
+          },
+        ],
+      })),
+    }
+    const tool = createConnectorListTool(undefined, undefined, openClaw)
+
+    await expect(tool.execute({ target: 'Gmail' }, {} as never)).resolves.toMatchObject({
+      has_relevant_match: true,
+      connectors: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'openclaw:google-workspace',
+          label: 'Google Workspace',
+          status: 'connected',
+          recommended_action: 'use',
+          services: expect.arrayContaining([
+            expect.objectContaining({ id: 'gmail', callable: true }),
+            expect.objectContaining({ id: 'openclaw-gog', callable: true }),
+          ]),
+          relevant: true,
+        }),
+      ]),
+    })
+    await expect(tool.execute({ target: 'GitHub repository' }, {} as never)).resolves.toMatchObject({
+      has_relevant_match: true,
+      connectors: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'openclaw:github',
+          label: 'GitHub',
+          status: 'connected',
+          recommended_action: 'use',
+          services: expect.arrayContaining([
+            expect.objectContaining({ id: 'openclaw-github', callable: true }),
+          ]),
+          relevant: true,
+        }),
+      ]),
+    })
+  })
+
   it('registers the inventory with only the MCP registry', async () => {
     const tool = createConnectorListTool(undefined, { list: () => [] })
     await expect(tool.execute({}, {} as never)).resolves.toEqual({ kind: 'connector_list', connectors: [] })
