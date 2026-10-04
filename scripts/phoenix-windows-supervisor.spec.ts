@@ -44,6 +44,9 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(autoUpdateSource).toContain("import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'")
     expect(autoUpdateSource).toContain("const env = bin === 'git'")
     expect(autoUpdateSource).toContain('gitSafeDirectoryEnvironment(process.env, [')
+    expect(updateWatchSource).toContain("import { gitSafeDirectoryEnvironment } from '../../../scripts/phoenix-git-safe-directory.mjs'")
+    expect(updateWatchSource).toContain('const safeEnv = gitSafeDirectoryEnvironment(process.env, [')
+    expect(updateWatchSource).toContain('env: safeEnv')
   })
 
   it('uses only an exact clean verified staged activator for prepared self-updates', () => {
