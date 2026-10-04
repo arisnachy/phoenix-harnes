@@ -424,6 +424,16 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
+/**
+ * Pick the flow method Phoenix should execute from the methods the Host
+ * actually registered. OAuth remains preferred when offered because it gives
+ * the smoothest browser ceremony, but connector-owned device/manual methods
+ * remain actionable instead of being overwritten with a fabricated "oauth".
+ */
+function preferredAuthorizationMethod(entry: Entry): string | undefined {
+  return entry.methods.find(method => method.id === 'oauth')?.id ?? entry.methods[0]?.id
+}
+
 function CatalogCard({ definition, live, account, mcpRuntime, managed, connected, t, onAuthorize, onConfigure, onFind, pending }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
@@ -464,7 +474,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
           : account !== undefined
             ? { text: t('availableStatus'), className: '' }
             : { text: t('adapterNeededStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
-  const oauthAccount = account !== undefined && account.methods.some(candidate => candidate.id === 'oauth')
+  const authorizableAccount = account !== undefined && preferredAuthorizationMethod(account) !== undefined
     ? account
     : undefined
   return (
@@ -495,8 +505,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
           </button>
         ) : installUrl !== undefined ? (
           <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
-        ) : oauthAccount !== undefined && !connectedByAccount ? (
-          <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
+        ) : authorizableAccount !== undefined && !connectedByAccount ? (
+          <button className={hubStyles['compactButton']} type="button" disabled={pending || authorizableAccount.inFlight} onClick={() => { onAuthorize(authorizableAccount) }}>
             {connected ? t('reauthorize') : t('authorize')}
           </button>
         ) : !connected && onFind !== undefined && definition.mode !== 'native' ? (
@@ -1033,7 +1043,7 @@ export function ConnectorsSettingsSection({ api,
                         type="button"
                         className={connectorStyles['connectorPrimaryButton']}
                         disabled={authorizationPending || entry.inFlight}
-                        onClick={() => { begin(entry.key, 'oauth') }}
+                        onClick={() => { begin(entry.key, preferredAuthorizationMethod(entry)) }}
                       >
                         {thisAuthorizationPending ? t('signingIn') : actionLabel}
                       </button>
@@ -1089,7 +1099,7 @@ export function ConnectorsSettingsSection({ api,
                 connected={row.connected}
                 t={connectorT}
                 pending={attempt?.status === 'pending' || jevBusy}
-                onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
+                onAuthorize={(entry) => { begin(entry.key, preferredAuthorizationMethod(entry)) }}
                 onFind={mcpRegistry === undefined ? undefined : () => {
                   setCatalogFailure(undefined)
                   setRegistryFailure(false)
