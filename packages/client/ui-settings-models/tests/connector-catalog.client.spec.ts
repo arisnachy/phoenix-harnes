@@ -21,6 +21,17 @@ describe('connector catalog', () => {
     expect(ids.size).toBe(CONNECTOR_CATALOG.length)
   })
 
+  it('classifies curated public connectors and owner-private connectors explicitly', () => {
+    const byId = new Map(CONNECTOR_CATALOG.map(connector => [connector.id, connector]))
+    expect(byId.get('canva')?.provenance).toBe('vendor-official')
+    expect(byId.get('github')?.provenance).toBe('vendor-official')
+    expect(byId.get('evolucionrd')?.provenance).toBe('private-owner')
+    expect(byId.get('kira-juancito-secure')?.provenance).toBe('private-owner')
+    expect(byId.get('openclaw')?.provenance).toBe('native')
+    expect(byId.get('custom-mcp')?.provenance).toBe('registry-listed')
+    expect(byId.get('canva')?.mode).toBe('oauth')
+  })
+
   it('keeps retired Jev out of the connector catalog', () => {
     expect(CONNECTOR_CATALOG.some(connector => connector.id === 'jev')).toBe(false)
     expect(CONNECTOR_CATALOG.some(connector => connector.providerFamily === 'jev')).toBe(false)
