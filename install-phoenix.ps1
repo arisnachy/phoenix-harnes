@@ -46,6 +46,131 @@ function Invoke-PhoenixPnpm([string[]]$Arguments) {
   }
 }
 
+function Add-PhoenixGitSafeDirectory([string]$Directory) {
+  $count = 0
+  if ($env:GIT_CONFIG_COUNT -match '^\d+
+function Get-PhoenixStableManifest {
+  & git fetch --quiet origin "refs/heads/$stableChannelBranch`:refs/remotes/origin/$stableChannelBranch"
+  if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the PHOENIX stable channel.' }
+  & git fetch --quiet origin "refs/heads/$stableSourceBranch`:refs/remotes/origin/$stableSourceBranch"
+  if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the PHOENIX promoted stable branch.' }
+
+  $manifestSpec = "origin/$stableChannelBranch`:$stableManifestPath"
+  $raw = ((& git show $manifestSpec) | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($raw)) {
+    throw 'Could not read the PHOENIX stable manifest.'
+  }
+  $manifest = $raw | ConvertFrom-Json
+  if ($manifest.schema -ne 1 -or $manifest.product -ne 'PHOENIX' -or $manifest.channel -ne 'stable') {
+    throw 'PHOENIX stable manifest identity mismatch.'
+  }
+  if ($manifest.sourceBranch -notin @('main', 'stable')) {
+    throw 'PHOENIX stable manifest must nominate main or stable.'
+  }
+  $target = ((& git rev-parse "origin/$stableSourceBranch^{commit}") | Out-String).Trim()
+  if ($target -notmatch '^[0-9a-fA-F]{40}$') {
+    throw 'PHOENIX promoted stable branch contains an invalid commit.'
+  }
+
+  & git cat-file -e "$target^{commit}" 2>$null
+  if ($LASTEXITCODE -ne 0) { throw "PHOENIX stable target $target is unavailable." }
+  return $manifest
+}
+
+Require-Command git 'Git.Git'
+Require-Command node 'OpenJS.NodeJS.LTS'
+
+$nodeVersion = [Version]((& node --version).TrimStart('v'))
+if ($nodeVersion -lt $minimumNode) {
+  throw "PHOENIX requires Node.js $minimumNode or newer; found $nodeVersion."
+}
+
+$resolvedInstallDirectory = [IO.Path]::GetFullPath($InstallDirectory)
+Add-PhoenixGitSafeDirectory $resolvedInstallDirectory
+$existingInstall = Test-Path $resolvedInstallDirectory
+if ($existingInstall) {
+  if (-not (Test-Path (Join-Path $resolvedInstallDirectory '.git'))) {
+    throw "Install directory exists but is not a PHOENIX Git checkout: $resolvedInstallDirectory"
+  }
+  if (-not (Test-Path (Join-Path $resolvedInstallDirectory '.phoenix-managed-install'))) {
+    throw "Install directory is a Git checkout but is not marked as a managed PHOENIX installation: $resolvedInstallDirectory"
+  }
+} else {
+  $parent = Split-Path -Parent $resolvedInstallDirectory
+  New-Item -ItemType Directory -Force -Path $parent | Out-Null
+  # stable is the release checkout. Before dependencies are
+  # installed or PHOENIX is launched, the checkout is reset to the commit
+  # nominated by the independently fetched stable channel below.
+  & git clone --branch $stableSourceBranch --single-branch $repository $resolvedInstallDirectory
+  if ($LASTEXITCODE -ne 0) { throw 'Could not clone PHOENIX.' }
+}
+
+Push-Location $resolvedInstallDirectory
+try {
+  if ((& git status --porcelain).Count -ne 0) {
+    throw 'The managed PHOENIX checkout has local changes; stable alignment stopped to preserve them.'
+  }
+
+  $previous = (& git rev-parse HEAD).Trim()
+  $manifest = Get-PhoenixStableManifest
+  $target = ((& git rev-parse "origin/$stableSourceBranch^{commit}") | Out-String).Trim()
+
+  if ($previous -ne $target) {
+    & git update-ref refs/phoenix/recovery/pre-install $previous
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record the pre-install PHOENIX recovery ref.' }
+    Write-Host "Aligning PHOENIX to promoted stable $($target.Substring(0, 12))..."
+    & git reset --hard $target
+    if ($LASTEXITCODE -ne 0) { throw 'Could not align PHOENIX to the promoted stable commit.' }
+  }
+
+  Set-Content -LiteralPath (Join-Path $resolvedInstallDirectory '.phoenix-managed-install') -Value "managed`n" -Encoding Ascii
+
+  try {
+    Invoke-PhoenixPnpm @('install', '--frozen-lockfile')
+    Invoke-PhoenixPnpm @('run', 'build')
+    & node (Join-Path $resolvedInstallDirectory 'apps\cli\lib\bin.js') --version
+    if ($LASTEXITCODE -ne 0) { throw 'PHOENIX launcher smoke test failed.' }
+    & git update-ref refs/phoenix/recovery/last-good $target
+    if ($LASTEXITCODE -ne 0) { throw 'Could not record the PHOENIX last-good stable ref.' }
+
+    $gitDir = (& git rev-parse --git-dir).Trim()
+    if (-not [IO.Path]::IsPathRooted($gitDir)) { $gitDir = Join-Path $resolvedInstallDirectory $gitDir }
+    $state = [ordered]@{
+      status = 'installed-stable'
+      current = $target
+      channelPublishedAt = [string]$manifest.publishedAt
+      at = [DateTime]::UtcNow.ToString('o')
+    }
+    $state | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $gitDir 'phoenix-update-state.json') -Encoding UTF8
+  } catch {
+    if ($previous -ne $target) {
+      Write-Warning "Stable installation failed; restoring pre-install checkout $($previous.Substring(0, 12))."
+      & git reset --hard $previous | Out-Null
+    }
+    throw
+  }
+} finally {
+  Pop-Location
+}
+
+$shortcutRepair = Join-Path $resolvedInstallDirectory 'scripts\phoenix-windows-shortcut.mjs'
+if (Test-Path -LiteralPath $shortcutRepair) {
+  & node $shortcutRepair --install
+  if ($LASTEXITCODE -ne 0) {
+    Write-Warning 'PHOENIX installed, but Windows shortcut repair returned a non-zero exit code.'
+  }
+}
+
+Write-Host "PHOENIX stable is installed at $resolvedInstallDirectory"
+Write-Host 'Desktop/Start/taskbar integration is owned by the canonical Phoenix browser shortcut.'
+if (-not $NoLaunch) { & (Join-Path $resolvedInstallDirectory 'phoenix-windows.cmd') }
+) { $count = [int]$env:GIT_CONFIG_COUNT }
+  $normalized = ([IO.Path]::GetFullPath($Directory)).Replace('\', '/')
+  [Environment]::SetEnvironmentVariable("GIT_CONFIG_KEY_$count", 'safe.directory', 'Process')
+  [Environment]::SetEnvironmentVariable("GIT_CONFIG_VALUE_$count", $normalized, 'Process')
+  [Environment]::SetEnvironmentVariable('GIT_CONFIG_COUNT', [string]($count + 1), 'Process')
+}
+
 function Get-PhoenixStableManifest {
   & git fetch --quiet origin "refs/heads/$stableChannelBranch`:refs/remotes/origin/$stableChannelBranch"
   if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the PHOENIX stable channel.' }
