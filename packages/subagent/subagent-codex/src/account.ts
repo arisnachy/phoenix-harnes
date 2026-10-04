@@ -27,14 +27,14 @@ export const CODEX_ACCOUNT_KEY = credentialKey('subagent-codex', 'account')
  * Keep Settings/telemetry re-renders from spawning a Codex app-server storm
  * while still letting the visible quota converge within tens of seconds after
  * real Codex usage. The UI may poll the cheap authorization catalog more often;
- * this TTL bounds native app-server probes to at most twice per minute.
+ * this TTL keeps the fallback responsive without spawning one app-server
+ * process per UI poll.
  */
 const ACCOUNT_INSPECTION_TTL_MS = 10_000
 /**
  * A failed native probe is retried later, not once per UI subscriber/render.
- * Native Codex can spend its whole 30 s startup gate on a state-db backfill;
- * leave a larger quiet interval so Phoenix never turns that failure into a
- * self-sustaining app-server restart loop.
+ * The short cooldown repairs a temporarily stale counter while inFlightSnapshot
+ * still coalesces concurrent callers and prevents a restart storm.
  */
 const ACCOUNT_FAILURE_COOLDOWN_MS = 15_000
 /** Shared probe must outlive Codex's own 30 s state-db startup/backfill window. */
@@ -155,7 +155,7 @@ export function mergeCodexRateLimitsUpdate(
   if (next === undefined) return snapshot
   const response = maybeObject(snapshot.rateLimits) ?? {}
   const buckets = maybeObject(response.rateLimitsByLimitId) ?? {}
-  const current = maybeObject(buckets.codex) ?? maybeObject(response.rateLimits) ?? {}
+  const current = maybeObject(buckets.codex) ?? response
   const merged: JsonObject = { ...current }
   for (const [key, value] of Object.entries(next)) {
     if (value !== undefined && value !== null) merged[key] = value
