@@ -178,7 +178,7 @@ describe('Codex realtime app-server notifications', () => {
       transcriptListeners: Map<string, (value: unknown) => void>
       routeMessage(value: unknown): void
     }
-    internal.transcriptListeners.set('thread-chat', value => { received.push(value) })
+    internal.transcriptListeners.set('thread-chat', (value) => { received.push(value) })
     internal.routeMessage({
       method: 'thread/realtime/transcript/done',
       params: { threadId: 'thread-other', role: 'assistant', text: 'ignore me' },
@@ -265,7 +265,47 @@ describe('Codex realtime optional session context', () => {
       assistantName: 'KIRA',
       assistantGender: 'feminine',
       voice: 'juniper',
-      onTranscript: expect.any(Function),
+    }))
+  })
+})
+
+describe('Codex realtime harness dispatch', () => {
+  it('routes finalized user speech through the live Phoenix Agent and ignores the parallel realtime answer', async () => {
+    const { ctx, voice } = await mountVoice()
+    const followup = vi.fn()
+    const context = ctx as unknown as { get(name: string): unknown }
+    const nativeGet = context.get.bind(context)
+    vi.spyOn(context, 'get').mockImplementation((name) => {
+      if (name === 'agents') {
+        return {
+          get: (id: string) => id === 'session-harness-voice' ? { followup } : undefined,
+        }
+      }
+      return nativeGet(name)
+    })
+
+    const internal = voice as unknown as {
+      appendRealtimeTranscript(
+        key: string,
+        model: string | undefined,
+        transcript: { role: 'user' | 'assistant'; text: string },
+      ): void
+    }
+    internal.appendRealtimeTranscript(
+      'session-harness-voice',
+      'gpt-6-luna',
+      { role: 'user', text: '  revisa el proyecto y ejecuta la tarea  ' },
+    )
+    internal.appendRealtimeTranscript(
+      'session-harness-voice',
+      'gpt-6-luna',
+      { role: 'assistant', text: 'respuesta paralela del realtime' },
+    )
+
+    expect(followup).toHaveBeenCalledTimes(1)
+    expect(followup).toHaveBeenCalledWith(expect.objectContaining({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'revisa el proyecto y ejecuta la tarea' }],
     }))
   })
 })
@@ -273,13 +313,14 @@ describe('Codex realtime optional session context', () => {
 describe('Codex realtime profile identity', () => {
   it('uses the persisted assistant name and masculine voice presentation', async () => {
     const { ctx, voice } = await mountVoice()
-    const nativeGet = ctx.get.bind(ctx)
-    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => {
+    const context = ctx as unknown as { get(name: string): unknown }
+    const nativeGet = context.get.bind(context)
+    vi.spyOn(context, 'get').mockImplementation((name) => {
       if (name === 'userProfile') {
         return { getAssistantIdentity: () => ({ name: 'Marco', gender: 'masculine' }) }
       }
-      return nativeGet(name as never)
-    }) as typeof ctx.get)
+      return nativeGet(name)
+    })
 
     const internal = voice as unknown as {
       codexRealtimeBridge(): {
@@ -303,7 +344,6 @@ describe('Codex realtime profile identity', () => {
       assistantName: 'Marco',
       assistantGender: 'masculine',
       voice: 'cove',
-      onTranscript: expect.any(Function),
     }))
   })
 })
