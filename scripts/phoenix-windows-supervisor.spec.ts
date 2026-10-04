@@ -21,9 +21,10 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('restartTimer.unref?.()')
   })
 
-  it('does not respawn a watcher that exits normally', () => {
-    expect(source).toContain('if (code === 0)')
-    expect(source).toContain('watcher exited normally; leaving it stopped until the next Host launch')
+  it('respawns a watcher that exits while the Host is still alive, even with code 0', () => {
+    expect(source).toContain("code === 0\n        ? 'unexpected clean exit'")
+    expect(source).toContain('scheduleRestart(reason, launchedAt)')
+    expect(source).not.toContain('leaving it stopped until the next Host launch')
   })
 
   it('disables watcher respawn before an intentional host/update shutdown', () => {
@@ -35,6 +36,14 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   it('does not start or respawn the updater watcher when update mode is off', () => {
     expect(source).toContain("const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()")
     expect(source).toContain("|| updateMode === 'off'")
+  })
+
+  it('injects a process-scoped Git safe.directory for the persistent Windows checkout', () => {
+    expect(source).toContain("import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'")
+    expect(source).toContain('Object.assign(process.env, gitSafeDirectoryEnvironment(process.env, [root]))')
+    expect(autoUpdateSource).toContain("import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'")
+    expect(autoUpdateSource).toContain("const env = bin === 'git'")
+    expect(autoUpdateSource).toContain('gitSafeDirectoryEnvironment(process.env, [')
   })
 
   it('uses only an exact clean verified staged activator for prepared self-updates', () => {
