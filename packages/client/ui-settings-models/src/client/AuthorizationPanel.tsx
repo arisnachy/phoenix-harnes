@@ -471,7 +471,7 @@ function accountGrantConnectsCatalogEntry(
   return scopedConnectors.some(connector => liveMatchesDefinition(connector, definition))
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, connected, t, onAuthorize, onDisconnect, onConfigure,
+function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuthorize, onDisconnect, onConfigure,
   onFindOfficial, onFindRegistry, onRepair, onRemove, pending, repairing, removing, disconnecting,
   attempt, answer, setAnswer, submitAnswer, cancel, authorizationT }: {
   definition: ConnectorDefinition
@@ -479,7 +479,6 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
   account?: Entry | undefined
   mcpRuntime?: McpConnectorRuntimeView | undefined
   managed?: ManagedMcpConnectorView | undefined
-  connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
   onDisconnect?: ((key: string) => void) | undefined
@@ -1310,7 +1309,6 @@ export function ConnectorsSettingsSection({ api,
                 account={row.account}
                 mcpRuntime={row.mcpRuntime}
                 managed={row.managed}
-                connected={row.connected}
                 t={connectorT}
                 pending={attempt?.status === 'pending' || jevBusy}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
