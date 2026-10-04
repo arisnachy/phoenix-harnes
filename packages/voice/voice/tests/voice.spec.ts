@@ -270,6 +270,46 @@ describe('Codex realtime optional session context', () => {
   })
 })
 
+describe('Codex realtime harness dispatch', () => {
+  it('routes finalized user speech through the live Phoenix Agent and ignores the parallel realtime answer', async () => {
+    const { ctx, voice } = await mountVoice()
+    const followup = vi.fn()
+    const nativeGet = ctx.get.bind(ctx)
+    vi.spyOn(ctx, 'get').mockImplementation(((name: string) => {
+      if (name === 'agents') {
+        return {
+          get: (id: string) => id === 'session-harness-voice' ? { followup } : undefined,
+        }
+      }
+      return nativeGet(name as never)
+    }) as typeof ctx.get)
+
+    const internal = voice as unknown as {
+      appendRealtimeTranscript(
+        key: string,
+        model: string | undefined,
+        transcript: { role: 'user' | 'assistant'; text: string },
+      ): void
+    }
+    internal.appendRealtimeTranscript(
+      'session-harness-voice',
+      'gpt-6-luna',
+      { role: 'user', text: '  revisa el proyecto y ejecuta la tarea  ' },
+    )
+    internal.appendRealtimeTranscript(
+      'session-harness-voice',
+      'gpt-6-luna',
+      { role: 'assistant', text: 'respuesta paralela del realtime' },
+    )
+
+    expect(followup).toHaveBeenCalledTimes(1)
+    expect(followup).toHaveBeenCalledWith(expect.objectContaining({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'revisa el proyecto y ejecuta la tarea' }],
+    }))
+  })
+})
+
 describe('Codex realtime profile identity', () => {
   it('uses the persisted assistant name and masculine voice presentation', async () => {
     const { ctx, voice } = await mountVoice()
