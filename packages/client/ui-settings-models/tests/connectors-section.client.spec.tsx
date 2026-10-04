@@ -541,7 +541,7 @@ describe('connectors settings section', () => {
     expect(screen.getByRole('button', { name: 'Reauthorize' })).toBeTruthy()
   })
 
-  it('marks an already managed registry remote as installed instead of offering another install', async () => {
+  it('marks a persisted registry connector with no runtime as broken and removable', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
@@ -576,8 +576,9 @@ describe('connectors settings section', () => {
     renderHub(api, { mcpRegistry })
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
-    expect(await screen.findByText('Installed')).toBeTruthy()
+    expect(await screen.findByText('Broken')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Repair' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
     await waitFor(() => { expect(remove).toHaveBeenCalledWith({ entryId: 'x' }) })
   })
