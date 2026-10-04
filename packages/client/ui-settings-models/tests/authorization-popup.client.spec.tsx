@@ -238,6 +238,8 @@ describe('authorization popup isolation and pre-consent prompts', () => {
       renderPanel(api)
       await clickAuthorize()
       await waitFor(() => { expect(reserved.close).toHaveBeenCalledOnce() }, { timeout: 3000 })
+      const accountCard = document.querySelector(`[data-authorization-key="${KEY}"]`)
+      expect(accountCard?.textContent).toContain('Google Desktop OAuth client ID')
       expect(screen.getByText('Google Desktop OAuth client ID')).toBeTruthy()
       answered = true
       await waitFor(() => { expect(screen.getByRole('link', { name: /open/i }).getAttribute('href')).toBe(CONSENT_URL) }, { timeout: 3000 })
