@@ -8,7 +8,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IApiClient, RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
-import { ConnectorsSettingsSection } from '../src/client/AuthorizationPanel.tsx'
+import { AuthorizationPanel, ConnectorsSettingsSection } from '../src/client/AuthorizationPanel.tsx'
 import { en } from '../src/client/locales.ts'
 import { connectorEn } from '../src/client/connectors-locales.ts'
 
@@ -80,6 +80,38 @@ async function clickAuthorize(): Promise<void> {
   const buttons = await screen.findAllByRole('button', { name: connectorEn.authorize })
   fireEvent.click(buttons[0]!)
 }
+
+describe('Models authorization panel', () => {
+  it('shows native Codex as Auth and exposes its sign-in action', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({
+        entries: [{
+          key: 'subagent-codex/account',
+          label: 'ChatGPT / Codex',
+          methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+          inFlight: false,
+        }],
+      }))),
+      begin: vi.fn(),
+      status: vi.fn(),
+      answer: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    render(
+      <AuthorizationPanel
+        api={api}
+        t={key => en[key]}
+        onAuthorized={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('ChatGPT / Codex')).toBeTruthy()
+    expect(screen.getByText('Auth')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sign in with ChatGPT' })).toBeTruthy()
+  })
+})
 
 describe('authorization consent window', () => {
   it('reserves the window synchronously, inside the click gesture', async () => {
