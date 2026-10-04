@@ -4,9 +4,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, stat } from 'node:fs/promises'
+import { mkdir, open as openFile, stat } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { z as zod } from 'zod'
 import type { Context } from '@phoenix-ai/cordis'
 import {
@@ -145,6 +145,60 @@ const SESSION_SEARCH_PROVIDER_CALL_LIMIT = 100
 const COLD_SUMMARY_BATCH_SIZE = 64
 /** Default maximum artifact size eligible for one cold blankness read. */
 export const DEFAULT_COLD_BLANK_PROBE_MAX_BYTES = 1024
+
+const PHOENIX_DIAGNOSTIC_TAIL_BYTES = 64 * 1024
+const PHOENIX_DIAGNOSTIC_LINE_LIMIT = 12
+const PHOENIX_DIAGNOSTIC_LINE = /(error|failed|failure|warning|warn|exception|elifecycle|enoent|tsconfig_error|timeout|unavailable)/iu
+
+function phoenixDiagnosticsPaths(): { directory: string; logPath: string } {
+  const localAppData = process.env.LOCALAPPDATA?.trim()
+  const directory = process.platform === 'win32'
+    ? join(localAppData && localAppData.length > 0 ? localAppData : join(homedir(), 'AppData', 'Local'), 'Phoenix')
+    : join(homedir(), '.local', 'state', 'Phoenix')
+  return { directory, logPath: join(directory, 'desktop-launch.log') }
+}
+
+function safeDiagnosticLine(line: string): string {
+  return line
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/gu, 'sk-[redacted]')
+    .replace(/\b(Bearer|Authorization|api[_-]?key)(\s*[:=]\s*)\S+/giu, '$1$2[redacted]')
+    .slice(0, 2_000)
+}
+
+async function phoenixDiagnosticsSnapshot(): Promise<{
+  available: boolean
+  logPath: string
+  directory: string
+  recentErrors: string[]
+  updatedAt?: number
+}> {
+  const paths = phoenixDiagnosticsPaths()
+  try {
+    const info = await stat(paths.logPath)
+    if (!info.isFile()) return { ...paths, available: false, recentErrors: [] }
+    const length = Math.min(info.size, PHOENIX_DIAGNOSTIC_TAIL_BYTES)
+    const handle = await openFile(paths.logPath, 'r')
+    try {
+      const buffer = Buffer.alloc(length)
+      if (length > 0) await handle.read(buffer, 0, length, Math.max(0, info.size - length))
+      const recentErrors = buffer.toString('utf8')
+        .split(/\r?\n/u)
+        .filter(line => PHOENIX_DIAGNOSTIC_LINE.test(line))
+        .slice(-PHOENIX_DIAGNOSTIC_LINE_LIMIT)
+        .map(safeDiagnosticLine)
+      return {
+        ...paths,
+        available: true,
+        recentErrors,
+        updatedAt: Math.max(0, Math.floor(info.mtimeMs)),
+      }
+    } finally {
+      await handle.close()
+    }
+  } catch {
+    return { ...paths, available: false, recentErrors: [] }
+  }
+}
 
 /** Conversation message event types (the pagination counting unit). */
 const MESSAGE_TYPES = new Set(['user/message', 'assistant/message'])
@@ -3297,10 +3351,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     },
 
     host: {
-      describe(request) {
+      async describe(request) {
         // TODO: version should read apps/cli's package.json; placeholder for now.
         const selection = defaults.defaultModelSelection()
-        return Promise.resolve(ok(request, {
+        const diagnostics = await phoenixDiagnosticsSnapshot()
+        return ok(request, {
           version: '0.0.1',
           // Same source as session.create's fallback: the UI's default project
           // must match where an unspecified-cwd session actually lands.
@@ -3312,7 +3367,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           attachedSessions: ctx.agents.list().length,
           home: homedir(),
           canOpenPath: canOpenPaths(),
-        }))
+          diagnostics,
+        })
       },
 
       async pickDirectory(request, signal) {
