@@ -19,7 +19,7 @@ describe('native Codex managed-account boundary', () => {
 
   it('isolates native account probes and coalesces repeated inspection work', () => {
     expect(accountSource).toContain('codexAccountEnvironment(config.env)')
-    expect(accountSource).toContain('ACCOUNT_INSPECTION_TTL_MS')
+    expect(accountSource).toContain('const ACCOUNT_INSPECTION_TTL_MS = 30_000')
     expect(accountSource).toContain('ACCOUNT_FAILURE_COOLDOWN_MS')
     expect(accountSource).toContain('inFlightSnapshot')
   })
