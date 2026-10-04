@@ -250,7 +250,7 @@ describe('connectors settings section', () => {
     }
 
     renderHub(api, { mcpRegistry })
-    await screen.findByText('Supabase')
+    expect((await screen.findAllByText('Supabase')).length).toBeGreaterThan(0)
     fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
 
     await waitFor(() => {
