@@ -676,6 +676,42 @@ describe('agent loop', () => {
     expect(flat).toContain('change of plans')
   })
 
+  it('preempts request preparation so new human steering is handled before the active mission continues', async () => {
+    const adapter = new MockAdapter([textResponse('handled the interruption')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('priority-steering'), { provider: 'mock', model: 'mock' })
+    const preparing = Promise.withResolvers<undefined>()
+    let blockPreparation = true
+
+    ctx.on('agent/request', async ({ agent: subject, signal }, next) => {
+      if (subject !== agent || !blockPreparation) return next()
+      blockPreparation = false
+      preparing.resolve(undefined)
+      await new Promise<never>((_resolve, reject) => {
+        signal.addEventListener('abort', () => { reject(signal.reason) }, { once: true })
+      })
+    })
+
+    send(agent, 'keep building the game')
+    await preparing.promise
+
+    agent.steer(createUserMessage({
+      content: [{ type: 'text', text: 'open the game so I can see it' }],
+      source: { kind: 'user' },
+    }))
+    await agent.whenIdle()
+
+    expect(adapter.requests).toHaveLength(1)
+    const request = JSON.stringify(adapter.requests[0]?.messages)
+    // The interrupted mission prompt was already durable before request
+    // preparation began, so prioritizing the user does not erase prior work.
+    expect(request).toContain('keep building the game')
+    expect(request).toContain('open the game so I can see it')
+    expect(agent.session.events.filter(event => event.type === 'turn/start')).toHaveLength(2)
+    expect(agent.session.events.filter(event =>
+      event.type === 'turn/end' && event.data.reason.kind === 'aborted')).toHaveLength(1)
+  })
+
   it('fast-paths casual user steering without replaying tools or tool history', async () => {
     const adapter = new MockAdapter([
       toolCallResponse('c1', 'slow', {}, 'checking the generated object'),
