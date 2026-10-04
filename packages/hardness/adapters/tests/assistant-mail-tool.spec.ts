@@ -6,6 +6,7 @@ function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailCo
   return {
     recover: overrides.recover ?? (async () => ({ state: 'pending-verification', inboxId: 'kira-real@agentmail.to', connection: 'disconnected' })),
     createInbox: overrides.createInbox ?? (async () => ({ state: 'ready', inboxId: 'kira-another@agentmail.to', connection: 'disconnected' })),
+    discard: overrides.discard ?? (async () => ({ state: 'not-configured', connection: 'not-configured' })),
     verify: overrides.verify ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     refresh: overrides.refresh ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     sendToOwner: overrides.sendToOwner ?? (async () => ({ from: 'kira-real@agentmail.to', to: 'owner@example.com', messageId: 'sent' as never, threadId: 'thread' as never })),
@@ -119,4 +120,15 @@ it('does not turn missing runtime or pending delivery into a sent result', async
   const tool = createAssistantMailSendTool(() => control({ sendToOwner: async () => { throw new Error('provider confirmation pending') } }))
   await expect(tool.execute({ subject: 'Prueba', text: 'Hola' },
     { agent: { id: 'lead' }, callId: 'mail' } as never)).rejects.toThrow('confirmation pending')
+})
+
+
+it('supports the mailbox discard action', async () => {
+  const discard = vi.fn(async () => ({ state: 'not-configured' as const, connection: 'not-configured' }))
+  const tool = createAssistantMailIdentityTool(() => control({ discard }))
+  await expect(tool.execute({ action: 'discard' }, {} as never)).resolves.toMatchObject({
+    state: 'not-configured',
+    needs_verification: false,
+  })
+  expect(discard).toHaveBeenCalledOnce()
 })
