@@ -20,7 +20,7 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -479,11 +479,40 @@ function ensureStagingMaterialized(stage, target) {
   console.error('[PHOENIX UPDATE] staging worktree materialization repaired successfully.')
 }
 
+function quarantineConflictingStagingPath(root, stage) {
+  // This exact path is reserved for the current checkout by stageIdentity().
+  // A leftover directory can survive a checkout move or a broken worktree
+  // registration, making Git unable to prove repository ownership. Do not
+  // delete an unverified directory: move it aside, prune stale Git metadata,
+  // and let the updater recreate its canonical stage. The supervisor later
+  // garbage-collects these conflict directories after the normal grace period.
+  git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })
+  if (!existsSync(stage) || sameRepositoryWorktree(root, stage)) return
+
+  const quarantine = `${stage}-conflict-${String(process.pid)}-${String(Date.now())}`
+  try {
+    renameSync(stage, quarantine)
+  } catch (error) {
+    throw new Error(
+      `PHOENIX staging path is occupied by an unverifiable directory and could not be moved aside: ${stage}: `
+      + `${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+
+  git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })
+  console.error(
+    `[PHOENIX UPDATE] quarantined stale/conflicting staging path: ${stage} -> ${quarantine}`,
+  )
+}
+
 function ensureStagingWorktree(root, target) {
   const stage = stageDirectory(root)
+  if (existsSync(stage) && !sameRepositoryWorktree(root, stage)) {
+    quarantineConflictingStagingPath(root, stage)
+  }
   if (existsSync(stage)) {
     if (!sameRepositoryWorktree(root, stage)) {
-      throw new Error(`PHOENIX staging path exists but is not this repository: ${stage}`)
+      throw new Error(`PHOENIX staging path remains unverifiable after repair: ${stage}`)
     }
     console.error(`[PHOENIX UPDATE] reusing persistent staging worktree ${stage}`)
     git(stage, ['reset', '--hard', target], { inherit: true })
