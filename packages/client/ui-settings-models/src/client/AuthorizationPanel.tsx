@@ -77,6 +77,26 @@ export interface McpConnectorHubSnapshot {
   managed: ManagedMcpConnectorView[]
 }
 
+/** Operational OpenClaw connector state returned by the Host. */
+export interface OpenClawConnectorView {
+  id: 'google-workspace' | 'github'
+  source: 'openclaw'
+  skill: 'gog' | 'github'
+  runtime: 'gog' | 'gh'
+  status: 'ready' | 'auth-required' | 'missing-runtime' | 'failed'
+  account?: string
+  detail?: string
+}
+
+/** Browser-safe client for whitelisted OpenClaw connector authorization. */
+export interface OpenClawConnectorClient {
+  state(): Promise<{ connectors: OpenClawConnectorView[] }>
+  authorize(request: {
+    id: OpenClawConnectorView['id']
+    account?: string
+  }): Promise<{ started: true }>
+}
+
 /** Secret-free Jev setup/runtime projection. */
 export interface JevMcpSnapshot {
   configured: boolean
@@ -186,6 +206,7 @@ export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps 
   chatGptWeb?: ChatGptWebBridgeClient
   settings?: ChatGptWebSettingsClient
   mcpRegistry?: McpRegistryClient
+  openClaw?: OpenClawConnectorClient
 }
 
 function integer(value: number): string {
@@ -384,10 +405,11 @@ function accountPresentation(entry: Entry): {
   logoUrl?: string
   technical?: string
 } {
-  const definition = catalogDefinitionForText(
-    `${entry.label} ${entry.key} ${entry.telemetry?.provider ?? ''}`,
-  )
   const technical = collapsedTechnicalName(entry.telemetry?.provider ?? entry.label)
+  const normalizedTechnical = normalize(technical)
+  const definition = CONNECTOR_CATALOG.find(candidate =>
+    [candidate.id, candidate.name, ...(candidate.aliases ?? [])]
+      .some(alias => normalize(alias) === normalizedTechnical))
   if (definition !== undefined) {
     return {
       name: definition.name,
@@ -455,16 +477,21 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, connected, t, onAuthorize, onConfigure,
+function CatalogCard({ definition, live, account, openClaw, googleAccount, mcpRuntime, managed, connected, t,
+  onAuthorize, onOpenClawAuthorize, onGoogleAccountChange, onConfigure,
   onFindOfficial, onFindRegistry, onRepair, onRemove, pending, repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
+  openClaw?: OpenClawConnectorView | undefined
+  googleAccount: string
   mcpRuntime?: McpConnectorRuntimeView | undefined
   managed?: ManagedMcpConnectorView | undefined
   connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
+  onOpenClawAuthorize?: ((connector: OpenClawConnectorView, account?: string) => void) | undefined
+  onGoogleAccountChange: (value: string) => void
   onConfigure?: (() => void) | undefined
   onFindOfficial?: (() => void) | undefined
   onFindRegistry?: (() => void) | undefined
@@ -490,7 +517,16 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
             : managed !== undefined
               ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
               : undefined
-  const status = liveStatus ?? mcpStatus ?? (connectedByAccount
+  const openClawStatus = openClaw?.status === 'ready'
+    ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+    : openClaw?.status === 'auth-required'
+      ? { text: t('authorizationRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
+      : openClaw?.status === 'missing-runtime'
+        ? { text: t('openClawRuntimeMissingStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
+        : openClaw?.status === 'failed'
+          ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
+          : undefined
+  const status = liveStatus ?? openClawStatus ?? mcpStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
       ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -532,6 +568,18 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {openClaw === undefined ? null : (
+        <p className={styles['advancedHint']}>OpenClaw · {openClaw.skill}{openClaw.account === undefined ? '' : ` · ${openClaw.account}`}</p>
+      )}
+      {openClaw?.id === 'google-workspace' && openClaw.status !== 'ready' ? (
+        <input
+          aria-label={t('googleAccountEmailLabel')}
+          className={styles['advancedInput']}
+          value={googleAccount}
+          placeholder={t('googleAccountEmailPlaceholder')}
+          onChange={(event) => { onGoogleAccountChange(event.currentTarget.value) }}
+        />
+      ) : null}
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
         <div className={connectorStyles['connectorActions']}>
@@ -541,6 +589,16 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
             </button>
           ) : installUrl !== undefined ? (
             <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
+          ) : null}
+          {openClaw !== undefined && openClaw.status === 'auth-required' && onOpenClawAuthorize !== undefined ? (
+            <button
+              className={hubStyles['compactButton']}
+              type="button"
+              disabled={pending || (openClaw.id === 'google-workspace' && googleAccount.trim().length === 0)}
+              onClick={() => { onOpenClawAuthorize(openClaw, openClaw.id === 'google-workspace' ? googleAccount.trim() : undefined) }}
+            >
+              {t('authorize')}
+            </button>
           ) : null}
           {oauthAccount !== undefined && !connectedByAccount ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
