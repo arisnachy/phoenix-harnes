@@ -281,8 +281,8 @@ export function InputBar({
     if (input.phase !== 'plain' || input.draft.trim() === '') return
     voiceSubmitPendingRef.current = false
     voiceRef.current?.stop()
-    keyboard.submit('queue')
-  }, [input?.draft, input?.phase, keyboard])
+    keyboard.submit(resolveSubmitMode(running, 'enter', subagent === null))
+  }, [input?.draft, input?.phase, keyboard, resolveSubmitMode, running, subagent])
 
   // Chrome/WebKit can end a recognition segment after a response or due to a
   // browser timeout. Restart only while the user explicitly enabled hands-free
