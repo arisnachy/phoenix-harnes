@@ -457,6 +457,8 @@ export class ManagedMcpController {
   /**
    * Remove exactly one PHOENIX-managed connector. Persistence is authoritative:
    * a failed live unload never restores the entry to the managed overlay.
+   * @param request - Exact managed entry id to remove.
+   * @returns Whether persistence was removed and whether live unload also completed.
    */
   async remove(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }> {
     const entryId = request.entryId.trim()
@@ -467,6 +469,8 @@ export class ManagedMcpController {
   /**
    * Repair a managed registry connector from its persisted trusted source.
    * Legacy rows without source metadata stay removable but are not guessed.
+   * @param request - Exact managed entry id to repair.
+   * @returns Installation receipt for the freshly re-resolved connector.
    */
   async repair(request: { entryId: string }): Promise<McpRegistryInstallReceipt> {
     const entryId = request.entryId.trim()
