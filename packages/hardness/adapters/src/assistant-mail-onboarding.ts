@@ -55,26 +55,44 @@ export class MailOnboarding {
       if (current.state !== 'not-configured') throw new Error('existing enrollment; connect its key instead of repeating signup')
       return { state: 'signup-ambiguous', ownerEmail: owner, contacts: [] }
     })
-    let data: Record<string, unknown>
-    try { data = mailRecord(await agentMailRequest('/agent/sign-up', undefined, this.options.timeoutMs, this.options.fetch ?? fetch, { human_email: owner, username, source: 'phoenix-local' })) } catch {
-      throw new Error('signup result ambiguous; recover the existing account key instead of repeating signup')
-    }
-    const key = mailString(data.api_key, 8192)
-    await this.options.saveKey(key)
-    await this.file.change(current => ({ ...current, state: 'pending-verification', inboxId: mailAddress(mailString(data.inbox_id)) }))
-    return this.status()
+    return this.completeSignup(owner, username)
   }
-  /** Deliberately abandon an ambiguous local signup so the owner can request a new mailbox.
-   * This is never called automatically: an unknown provider result may have created
-   * a usable mailbox, so only an explicit human action may choose a second identity.
-   * @returns Empty enrollment ready for one new signup attempt.
+  /** Explicitly choose a new mailbox after an ambiguous provider result.
+   * The enrollment remains signup-ambiguous during provider IO so automatic
+   * first-run enrollment cannot race the owner's deliberate second attempt.
+   * @param ownerEmail Human owner receiving verification.
+   * @param username Fresh free-domain local part.
+   * @returns Actual provider inbox, pending verification.
    */
-  async resetAmbiguousSignup(): Promise<MailAccount> {
+  async signupAnother(ownerEmail: string, username: string): Promise<MailAccount> {
+    const owner = mailAddress(ownerEmail)
+    if (!/^[a-z0-9][a-z0-9-]{2,62}$/u.test(username)) throw new Error('invalid inbox name')
     await this.file.change((current) => {
       if (current.state !== 'signup-ambiguous') {
         throw new Error('a new mailbox can only replace an ambiguous signup')
       }
-      return { state: 'not-configured', contacts: [] }
+      return { state: 'signup-ambiguous', ownerEmail: owner, contacts: [] }
+    })
+    return this.completeSignup(owner, username)
+  }
+  private async completeSignup(owner: string, username: string): Promise<MailAccount> {
+    let data: Record<string, unknown>
+    try {
+      data = mailRecord(await agentMailRequest('/agent/sign-up', undefined, this.options.timeoutMs, this.options.fetch ?? fetch, {
+        human_email: owner,
+        username,
+        source: 'phoenix-local',
+      }))
+    } catch {
+      throw new Error('signup result ambiguous; recover the existing account key instead of repeating signup')
+    }
+    const key = mailString(data.api_key, 8192)
+    await this.options.saveKey(key)
+    await this.file.change((current) => {
+      if (current.state !== 'signup-ambiguous' || current.ownerEmail !== owner) {
+        throw new Error('mail enrollment changed during signup')
+      }
+      return { ...current, state: 'pending-verification', inboxId: mailAddress(mailString(data.inbox_id)) }
     })
     return this.status()
   }
