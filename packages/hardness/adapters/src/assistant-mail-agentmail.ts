@@ -40,6 +40,27 @@ export async function agentMailRequest(path: string,
   try { return JSON.parse(text) as unknown } catch { throw new Error('invalid mail provider JSON response') }
 }
 
+/** Permanently delete one inbox when Phoenix still holds a usable account credential.
+ * A missing inbox is already the desired end state.
+ * @param inboxId Exact provider inbox identity.
+ * @param key Resolved AgentMail credential.
+ * @param timeoutMs Request deadline.
+ * @param fetcher HTTP transport.
+ * @param signal Optional owner cancellation.
+ */
+export async function agentMailDeleteInbox(inboxId: string,
+  key: string,
+  timeoutMs: number,
+  fetcher: typeof fetch,
+  signal?: AbortSignal): Promise<void> {
+  const response = await fetcher(`https://api.agentmail.to/v0/inboxes/${encodeURIComponent(mailAddress(inboxId))}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${mailString(key, 8192)}` },
+    signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+  })
+  if (!response.ok && response.status !== 404) throw new AgentMailHttpError(response.status)
+}
+
 /** AgentMail implementation with outgoing WebSocket notifications and authenticated-only reconciliation. */
 export class AgentMailTransport implements AssistantMailTransport {
   private authenticatedIds = new Set<MailMessageId>()
