@@ -14,7 +14,7 @@ The base bundle mounts the native Codex account provider and lists the `openai-c
 
 A finalized Codex realtime user transcript resolves the exact live Phoenix Agent and enters its ordinary follow-up inbox. That Agent remains the single planner and executor, so tools, hardness policies, persistence, verification, and chat output follow the same path as typed input. The browser realtime channel disables VAD-created autonomous responses and renders the finalized Phoenix assistant response as audio; standalone voice compositions without a live Agent retain transcript journaling as a compatibility fallback.
 
-Ambiguous AgentMail signup remains non-retriable automatically, but the owner can explicitly choose **Crear otro buzón**. That action clears only the ambiguous local enrollment and performs one fresh signup with a new generated mailbox name; advanced recovery remains available when preserving the earlier mailbox is preferable.
+Ambiguous AgentMail signup remains non-retriable automatically, but the owner can explicitly choose **Crear otro buzón**. That action keeps the enrollment marked ambiguous while it performs one fresh signup with a new generated mailbox name, preventing the automatic first-run pump from racing the deliberate second attempt; advanced recovery remains available when preserving the earlier mailbox is preferable.
 
 ## Alternatives considered
 
