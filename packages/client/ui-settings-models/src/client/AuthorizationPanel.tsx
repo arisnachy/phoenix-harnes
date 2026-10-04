@@ -77,6 +77,26 @@ export interface McpConnectorHubSnapshot {
   managed: ManagedMcpConnectorView[]
 }
 
+/** Operational OpenClaw connector state returned by the Host. */
+export interface OpenClawConnectorView {
+  id: 'google-workspace' | 'github'
+  source: 'openclaw'
+  skill: 'gog' | 'github'
+  runtime: 'gog' | 'gh'
+  status: 'ready' | 'auth-required' | 'missing-runtime' | 'failed'
+  account?: string
+  detail?: string
+}
+
+/** Browser-safe client for whitelisted OpenClaw connector authorization. */
+export interface OpenClawConnectorClient {
+  state(): Promise<{ connectors: OpenClawConnectorView[] }>
+  authorize(request: {
+    id: OpenClawConnectorView['id']
+    account?: string
+  }): Promise<{ started: true }>
+}
+
 /** Secret-free Jev setup/runtime projection. */
 export interface JevMcpSnapshot {
   configured: boolean
@@ -186,6 +206,7 @@ export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps 
   chatGptWeb?: ChatGptWebBridgeClient
   settings?: ChatGptWebSettingsClient
   mcpRegistry?: McpRegistryClient
+  openClaw?: OpenClawConnectorClient
 }
 
 function integer(value: number): string {
@@ -384,10 +405,11 @@ function accountPresentation(entry: Entry): {
   logoUrl?: string
   technical?: string
 } {
-  const definition = catalogDefinitionForText(
-    `${entry.label} ${entry.key} ${entry.telemetry?.provider ?? ''}`,
-  )
   const technical = collapsedTechnicalName(entry.telemetry?.provider ?? entry.label)
+  const normalizedTechnical = normalize(technical)
+  const definition = CONNECTOR_CATALOG.find(candidate =>
+    [candidate.id, candidate.name, ...(candidate.aliases ?? [])]
+      .some(alias => normalize(alias) === normalizedTechnical))
   if (definition !== undefined) {
     return {
       name: definition.name,
@@ -455,16 +477,21 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, connected, t, onAuthorize, onConfigure,
+function CatalogCard({ definition, live, account, openClaw, googleAccount, mcpRuntime, managed, connected, t,
+  onAuthorize, onOpenClawAuthorize, onGoogleAccountChange, onConfigure,
   onFindOfficial, onFindRegistry, onRepair, onRemove, pending, repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
+  openClaw?: OpenClawConnectorView | undefined
+  googleAccount: string
   mcpRuntime?: McpConnectorRuntimeView | undefined
   managed?: ManagedMcpConnectorView | undefined
   connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
+  onOpenClawAuthorize?: ((connector: OpenClawConnectorView, account?: string) => void) | undefined
+  onGoogleAccountChange: (value: string) => void
   onConfigure?: (() => void) | undefined
   onFindOfficial?: (() => void) | undefined
   onFindRegistry?: (() => void) | undefined
@@ -490,7 +517,16 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
             : managed !== undefined
               ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
               : undefined
-  const status = liveStatus ?? mcpStatus ?? (connectedByAccount
+  const openClawStatus = openClaw?.status === 'ready'
+    ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+    : openClaw?.status === 'auth-required'
+      ? { text: t('authorizationRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
+      : openClaw?.status === 'missing-runtime'
+        ? { text: t('openClawRuntimeMissingStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
+        : openClaw?.status === 'failed'
+          ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
+          : undefined
+  const status = liveStatus ?? openClawStatus ?? mcpStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
       ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -532,6 +568,18 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {openClaw === undefined ? null : (
+        <p className={styles['advancedHint']}>OpenClaw · {openClaw.skill}{openClaw.account === undefined ? '' : ` · ${openClaw.account}`}</p>
+      )}
+      {openClaw?.id === 'google-workspace' && openClaw.status !== 'ready' ? (
+        <input
+          aria-label={t('googleAccountEmailLabel')}
+          className={styles['input']}
+          value={googleAccount}
+          placeholder={t('googleAccountEmailPlaceholder')}
+          onChange={(event) => { onGoogleAccountChange(event.currentTarget.value) }}
+        />
+      ) : null}
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
         <div className={connectorStyles['connectorActions']}>
@@ -541,6 +589,16 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
             </button>
           ) : installUrl !== undefined ? (
             <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
+          ) : null}
+          {openClaw !== undefined && openClaw.status === 'auth-required' && onOpenClawAuthorize !== undefined ? (
+            <button
+              className={hubStyles['compactButton']}
+              type="button"
+              disabled={pending || (openClaw.id === 'google-workspace' && googleAccount.trim().length === 0)}
+              onClick={() => { onOpenClawAuthorize(openClaw, openClaw.id === 'google-workspace' ? googleAccount.trim() : undefined) }}
+            >
+              {t('authorize')}
+            </button>
           ) : null}
           {oauthAccount !== undefined && !connectedByAccount ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
@@ -783,6 +841,7 @@ export function ConnectorsSettingsSection({ api,
   chatGptWeb,
   settings,
   mcpRegistry,
+  openClaw,
   assistantMail,
   onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
@@ -795,6 +854,9 @@ export function ConnectorsSettingsSection({ api,
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryFailure, setRegistryFailure] = useState(false)
   const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
+  const [openClawHub, setOpenClawHub] = useState<{ connectors: OpenClawConnectorView[] }>({ connectors: [] })
+  const [openClawAuthorizingId, setOpenClawAuthorizingId] = useState<OpenClawConnectorView['id'] | undefined>()
+  const [googleAccount, setGoogleAccount] = useState('')
   const [jevState, setJevState] = useState<JevMcpSnapshot | undefined>()
   const [jevSetupOpen, setJevSetupOpen] = useState(false)
   const [jevApiKey, setJevApiKey] = useState('')
@@ -854,6 +916,37 @@ export function ConnectorsSettingsSection({ api,
     )
     return () => { stale = true }
   }, [mcpRegistry, refresh])
+
+  useEffect(() => {
+    if (openClaw === undefined) return
+    let stale = false
+    const read = (): void => {
+      void readConnectorRemoteWithRetry(() => openClaw.state(), () => stale).then(
+        (snapshot) => {
+          if (stale) return
+          setOpenClawHub({ connectors: [...snapshot.connectors] })
+          const google = snapshot.connectors.find(connector => connector.id === 'google-workspace')
+          if (google?.account !== undefined) setGoogleAccount(google.account)
+          if (openClawAuthorizingId !== undefined) {
+            const active = snapshot.connectors.find(connector => connector.id === openClawAuthorizingId)
+            if (active?.status === 'ready' || active?.status === 'missing-runtime' || active?.status === 'failed') {
+              setOpenClawAuthorizingId(undefined)
+              onAuthorized()
+            }
+          }
+        },
+        (error) => {
+          if (!stale && !isTransientConnectorRemoteFailure(error)) setCatalogFailure(String(error))
+        },
+      )
+    }
+    read()
+    const timer = openClawAuthorizingId === undefined ? undefined : window.setInterval(read, 1_500)
+    return () => {
+      stale = true
+      if (timer !== undefined) window.clearInterval(timer)
+    }
+  }, [openClaw, openClawAuthorizingId, refresh])
 
   useEffect(() => {
     const readJevState = mcpRegistry?.jevState
@@ -916,7 +1009,12 @@ export function ConnectorsSettingsSection({ api,
 
   const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
-    const account = entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
+    const openClawState = definition.openClawAuth === undefined
+      ? undefined
+      : openClawHub.connectors.find(connector => connector.id === definition.openClawAuth)
+    const account = definition.openClawAuth === undefined
+      ? entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
+      : undefined
     const mcpRuntime = definition.id === 'binance'
       ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
       : definition.id === 'jev'
@@ -931,10 +1029,11 @@ export function ConnectorsSettingsSection({ api,
     const connected = live?.installed === true
       || live?.callable === true
       || accountGrantConnectsCatalogEntry(account)
+      || openClawState?.status === 'ready'
       || mcpRuntime?.status === 'ready'
       || definition.id === 'binance'
-    return { definition, live, account, mcpRuntime, managed, connected }
-  }), [entries, liveConnectors, mcpHub])
+    return { definition, live, account, openClawState, mcpRuntime, managed, connected }
+  }), [entries, liveConnectors, mcpHub, openClawHub])
 
   const visibleRows = catalogRows.filter(({ definition, connected }) => {
     if (filter === 'connected' && !connected) return false
@@ -943,6 +1042,22 @@ export function ConnectorsSettingsSection({ api,
     if (needle.length === 0) return true
     return `${definition.name} ${definition.category} ${definition.description} ${definition.capabilities.join(' ')}`.toLowerCase().includes(needle)
   })
+
+  const authorizeOpenClawConnector = (connector: OpenClawConnectorView, account?: string): void => {
+    if (openClaw === undefined || openClawAuthorizingId !== undefined) return
+    setCatalogFailure(undefined)
+    setOpenClawAuthorizingId(connector.id)
+    void openClaw.authorize({
+      id: connector.id,
+      ...(account === undefined || account.length === 0 ? {} : { account }),
+    }).then(
+      () => { setRefresh(current => current + 1) },
+      (error: unknown) => {
+        setCatalogFailure(String(error))
+        setOpenClawAuthorizingId(undefined)
+      },
+    )
+  }
 
   const toggleChatGptWeb = (enabled: boolean): void => {
     if (chatGptWeb === undefined || settings === undefined || chatGptWebBusy) return
@@ -1083,6 +1198,10 @@ export function ConnectorsSettingsSection({ api,
       .finally(() => { setDisconnectingKey(undefined) })
   }
 
+  const accountEntries = openClaw === undefined
+    ? entries
+    : entries.filter(entry => entry.key !== 'authorization-google/account')
+
   return (
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
@@ -1146,14 +1265,14 @@ export function ConnectorsSettingsSection({ api,
         </section>
       )}
 
-      {entries.length === 0 ? null : (
+      {accountEntries.length === 0 ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('accounts')}>
           <div className={hubStyles['heading']}>
             <h3>{connectorT('accounts')}</h3>
             <p>{connectorT('accountsHint')}</p>
           </div>
           <div className={connectorStyles['connectorGrid']}>
-            {entries.map((entry) => {
+            {accountEntries.map((entry) => {
               const lines = telemetryLines(entry.telemetry)
               const presentation = accountPresentation(entry)
               const runtime = runtimeForEntry(entry, mcpHub.runtime)
@@ -1253,14 +1372,18 @@ export function ConnectorsSettingsSection({ api,
                 definition={row.definition}
                 live={row.live}
                 account={row.account}
+                openClaw={row.openClawState}
+                googleAccount={googleAccount}
                 mcpRuntime={row.mcpRuntime}
                 managed={row.managed}
                 connected={row.connected}
                 t={connectorT}
-                pending={attempt?.status === 'pending' || jevBusy}
+                pending={attempt?.status === 'pending' || jevBusy || openClawAuthorizingId !== undefined}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                 removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
                 onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
+                onOpenClawAuthorize={openClaw === undefined ? undefined : authorizeOpenClawConnector}
+                onGoogleAccountChange={setGoogleAccount}
                 onFindOfficial={mcpRegistry === undefined || row.definition.registryName === undefined
                   ? undefined
                   : () => { findOfficialConnector(row.definition) }}

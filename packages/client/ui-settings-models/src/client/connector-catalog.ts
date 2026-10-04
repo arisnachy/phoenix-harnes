@@ -16,6 +16,8 @@ export interface ConnectorDefinition {
   readonly mode: ConnectorMode
   readonly provenance: ConnectorProvenance
   readonly providerFamily?: string
+  /** Operational OpenClaw authorization route, when Phoenix has a verified runtime bridge. */
+  readonly openClawAuth?: 'google-workspace' | 'github'
   /** Exact Official MCP Registry identity accepted for curated install, when one is verified. */
   readonly registryName?: string
   readonly logoUrl?: string
@@ -36,10 +38,10 @@ const icon = (slug: string): string => `https://cdn.simpleicons.org/${slug}`
 
 /** Curated connector directory before explicit provenance is attached. */
 const PUBLIC_CONNECTOR_CATALOG = [
-  { id: 'gmail', name: 'Gmail', category: 'Email', description: 'Read, search, draft, send, label, and organize email.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('gmail'), capabilities: ['mail.read', 'mail.write', 'mail.search'] },
-  { id: 'google-calendar', aliases: ['calendar'], name: 'Google Calendar', category: 'Calendar', description: 'Read availability and create or update calendar events.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googlecalendar'), capabilities: ['calendar.read', 'calendar.write'] },
-  { id: 'google-drive', aliases: ['drive'], name: 'Google Drive', category: 'Files', description: 'Search and work with Drive, Docs, Sheets, Slides, and files.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googledrive'), capabilities: ['files.read', 'files.write', 'documents'] },
-  { id: 'google-contacts', aliases: ['contacts'], name: 'Google Contacts', category: 'Contacts', description: 'Find contacts, email addresses, phones, and organizations.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googlecontacts'), capabilities: ['contacts.read'] },
+  { id: 'gmail', name: 'Gmail', category: 'Email', description: 'Read, search, draft, send, label, and organize email.', mode: 'oauth', openClawAuth: 'google-workspace', providerFamily: 'google', logoUrl: icon('gmail'), capabilities: ['mail.read', 'mail.write', 'mail.search'] },
+  { id: 'google-calendar', aliases: ['calendar'], name: 'Google Calendar', category: 'Calendar', description: 'Read availability and create or update calendar events.', mode: 'oauth', openClawAuth: 'google-workspace', providerFamily: 'google', logoUrl: icon('googlecalendar'), capabilities: ['calendar.read', 'calendar.write'] },
+  { id: 'google-drive', aliases: ['drive'], name: 'Google Drive', category: 'Files', description: 'Search and work with Drive, Docs, Sheets, Slides, and files.', mode: 'oauth', openClawAuth: 'google-workspace', providerFamily: 'google', logoUrl: icon('googledrive'), capabilities: ['files.read', 'files.write', 'documents'] },
+  { id: 'google-contacts', aliases: ['contacts'], name: 'Google Contacts', category: 'Contacts', description: 'Find contacts, email addresses, phones, and organizations.', mode: 'oauth', openClawAuth: 'google-workspace', providerFamily: 'google', logoUrl: icon('googlecontacts'), capabilities: ['contacts.read'] },
   { id: 'outlook-mail', name: 'Outlook Mail', category: 'Email', description: 'Read, search, draft, and send Microsoft 365 email.', mode: 'oauth', providerFamily: 'microsoft', logoUrl: icon('microsoftoutlook'), capabilities: ['mail.read', 'mail.write'] },
   { id: 'outlook-calendar', name: 'Outlook Calendar', category: 'Calendar', description: 'Read availability and manage Microsoft 365 meetings.', mode: 'oauth', providerFamily: 'microsoft', logoUrl: icon('microsoftoutlook'), capabilities: ['calendar.read', 'calendar.write'] },
   { id: 'onedrive', name: 'OneDrive', category: 'Files', description: 'Search, read, create, and manage OneDrive files.', mode: 'oauth', providerFamily: 'microsoft', logoUrl: icon('microsoftonedrive'), capabilities: ['files.read', 'files.write'] },
@@ -51,7 +53,7 @@ const PUBLIC_CONNECTOR_CATALOG = [
   { id: 'slack', name: 'Slack', category: 'Communication', description: 'Search channels and messages and collaborate with teams.', mode: 'oauth', providerFamily: 'slack', logoUrl: icon('slack'), capabilities: ['messages.read', 'messages.write'] },
   { id: 'microsoft-teams', aliases: ['teams'], name: 'Microsoft Teams', category: 'Communication', description: 'Work with teams, chats, channels, meetings, and collaboration.', mode: 'oauth', providerFamily: 'microsoft', logoUrl: icon('microsoftteams'), capabilities: ['messages.read', 'messages.write', 'meetings'] },
   { id: 'zoom', name: 'Zoom', category: 'Meetings', description: 'Manage meetings, recordings, and meeting metadata.', mode: 'oauth', providerFamily: 'zoom', logoUrl: icon('zoom'), capabilities: ['meetings.read', 'meetings.write'] },
-  { id: 'github', registryName: 'io.github.github/github-mcp-server', name: 'GitHub', category: 'Development', description: 'Work with repositories, commits, issues, pull requests, and CI.', mode: 'oauth', providerFamily: 'github', logoUrl: icon('github'), capabilities: ['code.read', 'code.write', 'issues', 'pull-requests', 'ci'] },
+  { id: 'github', registryName: 'io.github.github/github-mcp-server', name: 'GitHub', category: 'Development', description: 'Work with repositories, commits, issues, pull requests, and CI.', mode: 'oauth', openClawAuth: 'github', providerFamily: 'github', logoUrl: icon('github'), capabilities: ['code.read', 'code.write', 'issues', 'pull-requests', 'ci'] },
   { id: 'linear', name: 'Linear', category: 'Development', description: 'Search, create, and update issues, projects, and initiatives.', mode: 'oauth', providerFamily: 'linear', logoUrl: icon('linear'), capabilities: ['issues', 'projects'] },
   { id: 'jira', name: 'Jira', category: 'Development', description: 'Work with issues, projects, boards, and engineering workflows.', mode: 'oauth', providerFamily: 'jira', logoUrl: icon('jira'), capabilities: ['issues', 'projects'] },
   { id: 'vercel', name: 'Vercel', category: 'Deploy', description: 'Build, inspect, and deploy web applications and agents.', mode: 'oauth', providerFamily: 'vercel', logoUrl: icon('vercel'), capabilities: ['deployments', 'hosting'] },
