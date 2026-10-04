@@ -30,6 +30,7 @@ const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
 const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() || 'stable'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
+const UPDATE_STATE_FILE = 'phoenix-update-state.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
 const HOST_RESTART_REQUEST_FILE = 'phoenix-host-restart-request.json'
 const WATCHER_RESTART_DELAY_MS = 1000
@@ -293,16 +294,36 @@ function stageDirectoriesForCleanup() {
 
 function stageProtectedByOwningCheckout(path) {
   const common = absoluteGitPath(path, gitValue(path, ['rev-parse', '--git-common-dir']))
-  if (common === undefined || !existsSync(common)) return false
+  const head = gitValue(path, ['rev-parse', 'HEAD'])
+  if (common === undefined || !existsSync(common) || head === undefined) return false
+
   const marker = join(common, PREPARED_FILE)
-  if (!existsSync(marker)) return false
+  if (existsSync(marker)) {
+    try {
+      const value = JSON.parse(readFileSync(marker, 'utf8'))
+      if (
+        value?.schema === 1
+        && typeof value.target === 'string'
+        && /^[0-9a-f]{40}$/iu.test(value.target)
+        && value.target === head
+      ) return true
+    } catch {
+      // Fall through to the active-preparation lease below.
+    }
+  }
+
+  // A candidate is vulnerable before PREPARED_FILE exists: the updater writes
+  // status=preparing before creating/reusing the staging worktree, then builds
+  // there and only writes PREPARED_FILE after a successful smoke test. Storage
+  // cleanup must therefore treat that state as a live lease for the matching
+  // staging HEAD, otherwise it can remove files underneath tsc/tsdown.
+  const statePath = join(common, UPDATE_STATE_FILE)
+  if (!existsSync(statePath)) return false
   try {
-    const value = JSON.parse(readFileSync(marker, 'utf8'))
-    const head = gitValue(path, ['rev-parse', 'HEAD'])
-    return value?.schema === 1
-      && typeof value.target === 'string'
-      && /^[0-9a-f]{40}$/iu.test(value.target)
-      && value.target === head
+    const state = JSON.parse(readFileSync(statePath, 'utf8'))
+    return state?.status === 'preparing'
+      && typeof state.target === 'string'
+      && state.target === head
   } catch {
     return false
   }
