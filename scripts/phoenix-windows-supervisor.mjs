@@ -313,15 +313,19 @@ function readPreparedRecord() {
 }
 
 async function waitForPreparedUpdateAfterHostCrash() {
-  const immediate = readPreparedRecord()
-  if (immediate !== undefined && preparedStageForTarget(immediate.target) !== undefined) return immediate
-
   let state = readUpdateState()
-  if (state?.status !== 'preparing') return undefined
-
-  const target = typeof state.target === 'string' && /^[0-9a-f]{40}$/iu.test(state.target)
+  const target = typeof state?.target === 'string' && /^[0-9a-f]{40}$/iu.test(state.target)
     ? state.target
     : undefined
+  if (target === undefined || (state?.status !== 'preparing' && state?.status !== 'ready')) return undefined
+
+  const immediate = readPreparedRecord()
+  if (
+    immediate?.target === target
+    && preparedStageForTarget(immediate.target) !== undefined
+  ) return immediate
+  if (state.status === 'ready') return undefined
+
   console.error(
     '[PHOENIX UPDATE] Host exited while a stable update is still preparing; '
     + 'keeping Phoenix down briefly so the verified replacement can finish instead of restarting the broken Host.',
@@ -331,8 +335,7 @@ async function waitForPreparedUpdateAfterHostCrash() {
   while (!shutdownRequested && Date.now() < deadline) {
     const prepared = readPreparedRecord()
     if (
-      prepared !== undefined
-      && (target === undefined || prepared.target === target)
+      prepared?.target === target
       && preparedStageForTarget(prepared.target) !== undefined
     ) return prepared
 
