@@ -6,6 +6,7 @@ import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import type {
   ManagedMcpConnector,
+  ManagedMcpSource,
   McpRegistryCandidate,
   McpRegistryInstallReceipt,
   McpRegistryInstallRequest,
@@ -88,6 +89,7 @@ interface ManagedMcpRow {
   id: string
   name: typeof MCP_CLIENT_PACKAGE
   config: ManagedMcpConfig
+  source?: ManagedMcpSource
 }
 
 interface ManagedMcpPatch {
@@ -225,6 +227,18 @@ function validConfig(value: unknown): value is ManagedMcpConfig {
   return value.transport === 'streamable-http' && validHttpConfig(value)
 }
 
+function validManagedSource(value: unknown): value is ManagedMcpSource {
+  if (!isRecord(value)) return false
+  if (value.kind === 'registry') {
+    return typeof value.name === 'string'
+      && value.name.trim().length >= 2
+      && (value.version === undefined || (typeof value.version === 'string' && value.version.trim().length > 0))
+  }
+  return value.kind === 'curated'
+    && typeof value.connectorId === 'string'
+    && value.connectorId.trim().length > 0
+}
+
 function parseManagedRows(raw: string): ManagedMcpRow[] {
   const document: unknown = JSON.parse(raw)
   if (!Array.isArray(document) || document.length !== 1) {
@@ -238,10 +252,14 @@ function parseManagedRows(raw: string): ManagedMcpRow[] {
     if (!isRecord(value) || typeof value.id !== 'string' || value.name !== MCP_CLIENT_PACKAGE || !validConfig(value.config)) {
       throw new Error(`managed MCP patch row ${index} is invalid`)
     }
+    if (value.source !== undefined && !validManagedSource(value.source)) {
+      throw new Error(`managed MCP patch row ${index} has an invalid source`)
+    }
     return {
       id: value.id,
       name: MCP_CLIENT_PACKAGE,
       config: value.config,
+      ...(value.source === undefined ? {} : { source: value.source }),
     }
   })
 }
@@ -269,6 +287,7 @@ function connectorOf(row: ManagedMcpRow): ManagedMcpConnector {
     entryId: row.id,
     serverName: row.config.serverName,
     url: row.config.transport === 'streamable-http' ? row.config.url : X_API_MCP_URL,
+    ...(row.source === undefined ? {} : { source: row.source }),
   }
 }
 
@@ -355,6 +374,7 @@ export class ManagedMcpController {
   private async installManagedConfig(
     config: ManagedMcpConfig,
     label: string,
+    source?: ManagedMcpSource,
   ): Promise<McpRegistryInstallReceipt> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
@@ -364,7 +384,12 @@ export class ManagedMcpController {
         return { status: 'already-installed', connector: connectorOf(existing) }
       }
       const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
-      const row: ManagedMcpRow = { id: entryId, name: MCP_CLIENT_PACKAGE, config }
+      const row: ManagedMcpRow = {
+        id: entryId,
+        name: MCP_CLIENT_PACKAGE,
+        config,
+        ...(source === undefined ? {} : { source }),
+      }
       try {
         await writeManagedRows(this.path, [...rows, row])
       } catch (error) {
@@ -514,7 +539,11 @@ export class ManagedMcpController {
       url: remoteUrl,
       headers: {},
       oauth: true,
-    }, candidate.name)
+    }, candidate.name, {
+      kind: 'registry',
+      name: candidate.name,
+      version: candidate.version,
+    })
   }
 }
 
