@@ -68,14 +68,14 @@ it('offers owner-bound recovery without requiring an API key', async () => {
 })
 
 
-it('can abandon an unrecoverable mailbox and return to fresh setup', async () => {
+it('can replace an unrecoverable mailbox in one click', async () => {
   vi.stubGlobal('confirm', () => true)
   const calls: string[] = []
   const client = { call: async (action: string) => {
     calls.push(action)
     return {
-      account: action === 'discard'
-        ? { state: 'not-configured', contacts: [] }
+      account: action === 'replace'
+        ? { state: 'pending-verification', inboxId: 'replacement@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }
         : { state: 'signup-ambiguous', ownerEmail: 'owner@example.com', contacts: [] },
       connection: 'disconnected',
       jobs: [],
@@ -83,7 +83,7 @@ it('can abandon an unrecoverable mailbox and return to fresh setup', async () =>
   } }
   render(<AssistantMailPanel client={client} />)
   fireEvent.click(await screen.findByRole('button', { name: 'No se puede recuperar: crear uno nuevo' }))
-  expect(await screen.findByRole('button', { name: 'Configurar correo de Kira' })).toBeTruthy()
-  expect(calls).toContain('discard')
+  expect(await screen.findByText('replacement@agentmail.to')).toBeTruthy()
+  expect(calls).toContain('replace')
   vi.unstubAllGlobals()
 })
