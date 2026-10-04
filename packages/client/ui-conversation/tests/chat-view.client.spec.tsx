@@ -638,6 +638,33 @@ describe('ChatView', () => {
     expect(view.container.querySelectorAll('[data-pending-steering]')).toHaveLength(1)
   })
 
+  it('hands the optimistic bubble off when steering is already durable and the queue row has retired', () => {
+    const startedAt = Date.now()
+    const text = 'abre el juego para irlo viendo'
+    const h = makeHarness(
+      {
+        queue: [],
+        nodes: [
+          assistant(1, 'working'),
+          {
+            kind: 'steering',
+            messageId: 'steer-durable-after-retire' as never,
+            seq: 2,
+            time: startedAt + 1,
+            content: [{ type: 'text', text }],
+            source: null,
+          },
+        ],
+        running: true,
+      },
+      { pendingSubmit: { text, startedAt } },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getAllByText(text)).toHaveLength(1)
+    expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+  })
+
   it('does not double-render when durable steering lands before the transient queue retires it', () => {
     const pending = {
       id: 'steer-overlap-occurrence' as never,
