@@ -159,6 +159,30 @@ describe('authorization consent window', () => {
     open.mockRestore()
   })
 
+  it('keeps the Host authorization alive when the provider closes its consent popup', async () => {
+    const reserved = reservedWindow()
+    reserved.location.replace.mockImplementation(() => { reserved.closed = true })
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    let polls = 0
+    const api = panelApi(() => {
+      polls += 1
+      if (polls === 1) return consentNotice()
+      return Promise.resolve(ok({
+        attemptId: 'attempt-1',
+        status: 'authorized' as const,
+        nextSeq: 2,
+        notices: [],
+      }))
+    })
+
+    renderPanel(api)
+    await clickAuthorize()
+
+    await waitFor(() => { expect(api.status).toHaveBeenCalledTimes(2) }, { timeout: 5000 })
+    expect(api.cancel).not.toHaveBeenCalled()
+    open.mockRestore()
+  })
+
   it('falls back to a fresh window when the reservation was already closed', async () => {
     const reserved = reservedWindow()
     reserved.closed = true
