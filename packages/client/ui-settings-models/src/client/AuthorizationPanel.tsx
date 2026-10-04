@@ -764,6 +764,8 @@ export function ConnectorsSettingsSection({ api,
   const [jevBusy, setJevBusy] = useState(false)
   const [jevFailure, setJevFailure] = useState<string | undefined>()
   const [installingRegistryName, setInstallingRegistryName] = useState<string | undefined>()
+  const [repairingEntryId, setRepairingEntryId] = useState<string | undefined>()
+  const [removingEntryId, setRemovingEntryId] = useState<string | undefined>()
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
@@ -835,7 +837,7 @@ export function ConnectorsSettingsSection({ api,
     // Jev is a pinned Phoenix integration with its own credential flow.
     // Never send Jev through the generic Official MCP Registry installer:
     // that path performs an unnecessary second registry lookup and can time out.
-    if (mcpRegistry === undefined || search.length < 2 || isRetiredJevSearchText(search) || catalogMatch?.id === 'jev') {
+    if (mcpRegistry === undefined || search.length < 2 || isRetiredJevSearchText(search) || catalogMatch !== undefined) {
       setRegistrySnapshot(undefined)
       setRegistryFailure(false)
       setRegistryBusy(false)
@@ -884,11 +886,11 @@ export function ConnectorsSettingsSection({ api,
         ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
         : mcpHub.runtime.find(candidate => runtimeMatchesDefinition(candidate, definition))
     const managed = definition.id === 'binance'
-      ? mcpHub.managed.some(candidate => candidate.serverName === 'binance-agent-os'
+      ? mcpHub.managed.find(candidate => candidate.serverName === 'binance-agent-os'
         || candidate.url === 'https://agent.binance.com/mcp/agentic')
       : definition.id === 'jev'
-        ? mcpHub.managed.some(candidate => candidate.serverName === 'jev')
-        : mcpHub.managed.some(candidate => managedMatchesDefinition(candidate, definition))
+        ? mcpHub.managed.find(candidate => candidate.serverName === 'jev')
+        : mcpHub.managed.find(candidate => managedMatchesDefinition(candidate, definition))
     const connected = live?.installed === true
       || live?.callable === true
       || accountGrantConnectsCatalogEntry(account)
@@ -941,6 +943,56 @@ export function ConnectorsSettingsSection({ api,
       },
       (error: unknown) => { setJevFailure(String(error)) },
     ).finally(() => { setJevBusy(false) })
+  }
+
+  const findOfficialConnector = (definition: ConnectorDefinition): void => {
+    const registryName = definition.registryName
+    if (mcpRegistry === undefined || registryName === undefined || registryBusy) return
+    setRegistryBusy(true)
+    setRegistryFailure(false)
+    setCatalogFailure(undefined)
+    void mcpRegistry.search({ query: registryName, limit: 12 }).then(
+      (snapshot) => {
+        const exact = snapshot.candidates.filter(candidate =>
+          candidate.name === registryName && !isRetiredJevCandidate(candidate))
+        setRegistrySnapshot({ ...snapshot, candidates: exact })
+        if (exact.length === 0) setCatalogFailure(connectorT('officialConnectorMissing'))
+      },
+      (error: unknown) => {
+        setRegistrySnapshot(undefined)
+        setRegistryFailure(true)
+        setCatalogFailure(String(error))
+      },
+    ).finally(() => { setRegistryBusy(false) })
+  }
+
+  const repairManagedConnector = (connector: ManagedMcpConnectorView): void => {
+    if (mcpRegistry === undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
+    setCatalogFailure(undefined)
+    setRepairingEntryId(connector.entryId)
+    void mcpRegistry.repair({ entryId: connector.entryId }).then(
+      () => {
+        setRefresh(current => current + 1)
+        onAuthorized()
+      },
+      (error: unknown) => { setCatalogFailure(String(error)) },
+    ).finally(() => { setRepairingEntryId(undefined) })
+  }
+
+  const removeManagedConnector = (connector: ManagedMcpConnectorView): void => {
+    if (mcpRegistry === undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
+    setCatalogFailure(undefined)
+    setRemovingEntryId(connector.entryId)
+    void mcpRegistry.remove({ entryId: connector.entryId }).then(
+      (result) => {
+        if (result.removed && !result.liveUnloaded) {
+          setCatalogFailure(connectorT('uninstallRestartRequired'))
+        }
+        setRefresh(current => current + 1)
+        onAuthorized()
+      },
+      (error: unknown) => { setCatalogFailure(String(error)) },
+    ).finally(() => { setRemovingEntryId(undefined) })
   }
 
   const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
@@ -1141,17 +1193,26 @@ export function ConnectorsSettingsSection({ api,
                 live={row.live}
                 account={row.account}
                 mcpRuntime={row.mcpRuntime}
-                managed={row.managed || (row.definition.id === 'jev' && jevState?.configured === true)}
+                managed={row.managed}
                 connected={row.connected}
                 t={connectorT}
                 pending={attempt?.status === 'pending' || jevBusy}
+                repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
+                removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
                 onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
-                onFind={mcpRegistry === undefined ? undefined : () => {
-                  setCatalogFailure(undefined)
-                  setRegistryFailure(false)
-                  setFilter('available')
-                  setQuery(row.definition.name)
-                }}
+                onFindOfficial={mcpRegistry === undefined || row.definition.registryName === undefined
+                  ? undefined
+                  : () => { findOfficialConnector(row.definition) }}
+                onFindRegistry={mcpRegistry === undefined || row.definition.provenance !== 'registry-listed'
+                  ? undefined
+                  : () => {
+                    setCatalogFailure(undefined)
+                    setRegistryFailure(false)
+                    setFilter('available')
+                    setQuery(row.definition.name)
+                  }}
+                onRepair={mcpRegistry === undefined ? undefined : repairManagedConnector}
+                onRemove={mcpRegistry === undefined ? undefined : removeManagedConnector}
                 onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
                   setJevFailure(undefined)
                   setJevSetupOpen(true)
