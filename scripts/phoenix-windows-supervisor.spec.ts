@@ -38,6 +38,11 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain("|| updateMode === 'off'")
   })
 
+  it('persists the exact Windows checkout as safe for user Git commands', () => {
+    expect(source).toContain("import { gitSafeDirectoryEnvironment, persistGitSafeDirectory } from './phoenix-git-safe-directory.mjs'")
+    expect(source).toContain('persistGitSafeDirectory(root)')
+  })
+
   it('injects a process-scoped Git safe.directory for the persistent Windows checkout', () => {
     expect(source).toContain("import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'")
     expect(source).toContain('Object.assign(process.env, gitSafeDirectoryEnvironment(process.env, [root]))')
