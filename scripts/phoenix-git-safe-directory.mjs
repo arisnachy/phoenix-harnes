@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process'
+import { homedir } from 'node:os'
 import { resolve } from 'node:path'
 
 /**
@@ -35,4 +37,39 @@ export function gitSafeDirectoryEnvironment(env, directories) {
 
   next.GIT_CONFIG_COUNT = String(count)
   return next
+}
+
+
+/**
+ * Persist one exact safe.directory entry in the current user's Git config.
+ *
+ * PHOENIX uses this only after the caller has verified that the checkout is
+ * the official Phoenix repository. Wildcard trust is intentionally refused.
+ *
+ * @param {string} directory Exact repository directory to trust.
+ * @param {NodeJS.ProcessEnv} [env] Environment used for the Git config command.
+ * @returns {boolean} Whether the exact entry is present after the operation.
+ */
+export function persistGitSafeDirectory(directory, env = process.env) {
+  if (typeof directory !== 'string' || directory.trim().length === 0 || directory.includes('*')) {
+    return false
+  }
+  const normalized = resolve(directory).replaceAll('\\', '/')
+  const options = {
+    cwd: homedir(),
+    env,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }
+  const existing = spawnSync('git', ['config', '--global', '--get-all', 'safe.directory'], options)
+  if (existing.error !== undefined) return false
+  if (existing.status !== 0 && existing.status !== 1) return false
+  const values = typeof existing.stdout === 'string'
+    ? existing.stdout.split(/\r?\n/u).map(value => value.trim()).filter(Boolean)
+    : []
+  if (values.some(value => value.toLowerCase() === normalized.toLowerCase())) return true
+
+  const added = spawnSync('git', ['config', '--global', '--add', 'safe.directory', normalized], options)
+  return added.error === undefined && added.status === 0
 }
