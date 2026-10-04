@@ -579,12 +579,86 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
 }
 
 /**
- * Legacy embedded model-account surface. Account and connector inventory now
- * belongs to Settings → Connectors; provider-specific OAuth remains in each
- * model provider editor.
+ * Compact model-account surface. Settings → Connectors still owns the full
+ * connector inventory, but Models must expose provider authentication where
+ * the user chooses models. This is especially important for openai-codex:
+ * the route is keyless at the provider layer and is usable only when the
+ * official Codex account flow is authenticated.
  */
-export function AuthorizationPanel(_props: AuthorizationPanelProps): ReactNode {
-  return null
+export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelProps): ReactNode {
+  const [entries, setEntries] = useState<Entry[]>([])
+  const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
+  const [refresh, setRefresh] = useState(0)
+  const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } =
+    useAuthorizationAttempt(api, () => {
+      setRefresh(current => current + 1)
+      onAuthorized()
+    })
+
+  useEffect(() => {
+    if (api === undefined) return
+    let stale = false
+    setCatalogFailure(undefined)
+    void api.list({}).then((response) => {
+      if (stale) return
+      if (!response.result.ok) {
+        setCatalogFailure(response.result.error.message)
+        return
+      }
+      setEntries(response.result.value.entries.filter(entry =>
+        entry.methods.some(method => method.id === 'oauth')) as Entry[])
+    }, (error: unknown) => {
+      if (!stale) setCatalogFailure(String(error))
+    })
+    return () => { stale = true }
+  }, [api, refresh])
+
+  if (api === undefined) return null
+  if (entries.length === 0 && catalogFailure === undefined) return null
+
+  return (
+    <section className={styles.authorizationPanel} aria-label={t('accountConnections')}>
+      <h3 className={styles.authorizationTitle}>{t('accountConnections')}</h3>
+      <p className={styles.intro}>{t('accountConnectionsHint')}</p>
+      {entries.map((entry) => {
+        const connected = entry.stored !== undefined
+        const busy = entry.inFlight || attempt?.status === 'pending'
+        const methods = entry.methods.filter(method => method.id === 'oauth')
+        return (
+          <div key={entry.key} className={styles.authorizationActions}>
+            <span className={styles.rowName}>{entry.label}</span>
+            <span className={styles.rowTag}>Auth</span>
+            <span className={connected ? styles.connectedChip : styles.notice}>
+              {connected ? t('accountSignedIn') : t('credentialMissing')}
+            </span>
+            {connected
+              ? null
+              : methods.map(method => (
+                <button
+                  key={method.id}
+                  type="button"
+                  className={styles.secondaryButton}
+                  disabled={busy}
+                  onClick={() => { begin(entry.key, method.id) }}
+                >
+                  {busy && attempt?.key === entry.key ? t('signingIn') : method.label}
+                </button>
+              ))}
+          </div>
+        )
+      })}
+      <AuthorizationAttemptProgress
+        attempt={attempt}
+        answer={answer}
+        setAnswer={setAnswer}
+        submitAnswer={submitAnswer}
+        cancel={cancel}
+        t={t}
+      />
+      {catalogFailure === undefined ? null : <p className={styles.error}>{catalogFailure}</p>}
+      {failure === undefined ? null : <p className={styles.error}>{failure}</p>}
+    </section>
+  )
 }
 
 /** Dedicated account and MCP/app connector settings page. */
