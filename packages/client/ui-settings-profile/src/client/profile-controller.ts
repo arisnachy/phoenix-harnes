@@ -111,9 +111,13 @@ export class UserProfileForm {
     this.store = createSnapshotStore(this.project())
     this.unsubscribe = scope.subscribe(() => {
       if (this.disposed) return
+      // Compare the draft with the previous Host snapshot before accepting the
+      // incoming one. Otherwise first hydration makes persisted values look
+      // like conflicting local edits and leaves the visible form empty.
+      const hadLocalEdits = this.isDirty()
       const snapshot = scope.getSnapshot()
       this.source = snapshot.value
-      if (!this.isDirty()) this.draft = toDraft(this.source)
+      if (!hadLocalEdits) this.draft = toDraft(this.source)
       this.publish()
     })
     const snapshot = scope.getSnapshot()
