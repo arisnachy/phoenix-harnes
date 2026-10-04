@@ -64,6 +64,20 @@ export class MailOnboarding {
     await this.file.change(current => ({ ...current, state: 'pending-verification', inboxId: mailAddress(mailString(data.inbox_id)) }))
     return this.status()
   }
+  /** Deliberately abandon an ambiguous local signup so the owner can request a new mailbox.
+   * This is never called automatically: an unknown provider result may have created
+   * a usable mailbox, so only an explicit human action may choose a second identity.
+   * @returns Empty enrollment ready for one new signup attempt.
+   */
+  async resetAmbiguousSignup(): Promise<MailAccount> {
+    await this.file.change((current) => {
+      if (current.state !== 'signup-ambiguous') {
+        throw new Error('a new mailbox can only replace an ambiguous signup')
+      }
+      return { state: 'not-configured', contacts: [] }
+    })
+    return this.status()
+  }
   /** Connect an existing account and challenge the nominated owner before accepting jobs.
    * @param ownerEmail Human owner.
    * @param inboxId Existing provider inbox.
