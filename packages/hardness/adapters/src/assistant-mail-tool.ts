@@ -39,7 +39,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       needs_verification: true,
       guidance: 'The mailbox already exists. Tell the user the exact address and ask them to finish '
         + 'the six-digit owner verification with action=verify and the code they received, or in Settings. '
-        + 'If the user explicitly says this mailbox is stale/broken and wants a new one, action=discard may remove it before action=ensure.',
+        + 'If the user explicitly says this mailbox is stale/broken and wants a new one, action=replace removes/abandons it and starts a fresh enrollment.',
     }
   }
   if (value.state === 'signup-ambiguous') {
@@ -51,7 +51,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       needs_verification: false,
       guidance: 'The provider signup result is ambiguous. Do not retry signup automatically. '
         + 'Use action=recover when the user wants the old mailbox back. If recovery failed or the user explicitly wants to abandon the stale mailbox and create a new one, '
-        + 'use action=discard, then action=ensure. Discard is destructive and may leave the inaccessible remote inbox at AgentMail when its credential is already lost.',
+        + 'use action=replace. Replacement is destructive and may leave the inaccessible remote inbox at AgentMail when its credential is already lost.',
     }
   }
   return {
@@ -81,13 +81,14 @@ export function createAssistantMailIdentityTool(
       + 'mailbox is ready. This is not Gmail and does not create a Gmail account. action=ensure creates the '
       + 'mailbox only when absent and otherwise reuses the existing enrollment. Never invent an address and '
       + 'never retry recovery automatically; action=recover renews access to the same owner account. Use action=create-inbox only for an explicit request for another mailbox, after owner verification; provider quota may refuse it. '
-      + 'Use action=discard only when the user explicitly wants to delete/abandon a stale mailbox or recovery has failed and they explicitly want a new mailbox. After discard, call action=ensure to create the replacement.',
+      + 'Use action=replace when the user explicitly wants a stale/broken mailbox replaced; it retains the known owner identity, discards the old enrollment and immediately starts a fresh one. '
+      + 'Use action=discard only when the user explicitly wants to remove/abandon the mailbox without creating a replacement.',
     parameters: {
       action: {
         type: 'string',
-        enum: ['status', 'ensure', 'recover', 'create-inbox', 'discard', 'verify', 'refresh'],
+        enum: ['status', 'ensure', 'recover', 'create-inbox', 'replace', 'discard', 'verify', 'refresh'],
         required: true,
-        description: 'status reads the mailbox; ensure creates it once if absent; recover restores the persisted owner account; create-inbox adds another inbox to a verified account; discard abandons/removes a stale mailbox so a new one can be created; verify activates the existing inbox with the owner code; refresh requests an incoming check without waiting for task completion.',
+        description: 'status reads the mailbox; ensure creates it once if absent; recover restores the persisted owner account; create-inbox adds another inbox to a verified account; replace deletes/abandons a stale mailbox and immediately starts a fresh enrollment; discard removes/abandons it without replacement; verify activates the existing inbox with the owner code; refresh requests an incoming check without waiting for task completion.',
       },
       code: { type: 'string', description: 'Six-digit owner verification code; required only for action=verify. Never invent or guess it.' },
       owner_email: {
@@ -132,6 +133,7 @@ export function createAssistantMailIdentityTool(
       try {
         if (args.action === 'recover') return project(await service.recover())
         if (args.action === 'create-inbox') return project(await service.createInbox())
+        if (args.action === 'replace') return project(await service.replace(args.owner_email))
         if (args.action === 'discard') return project(await service.discard())
         if (args.action === 'verify') {
           if (args.code === undefined) throw new ToolArgsError(['verification requires the six-digit code received by the owner'])
@@ -159,7 +161,7 @@ export function createAssistantMailIdentityTool(
       return {
         card: 'generic',
         title: args.action === 'ensure' ? 'Configurar correo de Kira' : 'Correo de Kira',
-        kind: ['ensure', 'recover', 'create-inbox', 'discard', 'verify'].includes(args.action) ? 'execute' : 'read',
+        kind: ['ensure', 'recover', 'create-inbox', 'replace', 'discard', 'verify'].includes(args.action) ? 'execute' : 'read',
       }
     },
   })
