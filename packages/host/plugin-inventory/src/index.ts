@@ -239,6 +239,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
   /**
    * Remove one exact PHOENIX-managed MCP from persistence and the live Loader.
    * The browser supplies only the managed entry id.
+   * @param request - Exact PHOENIX-managed entry id to remove.
+   * @returns Persistent/live removal result.
    */
   @Remote('removeManagedMcpConnector')
   async removeManagedMcpConnector(request: ManagedMcpEntryRequest): Promise<ManagedMcpRemoveReceipt> {
@@ -248,6 +250,8 @@ export class PluginInventoryGateway extends TypertRemoteService {
   /**
    * Repair one PHOENIX-managed MCP strictly from its persisted trusted source.
    * No browser-provided URL, package, command, or environment is accepted.
+   * @param request - Exact PHOENIX-managed entry id to repair.
+   * @returns Managed connector installation receipt after trusted re-resolution.
    */
   @Remote('repairManagedMcpConnector')
   async repairManagedMcpConnector(request: ManagedMcpEntryRequest): Promise<McpRegistryInstallReceipt> {
