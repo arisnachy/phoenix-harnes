@@ -29,6 +29,8 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('let watcherSupervisor = superviseWatcher()')
     expect(source).toContain('if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()')
     expect(source).toContain('watcherSupervisor = undefined')
+    expect(source).toContain('const requestedTarget = restartRequestTarget()')
+    expect(source).toContain('if (requestedTarget !== undefined) {\n    await watcherSupervisor.stop()\n    watcherSupervisor = undefined')
     expect(source).toContain('if (watcherSupervisor !== undefined) await watcherSupervisor.stop()')
   })
 
