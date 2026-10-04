@@ -8,17 +8,23 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { gitSafeDirectoryEnvironment } from '../../../scripts/phoenix-git-safe-directory.mjs'
 
 /** Start one best-effort watcher for the lifetime of this PHOENIX process. */
 export function startPhoenixUpdateWatcher(): void {
+  const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()
+  const safeEnv = gitSafeDirectoryEnvironment(process.env, [
+    process.cwd(),
+    ...(installRoot === undefined || installRoot.length === 0 ? [] : [installRoot]),
+  ])
   const rootResult = spawnSync('git', ['rev-parse', '--show-toplevel'], {
     encoding: 'utf8',
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'ignore'],
+    env: safeEnv,
   })
   if (rootResult.status !== 0 || typeof rootResult.stdout !== 'string') return
   const detectedRoot = resolve(rootResult.stdout.trim())
-  const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()
   const root = installRoot === undefined || installRoot.length === 0
     ? detectedRoot
     : resolve(installRoot)
@@ -70,7 +76,7 @@ function startWatcher(root: string, worker: string, label: string, args: string[
   try {
     const child = spawn(process.execPath, [worker, ...args], {
       cwd: root,
-      env: process.env,
+      env: gitSafeDirectoryEnvironment(process.env, [root]),
       stdio: ['ignore', 'inherit', 'inherit'],
       windowsHide: true,
     })
