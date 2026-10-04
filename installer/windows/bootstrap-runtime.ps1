@@ -116,6 +116,14 @@ try {
   & corepack pnpm run build
   if ($LASTEXITCODE -ne 0) { throw 'Phoenix build failed' }
 
+  # Materialize and validate only the lightweight DSH profile skeleton before
+  # declaring the managed runtime ready. prepareProfile() creates the shared
+  # profiles\\node_modules junction farm back to this runtime; it does not copy
+  # the workspace into DSH_HOME or install profile-local package trees.
+  Write-Host '[PHOENIX BOOTSTRAP] preparing local DSH profile'
+  & node --import tsx/esm apps/cli/src/bin.ts --profile web --dump-default-config 1>$null
+  if ($LASTEXITCODE -ne 0) { throw 'Phoenix local DSH profile bootstrap failed' }
+
   Set-Content -Path $readyMarker -Value @(
     'schema=1'
     'state=ready'
