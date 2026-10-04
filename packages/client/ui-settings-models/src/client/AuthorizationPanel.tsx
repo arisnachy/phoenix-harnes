@@ -618,32 +618,13 @@ function OfficialMcpCard({ candidate, stale, installed, installing, t, onInstall
  * official Codex account flow is authenticated.
  */
 export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelProps): ReactNode {
-  const [entries, setEntries] = useState<Entry[]>([])
-  const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
+  const { entries, catalogFailure } = useAuthorizationEntries(api, refresh, true)
   const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } =
     useAuthorizationAttempt(api, () => {
       setRefresh(current => current + 1)
       onAuthorized()
     })
-
-  useEffect(() => {
-    if (api === undefined) return
-    let stale = false
-    setCatalogFailure(undefined)
-    void api.list({}).then((response) => {
-      if (stale) return
-      if (!response.result.ok) {
-        setCatalogFailure(response.result.error.message)
-        return
-      }
-      setEntries(response.result.value.entries.filter(entry =>
-        entry.methods.some(method => method.id === 'oauth')) as Entry[])
-    }, (error: unknown) => {
-      if (!stale) setCatalogFailure(String(error))
-    })
-    return () => { stale = true }
-  }, [api, refresh])
 
   if (api === undefined) return null
   if (entries.length === 0 && catalogFailure === undefined) return null
