@@ -113,9 +113,10 @@
     # Google Workspace authorization uses a Desktop OAuth client id. A deployment
     # may supply it through PHOENIX_GOOGLE_OAUTH_CLIENT_ID; otherwise the first
     # Connect action asks for the public Desktop client id once and stores that
-    # application identity in Phoenix credentials. Access/refresh tokens remain
-    # Host-process-only and never enter model context or the credential file.
-    # Google installed apps do not support incremental authorization, so the
+    # application identity in Phoenix credentials. Access/refresh tokens are
+    # stored as an owner-private grant in the Host credential store so Google
+    # stays connected across restarts; they never enter model context or browser
+    # telemetry. Google installed apps do not support incremental authorization, so the
     # enabled provider requests exactly the shipped Workspace capability set.
     - id: authorization-google
       name: '@phoenix-ai/dsh-authorization/google'
