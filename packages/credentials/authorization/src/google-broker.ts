@@ -53,30 +53,6 @@ interface GoogleGrant {
   scopes: readonly string[]
 }
 
-function storedGoogleGrant(payload: unknown): GoogleGrant | undefined {
-  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return undefined
-  const value = payload as Record<string, unknown>
-  const accessToken = value.accessToken
-  const refreshToken = value.refreshToken
-  const expiresAt = value.expiresAt
-  const rawScopes = value.scopes
-  if (typeof accessToken !== 'string' || accessToken.length === 0) return undefined
-  if (refreshToken !== undefined && (typeof refreshToken !== 'string' || refreshToken.length === 0)) return undefined
-  if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt) || expiresAt < 0) return undefined
-  if (!Array.isArray(rawScopes)) return undefined
-  const scopes: string[] = []
-  for (const scope of rawScopes) {
-    if (typeof scope !== 'string' || scope.trim().length === 0) return undefined
-    scopes.push(scope)
-  }
-  return {
-    accessToken,
-    ...(refreshToken === undefined ? {} : { refreshToken }),
-    expiresAt,
-    scopes,
-  }
-}
-
 interface TokenResponse {
   access_token: string
   expires_in: number
@@ -776,6 +752,30 @@ export default class GoogleApiBroker extends Service {
       ...stored,
       scopes: stored.scopes.filter(scope => this.spec.scopes.includes(scope)),
     }
+  }
+}
+
+function storedGoogleGrant(payload: unknown): GoogleGrant | undefined {
+  if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return undefined
+  const value = payload as Record<string, unknown>
+  const accessToken = value.accessToken
+  const refreshToken = value.refreshToken
+  const expiresAt = value.expiresAt
+  const rawScopes = value.scopes
+  if (typeof accessToken !== 'string' || accessToken.length === 0) return undefined
+  if (refreshToken !== undefined && (typeof refreshToken !== 'string' || refreshToken.length === 0)) return undefined
+  if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt) || expiresAt < 0) return undefined
+  if (!Array.isArray(rawScopes)) return undefined
+  const scopes: string[] = []
+  for (const scope of rawScopes) {
+    if (typeof scope !== 'string' || scope.trim().length === 0) return undefined
+    scopes.push(scope)
+  }
+  return {
+    accessToken,
+    ...(refreshToken === undefined ? {} : { refreshToken }),
+    expiresAt,
+    scopes,
   }
 }
 
