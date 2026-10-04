@@ -288,7 +288,8 @@ function runtimeDirectoriesForCleanup() {
 function stageDirectoriesForCleanup() {
   const base = runtimeBaseDirectory()
   return readdirSync(base, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && /^phoenix-stage-[0-9a-f]{10}$/iu.test(entry.name))
+    .filter(entry => entry.isDirectory()
+      && /^phoenix-stage-[0-9a-f]{10}(?:-conflict-\d+-\d+)?$/iu.test(entry.name))
     .map(entry => join(base, entry.name))
 }
 
