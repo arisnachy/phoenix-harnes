@@ -123,6 +123,17 @@ export interface McpRegistryInstallReceipt {
   readonly connector: ManagedMcpConnector
 }
 
+/** Exact PHOENIX-managed entry request; callers never provide a URL or executable. */
+export interface ManagedMcpEntryRequest {
+  readonly entryId: string
+}
+
+/** Result of removing one PHOENIX-managed connector. */
+export interface ManagedMcpRemoveReceipt {
+  readonly removed: boolean
+  readonly liveUnloaded: boolean
+}
+
 /** Secret-bearing Jev setup request accepted only by the trusted Host remote. */
 export interface JevMcpConfigureRequest {
   readonly apiKey: string
