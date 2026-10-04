@@ -26,7 +26,7 @@ import {
   type CodexPermissionMode,
   type CodexRunSpec,
 } from './run.ts'
-import { registerCodexAccountFlow } from './account.ts'
+import { observeCodexRateLimitsUpdate, registerCodexAccountFlow } from './account.ts'
 
 export { CODEX_ACCOUNT_KEY, readCodexAccountSnapshot } from './account.ts'
 export type { CodexAccountBridgeConfig, CodexAccountSnapshot } from './account.ts'
@@ -104,6 +104,7 @@ class CodexProvider implements SubagentProvider {
           `subagent-codex "${this.name}": child run failed (${stopReason}): ${error.message}`,
         )
       },
+      onRateLimitsUpdated: observeCodexRateLimitsUpdate,
     }
     return startCodexRun(request, spec)
   }
