@@ -82,6 +82,15 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain('`phoenix-runtime-${stageIdentity()}-${target.slice(0, 12)}`')
   })
 
+  it('self-heals an occupied canonical staging path without deleting unverified data', () => {
+    expect(updater).toContain('function quarantineConflictingStagingPath(root, stage)')
+    expect(updater).toContain("git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })")
+    expect(updater).toContain('renameSync(stage, quarantine)')
+    expect(updater).toContain('quarantined stale/conflicting staging path')
+    expect(updater).toContain('if (existsSync(stage) && !sameRepositoryWorktree(root, stage))')
+    expect(updater).not.toContain('PHOENIX staging path exists but is not this repository')
+  })
+
 
   it('prunes stale updater storage only after the retention grace period', () => {
     expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000')
@@ -92,7 +101,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain('if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue')
     expect(supervisor).toContain('Math.min(UPDATE_STORAGE_RETENTION_MS, 6 * 60 * 60 * 1000)')
     expect(supervisor).toContain('function stageDirectoriesForCleanup()')
-    expect(supervisor).toContain('/^phoenix-stage-[0-9a-f]{10}$/iu')
+    expect(supervisor).toContain('/^phoenix-stage-[0-9a-f]{10}(?:-conflict-\\d+-\\d+)?$/iu')
     expect(supervisor).toContain('removed stale updater staging worktree')
   })
 
