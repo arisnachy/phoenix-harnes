@@ -2,6 +2,8 @@
 
 Status: implemented
 
+[English](2026-10-04-crashed-host-update-handoff.md) | 中文
+
 ## Problem
 
 Windows supervisor 现在已经会让 stable updater 跨越 Host 崩溃继续运行，因此即使当前 Host 无法启动，candidate 也能完成依赖刷新、构建和 smoke。仍然存在一个死锁：激活依旧依赖 Host 内部的 restart bridge。像 profile runtime 模块缺失这样的故障会发生在 bridge 启动之前，因此 updater 虽然已经得到经过验证的 prepared 状态，supervisor 却仍不断重新启动同一个损坏 Host，而且没有任何进程提出激活请求。
