@@ -27,7 +27,7 @@ describe('mail onboarding', () => {
       const account = new MailOnboarding({
         path: join(directory, 'account.json'),
         timeoutMs: 1000,
-        saveKey: async value => { key = value },
+        saveKey: async (value) => { key = value },
         resolveKey: async () => key,
         fetch: async () => {
           calls += 1
