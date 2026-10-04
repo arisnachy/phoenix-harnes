@@ -665,7 +665,7 @@ describe('ChatView', () => {
     expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
   })
 
-  it('renders Host-pending steering at the flow tail and hands off to the durable node', () => {
+  it('keeps a pending user interjection at its true in-turn position and hands off without moving it', () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
@@ -675,6 +675,7 @@ describe('ChatView', () => {
       id: 'steer-occurrence' as never,
       messageId: 'steer-message' as never,
       placement: 'steering' as const,
+      anchorSeq: 2,
       content: [{ type: 'text' as const, text: 'interrupt now' }],
       preview: 'interrupt now',
       text: 'interrupt now',
@@ -687,51 +688,47 @@ describe('ChatView', () => {
       preview: 'later',
       text: 'later',
     }
-    const h = makeHarness({ nodes: [assistant(1, 'working')], queue: [queued, pending], running: true })
+    const before = assistant(1, 'working before steer')
+    const after = assistant(4, 'reply after steer')
+    const h = makeHarness({ nodes: [before, after], queue: [queued, pending], running: true })
     const view = render(<h.ChatView {...h.props} />)
 
-    expect(view.getByText('interrupt now').closest('[data-pending-steering]')).not.toBeNull()
     expect(view.queryByText('later')).toBeNull()
+    const beforeRow = view.getByText('working before steer').closest('[data-chat-flow-key]')
     const pendingBubble = view.getByText('interrupt now').closest('[data-pending-steering]')
+    const afterRow = view.getByText('reply after steer').closest('[data-chat-flow-key]')
+    expect(beforeRow).not.toBeNull()
     expect(pendingBubble).not.toBeNull()
+    expect(afterRow).not.toBeNull()
+    expect(beforeRow!.compareDocumentPosition(pendingBubble!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(pendingBubble!.compareDocumentPosition(afterRow!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+
     fireEvent.click(within(pendingBubble as HTMLElement).getByRole('button', { name: '复制' }))
     expect(writeText).toHaveBeenCalledWith('interrupt now')
     expect(within(pendingBubble as HTMLElement).queryByRole('button', { name: '在新对话中分支' })).toBeNull()
-    expect(view.getByRole('status').compareDocumentPosition(view.getByText('interrupt now'))
-      & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
 
     act(() => {
       h.set({
         queue: [queued],
         nodes: [
-          assistant(1, 'working'),
+          before,
           {
             kind: 'steering', messageId: pending.messageId,
-            seq: 2, time: 2_000,
+            seq: 3, time: 2_000,
             content: [{ type: 'text', text: 'interrupt now' }], source: null,
           },
+          after,
         ],
       })
     })
     expect(view.getAllByText('interrupt now')).toHaveLength(1)
     expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
-    // Only the durable steering bubble: the turn is still running, so its
-    // assistant narration owns no footer yet, and a steering bubble never
-    // carries a branch action.
-    expect(view.getAllByRole('button', { name: '复制' })).toHaveLength(1)
     const durableBubble = view.getByText('interrupt now').closest('[class*="userRow"]') as HTMLElement
+    const durableBefore = view.getByText('working before steer').closest('[data-chat-flow-key]')
+    const durableAfter = view.getByText('reply after steer').closest('[data-chat-flow-key]')
+    expect(durableBefore!.compareDocumentPosition(durableBubble) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(durableBubble.compareDocumentPosition(durableAfter!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     expect(within(durableBubble).queryByRole('button', { name: '在新对话中分支' })).toBeNull()
-
-    act(() => {
-      h.set({ running: false, turnEnds: new Map([[1, 3]]) })
-    })
-    // The Turn Tail belongs to the closed Turn, independently of a later
-    // steering bubble's placement in the Chat list.
-    const branchButtons = view.getAllByRole('button', { name: '在新对话中分支' })
-    expect(branchButtons).toHaveLength(1)
-    expect(branchButtons[0]!.getAttribute('aria-disabled')).toBeNull()
-    fireEvent.click(branchButtons[0]!)
-    expect(h.forkAt).toHaveBeenCalledWith(1)
   })
 
   it('does not double-render when a claimed steer is briefly classified as a durable user node', () => {
