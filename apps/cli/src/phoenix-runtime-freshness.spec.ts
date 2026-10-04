@@ -28,7 +28,10 @@ function repository(): string {
   git(root, ['config', 'user.name', 'PHOENIX Tests'])
   writeFileSync(join(root, '.gitignore'), '.dsh-build/\napps/web/dist/\n', 'utf8')
   writeFileSync(join(root, 'state.txt'), 'one\n', 'utf8')
-  git(root, ['add', '.gitignore', 'state.txt'])
+  mkdirSync(join(root, 'apps', 'cli', 'lib'), { recursive: true })
+  writeFileSync(join(root, 'apps', 'cli', 'package.json'), JSON.stringify({ name: '@phoenix-ai/dsh' }), 'utf8')
+  writeFileSync(join(root, 'apps', 'cli', 'lib', 'bin.js'), '', 'utf8')
+  git(root, ['add', '.gitignore', 'state.txt', 'apps/cli/package.json', 'apps/cli/lib/bin.js'])
   git(root, ['commit', '-m', 'initial'])
   return root
 }
