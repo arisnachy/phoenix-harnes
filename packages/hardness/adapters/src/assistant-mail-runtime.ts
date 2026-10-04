@@ -60,6 +60,10 @@ export interface AssistantMailControl {
    * This action is destructive and must only follow an explicit owner request.
    */
   discard(): Promise<AssistantMailIdentity>
+  /** Replace a stale mailbox with a fresh enrollment while retaining the known owner identity.
+   * @param ownerEmail Optional replacement owner when the old enrollment has none.
+   */
+  replace(ownerEmail?: string): Promise<AssistantMailIdentity>
   /** Activate the existing mailbox using the owner's one-time verification code.
    * @param code Six-digit code received by the owner.
    * @returns Verified mailbox identity.
@@ -87,7 +91,8 @@ class AssistantMailControlService extends Service implements AssistantMailContro
     private readonly send: AssistantMailControl['sendToOwner'],
     private readonly restore: AssistantMailControl['recover'],
     private readonly replaceInbox: AssistantMailControl['createInbox'],
-    private readonly discardEnrollment: AssistantMailControl['discard']) {
+    private readonly discardEnrollment: AssistantMailControl['discard'],
+    private readonly replaceEnrollment: AssistantMailControl['replace']) {
     super(ctx, 'assistantMail')
   }
   status(): Promise<AssistantMailIdentity> { return this.read() }
@@ -95,6 +100,7 @@ class AssistantMailControlService extends Service implements AssistantMailContro
   recover(): Promise<AssistantMailIdentity> { return this.restore() }
   createInbox(): Promise<AssistantMailIdentity> { return this.replaceInbox() }
   discard(): Promise<AssistantMailIdentity> { return this.discardEnrollment() }
+  replace(ownerEmail?: string): Promise<AssistantMailIdentity> { return this.replaceEnrollment(ownerEmail) }
   verify(code: string): Promise<AssistantMailIdentity> { return this.activate(code) }
   refresh(): Promise<AssistantMailIdentity> { return this.reconcile() }
   sendToOwner(subject: string, text: string, key: string): Promise<MailDelivery & { from: string; to: string }> {
@@ -341,6 +347,17 @@ export function installAssistantMail(ctx: Context,
       resetting = false
     }
   }
+  const replaceEnrollment = async (explicitOwnerEmail?: string): Promise<AssistantMailIdentity> => {
+    const previous = await onboarding.status()
+    const owner = explicitOwnerEmail?.trim() || previous.ownerEmail || await config.resolveOwnerEmail?.()
+    await discardEnrollment()
+    await ensureEnrollment(owner, true)
+    const account = await onboarding.status()
+    const root = ctx.get('agents')?.roots()[0]
+    if (account.sessionId === undefined && root !== undefined) await onboarding.bindSessionIfUnset(root.id)
+    if (account.state === 'ready') void pump()
+    return identity()
+  }
   const serviceContext = ctx as unknown as { readonly reflect?: unknown }
   if (serviceContext.reflect !== undefined) {
     new AssistantMailControlService(
@@ -362,6 +379,7 @@ export function installAssistantMail(ctx: Context,
       async () => { await onboarding.recover(); return identity() },
       async () => { await onboarding.createInbox(); void pump(); return identity() },
       discardEnrollment,
+      replaceEnrollment,
     )
   }
   let connection: HostConnectionHandle | undefined
@@ -384,6 +402,10 @@ export function installAssistantMail(ctx: Context,
           if (Object.keys(args).length > 0) throw new Error('mail discard does not accept parameters')
           await discardEnrollment()
         }
+        else if (endpoint === 'replace') {
+          if (Object.keys(args).some(key => key !== 'ownerEmail')) throw new Error('mail replacement accepts only an optional owner email')
+          await replaceEnrollment(args.ownerEmail === undefined ? undefined : mailString(args.ownerEmail))
+        }
         else if (endpoint === 'connect') await onboarding.connect(mailString(args.ownerEmail), mailString(args.inboxId), mailString(args.apiKey, 8192))
         else if (endpoint === 'verify') await onboarding.verify(mailString(args.code))
         else if (endpoint === 'configure') {
@@ -397,7 +419,7 @@ export function installAssistantMail(ctx: Context,
           const outcome = await child.done
           if (outcome.exitCode !== 0) throw new Error('could not configure local Windows startup')
         } else if (endpoint !== 'status' && endpoint !== 'refresh') throw new Error('unknown mail operation')
-        if (endpoint !== 'status' && endpoint !== 'discard') {
+        if (endpoint !== 'status' && endpoint !== 'discard' && endpoint !== 'replace') {
           const account = await onboarding.status()
           const root = ctx.get('agents')?.roots()[0]
           if (account.sessionId === undefined && root !== undefined) await onboarding.bindSessionIfUnset(root.id)
