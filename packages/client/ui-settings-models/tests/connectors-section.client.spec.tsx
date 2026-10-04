@@ -130,6 +130,36 @@ describe('connectors settings section', () => {
     expect(screen.getAllByRole('button', { name: 'Find / install' }).length).toBeGreaterThan(0)
   })
 
+  it('shows an explicit official lookup even when the search box is empty', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const search = vi.fn(async () => ({
+      source: 'official-mcp-registry' as const,
+      query: 'com.canva.mcp/mcp',
+      fetchedAt: '2026-10-04T00:00:00.000Z',
+      stale: false,
+      candidates: [{
+        name: 'com.canva.mcp/mcp', title: 'Canva', description: 'Canva tools.', version: '1.0.0',
+        status: 'active' as const, trust: 'registry-listed' as const, icons: [],
+        transports: ['streamable-http' as const], packages: [], remoteUrl: 'https://mcp.canva.com/mcp',
+      }],
+    }))
+    const mcpRegistry = { state: vi.fn(async () => ({ runtime: [], managed: [] })), install: vi.fn(), search }
+
+    renderHub(api, { mcpRegistry })
+    const officialButtons = await screen.findAllByRole('button', { name: 'Find official / install' })
+    const canvaCard = document.querySelector('[data-connector-id="canva"]')
+    const canvaButton = Array.from(canvaCard?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Find official / install')
+    expect(canvaButton).toBeTruthy()
+    fireEvent.click(canvaButton!)
+
+    expect(await screen.findByText('Registry-listed · vendor not verified')).toBeTruthy()
+    expect(search).toHaveBeenCalledWith({ query: 'com.canva.mcp/mcp', limit: 12 })
+    expect(officialButtons.length).toBeGreaterThan(0)
+  })
   it('keeps known Canva on its curated official identity instead of generic registry search', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
