@@ -78,6 +78,7 @@ describe('ManagedMcpController', () => {
       connector: {
         entryId: 'live-entry-id',
         url: 'https://mcp.example.com/calendar',
+        source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
       },
     })
     expect(installed.connector.serverName).toMatch(/^calendar-[a-f0-9]{7}$/)
@@ -98,6 +99,7 @@ describe('ManagedMcpController', () => {
       entryId: 'live-entry-id',
       serverName: installed.connector.serverName,
       url: 'https://mcp.example.com/calendar',
+      source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
     }])
 
     await expect(controller.install({ name: 'io.example/calendar' })).resolves.toMatchObject({
