@@ -4,7 +4,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import {
   OPENCLAW_GOOGLE_ACCOUNT_KEY,
   runOpenClawCli,
-} from '@phoenix-ai/dsh-authorization/openclaw-cli'
+} from '@phoenix-ai/dsh-authorization/google'
 import {
   defineTool,
   ToolArgsError,
