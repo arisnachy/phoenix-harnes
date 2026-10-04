@@ -3,6 +3,9 @@
 /** Configuration path a catalog connector expects once its adapter is installed. */
 export type ConnectorMode = 'oauth' | 'api-key' | 'mcp' | 'native'
 
+/** Provenance is explicit; a matching display name never grants vendor trust. */
+export type ConnectorProvenance = 'vendor-official' | 'registry-listed' | 'private-owner' | 'native'
+
 /** One discoverable external or local integration. */
 export interface ConnectorDefinition {
   readonly id: string
@@ -11,6 +14,7 @@ export interface ConnectorDefinition {
   readonly category: string
   readonly description: string
   readonly mode: ConnectorMode
+  readonly provenance: ConnectorProvenance
   readonly providerFamily?: string
   readonly logoUrl?: string
   readonly capabilities: readonly string[]
@@ -28,8 +32,8 @@ export interface ConnectorPreset {
 
 const icon = (slug: string): string => `https://cdn.simpleicons.org/${slug}`
 
-/** Curated connector directory. Runtime state is joined separately from authorization/MCP telemetry. */
-export const CONNECTOR_CATALOG: readonly ConnectorDefinition[] = [
+/** Curated connector directory before explicit provenance is attached. */
+const PUBLIC_CONNECTOR_CATALOG = [
   { id: 'gmail', name: 'Gmail', category: 'Email', description: 'Read, search, draft, send, label, and organize email.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('gmail'), capabilities: ['mail.read', 'mail.write', 'mail.search'] },
   { id: 'google-calendar', aliases: ['calendar'], name: 'Google Calendar', category: 'Calendar', description: 'Read availability and create or update calendar events.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googlecalendar'), capabilities: ['calendar.read', 'calendar.write'] },
   { id: 'google-drive', aliases: ['drive'], name: 'Google Drive', category: 'Files', description: 'Search and work with Drive, Docs, Sheets, Slides, and files.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googledrive'), capabilities: ['files.read', 'files.write', 'documents'] },
@@ -75,9 +79,52 @@ export const CONNECTOR_CATALOG: readonly ConnectorDefinition[] = [
   { id: 'quickbooks', name: 'QuickBooks', category: 'Finance', description: 'Work with accounting, invoices, expenses, and business finances.', mode: 'oauth', providerFamily: 'quickbooks', logoUrl: icon('quickbooks'), capabilities: ['accounting', 'invoices', 'expenses'] },
   { id: 'openai-platform', aliases: ['openai'], name: 'OpenAI Platform', category: 'AI', description: 'Configure OpenAI API access for development and model workflows.', mode: 'api-key', providerFamily: 'openai', logoUrl: icon('openai'), capabilities: ['models', 'api', 'development'] },
   { id: 'codex', aliases: ['chatgpt', 'openai-codex'], name: 'OpenAI Codex', category: 'Agents', description: 'Use the native ChatGPT/Codex account session for models, coding, agents, and realtime voice without an API key.', mode: 'oauth', providerFamily: 'codex', logoUrl: icon('openai'), capabilities: ['models', 'agents', 'code', 'delegation', 'voice'] },
-  { id: 'openclaw', name: 'OpenClaw', category: 'Agents', description: 'Connect the OpenClaw agent runtime and its local CLI tools.', mode: 'native', capabilities: ['agents', 'local-tools'] },
-  { id: 'custom-mcp', name: 'Custom MCP Server', category: 'Automation', description: 'Attach any compatible stdio or Streamable HTTP MCP server to Phoenix.', mode: 'mcp', capabilities: ['dynamic-tools'] },
 ] as const
+
+/** Curated connector directory. Runtime state is joined separately from authorization/MCP telemetry. */
+export const CONNECTOR_CATALOG: readonly ConnectorDefinition[] = [
+  ...PUBLIC_CONNECTOR_CATALOG.map(definition => ({ ...definition, provenance: 'vendor-official' as const })),
+  {
+    id: 'evolucionrd',
+    aliases: ['evolucion-rd'],
+    name: 'EvolucionRD',
+    category: 'Private',
+    description: 'Owner-private EvolucionRD connector.',
+    mode: 'native',
+    provenance: 'private-owner',
+    providerFamily: 'evolucionrd',
+    capabilities: ['private-tools'],
+  },
+  {
+    id: 'kira-juancito-secure',
+    aliases: ['kira-juancito', 'juancito'],
+    name: 'KIRA Juancito Secure',
+    category: 'Private',
+    description: 'Owner-private authenticated Juancito inventory connector.',
+    mode: 'native',
+    provenance: 'private-owner',
+    providerFamily: 'kira-juancito-secure',
+    capabilities: ['private-tools'],
+  },
+  {
+    id: 'openclaw',
+    name: 'OpenClaw',
+    category: 'Agents',
+    description: 'Connect the OpenClaw agent runtime and its local CLI tools.',
+    mode: 'native',
+    provenance: 'native',
+    capabilities: ['agents', 'local-tools'],
+  },
+  {
+    id: 'custom-mcp',
+    name: 'Custom MCP Server',
+    category: 'Automation',
+    description: 'Attach a compatible MCP server explicitly; registry listing does not imply vendor ownership.',
+    mode: 'mcp',
+    provenance: 'registry-listed',
+    capabilities: ['dynamic-tools'],
+  },
+]
 
 /** Domain presets shown above the connector catalog. */
 export const CONNECTOR_PRESETS: readonly ConnectorPreset[] = [
