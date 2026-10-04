@@ -1,5 +1,5 @@
 /** General Settings row for local PHOENIX diagnostics without a visible console. */
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import css from './DiagnosticsRow.module.css'
@@ -30,7 +30,7 @@ export function DiagnosticsRow({ host, t }: DiagnosticsRowProps) {
   const [openFailed, setOpenFailed] = useState(false)
   const [canOpenPath, setCanOpenPath] = useState(false)
 
-  const load = async (): Promise<void> => {
+  const load = useCallback(async (): Promise<void> => {
     const response = await host.describe({})
     if (!response.result.ok) {
       setLoadFailed(true)
@@ -39,13 +39,13 @@ export function DiagnosticsRow({ host, t }: DiagnosticsRowProps) {
     setLoadFailed(false)
     setCanOpenPath(response.result.value.canOpenPath)
     setDiagnostics(response.result.value.diagnostics)
-  }
+  }, [host])
 
   useEffect(() => {
     void load()
     const timer = window.setInterval(() => { void load() }, 15_000)
     return () => { window.clearInterval(timer) }
-  }, [host])
+  }, [load])
 
   const open = async (path: string): Promise<void> => {
     setOpenFailed(false)
