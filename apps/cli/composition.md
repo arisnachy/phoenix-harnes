@@ -52,6 +52,8 @@ flowchart LR
   cfg --> plugin_dsh_base_authorization
   plugin_dsh_base_authorization_google["authorization-google<br/>@phoenix-ai/dsh-authorization/google"]
   cfg --> plugin_dsh_base_authorization_google
+  plugin_dsh_base_tool_google_workspace["tool-google-workspace<br/>@phoenix-ai/dsh-tool-google-workspace"]
+  cfg --> plugin_dsh_base_tool_google_workspace
   plugin_dsh_base_llm_pi_ai["llm-pi-ai<br/>@phoenix-ai/dsh-llm-pi-ai"]
   cfg --> plugin_dsh_base_llm_pi_ai
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@phoenix-ai/dsh-session-persistence-jsonl"]
@@ -130,6 +132,8 @@ flowchart LR
   cfg --> plugin_dsh_base_command_compact
   plugin_dsh_base_subagent["subagent<br/>@phoenix-ai/dsh-subagent"]
   cfg --> plugin_dsh_base_subagent
+  plugin_dsh_base_subagent_codex["subagent-codex<br/>@phoenix-ai/dsh-subagent-codex"]
+  cfg --> plugin_dsh_base_subagent_codex
   plugin_dsh_base_subagent_spawn_in_process["subagent-spawn-in-process<br/>@phoenix-ai/dsh-subagent-spawn-in-process"]
   cfg --> plugin_dsh_base_subagent_spawn_in_process
   plugin_dsh_base_subagent_fork_in_process["subagent-fork-in-process<br/>@phoenix-ai/dsh-subagent-fork-in-process"]
@@ -238,6 +242,7 @@ flowchart LR
 | `secret-vault` | `@phoenix-ai/dsh-secret-vault` |
 | `authorization` | `@phoenix-ai/dsh-authorization` |
 | `authorization-google` | `@phoenix-ai/dsh-authorization/google` |
+| `tool-google-workspace` | `@phoenix-ai/dsh-tool-google-workspace` |
 | `llm-pi-ai` | `@phoenix-ai/dsh-llm-pi-ai` |
 | `session-persistence-jsonl` | `@phoenix-ai/dsh-session-persistence-jsonl` |
 | `session-learning` | `@phoenix-ai/dsh-session-learning` |
@@ -277,6 +282,7 @@ flowchart LR
 | `compaction-basic` | `@phoenix-ai/dsh-compaction-basic` |
 | `command-compact` | `@phoenix-ai/dsh-command-compact` |
 | `subagent` | `@phoenix-ai/dsh-subagent` |
+| `subagent-codex` | `@phoenix-ai/dsh-subagent-codex` |
 | `subagent-spawn-in-process` | `@phoenix-ai/dsh-subagent-spawn-in-process` |
 | `subagent-fork-in-process` | `@phoenix-ai/dsh-subagent-fork-in-process` |
 | `agent-team` | `@phoenix-ai/dsh-agent-team` |

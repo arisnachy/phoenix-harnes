@@ -145,6 +145,8 @@ interface AccountTelemetry {
   connectors?: ConnectorTelemetry[]
 }
 
+const NATIVE_CODEX_ACCOUNT_KEY = 'subagent-codex/account'
+
 interface Entry {
   key: string
   label: string
@@ -627,8 +629,13 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
         setCatalogFailure(response.result.error.message)
         return
       }
-      setEntries(response.result.value.entries.filter(entry =>
-        entry.methods.some(method => method.id === 'oauth')) as Entry[])
+      const oauthEntries = response.result.value.entries.filter(entry =>
+        entry.methods.some(method => method.id === 'oauth')) as Entry[]
+      // Fresh installs put subscription-backed Codex first so the primary
+      // model route presents its native Auth action before generic providers.
+      oauthEntries.sort((left, right) =>
+        Number(right.key === NATIVE_CODEX_ACCOUNT_KEY) - Number(left.key === NATIVE_CODEX_ACCOUNT_KEY))
+      setEntries(oauthEntries)
     }, (error: unknown) => {
       if (!stale) setCatalogFailure(String(error))
     })

@@ -34,7 +34,7 @@ const KEY = 'mcp-client/notion-notion'
 const LABEL = 'MCP notion-notion'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
 
-function panelApi(status: () => Promise<RpcResponse<unknown>>) {
+function panelApi(statusResult: () => Promise<RpcResponse<unknown>>) {
   return {
     list: vi.fn(() => Promise.resolve(ok({
       entries: [{
@@ -45,11 +45,11 @@ function panelApi(status: () => Promise<RpcResponse<unknown>>) {
       }],
     }))),
     begin: vi.fn(() => Promise.resolve(ok({ attemptId: 'attempt-1', status: 'pending' as const }))),
-    status: vi.fn(status),
+    status: vi.fn(statusResult),
     answer: vi.fn(),
     cancel: vi.fn(),
     disconnect: vi.fn(),
-  } as unknown as IApiClient['authorization']
+  }
 }
 
 function pendingForever(): Promise<RpcResponse<unknown>> {
@@ -65,10 +65,10 @@ function consentNotice(): Promise<RpcResponse<unknown>> {
   }))
 }
 
-function renderPanel(api: IApiClient['authorization']) {
+function renderPanel(api: ReturnType<typeof panelApi>) {
   return render(
     <ConnectorsSettingsSection
-      api={api}
+      api={api as unknown as IApiClient['authorization']}
       t={key => en[key]}
       connectorT={key => connectorEn[key]}
       onAuthorized={vi.fn()}
@@ -156,6 +156,30 @@ describe('authorization consent window', () => {
     )
     // The reserved window carried the navigation: no second popup was attempted.
     expect(open).toHaveBeenCalledTimes(1)
+    open.mockRestore()
+  })
+
+  it('keeps the Host authorization alive when the provider closes its consent popup', async () => {
+    const reserved = reservedWindow()
+    reserved.location.replace.mockImplementation(() => { reserved.closed = true })
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    let polls = 0
+    const api = panelApi(() => {
+      polls += 1
+      if (polls === 1) return consentNotice()
+      return Promise.resolve(ok({
+        attemptId: 'attempt-1',
+        status: 'authorized' as const,
+        nextSeq: 2,
+        notices: [],
+      }))
+    })
+
+    renderPanel(api)
+    await clickAuthorize()
+
+    await waitFor(() => { expect(api.status).toHaveBeenCalledTimes(2) }, { timeout: 5000 })
+    expect(api.cancel).not.toHaveBeenCalled()
     open.mockRestore()
   })
 

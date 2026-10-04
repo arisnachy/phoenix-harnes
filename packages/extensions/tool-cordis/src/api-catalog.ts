@@ -1031,6 +1031,31 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'googleApi',
+    summary: 'Google Host broker.',
+    description: 'Google Host broker. OAuth material never leaves this service instance.',
+    methods: [
+      {
+        signature: 'async inspect(): Promise<AuthorizationTelemetry | undefined>',
+        description: 'Secret-free telemetry exists only while this process owns a live grant.',
+        parameters: [],
+        returns: 'sanitized Google account and service capability telemetry, when connected.',
+      },
+      {
+        signature: 'async request(request: GoogleApiRequest): Promise<GoogleApiResponse>',
+        description: 'Execute one request inside a fixed Google service boundary.',
+        parameters: [{ name: 'request', description: 'bounded Google service request.' }],
+        returns: 'the bounded response without credential-bearing headers.',
+      },
+      {
+        signature: 'async disconnect(): Promise<{ revoked: boolean }>',
+        description: 'Clear the process grant and secret-free marker even when provider revocation fails.',
+        parameters: [],
+        returns: 'whether Google acknowledged token revocation.',
+      },
+    ],
+  },
+  {
     key: 'home',
     summary: 'Cordis service owner for the Home Assistant gateway.',
     description: 'Cordis service owner for the Home Assistant gateway.',
@@ -3544,11 +3569,11 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'AuthorizationEntry',
-    declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n    disconnectable?: true;\n}',
+    declaration: 'export interface AuthorizationEntry {\n    key: CredentialKey;\n    label: string;\n    methods: readonly AuthorizationMethod[];\n    inFlight: boolean;\n    connectors?: readonly AuthorizationConnectorTelemetry[];\n    disconnectable?: true;\n}',
   },
   {
     name: 'AuthorizationFlow',
-    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>;\n    disconnect?(signal?: AbortSignal): Promise<void>;\n    run(session: AuthorizationSession): Promise<void>;\n}',
+    declaration: 'export interface AuthorizationFlow {\n    readonly key: CredentialKey;\n    readonly label: string;\n    readonly methods: readonly [\n        AuthorizationMethod,\n        ...AuthorizationMethod[]\n    ];\n    readonly connectors?: readonly AuthorizationConnectorTelemetry[];\n    inspect?(signal?: AbortSignal): Promise<AuthorizationTelemetry | undefined>;\n    disconnect?(signal?: AbortSignal): Promise<void>;\n    run(session: AuthorizationSession): Promise<void>;\n}',
   },
   {
     name: 'AuthorizationInteraction',
@@ -4157,6 +4182,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'GoalView',
     declaration: 'export interface GoalView extends GoalSnapshot {\n    readonly roundsStarted: number;\n    readonly createdAt: number;\n    readonly updatedAt: number;\n    readonly activation: GoalActivation;\n}',
+  },
+  {
+    name: 'GoogleApiRequest',
+    declaration: 'export interface GoogleApiRequest {\n    service: GoogleWorkspaceService;\n    path: string;\n    method?: string;\n    headers?: Readonly<Record<string, string>>;\n    body?: BodyInit | null;\n    upload?: boolean;\n    signal?: AbortSignal;\n}',
+  },
+  {
+    name: 'GoogleApiResponse',
+    declaration: 'export interface GoogleApiResponse {\n    status: number;\n    ok: boolean;\n    contentType?: string;\n    body: string;\n}',
+  },
+  {
+    name: 'GoogleWorkspaceService',
+    declaration: 'export type GoogleWorkspaceService = \'gmail\' | \'calendar\' | \'drive\' | \'docs\' | \'sheets\' | \'slides\' | \'contacts\';',
   },
   {
     name: 'GrantRecord',

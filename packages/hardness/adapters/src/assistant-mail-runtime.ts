@@ -332,7 +332,9 @@ export function installAssistantMail(ctx: Context,
       try {
         const args = input === undefined ? {} : mailRecord(input)
         if (endpoint === 'signup') await onboarding.signup(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
-        else if (endpoint === 'connect') await onboarding.connect(mailString(args.ownerEmail), mailString(args.inboxId), mailString(args.apiKey, 8192))
+        else if (endpoint === 'new-signup') {
+          await onboarding.signupAnother(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
+        } else if (endpoint === 'connect') await onboarding.connect(mailString(args.ownerEmail), mailString(args.inboxId), mailString(args.apiKey, 8192))
         else if (endpoint === 'verify') await onboarding.verify(mailString(args.code))
         else if (endpoint === 'configure') {
           if (!Array.isArray(args.contacts) || args.contacts.some(value => typeof value !== 'string')) throw new Error('invalid authorized contacts')

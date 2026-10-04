@@ -101,6 +101,7 @@
     "@phoenix-ai/dsh-spill-local": "workspace:^",
     "@phoenix-ai/dsh-spill-policy": "workspace:^",
     "@phoenix-ai/dsh-subagent": "workspace:^",
+    "@phoenix-ai/dsh-subagent-codex": "workspace:^",
     "@phoenix-ai/dsh-subagent-fork-in-process": "workspace:^",
     "@phoenix-ai/dsh-subagent-spawn-in-process": "workspace:^",
     "@phoenix-ai/dsh-subprocess-local": "workspace:^",

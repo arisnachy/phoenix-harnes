@@ -19,6 +19,36 @@ describe('mail onboarding', () => {
       expect(calls).toBe(1)
     } finally { await rm(directory, { recursive: true, force: true }) }
   })
+  it('allows a deliberate second mailbox after an ambiguous provider result', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-'))
+    try {
+      let calls = 0
+      let key = ''
+      const account = new MailOnboarding({
+        path: join(directory, 'account.json'),
+        timeoutMs: 1000,
+        saveKey: async (value) => { key = value },
+        resolveKey: async () => key,
+        fetch: async () => {
+          calls += 1
+          if (calls === 1) throw new Error('unknown result')
+          return Response.json({ api_key: 'second-secret', inbox_id: 'second@agentmail.to' })
+        },
+      })
+      await expect(account.signup('owner@example.com', 'kira-first')).rejects.toThrow('ambiguous')
+      await expect(account.signup('owner@example.com', 'kira-hidden-retry')).rejects.toThrow('existing')
+      expect(calls).toBe(1)
+
+      const second = await account.signupAnother('owner@example.com', 'kira-second')
+      expect(second).toMatchObject({
+        state: 'pending-verification',
+        inboxId: 'second@agentmail.to',
+      })
+      expect(key).toBe('second-secret')
+      expect(calls).toBe(2)
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+
   it('stores the actual inbox and secret, then verifies owner before enabling jobs', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-'))
     try {

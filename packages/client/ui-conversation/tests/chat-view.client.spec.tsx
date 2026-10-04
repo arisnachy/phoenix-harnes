@@ -345,14 +345,17 @@ describe('Chat node rendering', () => {
 
   it('composes user message plugin actions into the same icon row as copy', () => {
     const h = makeHarness({ nodes: [user(1, 'hola')] })
-    const original = h.props.renderSlot as unknown as
-      (key: string, owner: object, opts?: object) => React.ReactNode
+    const original = h.props.renderSlot
     h.props.renderSlot = ((key: string, owner: object, opts?: object) => {
       if (key === 'conversation.chat.message-actions') {
         return <button type="button" data-testid="inline-reaction">react</button>
       }
-      return original(key, owner, opts)
-    }) as unknown as ChatViewSlotProps['renderSlot']
+      return (original as unknown as (
+        slotKey: string,
+        slotOwner: object,
+        slotOpts?: object,
+      ) => React.ReactNode)(key, owner, opts)
+    })
 
     const view = render(<h.ChatView {...h.props} />)
     const reaction = view.getByTestId('inline-reaction')

@@ -52,12 +52,10 @@ export function useAuthorizationAttempt(
   const [failure, setFailure] = useState<string | undefined>()
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
-  const popupClosedAt = useRef<number | undefined>()
 
   const closeReservedPopup = useCallback((): void => {
     const popup = popupRef.current
     popupRef.current = null
-    popupClosedAt.current = undefined
     if (popup !== null && !popup.closed) popup.close()
   }, [])
 
@@ -65,24 +63,12 @@ export function useAuthorizationAttempt(
     if (api === undefined || attempt?.status !== 'pending') return
     let stale = false
     const timer = window.setTimeout(() => {
-      const popup = popupRef.current
-      if (popup !== null && popup.closed) {
-        const firstClosedAt = popupClosedAt.current
-        if (firstClosedAt === undefined) popupClosedAt.current = Date.now()
-        else if (Date.now() - firstClosedAt >= 900) {
-          popupRef.current = null
-          popupClosedAt.current = undefined
-          void api.cancel({ attemptId: attempt.id }).finally(() => {
-            if (stale) return
-            setAttempt(current => current?.id === attempt.id
-              ? { ...current, status: 'cancelled' }
-              : current)
-          })
-          return
-        }
-      } else {
-        popupClosedAt.current = undefined
-      }
+      // OAuth providers commonly close the consent tab as soon as the redirect
+      // reaches the loopback callback, while the Host still exchanges the code
+      // and commits the grant. Popup closure is therefore not cancellation.
+      // Only the explicit Cancel action owns api.cancel(); keep polling the Host
+      // until it reports authorized, failed, or cancelled.
+      if (popupRef.current?.closed === true) popupRef.current = null
 
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
         if (stale) return
