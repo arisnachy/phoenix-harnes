@@ -58,9 +58,9 @@ export async function runOpenClawCli(
   command: string,
   args: readonly string[],
   options: {
-    signal?: AbortSignal
-    env?: Readonly<Record<string, string>>
-    onOutput?: (text: string) => void
+    signal?: AbortSignal | undefined
+    env?: Readonly<Record<string, string>> | undefined
+    onOutput?: ((text: string) => void) | undefined
   } = {},
 ): Promise<CliResult> {
   const subprocess: SubprocessRuntime = ctx.subprocess
