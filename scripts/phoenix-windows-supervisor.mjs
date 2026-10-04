@@ -72,7 +72,7 @@ const PROFILE_REQUIRED_RUNTIME_PACKAGES = [
   '@phoenix-ai/dsh-mcp-connector-registry',
   '@phoenix-ai/dsh-tool-google-workspace',
   '@phoenix-ai/dsh-host-plugin-inventory',
-] as const
+]
 
 function repairDesktopShortcut() {
   if (process.platform !== 'win32') return
@@ -638,8 +638,12 @@ function repairMissingProfileRuntimeArtifact(
     }
   }
 
-  const fallbackStillMissing = profileFallbackHasMissingRuntimeArtifact()
+  // The preflight itself calls prepareProfile(), which re-heals the shared
+  // ~/.dsh/profiles/node_modules junction farm to this exact runtime. Check the
+  // fallback only AFTER that re-anchor; checking it first can mistake a healthy
+  // newly-built isolated runtime for the old broken source checkout.
   const retried = runtimeBootPreflight(path)
+  const fallbackStillMissing = profileFallbackHasMissingRuntimeArtifact()
   if (!fallbackStillMissing && retried.ok) {
     console.error('[PHOENIX RECOVERY] missing profile runtime artifacts rebuilt successfully; boot preflight passed.')
     return retried
