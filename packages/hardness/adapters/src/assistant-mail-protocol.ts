@@ -18,8 +18,8 @@ export const ASSISTANT_MAIL_PROTOCOL = [
     + 'that only the one-time owner verification remains in Settings. Do not create a second mailbox.',
   '- If signup is ambiguous, never repeat signup automatically. First offer/reuse the existing-account '
     + 'recovery flow. If recovery fails, or the user explicitly says the old mailbox is broken/stale and wants '
-    + 'a new one, phoenix_mail_identity action "discard" may abandon the stale enrollment; then action "ensure" '
-    + 'creates the replacement. Discard is destructive and must follow explicit owner intent. When the old '
+    + 'a new one, phoenix_mail_identity action "replace" abandons the stale enrollment and immediately starts '
+    + 'the replacement. Replacement is destructive and must follow explicit owner intent. When the old '
     + 'credential is still valid Phoenix also asks AgentMail to delete that inbox; if access is already lost, '
     + 'Phoenix forgets it locally and must not claim that the remote inbox was deleted.',
   '- For an explicitly requested test or immediate email to the owner, call phoenix_mail_send with subject and text. '
