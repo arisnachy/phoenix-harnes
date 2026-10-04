@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   clientArtifactsAreFresh,
+  missingHostRuntimeArtifacts,
   preparePhoenixWebRuntime,
   sourceCheckoutSupersedesRuntime,
 } from './phoenix-runtime-freshness.ts'
@@ -83,6 +84,40 @@ describe('PHOENIX runtime freshness', () => {
       environment: { DSH_CLIENT_COMMIT_HASH: '0000000' },
     }), 'utf8')
     expect(clientArtifactsAreFresh(root, head)).toBe(false)
+  })
+
+  it('detects a missing Host package artifact through the CLI dependency closure', () => {
+    const root = repository()
+    mkdirSync(join(root, 'apps', 'cli', 'lib'), { recursive: true })
+    writeFileSync(join(root, 'apps', 'cli', 'lib', 'bin.js'), '', 'utf8')
+    writeFileSync(join(root, 'apps', 'cli', 'package.json'), JSON.stringify({
+      name: '@phoenix-ai/dsh',
+      dependencies: { '@phoenix-ai/dsh-base': 'workspace:^' },
+    }), 'utf8')
+
+    const base = join(root, 'packages', 'bundle', 'base')
+    mkdirSync(base, { recursive: true })
+    writeFileSync(join(base, 'package.json'), JSON.stringify({
+      name: '@phoenix-ai/dsh-base',
+      main: 'lib/index.js',
+      dependencies: { '@phoenix-ai/dsh-tool-google-workspace': 'workspace:^' },
+    }), 'utf8')
+    mkdirSync(join(base, 'lib'), { recursive: true })
+    writeFileSync(join(base, 'lib', 'index.js'), '', 'utf8')
+
+    const google = join(root, 'packages', 'credentials', 'tool-google-workspace')
+    mkdirSync(google, { recursive: true })
+    writeFileSync(join(google, 'package.json'), JSON.stringify({
+      name: '@phoenix-ai/dsh-tool-google-workspace',
+      main: 'lib/index.js',
+    }), 'utf8')
+
+    expect(missingHostRuntimeArtifacts(root))
+      .toContain('packages/credentials/tool-google-workspace/lib/index.js')
+
+    mkdirSync(join(google, 'lib'), { recursive: true })
+    writeFileSync(join(google, 'lib', 'index.js'), '', 'utf8')
+    expect(missingHostRuntimeArtifacts(root)).toEqual([])
   })
 
   it('retires the stale isolated runtime marker before launch when the clean source is newer', () => {
