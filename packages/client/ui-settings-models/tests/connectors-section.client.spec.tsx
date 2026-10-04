@@ -546,12 +546,14 @@ describe('connectors settings section', () => {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
+    const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
     const mcpRegistry = {
       state: vi.fn(async () => ({
         runtime: [],
         managed: [{ entryId: 'x', serverName: 'registry-fixture-x', url: 'https://mcp.example.com/registry-fixture' }],
       })),
       install: vi.fn(),
+      remove,
       search: vi.fn(async () => ({
         source: 'official-mcp-registry' as const,
         query: 'registry-fixture',
@@ -576,6 +578,8 @@ describe('connectors settings section', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
     expect(await screen.findByText('Installed')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
+    await waitFor(() => { expect(remove).toHaveBeenCalledWith({ entryId: 'x' }) })
   })
 
   it('rejects unsafe connector links instead of opening a blank or custom-scheme window', () => {
