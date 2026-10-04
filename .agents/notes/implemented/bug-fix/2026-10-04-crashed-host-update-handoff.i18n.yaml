@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-04-crashed-host-update-handoff.md
-2026-10-04-crashed-host-update-handoff.md: 0bf0c6caba6a7a4e5d801e9b4d58b2d7b00e5351
-2026-10-04-crashed-host-update-handoff.zh.md: 2655163ee9710ffe7909dfab74fccafcfac0d03d
+2026-10-04-crashed-host-update-handoff.md: 85eff145df6183b171ed8bc10e792222dec4edbd
+2026-10-04-crashed-host-update-handoff.zh.md: 30a8ec6a1d8b095b499917632bc09121d3a3ac25
