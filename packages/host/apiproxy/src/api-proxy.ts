@@ -1475,10 +1475,28 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     })
   })
 
+  /** Find the durable inbox insertion event that owns one still-pending occurrence. */
+  const pendingInboxAnchorSeq = (
+    session: Session,
+    messageId: UserMessage['id'],
+    currentSplice?: SessionEventMap['agent/inbox/spliced'],
+    currentSeq?: number,
+  ): number | undefined => {
+    if (currentSplice !== undefined && currentSeq !== undefined
+      && currentSplice.inserted.some(message => message.id === messageId)) return currentSeq
+    for (let index = session.events.length - 1; index >= 0; index -= 1) {
+      const event = session.events[index]
+      if (event?.type !== 'agent/inbox/spliced') continue
+      if (event.data.inserted.some(message => message.id === messageId)) return event.seq
+    }
+    return undefined
+  }
+
   /** Project both durable inbox lists, optionally including the splice currently being emitted. */
   const queueItems = (
     agent: Agent,
     splice?: SessionEventMap['agent/inbox/spliced'],
+    spliceSeq?: number,
   ): QueuedInboxItem[] => {
     const project = (target: 'next-turn' | 'next-step'): readonly UserMessage[] => {
       const messages = target === 'next-turn' ? agent.inbox.nextTurn : agent.inbox.nextStep
@@ -1495,6 +1513,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // and must not render as a pending steering bubble.
         placement: message.source.kind === 'user' ? 'steering' as const : 'context' as const,
         message,
+        ...message.source.kind !== 'user'
+          ? {}
+          : {
+            anchorSeq: pendingInboxAnchorSeq(agent.session, message.id, splice, spliceSeq),
+          },
       })),
     ]
   }
@@ -1503,7 +1526,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     if (event.type !== 'agent/inbox/spliced') return
     const agent = ctx.agents.get(session.id)
     if (agent?.session !== session) return
-    broadcast({ type: 'session/queue', sessionId: session.id, items: queueItems(agent, event.data) })
+    broadcast({ type: 'session/queue', sessionId: session.id, items: queueItems(agent, event.data, event.seq) })
   })
 
   /** Remove a wait before settling it: synchronous deletion makes the first claimant win. */
