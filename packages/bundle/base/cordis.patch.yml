@@ -115,8 +115,8 @@
     # its own non-secret account marker; Disconnect never logs the user out of
     # those shared CLIs. This replaces the older Phoenix-specific Google OAuth
     # exchange, avoiding two independent Google sessions and token stores.
-    - id: authorization-openclaw-cli
-      name: '@phoenix-ai/dsh-authorization/openclaw-cli'
+    - id: authorization-google
+      name: '@phoenix-ai/dsh-authorization/google'
 
     # Model-facing Gmail/Calendar/Drive tools use the same adopted gog account
     # as the authorization flow above. One account, one tool namespace.
