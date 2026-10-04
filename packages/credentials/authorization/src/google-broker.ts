@@ -685,7 +685,7 @@ export default class GoogleApiBroker extends Service {
     try {
       session.notify({
         message: 'Continue with Google in your browser. PHOENIX keeps OAuth tokens inside the Host process.',
-        url: createAuthorizationUrl(this.spec, receiver.redirectUri, state, pkce.challenge),
+        url: createAuthorizationUrl({ ...this.spec, clientId }, receiver.redirectUri, state, pkce.challenge),
       })
       const code = await receiver.code
       const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
