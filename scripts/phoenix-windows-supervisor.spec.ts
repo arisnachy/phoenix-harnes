@@ -189,7 +189,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('function profileFallbackHasMissingRuntimeArtifact()')
     expect(source).toContain('function isMissingProfileRuntimeArtifact(detail)')
     expect(source).toContain("normalized.includes('/profiles/node_modules/')")
-    expect(source).toContain("['run', 'build:lib:host']")
+    expect(source).toContain("['exec', 'tsx', 'scripts/build.ts']")
     expect(source).toContain('repairMissingProfileRuntimeArtifact(runtimeRoot, crashPreflight)')
     expect(source).toContain('profile artifact repair failed; refusing an automatic relaunch loop')
   })
