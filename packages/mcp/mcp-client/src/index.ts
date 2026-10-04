@@ -189,6 +189,17 @@ export const Config = z.union([
  * @returns startup readiness after connection and initial tool discovery settle.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
+  // Registry-managed remotes declare OAuth explicitly. If their auth services
+  // are still loading, defer the whole connector under a reactive injection
+  // instead of starting it anonymously and permanently missing its Auth flow.
+  // Public/legacy remotes that omit `oauth` keep their existing standalone
+  // behavior; managed OAuth connectors always persist `oauth: true`.
+  if (config.transport === 'streamable-http' && config.oauth === true
+    && (ctx.get('authorization') === undefined || ctx.get('credentials') === undefined)) {
+    ctx.inject(['tools', 'authorization', 'credentials'], inner => apply(inner, config))
+    return
+  }
+
   // Platform-bound stdio servers must be rejected before startConnection() can
   // construct an SDK transport and spawn a child process. This keeps persisted
   // XcodeBuildMCP configs harmless on Windows/Linux and prevents pointless
