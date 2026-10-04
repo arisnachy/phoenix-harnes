@@ -1,6 +1,6 @@
 import { MailMessageId } from '../src/assistant-mail-types.ts'
 import { describe, expect, it, vi } from 'vitest'
-import { AgentMailTransport } from '../src/assistant-mail-agentmail.ts'
+import { AgentMailTransport, agentMailDeleteInbox } from '../src/assistant-mail-agentmail.ts'
 
 describe('AgentMail transport', () => {
   it('uses authenticated-only listing and idempotent reply pinned to the verified sender', async () => {
@@ -71,4 +71,20 @@ it('rejects identity mismatches and admits only candidates from the authenticate
   expect(await transport.readMessage(id)).toMatchObject({ authenticated: true, from: 'owner@example.com' })
   wrongIdentity = true
   await expect(transport.readMessage(id)).rejects.toThrow('identity')
+})
+
+it('deletes a stale inbox with the authenticated DELETE endpoint and treats missing as already deleted', async () => {
+  const requests: { url: string; method?: string }[] = []
+  let status = 204
+  const fetcher = async (url: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
+    requests.push({ url: typeof url === 'string' ? url : url instanceof URL ? url.href : url.url, ...(init?.method === undefined ? {} : { method: init.method }) })
+    return new Response(null, { status })
+  }
+  await agentMailDeleteInbox('old@agentmail.to', 'private-key', 1000, fetcher)
+  status = 404
+  await agentMailDeleteInbox('old@agentmail.to', 'private-key', 1000, fetcher)
+  expect(requests).toEqual([
+    { url: 'https://api.agentmail.to/v0/inboxes/old%40agentmail.to', method: 'DELETE' },
+    { url: 'https://api.agentmail.to/v0/inboxes/old%40agentmail.to', method: 'DELETE' },
+  ])
 })

@@ -3,7 +3,7 @@ import { SessionId } from '@phoenix-ai/dsh-session'
 import { createHash, randomInt, randomUUID } from 'node:crypto'
 import type { MailAccount } from './assistant-mail-types.ts'
 import { MailFile, mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
-import { AgentMailHttpError, agentMailRequest } from './assistant-mail-agentmail.ts'
+import { AgentMailHttpError, agentMailDeleteInbox, agentMailRequest } from './assistant-mail-agentmail.ts'
 
 interface Enrollment extends MailAccount {
   readonly signupUsername?: string
@@ -61,6 +61,29 @@ export class MailOnboarding {
     } = await this.file.read()
     return account
   }
+  /** Discard a stale enrollment so Phoenix can start a genuinely new mailbox flow.
+   * When the stored credential still works, the old provider inbox is deleted first to release quota.
+   * If provider access is already lost, local state is still cleared so the broken enrollment cannot
+   * permanently trap Phoenix.
+   * @returns Empty enrollment ready for a new signup.
+   */
+  discard(): Promise<MailAccount> {
+    return this.exclusively(async () => {
+      const previous = await this.file.read()
+      const key = await this.options.resolveKey?.()
+      if (previous.inboxId !== undefined && key !== undefined) {
+        try {
+          await agentMailDeleteInbox(previous.inboxId, key, this.options.timeoutMs, this.options.fetch ?? fetch)
+        } catch {
+          // Lost/invalid access must not make a stale local enrollment undeletable.
+          // The remote inbox may remain at AgentMail, but Phoenix stops using it.
+        }
+      }
+      await this.file.change(() => ({ state: 'not-configured', contacts: [] }))
+      return this.status()
+    })
+  }
+
   /** Create a free-domain account once; persist ambiguity before contacting the provider.
    * @param ownerEmail Human owner receiving verification.
    * @param username Requested free-domain local part.

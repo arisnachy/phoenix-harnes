@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AssistantMailPanel } from '../src/client/AssistantMailPanel.tsx'
 afterEach(cleanup)
 describe('local assistant mailbox settings', () => {
@@ -65,4 +65,25 @@ it('offers owner-bound recovery without requiring an API key', async () => {
   expect(await screen.findByText('existing@agentmail.to')).toBeTruthy()
   expect(calls).toContain('recover')
   expect(screen.queryByLabelText('Clave de recuperación de AgentMail')).toBeNull()
+})
+
+
+it('can replace an unrecoverable mailbox in one click', async () => {
+  vi.stubGlobal('confirm', () => true)
+  const calls: string[] = []
+  const client = { call: async (action: string) => {
+    calls.push(action)
+    return {
+      account: action === 'replace'
+        ? { state: 'pending-verification', inboxId: 'replacement@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }
+        : { state: 'signup-ambiguous', ownerEmail: 'owner@example.com', contacts: [] },
+      connection: 'disconnected',
+      jobs: [],
+    }
+  } }
+  render(<AssistantMailPanel client={client} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'No se puede recuperar: crear uno nuevo' }))
+  expect(await screen.findByText('replacement@agentmail.to')).toBeTruthy()
+  expect(calls).toContain('replace')
+  vi.unstubAllGlobals()
 })

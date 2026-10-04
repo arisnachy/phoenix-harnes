@@ -16,8 +16,12 @@ export const ASSISTANT_MAIL_PROTOCOL = [
     + 'used only as the owner identity for enrollment and delivery defaults; it is not Kira\'s mailbox.',
   '- If the tool returns pending-verification, tell the user the real Kira address immediately and explain '
     + 'that only the one-time owner verification remains in Settings. Do not create a second mailbox.',
-  '- If signup is ambiguous, never repeat signup automatically. Direct the user to the existing-account '
-    + 'recovery flow in Settings.',
+  '- If signup is ambiguous, never repeat signup automatically. First offer/reuse the existing-account '
+    + 'recovery flow. If recovery fails, or the user explicitly says the old mailbox is broken/stale and wants '
+    + 'a new one, phoenix_mail_identity action "replace" abandons the stale enrollment and immediately starts '
+    + 'the replacement. Replacement is destructive and must follow explicit owner intent. When the old '
+    + 'credential is still valid Phoenix also asks AgentMail to delete that inbox; if access is already lost, '
+    + 'Phoenix forgets it locally and must not claim that the remote inbox was deleted.',
   '- For an explicitly requested test or immediate email to the owner, call phoenix_mail_send with subject and text. '
     + 'The stored AgentMail credential is already the sending connection; no separate service, Gmail login or new API key is needed. '
     + 'Report sent only when the tool returns state=sent and a provider messageId. If confirmation is pending, do not issue another send.',
