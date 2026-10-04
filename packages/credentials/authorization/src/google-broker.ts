@@ -56,18 +56,24 @@ interface GoogleGrant {
 function storedGoogleGrant(payload: unknown): GoogleGrant | undefined {
   if (payload === null || typeof payload !== 'object' || Array.isArray(payload)) return undefined
   const value = payload as Record<string, unknown>
-  if (typeof value.accessToken !== 'string' || value.accessToken.length === 0) return undefined
-  if (value.refreshToken !== undefined && (typeof value.refreshToken !== 'string' || value.refreshToken.length === 0)) {
-    return undefined
+  const accessToken = value.accessToken
+  const refreshToken = value.refreshToken
+  const expiresAt = value.expiresAt
+  const rawScopes = value.scopes
+  if (typeof accessToken !== 'string' || accessToken.length === 0) return undefined
+  if (refreshToken !== undefined && (typeof refreshToken !== 'string' || refreshToken.length === 0)) return undefined
+  if (typeof expiresAt !== 'number' || !Number.isFinite(expiresAt) || expiresAt < 0) return undefined
+  if (!Array.isArray(rawScopes)) return undefined
+  const scopes: string[] = []
+  for (const scope of rawScopes) {
+    if (typeof scope !== 'string' || scope.trim().length === 0) return undefined
+    scopes.push(scope)
   }
-  if (typeof value.expiresAt !== 'number' || !Number.isFinite(value.expiresAt) || value.expiresAt < 0) return undefined
-  if (!Array.isArray(value.scopes)
-    || !value.scopes.every(scope => typeof scope === 'string' && scope.trim().length > 0)) return undefined
   return {
-    accessToken: value.accessToken,
-    ...(value.refreshToken === undefined ? {} : { refreshToken: value.refreshToken as string }),
-    expiresAt: value.expiresAt,
-    scopes: [...value.scopes] as string[],
+    accessToken,
+    ...(refreshToken === undefined ? {} : { refreshToken }),
+    expiresAt,
+    scopes,
   }
 }
 
