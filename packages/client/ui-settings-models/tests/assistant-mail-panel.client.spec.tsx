@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AssistantMailPanel } from '../src/client/AssistantMailPanel.tsx'
 afterEach(cleanup)
 describe('local assistant mailbox settings', () => {
@@ -15,6 +15,22 @@ describe('local assistant mailbox settings', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Verificar y activar' }))
     expect(await screen.findByText(/Correo verificado/u)).toBeTruthy()
   })
+})
+
+it('offers a deliberate new mailbox after an ambiguous signup', async () => {
+  const call = vi.fn(async (action: string) => ({
+    account: action === 'new-signup'
+      ? { state: 'pending-verification', inboxId: 'second@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }
+      : { state: 'signup-ambiguous', ownerEmail: 'owner@example.com', contacts: [] },
+    connection: 'disconnected',
+    jobs: [],
+  }))
+  render(<AssistantMailPanel client={{ call }} />)
+  const create = await screen.findByRole('button', { name: 'Crear otro buzón' })
+  fireEvent.click(create)
+  await act(async () => { await Promise.resolve() })
+  expect(call).toHaveBeenCalledWith('new-signup', { ownerEmail: 'owner@example.com' })
+  expect(await screen.findByText('second@agentmail.to')).toBeTruthy()
 })
 
 it('preserves owner input typed before the initial host status resolves', async () => {
