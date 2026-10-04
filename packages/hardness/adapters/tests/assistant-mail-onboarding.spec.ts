@@ -263,7 +263,7 @@ it('deletes a reachable old inbox and clears the enrollment so signup can start 
       saveKey: async () => {},
       resolveKey: async () => 'test-secret',
       fetch: async (url, init) => {
-        requests.push({ url: requestAddress(url), method: init?.method })
+        requests.push({ url: requestAddress(url), ...(init?.method === undefined ? {} : { method: init.method }) })
         if (init?.method === 'DELETE') return new Response(null, { status: 204 })
         return Response.json({ api_key: 'new-secret', inbox_id: 'new@agentmail.to' })
       },
