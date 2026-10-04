@@ -100,8 +100,8 @@ function googleAccount(stdout: string): string | undefined {
 
 function snapshot(
   id: OpenClawConnectorId,
-  skill: string,
-  runtime: string,
+  skill: OpenClawConnectorSnapshot['skill'],
+  runtime: OpenClawConnectorSnapshot['runtime'],
   result: OpenClawCommandResult,
   account?: string,
 ): OpenClawConnectorSnapshot {
