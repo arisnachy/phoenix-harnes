@@ -628,6 +628,20 @@ export const IconApiOutline14 = ({ size = 14, className }: IconProps) => (
   </svg>
 )
 
+/** Circular person glyph for Profile navigation. */
+export const IconProfileOutline16 = ({ size = 16, className }: IconProps) => (
+  <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="8" cy="8" r="6.55" stroke="currentColor" strokeWidth="1.3" />
+    <circle cx="8" cy="5.55" r="2.05" stroke="currentColor" strokeWidth="1.3" />
+    <path
+      d="M4.45 12.15C5.08 10.55 6.27 9.72 8 9.72C9.73 9.72 10.92 10.55 11.55 12.15"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+    />
+  </svg>
+)
+
 /** Plug glyph for account and app connector navigation. */
 export const IconPlugOutline16 = ({ size = 16, className }: IconProps) => (
   <svg width={size} height={size} className={className} viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
