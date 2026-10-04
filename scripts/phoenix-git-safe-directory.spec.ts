@@ -1,7 +1,9 @@
+import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { describe, expect, it } from 'vitest'
-import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
+import { gitSafeDirectoryEnvironment, persistGitSafeDirectory } from './phoenix-git-safe-directory.mjs'
 
 const repository = join(tmpdir(), 'Phoenix').replaceAll('\\', '/')
 
@@ -27,5 +29,29 @@ describe('PHOENIX Git safe-directory environment', () => {
     expect(env.GIT_CONFIG_VALUE_0).toBe('false')
     expect(env.GIT_CONFIG_KEY_1).toBe('safe.directory')
     expect(env.GIT_CONFIG_VALUE_1).toBe(repository)
+  })
+
+  it('persists one exact repository safe.directory so user Git works outside Phoenix', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-git-safe-global-'))
+    try {
+      const env = {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: join(home, 'gitconfig'),
+      }
+      expect(persistGitSafeDirectory(repository, env)).toBe(true)
+      expect(persistGitSafeDirectory(repository, env)).toBe(true)
+
+      const configured = spawnSync('git', ['config', '--global', '--get-all', 'safe.directory'], {
+        cwd: home,
+        env,
+        encoding: 'utf8',
+        windowsHide: true,
+      })
+      expect(configured.status).toBe(0)
+      expect(configured.stdout.trim().split(/\r?\n/u)).toEqual([repository])
+      expect(configured.stdout).not.toContain('*')
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 })
