@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Browser settings row for the local user profile. The row keeps drafts local until Save, exposes general profile fields and family entries, and requires independent consent before a field can be projected into model context by the Host profile service.
+Browser settings row for the local user profile. The row keeps drafts local until Save, exposes general profile fields and family entries, and requires independent consent before a field can be projected into model context by the Host profile service. Initial Host hydration is adopted before dirty-state comparison, so reopening Settings shows persisted values immediately; later Host refreshes preserve an actually edited local draft.
 
 The row also edits KIRA's assistant name and masculine, feminine, or neutral presentation. The Models settings page owns the adjacent-arrow editor for provider order; it persists the order in the same local preference namespace so the conversation model selector receives it from the Host.
 
