@@ -92,6 +92,36 @@ export interface McpConnectorRuntimeEntry {
   readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
 }
 
+/** Operational OpenClaw-backed connector ids exposed to Settings. */
+export type OpenClawConnectorId = 'google-workspace' | 'github'
+
+/** Secret-free OpenClaw connector lifecycle projected by the Host. */
+export interface OpenClawConnectorSnapshot {
+  readonly id: OpenClawConnectorId
+  readonly source: 'openclaw'
+  readonly skill: 'gog' | 'github'
+  readonly runtime: 'gog' | 'gh'
+  readonly status: 'ready' | 'auth-required' | 'missing-runtime' | 'failed'
+  readonly account?: string
+  readonly detail?: string
+}
+
+/** Current whitelisted OpenClaw connector inventory. */
+export interface OpenClawConnectorHubSnapshot {
+  readonly connectors: readonly OpenClawConnectorSnapshot[]
+}
+
+/** Browser-safe authorization request; commands and URLs are never accepted. */
+export interface OpenClawConnectorAuthorizeRequest {
+  readonly id: OpenClawConnectorId
+  readonly account?: string
+}
+
+/** Receipt returned after the Host starts an OpenClaw authorization process. */
+export interface OpenClawConnectorAuthorizeReceipt {
+  readonly started: true
+}
+
 /** Trusted reconstruction source for one PHOENIX-managed MCP. */
 export type ManagedMcpSource =
   | { readonly kind: 'registry'; readonly name: string; readonly version?: string }
