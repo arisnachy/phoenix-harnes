@@ -16,11 +16,13 @@ import {
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
+import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
 
 const root = resolve(process.cwd())
+Object.assign(process.env, gitSafeDirectoryEnvironment(process.env, [root]))
 let runtimeRoot = root
 const hostArgs = process.argv.slice(2)
 const desktopConsoleVisible = ['1', 'true', 'yes']
@@ -959,12 +961,11 @@ function superviseWatcher(host) {
       if (watcher !== child) return
       watcher = undefined
       if (stopping || host.exitCode !== null || host.killed) return
-      if (code === 0) {
-        restartDelay = WATCHER_RESTART_DELAY_MS
-        console.error('[PHOENIX UPDATE] watcher exited normally; leaving it stopped until the next Host launch.')
-        return
-      }
-      const reason = code === null ? `signal ${signal ?? 'unknown'}` : `exit code ${String(code)}`
+      const reason = code === 0
+        ? 'unexpected clean exit'
+        : code === null
+          ? `signal ${signal ?? 'unknown'}`
+          : `exit code ${String(code)}`
       scheduleRestart(reason, launchedAt)
     })
   }

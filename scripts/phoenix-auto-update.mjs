@@ -25,6 +25,7 @@ import {
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
+import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'
 import { classifyStableUpdate } from './phoenix-update-policy.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
@@ -57,12 +58,20 @@ function normalizeMode(value) {
 }
 
 function command(bin, args, options = {}) {
+  const cwd = options.cwd ?? process.cwd()
+  const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()
+  const env = bin === 'git'
+    ? gitSafeDirectoryEnvironment(process.env, [
+        ...(installRoot === undefined || installRoot.length === 0 ? [] : [installRoot]),
+        cwd,
+      ])
+    : process.env
   const result = spawnSync(bin, args, {
     cwd: options.cwd,
     encoding: 'utf8',
     stdio: options.inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
-    env: process.env,
+    env,
   })
   if (result.error !== undefined) {
     if (options.allowFailure) return { ok: false, stdout: '', stderr: result.error.message, status: 1 }
