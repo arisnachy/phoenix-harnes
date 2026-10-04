@@ -299,6 +299,22 @@ function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDe
   return ids.includes(liveId) || ids.includes(liveName) || normalize(definition.name) === liveName
 }
 
+function runtimeMatchesDefinition(runtime: McpConnectorRuntimeView, definition: ConnectorDefinition): boolean {
+  const server = normalize(runtime.serverName)
+  const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
+    .map(normalize)
+    .filter(value => value.length >= 3)
+  return needles.some(needle => server === needle || server.includes(needle) || needle.includes(server))
+}
+
+function managedMatchesDefinition(managed: { serverName: string; url: string }, definition: ConnectorDefinition): boolean {
+  const server = normalize(managed.serverName)
+  const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
+    .map(normalize)
+    .filter(value => value.length >= 3)
+  return needles.some(needle => server === needle || server.includes(needle) || needle.includes(server))
+}
+
 
 function catalogDefinitionForText(value: string): ConnectorDefinition | undefined {
   const haystack = normalize(value)
@@ -408,15 +424,17 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuthorize, onConfigure, pending }: {
+function CatalogCard({ definition, live, account, mcpRuntime, managed, connected, t, onAuthorize, onConfigure, onFind, pending }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
   mcpRuntime?: McpConnectorRuntimeView | undefined
   managed?: boolean
+  connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
   onConfigure?: (() => void) | undefined
+  onFind?: (() => void) | undefined
   pending: boolean
 }): ReactNode {
   const connectedByAccount = accountGrantConnectsCatalogEntry(account)
@@ -477,11 +495,15 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, t, onAuth
           </button>
         ) : installUrl !== undefined ? (
           <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
-        ) : oauthAccount === undefined || connectedByAccount ? null : (
+        ) : oauthAccount !== undefined && !connectedByAccount ? (
           <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
-            {t('authorize')}
+            {connected ? t('reauthorize') : t('authorize')}
           </button>
-        )}
+        ) : !connected && onFind !== undefined && definition.mode !== 'native' ? (
+          <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFind}>
+            {t('findConnector')}
+          </button>
+        ) : null}
       </div>
     </article>
   )
@@ -675,7 +697,7 @@ export function ConnectorsSettingsSection({ api,
   const [disconnectingKey, setDisconnectingKey] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<ConnectorFilter>('connected')
+  const [filter, setFilter] = useState<ConnectorFilter>('all')
   const [registrySnapshot, setRegistrySnapshot] = useState<McpRegistrySearchSnapshot | undefined>()
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryFailure, setRegistryFailure] = useState(false)
@@ -804,13 +826,13 @@ export function ConnectorsSettingsSection({ api,
       ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
       : definition.id === 'jev'
         ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
-        : undefined
+        : mcpHub.runtime.find(candidate => runtimeMatchesDefinition(candidate, definition))
     const managed = definition.id === 'binance'
       ? mcpHub.managed.some(candidate => candidate.serverName === 'binance-agent-os'
         || candidate.url === 'https://agent.binance.com/mcp/agentic')
       : definition.id === 'jev'
         ? mcpHub.managed.some(candidate => candidate.serverName === 'jev')
-        : false
+        : mcpHub.managed.some(candidate => managedMatchesDefinition(candidate, definition))
     const connected = live?.installed === true
       || live?.callable === true
       || accountGrantConnectsCatalogEntry(account)
@@ -1064,9 +1086,16 @@ export function ConnectorsSettingsSection({ api,
                 account={row.account}
                 mcpRuntime={row.mcpRuntime}
                 managed={row.managed || (row.definition.id === 'jev' && jevState?.configured === true)}
+                connected={row.connected}
                 t={connectorT}
                 pending={attempt?.status === 'pending' || jevBusy}
                 onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
+                onFind={mcpRegistry === undefined ? undefined : () => {
+                  setCatalogFailure(undefined)
+                  setRegistryFailure(false)
+                  setFilter('available')
+                  setQuery(row.definition.name)
+                }}
                 onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
                   setJevFailure(undefined)
                   setJevSetupOpen(true)

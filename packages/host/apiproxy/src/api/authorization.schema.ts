@@ -60,6 +60,7 @@ const authorizationEntrySchema = z.object({
   label: z.string().min(1),
   methods: z.array(authorizationMethodSchema).min(1),
   inFlight: z.boolean(),
+  connectors: z.array(connectorTelemetrySchema).optional(),
   disconnectable: z.literal(true).optional(),
   stored: z.object({ kind: z.union([z.literal('api-key'), z.literal('grant')]) }).optional(),
   telemetry: authorizationTelemetrySchema.optional(),

@@ -3,11 +3,13 @@ import { Context } from '@phoenix-ai/cordis'
 import AuthorizationService from '@phoenix-ai/dsh-authorization'
 import GoogleApiBroker, {
   GOOGLE_ACCOUNT_KEY,
+  GOOGLE_CLIENT_ID_REF,
   internals,
 } from '@phoenix-ai/dsh-authorization/google'
 import { MemoryCredentials } from './memory.ts'
 
 const originalFetch = internals.fetch
+const originalOpenLoopback = internals.openLoopback
 
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive'
 
@@ -19,6 +21,7 @@ function googleApi(ctx: Context): GoogleApiBroker {
 
 afterEach(() => {
   internals.fetch = originalFetch
+  internals.openLoopback = originalOpenLoopback
   vi.restoreAllMocks()
 })
 
@@ -44,21 +47,38 @@ describe('Google Workspace runtime guards', () => {
     expect(fetchSpy).not.toHaveBeenCalled()
   })
 
-  it('refuses interactive authorization when the deployment client identity is absent', async () => {
+  it('collects and persists a Desktop client id on first authorization when deployment config is absent', async () => {
     const ctx = await harnessWithoutClientId()
-    const fetchSpy = vi.fn()
-    internals.fetch = fetchSpy as typeof fetch
+    const prompt = vi.fn(() => Promise.resolve('desktop.apps.googleusercontent.com'))
+    internals.openLoopback = async () => ({
+      redirectUri: 'http://127.0.0.1:49152/oauth2/callback',
+      code: Promise.resolve('authorization-code'),
+      close: () => Promise.resolve(),
+    })
+    internals.fetch = (async () => new Response(JSON.stringify({
+      access_token: 'access-token',
+      refresh_token: 'refresh-token',
+      expires_in: 3600,
+      token_type: 'Bearer',
+      scope: DRIVE_SCOPE,
+    }), { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch
 
     await expect(ctx.authorization.begin({
       key: GOOGLE_ACCOUNT_KEY,
       interaction: {
         notify: () => {},
-        prompt: () => Promise.reject(new Error('not used')),
+        prompt,
       },
-    })).rejects.toMatchObject({ code: 'GOOGLE_CLIENT_UNCONFIGURED' })
+    })).resolves.toEqual({ status: 'authorized' })
 
-    expect(fetchSpy).not.toHaveBeenCalled()
-    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
+    expect(prompt).toHaveBeenCalledWith(expect.objectContaining({
+      kind: 'text',
+      message: 'Google Desktop OAuth client ID',
+    }))
+    await expect(ctx.credentials.resolve(GOOGLE_CLIENT_ID_REF)).resolves.toMatchObject({
+      value: 'desktop.apps.googleusercontent.com',
+    })
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toEqual({ kind: 'api-key' })
   })
 
   it('never treats a durable marker as a reusable OAuth grant', async () => {

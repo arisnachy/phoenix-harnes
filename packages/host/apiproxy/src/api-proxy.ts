@@ -3844,6 +3844,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             label: entry.label,
             methods: entry.methods.map(method => ({ id: method.id, label: method.label })),
             inFlight: entry.inFlight,
+            ...(entry.connectors === undefined ? {} : { connectors: entry.connectors }),
             ...(entry.disconnectable === true ? { disconnectable: true as const } : {}),
             ...stored === undefined ? {} : { stored },
             ...telemetry === undefined ? {} : { telemetry },

@@ -100,28 +100,33 @@ describe('connectors settings section', () => {
     expect(screen.getByRole('heading', { name: 'MCP connectors' })).toBeTruthy()
   })
 
-  it('defaults the connector catalog to connected and reveals the broad catalog on demand', async () => {
+  it('defaults the connector catalog to all so missing adapters are visible and actionable', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
 
-    renderHub(api)
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'Notion',
+        fetchedAt: '2026-10-03T00:00:00.000Z',
+        stale: false,
+        candidates: [],
+      })),
+    }
+
+    renderHub(api, { mcpRegistry })
     expect(screen.getByRole('heading', { name: 'MCP connectors' })).toBeTruthy()
     expect(screen.getByText('Phoenix knows which MCPs you already have')).toBeTruthy()
     expect(screen.queryByText('Capability presets')).toBeNull()
-    expect(screen.queryByText('Default')).toBeNull()
-    expect(screen.queryByText('Security / Codex Security')).toBeNull()
-    // The catalog defaults to the connected filter: non-operational adapters
-    // stay out of the default view instead of flooding it with "not installed".
-    expect(screen.queryByText('Adapter not installed')).toBeNull()
-
-    // Revealing the broad catalog still lists unconnected adapters.
-    fireEvent.click(screen.getByRole('button', { name: 'All' }))
     expect(screen.getByText('Devpost')).toBeTruthy()
     expect(screen.getByText('Microsoft Teams')).toBeTruthy()
     expect(screen.getByText('Firebase')).toBeTruthy()
     expect(screen.getAllByText('Adapter not installed').length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: 'Find / install' }).length).toBeGreaterThan(0)
   })
 
   it('reuses registered OAuth flows and live connector telemetry', async () => {

@@ -106,9 +106,14 @@ function relevantToTarget(
   return required.every(token => haystack.has(token))
 }
 
-function serviceViews(telemetry: AuthorizationTelemetry | undefined): JsonValue[] {
-  if (telemetry?.kind !== 'account' || telemetry.connectors === undefined) return []
-  return telemetry.connectors.map(connector => ({
+function serviceViews(
+  telemetry: AuthorizationTelemetry | undefined,
+  advertised: AuthorizationEntry['connectors'],
+): JsonValue[] {
+  const connectors = telemetry?.kind === 'account' && telemetry.connectors !== undefined
+    ? telemetry.connectors
+    : advertised ?? []
+  return connectors.map(connector => ({
     id: connector.id,
     name: connector.name,
     ...(connector.description === undefined ? {} : { description: connector.description }),
@@ -142,7 +147,7 @@ async function projectEntry(
     recommended_action: authorizationRecommendedAction(status),
     in_flight: entry.inFlight,
     ...(entry.disconnectable === true ? { disconnectable: true as const } : {}),
-    services: serviceViews(telemetry),
+    services: serviceViews(telemetry, entry.connectors),
   }
 }
 

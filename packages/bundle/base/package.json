@@ -136,7 +136,8 @@
     "@phoenix-ai/dsh-web": "workspace:^",
     "@phoenix-ai/dsh-web-search-free": "workspace:^",
     "@phoenix-ai/dsh-web-search-openrouter": "workspace:^",
-    "@phoenix-ai/dsh-workflow-worker-thread": "workspace:^"
+    "@phoenix-ai/dsh-workflow-worker-thread": "workspace:^",
+    "@phoenix-ai/dsh-tool-google-workspace": "workspace:^"
   },
   "peerDependencies": {
     "@phoenix-ai/dsh-invariants": "workspace:^",
