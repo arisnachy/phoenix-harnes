@@ -91,8 +91,8 @@ function officialPhoenixRemote() {
   const value = gitValue(root, ['remote', 'get-url', 'origin'])
   if (value === undefined) return false
   const normalized = value.replaceAll('\\', '/').replace(/\.git$/iu, '').toLowerCase()
-  return normalized.endsWith('github.com/arisnachy/phoenix-harnes')
-    || normalized.endsWith('github.com:arisnachy/phoenix-harnes')
+  return normalized === 'https://github.com/arisnachy/phoenix-harnes'
+    || normalized === 'git@github.com:arisnachy/phoenix-harnes'
 }
 
 function repairUserGitSafeDirectory() {
