@@ -56,6 +56,10 @@ export interface AssistantMailControl {
    * @returns Confirmed new inbox identity.
    */
   createInbox(): Promise<AssistantMailIdentity>
+  /** Discard a stale or unrecoverable mailbox enrollment so a new one can be created.
+   * This action is destructive and must only follow an explicit owner request.
+   */
+  discard(): Promise<AssistantMailIdentity>
   /** Activate the existing mailbox using the owner's one-time verification code.
    * @param code Six-digit code received by the owner.
    * @returns Verified mailbox identity.
@@ -82,13 +86,15 @@ class AssistantMailControlService extends Service implements AssistantMailContro
     private readonly reconcile: AssistantMailControl['refresh'],
     private readonly send: AssistantMailControl['sendToOwner'],
     private readonly restore: AssistantMailControl['recover'],
-    private readonly replaceInbox: AssistantMailControl['createInbox']) {
+    private readonly replaceInbox: AssistantMailControl['createInbox'],
+    private readonly discardEnrollment: AssistantMailControl['discard']) {
     super(ctx, 'assistantMail')
   }
   status(): Promise<AssistantMailIdentity> { return this.read() }
   ensure(ownerEmail?: string): Promise<AssistantMailIdentity> { return this.create(ownerEmail) }
   recover(): Promise<AssistantMailIdentity> { return this.restore() }
   createInbox(): Promise<AssistantMailIdentity> { return this.replaceInbox() }
+  discard(): Promise<AssistantMailIdentity> { return this.discardEnrollment() }
   verify(code: string): Promise<AssistantMailIdentity> { return this.activate(code) }
   refresh(): Promise<AssistantMailIdentity> { return this.reconcile() }
   sendToOwner(subject: string, text: string, key: string): Promise<MailDelivery & { from: string; to: string }> {
@@ -164,6 +170,7 @@ export function installAssistantMail(ctx: Context,
   let socketDispose: (() => void) | undefined
   let transportInbox: string | undefined
   let status = 'not-configured'
+  let resetting = false
   let disposed = false
   const controller = new AbortController()
   const sends = new Set<Promise<unknown>>()
@@ -257,6 +264,7 @@ export function installAssistantMail(ctx: Context,
     return delivery(key)
   })
   const recover = async (): Promise<void> => {
+    if (resetting) return
     await ensureEnrollment()
     const account = await onboarding.status()
     if (isDisposed() || account.state !== 'ready' || account.inboxId === undefined) return
@@ -313,6 +321,26 @@ export function installAssistantMail(ctx: Context,
       ...(account.ownerEmail === undefined ? {} : { ownerEmail: account.ownerEmail }),
     }
   }
+  const discardEnrollment = async (): Promise<AssistantMailIdentity> => {
+    const credentials = ctx.get('credentials')
+    if (credentials === undefined) throw new Error('secure credential storage is unavailable')
+    if (resetting) throw new Error('mail reset is already in progress')
+    resetting = true
+    try {
+      socketDispose?.()
+      socketDispose = undefined
+      await receiver?.stop()
+      receiver = undefined
+      transportInbox = undefined
+      await onboarding.discard()
+      await credentials.unset(ref)
+      status = 'not-configured'
+      repumpRequested = false
+      return identity()
+    } finally {
+      resetting = false
+    }
+  }
   const serviceContext = ctx as unknown as { readonly reflect?: unknown }
   if (serviceContext.reflect !== undefined) {
     new AssistantMailControlService(
@@ -333,6 +361,7 @@ export function installAssistantMail(ctx: Context,
       sendToOwner,
       async () => { await onboarding.recover(); return identity() },
       async () => { await onboarding.createInbox(); void pump(); return identity() },
+      discardEnrollment,
     )
   }
   let connection: HostConnectionHandle | undefined
@@ -351,6 +380,10 @@ export function installAssistantMail(ctx: Context,
           if (endpoint === 'recover') await onboarding.recover()
           else await onboarding.createInbox()
         }
+        else if (endpoint === 'discard') {
+          if (Object.keys(args).length > 0) throw new Error('mail discard does not accept parameters')
+          await discardEnrollment()
+        }
         else if (endpoint === 'connect') await onboarding.connect(mailString(args.ownerEmail), mailString(args.inboxId), mailString(args.apiKey, 8192))
         else if (endpoint === 'verify') await onboarding.verify(mailString(args.code))
         else if (endpoint === 'configure') {
@@ -364,7 +397,7 @@ export function installAssistantMail(ctx: Context,
           const outcome = await child.done
           if (outcome.exitCode !== 0) throw new Error('could not configure local Windows startup')
         } else if (endpoint !== 'status' && endpoint !== 'refresh') throw new Error('unknown mail operation')
-        if (endpoint !== 'status') {
+        if (endpoint !== 'status' && endpoint !== 'discard') {
           const account = await onboarding.status()
           const root = ctx.get('agents')?.roots()[0]
           if (account.sessionId === undefined && root !== undefined) await onboarding.bindSessionIfUnset(root.id)
