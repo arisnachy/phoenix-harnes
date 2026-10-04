@@ -8,6 +8,7 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import { credentialKey, type CredentialKey } from '@phoenix-ai/dsh-credentials'
+import type { SubprocessRuntime } from '@phoenix-ai/dsh-subprocess'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
 
 /** Cordis plugin name. */
@@ -44,19 +45,28 @@ function appendBounded(current: string, chunk: unknown): string {
   return next.length <= MAX_CLI_OUTPUT ? next : next.slice(-MAX_CLI_OUTPUT)
 }
 
+/**
+ * Run one fixed-argv official connector CLI through Phoenix's governed subprocess seam.
+ * @param ctx - Cordis context carrying the subprocess runtime.
+ * @param command - Official CLI executable name such as `gog` or `gh`.
+ * @param args - Fixed argv entries; no shell interpolation is performed.
+ * @param options - Optional cancellation, non-secret environment, and output observer.
+ * @returns Captured stdout/stderr after a successful exit.
+ */
 export async function runOpenClawCli(
   ctx: Context,
   command: string,
   args: readonly string[],
   options: {
     signal?: AbortSignal
-    env?: NodeJS.ProcessEnv
+    env?: Readonly<Record<string, string>>
     onOutput?: (text: string) => void
   } = {},
 ): Promise<CliResult> {
+  const subprocess: SubprocessRuntime = ctx.subprocess
   let executable: string
   try {
-    executable = await ctx.subprocess.resolveExecutable(command, options.env, options.signal)
+    executable = await subprocess.resolveExecutable(command, options.env, options.signal)
   } catch (error) {
     throw new AuthorizationError(
       `Official OpenClaw connector runtime "${command}" is not installed or not discoverable on PATH.`,
@@ -64,7 +74,7 @@ export async function runOpenClawCli(
       { cause: error },
     )
   }
-  const handle = ctx.subprocess.spawn({
+  const handle = subprocess.spawn({
     argv: [executable, ...args],
     cwd: process.cwd(),
     stdio: { stdin: 'ignore', stdout: 'pipe', stderr: 'pipe' },
