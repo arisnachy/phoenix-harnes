@@ -687,7 +687,7 @@ describe('agent loop', () => {
       if (subject !== agent || !blockPreparation) return next()
       blockPreparation = false
       preparing.resolve(undefined)
-      await new Promise<never>((_resolve, reject) => {
+      return await new Promise<never>((_resolve, reject) => {
         signal.addEventListener('abort', () => { reject(signal.reason) }, { once: true })
       })
     })
