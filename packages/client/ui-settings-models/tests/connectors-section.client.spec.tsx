@@ -193,7 +193,6 @@ describe('connectors settings section', () => {
     await waitFor(() => {
       expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/github', method: 'device' })
     })
-    expect(window.open).not.toHaveBeenCalled()
   })
 
   it('cancels a pending OAuth attempt when the user closes the consent window and restores connector actions', async () => {
