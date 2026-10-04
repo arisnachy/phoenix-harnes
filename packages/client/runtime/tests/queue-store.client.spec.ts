@@ -23,6 +23,7 @@ interface QueueFixture {
   content?: ContentBlock[]
   placement?: 'queued' | 'steering'
   message?: UserMessage
+  anchorSeq?: number
 }
 
 /** Build one authoritative queue snapshot. */
@@ -33,6 +34,7 @@ function queueFrame(items: QueueFixture[]): MuxFrame {
     items: items.map(item => ({
       id: iid(item.id),
       placement: item.placement ?? 'queued',
+      ...item.anchorSeq === undefined ? {} : { anchorSeq: item.anchorSeq },
       message: item.message ?? createUserMessage({
         content: item.content ?? text(item.body),
         source: { kind: 'user', rpcId: rid(`rpc-${item.id}`) } as never,
@@ -124,14 +126,14 @@ describe('queue snapshot intake', () => {
     const session = makeSession()
     session.handleMuxEnvelope(rid('env-steering'), queueFrame([
       { id: 'q-next', body: 'later' },
-      { id: 's-now', body: 'interrupt now', placement: 'steering' },
+      { id: 's-now', body: 'interrupt now', placement: 'steering', anchorSeq: 42 },
     ]))
 
     expect(session.getSnapshot().queue.map(item => ({
-      id: item.id, placement: item.placement, content: item.content,
+      id: item.id, placement: item.placement, content: item.content, anchorSeq: item.anchorSeq,
     }))).toEqual([
-      { id: 'q-next', placement: 'queued', content: text('later') },
-      { id: 's-now', placement: 'steering', content: text('interrupt now') },
+      { id: 'q-next', placement: 'queued', content: text('later'), anchorSeq: undefined },
+      { id: 's-now', placement: 'steering', content: text('interrupt now'), anchorSeq: 42 },
     ])
   })
 
