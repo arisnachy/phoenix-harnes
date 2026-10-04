@@ -77,7 +77,7 @@ it('deletes a stale inbox with the authenticated DELETE endpoint and treats miss
   const requests: { url: string; method?: string }[] = []
   let status = 204
   const fetcher = async (url: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
-    requests.push({ url: typeof url === 'string' ? url : url instanceof URL ? url.href : url.url, method: init?.method })
+    requests.push({ url: typeof url === 'string' ? url : url instanceof URL ? url.href : url.url, ...(init?.method === undefined ? {} : { method: init.method }) })
     return new Response(null, { status })
   }
   await agentMailDeleteInbox('old@agentmail.to', 'private-key', 1000, fetcher)
