@@ -13,6 +13,7 @@ describe('universal artifact surface', () => {
     expect(normalizeHardnessArtifact({ id: 'py', title: 'Model', mime: 'text/x-python', data: 'print(1)' })).toMatchObject({ kind: 'code', language: 'python', executable: true })
     expect(normalizeHardnessArtifact({ id: 'js', title: 'Script', mime: 'text/plain', language: 'javascript', data: 'console.log(1)' })).toMatchObject({ kind: 'text', language: 'javascript', executable: false })
     expect(normalizeHardnessArtifact({ id: 'html', title: 'App', mime: 'text/html', data: '<button>Run</button>' })).toMatchObject({ kind: 'html', executable: true })
+    expect(normalizeHardnessArtifact({ id: 'web', title: 'Page', mime: 'application/vnd.phoenix.web-preview+json', data: { url: 'https://example.test' } })).toMatchObject({ kind: 'html', executable: true })
     expect(normalizeHardnessArtifact({ id: 'image', title: 'Chart', mime: 'image/png', data: 'data:image/png;base64,AA==' })).toMatchObject({ kind: 'image', executable: false })
   })
 
