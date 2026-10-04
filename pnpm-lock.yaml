@@ -1258,6 +1258,9 @@ importers:
       '@phoenix-ai/dsh-tool-goal':
         specifier: workspace:^
         version: link:../../goal/tool-goal
+      '@phoenix-ai/dsh-tool-google-workspace':
+        specifier: workspace:^
+        version: link:../../credentials/tool-google-workspace
       '@phoenix-ai/dsh-tool-home-gateway':
         specifier: workspace:^
         version: link:../../home/tool-home-gateway
@@ -4148,21 +4151,6 @@ importers:
         specifier: workspace:^
         version: link:../../util/launch-environment
 
-  packages/credentials/tool-google-workspace:
-    devDependencies:
-      '@phoenix-ai/cordis':
-        specifier: workspace:^
-        version: link:../../../vendor/cordis
-      '@phoenix-ai/dsh-authorization':
-        specifier: workspace:^
-        version: link:../authorization
-      '@phoenix-ai/dsh-invariants':
-        specifier: workspace:^
-        version: link:../../runtime-diagnostics/invariants
-      '@phoenix-ai/dsh-tools':
-        specifier: workspace:^
-        version: link:../../core/tools
-
   packages/credentials/secret-vault:
     devDependencies:
       '@phoenix-ai/cordis':
@@ -4177,6 +4165,21 @@ importers:
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+
+  packages/credentials/tool-google-workspace:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-authorization':
+        specifier: workspace:^
+        version: link:../authorization
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/e2b/e2b:
     dependencies:
