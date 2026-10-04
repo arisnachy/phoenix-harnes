@@ -20,6 +20,14 @@ describe('PHOENIX Windows desktop shortcut', () => {
     })
   })
 
+  it('uses a versioned icon path so Explorer cannot reuse the legacy icon cache', async () => {
+    const { readFileSync } = await import('node:fs')
+    const source = readFileSync(new URL('./phoenix-desktop-shortcut.ps1', import.meta.url), 'utf8')
+    expect(source).toContain("$iconRevision = 'v2'")
+    expect(source).toContain('phoenix-browser-$iconRevision-$iconHash.ico')
+    expect(source).toContain("ie4uinit.exe")
+  })
+
   it('invokes the setup script without exposing a console window', () => {
     const spawnSync = vi.fn(() => ({
       status: 0,
