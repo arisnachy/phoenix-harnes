@@ -236,6 +236,35 @@ describe('ModelsSection', () => {
     expect(document.body.textContent).toBe('')
   })
 
+  it('keeps account authorization actions out of Models and leaves them to Connectors', async () => {
+    const scripted = scriptedFace()
+    const begin = vi.fn()
+    ;(scripted.face as unknown as { authorization: unknown }).authorization = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'llm-pi-ai/openai',
+        label: 'OpenAI Account',
+        methods: [{ id: 'oauth', label: 'Sign in with OpenAI' }],
+        inFlight: false,
+      }] }))),
+      begin,
+      status: vi.fn(),
+      answer: vi.fn(),
+      cancel: vi.fn(),
+      disconnect: vi.fn(),
+    }
+    await mountFace(scripted)
+
+    await waitFor(() => {
+      expect(screen.queryByText(en.accountConnections)).toBeNull()
+    })
+    expect(screen.queryByRole('button', { name: 'Sign in with OpenAI' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: openaiCopy(en.editProvider) }))
+    await waitFor(() => { expect(screen.getByLabelText(en.keyInput)).toBeTruthy() })
+    expect(screen.queryByRole('button', { name: /Sign in with/i })).toBeNull()
+    expect(begin).not.toHaveBeenCalled()
+  })
+
   it('renders the unkeyed whole-section provider as an open setup card in the first-run posture', async () => {
     await mountFirstRun()
     // Nothing is reachable yet, and DeepSeek has no configured credential and
