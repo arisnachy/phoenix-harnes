@@ -1,5 +1,7 @@
 # Agent Note: Host 崩溃时激活 stable 更新
 
+[English](2026-10-04-crashed-host-update-handoff.md) | 中文
+
 Status: implemented
 
 ## Problem
