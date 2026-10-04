@@ -1225,6 +1225,9 @@ importers:
       '@phoenix-ai/dsh-subagent':
         specifier: workspace:^
         version: link:../../subagent/subagent
+      '@phoenix-ai/dsh-subagent-codex':
+        specifier: workspace:^
+        version: link:../../subagent/subagent-codex
       '@phoenix-ai/dsh-subagent-fork-in-process':
         specifier: workspace:^
         version: link:../../subagent/subagent-fork-in-process
@@ -1258,6 +1261,9 @@ importers:
       '@phoenix-ai/dsh-tool-goal':
         specifier: workspace:^
         version: link:../../goal/tool-goal
+      '@phoenix-ai/dsh-tool-google-workspace':
+        specifier: workspace:^
+        version: link:../../credentials/tool-google-workspace
       '@phoenix-ai/dsh-tool-home-gateway':
         specifier: workspace:^
         version: link:../../home/tool-home-gateway
@@ -4162,6 +4168,21 @@ importers:
       '@phoenix-ai/dsh-invariants':
         specifier: workspace:^
         version: link:../../runtime-diagnostics/invariants
+
+  packages/credentials/tool-google-workspace:
+    devDependencies:
+      '@phoenix-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@phoenix-ai/dsh-authorization':
+        specifier: workspace:^
+        version: link:../authorization
+      '@phoenix-ai/dsh-invariants':
+        specifier: workspace:^
+        version: link:../../runtime-diagnostics/invariants
+      '@phoenix-ai/dsh-tools':
+        specifier: workspace:^
+        version: link:../../core/tools
 
   packages/e2b/e2b:
     dependencies:
