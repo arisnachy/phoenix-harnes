@@ -14,6 +14,16 @@ function service(overrides: Partial<{
       label: 'Google Workspace',
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],
       inFlight: false,
+      connectors: [{
+        id: 'gmail',
+        name: 'Gmail',
+        description: 'Mail',
+        category: 'Communication',
+        accessible: true,
+        enabled: true,
+        installed: true,
+        callable: false,
+      }],
       disconnectable: true as const,
     }]),
     inspect: overrides.inspect ?? (async () => ({
@@ -69,12 +79,20 @@ describe('connector_list tool', () => {
   it('distinguishes an inspectable disconnected flow from a provider without telemetry', async () => {
     const tool = createConnectorListTool(service({ inspect: vi.fn(async () => undefined) }))
     await expect(tool.execute({}, {} as never)).resolves.toMatchObject({
-      connectors: [{ status: 'not-connected', recommended_action: 'connect-or-reconnect', services: [] }],
+      connectors: [{
+        status: 'not-connected',
+        recommended_action: 'connect-or-reconnect',
+        services: [{ id: 'gmail', name: 'Gmail', callable: false }],
+      }],
     })
 
     const unknown = createConnectorListTool(service({ inspect: vi.fn(async () => { throw new Error('offline') }) }))
     await expect(unknown.execute({}, {} as never)).resolves.toMatchObject({
-      connectors: [{ status: 'unknown', recommended_action: 'inspect', services: [] }],
+      connectors: [{
+        status: 'unknown',
+        recommended_action: 'inspect',
+        services: [{ id: 'gmail', name: 'Gmail', callable: false }],
+      }],
     })
   })
 
@@ -207,6 +225,17 @@ describe('connector_list tool', () => {
       has_relevant_match: true,
       connectors: [{
         label: 'Google Workspace',
+        relevant: true,
+      }],
+    })
+
+    await expect(tool.execute({ target: 'Gmail' }, {} as never)).resolves.toMatchObject({
+      requested_target: 'Gmail',
+      has_relevant_match: true,
+      connectors: [{
+        label: 'Google Workspace',
+        status: 'not-connected',
+        services: [{ id: 'gmail', name: 'Gmail', callable: false }],
         relevant: true,
       }],
     })
