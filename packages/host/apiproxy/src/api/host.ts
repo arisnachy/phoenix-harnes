@@ -52,6 +52,14 @@ export interface HostApi {
     attachedSessions: number
     home: string
     canOpenPath: boolean
+    /** Recent local Phoenix launcher/runtime diagnostics, when available. */
+    diagnostics?: {
+      available: boolean
+      logPath: string
+      directory: string
+      recentErrors: string[]
+      updatedAt?: number
+    }
   }>>
 
   /**
