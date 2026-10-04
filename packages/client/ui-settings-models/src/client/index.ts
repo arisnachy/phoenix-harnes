@@ -25,6 +25,8 @@ import type {
   ConnectorsSettingsSectionProps,
   McpConnectorHubSnapshot,
   McpRegistryClient,
+  OpenClawConnectorClient,
+  OpenClawConnectorView,
   McpRegistrySearchSnapshot,
 } from './AuthorizationPanel.tsx'
 import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
@@ -100,6 +102,14 @@ type PluginInventoryMcpRegistryRemote = {
   }>>
 }
 
+type PluginInventoryOpenClawRemote = {
+  openClawConnectorState(): Promise<PluginInventoryRemoteResult<{ connectors: OpenClawConnectorView[] }>>
+  authorizeOpenClawConnector(request: {
+    id: OpenClawConnectorView['id']
+    account?: string
+  }): Promise<PluginInventoryRemoteResult<{ started: true }>>
+}
+
 type PluginInventoryLocalRemote = {
   localModelState(): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
   installLocalModel(request: { modelId: string }): Promise<PluginInventoryRemoteResult<PhoenixLocalModelSnapshot>>
@@ -149,6 +159,25 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     repair: async request => unwrapPluginInventory(
       'repairManagedMcpConnector',
       await remote().repairManagedMcpConnector(request),
+    ),
+  }
+}
+
+/** Adapt the Host-owned OpenClaw connector bridge to Settings. */
+function openClawConnectorClient(ctx: ClientContext): OpenClawConnectorClient {
+  const remote = (): PluginInventoryOpenClawRemote => {
+    const value = ctx.get('remote.pluginInventory') as PluginInventoryOpenClawRemote | undefined
+    if (value === undefined) throw new Error('OpenClaw connector bridge is unavailable on this host.')
+    return value
+  }
+  return {
+    state: async () => unwrapPluginInventory(
+      'openClawConnectorState',
+      await remote().openClawConnectorState(),
+    ),
+    authorize: async request => unwrapPluginInventory(
+      'authorizeOpenClawConnector',
+      await remote().authorizeOpenClawConnector(request),
     ),
   }
 }
@@ -230,6 +259,7 @@ export function apply(ctx: ClientContext): void {
   const connectorT = ctx.locale.bind(CONNECTORS_NS) as ConnectorsSettingsSectionProps['connectorT']
   const localModel = localModelClient(ctx)
   const mcpRegistry = mcpRegistryClient(ctx)
+  const openClaw = openClawConnectorClient(ctx)
   const injected = (): ModelsWithLocalSectionInjected => ({
     controller,
     hooks: { snapshot: controller.store },
@@ -261,6 +291,7 @@ export function apply(ctx: ClientContext): void {
     chatGptWeb: chatGptWebClient(ctx),
     settings: connection.api.settings,
     mcpRegistry,
+    openClaw,
     onAuthorized: () => { refreshIfLoaded(controller) },
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
