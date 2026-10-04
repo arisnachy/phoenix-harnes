@@ -12,7 +12,7 @@ export const name = 'tool-google-workspace-invariant'
 export const inject = ['invariants']
 
 const install: InvariantInstaller = () => {
-  // OAuth grants and Google API state are owned by the host Google broker.
+  // No runtime invariant: OAuth grants and Google API state are owned by the host Google broker.
 }
 
 /** Register this package's invariant companion. */
