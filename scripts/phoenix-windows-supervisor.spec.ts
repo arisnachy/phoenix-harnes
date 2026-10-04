@@ -13,12 +13,25 @@ const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrp
 
 describe('PHOENIX Windows updater supervisor resilience', () => {
   it('retries failed updater watchers with capped backoff instead of a one-second hot loop', () => {
-    expect(source).toContain('function superviseWatcher(host)')
+    expect(source).toContain('function superviseWatcher()')
     expect(source).toContain('WATCHER_MAX_RESTART_DELAY_MS')
     expect(source).toContain('WATCHER_STABLE_MS')
     expect(source).toContain('scheduleRestart(reason, launchedAt)')
     expect(source).toContain('restartDelay = Math.min(WATCHER_MAX_RESTART_DELAY_MS, restartDelay * 2)')
     expect(source).toContain('restartTimer.unref?.()')
+  })
+
+  it('keeps the updater watcher alive across unexpected Host crashes', () => {
+    expect(source).toContain('function superviseWatcher()')
+    expect(source).toContain('if (stopping || shutdownRequested || restartTimer !== undefined) return')
+    expect(source).toContain('if (stopping || shutdownRequested) return')
+    expect(source).not.toContain('host.exitCode !== null || host.killed')
+    expect(source).toContain('let watcherSupervisor = superviseWatcher()')
+    expect(source).toContain('if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()')
+    expect(source).toContain('watcherSupervisor = undefined')
+    expect(source).toContain('const requestedTarget = restartRequestTarget()')
+    expect(source).toContain('if (requestedTarget !== undefined) {\n    await watcherSupervisor.stop()\n    watcherSupervisor = undefined')
+    expect(source).toContain('if (watcherSupervisor !== undefined) await watcherSupervisor.stop()')
   })
 
   it('respawns a watcher that exits while the Host is still alive, even with code 0', () => {
@@ -36,6 +49,14 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   it('does not start or respawn the updater watcher when update mode is off', () => {
     expect(source).toContain("const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()")
     expect(source).toContain("|| updateMode === 'off'")
+  })
+
+  it('persists the exact Windows checkout as safe for user Git commands only for the official remote', () => {
+    expect(source).toContain("import { gitSafeDirectoryEnvironment, persistGitSafeDirectory } from './phoenix-git-safe-directory.mjs'")
+    expect(source).toContain("normalized === 'https://github.com/arisnachy/phoenix-harnes'")
+    expect(source).toContain("normalized === 'git@github.com:arisnachy/phoenix-harnes'")
+    expect(source).not.toContain("normalized.endsWith('github.com/arisnachy/phoenix-harnes')")
+    expect(source).toContain('persistGitSafeDirectory(root)')
   })
 
   it('injects a process-scoped Git safe.directory for the persistent Windows checkout', () => {
@@ -185,12 +206,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('continue')
   })
 
-  it('lets a stable update finish and self-activate when the Host crashes before its bridge can run', () => {
+  it('waits for a preparing stable and activates it without a Host-side bridge after a crash', () => {
     expect(source).toContain('function readUpdateState()')
     expect(source).toContain('async function waitForPreparedUpdateAfterHostCrash()')
     expect(source).toContain("state?.status !== 'preparing'")
     expect(source).toContain('Host exited while a stable update is still preparing')
     expect(source).toContain('crashPreparedUpdate = await waitForPreparedUpdateAfterHostCrash()')
+    expect(source).toContain('await watcherSupervisor.stop()')
     expect(source).toContain('activatePreparedRuntime(crashPreparedUpdate.target)')
     expect(source).toContain('without waiting for a Host-side restart bridge')
     expect(source).toContain('relaunching PHOENIX from the verified runtime')
