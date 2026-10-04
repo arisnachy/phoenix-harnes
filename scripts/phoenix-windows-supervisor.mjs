@@ -323,7 +323,7 @@ function stageProtectedByOwningCheckout(path) {
     const state = JSON.parse(readFileSync(statePath, 'utf8'))
     return state?.status === 'preparing'
       && typeof state.target === 'string'
-      && state.target === head
+      && /^[0-9a-f]{40}$/iu.test(state.target)
   } catch {
     return false
   }
