@@ -29,6 +29,7 @@ interface ConversationAttachmentFace {
     text: string,
     imageIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
+    clientSubmissionId: string,
     signal?: AbortSignal,
   ): Promise<SubmitOutcome>
   serializeDraftImages(imageIds: readonly DraftAttachmentId[]): Promise<readonly SubmitImageAttachment[]>
@@ -77,7 +78,8 @@ export class InputHub implements SessionInputResolver {
       inputTriggers: () => this.controller(actx),
       popup: () => this.popup(actx),
       queue: queueReadFaceOf(session),
-      defaultSink: (text, imageIds, mode, signal) => this.sink(session, text, imageIds, mode, signal),
+      defaultSink: (text, imageIds, mode, clientSubmissionId, signal) =>
+        this.sink(session, text, imageIds, mode, clientSubmissionId, signal),
       steerQueue: () => { void this.steerQueue(session, shell) },
       commandImages: {
         serialize: ids => this.conversation().serializeDraftImages(ids),
@@ -167,11 +169,14 @@ export class InputHub implements SessionInputResolver {
     text: string,
     imageIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
+    clientSubmissionId: string,
     signal: AbortSignal,
   ): Promise<SubmitOutcome> {
     if (text === '' && imageIds.length === 0) return Promise.resolve({ kind: 'success' })
     const addressed = await this.rootCtx.bail(this.rootCtx, 'conversation/addressed-submit', { sessionId: session.sessionId, text, hasImages: imageIds.length > 0, signal })
-    return addressed ?? this.conversation().sendSession(session, text, imageIds, mode, signal)
+    return addressed ?? this.conversation().sendSession(
+      session, text, imageIds, mode, clientSubmissionId, signal,
+    )
   }
 
   /**
