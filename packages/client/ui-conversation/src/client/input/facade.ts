@@ -49,6 +49,7 @@ export interface SessionInputDeps {
     text: string,
     imageIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
+    clientSubmissionId: string,
     signal: AbortSignal,
   ): Promise<SubmitOutcome>
   /** Command-plane image plumbing (the hub owns the conversation face and the copy). */
@@ -73,6 +74,13 @@ function guardOf(phase: InputState['phase']): 'plain' | 'claimed' | 'frozen' {
 
 const EMPTY_QUEUE: readonly QueuedMessage[] = []
 
+let clientSubmissionSequence = 0
+
+/** Mint one browser-local identity used only to reconcile the same visible send across projections. */
+function mintClientSubmissionId(): string {
+  clientSubmissionSequence += 1
+  return `submit-${Date.now().toString(36)}-${clientSubmissionSequence.toString(36)}`
+}
 
 /** No-pipeline lexicon: zero text-ref decorations. */
 const EMPTY_LEXICON: ReadonlyMap<'/' | '@', readonly string[]> = new Map()
@@ -106,6 +114,7 @@ export class SessionInputShell implements SessionInput {
   /** Ordinary prompt currently crossing the Host admission boundary. */
   private pendingSubmit: {
     readonly seq: number
+    readonly clientSubmissionId: string
     readonly text: string
     readonly modelText?: string
     readonly startedAt: number
@@ -219,7 +228,9 @@ export class SessionInputShell implements SessionInput {
       if (this.snapshot.phase === 'plain' && !this.imageSendInFlight) {
         const imageIds = [...this.imageIds]
         this.imageSendInFlight = true
-        void this.deps.defaultSink('', imageIds, mode, new AbortController().signal).then((outcome) => {
+        void this.deps.defaultSink(
+          '', imageIds, mode, mintClientSubmissionId(), new AbortController().signal,
+        ).then((outcome) => {
           this.imageSendInFlight = false
           if (this.disposed) return
           if (outcome.kind === 'success') this.commitSend(imageIds)
@@ -472,8 +483,10 @@ export class SessionInputShell implements SessionInput {
     // optimistic bubble and clear the composer synchronously before any
     // serializer/Host await so a slow admission can never look like a frozen
     // Send button. The submitting phase remains the single-flight guard.
+    const clientSubmissionId = mintClientSubmissionId()
     this.pendingSubmit = {
       seq: attempt.seq,
+      clientSubmissionId,
       text: draft.trim(),
       startedAt: Date.now(),
     }
@@ -483,7 +496,7 @@ export class SessionInputShell implements SessionInput {
       if (this.pendingSubmit?.seq === attempt.seq) {
         this.pendingSubmit = { ...this.pendingSubmit, modelText }
       }
-      this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, attempt.signal), imageIds)
+      this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, clientSubmissionId, attempt.signal), imageIds)
       return
     }
     const inputTriggers = this.deps.inputTriggers?.()
@@ -515,7 +528,7 @@ export class SessionInputShell implements SessionInput {
           // a fast durable event can hand off without a duplicate optimistic row.
           this.publish()
         }
-        this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, attempt.signal), imageIds)
+        this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, clientSubmissionId, attempt.signal), imageIds)
       },
       (error: unknown) => {
         controller.abort()
@@ -641,6 +654,7 @@ export class SessionInputShell implements SessionInput {
       imageIds: this.imageIds,
       ...(pending === undefined ? {} : {
         pendingSubmit: {
+          clientSubmissionId: pending.clientSubmissionId,
           text: pending.text,
           ...(pending.modelText === undefined ? {} : { modelText: pending.modelText }),
           startedAt: pending.startedAt,
