@@ -331,7 +331,8 @@ Provider registry and non-blocking important-event announcement queue.
 
 ```ts cordis-catalog
 /**
- * Report whether the local Client can route conversation speech through neural TTS.
+ * Report whether the local Client can route conversation speech through the
+ * deterministic Kokoro -> platform fallback chain.
  * @returns Current conversational voice availability and selected provider.
  */
 @Remote('conversationStatus') async conversationStatus(): Promise<VoiceConversationStatus>
@@ -360,7 +361,7 @@ Provider registry and non-blocking important-event announcement queue.
 /**
  * Play one stable semantic segment on the Host without blocking the browser thread.
  * @param request - Message identity, ordering, text, language, and final-segment metadata.
- * @returns Admission/playback receipt for the selected neural provider.
+ * @returns Admission/playback receipt for the selected conversation TTS provider.
  */
 @Remote('conversationSpeak') async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt>
 

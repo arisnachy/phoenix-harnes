@@ -39,6 +39,7 @@ describe('Team execution evidence boundaries', () => {
     ['Explain how to send the email, can you send the email now?', false],
     ['Explain how to create the file, why does that work?', true],
     ['Explain how to create a file, how do I send an email?', true],
+    ['Explain how to create a file, thanks for the explanation', true],
     ['¿Puedes crear el archivo ahora?', false],
   ])('separates explanation from authorization: %s', (text, conversational) => {
     expect(isConversationalTeamUserRequest(text)).toBe(conversational)

@@ -18,6 +18,8 @@ The browser Cordis fixture retains its manual approval lifecycle through a test-
 
 The remaining owning fixtures distinguish instruction and time-context messages from other plugin messages, pin absent project markers, and check the stable identity opener instead of duplicated policy prose. The pi-ai fixtures include the registered offline/free providers, explicitly declare the experimental vision model, decode compressed request bodies before asserting the wire contract, and mock catalog discovery for registration/disposal. Windows runtime discovery stays explicitly verified while automatic configuration follows the actual host platform. Restore the missing stylesheet imported by the existing GenerativeUi component so its owning tests can load; this does not add a new UI integration.
 
+Focused source coverage also verifies route restoration, safe delivery, report ownership, rejected admission, retry idempotency and persistence failures. Remove only unreachable internal fallbacks guaranteed by dense journals, bounded static persona indexes, initialized caches, filtered event kinds and string-only fingerprints; retain malformed-history guards and the concrete Sol 6.1 conversational worker special case. All seven affected routing, chat, evidence, mailbox, continuation and Team-tool sources reach the existing per-file 100% thresholds. Regenerate the Cordis catalog after source changes so both static and Windows documentation gates use the same API projection.
+
 ## Alternatives considered
 
 **Relax thresholds or skip failing tests.** This would hide existing release failures and weaken the integration evidence.

@@ -131,6 +131,7 @@ function pinGpt6LunaMax(selection: ModelSelection): ModelSelection {
   return { ...selection, reasoningEffort: ReasoningEffortId('max') }
 }
 
+/** Resolve a concrete selection's conversational worker; Phoenix Auto routes before this helper. */
 function lunaWorkerFor(model: string): string | undefined {
   if (model === PHOENIX_CODEX_AUTO_PLANNER_MODEL) return PHOENIX_CODEX_AUTO_WORKER_MODEL
   const plannerGeneration = codexPlannerGeneration(model)
@@ -332,8 +333,8 @@ function directUserTextForTurn(agent: {
   const fragments: string[] = []
   const events = agent.session.events
   for (let index = events.length - 1; index >= 0; index -= 1) {
-    const event = events[index]
-    if (event === undefined) continue
+    // Session journals are dense; this bounded synchronous read cannot lose its entry.
+    const event = events[index] as (typeof events)[number]
     if (event.type === 'turn/start' && (event.data as { turn?: number }).turn === turn) break
     if (event.type !== 'user/message') continue
     const message = event.data as {
@@ -413,15 +414,8 @@ function phoenixAutoHasTeamOutcomeForTurn(
   })
 }
 
-function stableFingerprint(value: unknown): string {
-  let serialized: string
-  try {
-    const encoded: unknown = JSON.stringify(value)
-    serialized = typeof encoded === 'string' ? encoded : String(value)
-  } catch {
-    serialized = String(value)
-  }
-  return serialized
+function stableFingerprint(value: string): string {
+  return JSON.stringify(value)
     .toLocaleLowerCase()
     .replace(/\b\d+\b/gu, '#')
     .replace(/\s+/gu, ' ')
@@ -430,7 +424,6 @@ function stableFingerprint(value: unknown): string {
 }
 
 function failedToolFingerprint(event: PhoenixAutoEvent): string | undefined {
-  if (event.type !== 'tool/result') return undefined
   const data = event.data as {
     readonly error?: { readonly name?: string; readonly code?: string }
     readonly message?: {
@@ -446,7 +439,6 @@ function failedToolFingerprint(event: PhoenixAutoEvent): string | undefined {
 }
 
 function toolCallFingerprint(event: PhoenixAutoEvent): string | undefined {
-  if (event.type !== 'tool/call') return undefined
   const data = event.data as { readonly name?: string; readonly arguments?: string }
   if (typeof data.name !== 'string') return undefined
   return `${data.name}:${stableFingerprint(data.arguments ?? '')}`
@@ -581,7 +573,7 @@ function phoenixAutoRoute(
   step: number,
   directText: string,
   state: PhoenixAutoRouterState,
-): ModelSelection {
+): ModelSelection & { reasoningEffort: ReasoningEffortId } {
   resetPhoenixAutoTurnState(state, turn)
   const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
   if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
@@ -760,9 +752,7 @@ export function installModelSelection(
           ...withoutInheritedEffort,
           provider: routed.provider,
           model: routed.model,
-          ...routed.reasoningEffort === undefined
-            ? {}
-            : { reasoningEffort: routed.reasoningEffort },
+          reasoningEffort: routed.reasoningEffort,
         }
       }
       const resolvedHandoff = typeof handoff === 'function' ? handoff(selected) : handoff

@@ -155,16 +155,19 @@ export class TeamChat {
     const named = member === undefined ? undefined : ['la-forja', 'forja', 'forge'].includes(member.name) ? TEAM_PERSONAS.find(persona => persona.kind === 'atlas') : TEAM_PERSONAS.find(persona => persona.name.toLowerCase() === member.name || persona.kind === member.name)
     const occupied = new Set([...this.participants(root).values()].flatMap(person => person.avatar === undefined ? [] : [person.avatar]))
     let offset = 0
-    for (const character of header.id) offset += character.codePointAt(0) ?? 0
+    // String iteration always yields a nonempty string.
+    for (const character of header.id) offset += character.codePointAt(0) as number
     const descriptor = foldSubagentDescriptor(events.slice(header.seedLength ?? 0))
     const task = member?.description ?? descriptor?.label
     const skill = inferTeamSkill(task ?? '')
-    let selected = named ?? TEAM_PERSONAS[offset % TEAM_PERSONAS.length] ?? TEAM_PERSONAS[0]
+    // Modulo indexes the static nonempty persona tuple.
+    let selected: typeof TEAM_PERSONAS[number] = named ?? (TEAM_PERSONAS[offset % TEAM_PERSONAS.length] as typeof TEAM_PERSONAS[number])
     if (named === undefined) {
       const preferred = skill === 'general' ? undefined : TEAM_SKILL_POOLS[skill].find(kind => !occupied.has(kind))
-      if (preferred !== undefined) selected = TEAM_PERSONAS.find(persona => persona.kind === preferred) ?? selected
+      // Skill pools contain only kinds from the persona tuple.
+      if (preferred !== undefined) selected = TEAM_PERSONAS.find(persona => persona.kind === preferred) as typeof TEAM_PERSONAS[number]
       else for (let step = 0; step < TEAM_PERSONAS.length; step++) {
-        const candidate = TEAM_PERSONAS[(offset + step) % TEAM_PERSONAS.length] ?? TEAM_PERSONAS[0]
+        const candidate = TEAM_PERSONAS[(offset + step) % TEAM_PERSONAS.length] as typeof TEAM_PERSONAS[number]
         if (!occupied.has(candidate.kind)) { selected = candidate; break }
       }
     }
@@ -277,7 +280,8 @@ export class TeamChat {
       for (const child of this.ctx.sessions.list()) {
         if (child.header.parentSession === root.id && !participants.some(person => person.id === child.id)) participants.push({ id: child.id, name: child.id, role: 'Team', status: this.ctx.agents.get(child.id)?.status ?? 'inactive' })
       }
-      for (const child of this.coldParticipants.get(root) ?? []) {
+      // The cache is set before this root is marked backfilled.
+      for (const child of this.coldParticipants.get(root) as TeamChatParticipant[]) {
         if (!participants.some(person => person.id === child.id)) participants.push(child)
       }
       const messages = this.messages(root)
@@ -443,6 +447,7 @@ export class TeamChat {
         root.append('team/chat-message', { version: 1, message: row })
         await this.ctx.sessions.flush(root)
       }
+      // Entering the delivery loop establishes a list; each update retains it.
       let current: TeamChatMessage = row
       for (const delivery of current.deliveries ?? []) {
         if (delivery.accepted) continue
@@ -461,9 +466,9 @@ export class TeamChat {
           const active = this.ctx.sessions.get(target)
           if (active !== undefined) await this.ctx.sessions.flush(active)
           current = { ...current,
-            deliveries: (current.deliveries ?? []).map(item => item.targetId === target ? { targetId: target, accepted: true } : item) }
+            deliveries: (current.deliveries as NonNullable<TeamChatMessage['deliveries']>).map(item => item.targetId === target ? { targetId: target, accepted: true } : item) }
         } catch (error) {
-          current = { ...current, deliveries: (current.deliveries ?? []).map(item => item.targetId === target
+          current = { ...current, deliveries: (current.deliveries as NonNullable<TeamChatMessage['deliveries']>).map(item => item.targetId === target
             ? { targetId: target, accepted: false, error: error instanceof Error ? error.message : 'Delivery failed' } : item) }
         }
         this.assertLive(root)

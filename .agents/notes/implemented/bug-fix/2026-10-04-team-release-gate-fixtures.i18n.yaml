@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-04-team-release-gate-fixtures.md
-2026-10-04-team-release-gate-fixtures.md: 804f7cf17fa450e1cd51ea6a74dbfcf26b246a8a
-2026-10-04-team-release-gate-fixtures.zh.md: 30bfac1025bb161ed79e65f40453623027228972
+2026-10-04-team-release-gate-fixtures.md: e5ad322fac558d532132b1b054dd46c556f12597
+2026-10-04-team-release-gate-fixtures.zh.md: 57c779ab69f72b6ee46b2fe877e44bb977db7c1f

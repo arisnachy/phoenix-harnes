@@ -2680,7 +2680,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: '@Remote(\'conversationStatus\') async conversationStatus(): Promise<VoiceConversationStatus>',
-        description: 'Report whether the local Client can route conversation speech through neural TTS.',
+        description: 'Report whether the local Client can route conversation speech through the deterministic Kokoro -> platform fallback chain.',
         parameters: [],
         returns: 'Current conversational voice availability and selected provider.',
       },
@@ -2706,7 +2706,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: '@Remote(\'conversationSpeak\') async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt>',
         description: 'Play one stable semantic segment on the Host without blocking the browser thread.',
         parameters: [{ name: 'request', description: 'Message identity, ordering, text, language, and final-segment metadata.' }],
-        returns: 'Admission/playback receipt for the selected neural provider.',
+        returns: 'Admission/playback receipt for the selected conversation TTS provider.',
       },
       {
         signature: '@Remote(\'conversationCancel\') async conversationCancel(request: VoiceConversationCancelRequest): Promise<VoiceConversationCancelReceipt>',
