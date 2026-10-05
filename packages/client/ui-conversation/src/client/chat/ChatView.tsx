@@ -239,11 +239,20 @@ export function ChatView({
       return expected.has(text)
     })
   }, [pendingSteering, pendingSubmit])
+  const optimisticAnchorSeq = useMemo(() => {
+    if (pendingSubmit === undefined) return null
+    let anchorSeq: number | null = null
+    for (const node of chatNodes) {
+      const data = node.data as { time?: unknown }
+      if (typeof data.time === 'number' && data.time <= pendingSubmit.startedAt) anchorSeq = node.anchorSeq
+    }
+    return anchorSeq
+  }, [chatNodes, pendingSubmit])
   const optimisticSubmit = useMemo(() => (
     pendingSubmit !== undefined && !pendingSubmitDurable && !pendingSubmitInSteering && pendingSubmit.text !== ''
-      ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
+      ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt, anchorSeq: optimisticAnchorSeq }
       : undefined
-  ), [pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
+  ), [optimisticAnchorSeq, pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
   // A stale pendingSubmit must never resurrect "preparing" after the durable
   // transcript (or steering mirror) has already taken ownership of the send.
   // This is a defensive handoff in addition to the input facade retiring the
