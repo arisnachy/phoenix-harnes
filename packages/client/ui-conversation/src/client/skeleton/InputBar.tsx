@@ -282,8 +282,9 @@ export function InputBar({
     try {
       // Codex Live + the profile voice (Juniper for Kira's feminine profile)
       // owns the full hands-free session whenever the selected route/account can
-      // open native Realtime. The Host forwards final user speech into the live
-      // PHOENIX Agent, so using Realtime here never bypasses the harness.
+      // open native Realtime. Browser recognition still submits final human
+      // speech through the ordinary composer/session path, so using Realtime
+      // never bypasses the PHOENIX harness or chat transcript.
       const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
       if (realtime.kind === 'started') {
         // Codex Live owns audio output, but the browser recognizer still owns
