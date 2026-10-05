@@ -1006,7 +1006,7 @@ export function InputBar({
             {rightItems}
             {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
-            {(voiceState !== 'unsupported' || sessionId !== undefined) && (
+            {voiceState !== 'unsupported' && (
               <Tooltip
                 label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
