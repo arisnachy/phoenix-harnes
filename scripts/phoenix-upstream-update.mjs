@@ -1,5 +1,5 @@
 /**
- * Receive updates from the official Codex plugin and OpenClaw skill sources.
+ * Receive updates from the official Codex plugin, OpenClaw skill, and Superpowers sources.
  *
  * Each update is staged in a private DSH_HOME, verified through the native
  * bridge commands, and activated as one filesystem transaction. A failed
@@ -47,6 +47,17 @@ const PROVIDERS = {
     bridgeArgs: ['openclaw-skills', 'sync'],
     verifyArgs: ['openclaw-skills', 'verify'],
     managedField: 'managedSkills',
+  },
+  superpowers: {
+    label: 'Superpowers skills',
+    sourceRepository: 'https://github.com/obra/superpowers.git',
+    sourceBranch: 'main',
+    rootRelative: 'superpowers',
+    stateRelative: join('superpowers', 'arsenal.json'),
+    bridgeArgs: ['superpowers', 'sync'],
+    verifyArgs: ['superpowers', 'verify'],
+    managedField: 'managedSkills',
+    bootstrap: true,
   },
 }
 
@@ -226,7 +237,13 @@ function inspect(home) {
   for (const key of Object.keys(PROVIDERS)) {
     const local = readProviderState(home, key)
     if (local.status === 'not-configured') {
-      providers[key] = { status: 'not-configured' }
+      if (PROVIDERS[key].bootstrap === true) {
+        const latestCommit = fetchHead(PROVIDERS[key])
+        providers[key] = { status: 'available', latestCommit, bootstrap: true }
+        initialized += 1
+      } else {
+        providers[key] = { status: 'not-configured' }
+      }
       continue
     }
     initialized += 1
@@ -328,8 +345,15 @@ export function buildActivationPlan(home, stageHome, backupRoot, changed) {
     const skillBackups = []
     const skillActivations = []
     for (const name of all) {
-      const prefix = item.key === 'codex' ? 'codex-' : 'openclaw-'
-      if (!new RegExp(`^${prefix}[a-z0-9-]+(?:\\.md)?$`).test(name)) throw new Error(`unsafe managed skill path ${JSON.stringify(name)}`)
+      const prefixes = {
+        codex: 'codex-',
+        openclaw: 'openclaw-',
+        superpowers: 'superpowers-',
+      }
+      const prefix = prefixes[item.key]
+      if (prefix === undefined || !new RegExp(`^${prefix}[a-z0-9-]+(?:\\.md)?$`).test(name)) {
+        throw new Error(`unsafe managed skill path ${JSON.stringify(name)}`)
+      }
       const live = join(home, 'skills', name)
       const candidate = join(stageHome, 'skills', name)
       const backup = join(backupRoot, 'skills', item.key, name)
@@ -445,8 +469,13 @@ function outputInspection(inspection, quiet) {
   if (quiet && inspection.status !== 'available') return
   for (const [key, provider] of Object.entries(inspection.providers)) {
     const label = PROVIDERS[key].label
-    if (provider.status === 'not-configured') process.stdout.write(`INFO ${label}: not configured; automatic intake is idle.\n`)
-    else process.stdout.write(`${provider.status === 'available' ? 'UPDATE' : 'PASS'} ${label}: ${provider.currentCommit.slice(0, 12)}${provider.latestCommit ? ` -> ${provider.latestCommit.slice(0, 12)}` : ''}\n`)
+    if (provider.status === 'not-configured') {
+      process.stdout.write(`INFO ${label}: not configured; automatic intake is idle.\n`)
+    } else if (provider.bootstrap === true) {
+      process.stdout.write(`INSTALL ${label}: not installed -> ${provider.latestCommit.slice(0, 12)}\n`)
+    } else {
+      process.stdout.write(`${provider.status === 'available' ? 'UPDATE' : 'PASS'} ${label}: ${provider.currentCommit.slice(0, 12)}${provider.latestCommit ? ` -> ${provider.latestCommit.slice(0, 12)}` : ''}\n`)
+    }
   }
 }
 
@@ -536,7 +565,7 @@ async function watch(home, mode, parentPid) {
 }
 
 function printHelp() {
-  process.stdout.write('PHOENIX upstream update intake\n\nCommands:\n  dsh upstream-update --check\n  dsh upstream-update --apply\n  dsh upstream-update --doctor\n\nEnvironment:\n  PHOENIX_UPSTREAM_UPDATE_MODE=auto|notify|off\n  PHOENIX_UPSTREAM_UPDATE_POLL_MS=milliseconds (minimum 30000)\n\nUpdates are fetched from official Codex plugins and OpenClaw skills sources, staged, verified, and activated transactionally.\n')
+  process.stdout.write('PHOENIX upstream update intake\n\nCommands:\n  dsh upstream-update --check\n  dsh upstream-update --apply\n  dsh upstream-update --doctor\n\nEnvironment:\n  PHOENIX_UPSTREAM_UPDATE_MODE=auto|notify|off\n  PHOENIX_UPSTREAM_UPDATE_POLL_MS=milliseconds (minimum 30000)\n\nUpdates are fetched from official Codex plugins, OpenClaw skills, and obra/superpowers sources, staged, verified, and activated transactionally.\n')
 }
 
 async function main() {
