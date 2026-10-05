@@ -492,11 +492,15 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   // the misleading fatal "is not a working tree" message forever. They are safe
   // to treat as orphaned managed storage only after the caller has already
   // applied active-runtime protection and retention-age checks.
-  if (registeredWorktrees !== undefined && !registeredWorktrees.has(runtimePathKey(path))) {
+  const key = runtimePathKey(path)
+  if (registeredWorktrees !== undefined && !registeredWorktrees.has(key)) {
     return removeOrphanedManagedDirectory(path)
   }
 
-  const result = spawnSync('git', ['worktree', 'remove', '--force', path], {
+  // Runtime worktrees contain very deep pnpm/node_modules paths. On Windows,
+  // Git must opt into Win32 long-path handling or cleanup can fail with
+  // "Filename too long" even though the worktree is otherwise removable.
+  const result = spawnSync('git', ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path], {
     cwd: root,
     encoding: 'utf8',
     windowsHide: true,
@@ -505,10 +509,22 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
 
   if (result.status === 0 || !existsSync(path)) return true
 
+  const detail = typeof result.stderr === 'string' ? result.stderr.trim() : ''
+
+  // Git's worktree registry can change between the initial snapshot and this
+  // removal attempt (for example after prune or a completed handoff). Re-check
+  // it before declaring the directory "in use". If Git itself says the path is
+  // not a worktree, treat it as orphaned managed storage and remove it directly.
+  const refreshedWorktrees = registeredWorktreePaths()
+  const becameOrphaned = /(?:is|isn't|not) a working tree/iu.test(detail)
+    || (refreshedWorktrees !== undefined && !refreshedWorktrees.has(key))
+  if (becameOrphaned) {
+    return removeOrphanedManagedDirectory(path)
+  }
+
   // For an actually registered worktree, a failed remove usually means Windows
   // still owns cwd, DLL, node_modules, or compiler handles. Never recursively
   // delete a registered tree after Git refuses removal.
-  const detail = typeof result.stderr === 'string' ? result.stderr.trim() : ''
   console.error(
     `[PHOENIX UPDATE] registered managed worktree cleanup deferred because it is still in use: ${path}`
     + (detail.length > 0 ? ` (${detail})` : ''),
