@@ -761,7 +761,7 @@ export function speakVoiceAssistantAttention(title: string, detail?: string): bo
       'PHOENIX needs the user\'s input or review before continuing.',
       'Use the same voice and persona already active in this call.',
       'Do not read UUIDs, task ids, hashes, timestamps, field names, or raw numbers used only as identifiers.',
-      'Do not literally say "need attention" or "needs attention".',
+      'Avoid mechanical status-label wording; ask for the required review or input like a person would.',
       'Use the following context only to explain naturally what the user should look at:',
       context,
     ].join(' '),
