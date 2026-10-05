@@ -197,11 +197,18 @@ export function AppFrame({
   // absorbs the squeeze.
   const narrow = viewport < SIDEBAR_AUTO_COLLAPSE
   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
-  const sidebarCollapsed = narrow ? !panels.narrowExpanded : panels.sidebar === 0
+  const cordisOnLeft = panels.workspaceCordis && panels.workspaceCordisSide === 'left'
+  const sidebarCollapsed = cordisOnLeft || (narrow ? !panels.narrowExpanded : panels.sidebar === 0)
   const sidebarPreference = sidebarCollapsed
     ? 0
     : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
-  const cols = computeColumns(viewport, sidebarPreference, detailsSession === undefined ? 0 : panels.details)
+  const solvedCols = computeColumns(viewport, sidebarPreference, detailsSession === undefined ? 0 : panels.details)
+  // Ordinary collapse keeps a 56px control rail. Left Cordis borrows that
+  // physical edge too, so make it a true 0px track and return the rail width
+  // to center instead of overlaying the conversation.
+  const cols = cordisOnLeft
+    ? { ...solvedCols, sidebar: 0, center: solvedCols.center + solvedCols.sidebar }
+    : solvedCols
   // KIRA Teams floats above the conversation and must never create a structural
   // rail. Expanding the sidebar would still move a centered chat to the right
   // by half the sidebar delta, though, so publish the exact paint-only
@@ -239,6 +246,7 @@ export function AppFrame({
         '--dsh-overlay-stable-chat-axis-offset': `${overlayStableChatAxisOffset}px`,
       } as CSSProperties}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
+      data-cordis-side={panels.workspaceCordis ? panels.workspaceCordisSide ?? 'right' : undefined}
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
     >
