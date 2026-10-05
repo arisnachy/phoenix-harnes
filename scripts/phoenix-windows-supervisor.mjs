@@ -88,7 +88,7 @@ const PROFILE_REQUIRED_RUNTIME_PACKAGES = [
 function repairDesktopShortcut() {
   if (process.platform !== 'win32') return
   try {
-    const result = ensurePhoenixDesktopShortcut(root)
+    const result = ensurePhoenixDesktopShortcut(root, { sourceRoot: runtimeRoot })
     if (result.status === 'ready' && result.shortcut !== undefined) {
       console.error(`[PHOENIX] desktop shortcut ready: ${result.shortcut}`)
     }
@@ -1315,9 +1315,9 @@ function requestShutdown() {
 process.once('SIGINT', requestShutdown)
 process.once('SIGTERM', requestShutdown)
 
-repairDesktopShortcut()
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
+repairDesktopShortcut()
 cleanupObsoleteRuntimes()
 recoverConfigurationBeforeFirstBoot()
 
