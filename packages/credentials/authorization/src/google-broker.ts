@@ -19,6 +19,12 @@ import { createServer, type Server } from 'node:http'
 import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialKey, credentialRef, type CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
+import {
+  authorizeGoogleWithOpenClaw,
+  findOpenClawGoogleAccount,
+  registerOpenClawGithubAuthorization,
+  requestGoogleWithOpenClaw,
+} from './openclaw-workspace.ts'
 
 /** Secret-free durable marker for the process-local Google account. */
 export const GOOGLE_ACCOUNT_KEY: CredentialKey = credentialKey('authorization-google', 'account')
@@ -507,6 +513,8 @@ export default class GoogleApiBroker extends Service {
       run: session => this.authorize(session),
     }))
 
+    ctx.effect(() => registerOpenClawGithubAuthorization(ctx), 'authorization-openclaw-github')
+
   }
 
   /**
@@ -515,6 +523,16 @@ export default class GoogleApiBroker extends Service {
    */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
     await this.startupCleanup
+    const openClawAccount = await findOpenClawGoogleAccount()
+    if (openClawAccount !== undefined) {
+      return {
+        kind: 'account',
+        provider: 'Google Workspace',
+        accountType: 'openclaw-gog',
+        email: openClawAccount,
+        connectors: serviceCatalog().map(connector => ({ ...connector, callable: true })),
+      }
+    }
     const grant = this.grant
     if (grant === undefined) return undefined
     const email = await this.inspectAccountEmail(grant)
@@ -552,6 +570,17 @@ export default class GoogleApiBroker extends Service {
    * @returns the bounded response without credential-bearing headers.
    */
   async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {
+    const openClawAccount = await findOpenClawGoogleAccount(request.signal)
+    if (openClawAccount !== undefined) {
+      const bridged = await requestGoogleWithOpenClaw(openClawAccount, request)
+      if (bridged !== undefined) return bridged
+      if (this.grant === undefined) {
+        throw new AuthorizationError(
+          'This Google Workspace operation is connected through OpenClaw gog but is not mapped to the legacy REST tool. Use the official openclaw-gog skill for this operation.',
+          'GOOGLE_OPENCLAW_UNMAPPED',
+        )
+      }
+    }
     const destination = serviceUrl(request)
     const headers = callerHeaders(request.headers)
     const grant = await this.usableGrant(destination.scope, request.signal)
@@ -598,6 +627,15 @@ export default class GoogleApiBroker extends Service {
 
   private async authorize(session: AuthorizationSession): Promise<void> {
     await this.startupCleanup
+    const openClawAccount = await authorizeGoogleWithOpenClaw(session)
+    if (openClawAccount !== undefined) {
+      await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
+      this.grant = undefined
+      this.refreshInFlight = undefined
+      this.accountEmail = openClawAccount
+      this.emailLookupInFlight = undefined
+      return
+    }
     const clientId = await this.resolveClientId(session)
     let clientSecret = await this.resolveClientSecret()
     const state = base64url(randomBytes(32))
