@@ -267,6 +267,7 @@ function verify(): number {
   const state = requireState()
   let failures = 0
   const aliases = new Set<string>()
+  const siblingSkillNames = state.skills.map(skill => skill.sourceName)
   for (const skill of state.skills) {
     aliases.add(skill.alias)
     const target = join(p.skills, skill.managedPath)
@@ -275,9 +276,18 @@ function verify(): number {
       if (!existsSync(body)) throw new Error('SKILL.md is missing')
       const source = readFileSync(body, 'utf8')
       if (frontmatterValue(source, 'name') !== skill.alias) throw new Error('frontmatter name does not match alias')
-      if (/\bsuperpowers:[a-z0-9-]+\b/i.test(source)) throw new Error('untranslated Superpowers cross-skill reference')
+      if (rewriteSuperpowersReferences(source, siblingSkillNames) !== source) {
+        throw new Error('untranslated Superpowers cross-skill reference')
+      }
       for (const resource of skill.resources) {
-        if (!existsSync(join(target, resource))) throw new Error(`resource is missing: ${resource}`)
+        const resourcePath = join(target, resource)
+        if (!existsSync(resourcePath)) throw new Error(`resource is missing: ${resource}`)
+        if (REWRITABLE_EXTENSIONS.has(extname(resource).toLowerCase())) {
+          const resourceText = readFileSync(resourcePath, 'utf8')
+          if (rewriteSuperpowersReferences(resourceText, siblingSkillNames) !== resourceText) {
+            throw new Error(`resource has untranslated Superpowers cross-skill reference: ${resource}`)
+          }
+        }
       }
       process.stdout.write(`PASS ${skill.alias}\n`)
     } catch (error) {
