@@ -16,6 +16,8 @@ export interface ConnectorDefinition {
   readonly mode: ConnectorMode
   readonly provenance: ConnectorProvenance
   readonly providerFamily?: string
+  /** Exact authorization entry key when substring provider matching would be ambiguous. */
+  readonly authorizationKey?: string
   /** Existing OpenClaw skill-backed route Phoenix can verify and reuse. */
   readonly openClawConnectorId?: 'google-workspace' | 'github'
   /** Exact Official MCP Registry identity accepted for curated install, when one is verified. */
@@ -45,7 +47,8 @@ const PUBLIC_CONNECTOR_CATALOG = [
     category: 'Productivity',
     description: 'Gmail, Calendar, Drive, Contacts, Docs, Sheets, and Slides through one Google account.',
     mode: 'oauth',
-    providerFamily: 'google',
+    providerFamily: 'google-workspace',
+    authorizationKey: 'authorization-google/account',
     openClawConnectorId: 'google-workspace',
     logoUrl: icon('google'),
     capabilities: ['mail.read', 'mail.write', 'calendar.read', 'calendar.write', 'files.read', 'files.write', 'contacts.read', 'documents', 'spreadsheets', 'presentations'],
@@ -68,6 +71,7 @@ const PUBLIC_CONNECTOR_CATALOG = [
     category: 'Development',
     description: 'Repositories, commits, issues, pull requests, releases, and CI via an authenticated OpenClaw gh session or the official GitHub MCP.',
     mode: 'mcp',
+    authorizationKey: 'authorization-openclaw/github',
     openClawConnectorId: 'github',
     logoUrl: icon('github'),
     capabilities: ['code.read', 'code.write', 'issues', 'pull-requests', 'ci'],
@@ -75,12 +79,12 @@ const PUBLIC_CONNECTOR_CATALOG = [
   { id: 'linear', name: 'Linear', category: 'Development', description: 'Search, create, and update issues, projects, and initiatives.', mode: 'oauth', providerFamily: 'linear', logoUrl: icon('linear'), capabilities: ['issues', 'projects'] },
   { id: 'jira', name: 'Jira', category: 'Development', description: 'Work with issues, projects, boards, and engineering workflows.', mode: 'oauth', providerFamily: 'jira', logoUrl: icon('jira'), capabilities: ['issues', 'projects'] },
   { id: 'vercel', name: 'Vercel', category: 'Deploy', description: 'Build, inspect, and deploy web applications and agents.', mode: 'oauth', providerFamily: 'vercel', logoUrl: icon('vercel'), capabilities: ['deployments', 'hosting'] },
-  { id: 'firebase', name: 'Firebase', category: 'Cloud', description: 'Work with Firebase projects, hosting, databases, auth, and functions.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('firebase'), capabilities: ['database', 'auth', 'hosting', 'functions'] },
+  { id: 'firebase', name: 'Firebase', category: 'Cloud', description: 'Work with Firebase projects, hosting, databases, auth, and functions.', mode: 'oauth', providerFamily: 'firebase', logoUrl: icon('firebase'), capabilities: ['database', 'auth', 'hosting', 'functions'] },
   { id: 'supabase', registryName: 'com.supabase/mcp', name: 'Supabase', category: 'Database', description: 'Manage Postgres, auth, storage, realtime, and Edge Functions.', mode: 'mcp', providerFamily: 'supabase', logoUrl: icon('supabase'), capabilities: ['database', 'auth', 'storage', 'functions'] },
   { id: 'neon', name: 'Neon', category: 'Database', description: 'Manage serverless PostgreSQL projects, branches, and computes.', mode: 'mcp', providerFamily: 'neon', logoUrl: icon('neon'), capabilities: ['database', 'postgres'] },
   { id: 'mongodb', name: 'MongoDB', category: 'Database', description: 'Inspect and operate MongoDB databases and Atlas resources.', mode: 'mcp', providerFamily: 'mongodb', logoUrl: icon('mongodb'), capabilities: ['database'] },
   { id: 'snowflake', name: 'Snowflake', category: 'Data', description: 'Query warehouses and analyze governed enterprise data.', mode: 'mcp', providerFamily: 'snowflake', logoUrl: icon('snowflake'), capabilities: ['sql', 'analytics'] },
-  { id: 'bigquery', name: 'BigQuery', category: 'Data', description: 'Query and analyze Google Cloud data warehouses.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googlebigquery'), capabilities: ['sql', 'analytics'] },
+  { id: 'bigquery', name: 'BigQuery', category: 'Data', description: 'Query and analyze Google Cloud data warehouses.', mode: 'oauth', providerFamily: 'bigquery', logoUrl: icon('googlebigquery'), capabilities: ['sql', 'analytics'] },
   { id: 'posthog', registryName: 'io.github.PostHog/mcp', name: 'PostHog', category: 'Analytics', description: 'Use product analytics, funnels, experiments, flags, logs, and surveys.', mode: 'mcp', providerFamily: 'posthog', logoUrl: icon('posthog'), capabilities: ['analytics', 'experiments', 'feature-flags'] },
   { id: 'sentry', registryName: 'io.github.getsentry/sentry-mcp', name: 'Sentry', category: 'Observability', description: 'Inspect application errors, traces, releases, and performance.', mode: 'mcp', providerFamily: 'sentry', logoUrl: icon('sentry'), capabilities: ['errors', 'traces', 'observability'] },
   { id: 'cloudflare', name: 'Cloudflare', category: 'Cloud', description: 'Manage Workers, domains, DNS, deployments, and edge services.', mode: 'api-key', providerFamily: 'cloudflare', logoUrl: icon('cloudflare'), capabilities: ['edge', 'dns', 'deployments'] },
