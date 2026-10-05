@@ -25,7 +25,7 @@ interface ToolActivityFlowProps extends SeatProps {
   readonly nodes: readonly OrderedChatNode[]
   /** Ordinary prompt admitted locally but not yet present in the durable transcript. */
   readonly optimisticSubmit?: {
-    readonly seq: number
+    readonly startedAt: number
     readonly text: string
     /** Last durable node that existed when Enter was pressed; null means before the first node. */
     readonly afterNodeKey: string | null
@@ -208,7 +208,7 @@ function buildAnchoredFlow(
     ...buildFlow(nodes.slice(0, splitAt)),
     {
       kind: 'optimistic',
-      key: `optimistic-user:${optimisticSubmit.seq}`,
+      key: `optimistic-user:${optimisticSubmit.startedAt}`,
       text: optimisticSubmit.text,
     },
     ...buildFlow(nodes.slice(splitAt)),
