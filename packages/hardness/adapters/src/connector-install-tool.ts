@@ -109,12 +109,6 @@ export function createConnectorInstallTool(
       if (name !== undefined && name.length < 2) {
         throw new Error('connector_install requires an exact registry server name')
       }
-      if (connectorId !== undefined && connectorId !== 'devpost') {
-        throw new Error('connector_install supports only the curated devpost connector')
-      }
-      if (connectorId === 'devpost' && installer.installCuratedMcpConnector === undefined) {
-        throw new Error('curated Devpost MCP installation is unavailable in this Phoenix runtime')
-      }
       if (exec.agent === undefined) throw new Error('connector_install requires an active agent session')
       const label = connectorId === 'devpost' ? 'Devpost Hackathons' : name
       const outcome = await approval.request({
@@ -136,11 +130,10 @@ export function createConnectorInstallTool(
       }
       let receipt: Awaited<ReturnType<McpRegistryInstallerService['installMcpRegistryServer']>>
       if (connectorId === 'devpost') {
-        const installCurated = installer.installCuratedMcpConnector
-        if (installCurated === undefined) {
+        if (installer.installCuratedMcpConnector === undefined) {
           throw new Error('curated Devpost MCP installation is unavailable in this Phoenix runtime')
         }
-        receipt = await installCurated({ connectorId })
+        receipt = await installer.installCuratedMcpConnector({ connectorId })
       } else {
         if (name === undefined) throw new Error('connector_install requires an exact registry server name')
         receipt = await installer.installMcpRegistryServer({
