@@ -79,7 +79,11 @@ export class LayoutController implements ILayout {
       && (occupant !== 'cordis' || this.#cordisSide === nextSide)
     ) return
 
-    this.#require().setWorkspaceOccupant(occupant, active, nextSide ?? undefined)
+    if (occupant === 'cordis' && active) {
+      this.#require().setWorkspaceOccupant(occupant, active, nextSide ?? 'right')
+    } else {
+      this.#require().setWorkspaceOccupant(occupant, active)
+    }
     if (occupant === 'cordis') this.#cordisSide = active ? nextSide : null
 
     if (currentActive !== active) {
