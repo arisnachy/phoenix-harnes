@@ -24,51 +24,50 @@ type QueueItems = Extract<MuxFrame, { type: 'session/queue' }>['items']
 export class SessionQueueMirror {
   private current: readonly QueuedMessage[] = []
 
-  /**
-   * Return the current immutable queue projection.
-   * @returns current queue rows.
-   */
   snapshot(): readonly QueuedMessage[] {
     return this.current
   }
 
-  /**
-   * Drop the stale generation before its replacement queue baseline arrives.
-   * @returns whether any projected queue row was removed.
-   */
   reset(): boolean {
     if (this.current.length === 0) return false
     this.current = []
     return true
   }
 
-  /**
-   * Replace from one authoritative stream queue frame.
-   * @param items - complete host queue snapshot.
-   */
-  replace(items: QueueItems): void {
-    this.current = items.map(item => ({
-      id: item.id,
-      messageId: item.message.id,
-      placement: item.placement,
-      content: item.message.content,
-      preview: previewOf(item.message.content),
-      text: textOf(item.message.content),
-    }))
+  replace(items: QueueItems, anchorSeq: number | null = null): void {
+    const previousAnchors = new Map(
+      this.current.map(item => [String(item.messageId), item.anchorSeq] as const),
+    )
+    const byMessage = new Map<string, QueuedMessage>()
+    for (const item of items) {
+      const messageKey = String(item.message.id)
+      const candidate: QueuedMessage = {
+        id: item.id,
+        messageId: item.message.id,
+        placement: item.placement,
+        anchorSeq: previousAnchors.get(messageKey) ?? anchorSeq,
+        content: item.message.content,
+        preview: previewOf(item.message.content),
+        text: textOf(item.message.content),
+      }
+      const existing = byMessage.get(messageKey)
+      if (existing === undefined) {
+        byMessage.set(messageKey, candidate)
+        continue
+      }
+      const rank = { context: 0, queued: 1, steering: 2 } as const
+      if (rank[candidate.placement] > rank[existing.placement]) byMessage.set(messageKey, candidate)
+    }
+    this.current = [...byMessage.values()]
   }
 
-  /**
-   * Retire a transient steering row once its durable message enters the log.
-   * @param event - newly contiguous durable Session event.
-   * @returns whether the projection changed.
-   */
   acceptDurable(event: SessionEvent): boolean {
     if (event.type !== 'user/message') return false
     const messageId = event.data.id
-    const index = this.current.findIndex(item =>
-      item.placement === 'steering' && item.messageId === messageId)
-    if (index < 0) return false
-    this.current = this.current.filter((_item, candidate) => candidate !== index)
+    const next = this.current.filter(item =>
+      !(item.placement === 'steering' && item.messageId === messageId))
+    if (next.length === this.current.length) return false
+    this.current = next
     return true
   }
 }
