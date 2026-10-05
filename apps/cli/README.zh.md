@@ -21,6 +21,10 @@
 
 standard 和 code 预设在处理游戏任务时加载内置的 [game-development 技能](config/agent-presets/standard/skills/game-development/SKILL.md)。它分别处理浏览器街机、Godot 2D/3D、现代复古风格以及明确要求的原生自制游戏，按需加载平台配方，并通过 Node 工具检查程序。Godot/Blender 仅通过可信的平台包管理器显式安装；原生 SDK、导出模板和模拟器需独立验证。交付前必须提供与游戏类型相符的技术、视觉和实际游玩证据。
 
+## Hackathon Autopilot
+
+standard 和 code 预设随附 [hackathon-autopilot 技能](config/agent-presets/standard/skills/hackathon-autopilot/SKILL.md)。它把竞赛作为一个持久任务处理：验证或激活 Devpost 与支持连接器，读取实时规则和评审标准，按这些标准规划与构建，测试并部署真实产品，使用自然英语旁白制作可验证的演示媒体，进行对抗式评委审查，准备有证据支撑的 Devpost 文案，并验证最终提交。Devpost 注册／条款与最终提交仍是需要明确人工确认的关卡；高级媒体服务是可选项，因为该技能保留本地回退路线。
+
 ## ChatGPT Web 网桥
 
 PHOENIX 可以将本地的 [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) 网桥作为 `chatgpt-web` 模型路由使用。网桥负责浏览器登录与 cookie；PHOENIX 不会导入或保存这些内容。在 Windows 上，请先在已安装的 Codex Web GPT 启动器中完成 `Setup > Browser-only`；随后 `dsh chatgpt-web start` 会自动发现完整的打包运行时，并忽略不完整的安装。其他安装仍可使用 JSON argv 配置：

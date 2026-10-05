@@ -99,7 +99,7 @@ Inspect the need, resolve a verified capability, plan the operation, obtain appr
 ##### Connector inventory
 
 ```markdown
-The model also receives the read-only connector_list tool when the authorization or MCP connector seam is mounted. Authorization rows report registered flows, provider telemetry, and sanitized callable service metadata. MCP rows report server identity, transport, lifecycle status, stable reason code, and public tool names. The tool never begins authorization, grants permission, invokes a connection, or exposes credentials or transport configuration.
+The model also receives the read-only connector_list tool when the authorization or MCP connector seam is mounted. Authorization rows report registered flows, provider telemetry, and sanitized callable service metadata. MCP rows report server identity, transport, lifecycle status, stable reason code, and public tool names. The tool never begins authorization, grants permission, invokes a connection, or exposes credentials or transport configuration. Full model-tool scopes also expose `connector_discover` and the approval-gated `connector_install`: registry installs accept only the exact Official MCP Registry identity re-resolved by the Host, while `connectorId=devpost` selects the Host-pinned official Devpost Hackathons MCP without registry discovery. Neither path accepts arbitrary executable URLs or repositories.
 ```
 
 ##### X MCP activation
