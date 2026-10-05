@@ -100,8 +100,9 @@ export function rewriteSuperpowersReferences(source: string, siblingSkillNames: 
   const siblings = new Set(siblingSkillNames.map(name => kebab(name)))
   const namespaced = source.replace(/\bsuperpowers:([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi, (_match, name: string) =>
     superpowersAlias(name))
-  return namespaced.replace(/\.\.\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\/)/gi, (match, name: string) =>
-    siblings.has(kebab(name)) ? `../${superpowersAlias(name)}` : match)
+  return namespaced.replace(/((?:\.\.\/)+)([a-z0-9]+(?:-[a-z0-9]+)*)(?=\/|[\s"'\`)\]}.,;:]|$)/gi,
+    (match, parents: string, name: string) =>
+      siblings.has(kebab(name)) ? `${parents}${superpowersAlias(name)}` : match)
 }
 
 function frontmatter(source: string): string {
@@ -144,12 +145,20 @@ function resourceFiles(root: string, current = root): string[] {
   return files.sort()
 }
 
-const REWRITABLE_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.toml'])
+const REWRITABLE_EXTENSIONS = new Set([
+  '.md', '.txt', '.json', '.yaml', '.yml', '.toml',
+  '.js', '.cjs', '.mjs', '.ts', '.tsx', '.sh', '.bash', '.ps1', '.py',
+  '.html', '.css', '.xml', '.svg', '.dot',
+])
+
+function isRewritableTextResource(resource: string): boolean {
+  const extension = extname(resource).toLowerCase()
+  return extension.length === 0 || REWRITABLE_EXTENSIONS.has(extension)
+}
 
 function rewriteTextResources(root: string, resources: readonly string[], siblingSkillNames: readonly string[]): void {
   for (const resource of resources) {
-    const extension = extname(resource).toLowerCase()
-    if (!REWRITABLE_EXTENSIONS.has(extension)) continue
+    if (!isRewritableTextResource(resource)) continue
     const path = join(root, resource)
     const source = readFileSync(path, 'utf8')
     const rewritten = rewriteSuperpowersReferences(source, siblingSkillNames)
@@ -282,7 +291,7 @@ function verify(): number {
       for (const resource of skill.resources) {
         const resourcePath = join(target, resource)
         if (!existsSync(resourcePath)) throw new Error(`resource is missing: ${resource}`)
-        if (REWRITABLE_EXTENSIONS.has(extname(resource).toLowerCase())) {
+        if (isRewritableTextResource(resource)) {
           const resourceText = readFileSync(resourcePath, 'utf8')
           if (rewriteSuperpowersReferences(resourceText, siblingSkillNames) !== resourceText) {
             throw new Error(`resource has untranslated Superpowers cross-skill reference: ${resource}`)
