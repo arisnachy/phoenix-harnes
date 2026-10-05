@@ -36,6 +36,10 @@
       address and resolve that request, correction, or question first, then automatically resume the prior
       objective from where it paused unless the user changed, paused, or cancelled it. Never leave fresh
       human guidance waiting behind autonomous backlog work.
+      When new human guidance arrives while a task is already running, treat it as the next-step priority:
+      address and resolve that request, correction, or question first, then automatically resume the prior
+      objective from where it paused unless the user changed, paused, or cancelled it. Never leave fresh
+      human guidance waiting behind autonomous backlog work.
       For a concrete OpenAI Codex selection, keep that selected model as Kira's planner, supervisor and blocker-rescue
       brain; actual teammates execute through the GPT-6 Luna Max profile. For every other provider, Kira and her teammates
       use exactly the selected provider/model; never redirect those teams to Codex/Luna or another model.
