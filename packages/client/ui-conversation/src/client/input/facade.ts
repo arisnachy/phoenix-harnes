@@ -49,8 +49,8 @@ export interface SessionInputDeps {
     text: string,
     imageIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
-    clientSubmissionId: string,
     signal: AbortSignal,
+    clientSubmissionId?: string,
   ): Promise<SubmitOutcome>
   /** Command-plane image plumbing (the hub owns the conversation face and the copy). */
   commandImages: {
@@ -229,7 +229,7 @@ export class SessionInputShell implements SessionInput {
         const imageIds = [...this.imageIds]
         this.imageSendInFlight = true
         void this.deps.defaultSink(
-          '', imageIds, mode, mintClientSubmissionId(), new AbortController().signal,
+          '', imageIds, mode, new AbortController().signal, mintClientSubmissionId(),
         ).then((outcome) => {
           this.imageSendInFlight = false
           if (this.disposed) return
@@ -496,7 +496,7 @@ export class SessionInputShell implements SessionInput {
       if (this.pendingSubmit?.seq === attempt.seq) {
         this.pendingSubmit = { ...this.pendingSubmit, modelText }
       }
-      this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, clientSubmissionId, attempt.signal), imageIds)
+      this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, attempt.signal, clientSubmissionId), imageIds)
       return
     }
     const inputTriggers = this.deps.inputTriggers?.()
@@ -528,7 +528,7 @@ export class SessionInputShell implements SessionInput {
           // a fast durable event can hand off without a duplicate optimistic row.
           this.publish()
         }
-        this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, clientSubmissionId, attempt.signal), imageIds)
+        this.settleSubmit(attempt, this.deps.defaultSink(modelText, imageIds, mode, attempt.signal, clientSubmissionId), imageIds)
       },
       (error: unknown) => {
         controller.abort()
