@@ -579,6 +579,7 @@ async function authorizeGithub(session: AuthorizationSession): Promise<string> {
       session.notify({
         message: `Enter GitHub device code ${code} to authorize PHOENIX.`,
         url: 'https://github.com/login/device',
+        code,
       })
     },
   })
