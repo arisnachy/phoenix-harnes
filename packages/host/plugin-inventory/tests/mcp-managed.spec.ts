@@ -109,6 +109,62 @@ describe('ManagedMcpController', () => {
     expect(live.create).toHaveBeenCalledTimes(1)
   })
 
+  it('installs, persists, and repairs the pinned official Devpost Hackathons MCP', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create
+      .mockResolvedValueOnce('devpost-entry')
+      .mockResolvedValueOnce('devpost-repaired')
+    const search = registry([])
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
+
+    const installed = await controller.installDevpostHackathons()
+    expect(installed).toEqual({
+      status: 'installed',
+      connector: {
+        entryId: 'devpost-entry',
+        serverName: 'devpost-hackathons',
+        url: 'https://devpost.com/mcp',
+        source: { kind: 'curated', connectorId: 'devpost' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: {
+        transport: 'streamable-http',
+        serverName: 'devpost-hackathons',
+        url: 'https://devpost.com/mcp',
+        headers: {},
+        oauth: true,
+      },
+    })
+    expect(search).not.toHaveBeenCalled()
+    expect(readFileSync(patchPath, 'utf8')).toContain('https://devpost.com/mcp')
+
+    await expect(controller.installDevpostHackathons()).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { entryId: 'devpost-entry' },
+    })
+    expect(live.create).toHaveBeenCalledTimes(1)
+
+    const repaired = await controller.repair({ entryId: 'devpost-entry' })
+    expect(live.remove).toHaveBeenCalledWith('devpost-entry')
+    expect(repaired).toMatchObject({
+      status: 'installed',
+      connector: {
+        entryId: 'devpost-repaired',
+        serverName: 'devpost-hackathons',
+        url: 'https://devpost.com/mcp',
+        source: { kind: 'curated', connectorId: 'devpost' },
+      },
+    })
+    expect(search).not.toHaveBeenCalled()
+
+    await expect(controller.removeDevpostHackathons()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledWith('devpost-repaired')
+    await expect(controller.snapshot()).resolves.toEqual([])
+  })
+
   it('installs and removes only the pinned official Binance Agent OS connector', async () => {
     const patchPath = tempPatch()
     const live = loader()
