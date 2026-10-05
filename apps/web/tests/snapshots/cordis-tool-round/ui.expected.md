@@ -17,6 +17,7 @@
 - button "Copy":
   - img
 - button "Add reaction"
+- text: ϟ
 - strong: Kira
 - text: Coordination / orchestration
 - paragraph: CORDIS_UI_READY
@@ -87,7 +88,7 @@
 - button "Read answer aloud"
 - button "Branch into a new conversation":
   - img
-- text: {{clock}} Ran for {{duration}}
+- text: {{clock}} Ran for {{duration}} ϟ
 - strong: Kira
 - text: Coordination / orchestration
 - paragraph: The Cordis Plugin is running.
@@ -112,6 +113,7 @@
 - button "Copy":
   - img
 - button "Add reaction"
+- text: ϟ
 - strong: Kira
 - text: Coordination / orchestration
 - paragraph: CORDIS_UI_DONE
