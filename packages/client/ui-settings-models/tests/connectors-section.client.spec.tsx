@@ -248,7 +248,7 @@ describe('connectors settings section', () => {
       status: 'installed' as const,
       connector: {
         entryId: 'devpost-entry',
-        serverName: 'devpost-hackathons',
+        serverName: 'devpost',
         url: 'https://devpost.com/mcp',
         source: { kind: 'curated' as const, connectorId: 'devpost' },
       },
