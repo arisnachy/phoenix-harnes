@@ -10,7 +10,9 @@ import type {
 const OFFICIAL_MCP_REGISTRY = 'https://registry.modelcontextprotocol.io'
 const CACHE_TTL_MS = 5 * 60 * 1000
 const STALE_TTL_MS = 24 * 60 * 60 * 1000
-const REQUEST_TIMEOUT_MS = 6000
+const REQUEST_TIMEOUT_MS = 10_000
+const REQUEST_ATTEMPTS = 2
+const RETRY_DELAY_MS = 150
 const MAX_CACHE_ENTRIES = 64
 
 interface CachedSearch {
@@ -19,6 +21,7 @@ interface CachedSearch {
 }
 
 const cache = new Map<string, CachedSearch>()
+const inFlight = new Map<string, Promise<McpRegistrySearchSnapshot>>()
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -182,9 +185,148 @@ function staleSnapshot(hit: CachedSearch): McpRegistrySearchSnapshot {
   return { ...hit.snapshot, stale: true }
 }
 
+class RegistryHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`registry returned HTTP ${status}`)
+  }
+}
+
+function registrySnapshot(
+  query: string,
+  candidates: McpRegistryCandidate[],
+): McpRegistrySearchSnapshot {
+  return {
+    source: 'official-mcp-registry',
+    query,
+    fetchedAt: new Date().toISOString(),
+    stale: false,
+    candidates,
+  }
+}
+
+function isTransientFetchFailure(error: Error): boolean {
+  const code = String((error as Error & { code?: unknown }).code ?? '').toUpperCase()
+  const message = error.message.toLowerCase()
+  return error.name === 'AbortError'
+    || ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH'].includes(code)
+    || ['fetch failed', 'network error', 'networkerror', 'socket', 'timed out', 'timeout', 'aborted']
+      .some(fragment => message.includes(fragment))
+}
+
+async function retryDelay(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, RETRY_DELAY_MS)
+    timer.unref()
+  })
+}
+
+async function fetchRegistryJson(url: URL): Promise<unknown> {
+  let lastError: Error | undefined
+  for (let attempt = 0; attempt < REQUEST_ATTEMPTS; attempt++) {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => { controller.abort() }, REQUEST_TIMEOUT_MS)
+    timeout.unref()
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: { accept: 'application/json' },
+        signal: controller.signal,
+      })
+      if (!response.ok) throw new RegistryHttpError(response.status)
+      return await response.json()
+    } catch (error) {
+      const normalized = controller.signal.aborted
+        ? new Error(`registry request timed out after ${REQUEST_TIMEOUT_MS}ms`)
+        : error instanceof Error
+          ? error
+          : new Error(String(error))
+      lastError = normalized
+      if (attempt + 1 >= REQUEST_ATTEMPTS || !isTransientFetchFailure(normalized)) throw normalized
+    } finally {
+      clearTimeout(timeout)
+    }
+    await retryDelay()
+  }
+  throw lastError ?? new Error('registry request failed')
+}
+
+function looksLikeExactRegistryName(query: string): boolean {
+  return query.includes('/') && !/\s/.test(query)
+}
+
+async function fetchFreshRegistrySnapshot(
+  query: string,
+  limit: number,
+): Promise<McpRegistrySearchSnapshot> {
+  if (looksLikeExactRegistryName(query)) {
+    const detailUrl = new URL(
+      `/v0.1/servers/${encodeURIComponent(query)}/versions/latest`,
+      OFFICIAL_MCP_REGISTRY,
+    )
+    try {
+      const candidate = projectCandidate(await fetchRegistryJson(detailUrl))
+      if (candidate !== undefined && candidate.name === query) {
+        return registrySnapshot(query, [candidate])
+      }
+    } catch (error) {
+      if (!(error instanceof RegistryHttpError) || error.status !== 404) throw error
+    }
+  }
+
+  const url = new URL('/v0.1/servers', OFFICIAL_MCP_REGISTRY)
+  url.searchParams.set('search', query)
+  url.searchParams.set('limit', String(limit))
+  url.searchParams.set('version', 'latest')
+  const payload = record(await fetchRegistryJson(url))
+  if (!Array.isArray(payload?.servers)) throw new Error('registry returned an invalid server list')
+  const candidates = payload.servers.flatMap((entry) => {
+    const candidate = projectCandidate(entry)
+    return candidate === undefined ? [] : [candidate]
+  })
+  return registrySnapshot(query, candidates)
+}
+
+function cachedCandidateMatches(candidate: McpRegistryCandidate, normalizedQuery: string): boolean {
+  return [candidate.name, candidate.title, candidate.description]
+    .some(value => value.toLowerCase().includes(normalizedQuery))
+}
+
+function relatedStaleSnapshot(
+  query: string,
+  limit: number,
+  now: number,
+): McpRegistrySearchSnapshot | undefined {
+  const normalizedQuery = query.toLowerCase()
+  const candidates = new Map<string, McpRegistryCandidate>()
+  let freshest = 0
+  for (const hit of cache.values()) {
+    if (now - hit.at > STALE_TTL_MS) continue
+    freshest = Math.max(freshest, hit.at)
+    for (const candidate of hit.snapshot.candidates) {
+      if (!cachedCandidateMatches(candidate, normalizedQuery)) continue
+      candidates.set(`${candidate.name}\u0000${candidate.version}`, candidate)
+      if (candidates.size >= limit) break
+    }
+    if (candidates.size >= limit) break
+  }
+  if (candidates.size === 0) return undefined
+  return {
+    source: 'official-mcp-registry',
+    query,
+    fetchedAt: new Date(freshest).toISOString(),
+    stale: true,
+    candidates: [...candidates.values()].slice(0, limit),
+  }
+}
+
 /**
  * Search the public Official MCP Registry through the Host, avoiding browser
  * CORS failures and keeping a bounded stale cache for short registry outages.
+ *
+ * Exact registry identities use the server-detail endpoint first, which avoids
+ * a full text search for install/reconnect flows. Transient network/AbortError
+ * failures receive one bounded retry; duplicate identical searches share the
+ * same in-flight request.
  *
  * Registry-listed is provenance, not a claim that the vendor named by a server
  * title published it. Callers should show repository/publisher provenance and
@@ -201,41 +343,31 @@ export async function searchOfficialMcpRegistry(
   const now = Date.now()
   if (hit !== undefined && now - hit.at <= CACHE_TTL_MS) return hit.snapshot
 
-  const url = new URL('/v0.1/servers', OFFICIAL_MCP_REGISTRY)
-  url.searchParams.set('search', query)
-  url.searchParams.set('limit', String(limit))
-  url.searchParams.set('version', 'latest')
+  const active = inFlight.get(key)
+  if (active !== undefined) return active
 
-  const controller = new AbortController()
-  const timeout = setTimeout(() => { controller.abort() }, REQUEST_TIMEOUT_MS)
-  timeout.unref()
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { accept: 'application/json' },
-      signal: controller.signal,
-    })
-    if (!response.ok) throw new Error(`registry returned HTTP ${response.status}`)
-    const payload = record(await response.json())
-    if (!Array.isArray(payload?.servers)) throw new Error('registry returned an invalid server list')
-    const candidates = payload.servers.flatMap((entry) => {
-      const candidate = projectCandidate(entry)
-      return candidate === undefined ? [] : [candidate]
-    })
-    const snapshot: McpRegistrySearchSnapshot = {
-      source: 'official-mcp-registry',
-      query,
-      fetchedAt: new Date().toISOString(),
-      stale: false,
-      candidates,
+  const pending = (async (): Promise<McpRegistrySearchSnapshot> => {
+    try {
+      const snapshot = await fetchFreshRegistrySnapshot(query, limit)
+      remember(key, snapshot)
+      return snapshot
+    } catch (error) {
+      const fallbackNow = Date.now()
+      const exactHit = cache.get(key)
+      if (exactHit !== undefined && fallbackNow - exactHit.at <= STALE_TTL_MS) {
+        return staleSnapshot(exactHit)
+      }
+      const related = relatedStaleSnapshot(query, limit, fallbackNow)
+      if (related !== undefined) return related
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`Official MCP Registry lookup failed: ${message}`)
     }
-    remember(key, snapshot)
-    return snapshot
-  } catch (error) {
-    if (hit !== undefined && now - hit.at <= STALE_TTL_MS) return staleSnapshot(hit)
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Official MCP Registry lookup failed: ${message}`)
+  })()
+
+  inFlight.set(key, pending)
+  try {
+    return await pending
   } finally {
-    clearTimeout(timeout)
+    if (inFlight.get(key) === pending) inFlight.delete(key)
   }
 }
