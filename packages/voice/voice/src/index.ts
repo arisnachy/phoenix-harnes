@@ -115,7 +115,7 @@ export interface VoiceAnnouncementReceipt {
   /** Whether the event entered the bounded side-channel queue. */
   readonly accepted: boolean
   /** Why an event was not accepted. */
-  readonly reason?: 'disabled' | 'not-important' | 'empty' | 'queue-full' | 'duplicate' | 'no-provider'
+  readonly reason?: 'disabled' | 'not-important' | 'empty' | 'queue-full' | 'duplicate' | 'no-provider' | 'native-realtime'
   /** Normalized text, when accepted. */
   readonly text?: string
 }
@@ -241,34 +241,56 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
   if (!isRecord(input) || typeof input.type !== 'string' || !isRecord(input.data)) return undefined
   const data = input.data
   const id = stringValue(data.id) ?? stringValue(data.goalId) ?? 'event'
+  const revision = stringValue(data.revision) ?? 'current'
   switch (input.type) {
-    case 'approval/asked': {
-      const toolName = stringValue(data.toolName) ?? 'an action'
+    case 'approval/asked':
       return {
         kind: 'authorization',
-        displayOutput: `Authorization is required for ${toolName}.`,
+        displayOutput: 'I need your authorization before I can continue.',
         dedupeKey: `authorization:${id}`,
       }
-    }
     case 'goal/judge': {
-      const goalId = stringValue(data.goalId) ?? 'the mission'
       const verdict = data.verdict
+      const summary = naturalEventSummary(data.summary)
       if (verdict === 'pass') {
-        return { kind: 'mission-completed', displayOutput: `${goalId} completed and passed review.`, dedupeKey: `completed:${goalId}:${stringValue(data.revision) ?? 'current'}` }
+        return {
+          kind: 'mission-completed',
+          displayOutput: summary ?? 'The task is complete and has passed review.',
+          dedupeKey: `completed:${id}:${revision}`,
+        }
       }
       if (verdict === 'blocked') {
-        return { kind: 'blocked', displayOutput: `${goalId} is blocked and needs attention.`, dedupeKey: `blocked:${goalId}:${stringValue(data.revision) ?? 'current'}` }
+        return {
+          kind: 'blocked',
+          displayOutput: summary === undefined
+            ? 'I need your attention before I can continue with the task.'
+            : `I need your attention before I can continue. ${summary}`,
+          dedupeKey: `blocked:${id}:${revision}`,
+        }
       }
       return undefined
     }
-    case 'goal/supervisor': {
+    case 'goal/supervisor':
       if (data.status !== 'blocked' && data.nextAction !== 'blocked') return undefined
-      const goalId = stringValue(data.goalId) ?? 'the mission'
-      return { kind: 'blocked', displayOutput: `${goalId} is blocked and needs attention.`, dedupeKey: `blocked:${goalId}:${stringValue(data.revision) ?? 'current'}` }
-    }
+      return {
+        kind: 'blocked',
+        displayOutput: 'I need your attention before I can continue with the task.',
+        dedupeKey: `blocked:${id}:${revision}`,
+      }
     default:
       return undefined
   }
+}
+
+function naturalEventSummary(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const text = value
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/giu, ' ')
+    .replace(/\b[0-9a-f]{16,}\b/giu, ' ')
+    .replace(/\b\d{6,}\b/gu, ' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  return text === '' ? undefined : text.slice(0, 320)
 }
 
 const CODEX_REALTIME_CONTEXT_MAX_ITEMS = 6
@@ -601,6 +623,12 @@ export class VoiceRuntime extends TypertRemoteService {
     if (!isVoiceEventKind(event.kind)) return { id, accepted: false, reason: 'not-important' }
     const text = displayOutputToVoiceText(event.displayOutput, this.config.maxChars)
     if (text === '') return { id, accepted: false, reason: 'empty' }
+    // Never mix the browser/system TTS voice into an active native Codex call.
+    // The browser realtime surface (or the finalized harness answer) owns these
+    // audible notifications while the authenticated Codex session is alive.
+    if (this.codexRealtime?.hasActiveSession() === true) {
+      return { id, accepted: false, reason: 'native-realtime', text }
+    }
     const key = event.dedupeKey
     if (key !== undefined && (this.pendingKeys.has(key) || this.current?.event.dedupeKey === key)) {
       return { id, accepted: false, reason: 'duplicate' }
