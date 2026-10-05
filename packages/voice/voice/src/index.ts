@@ -393,15 +393,16 @@ export class VoiceRuntime extends TypertRemoteService {
   }
 
   /**
-   * Report whether the local Client can route conversation speech through neural TTS.
+   * Report whether the local Client can route conversation speech through the
+   * deterministic Kokoro -> platform fallback chain.
    * @returns Current conversational voice availability and selected provider.
    */
   @Remote('conversationStatus')
   async conversationStatus(): Promise<VoiceConversationStatus> {
-    const provider = this.selectTtsProvider()
+    const provider = this.selectConversationTtsProvider()
     return {
       enabled: this.config.enabled,
-      natural: this.config.enabled && provider?.id === 'phoenix-natural',
+      natural: false,
       ...(provider === undefined ? {} : { provider: provider.id }),
     }
   }
@@ -524,14 +525,15 @@ export class VoiceRuntime extends TypertRemoteService {
   /**
    * Play one stable semantic segment on the Host without blocking the browser thread.
    * @param request - Message identity, ordering, text, language, and final-segment metadata.
-   * @returns Admission/playback receipt for the selected neural provider.
+   * @returns Admission/playback receipt for the selected conversation TTS provider.
    */
   @Remote('conversationSpeak')
   async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt> {
     if (!this.config.enabled) return { accepted: false, reason: 'disabled' }
-    const provider = this.selectTtsProvider()
-    if (provider?.id !== 'phoenix-natural') {
-      return { accepted: false, reason: 'natural-unavailable', ...(provider === undefined ? {} : { provider: provider.id }) }
+    const providers = this.conversationTtsProviders()
+    const provider = providers[0]
+    if (provider === undefined) {
+      return { accepted: false, reason: 'natural-unavailable' }
     }
     const key = request.key.trim()
     if (key === '' || key.length > 256 || !Number.isSafeInteger(request.sequence) || request.sequence < 0) {
@@ -558,7 +560,7 @@ export class VoiceRuntime extends TypertRemoteService {
       .catch(() => {})
       .then(async () => {
         if (controller.signal.aborted) return
-        await this.speakThroughProviders(text, language, controller.signal)
+        await this.speakThroughProviders(text, language, controller.signal, providers)
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
@@ -825,6 +827,24 @@ export class VoiceRuntime extends TypertRemoteService {
       yield () => store.delete(provider.id)
     }, 'voice provider registration')
     return () => { void dispose() }
+  }
+
+  private conversationTtsProviders(): VoiceTextToSpeechProvider[] {
+    // Hands-free fallback is intentionally deterministic: Codex Live is owned
+    // by the Realtime bridge; when it is unavailable the Host speaks through
+    // Kokoro first, then the platform-native engine. Other optional neural
+    // engines remain available for non-conversation announcements only.
+    const ids = ['kokoro', 'system'] as const
+    const providers: VoiceTextToSpeechProvider[] = []
+    for (const id of ids) {
+      const provider = this.ttsProviders.get(id)
+      if (provider?.available() === true) providers.push(provider)
+    }
+    return providers
+  }
+
+  private selectConversationTtsProvider(): VoiceTextToSpeechProvider | undefined {
+    return this.conversationTtsProviders()[0]
   }
 
   private selectTtsProvider(): VoiceTextToSpeechProvider | undefined {
