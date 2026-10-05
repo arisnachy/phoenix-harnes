@@ -8,10 +8,12 @@ import {
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
   interruptVoiceAssistantSpeech,
+  isCodexRealtimeVoiceActive,
   isLikelyVoiceAssistantEcho,
   refreshVoiceAssistantRemote,
   setVoiceAssistantActive,
   setVoiceAssistantListening,
+  speakVoiceAssistantAttention,
   speakVoiceAssistantResponse,
   streamVoiceAssistantResponse,
   stopCodexRealtimeVoice,
@@ -80,7 +82,7 @@ describe('browser voice adapter', () => {
   it('uses native realtime only as speech transport while Phoenix harness owns the answer', async () => {
     class FakeDataChannel {
       static instance: FakeDataChannel | undefined
-      readyState: 'open' | 'closed' = 'open'
+      readyState: 'connecting' | 'open' | 'closing' | 'closed' = 'open'
       onopen: (() => void) | null = null
       onmessage: ((event: { data: string }) => void) | null = null
       readonly send = vi.fn((_payload: string) => undefined)
@@ -88,11 +90,13 @@ describe('browser voice adapter', () => {
       constructor() { FakeDataChannel.instance = this }
     }
     class FakePeer {
+      static instance: FakePeer | undefined
       iceGatheringState = 'complete'
-      connectionState = 'connected'
+      connectionState: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed' = 'connected'
       localDescription: { type: 'offer'; sdp: string } | null = null
       ontrack: ((event: { streams: MediaStream[]; track: MediaStreamTrack }) => void) | null = null
       onconnectionstatechange: (() => void) | null = null
+      constructor() { FakePeer.instance = this }
       createDataChannel(): FakeDataChannel { return new FakeDataChannel() }
       addTrack(): void {}
       async createOffer(): Promise<{ type: 'offer'; sdp: string }> {
@@ -172,6 +176,21 @@ describe('browser voice adapter', () => {
       expect(sessionUpdate.type).toBe('session.update')
       expect(sessionUpdate.session.turn_detection.create_response).toBe(false)
 
+      const peer = FakePeer.instance
+      expect(peer).toBeDefined()
+
+      // A long Hardness/tool turn can make WebRTC report a transient
+      // "disconnected". Native Codex voice must remain the selected transport.
+      if (peer !== undefined) {
+        peer.connectionState = 'disconnected'
+        peer.onconnectionstatechange?.()
+      }
+      expect(isCodexRealtimeVoiceActive()).toBe(true)
+      expect(getVoiceAssistantSnapshot().active).toBe(true)
+
+      // If the data channel is temporarily unwritable when Hardness returns,
+      // keep the answer queued for Codex instead of falling back to system TTS.
+      if (channel !== undefined) channel.readyState = 'connecting'
       const activatedAt = getVoiceAssistantSnapshot().activatedAt
       streamVoiceAssistantResponse(
         'assistant:harness:1',
@@ -179,6 +198,13 @@ describe('browser voice adapter', () => {
         activatedAt,
         true,
       )
+      expect(channel?.send).toHaveBeenCalledTimes(1)
+
+      if (channel !== undefined) channel.readyState = 'open'
+      if (peer !== undefined) {
+        peer.connectionState = 'connected'
+        peer.onconnectionstatechange?.()
+      }
       const spoken = JSON.parse(String(channel?.send.mock.calls[1]?.[0])) as {
         type: string
         response: { instructions: string }
@@ -186,8 +212,21 @@ describe('browser voice adapter', () => {
       expect(spoken.type).toBe('response.create')
       expect(spoken.response.instructions).toContain('La tarea terminó correctamente.')
 
+      expect(speakVoiceAssistantAttention(
+        'Aprobación 550e8400-e29b-41d4-a716-446655440000',
+        'Revisa la acción antes de continuar; referencia 123456789 needs attention.',
+      )).toBe(true)
+      const attention = JSON.parse(String(channel?.send.mock.calls[2]?.[0])) as {
+        type: string
+        response: { instructions: string }
+      }
+      expect(attention.type).toBe('response.create')
+      expect(attention.response.instructions).not.toContain('550e8400-e29b-41d4-a716-446655440000')
+      expect(attention.response.instructions).not.toContain('123456789 needs attention')
+      expect(attention.response.instructions).toContain('same voice and persona')
+
       expect(interruptVoiceAssistantSpeech()).toBe(true)
-      expect(JSON.parse(String(channel?.send.mock.calls[2]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(JSON.parse(String(channel?.send.mock.calls[3]?.[0]))).toEqual({ type: 'response.cancel' })
     } finally {
       await stopCodexRealtimeVoice()
       disposeRemote()
