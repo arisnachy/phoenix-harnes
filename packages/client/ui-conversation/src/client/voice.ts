@@ -443,7 +443,7 @@ export async function tryStartCodexRealtimeVoice(
 
     peer.onconnectionstatechange = () => {
       const liveSession = codexRealtimeVoiceSession
-      if (liveSession?.peer !== peer) return
+      if (liveSession === undefined || liveSession.peer !== peer) return
       if (peer?.connectionState === 'connected') {
         // WebRTC "disconnected" is explicitly transient. A long Hardness/tool
         // turn can pass through it and reconnect without renegotiating voice.
