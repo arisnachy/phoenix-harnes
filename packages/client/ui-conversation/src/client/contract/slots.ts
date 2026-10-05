@@ -440,6 +440,13 @@ export interface ChatNodeTurnDataInjected {
   }
 }
 
+/** HTML canvas payload that Phoenix may route to its side visual workspace. */
+export interface CanvasWorkspaceRequest {
+  readonly title: string
+  readonly html: string
+  readonly executable: boolean
+}
+
 /** Stable owner currency delivered to one keyed Chat business renderer. */
 export interface ChatNodeOwnerProps {
   /** Additive per-message controls already rendered for this exact transcript node. */
@@ -450,6 +457,8 @@ export interface ChatNodeOwnerProps {
   cwd?: string | undefined
   openFile: (path: string) => void
   inspectCall: (callId: CallId) => void
+  /** Open a Phoenix canvas beside the chat without making the renderer depend on the workspace plugin. */
+  openCanvas?: (canvas: CanvasWorkspaceRequest) => boolean
   /** Execute a code artifact through the host's isolated HARDNESS runtime. */
   runArtifact?: (artifact: {
     readonly id: string
@@ -820,6 +829,8 @@ export interface ChatScrollPosition {
  * outside the view (layout orchestration; the session object layer).
  */
 export interface ChatViewInjected {
+  /** Route an HTML canvas into Phoenix's visual workspace when that service is available. */
+  openCanvas?: (canvas: CanvasWorkspaceRequest) => boolean
   /** Selection write + details panel opening in one gesture (store action + layout orchestration). */
   openDetails: (target: SelectionTarget) => void
   /**
