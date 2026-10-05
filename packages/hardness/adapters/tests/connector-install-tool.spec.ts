@@ -21,7 +21,10 @@ function exec(agent: Agent | undefined) {
   } as never
 }
 
-function installer(): McpRegistryInstallerService & { installMcpRegistryServer: ReturnType<typeof vi.fn> } {
+function installer(): McpRegistryInstallerService & {
+  installMcpRegistryServer: ReturnType<typeof vi.fn>
+  installCuratedMcpConnector: ReturnType<typeof vi.fn>
+} {
   return {
     installMcpRegistryServer: vi.fn(async () => ({
       status: 'installed' as const,
@@ -29,6 +32,14 @@ function installer(): McpRegistryInstallerService & { installMcpRegistryServer: 
         entryId: 'managed-1',
         serverName: 'calendar-abc1234',
         url: 'https://mcp.example.com/calendar',
+      },
+    })),
+    installCuratedMcpConnector: vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'devpost-entry',
+        serverName: 'devpost',
+        url: 'https://devpost.com/mcp',
       },
     })),
   }
@@ -40,7 +51,9 @@ describe('connector_install', () => {
     const service = installer()
     const tool = createConnectorInstallTool(approval, service)
 
-    await expect(tool.execute({ name: ' ' }, exec({} as Agent))).rejects.toThrow('exact registry server name')
+    await expect(tool.execute({}, exec({} as Agent))).rejects.toThrow('exactly one of name or connectorId')
+    await expect(tool.execute({ name: 'io.example/calendar', connectorId: 'devpost' }, exec({} as Agent)))
+      .rejects.toThrow('exactly one of name or connectorId')
     await expect(tool.execute({ name: 'io.example/calendar' }, exec(undefined))).rejects.toThrow('active agent session')
     expect(approval.request).not.toHaveBeenCalled()
     expect(service.installMcpRegistryServer).not.toHaveBeenCalled()
@@ -80,6 +93,34 @@ describe('connector_install', () => {
     expect(service.installMcpRegistryServer).toHaveBeenCalledWith({ name: 'io.example/calendar' })
   })
 
+  it('activates the pinned Devpost MCP after approval without registry discovery', async () => {
+    const approval = { request: vi.fn(async () => 'allowed-once' as const) }
+    const service = installer()
+    const tool = createConnectorInstallTool(approval, service)
+
+    await expect(tool.execute({ connectorId: 'devpost' }, exec({} as Agent))).resolves.toEqual({
+      status: 'installed',
+      serverName: 'devpost',
+      message: 'Installed Devpost Hackathons. Use connector_list to check whether it is ready or needs authorization.',
+    })
+    expect(approval.request).toHaveBeenCalledWith(expect.objectContaining({
+      reason: 'Activate the Phoenix-curated official Devpost Hackathons MCP',
+      risk: 'medium',
+      reversible: true,
+    }))
+    expect(service.installCuratedMcpConnector).toHaveBeenCalledWith({ connectorId: 'devpost' })
+    expect(service.installMcpRegistryServer).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the curated Devpost installer is unavailable', async () => {
+    const service = installer()
+    service.installCuratedMcpConnector = undefined as never
+    const tool = createConnectorInstallTool({ request: vi.fn() }, service)
+
+    await expect(tool.execute({ connectorId: 'devpost' }, exec({} as Agent)))
+      .rejects.toThrow('curated Devpost MCP installation is unavailable')
+  })
+
   it('passes an exact version and preserves the already-installed outcome', async () => {
     const approval = { request: vi.fn(async () => 'allowed-once' as const) }
     const service = installer()
@@ -111,6 +152,12 @@ describe('connector_install', () => {
       title: 'Install MCP: io.example/calendar',
       kind: 'edit',
       rawInput: 'io.example/calendar',
+    })
+    expect(tool.presentCall?.({ connectorId: 'devpost' })).toEqual({
+      card: 'generic',
+      title: 'Install MCP: Devpost Hackathons',
+      kind: 'edit',
+      rawInput: 'Devpost Hackathons',
     })
   })
 })
