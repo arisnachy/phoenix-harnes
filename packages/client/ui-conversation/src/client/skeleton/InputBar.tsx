@@ -31,6 +31,7 @@ import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
+  configureCodexRealtimeUserTranscriptHandler,
   createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, interruptVoiceAssistantSpeech,
   isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
   tryStartCodexRealtimeVoice,
@@ -191,9 +192,9 @@ export function InputBar({
     && input.queue.some(row => row.placement === 'queued')
 
   // Voice is an input/output layer over the ordinary PHOENIX execution path.
-  // For an OpenAI Codex route, native Realtime is the preferred microphone/audio
-  // transport, while finalized human speech is dispatched by the Host into the
-  // same live Agent inbox as typed input. The PHOENIX agent therefore remains
+  // For an OpenAI Codex route, native Realtime owns microphone/audio and its
+  // finalized transcript is admitted through this same composer path as typed
+  // input. The PHOENIX agent therefore remains
   // the only planner/executor for tools, Hardness, approvals and orchestration.
   // If native Realtime is unavailable or its account quota cannot open a call,
   // browser recognition stays as the input fallback while Host TTS selects
@@ -226,6 +227,8 @@ export function InputBar({
     voiceSubmitPendingRef.current = true
     requestAnimationFrame(() => { inputRef.current?.focus({ preventScroll: true }) })
   }, [keyboard, locked, machineBusy])
+  useEffect(() => configureCodexRealtimeUserTranscriptHandler(appendVoiceText), [appendVoiceText])
+
   const startVoiceRecognition = useCallback((): void => {
     const recognition = voiceRef.current
     if (recognition === null || voiceState === 'listening' || locked || machineBusy
