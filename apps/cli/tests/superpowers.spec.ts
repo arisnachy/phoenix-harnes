@@ -31,6 +31,15 @@ describe('Superpowers bridge contract', () => {
     )
   })
 
+  it('rewrites multi-level sibling paths used by extensionless upstream scripts', () => {
+    expect(rewriteSuperpowersReferences(
+      'sdd="$(dirname "$0")/../../subagent-driven-development/scripts" and ../subagent-driven-development',
+      ['subagent-driven-development'],
+    )).toBe(
+      'sdd="$(dirname "$0")/../../superpowers-subagent-driven-development/scripts" and ../superpowers-subagent-driven-development',
+    )
+  })
+
   it('rewrites repeated references case-insensitively', () => {
     expect(rewriteSuperpowersReferences(
       'Superpowers:Brainstorming then superpowers:writing-plans',
