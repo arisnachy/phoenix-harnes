@@ -134,12 +134,20 @@ export function createConnectorInstallTool(
           message: `MCP installation was not approved (${outcome}).`,
         }
       }
-      const receipt = connectorId === 'devpost'
-        ? await installer.installCuratedMcpConnector!({ connectorId })
-        : await installer.installMcpRegistryServer({
-            name: name!,
-            ...(args.version === undefined ? {} : { version: args.version }),
-          })
+      let receipt: Awaited<ReturnType<McpRegistryInstallerService['installMcpRegistryServer']>>
+      if (connectorId === 'devpost') {
+        const installCurated = installer.installCuratedMcpConnector
+        if (installCurated === undefined) {
+          throw new Error('curated Devpost MCP installation is unavailable in this Phoenix runtime')
+        }
+        receipt = await installCurated({ connectorId })
+      } else {
+        if (name === undefined) throw new Error('connector_install requires an exact registry server name')
+        receipt = await installer.installMcpRegistryServer({
+          name,
+          ...(args.version === undefined ? {} : { version: args.version }),
+        })
+      }
       return {
         status: receipt.status,
         serverName: receipt.connector.serverName,
