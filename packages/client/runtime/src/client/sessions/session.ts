@@ -186,12 +186,15 @@ export class Session implements SessionFace {
    * Send (queue/steer passed through 1:1); failures land in the snapshot's promptError.
    * @param content - text plus browser-owned temporary image uploads.
    * @param mode - queue appends after the current turn; steer interrupts it.
+   * @param signal - optional cancellation for admission.
+   * @param clientSubmissionId - browser visual correlation id carried into the durable user source.
    * @returns the prompt result (also mirrored into promptError on failure).
    */
   async prompt(
     content: PromptContentPart[],
     mode: 'queue' | 'steer',
     signal?: AbortSignal,
+    clientSubmissionId?: string,
   ): Promise<RpcResult<{ accepted: true }>> {
     this.promptError = null
     this.lastAgentError = null
@@ -210,6 +213,7 @@ export class Session implements SessionFace {
           mode,
           content,
           clientTimeZone: resolvedClientTimeZone(),
+          ...(clientSubmissionId === undefined ? {} : { clientSubmissionId }),
           ...(clientLocation === undefined ? {} : { clientLocation }),
         }, signal)).result
       } else if (this.address.mode === 'one-shot') {
