@@ -1,18 +1,25 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)]
-  [string]$Root
+  [string]$Root,
+  [string]$AssetRoot = ''
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 $rootPath = (Resolve-Path -LiteralPath $Root).Path
+$assetRootPath = if ([string]::IsNullOrWhiteSpace($AssetRoot)) {
+  $rootPath
+}
+else {
+  (Resolve-Path -LiteralPath $AssetRoot).Path
+}
 $launcherPath = Join-Path $rootPath 'scripts\phoenix-desktop-launch.ps1'
 $markdownOpenPath = Join-Path $rootPath 'scripts\phoenix-markdown-open.ps1'
-$iconAssetPath = Join-Path $rootPath 'scripts\phoenix-windows-icon.ico.b64'
+$logoAssetPath = Join-Path $assetRootPath 'apps\web\public\phoenix-emblem.png'
 
-foreach ($required in @($launcherPath, $markdownOpenPath, $iconAssetPath)) {
+foreach ($required in @($launcherPath, $markdownOpenPath, $logoAssetPath)) {
   if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
     throw "PHOENIX shell integration file is missing: $required"
   }
@@ -37,37 +44,58 @@ if ([string]::IsNullOrWhiteSpace($localAppData)) {
 $phoenixState = Join-Path $localAppData 'Phoenix'
 New-Item -ItemType Directory -Force -Path $phoenixState | Out-Null
 
-# Use the current Phoenix app emblem (derived from apps/web/public/favicon.svg) as a real ICO.
-# The hash in the file name also invalidates Explorer's stale icon cache.
-$iconBase64 = (Get-Content -LiteralPath $iconAssetPath -Raw).Trim()
-try {
-  $iconBytes = [Convert]::FromBase64String($iconBase64)
-}
-catch {
-  throw 'PHOENIX shortcut icon asset is not valid base64.'
-}
-if (
-  $iconBytes.Length -lt 64 -or
-  $iconBytes[0] -ne 0 -or
-  $iconBytes[1] -ne 0 -or
-  $iconBytes[2] -ne 1 -or
-  $iconBytes[3] -ne 0
-) {
-  throw 'PHOENIX shortcut icon asset is not a valid ICO file.'
-}
+# Render the exact Phoenix product emblem used by the web UI into a real ICO.
+# Hashing the source plus a revisioned path forces Explorer to abandon stale icon cache entries.
+$logoBytes = [IO.File]::ReadAllBytes($logoAssetPath)
 $sha256 = [Security.Cryptography.SHA256]::Create()
 try {
-  $iconHash = ([BitConverter]::ToString($sha256.ComputeHash($iconBytes))).Replace('-', '').Substring(0, 12).ToLowerInvariant()
+  $iconHash = ([BitConverter]::ToString($sha256.ComputeHash($logoBytes))).Replace('-', '').Substring(0, 12).ToLowerInvariant()
 }
 finally {
   $sha256.Dispose()
 }
-$iconRevision = 'v3'
+$iconRevision = 'v4'
 $iconPath = Join-Path $phoenixState "phoenix-browser-$iconRevision-$iconHash.ico"
 if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
-  [IO.File]::WriteAllBytes($iconPath, $iconBytes)
+  $sourceImage = $null
+  $bitmap = $null
+  $graphics = $null
+  $icon = $null
+  $stream = $null
+  try {
+    Add-Type -AssemblyName System.Drawing
+    $sourceImage = [Drawing.Image]::FromFile($logoAssetPath)
+    $bitmap = New-Object -TypeName Drawing.Bitmap -ArgumentList 256, 256
+    $graphics = [Drawing.Graphics]::FromImage($bitmap)
+    $graphics.Clear([Drawing.Color]::Transparent)
+    $graphics.CompositingQuality = [Drawing.Drawing2D.CompositingQuality]::HighQuality
+    $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::HighQuality
+
+    $scale = [Math]::Min(256.0 / [double]$sourceImage.Width, 256.0 / [double]$sourceImage.Height)
+    $renderWidth = [Math]::Max(1, [int][Math]::Round($sourceImage.Width * $scale))
+    $renderHeight = [Math]::Max(1, [int][Math]::Round($sourceImage.Height * $scale))
+    $x = [int][Math]::Floor((256 - $renderWidth) / 2.0)
+    $y = [int][Math]::Floor((256 - $renderHeight) / 2.0)
+    $graphics.DrawImage($sourceImage, $x, $y, $renderWidth, $renderHeight)
+
+    $icon = [Drawing.Icon]::FromHandle($bitmap.GetHicon())
+    $stream = [IO.File]::Open($iconPath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    $icon.Save($stream)
+  }
+  catch {
+    Remove-Item -LiteralPath $iconPath -Force -ErrorAction SilentlyContinue
+    throw "PHOENIX could not render its modern shortcut emblem: $($_.Exception.Message)"
+  }
+  finally {
+    if ($null -ne $stream) { $stream.Dispose() }
+    if ($null -ne $icon) { $icon.Dispose() }
+    if ($null -ne $graphics) { $graphics.Dispose() }
+    if ($null -ne $bitmap) { $bitmap.Dispose() }
+    if ($null -ne $sourceImage) { $sourceImage.Dispose() }
+  }
 }
-# A versioned icon path forces Explorer to stop reusing the old PowerShell/EXE icon cache.
 Get-ChildItem -LiteralPath $phoenixState -Filter 'phoenix-browser-*.ico' -File -ErrorAction SilentlyContinue |
   Where-Object { $_.FullName -ne $iconPath } |
   Remove-Item -Force -ErrorAction SilentlyContinue
