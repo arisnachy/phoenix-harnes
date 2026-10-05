@@ -7,7 +7,7 @@ import {
 import type { ConversationSettings } from '../src/submission-settings.ts'
 
 describe('ComposerSubmissionPolicy', () => {
-  it('defaults to Steer while running; Queue remains the explicit alternate preference', () => {
+  it('always steers plain Enter while running and reserves the accelerated chord for Queue', () => {
     const policy = new ComposerSubmissionPolicy()
     expect(policy.busyEnter.getSnapshot()).toBe(DEFAULT_BUSY_ENTER_BEHAVIOR)
     expect(policy.resolve(false, 'enter', true)).toBe('queue')
@@ -21,8 +21,8 @@ describe('ComposerSubmissionPolicy', () => {
     policy.busyEnter.subscribe(changed)
     policy.setBusyEnter('queue')
     expect(changed).toHaveBeenCalledTimes(1)
-    expect(policy.resolve(true, 'enter', true)).toBe('queue')
-    expect(policy.resolve(true, 'accelerated', true)).toBe('steer')
+    expect(policy.resolve(true, 'enter', true)).toBe('steer')
+    expect(policy.resolve(true, 'accelerated', true)).toBe('queue')
     expect(policy.resolve(false, 'enter', true)).toBe('queue')
     expect(policy.resolve(false, 'accelerated', true)).toBe('queue')
   })

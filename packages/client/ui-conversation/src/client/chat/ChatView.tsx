@@ -15,7 +15,6 @@ import type {
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
-import { PendingSteeringBubble } from './MessageItem.tsx'
 import { turnProgress } from './turn-progress.ts'
 import { ToolActivityFlow } from './ToolActivityFlow.tsx'
 import css from './ChatView.module.css'
@@ -239,11 +238,28 @@ export function ChatView({
       return expected.has(text)
     })
   }, [pendingSteering, pendingSubmit])
+  const optimisticAnchorSeq = useMemo(() => {
+    if (pendingSubmit === undefined) return null
+    let anchorSeq: number | null = null
+    for (const node of chatNodes) {
+      const data = node.data as { time?: unknown }
+      if (typeof data.time === 'number' && data.time <= pendingSubmit.startedAt) anchorSeq = node.anchorSeq
+    }
+    return anchorSeq
+  }, [chatNodes, pendingSubmit])
   const optimisticSubmit = useMemo(() => (
     pendingSubmit !== undefined && !pendingSubmitDurable && !pendingSubmitInSteering && pendingSubmit.text !== ''
-      ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
+      ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt, anchorSeq: optimisticAnchorSeq }
       : undefined
-  ), [pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
+  ), [optimisticAnchorSeq, pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
+  const pendingSteeringFlow = useMemo(() => {
+    const fallbackAnchor = chatNodes.at(-1)?.anchorSeq ?? null
+    return pendingSteering.map(item => ({
+      key: 'pending-steering:' + String(item.messageId),
+      content: item.content,
+      anchorSeq: item.anchorSeq ?? fallbackAnchor,
+    }))
+  }, [chatNodes, pendingSteering])
   // A stale pendingSubmit must never resurrect "preparing" after the durable
   // transcript (or steering mirror) has already taken ownership of the send.
   // This is a defensive handoff in addition to the input facade retiring the
@@ -522,6 +538,7 @@ export function ChatView({
           <ToolActivityFlow
             nodes={chatNodes}
             optimisticSubmit={optimisticSubmit}
+            pendingSteering={pendingSteeringFlow}
             turnStatus={visibleTurnStatus}
             useSession={useSession}
             selectedCallId={selectedCallId}
@@ -548,14 +565,6 @@ export function ChatView({
               </span>
             </div>
           )}
-          {pendingSteering.map(item => (
-            <PendingSteeringBubble
-              key={item.id}
-              content={item.content}
-              renderMessageImages={renderMessageImages}
-              t={t}
-            />
-          ))}
         </div>
         {!atBottom && (
           <div className={css.toBottomSlot}>

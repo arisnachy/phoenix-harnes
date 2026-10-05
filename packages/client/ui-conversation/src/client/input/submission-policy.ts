@@ -1,7 +1,8 @@
 /**
- * Composer submission policy. It owns the live busy-Enter
- * preference and resolves keyboard gestures into queue/steer delivery modes;
- * Host and Agent keep the actual delivery-window authority.
+ * Composer submission policy. Human input is priority guidance: while the
+ * addressed agent is running, plain Enter always steers the active turn and
+ * the accelerated chord explicitly queues for later. Host and Agent keep the
+ * actual delivery-window authority.
  */
 import {
   createSnapshotStore, type SettingsScope, type SnapshotStore,
@@ -43,7 +44,7 @@ export class ComposerSubmissionPolicy {
    * @param running - whether the addressed agent currently reports busy.
    * @param gesture - plain Enter or the Cmd/Ctrl-accelerated chord.
    * @param steeringAvailable - whether this session transport supports steering.
-   * @returns Queue outside steer-capable busy state; otherwise the preferred mode or its opposite.
+   * @returns Queue outside steer-capable busy state; while busy, Enter steers and the accelerated chord queues.
    */
   resolve(
     running: boolean,
@@ -51,9 +52,10 @@ export class ComposerSubmissionPolicy {
     steeringAvailable: boolean,
   ): InputSubmitMode {
     if (!running || !steeringAvailable) return 'queue'
-    const preferred = this.busyEnter.getSnapshot()
-    if (gesture === 'enter') return preferred
-    return preferred === 'queue' ? 'steer' : 'queue'
+    // A human message sent while Phoenix is working is an interruption, not a
+    // backlog item. This deliberately ignores legacy persisted busyEnter=queue
+    // values so upgrades cannot strand fresh user guidance behind a long task.
+    return gesture === 'enter' ? 'steer' : 'queue'
   }
 
   /**

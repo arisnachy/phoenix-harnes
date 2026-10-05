@@ -320,6 +320,12 @@ export interface QueuedMessage {
   readonly messageId: MessageId
   /** Agent-resolved placement; only queued rows accept queue mutations. */
   readonly placement: 'queued' | 'steering' | 'context'
+  /**
+   * Durable transcript tail visible when this queue occurrence first appeared.
+   * Pending steering is rendered immediately after this boundary so later
+   * assistant/tool output cannot jump visually above the user's interruption.
+   */
+  readonly anchorSeq?: number | null
   /** Complete content used to render pending steering before it becomes durable. */
   readonly content: readonly ContentBlock[]
   readonly preview: string
