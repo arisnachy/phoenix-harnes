@@ -105,12 +105,19 @@ export class OpenClawConnectorBridge {
     }
   }
 
-  /** Return one exact connector route. */
+  /**
+   * Return one exact connector route.
+   * @param id - Supported OpenClaw connector identity.
+   * @returns Secret-free connector readiness.
+   */
   state(id: OpenClawConnectorId): OpenClawConnectorEntry {
     return id === 'google-workspace' ? this.google() : this.github()
   }
 
-  /** Return all OpenClaw routes currently supported by Settings. */
+  /**
+   * Return all OpenClaw routes currently supported by Settings.
+   * @returns Secret-free readiness for each supported OpenClaw connector.
+   */
   snapshot(): OpenClawConnectorSnapshot {
     return { connectors: [this.google(), this.github()] }
   }
