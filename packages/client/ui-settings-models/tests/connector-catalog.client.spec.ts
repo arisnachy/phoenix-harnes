@@ -51,6 +51,21 @@ describe('connector catalog', () => {
     expect(byId.get('bigquery')?.providerFamily).toBe('bigquery')
   })
 
+  it('exposes Devpost Hackathons as a Host-curated MCP', () => {
+    const devpost = CONNECTOR_CATALOG.find(connector => connector.id === 'devpost')
+    expect(devpost).toMatchObject({
+      name: 'Devpost Hackathons',
+      mode: 'mcp',
+      provenance: 'vendor-official',
+      providerFamily: 'devpost',
+      curatedMcp: true,
+    })
+    expect(devpost?.aliases).toContain('devpost-hackathons')
+    expect(devpost?.capabilities).toEqual(expect.arrayContaining([
+      'hackathons', 'registration', 'rules', 'prizes', 'projects', 'submissions',
+    ]))
+  })
+
   it('keeps retired Jev out of the connector catalog', () => {
     expect(CONNECTOR_CATALOG.some(connector => connector.id === 'jev')).toBe(false)
     expect(CONNECTOR_CATALOG.some(connector => connector.providerFamily === 'jev')).toBe(false)

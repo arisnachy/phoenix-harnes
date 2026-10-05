@@ -123,6 +123,11 @@ export interface McpRegistryClient {
     status: 'installed' | 'already-installed'
     connector: ManagedMcpConnectorView
   }>
+  /** Install a Host-pinned curated MCP by connector id; no endpoint crosses the browser boundary. */
+  installCurated?(request: { connectorId: 'devpost' }): Promise<{
+    status: 'installed' | 'already-installed'
+    connector: ManagedMcpConnectorView
+  }>
   /** Remove one exact PHOENIX-managed MCP. */
   remove?(request: { entryId: string }): Promise<{ removed: boolean; liveUnloaded: boolean }>
   /** Repair one managed MCP strictly from its persisted trusted source. */
@@ -478,7 +483,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
 }
 
 function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, onAuthorize, onConfigure,
-  onFindOfficial, onFindRegistry, onRepair, onRemove, pending, repairing, removing }: {
+  onInstallCurated, onFindOfficial, onFindRegistry, onRepair, onRemove, pending, installingCurated, repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
@@ -489,11 +494,13 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
   onConfigure?: (() => void) | undefined
+  onInstallCurated?: (() => void) | undefined
   onFindOfficial?: (() => void) | undefined
   onFindRegistry?: (() => void) | undefined
   onRepair?: ((connector: ManagedMcpConnectorView) => void) | undefined
   onRemove?: ((connector: ManagedMcpConnectorView) => void) | undefined
   pending: boolean
+  installingCurated: boolean
   repairing: boolean
   removing: boolean
 }): ReactNode {
@@ -597,6 +604,16 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               onClick={() => { onRemove(managed) }}
             >
               {removing ? t('uninstalling') : t('uninstall')}
+            </button>
+          ) : null}
+          {managed === undefined && mcpRuntime === undefined && oauthAccount === undefined && openClaw?.connected !== true && definition.curatedMcp === true && onInstallCurated !== undefined ? (
+            <button
+              className={connectorStyles['connectorPrimaryButton']}
+              type="button"
+              disabled={pending || installingCurated}
+              onClick={onInstallCurated}
+            >
+              {installingCurated ? t('installing') : t('install')}
             </button>
           ) : null}
           {managed === undefined && (oauthAccount === undefined || openClawRuntimeMissing) && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
@@ -834,6 +851,7 @@ export function ConnectorsSettingsSection({ api,
   const [jevBusy, setJevBusy] = useState(false)
   const [jevFailure, setJevFailure] = useState<string | undefined>()
   const [installingRegistryName, setInstallingRegistryName] = useState<string | undefined>()
+  const [installingCuratedId, setInstallingCuratedId] = useState<string | undefined>()
   const [repairingEntryId, setRepairingEntryId] = useState<string | undefined>()
   const [removingEntryId, setRemovingEntryId] = useState<string | undefined>()
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
@@ -1103,6 +1121,21 @@ export function ConnectorsSettingsSection({ api,
     ).finally(() => { setRemovingEntryId(undefined) })
   }
 
+  const installCuratedConnector = (definition: ConnectorDefinition): void => {
+    const installCurated = mcpRegistry?.installCurated
+    if (installCurated === undefined || definition.id !== 'devpost' || definition.curatedMcp !== true
+      || installingCuratedId !== undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
+    setCatalogFailure(undefined)
+    setInstallingCuratedId(definition.id)
+    void installCurated({ connectorId: 'devpost' }).then(
+      () => {
+        setRefresh(current => current + 1)
+        onAuthorized()
+      },
+      (error: unknown) => { setCatalogFailure(String(error)) },
+    ).finally(() => { setInstallingCuratedId(undefined) })
+  }
+
   const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
     if (mcpRegistry === undefined || installingRegistryName !== undefined || isRetiredJevCandidate(candidate)) return
     const definition = catalogDefinitionForText(`${candidate.name} ${candidate.title}`)
@@ -1314,9 +1347,13 @@ export function ConnectorsSettingsSection({ api,
                 connected={row.connected}
                 t={connectorT}
                 pending={attempt?.status === 'pending' || jevBusy}
+                installingCurated={installingCuratedId === row.definition.id}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                 removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
                 onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
+                onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
+                  ? undefined
+                  : () => { installCuratedConnector(row.definition) }}
                 onFindOfficial={mcpRegistry === undefined || row.definition.registryName === undefined
                   ? undefined
                   : () => { findOfficialConnector(row.definition) }}

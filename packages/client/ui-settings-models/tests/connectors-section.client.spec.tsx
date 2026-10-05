@@ -231,12 +231,46 @@ describe('connectors settings section', () => {
     expect(screen.getByRole('heading', { name: 'MCP connectors' })).toBeTruthy()
     expect(screen.getByText('Phoenix knows which MCPs you already have')).toBeTruthy()
     expect(screen.queryByText('Capability presets')).toBeNull()
-    expect(screen.getByText('Devpost')).toBeTruthy()
+    expect(screen.getByText('Devpost Hackathons')).toBeTruthy()
     expect(screen.getByText('Microsoft Teams')).toBeTruthy()
     expect(screen.getByText('Firebase')).toBeTruthy()
     expect(screen.getAllByText('Official adapter not available in this build').length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Find official / install' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Find / install' }).length).toBeGreaterThan(0)
+  })
+
+  it('installs the Host-curated Devpost Hackathons MCP without registry discovery', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'devpost-entry',
+        serverName: 'devpost',
+        url: 'https://devpost.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'devpost' },
+      },
+    }))
+    const search = vi.fn()
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      installCurated,
+      search,
+    }
+
+    renderHub(api, { mcpRegistry })
+    const devpostCard = document.querySelector('[data-connector-id="devpost"]')
+    expect(devpostCard?.textContent).toContain('Devpost Hackathons')
+    const installButton = Array.from(devpostCard?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Install')
+    expect(installButton).toBeTruthy()
+    fireEvent.click(installButton!)
+
+    await waitFor(() => { expect(installCurated).toHaveBeenCalledWith({ connectorId: 'devpost' }) })
+    expect(search).not.toHaveBeenCalled()
   })
 
   it('shows an explicit official lookup even when the search box is empty', async () => {

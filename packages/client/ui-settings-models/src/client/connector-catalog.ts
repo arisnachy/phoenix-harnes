@@ -18,6 +18,8 @@ export interface ConnectorDefinition {
   readonly providerFamily?: string
   /** Exact authorization entry key when substring provider matching would be ambiguous. */
   readonly authorizationKey?: string
+  /** Host-pinned MCP install route; browser input never carries the endpoint. */
+  readonly curatedMcp?: true
   /** Existing OpenClaw skill-backed route Phoenix can verify and reuse. */
   readonly openClawConnectorId?: 'google-workspace' | 'github'
   /** Exact Official MCP Registry identity accepted for curated install, when one is verified. */
@@ -94,7 +96,7 @@ const PUBLIC_CONNECTOR_CATALOG = [
   { id: 'heygen', name: 'HeyGen', category: 'Video AI', description: 'Create AI videos, avatars, voices, translations, and media.', mode: 'api-key', providerFamily: 'heygen', logoUrl: icon('heygen'), capabilities: ['video', 'voice', 'avatars'] },
   { id: 'magnific', name: 'Magnific', category: 'Multimedia', description: 'Generate, enhance, upscale, relight, and transform visual media.', mode: 'api-key', providerFamily: 'magnific', capabilities: ['image', 'video', 'upscale'] },
   { id: 'coursera', name: 'Coursera', category: 'Education', description: 'Find learning content and relevant lecture videos.', mode: 'oauth', providerFamily: 'coursera', logoUrl: icon('coursera'), capabilities: ['learning', 'courses'] },
-  { id: 'devpost', name: 'Devpost', category: 'Development', description: 'Find hackathons and manage projects, builds, and submissions.', mode: 'oauth', providerFamily: 'devpost', logoUrl: icon('devpost'), capabilities: ['hackathons', 'submissions', 'projects'] },
+  { id: 'devpost', aliases: ['devpost-hackathons'], name: 'Devpost Hackathons', category: 'Development', description: 'Official Devpost MCP for discovering hackathons, reviewing dates, rules and prizes, registering, managing projects, and submitting entries.', mode: 'mcp', providerFamily: 'devpost', curatedMcp: true, logoUrl: icon('devpost'), capabilities: ['hackathons', 'registration', 'rules', 'prizes', 'projects', 'submissions'] },
   { id: 'apollo', aliases: ['apollo-io'], name: 'Apollo.io', category: 'Sales', description: 'Search, enrich, and qualify accounts and contacts for outbound work.', mode: 'api-key', providerFamily: 'apollo', capabilities: ['sales', 'prospecting', 'enrichment'] },
   { id: 'salesforce', name: 'Salesforce', category: 'CRM', description: 'Work with CRM accounts, contacts, opportunities, and workflows.', mode: 'oauth', providerFamily: 'salesforce', logoUrl: icon('salesforce'), capabilities: ['crm', 'sales'] },
   { id: 'hubspot', name: 'HubSpot', category: 'CRM', description: 'Work with CRM records, marketing, sales, and service workflows.', mode: 'oauth', providerFamily: 'hubspot', logoUrl: icon('hubspot'), capabilities: ['crm', 'marketing', 'sales'] },
