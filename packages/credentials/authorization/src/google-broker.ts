@@ -19,11 +19,20 @@ import { createServer, type Server } from 'node:http'
 import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialKey, credentialRef, type CredentialKey } from '@phoenix-ai/dsh-credentials'
 import { AuthorizationError, type AuthorizationSession, type AuthorizationTelemetry } from './index.ts'
+import {
+  authorizeGoogleWithOpenClaw,
+  disconnectGoogleWithOpenClaw,
+  findOpenClawGoogleAccount,
+  registerOpenClawGithubAuthorization,
+  requestGoogleWithOpenClaw,
+} from './openclaw-workspace.ts'
 
 /** Secret-free durable marker for the process-local Google account. */
 export const GOOGLE_ACCOUNT_KEY: CredentialKey = credentialKey('authorization-google', 'account')
 /** Durable public OAuth application id used when deployment env does not provide one. */
 export const GOOGLE_CLIENT_ID_REF = credentialRef('PHOENIX_GOOGLE_OAUTH_CLIENT_ID')
+/** Secret half of a Google Desktop OAuth client, stored only in the credential provider. */
+export const GOOGLE_CLIENT_SECRET_REF = credentialRef('PHOENIX_GOOGLE_OAUTH_CLIENT_SECRET')
 
 const GOOGLE_AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 const GOOGLE_TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
@@ -36,12 +45,15 @@ const EXPIRY_SKEW_MS = 60_000
 export interface Config {
   /** Google Desktop OAuth client id. It identifies the app; it is not a user secret. */
   clientId?: string
+  /** Optional Google Desktop OAuth client secret. Prefer credential storage over source config. */
+  clientSecret?: string
   /** Consent set offered to the human. Installed apps do not support incremental authorization. */
   scopes: readonly string[]
 }
 
 interface ResolvedSpec {
   clientId?: string
+  clientSecret?: string
   scopes: readonly string[]
 }
 
@@ -232,7 +244,12 @@ export function resolveGoogleSpec(config: Config): ResolvedSpec {
     throw new TypeError('authorization-google: scopes must not contain duplicates')
   }
   const clientId = nonEmpty(config.clientId) ? config.clientId.trim() : undefined
-  return clientId === undefined ? { scopes } : { clientId, scopes }
+  const clientSecret = nonEmpty(config.clientSecret) ? config.clientSecret.trim() : undefined
+  return {
+    scopes,
+    ...(clientId === undefined ? {} : { clientId }),
+    ...(clientSecret === undefined ? {} : { clientSecret }),
+  }
 }
 
 function base64url(value: Buffer): string {
@@ -497,6 +514,8 @@ export default class GoogleApiBroker extends Service {
       run: session => this.authorize(session),
     }))
 
+    ctx.effect(() => registerOpenClawGithubAuthorization(ctx), 'authorization-openclaw-github')
+
   }
 
   /**
@@ -505,6 +524,17 @@ export default class GoogleApiBroker extends Service {
    */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
     await this.startupCleanup
+    const preferredOpenClawAccount = await this.openClawMarkerAccount()
+    const openClawAccount = await findOpenClawGoogleAccount(undefined, preferredOpenClawAccount)
+    if (openClawAccount !== undefined) {
+      return {
+        kind: 'account',
+        provider: 'Google Workspace',
+        accountType: 'openclaw-gog',
+        email: openClawAccount,
+        connectors: serviceCatalog().map(connector => ({ ...connector, callable: true })),
+      }
+    }
     const grant = this.grant
     if (grant === undefined) return undefined
     const email = await this.inspectAccountEmail(grant)
@@ -542,6 +572,18 @@ export default class GoogleApiBroker extends Service {
    * @returns the bounded response without credential-bearing headers.
    */
   async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {
+    const preferredOpenClawAccount = await this.openClawMarkerAccount()
+    const openClawAccount = await findOpenClawGoogleAccount(request.signal, preferredOpenClawAccount)
+    if (openClawAccount !== undefined) {
+      const bridged = await requestGoogleWithOpenClaw(openClawAccount, request)
+      if (bridged !== undefined) return bridged
+      if (this.grant === undefined) {
+        throw new AuthorizationError(
+          'This Google Workspace operation is connected through OpenClaw gog but is not mapped to the legacy REST tool. Use the official openclaw-gog skill for this operation.',
+          'GOOGLE_OPENCLAW_UNMAPPED',
+        )
+      }
+    }
     const destination = serviceUrl(request)
     const headers = callerHeaders(request.headers)
     const grant = await this.usableGrant(destination.scope, request.signal)
@@ -563,13 +605,20 @@ export default class GoogleApiBroker extends Service {
    */
   async disconnect(): Promise<{ revoked: boolean }> {
     await this.startupCleanup
+    const openClawAccount = await this.openClawMarkerAccount()
     const grant = this.grant
     this.grant = undefined
     this.refreshInFlight = undefined
     this.accountEmail = undefined
     this.emailLookupInFlight = undefined
-    let revoked = grant === undefined
-    if (grant !== undefined) {
+    let revoked = grant === undefined && openClawAccount === undefined
+    if (openClawAccount !== undefined) {
+      try {
+        revoked = await disconnectGoogleWithOpenClaw(openClawAccount)
+      } catch {
+        revoked = false
+      }
+    } else if (grant !== undefined) {
       const token = grant.refreshToken ?? grant.accessToken
       try {
         revoked = (await internals.fetch(GOOGLE_REVOKE_ENDPOINT, {
@@ -588,7 +637,20 @@ export default class GoogleApiBroker extends Service {
 
   private async authorize(session: AuthorizationSession): Promise<void> {
     await this.startupCleanup
+    const openClawAccount = await authorizeGoogleWithOpenClaw(session)
+    if (openClawAccount !== undefined) {
+      await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({
+        kind: 'grant',
+        payload: { provider: 'openclaw-gog', account: openClawAccount },
+      }))
+      this.grant = undefined
+      this.refreshInFlight = undefined
+      this.accountEmail = openClawAccount
+      this.emailLookupInFlight = undefined
+      return
+    }
     const clientId = await this.resolveClientId(session)
+    let clientSecret = await this.resolveClientSecret()
     const state = base64url(randomBytes(32))
     const pkce = createPkce()
     const receiver = await internals.openLoopback(state, session.signal)
@@ -598,11 +660,12 @@ export default class GoogleApiBroker extends Service {
         url: createAuthorizationUrl({ ...this.spec, clientId }, receiver.redirectUri, state, pkce.challenge),
       })
       const code = await receiver.code
-      const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
+      const exchange = (secret: string | undefined): Promise<Response> => internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: form({
           client_id: clientId,
+          ...(secret === undefined ? {} : { client_secret: secret }),
           code,
           code_verifier: pkce.verifier,
           grant_type: 'authorization_code',
@@ -611,6 +674,14 @@ export default class GoogleApiBroker extends Service {
         signal: session.signal,
         redirect: 'error',
       })
+      let response = await exchange(clientSecret)
+      if (!response.ok && clientSecret === undefined && (response.status === 400 || response.status === 401)) {
+        session.notify({
+          message: 'Google rejected the Desktop OAuth client without its client secret. Enter the secret from the same Google Desktop OAuth credentials file; Phoenix stores it only in Credentials.',
+        })
+        clientSecret = await this.resolveClientSecret(session)
+        response = await exchange(clientSecret)
+      }
       if (!response.ok) {
         throw new AuthorizationError(`Google token exchange failed with HTTP ${String(response.status)}`, 'GOOGLE_TOKEN_EXCHANGE')
       }
@@ -659,11 +730,32 @@ export default class GoogleApiBroker extends Service {
       throw new AuthorizationError('Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED')
     }
     const clientId = await this.resolveClientId()
-    const running = this.refreshGrant(current, clientId, refreshToken, signal).finally(() => {
+    const clientSecret = await this.resolveClientSecret()
+    const running = this.refreshGrant(current, clientId, clientSecret, refreshToken, signal).finally(() => {
       if (this.refreshInFlight === running) this.refreshInFlight = undefined
     })
     this.refreshInFlight = running
     return running.then(checkScope)
+  }
+
+  private async resolveClientSecret(session?: AuthorizationSession): Promise<string | undefined> {
+    if (this.spec.clientSecret !== undefined) return this.spec.clientSecret
+
+    const stored = await this.ctx.credentials.resolve(GOOGLE_CLIENT_SECRET_REF)
+    if (stored !== undefined && nonEmpty(stored.value)) return stored.value.trim()
+    if (session === undefined) return undefined
+
+    const entered = await session.prompt({
+      kind: 'secret',
+      message: 'Google Desktop OAuth client secret',
+      placeholder: 'GOCSPX-…',
+    })
+    if (!nonEmpty(entered)) {
+      throw new AuthorizationError('Google OAuth client secret cannot be empty', 'GOOGLE_CLIENT_INVALID')
+    }
+    const clientSecret = entered.trim()
+    await this.ctx.credentials.set(GOOGLE_CLIENT_SECRET_REF, clientSecret)
+    return clientSecret
   }
 
   private async resolveClientId(session?: AuthorizationSession): Promise<string> {
@@ -695,13 +787,19 @@ export default class GoogleApiBroker extends Service {
   private async refreshGrant(
     current: GoogleGrant,
     clientId: string,
+    clientSecret: string | undefined,
     refreshToken: string,
     signal?: AbortSignal,
   ): Promise<GoogleGrant> {
     const response = await internals.fetch(GOOGLE_TOKEN_ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: form({ client_id: clientId, refresh_token: refreshToken, grant_type: 'refresh_token' }),
+      body: form({
+        client_id: clientId,
+        ...(clientSecret === undefined ? {} : { client_secret: clientSecret }),
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
       ...(signal === undefined ? {} : { signal }),
       redirect: 'error',
     })
@@ -727,10 +825,24 @@ export default class GoogleApiBroker extends Service {
     return next
   }
 
-  /** Remove any Google credential record that predates this process-local broker instance. */
+  /** Read the durable, secret-free OpenClaw account adoption marker. */
+  private async openClawMarkerAccount(): Promise<string | undefined> {
+    const stored = await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
+    if (stored?.kind !== 'grant' || typeof stored.payload !== 'object' || stored.payload === null) return undefined
+    const payload = stored.payload as { provider?: unknown; account?: unknown }
+    return payload.provider === 'openclaw-gog'
+      && typeof payload.account === 'string'
+      && payload.account.trim().length > 0
+      ? payload.account.trim()
+      : undefined
+  }
+
+  /** Remove only stale process-local OAuth markers; durable OpenClaw adoption survives restart. */
   private async purgeStaleRecord(): Promise<void> {
     const info = await this.ctx.credentials.describeRecord(GOOGLE_ACCOUNT_KEY)
-    if (info.configured) await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
+    if (!info.configured) return
+    if (await this.openClawMarkerAccount() !== undefined) return
+    await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
   }
 }
 

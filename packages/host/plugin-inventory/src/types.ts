@@ -261,3 +261,23 @@ export interface ChatGptWebSnapshot {
   readonly baseUrl: string
   readonly detail: string
 }
+
+
+/** OpenClaw-backed connector identities PHOENIX can verify without exposing credentials. */
+export type OpenClawConnectorId = 'google-workspace' | 'github'
+
+/** Secret-free readiness of one OpenClaw connector route. */
+export interface OpenClawConnectorEntry {
+  readonly id: OpenClawConnectorId
+  readonly skillAlias: 'openclaw-gog' | 'openclaw-github'
+  readonly skillInstalled: boolean
+  readonly runtimeAvailable: boolean
+  readonly connected: boolean
+  readonly account?: string
+  readonly phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill'
+}
+
+/** Current OpenClaw connector readiness projected to Settings. */
+export interface OpenClawConnectorSnapshot {
+  readonly connectors: readonly OpenClawConnectorEntry[]
+}
