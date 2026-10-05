@@ -45,7 +45,10 @@ describe('connector catalog', () => {
     const github = byId.get('github')
     expect(github?.openClawConnectorId).toBe('github')
     expect(github?.mode).toBe('mcp')
-    expect(github?.providerFamily).toBeUndefined()
+    expect(github?.authorizationKey).toBe('authorization-openclaw/github')
+    expect(google?.authorizationKey).toBe('authorization-google/account')
+    expect(byId.get('firebase')?.providerFamily).toBe('firebase')
+    expect(byId.get('bigquery')?.providerFamily).toBe('bigquery')
   })
 
   it('keeps retired Jev out of the connector catalog', () => {
