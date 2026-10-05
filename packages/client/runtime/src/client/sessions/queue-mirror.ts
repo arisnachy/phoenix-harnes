@@ -20,6 +20,12 @@ function textOf(content: readonly ContentBlock[]): string | null {
 
 type QueueItems = Extract<MuxFrame, { type: 'session/queue' }>['items']
 
+function clientSubmissionIdOf(source: unknown): string | undefined {
+  if (typeof source !== 'object' || source === null) return undefined
+  const value = (source as { clientSubmissionId?: unknown }).clientSubmissionId
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
 /** Authoritative transient queue projection and durable steering handoff. */
 export class SessionQueueMirror {
   private current: readonly QueuedMessage[] = []
@@ -50,6 +56,9 @@ export class SessionQueueMirror {
     this.current = items.map(item => ({
       id: item.id,
       messageId: item.message.id,
+      ...clientSubmissionIdOf(item.message.source) === undefined
+        ? {}
+        : { clientSubmissionId: clientSubmissionIdOf(item.message.source) },
       placement: item.placement,
       content: item.message.content,
       preview: previewOf(item.message.content),
