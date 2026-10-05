@@ -51,6 +51,7 @@ import { createLearnedSkillTool } from './learned-skill.ts'
 import { installConnectorEventBridge } from './connector-event-bridge.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
+import { createPhoenixCanvasTool } from './canvas-tool.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
@@ -128,6 +129,7 @@ export { installHardnessMissionRuntime, createHardnessAcquisition, createHardnes
 export type { HardnessMissionRpcPayload, HardnessMissionRunner, HardnessMissionRunnerInput, HardnessMissionRuntimeDependencies } from './mission-runtime.ts'
 export { createHardnessTool } from './hardness-tool.ts'
 export { createPhoenixVisualizerTool } from './visualize-tool.ts'
+export { createPhoenixCanvasTool, PHOENIX_CANVAS_MIME } from './canvas-tool.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 export { installOrdinaryCompletionJudgeBridge, reviewOrdinaryCompletion } from './ordinary-completion-judge.ts'
 export type { OrdinaryCompletionJudgeDecision } from './ordinary-completion-judge.ts'
@@ -361,7 +363,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
-      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'phoenix_visualize'] }))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'phoenix_visualize', 'phoenix_canvas'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory/discovery
@@ -396,6 +398,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       }
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
+      disposers.push(ctx.tools.register(createPhoenixCanvasTool()))
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
       disposers.push(ctx.tools.register(createRealitySnapshotTool(reality.engine, ctx)))
       const resolveMailbox = () => (ctx.get as unknown as (name: string) => unknown)('assistantMail') as AssistantMailControl | undefined
