@@ -1068,10 +1068,10 @@ export function ConnectorsSettingsSection({ api,
         setRegistrySnapshot({ ...snapshot, candidates: exact })
         if (exact.length === 0) setCatalogFailure(connectorT('officialConnectorMissing'))
       },
-      (error: unknown) => {
+      () => {
         setRegistrySnapshot(undefined)
         setRegistryFailure(true)
-        setCatalogFailure(String(error))
+        setCatalogFailure(connectorT('registryUnavailable'))
       },
     ).finally(() => { setRegistryBusy(false) })
   }
