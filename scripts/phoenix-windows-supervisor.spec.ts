@@ -346,7 +346,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('runs runtime garbage collection at startup and after safe runtime handoff paths', () => {
-    expect(source).toContain('restoreActiveRuntime()\ncleanupObsoleteRuntimes()')
+    expect(source).toContain('restoreActiveRuntime()\nrepairDesktopShortcut()\ncleanupObsoleteRuntimes()')
     expect(source).toContain("if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()")
     expect(source).toContain('clearActiveRuntime()\n    cleanupObsoleteRuntimes()')
   })
