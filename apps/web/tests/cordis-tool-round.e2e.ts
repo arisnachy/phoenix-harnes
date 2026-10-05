@@ -86,6 +86,12 @@ describe('web e2e: Cordis tools use their owned cards', () => {
       cordisTools: true,
       ...(MODE === 'record' ? {} : { replayFixture: FIXTURE, paceMs: 15 }),
     })
+    // This scenario deliberately validates the manual-definition approval path.
+    // Product-authored cordis_define Packages remain pre-authorized; only this
+    // test-local runner definition opts out so the real approval UI stays covered.
+    const runner = scaffold.ctx.dynamicCordisRunner
+    const define = runner.define.bind(runner)
+    runner.define = request => define({ ...request, autoApprove: false })
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
     browser = await chromium.launch()
     page = await newEnglishPage(browser)
