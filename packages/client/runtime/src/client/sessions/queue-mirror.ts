@@ -53,17 +53,18 @@ export class SessionQueueMirror {
    * @param items - complete host queue snapshot.
    */
   replace(items: QueueItems): void {
-    this.current = items.map(item => ({
-      id: item.id,
-      messageId: item.message.id,
-      ...clientSubmissionIdOf(item.message.source) === undefined
-        ? {}
-        : { clientSubmissionId: clientSubmissionIdOf(item.message.source) },
-      placement: item.placement,
-      content: item.message.content,
-      preview: previewOf(item.message.content),
-      text: textOf(item.message.content),
-    }))
+    this.current = items.map((item): QueuedMessage => {
+      const clientSubmissionId = clientSubmissionIdOf(item.message.source)
+      return {
+        id: item.id,
+        messageId: item.message.id,
+        ...(clientSubmissionId === undefined ? {} : { clientSubmissionId }),
+        placement: item.placement,
+        content: item.message.content,
+        preview: previewOf(item.message.content),
+        text: textOf(item.message.content),
+      }
+    })
   }
 
   /**
