@@ -1716,6 +1716,10 @@ describe('command launcher chrome and control seats', () => {
     try {
       const { view, sink } = bench({ draft: 'Hola' })
       fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      // Voice now probes native Codex Realtime first. This test has no Codex
+      // route resolver, so let that classified failure settle before exercising
+      // the browser-recognition fallback.
+      await act(async () => { await Promise.resolve() })
       await act(async () => {
         FakeRecognition.instance?.onstart?.()
         FakeRecognition.instance?.onresult?.({
