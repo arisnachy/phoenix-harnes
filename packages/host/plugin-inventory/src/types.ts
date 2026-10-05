@@ -117,6 +117,11 @@ export interface McpRegistryInstallRequest {
   readonly version?: string
 }
 
+/** Exact curated connector id accepted by the Host-owned pinned installer. */
+export interface CuratedMcpInstallRequest {
+  readonly connectorId: 'devpost'
+}
+
 /** Result of installing a safe registry-listed Streamable HTTP MCP. */
 export interface McpRegistryInstallReceipt {
   readonly status: 'installed' | 'already-installed'
