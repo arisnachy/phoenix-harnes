@@ -479,7 +479,7 @@ export class Session implements SessionFace {
         return
       }
       case 'session/queue': {
-        this.queueMirror.replace(frame.items)
+        this.queueMirror.replace(frame.items, this.windowTailSeq())
         this.notifier.markDirty()
         return
       }
