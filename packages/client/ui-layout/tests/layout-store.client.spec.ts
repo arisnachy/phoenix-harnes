@@ -19,8 +19,10 @@ const INITIAL = {
   narrowExpanded: false,
   workspaceSubagent: false,
   workspaceCordis: false,
+  workspaceCordisSide: null,
   workspaceRestoreSidebar: null,
   workspaceRestoreDetails: null,
+  workspaceRestoreNarrowExpanded: null,
 } as const
 
 beforeEach(() => { localStorage.clear() })
@@ -116,7 +118,7 @@ describe('createLayoutStore', () => {
     expect(store.getSnapshot()).toMatchObject({ sidebar: 400, details: 500, workspaceSubagent: false })
   })
 
-  it('Cordis snapshots the shell, minimizes navigation, closes ordinary details, and restores exactly on close', () => {
+  it('right Cordis borrows only the details side and restores it exactly', () => {
     const { store, actions } = createLayoutStore().create()
     actions.setSidebar(400)
     actions.openDetails()
@@ -125,38 +127,88 @@ describe('createLayoutStore', () => {
 
     actions.setWorkspaceOccupant('cordis', true)
     expect(store.getSnapshot()).toMatchObject({
-      sidebar: 0,
+      sidebar: 400,
       details: 0,
       workspaceSubagent: true,
       workspaceCordis: true,
-      workspaceRestoreSidebar: 400,
+      workspaceCordisSide: 'right',
+      workspaceRestoreSidebar: null,
       workspaceRestoreDetails: 500,
     })
 
+    actions.toggleSidebar()
+    expect(store.getSnapshot().sidebar).toBe(0)
+    actions.openDetails()
+    actions.setDetails(320)
+    expect(store.getSnapshot().details).toBe(0)
+
     actions.setWorkspaceOccupant('cordis', false)
     expect(store.getSnapshot()).toMatchObject({
-      sidebar: 400,
+      sidebar: 0,
       details: 500,
       workspaceSubagent: true,
       workspaceCordis: false,
+      workspaceCordisSide: null,
       workspaceRestoreSidebar: null,
       workspaceRestoreDetails: null,
     })
   })
 
-  it('keeps navigation minimized and ordinary details closed while Cordis owns the rail', () => {
+  it('left Cordis hides the whole navigation edge, preserves details, and restores navigation exactly', () => {
     const { store, actions } = createLayoutStore().create()
-    actions.setWorkspaceOccupant('cordis', true)
-
-    actions.toggleSidebar()
+    actions.setSidebar(400)
     actions.openDetails()
-    actions.closeDetails()
+    actions.setDetails(500)
+    actions.setNarrow(true)
+    actions.toggleSidebar()
+    expect(store.getSnapshot().narrowExpanded).toBe(true)
 
+    actions.setWorkspaceOccupant('cordis', true, 'left')
     expect(store.getSnapshot()).toMatchObject({
       sidebar: 0,
-      details: 0,
+      details: 500,
+      narrowExpanded: false,
       workspaceCordis: true,
+      workspaceCordisSide: 'left',
+      workspaceRestoreSidebar: 400,
+      workspaceRestoreDetails: null,
+      workspaceRestoreNarrowExpanded: true,
     })
+
+    actions.setDetails(450)
+    actions.toggleSidebar()
+    expect(store.getSnapshot()).toMatchObject({ sidebar: 0, details: 450 })
+
+    actions.setWorkspaceOccupant('cordis', false)
+    expect(store.getSnapshot()).toMatchObject({
+      sidebar: 400,
+      details: 450,
+      narrowExpanded: true,
+      workspaceCordis: false,
+      workspaceCordisSide: null,
+      workspaceRestoreSidebar: null,
+      workspaceRestoreDetails: null,
+      workspaceRestoreNarrowExpanded: null,
+    })
+  })
+
+  it('moves an active Cordis lease between sides without losing either borrowed edge', () => {
+    const { store, actions } = createLayoutStore().create()
+    actions.setSidebar(400)
+    actions.openDetails()
+    actions.setDetails(500)
+
+    actions.setWorkspaceOccupant('cordis', true, 'right')
+    expect(store.getSnapshot()).toMatchObject({ sidebar: 400, details: 0, workspaceCordisSide: 'right' })
+
+    actions.setWorkspaceOccupant('cordis', true, 'left')
+    expect(store.getSnapshot()).toMatchObject({ sidebar: 0, details: 500, workspaceCordisSide: 'left' })
+
+    actions.setWorkspaceOccupant('cordis', true, 'right')
+    expect(store.getSnapshot()).toMatchObject({ sidebar: 400, details: 0, workspaceCordisSide: 'right' })
+
+    actions.setWorkspaceOccupant('cordis', false)
+    expect(store.getSnapshot()).toMatchObject({ sidebar: 400, details: 500, workspaceCordisSide: null })
   })
 
   it('does not persist panel geometry or workspace leases', () => {
