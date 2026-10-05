@@ -1,7 +1,9 @@
 /**
- * Composer submission policy. It owns the live busy-Enter
- * preference and resolves keyboard gestures into queue/steer delivery modes;
- * Host and Agent keep the actual delivery-window authority.
+ * Composer submission policy. Human Enter is the interactive lane: while an
+ * ordinary session is running it always steers the live Agent. The accelerated
+ * chord is the explicit queue-for-later lane. A legacy busyEnter preference is
+ * still read/written for profile compatibility, but no longer delays plain
+ * user messages behind active work.
  */
 import {
   createSnapshotStore, type SettingsScope, type SnapshotStore,
@@ -15,9 +17,8 @@ import type { ConversationSettings } from '../../submission-settings.ts'
 export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
 
 /**
- * Busy-Enter policy used by both the composer inject face and its Settings row.
- * Direct `steer` is intentionally best-effort: AgentLoop turns a closed-window
- * submission into the next waking Queue item.
+ * Busy-Enter policy. Direct `steer` is intentionally best-effort: AgentLoop
+ * owns the exact delivery window and safely replays an interrupted boundary.
  */
 export class ComposerSubmissionPolicy {
   /** Reactive preference source for the Settings row. */
@@ -43,7 +44,7 @@ export class ComposerSubmissionPolicy {
    * @param running - whether the addressed agent currently reports busy.
    * @param gesture - plain Enter or the Cmd/Ctrl-accelerated chord.
    * @param steeringAvailable - whether this session transport supports steering.
-   * @returns Queue outside steer-capable busy state; otherwise the preferred mode or its opposite.
+   * @returns Queue outside steer-capable busy state; while busy, plain Enter steers and the accelerated chord queues.
    */
   resolve(
     running: boolean,
@@ -51,9 +52,7 @@ export class ComposerSubmissionPolicy {
     steeringAvailable: boolean,
   ): InputSubmitMode {
     if (!running || !steeringAvailable) return 'queue'
-    const preferred = this.busyEnter.getSnapshot()
-    if (gesture === 'enter') return preferred
-    return preferred === 'queue' ? 'steer' : 'queue'
+    return gesture === 'enter' ? 'steer' : 'queue'
   }
 
   /**
