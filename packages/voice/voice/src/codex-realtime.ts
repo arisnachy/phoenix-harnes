@@ -266,6 +266,7 @@ export class CodexRealtimeBridge {
   /** Report whether Codex currently owns at least one browser realtime call.
    * Important-event speech uses this to avoid mixing a fallback TTS voice into
    * an active native Codex conversation.
+   * @returns Whether at least one native Codex Realtime session is active.
    */
   hasActiveSession(): boolean {
     return this.sessions.size > 0
