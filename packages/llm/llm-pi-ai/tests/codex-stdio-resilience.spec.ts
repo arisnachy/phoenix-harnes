@@ -32,7 +32,7 @@ describe('Codex metadata teardown source contract', () => {
   const source = readFileSync(fileURLToPath(new URL('../src/codex-discovery.ts', import.meta.url)), 'utf8')
 
   it('gives app-server EOF time to flush model cache before force-killing the process tree', () => {
-    expect(source).toContain('CODEX_METADATA_EXIT_GRACE_MS')
+    expect(source).toContain('const CODEX_METADATA_EXIT_GRACE_MS = 3_000')
     expect(source).toContain('await waitForNaturalCodexExit(child, CODEX_METADATA_EXIT_GRACE_MS)')
     expect(source).toContain('failed to write models cache: background task failed')
     expect(source.indexOf('await waitForNaturalCodexExit')).toBeLessThan(source.indexOf("spawnSync('taskkill'"))
