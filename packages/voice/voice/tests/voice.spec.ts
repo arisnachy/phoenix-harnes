@@ -98,6 +98,26 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     expect(system).not.toHaveBeenCalled()
   })
 
+  it('never mixes fallback TTS into an active native Codex realtime call', async () => {
+    const { voice } = await mountVoice()
+    const speak = vi.fn(() => Promise.resolve())
+    voice.registerTextToSpeechProvider(provider('system', speak))
+    const internal = voice as unknown as {
+      codexRealtime?: { hasActiveSession(): boolean; close(): void }
+    }
+    internal.codexRealtime = { hasActiveSession: () => true, close: () => {} }
+
+    expect(voice.announce({
+      kind: 'blocked',
+      displayOutput: 'I need your attention before I can continue.',
+    })).toMatchObject({
+      accepted: false,
+      reason: 'native-realtime',
+    })
+    await Promise.resolve()
+    expect(speak).not.toHaveBeenCalled()
+  })
+
   it('falls back when the preferred provider fails during synthesis', async () => {
     const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural' })
     const natural = vi.fn(() => Promise.reject(new Error('engine warming failed')))
@@ -404,5 +424,29 @@ describe('session-event voice mapping', () => {
     expect(sessionEventToVoiceEvent({ type: 'goal/judge', data: { goalId: 'g1', verdict: 'pass' } })).toMatchObject({ kind: 'mission-completed' })
     expect(sessionEventToVoiceEvent({ type: 'goal/supervisor', data: { goalId: 'g1', status: 'blocked' } })).toMatchObject({ kind: 'blocked' })
     expect(sessionEventToVoiceEvent({ type: 'tool/result', data: { ok: false } })).toBeUndefined()
+  })
+
+  it('keeps machine ids and the literal needs-attention phrase out of spoken alerts', () => {
+    const goalId = '550e8400-e29b-41d4-a716-446655440000'
+    const blocked = sessionEventToVoiceEvent({
+      type: 'goal/judge',
+      data: {
+        goalId,
+        revision: 47,
+        verdict: 'blocked',
+        summary: `Waiting for your decision on ${goalId}, reference 123456789.`,
+      },
+    })
+    expect(blocked).toMatchObject({ kind: 'blocked' })
+    expect(blocked?.displayOutput).not.toContain(goalId)
+    expect(blocked?.displayOutput).not.toContain('123456789')
+    expect(blocked?.displayOutput.toLowerCase()).not.toContain('needs attention')
+
+    const supervisor = sessionEventToVoiceEvent({
+      type: 'goal/supervisor',
+      data: { goalId, revision: 47, status: 'blocked' },
+    })
+    expect(supervisor?.displayOutput).not.toContain(goalId)
+    expect(supervisor?.displayOutput.toLowerCase()).not.toContain('needs attention')
   })
 })
