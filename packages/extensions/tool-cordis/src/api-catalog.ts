@@ -322,6 +322,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'bounded rows.',
       },
       {
+        signature: 'async answerChat(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }>',
+        description: 'Answer an accepted directed human question while retaining the caller\'s mission.',
+        parameters: [{ name: 'actor', description: 'Exact live addressed child.' }, { name: 'request', description: 'Durable human request identity and bounded answer.' }],
+        returns: 'Stable visible answer identity.',
+      },
+      {
         signature: '@Remote(\'chatReact\') async chatReact(request: TeamChatReactRequest): Promise<void>',
         description: 'Set/remove a human reaction.',
         parameters: [{ name: 'request', description: 'message and Unicode emoji.' }],
@@ -2674,7 +2680,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: '@Remote(\'conversationStatus\') async conversationStatus(): Promise<VoiceConversationStatus>',
-        description: 'Report whether the local Client can route conversation speech through neural TTS.',
+        description: 'Report whether the local Client can route conversation speech through the deterministic Kokoro -> platform fallback chain.',
         parameters: [],
         returns: 'Current conversational voice availability and selected provider.',
       },
@@ -2700,7 +2706,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         signature: '@Remote(\'conversationSpeak\') async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt>',
         description: 'Play one stable semantic segment on the Host without blocking the browser thread.',
         parameters: [{ name: 'request', description: 'Message identity, ordering, text, language, and final-segment metadata.' }],
-        returns: 'Admission/playback receipt for the selected neural provider.',
+        returns: 'Admission/playback receipt for the selected conversation TTS provider.',
       },
       {
         signature: '@Remote(\'conversationCancel\') async conversationCancel(request: VoiceConversationCancelRequest): Promise<VoiceConversationCancelReceipt>',
@@ -5473,7 +5479,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SubagentFollowupOptions',
-    declaration: 'export interface SubagentFollowupOptions {\n    readonly delivery?: \'next-turn\' | \'next-step\';\n    readonly source: MessageSource;\n    readonly signal: AbortSignal;\n}',
+    declaration: 'export interface SubagentFollowupOptions {\n    readonly modelSelection?: ModelSelection;\n    readonly delivery?: \'next-turn\' | \'next-step\' | \'next-safe-step\';\n    readonly source: MessageSource;\n    readonly signal: AbortSignal;\n}',
   },
   {
     name: 'SubagentInterruptAuthority',
@@ -5997,7 +6003,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'VoiceAnnouncementReceipt',
-    declaration: 'export interface VoiceAnnouncementReceipt {\n    readonly id: VoiceAnnouncementId;\n    readonly accepted: boolean;\n    readonly reason?: \'disabled\' | \'not-important\' | \'empty\' | \'queue-full\' | \'duplicate\' | \'no-provider\';\n    readonly text?: string;\n}',
+    declaration: 'export interface VoiceAnnouncementReceipt {\n    readonly id: VoiceAnnouncementId;\n    readonly accepted: boolean;\n    readonly reason?: \'disabled\' | \'not-important\' | \'empty\' | \'queue-full\' | \'duplicate\' | \'no-provider\' | \'native-realtime\';\n    readonly text?: string;\n}',
   },
   {
     name: 'VoiceConversationCancelReceipt',

@@ -57,6 +57,8 @@ A finished turn materializes one ordered `turn-tail` Conversation Node. Its engi
 
 Home attention suggestions carry a material revision. Opening or dismissing a suggestion records that revision through the loopback host and removes it only after confirmation. Reload preserves the receipt; a new revision can appear. Mail results share this existing surface and do not change the chat/team layout.
 
+
+Assistant author contributions receive the actual provider/model provenance for their message. Streaming output uses the prepared `request/header` configuration associated with its Step, including retry changes and a retained route when no new header is emitted. A durable `assistant/message` source takes precedence for settled output; later route changes never relabel historical messages.
 ## Model Experience
 
 None, as the conversation UI renders session history and streams in the browser; nothing here reaches a model request.

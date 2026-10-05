@@ -9,6 +9,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import AgentRegistry, {
   agentEvents,
+  latestModelSelectionPreference,
+  persistModelSelectionPreference,
   PHOENIX_CODEX_AUTO_MODEL,
   PHOENIX_CODEX_AUTO_PLANNER_MODEL,
   PHOENIX_CODEX_AUTO_WORKER_MODEL,
@@ -144,6 +146,7 @@ async function harness(logged?: {
       },
   } as unknown as Agent
   ctx.agents.register(agent)
+  Object.defineProperty(ctx, 'agent', { value: agent })
   return { ctx, agent, sessionId: session.id }
 }
 
@@ -173,6 +176,7 @@ describe('Web session model selection', () => {
       ...input.name === undefined ? {} : { name: input.name },
     }))
     const attachments = {
+      fileLimits: { maxFilesPerMessage: 2, maxMessageFileBytes: 4, maxFileBytes: 4 },
       imageLimits: {
         maxImageBytes: 4,
         maxImagesPerMessage: 2,
@@ -201,7 +205,7 @@ describe('Web session model selection', () => {
         { type: 'image' as const, mediaType: 'image/png' as const, data: 'Ag==' },
       ],
     }))
-    expect(result.result.ok).toBe(true)
+    expect(result.result, JSON.stringify(result.result)).toMatchObject({ ok: true })
     expect(validateImage.mock.calls.map(([input]) => [...input.data])).toEqual([[1], [2]])
     expect(saveImage.mock.calls.map(([input]) => [...input.data])).toEqual([[1], [2]])
     expect((followup.mock.calls[0]?.[0] as UserMessage).content).toEqual([
@@ -241,7 +245,7 @@ describe('Web session model selection', () => {
       type: 'image' as const,
       attachment: { attachmentId: 'att-history', mediaType: 'image/png' as const, bytes: 1, width: 1, height: 1 },
     }
-    agent.session.append('user/message', {
+    const imageEvent = agent.session.append('user/message', {
       id: 'image-message', role: 'user', source: { kind: 'user' }, content: [image],
     } as never, { surfaceOp: 'append' })
     expect(expectValue(await api.sessions.selectModel(request({
@@ -252,8 +256,8 @@ describe('Web session model selection', () => {
       id: 'summary', role: 'user', source: { kind: 'plugin', plugin: 'compact' },
       content: [{ type: 'text', text: 'image summarized' }],
     } as never, {
-      surfaceOp: { op: 'replace', start: 0, end: agent.session.events.length - 1 },
-      sourceEventSeqs: agent.session.events.map(event => event.seq),
+      surfaceOp: { op: 'replace', start: imageEvent.seq, end: imageEvent.seq },
+      sourceEventSeqs: [imageEvent.seq],
     })
     ;(agent.inbox.nextTurn as UserMessage[]).push({
       id: 'pending-image', role: 'user', source: { kind: 'user' }, content: [image],
@@ -354,7 +358,7 @@ describe('Web session model selection', () => {
     const codex = catalog.groups.find(group => group.id === 'openai-codex')
     expect(codex?.models[0]).toEqual({
       id: PHOENIX_CODEX_AUTO_MODEL,
-      name: 'Phoenix Auto',
+      name: 'Phoenix Orquesta',
       description: 'GPT-6.1 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
     })
 
@@ -419,7 +423,46 @@ describe('Web session model selection', () => {
     await ctx.fiber.dispose()
   })
 
-  it('dispatches a concrete Codex picker choice exactly instead of handing it to Luna', async () => {
+  it('retains the Orquesta preference after recording the real Sol planning route', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    registerCodex6(ctx)
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }),
+      cwd: '/tmp',
+    })
+    expectValue(await api.sessions.models(request({ sessionId })))
+    await ctx.systemPrompt.assemble()
+    const route = await agentEvents(ctx, agent).waterfall('agent/request', {
+      turn: 1, step: 1, signal: new AbortController().signal,
+    }, () => Promise.resolve({ provider: 'seed', model: 'seed' }))
+    agent.session.append('request/header', { header: { config: route }, reason: 'initial' })
+    expect(expectValue(await api.sessions.models(request({ sessionId }))).current)
+      .toEqual({ provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL })
+    await ctx.fiber.dispose()
+  })
+
+  it('restores the selected planner independently of the last serving worker route', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    registerCodex6(ctx)
+    const defaults = { defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }), cwd: '/tmp' }
+    const api = createApiProxy(ctx, defaults)
+    expectValue(await api.sessions.selectModel(request({ sessionId, provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL, reasoningEffort: 'high' })))
+    agent.session.append('request/header', { header: { config: { provider: 'openai-codex',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL, reasoningEffort: ReasoningEffortId('max') } }, reason: 'initial' })
+    const preference = agent.session.events.findLast(event => (event.type as string) === 'agent/model-selection')
+    expect(preference).toBeDefined()
+    const resumed = await harness({ provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_WORKER_MODEL, reasoningEffort: ReasoningEffortId('max') })
+    if (preference?.type !== 'agent/model-selection') throw new Error('Selected planner was not recorded')
+    resumed.agent.session.append('agent/model-selection', preference.data)
+    const restored = createApiProxy(resumed.ctx, defaults)
+    expect(expectValue(await restored.sessions.models(request({ sessionId: resumed.sessionId }))).current)
+      .toEqual({ provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_PLANNER_MODEL, reasoningEffort: 'high' })
+    await resumed.ctx.fiber.dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('uses the selected Codex planner before handing execution to Luna Max', async () => {
     const { ctx, agent, sessionId } = await harness()
     registerCodex6(ctx)
     const api = createApiProxy(ctx, {
@@ -453,8 +496,8 @@ describe('Web session model selection', () => {
       'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: 'high',
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+      reasoningEffort: 'max',
     })
     await ctx.fiber.dispose()
   })
@@ -640,6 +683,85 @@ describe('Web session model selection', () => {
     expect(agent.options).toMatchObject({ provider: 'text-only', model: 'plain' })
     expect(agent.options.provider).not.toBe('openai-codex')
     await ctx.fiber.dispose()
+  })
+
+  it('waits for session preference durability before accepting a picker selection', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    const entered = Promise.withResolvers<'flush'>()
+    const release = Promise.withResolvers<undefined>()
+    let durablePreference: unknown
+    ctx.on('session/flush', async (session) => {
+      expect(session).toBe(agent.session)
+      entered.resolve('flush')
+      await release.promise
+      durablePreference = session.events.findLast(event => event.type === 'agent/model-selection')?.data
+    })
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }), cwd: '/tmp',
+    })
+    const picking = api.sessions.selectModel(request({ sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max' }))
+    try {
+      expect(await Promise.race([entered.promise, picking.then(() => 'response')])).toBe('flush')
+      expect(durablePreference).toBeUndefined()
+      expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual({ provider: 'deepseek-official', model: 'deepseek-chat' })
+      release.resolve(undefined)
+      expectValue(await picking)
+      expect(durablePreference).toEqual({ selection: { provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max' }, source: 'explicit' })
+    } finally {
+      release.resolve(undefined)
+      await picking
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it.each([undefined, 'default', 'explicit'] as const)('restores the previous %s preference when picker durability fails', async (source) => {
+    const { ctx, agent, sessionId } = await harness()
+    const previousOptions = { ...agent.options }
+    if (source !== undefined) persistModelSelectionPreference(agent.session, { provider: 'deepseek-official', model: 'deepseek-chat' }, source)
+    ctx.on('session/flush', () => { throw new Error('session preference disk failure') })
+    const saved: unknown[] = []
+    const api = createApiProxy(ctx, {
+      defaultModelSelection: () => ({ provider: 'deepseek-official', model: 'deepseek-chat' }),
+      saveDefaultModelSelection: async (selection) => { saved.push(selection) }, cwd: '/tmp',
+    })
+    try {
+      const response = await api.sessions.selectModel(request({ sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max' }))
+      expect(response.result.ok).toBe(false)
+      if (response.result.ok) throw new Error('An unpersisted selection must not be accepted')
+      expect(response.result.error.code).toBe('internal')
+      expect(response.result.error.message).toContain('session preference disk failure')
+      expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual({ provider: 'deepseek-official', model: 'deepseek-chat' })
+      expect(agent.options).toEqual(previousOptions)
+      expect(latestModelSelectionPreference(agent.session)?.source).toBe(source ?? 'default')
+      expect(response.result.error.message).toContain('durable storage is uncertain')
+      expect(saved).toEqual([])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('durably restores the prior explicit preference after a transient selection write failure', async () => {
+    const { ctx, agent, sessionId } = await harness()
+    const previous = { provider: 'deepseek-official', model: 'deepseek-chat' }
+    persistModelSelectionPreference(agent.session, previous, 'explicit')
+    let writes = 0
+    let restored: unknown
+    ctx.on('session/flush', (session) => {
+      if (++writes === 1) throw new Error('temporary preference write failure')
+      restored = latestModelSelectionPreference(session)
+    })
+    const api = createApiProxy(ctx, { defaultModelSelection: () => previous, cwd: '/tmp' })
+    try {
+      const response = await api.sessions.selectModel(request({ sessionId, provider: 'deepseek-official', model: 'deepseek-reasoner', reasoningEffort: 'max' }))
+      expect(response.result.ok).toBe(false)
+      if (response.result.ok) throw new Error('A reverted selection must not be accepted')
+      expect(response.result.error.code).toBe('internal')
+      expect(response.result.error.message).toContain('previous route was restored')
+      expect(restored).toEqual({ selection: previous, source: 'explicit' })
+      expect(expectValue(await api.sessions.models(request({ sessionId }))).current).toEqual(previous)
+    } finally {
+      await ctx.fiber.dispose()
+    }
   })
 
   it('saves an accepted selection as the default and survives a storage failure', async () => {

@@ -34,7 +34,7 @@
 
 fresh child 不带 parent 历史 seed。fork child 只捕获一次 Lead 的已完成 turn 前缀，不包含正在执行 delegation 的 turn。继承的 Team 记录带有旧 Root 的 `TeamId`，普通 fork 成为独立运行时 Root 后会忽略这些记录。roster 之外、由 provider 管理的 subagent 不会被误认为嵌套 Team Lead。
 
-roster 同时报告持久 provisioning／failed phase 与实时 `running`／`idle` 状态。active 但不驻留的 teammate 显示为 `inactive`；后续 wakeup 投递会经 continuation owner 冷恢复它。创建请求可携带 provider-neutral `agentOptions`；continuation manager 会校验并持久化该路由，roster 则把 LLM 的 `modelProvider`／`model` 与 subagent transport provider 分开报告。
+roster 同时报告持久 provisioning／failed phase 与实时 `running`／`idle` 状态。active 但不驻留的 teammate 显示为 `inactive`；后续 wakeup 投递会经 continuation owner 冷恢复它。创建请求可携带 provider-neutral `agentOptions`；continuation manager 会校验并持久化该路由，roster 则把 LLM 的 `modelProvider`／`model` 与 subagent transport provider 分开报告。 唤醒邮箱投递和定向用户回复会根据 lead 最新的持久化选择刷新现有队友，缺少该选择时使用其配置路由。Codex 选择使用 Luna 执行交接；其他提供方保留所选提供方和模型。进行中的操作会先完成，然后安全边界上的用户回复使用刷新的路由。
 
 ## 持久 mailbox
 
@@ -43,6 +43,8 @@ roster 同时报告持久 provisioning／failed phase 与实时 `running`／`idl
 目标消息以 `Team message <id> from <name>:` 开头，并在 `TeamMessageSource` 中保留同一 id 与发送者。target Session 在 pending inbox 或已记录的用户消息历史中持久保存该身份后，Lead 日志才追加 `team/message/delivered`。即时准入按 target 和持久 queue 顺序串行化，恢复也按同一顺序重新投递 queued-minus-delivered 记录。重试前会同时折叠 live 与持久 target 的 inbox／历史状态，因此 inbox 已接受但模型尚未 claim 时发生崩溃也不会复制消息。Lead 日志 flush 成功后会唤醒当前 `waitForChange()` 调用方，调用方随后重新列出权威状态。
 
 该保证是进程内重试加 target Session 去重，而不是跨进程 exactly-once。本版本没有跨进程共享 mailbox 事务，也没有 mailbox 时间线 UI。
+
+定向用户问题在 child 的下一次安全模型步骤进入，不会中止当前操作。child 通过 `answerChat()` 回答已接受的对话请求，生成以 `replyTo` 关联且可稳定重试的转录记录，再继续原任务。操作性修正保留执行证据要求；对话问题及其回答回执不能清除原任务的证据责任。回答中识别到的操作或完成声明需要匹配的执行证据；双语词汇采用保守判断，并不能证明任意文字均真实。
 
 ## 共享任务板
 

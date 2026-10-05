@@ -81,7 +81,9 @@ export const ChatNodeSeat = memo(function ChatNodeSeat({
       data-chat-flow-key={routedNode.key}
       data-chat-flow-kind={routedNode.kind}
     >
-      {routedNode.kind === 'assistant-step' && renderSlot('conversation.chat.message-author', {})}
+      {routedNode.kind === 'assistant-step' && renderSlot('conversation.chat.message-author', {
+        ...routedNode.data.provenance === undefined ? {} : { provenance: routedNode.data.provenance },
+      })}
       {renderSlot('conversation.chat.node', routedOwner, {
         entryKey: routedNode.kind,
         hookContext: nodeKey,

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
+import { Session, SessionId } from '@phoenix-ai/dsh-session'
 import {
   agentEvents,
   defaultExecutionHandoff,
   installModelSelection,
-  isCodexPlannerModel,
+  latestModelSelectionPreference,
+  persistModelSelectionPreference,
   isContextualConversationFastPathText,
   isConversationalFastPathText,
   jevSelectedModelId,
@@ -13,9 +15,78 @@ import {
   type Agent,
   type ModelSelectionRef,
 } from '../src/index.ts'
-import { ReasoningEffortId, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
+import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 describe('installModelSelection()', () => {
+  it('captures the selected default on first dispatch while blank sessions observe changes', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const session = Session.create(SessionId('default-preference'))
+    const agent = { session, options: {} } as unknown as Agent
+    ctx.agent = agent
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: 'gpt-6-sol' }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    try {
+      await ctx.systemPrompt.assemble()
+      expect(session.events).toHaveLength(0)
+      selection.current = { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }
+      session.append('turn/start', { turn: 1 })
+      session.append('user/message', createUserMessage({ content: [{ type: 'text', text: 'Fix router.ts.' }], source: { kind: 'user' } }), { surfaceOp: 'append' })
+      await ctx.systemPrompt.assemble()
+      const signal = new AbortController().signal
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' }))).resolves.toMatchObject({ model: 'gpt-6.1-sol' })
+      expect(session.events.filter(event => event.type === 'agent/model-selection').map(event => event.data)).toEqual([
+        { selection: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, source: 'default' },
+      ])
+      await agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' }))
+      expect(session.events.filter(event => event.type === 'agent/model-selection')).toHaveLength(1)
+      expect(session.events.find(event => event.type === 'agent/model-selection')).not.toHaveProperty('surfaceOp')
+      expect(session.events.find(event => event.type === 'agent/model-selection')).not.toHaveProperty('ignorable')
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('restores explicit planner preference independently of the serving Luna request header', () => {
+    const session = Session.create(SessionId('explicit-preference'))
+    const selected = { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh') }
+    expect(latestModelSelectionPreference(session)).toBeUndefined()
+    expect(persistModelSelectionPreference(session, selected, 'explicit')).toBe(true)
+    expect(persistModelSelectionPreference(session, { ...selected }, 'explicit')).toBe(false)
+    session.append('request/header', { header: { config: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') } }, reason: 'initial' })
+    const restored = Session.fromRestore(session.id, structuredClone(session.events), structuredClone(session.header))
+    expect(restored.requestHeader()?.config.model).toBe('gpt-6-luna')
+    expect(latestModelSelectionPreference(restored)).toEqual({ selection: selected, source: 'explicit' })
+    expect(persistModelSelectionPreference(restored, { provider: 'deepseek', model: 'deepseek-v4-pro' }, 'explicit')).toBe(true)
+    expect(latestModelSelectionPreference(restored)).toEqual({ selection: { provider: 'deepseek', model: 'deepseek-v4-pro' }, source: 'explicit' })
+  })
+
+  it('does not replace a newer explicit preference with an older assembled default', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const session = Session.create(SessionId('selection-race'))
+    const agent = { session, options: {} } as unknown as Agent
+    ctx.agent = agent
+    const older = { provider: 'openai-codex', model: 'gpt-6-sol' }
+    const newer = { provider: 'openai-codex', model: 'gpt-6-astra' }
+    const selection: ModelSelectionRef = { current: older, assembled: undefined }
+    const dispose = installModelSelection(ctx, selection)
+    try {
+      await ctx.systemPrompt.assemble()
+      persistModelSelectionPreference(session, newer, 'explicit')
+      selection.current = newer
+      await expect(agentEvents(ctx, agent).waterfall('agent/request', { turn: 1, step: 1, signal: new AbortController().signal }, () => Promise.resolve(older))).resolves.toEqual(older)
+      expect(latestModelSelectionPreference(session)).toEqual({ selection: newer, source: 'explicit' })
+      expect(session.events).toHaveLength(1)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('accepts only an explicit Jev choice from the supplied same-family candidates', () => {
     const candidates = ['gpt-5.6-sol', 'gpt-5.6-luna']
     expect(jevSelectedModelId({
@@ -1056,41 +1127,60 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('uses premium Codex models as planners and the active Luna worker at Max', () => {
-    expect(isCodexPlannerModel('gpt-5.6-sol')).toBe(true)
-    expect(isCodexPlannerModel('gpt-6.1-sol')).toBe(true)
-    expect(isCodexPlannerModel('gpt-6-astra')).toBe(true)
-    expect(isCodexPlannerModel('gpt-6-luna')).toBe(false)
-
-    expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-5.6-sol' })).toEqual({
-      afterStep: 1,
-      selection: {
-        provider: 'openai-codex',
-        model: 'gpt-5.6-luna',
-        reasoningEffort: ReasoningEffortId('max'),
-      },
-    })
-    expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-6.1-sol' })).toEqual({
-      afterStep: 1,
-      selection: {
-        provider: 'openai-codex',
-        model: 'gpt-6-luna',
-        reasoningEffort: ReasoningEffortId('max'),
-      },
-    })
-    expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-6-astra' })).toEqual({
-      afterStep: 1,
-      selection: {
-        provider: 'openai-codex',
-        model: 'gpt-6-luna',
-        reasoningEffort: ReasoningEffortId('max'),
-      },
-    })
-    expect(defaultExecutionHandoff({ provider: 'openai-codex', model: 'gpt-6-luna' })).toBeUndefined()
-    expect(defaultExecutionHandoff({ provider: 'other', model: 'custom' })).toBeUndefined()
+  it.each(['gpt-5.6-luna', 'gpt-6-future', 'gpt-5.6-sol'])('plans and rescues with selected Codex %s while Luna Max executes', async (model) => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selected = { provider: 'openai-codex', model, reasoningEffort: ReasoningEffortId('max') }
+    const selection: ModelSelectionRef = { current: selected, assembled: undefined }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'Fix router.ts and run the tests.' }] } },
+    ]
+    const agent = { session: { events } } as unknown as Agent
+    const signal = new AbortController().signal
+    const request = (step: number): Promise<LlmCallConfig> => agentEvents(ctx, agent).waterfall(
+      'agent/request', { turn: 1, step, signal }, () => Promise.resolve(selected),
+    )
+    const worker = { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') }
+    try {
+      await ctx.systemPrompt.assemble()
+      await expect(request(1)).resolves.toEqual(selected)
+      await expect(request(2)).resolves.toEqual(worker)
+      for (const step of [2, 3]) events.push({
+        type: 'tool/result',
+        data: { turn: 1, step, error: { name: 'ToolError', code: 'TS2345' }, message: { role: 'tool', content: [{ type: 'text', text: 'TS2345 at router.ts' }] } },
+      })
+      await expect(request(4)).resolves.toEqual(selected)
+      await expect(request(5)).resolves.toEqual(worker)
+      for (const step of [4, 5]) events.push({
+        type: 'tool/result',
+        data: { turn: 1, step, message: { role: 'tool', content: [{ type: 'text', text: 'Tool succeeded after recovery.' }] } },
+      })
+      events.push({
+        type: 'user/message',
+        data: {
+          source: { kind: 'team-message', messageId: 'selected-route-blocker', purpose: 'blocker' },
+          content: [{ type: 'text', text: 'The specialist needs a new plan.' }],
+        },
+      })
+      await expect(request(6)).resolves.toEqual(selected)
+      await expect(request(7)).resolves.toEqual(worker)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
   })
 
-  it('uses a medium first evidence step for Luna tool work, then returns to the selected Max effort', async () => {
+  it.each(['gpt-5.6-sol', 'gpt-6.1-sol', 'gpt-6-astra', 'gpt-6-luna', 'custom-codex-model'])('hands selected Codex %s to the active Luna worker at Max', (model) => {
+    expect(defaultExecutionHandoff({ provider: 'openai-codex', model })).toEqual({
+      afterStep: 1,
+      selection: { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') },
+    })
+    expect(defaultExecutionHandoff({ provider: 'other', model })).toBeUndefined()
+  })
+
+  it('keeps selected older Luna for planning, then executes with the active Luna Max', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -1128,13 +1218,13 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-5.6-luna',
-      reasoningEffort: ReasoningEffortId('medium'),
+      reasoningEffort: ReasoningEffortId('max'),
     })
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-5.6-luna',
+      model: 'gpt-6-luna',
       reasoningEffort: ReasoningEffortId('max'),
     })
 

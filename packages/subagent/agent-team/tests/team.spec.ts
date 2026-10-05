@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
+import { latestModelSelectionPreference, persistModelSelectionPreference } from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
 import { defineTool } from '@phoenix-ai/dsh-tools'
@@ -13,9 +14,11 @@ import SessionProjections from '@phoenix-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
 import SubagentService from '@phoenix-ai/dsh-subagent'
 import * as SubagentFork from '@phoenix-ai/dsh-subagent-fork-in-process'
+import * as TeamTools from '../../tool-agent-team/src/index.ts'
 import * as SubagentSpawn from '@phoenix-ai/dsh-subagent-spawn-in-process'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import TeamService, { foldTeam, TeamError, TeamId, TeamMessageId, TeamTaskId } from '../src/index.ts'
+import { teamExecutionProof } from '../src/execution-evidence.ts'
 import { TeamRuntimeLifecycle } from '../src/lifecycle.ts'
 import type { TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot } from '../src/index.ts'
 
@@ -125,6 +128,47 @@ async function waitRunning(ctx: Context, id: SessionId): Promise<Agent> {
 }
 
 describe('Team identity and provisioning', () => {
+  it.each([false, true])('refreshes a reused Team worker route without changing an active request (live=%s)', async (live) => {
+    const entered = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    const { ctx, lead, adapter } = await setup(live
+      ? [toolCallResponse('held-work', 'held_work', {}), textResponse('first finished'), textResponse('followup finished')]
+      : [textResponse('first finished'), textResponse('followup finished')])
+    ctx.llm.registerAdapter(['other'], adapter)
+    ctx.tools.register(defineTool({ name: 'held_work', description: 'Hold a real action', parameters: {},
+      output: { schema: { type: 'object', additionalProperties: false, properties: {} }, render: () => [] },
+      async execute(_args, execution) {
+        entered.resolve(undefined)
+        await release.promise
+        expect(execution.signal.aborted).toBe(false)
+        return {}
+      },
+    }))
+    const started = await spawn(ctx, lead, 'route-worker')
+    if (live) await entered.promise
+    else await waitNoAgent(ctx, started.member.id)
+    const initial = adapter.requests[0]
+    lead.options.provider = 'other'
+    lead.options.model = 'other-model'
+    persistModelSelectionPreference(lead.session, { provider: 'other', model: 'other-model' }, 'explicit')
+    expect((await ctx.agentTeams.sendMessage(lead, {
+      target: 'route-worker', content: content('continue on the selected route'), delivery: 'wakeup', signal: SIGNAL,
+    })).status).toBe('accepted')
+    expect(initial?.provider).toBe('mock')
+    if (live) {
+      expect(ctx.agents.get(started.member.id)?.options.provider).toBe('other')
+      release.resolve(undefined)
+    }
+    await waitNoAgent(ctx, started.member.id)
+    const requests = adapter.requests.filter(request => request.sessionId === started.member.id)
+    expect(requests.at(-1)?.provider).toBe('other')
+    expect(requests.at(-1)?.model).toBe('other-model')
+    const saved = await ctx.sessionPersistence.inspect(started.member.id)
+    expect(latestModelSelectionPreference(saved)).toEqual({
+      selection: { provider: 'other', model: 'other-model' }, source: 'default',
+    })
+  })
+
   it('rejects deployment limits that are not positive safe integers', async () => {
     const fields = [
       'maxMembers',
@@ -1910,6 +1954,216 @@ describe('visible team conversation', () => {
     await lead.whenIdle()
   })
 
+  it('prioritizes a directed user question at a safe boundary and continues the same child mission once', async () => {
+    const effects: string[] = []
+    const entered = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    const { ctx, lead, adapter, storageRoot } = await setup([
+      toolCallResponse('work-start', 'write_file', { phase: 'first' }),
+      (options) => {
+        const delivered = options.messages.flatMap(message => message.content)
+          .filter(block => block.type === 'text').map(block => block.text).join('\n')
+        expect(delivered).toContain('User priority: answer this person at the next safe boundary')
+        expect(delivered).toContain('Then continue your existing mission')
+        expect(delivered).toContain('@Zenith why are you checking that first?')
+        expect(delivered).toContain('Update the file in two phases.')
+        return toolCallResponse('answer-user', 'team_chat_answer', { message_id: 'priority-user-question', text: 'Because it establishes the baseline.' })
+      },
+      toolCallResponse('work-continue', 'write_file', { phase: 'second' }),
+      textResponse('The remaining check is complete.'), 'hang',
+    ], {}, true)
+    ctx.llm.registerAdapter(['other'], adapter)
+    ctx.tools.register(defineTool({ name: 'write_file', description: 'Record a real mission checkpoint',
+      parameters: { phase: { type: 'string', required: true } },
+      output: { schema: { type: 'object', additionalProperties: false, properties: {} }, render: () => [] },
+      async execute(args) {
+        effects.push(args.phase)
+        writeFileSync(join(storageRoot, 'mission.txt'), effects.join('\n'))
+        if (args.phase === 'first') { entered.resolve(undefined); await release.promise }
+        return {}
+      },
+    }))
+    await ctx.plugin(TeamTools)
+    const started = await ctx.agentTeams.spawnTeammate(lead, { name: 'zenith', description: 'Update the file in two phases.',
+      prompt: content('Update the file in two phases.'), context: 'fresh', provider: 'spawn', signal: SIGNAL })
+    await entered.promise
+    const child = ctx.sessions.get(started.member.id)!
+    persistModelSelectionPreference(lead.session, { provider: 'other', model: 'other-selected' }, 'explicit')
+    const request = { requestId: 'priority-user-question', sessionId: lead.id, targetId: started.member.id,
+      text: '@Zenith why are you checking that first?' }
+    await ctx.agentTeams.chatReply(request)
+    await ctx.agentTeams.chatReply(request)
+    expect(effects).toEqual(['first'])
+    expect(child.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+    release.resolve(undefined)
+    await waitNoAgent(ctx, started.member.id)
+    expect(effects).toEqual(['first', 'second'])
+    expect(readFileSync(join(storageRoot, 'mission.txt'), 'utf8')).toBe('first\nsecond')
+    expect(child.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+    expect(child.events.filter(event => event.type === 'turn/end').map(event => event.data.reason.kind)).toEqual(['completed'])
+    const replies = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
+      .filter(row => row.senderId === child.id).map(row => row.text)
+    expect(replies).toEqual([
+      'Because it establishes the baseline.',
+      'The remaining check is complete.\n\n✓ Evidencia ejecutada: write_file',
+    ])
+    expect(adapter.requests).toHaveLength(5)
+    expect(adapter.requests[0]?.provider).toBe('mock')
+    expect(adapter.requests.slice(1, 4).map(item => [item.provider, item.model]))
+      .toEqual([['other', 'other-selected'], ['other', 'other-selected'], ['other', 'other-selected']])
+    const correlated = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(row => row.replyTo === request.requestId)
+    expect(correlated?.id).toBe(`${child.id}:answer:${request.requestId}`)
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
+  })
+
+  it('admits one correlated answer only after delivery and rejects foreign, operational, conflicting and stale callers', async () => {
+    const entered = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    const { ctx, lead } = await setup([toolCallResponse('wait-question', 'hold_question', {}), 'hang', 'hang'], {}, true)
+    ctx.tools.register(defineTool({ name: 'hold_question', description: 'Hold the current action', parameters: {},
+      output: { schema: { type: 'object', additionalProperties: false, properties: {} }, render: () => [] },
+      async execute() { entered.resolve(undefined); await release.promise; return {} },
+    }))
+    const target = await spawn(ctx, lead, 'zenith')
+    await entered.promise
+    const actor = ctx.agents.get(target.member.id)!
+    const foreign = await spawn(ctx, lead, 'argo')
+    const foreignActor = await waitRunning(ctx, foreign.member.id)
+    const request = { requestId: 'answer-admission', sessionId: lead.id, targetId: actor.id, text: 'Why start there?' }
+    await ctx.agentTeams.chatReply(request)
+    await expect(ctx.agentTeams.answerChat(actor, { messageId: request.requestId, text: 'To establish the baseline.' })).rejects.toThrow('has not reached')
+    await expect(ctx.agentTeams.answerChat(foreignActor, { messageId: request.requestId, text: 'Mine.' })).rejects.toThrow('not accepted')
+    await expect(ctx.agentTeams.answerChat(lead, { messageId: request.requestId, text: 'Mine.' })).rejects.toThrow('non-child')
+    await expect(ctx.agentTeams.answerChat(actor, { messageId: 'missing', text: 'Mine.' })).rejects.toThrow('not accepted')
+    await expect(ctx.agentTeams.answerChat(actor, { messageId: request.requestId, text: ' ' })).rejects.toThrow('invalid')
+    const unaccepted = { id: 'never-accepted', senderId: 'user', senderName: 'User', senderKind: 'user' as const,
+      missionId: lead.id, text: 'Why?', time: Date.now(), sourceSeq: lead.session.events.length,
+      targetId: actor.id, mentions: [actor.id], reactions: [], deliveries: [{ targetId: actor.id, accepted: false }] }
+    lead.session.append('team/chat-message', { version: 1, message: unaccepted })
+    await expect(ctx.agentTeams.answerChat(actor, { messageId: unaccepted.id, text: 'Mine.' })).rejects.toThrow('not accepted')
+    await ctx.agentTeams.chatReply({ ...request, requestId: 'operational-answer', text: 'Send the email.' })
+    await expect(ctx.agentTeams.answerChat(actor, { messageId: 'operational-answer', text: 'Sent.' })).rejects.toThrow('execution evidence')
+    release.resolve(undefined)
+    await vi.waitFor(() => { expect(actor.session.events.some(event => event.type === 'user/message'
+      && event.data.content.some(block => block.type === 'text' && block.text.startsWith('[Team user message answer-admission]')))).toBe(true) })
+    const answer = { messageId: request.requestId, text: 'To establish the baseline.' }
+    const first = await ctx.agentTeams.answerChat(actor, answer)
+    expect(await ctx.agentTeams.answerChat(actor, answer)).toEqual(first)
+    await expect(ctx.agentTeams.answerChat(actor, { ...answer, text: 'Changed.' })).rejects.toThrow('conflicts')
+    const transcript = await ctx.agentTeams.chatMessages({ sessionId: lead.id })
+    expect(transcript.messages.filter(row => row.id === first.messageId)).toHaveLength(1)
+    expect(transcript.messages.find(row => row.id === first.messageId)).toMatchObject({ replyTo: request.requestId, senderId: actor.id })
+    actor.cancel({ kind: 'user' })
+    foreignActor.cancel({ kind: 'user' })
+    await waitNoAgent(ctx, actor.id)
+    await waitNoAgent(ctx, foreignActor.id)
+    await expect(ctx.agentTeams.answerChat(actor, answer)).rejects.toThrow('stale')
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
+  })
+
+  it('rejects an operational answer to a conversational question until the original action has a matching receipt', async () => {
+    const { ctx, lead } = await setup(['hang'], {}, true)
+    const started = await ctx.agentTeams.spawnTeammate(lead, { name: 'zenith', description: 'Send the email.',
+      prompt: content('Send the email.'), context: 'fresh', provider: 'spawn', signal: SIGNAL })
+    const actor = await waitRunning(ctx, started.member.id)
+    const request = { requestId: 'email-status-question', sessionId: lead.id, targetId: actor.id, text: 'What is happening?' }
+    await ctx.agentTeams.chatReply(request)
+    actor.session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: content(
+      '[Team user message email-status-question]\nUser request: "What is happening?"\nReply context:\nWhat is happening?') }), { surfaceOp: 'append' })
+    const claim = { messageId: request.requestId, text: 'I sent the email and verified delivery.' }
+    await expect(ctx.agentTeams.answerChat(actor, claim)).rejects.toThrow('execution evidence')
+    await expect(ctx.agentTeams.answerChat(actor, { ...claim, text: 'Done.' })).rejects.toThrow('execution evidence')
+    for (const text of ['Verified means checked against evidence, and I sent the email.',
+      'Verified means checked against evidence. I sent the email.', 'The email was sent.', 'Email sent.']) {
+      await expect(ctx.agentTeams.answerChat(actor, { ...claim, text })).rejects.toThrow('execution evidence')
+    }
+    await expect(ctx.agentTeams.answerChat(actor, { ...claim, text: "I haven't sent it yet, but I sent another email." })).rejects.toThrow('execution evidence')
+    for (const [index, text] of ["I haven't sent it yet.", 'Todavía no lo he enviado.'].entries()) {
+      const negativeRequest = { ...request, requestId: `negative-status-${index}` }
+      await ctx.agentTeams.chatReply(negativeRequest)
+      actor.session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: content(
+        `[Team user message ${negativeRequest.requestId}]\nUser request: "What is happening?"\nReply context:\nWhat is happening?`) }), { surfaceOp: 'append' })
+      expect(await ctx.agentTeams.answerChat(actor, { messageId: negativeRequest.requestId, text }))
+        .toMatchObject({ messageId: `${actor.id}:answer:${negativeRequest.requestId}` })
+    }
+    expect(await ctx.agentTeams.answerChat(actor, { messageId: request.requestId, text: 'I have not sent the email yet.' }))
+      .toMatchObject({ messageId: `${actor.id}:answer:${request.requestId}` })
+    const logReceipt = (id: string, name: string) => {
+      const callId = CallId(id)
+      actor.session.append('tool/call', { turn: 1, step: 1, callId, name, arguments: '{}' })
+      actor.session.append('tool/result', { turn: 1, step: 1,
+        message: createToolResultMessage({ callId, content: content('ok'), isError: false }) }, { surfaceOp: 'append' })
+    }
+    logReceipt('wrong-action', 'write_file')
+    await expect(ctx.agentTeams.answerChat(actor, claim)).rejects.toThrow('execution evidence')
+    logReceipt('send-email', 'mcp__Gmail__send_email')
+    await expect(ctx.agentTeams.answerChat(actor, { ...claim, text: 'I deployed the website.' })).rejects.toThrow('execution evidence')
+    // A new user question owns a new immutable answer identity.
+    const verified = { ...request, requestId: 'email-status-verified' }
+    await ctx.agentTeams.chatReply(verified)
+    actor.session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: content(
+      '[Team user message email-status-verified]\nUser request: "What is happening?"\nReply context:\nWhat is happening?') }), { surfaceOp: 'append' })
+    expect(await ctx.agentTeams.answerChat(actor, { ...claim, messageId: verified.requestId }))
+      .toMatchObject({ messageId: `${actor.id}:answer:${verified.requestId}` })
+    actor.cancel({ kind: 'user' })
+    await waitNoAgent(ctx, actor.id)
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
+  })
+
+  it('requires an actual effect receipt for an operational answer when the original mission was conversational', async () => {
+    const { ctx, lead } = await setup(['hang'], {}, true)
+    const started = await ctx.agentTeams.spawnTeammate(lead, { name: 'zenith', description: 'Discuss the approach.',
+      prompt: content('Discuss the approach.'), context: 'fresh', provider: 'spawn', signal: SIGNAL })
+    const actor = await waitRunning(ctx, started.member.id)
+    const request = { requestId: 'discussion-status', sessionId: lead.id, targetId: actor.id, text: 'What is happening?' }
+    await ctx.agentTeams.chatReply(request)
+    actor.session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: content(
+      '[Team user message discussion-status]\nUser request: "What is happening?"\nReply context:\nWhat is happening?') }), { surfaceOp: 'append' })
+    const answer = { messageId: request.requestId, text: 'I created the file.' }
+    await expect(ctx.agentTeams.answerChat(actor, answer)).rejects.toThrow('execution evidence')
+    const callId = CallId('discussion-write')
+    actor.session.append('tool/call', { turn: 1, step: 1, callId, name: 'write_file', arguments: '{}' })
+    actor.session.append('tool/result', { turn: 1, step: 1,
+      message: createToolResultMessage({ callId, content: content('ok'), isError: false }) }, { surfaceOp: 'append' })
+    expect(await ctx.agentTeams.answerChat(actor, answer)).toMatchObject({ messageId: `${actor.id}:answer:${request.requestId}` })
+    actor.cancel({ kind: 'user' })
+    await waitNoAgent(ctx, actor.id)
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
+  })
+
+  it.each([
+    ['How do I send an email?', 'Use the mail connector with the recipient, subject and text.'],
+    ['¿Cómo puedo enviar un correo?', 'Usa el conector de correo e indica destinatario, asunto y texto.'],
+    ['What does the test do?', 'It compares the observed output with the expected result.'],
+    ['Explain how to create a file', 'Use write_file with the destination path and desired content.'],
+    ['What does verified mean?', 'Verified means checked against evidence.'],
+    ['How do I send an email?', 'After you click Send, the email is sent to the recipient.'],
+    ['What does the test do?', 'A completed test reports success.'],
+  ])('answers an instructional question before task execution without resetting its obligation: %s', async (question, explanation) => {
+    const { ctx, lead } = await setup(['hang'], {}, true)
+    const started = await ctx.agentTeams.spawnTeammate(lead, { name: 'zenith', description: 'Send the email.',
+      prompt: content('Send the email.'), context: 'fresh', provider: 'spawn', signal: SIGNAL })
+    const actor = await waitRunning(ctx, started.member.id)
+    const request = { requestId: 'instructional-user-question', sessionId: lead.id, targetId: actor.id, text: question }
+    await ctx.agentTeams.chatReply(request)
+    actor.session.append('user/message', createUserMessage({ source: { kind: 'user' }, content: content(
+      `[Team user message ${request.requestId}]\nUser request: ${JSON.stringify(question)}\nReply context:\n${question}`) }), { surfaceOp: 'append' })
+    expect(await ctx.agentTeams.answerChat(actor, { messageId: request.requestId, text: explanation }))
+      .toMatchObject({ messageId: `${actor.id}:answer:${request.requestId}` })
+    expect(teamExecutionProof(actor.session.events)).toMatchObject({ requirement: 'effect', satisfied: false })
+    const transcript = await ctx.agentTeams.chatMessages({ sessionId: lead.id })
+    const visibleAnswer = transcript.messages.find(row => row.replyTo === request.requestId)
+    expect(visibleAnswer?.text).toBe(explanation)
+    actor.cancel({ kind: 'user' })
+    await waitNoAgent(ctx, actor.id)
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
+  })
+
   it('delivers the exact visible reaction target id with peer messages', async () => {
     const { ctx, lead } = await setup(['hang'], {}, true)
     const started = await spawn(ctx, lead, 'zenith')
@@ -1922,15 +2176,14 @@ describe('visible team conversation', () => {
       signal: SIGNAL,
     })
     const child = ctx.sessions.get(started.member.id)!
-    const delivered = child.events.findLast(event => event.type === 'user/message'
-      && event.data.source.kind === 'team-message'
-      && event.data.source.messageId === sent.messageId)
-    expect(delivered?.type).toBe('user/message')
-    if (delivered?.type !== 'user/message') throw new Error('team message was not delivered')
-    const modelText = delivered.data.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
-    expect(modelText).toContain(`Visible reaction target: ${sent.messageId}`)
-    expect(modelText).toContain('team_chat_react')
-    expect(modelText).toContain('Prefer the reaction over filler prose')
+    const delivered = ctx.agents.get(child.id)!.inbox.nextStep.find(message => message.source.kind === 'team-message'
+      && message.source.messageId === sent.messageId)
+    expect(delivered?.source.kind).toBe('team-message')
+    if (delivered === undefined) throw new Error('team message was not accepted')
+    const modelText = delivered.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
+    expect(modelText).toContain(`Team message ${sent.messageId} from lead [review]:`)
+    expect(modelText).toContain('Please verify this result.')
+    expect(modelText).not.toContain('use team_chat_react once')
     ctx.agentTeams.interrupt(lead, 'zenith')
     await waitNoAgent(ctx, started.member.id)
   })

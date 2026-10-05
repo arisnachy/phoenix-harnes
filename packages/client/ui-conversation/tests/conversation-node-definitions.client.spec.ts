@@ -4,7 +4,7 @@ import type {
   ConversationNodeDefinition, ConversationViewDefinition,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { ConversationNodeAssembler } from '@phoenix-ai/dsh-client-runtime/client'
-import { assistantDefinition } from '../src/client/conversation-nodes/assistant.ts'
+import { assistantDefinition, assistantRequestModelDefinition } from '../src/client/conversation-nodes/assistant.ts'
 import { chatViewDefinition } from '../src/client/conversation-nodes/chat-snapshot-builder.ts'
 import { commandDefinition } from '../src/client/conversation-nodes/command.ts'
 import { compactionDefinition } from '../src/client/conversation-nodes/compaction.ts'
@@ -24,6 +24,7 @@ const DEFINITIONS: readonly ConversationNodeDefinition[] = [
   nextTurnInboxDefinition,
   nextStepInboxDefinition,
   messageDefinition,
+  assistantRequestModelDefinition,
   assistantDefinition,
   toolDefinition,
   commandDefinition,
@@ -118,6 +119,63 @@ function toolResult(callId: string, text: string) {
 }
 
 describe('built-in conversation node Definitions', () => {
+  it('projects actual request models while streaming and keeps final source after later headers', () => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }), at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'request/header', { reason: 'initial', header: { config: { provider: 'openai', model: 'gpt-6-sol' } } }),
+      at(4, 'assistant/chunk', { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: 'Sol' } }),
+    ])
+    expect(node(snapshot(value), 'assistant-step')?.data).toMatchObject({
+      status: 'running', provenance: { provider: 'openai', model: 'gpt-6-sol' },
+    })
+    value.append(at(5, 'llm/retry', { turn: 1, step: 1, attempt: 1 }))
+    value.append(at(6, 'request/header', { reason: 'change', header: { config: { provider: 'openai', model: 'gpt-6-luna' } } }))
+    value.append(at(7, 'assistant/chunk', { turn: 1, step: 1, chunk: { type: 'text-delta', index: 0, text: ' Luna' } }))
+    value.flush()
+    expect(node(snapshot(value), 'assistant-step')?.data).toMatchObject({ provenance: { provider: 'openai', model: 'gpt-6-luna' } })
+    value.append(at(8, 'assistant/message', { turn: 1, step: 1,
+      message: { ...assistantMessage('actual-luna', 'Luna'), source: { kind: 'model', provider: 'openai', model: 'gpt-6-luna' } },
+    }, { surfaceOp: 'append' }))
+    value.append(at(9, 'step/end', { turn: 1, step: 1 }))
+    value.append(at(10, 'step/start', { turn: 1, step: 2 }))
+    value.append(at(11, 'request/header', { reason: 'change', header: { config: { provider: 'openai', model: 'gpt-6-astra' } } }))
+    value.append(at(12, 'assistant/chunk', { turn: 1, step: 2, chunk: { type: 'text-delta', index: 0, text: 'Astra' } }))
+    value.flush()
+    const rows = [...snapshot(value).nodes.values()].filter(row => row.kind === 'assistant-step')
+    expect(rows[0]?.data).toMatchObject({ status: 'settled', provenance: { provider: 'openai', model: 'gpt-6-luna' } })
+    expect(rows[1]?.data).toMatchObject({ status: 'running', provenance: { provider: 'openai', model: 'gpt-6-astra' } })
+    value.append(at(13, 'step/end', { turn: 1, step: 2 }))
+    value.append(at(14, 'step/start', { turn: 1, step: 3 }))
+    value.append(at(15, 'assistant/chunk', { turn: 1, step: 3, chunk: { type: 'text-delta', index: 0, text: 'Still Astra' } }))
+    value.flush()
+    const sticky = [...snapshot(value).nodes.values()].filter(row => row.kind === 'assistant-step').at(-1)
+    expect(sticky?.data).toMatchObject({ provenance: { provider: 'openai', model: 'gpt-6-astra' } })
+  })
+
+  it('keeps historical model provenance when a later request selects another model', () => {
+    const events = [
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'assistant/message', { turn: 1, step: 1,
+        message: { ...assistantMessage('sol-answer', 'answer'),
+          source: { kind: 'model', provider: 'openai', model: 'gpt-6-sol' } },
+      }, { surfaceOp: 'append' }),
+      at(4, 'turn/end', { turn: 1, reason: { kind: 'completed' } }),
+    ]
+    const value = assembler(events)
+    const previous = node(snapshot(value), 'assistant-step')
+    value.append(at(5, 'request/header', { reason: 'change', header: {
+      config: { provider: 'openai', model: 'gpt-6-luna' },
+    } }))
+    value.flush()
+    expect(node(snapshot(value), 'assistant-step')?.data).toMatchObject({
+      provenance: { provider: 'openai', model: 'gpt-6-sol' },
+    })
+    expect(node(snapshot(assembler([...events, at(5, 'request/header', {
+      reason: 'change', header: { config: { provider: 'openai', model: 'gpt-6-luna' } },
+    })])), 'assistant-step')?.data).toEqual(previous?.data)
+  })
+
   it('keeps one keyed Assistant node while streaming settles and materializes interruption from Location', () => {
     const value = assembler([
       at(1, 'turn/start', { turn: 1 }),
@@ -142,6 +200,7 @@ describe('built-in conversation node Definitions', () => {
 
     const settledSnapshot = snapshot(value)
     const settled = node(settledSnapshot, 'assistant-step')
+    expect(settled?.data).toMatchObject({ provenance: { provider: 'fake', model: 'fake' }, finalNode: { provenance: { provider: 'fake', model: 'fake' } } })
     expect(settled?.key).toBe(running?.key)
     expect(settledSnapshot.order).toBe(order)
     expect(settled?.data).toMatchObject({ status: 'settled', blocks: [{ kind: 'text', text: 'settled' }] })

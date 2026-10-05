@@ -10,11 +10,13 @@ The API gateway shared by every client consists of the TypeScript API contract (
 
 `ApiProxyService` consumes `ctx.agentDefaultModel`; it does not own a provider/model config or settings section. The shared service registers `{provider, model, reasoningEffort?}` under `agent-default-model`: the base bundle's composition entry is the lower layer and `settings.yaml` layers the user's choice over it.
 
-A session resolves its model selection from three tiers on every access: a selection made in this process, otherwise the session's latest logged `request/header`, otherwise this default. A session that has run a turn derives its selection from its log, while a blank session observes a default saved after it was created.
+A session resolves its model selection from a choice made in this process, otherwise its latest durable `agent/model-selection` preference, otherwise its latest logged `request/header`, otherwise this default. The durable preference separates the selected planner from the last serving worker route. A blank session observes a default saved after it was created; its first real dispatch records that preference.
 
 `session.selectModel` saves an accepted switch as the deployment default; there is no separate gesture. It stores the resolved `ModelSelection`, including an adapter-materialized default effort. The complete-section write clears a stored effort when the selected model has none. A storage failure is logged without undoing the session selection. A deployment with no settings provider keeps the composition entry and the switch remains session-local.
 
 The section's `reasoningEffort` has no counterpart in the agent-default-model plugin config, deliberately: the seam merges the user layer over the composition entry per field, so an absent key cannot override a present one and a composition-set effort would survive every later switch to a model without one. A deployment default for effort belongs on the adapter profile, which resolves per model.
+
+The OpenAI Codex selector exposes Phoenix Orquesta with the durable id `phoenix-auto`: Sol plans and rescues, while Kira and her specialists execute on Luna Max. A concrete Codex selection retains the selected model for planning and rescue and hands later execution steps to Luna Max; other providers use the selected model throughout.
 
 The stored selection is independent of catalog membership. A default naming an unavailable provider still reaches `session.models` as the session's `current`, allowing the selector to request a replacement instead of silently choosing another model. Conversely, an adapter may serve a model that its catalog does not advertise.
 

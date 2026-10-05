@@ -57,6 +57,8 @@ Host 带 placement 的 `session/queue` 快照也会携带待处理 steering。Qu
 
 主页提示携带实质版本。打开或关闭提示时通过 loopback host 记录版本，仅确认成功后移除。刷新保留回执，新版本仍可出现。邮箱结果共用现有提示区域，不改变聊天与团队布局。
 
+
+Assistant 作者贡献接收对应消息实际 provider/model 的来源信息。流式输出使用所属 Step 的已准备 `request/header` 配置，包括重试时的变更，以及未产生新 header 时保留的路由。已完成输出优先使用持久化 `assistant/message` 的来源；后续路由变更不会改写历史消息的模型标记。
 ## 模型体验
 
 无。会话 UI 在浏览器中渲染会话历史与流；这里没有任何内容进入模型请求。

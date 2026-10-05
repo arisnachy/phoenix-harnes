@@ -110,6 +110,13 @@ Agent Teams service backed by the exact live Lead Session log.
  */
 async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult>
 
+/** Answer an accepted directed human question while retaining the caller's mission.
+ * @param actor - Exact live addressed child.
+ * @param request - Durable human request identity and bounded answer.
+ * @returns Stable visible answer identity.
+ */
+async answerChat(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }>
+
 /** Set/remove a human reaction.
  * @param request - message and Unicode emoji.
  */

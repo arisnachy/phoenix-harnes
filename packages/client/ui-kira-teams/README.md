@@ -6,6 +6,8 @@ Browser mission-control overlay for the active KIRA subagents in the current ses
 
 The overlay never reserves conversation width. Selecting an avatar changes the agent represented in the strip; activating that focused strip highlights the agent’s interventions in the existing main conversation. Settled or idle subagents disappear from both the strip and the rail.
 
+
+Kira keeps her fixed portrait when models change. A small badge beside it identifies the actual output model: sun for Sol, moon for Luna, star for Astra, and lightning for other models. Its accessible label and tooltip carry the exact provider and model. Missing provenance produces no model badge, and historical badges follow each message source rather than the currently selected model.
 ## Main conversation
 
 Kira and real child outputs display complete portraits at their actual chat size, with durable names and roles. Reactions belong to individual messages: Kira and teammates can react to user messages or to one another. Newly received reactions pulse briefly, respect reduced-motion preferences and do not replay the initial history. Reaction portraits remain fully visible, and user-message reactions align beneath the user message. Message actions provide grouped Unicode reactions, a searchable native emoji picker and removal of the user’s own reactions. Reply selects quoted context above the existing composer; `@Name` or `@"Name with spaces"` addresses one or several existing continuable agents. A retained request identity prevents duplicate admission after a lost RPC response, and reconnect retries pending submissions. Pending delivery remains visible in the original row. One-shot children retain readable history but cannot be resumed through these replies.
