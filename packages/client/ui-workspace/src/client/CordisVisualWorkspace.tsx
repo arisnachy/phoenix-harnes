@@ -10,6 +10,7 @@ export type CordisVisualContent = (
   | { readonly kind: 'image'; readonly src: string; readonly title?: string; readonly alt?: string }
   | { readonly kind: 'video'; readonly src: string; readonly title?: string; readonly poster?: string; readonly autoplay?: boolean }
   | { readonly kind: 'page'; readonly url: string; readonly title?: string }
+  | { readonly kind: 'html'; readonly html: string; readonly title?: string; readonly executable?: boolean }
   | { readonly kind: 'text'; readonly text: string; readonly title?: string }
 ) & { readonly dock?: CordisDockSide }
 
@@ -91,6 +92,27 @@ function safePageUrl(raw: string): string | null {
   }
 }
 
+function sandboxCanvasDocument(html: string, executable: boolean): string {
+  const scriptSources = executable ? "script-src 'unsafe-inline'" : "script-src 'none'"
+  const csp = [
+    "default-src 'none'",
+    'img-src data: blob:',
+    'media-src data: blob:',
+    'font-src data:',
+    "style-src 'unsafe-inline'",
+    scriptSources,
+    "connect-src 'none'",
+    "frame-src 'none'",
+    "child-src 'none'",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+  ].join('; ') + ';'
+  const head = /<head\\b[^>]*>([\\s\\S]*?)<\\/head>/i.exec(html)?.[1] ?? ''
+  const body = /<body\\b[^>]*>([\\s\\S]*?)<\\/body>/i.exec(html)?.[1] ?? html
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;width:100%;height:100%;overflow:auto;font-family:system-ui,sans-serif}*{box-sizing:border-box}</style></head><body>${body}</body></html>`
+}
+
 function Surface({ content }: { content: CordisVisualContent }) {
   switch (content.kind) {
     case 'image':
@@ -104,6 +126,16 @@ function Surface({ content }: { content: CordisVisualContent }) {
           controls
           autoPlay={content.autoplay}
           playsInline
+        />
+      )
+    case 'html':
+      return (
+        <iframe
+          className={css.canvas}
+          title={content.title ?? 'Phoenix canvas'}
+          srcDoc={sandboxCanvasDocument(content.html, content.executable !== false)}
+          sandbox={content.executable === false ? '' : 'allow-scripts'}
+          referrerPolicy="no-referrer"
         />
       )
     case 'page': {

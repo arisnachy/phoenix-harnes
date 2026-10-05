@@ -51,6 +51,31 @@ describe('HARDNESS inline artifact renderer', () => {
   })
 
 
+  it('routes a Phoenix canvas into the side workspace and keeps only a compact launcher in chat', () => {
+    const openCanvas = vi.fn(() => true)
+    render(<HardnessArtifactNodeView
+      {...props({
+        artifactId: 'canvas-1',
+        mime: 'application/vnd.phoenix.canvas+html',
+        title: 'Floral dream',
+        data: '<canvas id="art"></canvas><script>document.body.dataset.ready="1"</script>',
+        executable: true,
+      })}
+      openCanvas={openCanvas}
+    />)
+
+    expect(openCanvas).toHaveBeenCalledWith({
+      title: 'Floral dream',
+      html: '<canvas id="art"></canvas><script>document.body.dataset.ready="1"</script>',
+      executable: true,
+    })
+    expect(document.querySelector('[data-canvas-workspace-launcher]')).toBeTruthy()
+    expect(screen.queryByTitle('Floral dream')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Floral dream/i }))
+    expect(openCanvas).toHaveBeenCalledTimes(2)
+  })
+
   it('renders the Phoenix rich visual contract instead of raw JSON', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'visual-1',

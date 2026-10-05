@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import type { ChatNodeViewProps } from '../contract/slots.ts'
 import { normalizeHardnessArtifact } from '../artifact.ts'
 import { UniversalArtifactSurface } from './UniversalArtifactSurface.tsx'
@@ -6,13 +6,35 @@ import styles from './HardnessArtifactNodeView.module.css'
 
 /** ChatGPT-style inline artifact card. It never owns or replaces the conversation surface. */
 export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
-  node, runArtifact, renderMessageImages, loadImage,
+  node, openCanvas, runArtifact, renderMessageImages, loadImage,
 }: ChatNodeViewProps<'hardness-artifact'>) {
   const artifact = node.data
+  const isCanvas = artifact.mime === 'application/vnd.phoenix.canvas+html' && typeof artifact.data === 'string'
+  const [canvasRouted, setCanvasRouted] = useState<boolean | null>(null)
+  const routedCanvasRef = useRef<string | null>(null)
   const [result, setResult] = useState<Readonly<Record<string, unknown>> | undefined>(artifact.result)
   useEffect(() => {
     if (artifact.result !== undefined) setResult(artifact.result)
   }, [artifact.result])
+  useEffect(() => {
+    if (!isCanvas) {
+      setCanvasRouted(null)
+      return
+    }
+    if (openCanvas === undefined) {
+      setCanvasRouted(false)
+      return
+    }
+    if (routedCanvasRef.current === artifact.artifactId) return
+    const opened = openCanvas({
+      title: artifact.title,
+      html: artifact.data as string,
+      executable: artifact.executable !== false,
+    })
+    setCanvasRouted(opened)
+    if (opened) routedCanvasRef.current = artifact.artifactId
+  }, [artifact.artifactId, artifact.data, artifact.executable, artifact.title, isCanvas, openCanvas])
+
   const universal = normalizeHardnessArtifact({
     id: artifact.artifactId,
     title: artifact.title,
@@ -22,6 +44,30 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
     ...artifact.language === undefined ? {} : { language: artifact.language },
   })
   const code = universal.kind === 'code' && typeof universal.data === 'string' ? universal.data : undefined
+  if (isCanvas && openCanvas !== undefined && canvasRouted !== false) {
+    const reopen = (): void => {
+      const opened = openCanvas({
+        title: artifact.title,
+        html: artifact.data as string,
+        executable: artifact.executable !== false,
+      })
+      setCanvasRouted(opened)
+      if (opened) routedCanvasRef.current = artifact.artifactId
+    }
+    return (
+      <article
+        className={styles.card}
+        data-hardness-artifact={artifact.artifactId}
+        data-artifact-mime={artifact.mime}
+        data-canvas-workspace-launcher
+      >
+        <button type="button" className={styles.canvasLauncher} onClick={reopen}>
+          <span className={styles.canvasTitle}>{artifact.title}</span>
+          <span className={styles.canvasHint}>Canvas · visual workspace</span>
+        </button>
+      </article>
+    )
+  }
   return (
     <article
       className={styles.card}
