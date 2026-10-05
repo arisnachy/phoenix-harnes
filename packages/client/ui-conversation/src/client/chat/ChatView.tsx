@@ -196,12 +196,12 @@ export function ChatView({
   // Freeze the durable flow position that existed when this local submission
   // appeared. Later assistant/tool nodes must render after the user's bubble,
   // not above it while Host steering admission is still settling.
-  const pendingSubmitAnchor = useRef<{ seq: number; afterNodeKey: string | null } | null>(null)
+  const pendingSubmitAnchor = useRef<{ startedAt: number; afterNodeKey: string | null } | null>(null)
   if (pendingSubmit === undefined) {
     pendingSubmitAnchor.current = null
-  } else if (pendingSubmitAnchor.current?.seq !== pendingSubmit.seq) {
+  } else if (pendingSubmitAnchor.current?.startedAt !== pendingSubmit.startedAt) {
     pendingSubmitAnchor.current = {
-      seq: pendingSubmit.seq,
+      startedAt: pendingSubmit.startedAt,
       afterNodeKey: order.at(-1) ?? null,
     }
   }
@@ -263,10 +263,9 @@ export function ChatView({
     if (pendingSubmit === undefined || pendingSubmitDurable || pendingSubmit.text === '') return undefined
     const anchor = pendingSubmitAnchor.current
     return {
-      seq: pendingSubmit.seq,
-      text: pendingSubmit.text,
       startedAt: pendingSubmit.startedAt,
-      afterNodeKey: anchor?.seq === pendingSubmit.seq ? anchor.afterNodeKey : null,
+      text: pendingSubmit.text,
+      afterNodeKey: anchor?.startedAt === pendingSubmit.startedAt ? anchor.afterNodeKey : null,
     }
   }, [pendingSubmit, pendingSubmitDurable])
   // A stale pendingSubmit must never resurrect "preparing" after the durable
