@@ -568,7 +568,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : installUrl !== undefined ? (
             <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
           ) : null}
-          {oauthAccount !== undefined && !connectedByAccount ? (
+          {oauthAccount !== undefined && !connectedByAccount && openClaw?.connected !== true ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
               {connected ? t('reauthorize') : t('authorize')}
             </button>
@@ -593,12 +593,12 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               {removing ? t('uninstalling') : t('uninstall')}
             </button>
           ) : null}
-          {managed === undefined && oauthAccount === undefined && definition.registryName !== undefined && onFindOfficial !== undefined ? (
+          {managed === undefined && oauthAccount === undefined && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
               {t('findOfficialConnector')}
             </button>
           ) : null}
-          {managed === undefined && oauthAccount === undefined && definition.provenance === 'registry-listed' && onFindRegistry !== undefined ? (
+          {managed === undefined && oauthAccount === undefined && openClaw?.connected !== true && definition.provenance === 'registry-listed' && onFindRegistry !== undefined ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindRegistry}>
               {t('findConnector')}
             </button>
