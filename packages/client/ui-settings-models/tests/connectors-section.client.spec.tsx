@@ -273,6 +273,43 @@ describe('connectors settings section', () => {
     expect(search).not.toHaveBeenCalled()
   })
 
+
+  it('installs Canva directly as a Host-curated official MCP when the Host supports it', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'canva-entry',
+        serverName: 'canva',
+        url: 'https://mcp.canva.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'canva' },
+      },
+    }))
+    const search = vi.fn()
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      installCurated,
+      search,
+    }
+
+    renderHub(api, { mcpRegistry })
+    const canvaCard = document.querySelector('[data-connector-id="canva"]')
+    expect(canvaCard?.textContent).toContain('Canva')
+    const installButton = Array.from(canvaCard?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Install')
+    expect(installButton).toBeTruthy()
+    expect(Array.from(canvaCard?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Find official / install')).toBe(false)
+    fireEvent.click(installButton!)
+
+    await waitFor(() => { expect(installCurated).toHaveBeenCalledWith({ connectorId: 'canva' }) })
+    expect(search).not.toHaveBeenCalled()
+  })
+
   it('shows an explicit official lookup even when the search box is empty', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),

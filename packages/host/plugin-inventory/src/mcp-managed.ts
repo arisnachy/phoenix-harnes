@@ -21,6 +21,7 @@ const JEV_LEGACY_TOOL_TIMEOUT_MS = 1_800
 const JEV_LEGACY_STARTUP_TIMEOUT_MS = 1_200
 const X_API_TOOL_TIMEOUT_MS = 60_000
 const X_API_STARTUP_TIMEOUT_MS = 300_000
+const CANVA_TOOL_TIMEOUT_MS = 60_000
 
 interface ManagedMcpReconnect {
   enabled: boolean
@@ -72,6 +73,10 @@ export const BINANCE_AGENT_OS_URL = 'https://agent.binance.com/mcp/agentic'
 export const DEVPOST_HACKATHONS_SERVER_NAME = 'devpost'
 /** Official Devpost Hackathons Streamable HTTP MCP endpoint. */
 export const DEVPOST_HACKATHONS_URL = 'https://devpost.com/mcp'
+/** Stable local MCP namespace for Canva's official remote MCP. */
+export const CANVA_MCP_SERVER_NAME = 'canva'
+/** Official Canva Streamable HTTP MCP endpoint. */
+export const CANVA_MCP_URL = 'https://mcp.canva.com/mcp'
 /** Stable local MCP namespace for the official X API bridge. */
 export const X_API_MCP_SERVER_NAME = 'x-api'
 /** Official X API hosted MCP endpoint reached through xurl. */
@@ -132,6 +137,17 @@ function devpostHackathonsMcpConfig(): ManagedStreamableHttpMcpConfig {
     url: DEVPOST_HACKATHONS_URL,
     headers: {},
     oauth: true,
+  }
+}
+
+function canvaMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    transport: 'streamable-http',
+    serverName: CANVA_MCP_SERVER_NAME,
+    url: CANVA_MCP_URL,
+    headers: {},
+    oauth: true,
+    toolCallTimeoutMs: CANVA_TOOL_TIMEOUT_MS,
   }
 }
 
@@ -328,6 +344,11 @@ function isDevpostHackathonsManagedRow(row: ManagedMcpRow): boolean {
     || (row.config.transport === 'streamable-http' && row.config.url === DEVPOST_HACKATHONS_URL)
 }
 
+function isCanvaManagedRow(row: ManagedMcpRow): boolean {
+  return row.config.serverName === CANVA_MCP_SERVER_NAME
+    || (row.config.transport === 'streamable-http' && row.config.url === CANVA_MCP_URL)
+}
+
 function isBinanceAgentOsManagedRow(row: ManagedMcpRow): boolean {
   return row.config.serverName === BINANCE_AGENT_OS_SERVER_NAME
     || (row.config.transport === 'streamable-http' && row.config.url === BINANCE_AGENT_OS_URL)
@@ -500,7 +521,8 @@ export class ManagedMcpController {
       throw new Error(`managed MCP entry "${entryId}" has no trusted repair source`)
     }
     if (row.source.kind === 'curated') {
-      if (row.source.connectorId !== 'devpost') {
+      const connectorId = row.source.connectorId
+      if (connectorId !== 'devpost' && connectorId !== 'canva') {
         throw new Error(`managed MCP entry "${entryId}" uses an unsupported curated repair source`)
       }
       const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
@@ -510,7 +532,7 @@ export class ManagedMcpController {
           `managed MCP entry "${entryId}" was removed from persistence but its live runtime could not be unloaded; restart Phoenix before retrying repair`,
         )
       }
-      return this.installDevpostHackathons()
+      return connectorId === 'devpost' ? this.installDevpostHackathons() : this.installCanva()
     }
 
     const snapshot = await this.registrySearch({ query: row.source.name, limit: 20 })
@@ -581,6 +603,20 @@ export class ManagedMcpController {
    */
   async removeDevpostHackathons(): Promise<boolean> {
     return this.removeManagedRows(isDevpostHackathonsManagedRow, 'Devpost Hackathons')
+  }
+
+  /** Install Canva's pinned official remote MCP with user-scoped OAuth. */
+  async installCanva(): Promise<McpRegistryInstallReceipt> {
+    return this.installManagedConfig(
+      canvaMcpConfig(),
+      'Canva',
+      { kind: 'curated', connectorId: 'canva' },
+    )
+  }
+
+  /** Remove only the PHOENIX-managed Canva MCP. */
+  async removeCanva(): Promise<boolean> {
+    return this.removeManagedRows(isCanvaManagedRow, 'Canva')
   }
 
   /**
