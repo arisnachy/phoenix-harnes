@@ -37,7 +37,7 @@ if ([string]::IsNullOrWhiteSpace($localAppData)) {
 $phoenixState = Join-Path $localAppData 'Phoenix'
 New-Item -ItemType Directory -Force -Path $phoenixState | Out-Null
 
-# Use a real ICO shipped with Phoenix instead of synthesizing one at runtime.
+# Use the current Phoenix app emblem (derived from apps/web/public/favicon.svg) as a real ICO.
 # The hash in the file name also invalidates Explorer's stale icon cache.
 $iconBase64 = (Get-Content -LiteralPath $iconAssetPath -Raw).Trim()
 try {
@@ -62,7 +62,7 @@ try {
 finally {
   $sha256.Dispose()
 }
-$iconRevision = 'v2'
+$iconRevision = 'v3'
 $iconPath = Join-Path $phoenixState "phoenix-browser-$iconRevision-$iconHash.ico"
 if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
   [IO.File]::WriteAllBytes($iconPath, $iconBytes)
