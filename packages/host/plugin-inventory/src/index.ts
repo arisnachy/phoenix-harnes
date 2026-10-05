@@ -35,6 +35,7 @@ import {
 } from './mcp-managed.ts'
 import type {
   ChatGptWebSnapshot,
+  CuratedMcpInstallRequest,
   JevMcpConfigureRequest,
   JevMcpSnapshot,
   ManagedMcpEntryRequest,
@@ -248,6 +249,20 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('installMcpRegistryServer')
   async installMcpRegistryServer(request: McpRegistryInstallRequest): Promise<McpRegistryInstallReceipt> {
     return this.managedMcp.install(request)
+  }
+
+  /**
+   * Install one Host-curated MCP whose endpoint is pinned in Phoenix code.
+   * Browser input selects only a known connector id and can never supply a URL.
+   * @param request - Exact curated connector id.
+   * @returns Idempotent managed connector installation receipt.
+   */
+  @Remote('installCuratedMcpConnector')
+  async installCuratedMcpConnector(request: CuratedMcpInstallRequest): Promise<McpRegistryInstallReceipt> {
+    if (request.connectorId !== 'devpost') {
+      throw new Error(`unsupported curated MCP connector: ${request.connectorId}`)
+    }
+    return this.managedMcp.installDevpostHackathons()
   }
 
   /**
