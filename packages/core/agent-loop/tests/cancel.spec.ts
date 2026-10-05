@@ -948,6 +948,8 @@ describe('Agent.cancel()', () => {
 
     expect(firstSignal.aborted).toBe(true)
     expect(adapter.requests).toHaveLength(2)
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('answer this now')
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('resume the task that was in progress')
     expect(userTexts(agent)).toEqual(['start slow model', 'answer this now'])
     expect(agent.inbox.nextStep).toHaveLength(0)
     expect(agent.session.events
@@ -997,6 +999,8 @@ describe('Agent.cancel()', () => {
     ])
 
     expect(adapter.requests).toHaveLength(2)
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('answer this now')
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('resume the task that was in progress')
     expect(userTexts(agent)).toEqual(['start long tool', 'answer this now'])
     expect(agent.inbox.nextStep).toHaveLength(0)
     expect(agent.session.events

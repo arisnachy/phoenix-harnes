@@ -64,6 +64,7 @@ type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }
 
 const SILENT_TOOL_PROGRESS_REMINDER = 'Before calling more tools, send the user a brief progress update in their language. Summarize what you just did or found and what you will do next. Do not reveal hidden chain-of-thought or private reasoning.'
 const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest tool result without waiting for a new user prompt. Keep working until the task is complete. Before more tool calls, give the user a brief progress update if you have not done so recently; do not reveal hidden chain-of-thought.'
+const USER_STEER_RESUME_PROMPT = 'A human message interrupted active work. First address and resolve the latest human request promptly. Then resume the task that was in progress from the existing conversation, goal, and tool context unless the human explicitly changed, replaced, paused, or cancelled that task. Do not ask for permission merely to resume.'
 
 type PreparedStep =
   | { kind: 'reject' }
@@ -107,6 +108,8 @@ export class ReactLoopAgent implements Agent {
   private modelBoundaryActive = false
   /** True only while the current step is waiting on model-requested tool work. */
   private toolBoundaryActive = false
+  /** One preempted human steer must carry an explicit resume contract into its replay step. */
+  private resumeInterruptedWorkAfterSteer = false
 
   /** The agent-scoped registration boundary; the lifecycle owner unwinds it after the driver exits. */
   readonly scope: Scope
@@ -173,11 +176,13 @@ export class ReactLoopAgent implements Agent {
     this.send(input, 'next-step', true)
     if (!shouldInterruptActiveWork || this.phase.kind !== 'running' || this.phase.abort.signal.aborted) return
 
-    // "Steer" is the interactive path, distinct from Queue. A user message
+    // "Steer" is the interactive path, distinct from Queue. A human message
     // must not sit behind a long model TTFT/stream or an unbounded
     // Blender/PowerShell/browser call. Keep the steering inbox item,
     // cooperatively abort the active model/tool boundary, and latch a fresh
-    // turn; the normal abort drain still owns cleanup and replay.
+    // turn. The replay step receives a private resume contract so handling the
+    // interruption does not silently abandon the mission that was in progress.
+    this.resumeInterruptedWorkAfterSteer = input.source.kind === 'user'
     this.phase.wakeRequested = true
     this.phase.abort.abort({ kind: 'user' })
   }
@@ -189,6 +194,7 @@ export class ReactLoopAgent implements Agent {
   cancel(cause: AgentCancelCause, options: CancelOptions = {}): void {
     if (!options.keepInbox) {
       this.inbox.clear()
+      this.resumeInterruptedWorkAfterSteer = false
       if (this.phase.kind !== 'idle') this.phase.wakeRequested = false
     }
     if (this.phase.kind !== 'idle') this.phase.abort.abort(cause)
@@ -282,15 +288,24 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
     const claimed = this.inbox.claim(target, position.turn)
+    const resumeInterruptedWork = this.resumeInterruptedWorkAfterSteer
+      && claimed.some(message => message.source.kind === 'user')
+    if (resumeInterruptedWork) this.resumeInterruptedWorkAfterSteer = false
+    const entering = resumeInterruptedWork
+      ? [...claimed, createUserMessage({
+        content: [{ type: 'text', text: USER_STEER_RESUME_PROMPT }],
+        source: { kind: 'plugin', plugin: 'agent-loop' },
+      })]
+      : claimed
     const firstTurnBoundary = target === 'next-turn' && position.step === 1
     const userSteeringBoundary = target === 'next-step'
-    const directText = directUserText(claimed)
+    const directText = directUserText(entering)
     const conversationalBoundary = firstTurnBoundary || userSteeringBoundary
     const fastConversation = conversationalBoundary
-      && isTextOnlyHumanBatch(claimed)
+      && isTextOnlyHumanBatch(entering)
       && isConversationalFastPathText(directText)
     const contextualConversation = conversationalBoundary
-      && isTextOnlyHumanBatch(claimed)
+      && isTextOnlyHumanBatch(entering)
       && !fastConversation
       && isContextualConversationFastPathText(directText)
     const toolFreeConversation = fastConversation || contextualConversation
@@ -317,7 +332,7 @@ export class ReactLoopAgent implements Agent {
       : this.runtimeContext.project(joinContextSections(sections), sections)
     const decision = await this.dispatch.waterfall(
       'agent/pre-step', {
-        messages: claimed,
+        messages: entering,
         ...position,
         signal,
         ...fastConversation ? { fastConversation: true } : {},
@@ -325,7 +340,7 @@ export class ReactLoopAgent implements Agent {
       },
       (): Promise<PreStepDecision> => Promise.resolve<PreStepDecision>({
         kind: 'enter',
-        messages: context === undefined ? claimed : [...claimed, context],
+        messages: context === undefined ? entering : [...entering, context],
       }),
     )
     signal.throwIfAborted()
