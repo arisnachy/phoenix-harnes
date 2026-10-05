@@ -327,7 +327,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain("rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })")
     expect(source).toContain("spawnSync('git', ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path]")
     expect(source).toContain('const refreshedWorktrees = registeredWorktreePaths()')
-    expect(source).toContain('const becameOrphaned = /(?:is|isn\\'t|not) a working tree/iu.test(detail)')
+    expect(source).toContain('const becameOrphaned = /(?:is )?not a working tree/iu.test(detail)')
     expect(source).toContain('registered managed worktree cleanup deferred because it is still in use')
     expect(source).toContain('orphaned managed runtime is no longer a Git worktree but Windows still has it open')
   })
