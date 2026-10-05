@@ -124,7 +124,7 @@ function userMessageText(node: UserMessageNode): string {
  */
 export function ChatView({
   useSession, useSessions, useInput, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, workspaceFileMentions, runArtifact, t,
+  fileMentions, workspaceFileMentions, openCanvas, runArtifact, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -533,6 +533,7 @@ export function ChatView({
             loadImage={loadImage}
             fileMentions={fileMentions}
             workspaceFileMentions={workspaceFileMentions}
+            {...openCanvas === undefined ? {} : { openCanvas }}
             {...runArtifact === undefined ? {} : { runArtifact }}
             renderSlot={renderSlot}
             t={t}
