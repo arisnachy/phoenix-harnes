@@ -253,6 +253,14 @@ export function ChatView({
       ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt, anchorSeq: optimisticAnchorSeq }
       : undefined
   ), [optimisticAnchorSeq, pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
+  const pendingSteeringFlow = useMemo(() => {
+    const fallbackAnchor = chatNodes.at(-1)?.anchorSeq ?? null
+    return pendingSteering.map(item => ({
+      key: 'pending-steering:' + String(item.messageId),
+      content: item.content,
+      anchorSeq: item.anchorSeq ?? fallbackAnchor,
+    }))
+  }, [chatNodes, pendingSteering])
   // A stale pendingSubmit must never resurrect "preparing" after the durable
   // transcript (or steering mirror) has already taken ownership of the send.
   // This is a defensive handoff in addition to the input facade retiring the
