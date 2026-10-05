@@ -96,6 +96,35 @@ const CHAT_NODE_INJECT: ChatNodeTurnDataInjected = {
   },
 }
 
+interface CanvasVisualWorkspace {
+  show(content: {
+    readonly kind: 'html'
+    readonly html: string
+    readonly title?: string
+    readonly executable?: boolean
+  }): void
+}
+
+function openCanvasWorkspace(ctx: Context, canvas: {
+  readonly title: string
+  readonly html: string
+  readonly executable: boolean
+}): boolean {
+  const workspace = (ctx.get as unknown as (name: string) => unknown)('visualWorkspace') as CanvasVisualWorkspace | undefined
+  if (workspace === undefined || typeof workspace.show !== 'function') return false
+  try {
+    workspace.show({
+      kind: 'html',
+      html: canvas.html,
+      title: canvas.title,
+      executable: canvas.executable,
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Resolve the session-scoped conversation face (scope-addressed send/cancel), failing loud. */
 function scopedConversation(sessions: ISessions, id: SessionId): IConversation {
   const scoped = sessions.scope(id)
@@ -453,6 +482,7 @@ export function apply(ctx: Context): void {
       const scoped = scopedConversation(sessions, sessionId)
       const connection = ctx.get('connection') as ConnectionHandle
       return {
+        openCanvas: canvas => openCanvasWorkspace(ctx, canvas),
         openDetails: (target) => {
           actions.select(target)
           layout.openDetails()
