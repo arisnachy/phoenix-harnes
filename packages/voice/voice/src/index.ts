@@ -556,13 +556,21 @@ export class VoiceRuntime extends TypertRemoteService {
     const language = request.language?.trim() || this.config.language
     const final = request.final === true
     const currentChannel = channel
+    let spokenProvider = provider.id
+    let playbackError: unknown
     const task = channel.tail
       .catch(() => {})
       .then(async () => {
         if (controller.signal.aborted) return
-        await this.speakThroughProviders(text, language, controller.signal, providers)
+        spokenProvider = await this.speakThroughProviders(
+          text,
+          language,
+          controller.signal,
+          providers,
+        ) ?? spokenProvider
       })
       .catch((error: unknown) => {
+        playbackError = error
         if (!controller.signal.aborted) {
           this.ctx.logger('voice').warn(`conversation voice failed: ${String(error)}`)
         }
@@ -578,7 +586,10 @@ export class VoiceRuntime extends TypertRemoteService {
     // the Client never awaits it on its render path. The completion signal lets
     // hands-free mode return from "speaking" to "listening" truthfully.
     await task
-    return { accepted: true, provider: provider.id }
+    if (playbackError !== undefined || controller.signal.aborted) {
+      return { accepted: false, reason: 'natural-unavailable', provider: spokenProvider }
+    }
+    return { accepted: true, provider: spokenProvider }
   }
 
   /**
@@ -887,22 +898,23 @@ export class VoiceRuntime extends TypertRemoteService {
     language: string,
     signal: AbortSignal,
     candidates = orderedProviders(this.ttsProviders, this.config.ttsProvider),
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     let lastError: unknown
     for (const provider of candidates) {
-      if (signal.aborted) return
+      if (signal.aborted) return undefined
       try {
         await provider.speak({ text, language, signal })
-        return
+        return provider.id
       } catch (error) {
         lastError = error
-        if (signal.aborted) return
+        if (signal.aborted) return undefined
         this.ctx.logger('voice').warn(
           `voice provider "${provider.id}" failed; trying fallback: ${String(error)}`,
         )
       }
     }
     if (lastError !== undefined) throw lastError
+    return undefined
   }
 }
 
