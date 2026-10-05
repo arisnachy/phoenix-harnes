@@ -108,8 +108,8 @@ function sandboxCanvasDocument(html: string, executable: boolean): string {
     "base-uri 'none'",
     "form-action 'none'",
   ].join('; ') + ';'
-  const head = /<head\\b[^>]*>([\\s\\S]*?)<\\/head>/i.exec(html)?.[1] ?? ''
-  const body = /<body\\b[^>]*>([\\s\\S]*?)<\\/body>/i.exec(html)?.[1] ?? html
+  const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
+  const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;width:100%;height:100%;overflow:auto;font-family:system-ui,sans-serif}*{box-sizing:border-box}</style></head><body>${body}</body></html>`
 }
 
