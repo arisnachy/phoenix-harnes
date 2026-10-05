@@ -30,6 +30,8 @@ describe('connector catalog', () => {
     expect(byId.get('openclaw')?.provenance).toBe('native')
     expect(byId.get('custom-mcp')?.provenance).toBe('registry-listed')
     expect(byId.get('canva')?.mode).toBe('oauth')
+    expect(byId.get('canva')?.curatedMcp).toBe(true)
+    expect(byId.get('canva')?.registryName).toBe('com.canva.mcp/mcp')
   })
 
   it('deduplicates Google Workspace and keeps GitHub separate from GitHub Copilot auth', () => {
