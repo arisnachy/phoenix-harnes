@@ -246,7 +246,7 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
     case 'approval/asked':
       return {
         kind: 'authorization',
-        displayOutput: 'I need your authorization before I can continue.',
+        displayOutput: 'I need your approval before I can continue.',
         dedupeKey: `authorization:${id}`,
       }
     case 'goal/judge': {
@@ -263,8 +263,8 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
         return {
           kind: 'blocked',
           displayOutput: summary === undefined
-            ? 'I need your attention before I can continue with the task.'
-            : `I need your attention before I can continue. ${summary}`,
+            ? 'I need your input before I can continue with the task.'
+            : `I need your input before I can continue. ${summary}`,
           dedupeKey: `blocked:${id}:${revision}`,
         }
       }
@@ -274,7 +274,7 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
       if (data.status !== 'blocked' && data.nextAction !== 'blocked') return undefined
       return {
         kind: 'blocked',
-        displayOutput: 'I need your attention before I can continue with the task.',
+        displayOutput: 'I need your input before I can continue with the task.',
         dedupeKey: `blocked:${id}:${revision}`,
       }
     default:
@@ -288,6 +288,7 @@ function naturalEventSummary(value: unknown): string | undefined {
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu, ' ')
     .replace(/\b[0-9a-f]{16,}\b/giu, ' ')
     .replace(/\b\d{6,}\b/gu, ' ')
+    .replace(/\bneeds? attention\b/giu, ' ')
     .replace(/\s+/gu, ' ')
     .trim()
   return text === '' ? undefined : text.slice(0, 320)
