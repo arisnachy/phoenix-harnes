@@ -229,6 +229,61 @@ describe('Official MCP Registry proxy', () => {
     expect(new URL(requestedUrls.at(-1)!).searchParams.get('limit')).toBe('20')
   })
 
+  it('retries one transient aborted request before surfacing a registry failure', async () => {
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async () => {
+        const error = new Error('This operation was aborted')
+        error.name = 'AbortError'
+        throw error
+      })
+      .mockImplementationOnce(async () => response([activeServer('retry-fixture')]))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await searchOfficialMcpRegistry({ query: 'retry-fixture' })
+
+    expect(result.candidates.map(candidate => candidate.name)).toEqual(['retry-fixture'])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('uses the direct latest-version endpoint for an exact registry identity', async () => {
+    const name = 'io.example/direct-fixture'
+    const fetchMock = vi.fn(async (input: string | URL) => {
+      const url = new URL(String(input))
+      expect(url.origin).toBe('https://registry.modelcontextprotocol.io')
+      expect(decodeURIComponent(url.pathname)).toBe(`/v0.1/servers/${name}/versions/latest`)
+      expect(url.search).toBe('')
+      return new Response(JSON.stringify(activeServer(name)), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      })
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await searchOfficialMcpRegistry({ query: name, limit: 20 })
+
+    expect(result.candidates.map(candidate => candidate.name)).toEqual([name])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('shares one in-flight request for duplicate registry searches', async () => {
+    let release: (() => void) | undefined
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const fetchMock = vi.fn(async () => {
+      await gate
+      return response([activeServer('dedupe-fixture')])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const first = searchOfficialMcpRegistry({ query: 'dedupe-fixture' })
+    const second = searchOfficialMcpRegistry({ query: 'dedupe-fixture' })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    release?.()
+
+    const [firstResult, secondResult] = await Promise.all([first, second])
+    expect(firstResult).toBe(secondResult)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
   it('returns a stale cached snapshot during a short registry outage, then fails after the stale horizon', async () => {
     let now = 1_000_000
     vi.spyOn(Date, 'now').mockImplementation(() => now)
