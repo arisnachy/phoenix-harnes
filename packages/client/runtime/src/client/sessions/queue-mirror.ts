@@ -24,16 +24,28 @@ type QueueItems = Extract<MuxFrame, { type: 'session/queue' }>['items']
 export class SessionQueueMirror {
   private current: readonly QueuedMessage[] = []
 
+  /**
+   * Return the current immutable queue projection.
+   * @returns current queue rows.
+   */
   snapshot(): readonly QueuedMessage[] {
     return this.current
   }
 
+  /**
+   * Drop the stale generation before its replacement queue baseline arrives.
+   * @returns whether any projected queue row was removed.
+   */
   reset(): boolean {
     if (this.current.length === 0) return false
     this.current = []
     return true
   }
 
+  /**
+   * Replace from one authoritative stream queue frame.
+   * @param items - complete host queue snapshot.
+   */
   replace(items: QueueItems, anchorSeq: number | null = null): void {
     const previousAnchors = new Map(
       this.current.map(item => [String(item.messageId), item.anchorSeq] as const),
@@ -61,6 +73,11 @@ export class SessionQueueMirror {
     this.current = [...byMessage.values()]
   }
 
+  /**
+   * Retire a transient steering row once its durable message enters the log.
+   * @param event - newly contiguous durable Session event.
+   * @returns whether the projection changed.
+   */
   acceptDurable(event: SessionEvent): boolean {
     if (event.type !== 'user/message') return false
     const messageId = event.data.id
