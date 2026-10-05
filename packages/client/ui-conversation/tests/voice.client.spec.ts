@@ -330,10 +330,10 @@ describe('browser voice adapter', () => {
     }
   })
 
-  it('routes streaming speech to the Host neural voice and cancels it on barge-in', async () => {
+  it('routes streaming speech to Host Kokoro even when it is not the neural provider flag', async () => {
     const status = vi.fn(async () => ({
       ok: true as const,
-      value: { enabled: true, natural: true, provider: 'phoenix-natural' },
+      value: { enabled: true, natural: false, provider: 'kokoro' },
     }))
     const speak = vi.fn(async (_request: {
       readonly key: string
@@ -343,7 +343,7 @@ describe('browser voice adapter', () => {
       readonly final?: boolean
     }) => ({
       ok: true as const,
-      value: { accepted: true, provider: 'phoenix-natural' },
+      value: { accepted: true, provider: 'kokoro' },
     }))
     const cancel = vi.fn(async (_request: { readonly key: string }) => ({
       ok: true as const,
