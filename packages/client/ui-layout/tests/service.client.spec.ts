@@ -58,7 +58,7 @@ describe('LayoutController', () => {
     expect(service.getWorkspaceOccupancy()).toEqual({ subagent: false, cordis: true })
 
     expect(panels.setWorkspaceOccupant).toHaveBeenNthCalledWith(1, 'subagent', true)
-    expect(panels.setWorkspaceOccupant).toHaveBeenNthCalledWith(2, 'cordis', true)
+    expect(panels.setWorkspaceOccupant).toHaveBeenNthCalledWith(2, 'cordis', true, 'right')
     expect(panels.setWorkspaceOccupant).toHaveBeenNthCalledWith(3, 'subagent', false)
     expect(listener).toHaveBeenCalledTimes(3)
 
@@ -67,15 +67,21 @@ describe('LayoutController', () => {
     expect(listener).toHaveBeenCalledTimes(3)
   })
 
-  it('ignores duplicate occupancy writes', () => {
+  it('ignores duplicate occupancy writes but forwards an in-place Cordis side move', () => {
     const service = new LayoutController()
     const panels = fakePanels()
+    const listener = vi.fn()
     service.attachPanels(panels)
+    service.subscribeWorkspaceOccupancy(listener)
 
     service.setWorkspaceOccupant('cordis', true)
     service.setWorkspaceOccupant('cordis', true)
+    service.setWorkspaceOccupant('cordis', true, 'left')
 
-    expect(panels.setWorkspaceOccupant).toHaveBeenCalledTimes(1)
+    expect(panels.setWorkspaceOccupant).toHaveBeenCalledTimes(2)
+    expect(panels.setWorkspaceOccupant).toHaveBeenNthCalledWith(1, 'cordis', true, 'right')
+    expect(panels.setWorkspaceOccupant).toHaveBeenNthCalledWith(2, 'cordis', true, 'left')
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 
   it('re-attach overwrites the stale action set (entry re-register)', () => {
