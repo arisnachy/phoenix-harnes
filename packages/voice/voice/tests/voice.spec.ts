@@ -109,7 +109,7 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
 
     await expect(voice.conversationStatus()).resolves.toEqual({
       enabled: true,
-      natural: false,
+      natural: true,
       provider: 'kokoro',
     })
     await expect(voice.conversationSpeak({
