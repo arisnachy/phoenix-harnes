@@ -19,7 +19,7 @@ const GOOGLE_SERVICES = 'gmail,calendar,drive,docs,sheets,slides,contacts'
 const MAX_OUTPUT = 256_000
 
 interface CliRunOptions {
-  readonly signal?: AbortSignal
+  readonly signal?: AbortSignal | undefined
   readonly env?: Readonly<Record<string, string>>
   readonly onOutput?: (text: string) => void
 }
@@ -332,12 +332,14 @@ function parseRawMessage(raw: string): {
   const to = headers.get('to') ?? ''
   const subject = headers.get('subject') ?? ''
   if (to.length === 0 || subject.length === 0) return undefined
+  const cc = headers.get('cc')
+  const bcc = headers.get('bcc')
   return {
     to,
     subject: decodeMimeSubject(subject),
     body,
-    ...(headers.get('cc') === undefined ? {} : { cc: headers.get('cc') }),
-    ...(headers.get('bcc') === undefined ? {} : { bcc: headers.get('bcc') }),
+    ...(cc === undefined ? {} : { cc }),
+    ...(bcc === undefined ? {} : { bcc }),
     html: (headers.get('content-type') ?? '').toLowerCase().startsWith('text/html'),
   }
 }
