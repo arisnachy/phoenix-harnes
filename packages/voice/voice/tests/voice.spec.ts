@@ -168,6 +168,17 @@ describe('Codex realtime compact context', () => {
 })
 
 describe('Codex realtime app-server notifications', () => {
+  it('reports active native realtime ownership without exposing thread details', () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as { sessions: Map<string, string> }
+    expect(bridge.hasActiveSession()).toBe(false)
+    internal.sessions.set('session-a', 'thread-a')
+    expect(bridge.hasActiveSession()).toBe(true)
+    internal.sessions.clear()
+    expect(bridge.hasActiveSession()).toBe(false)
+    bridge.close()
+  })
+
   it('surfaces an async startup error immediately instead of waiting for a missing SDP', async () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
