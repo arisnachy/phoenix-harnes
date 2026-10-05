@@ -100,6 +100,14 @@ if (rawArgs[0] === 'codex-update') {
   process.exit(result.status ?? 1)
 }
 
+// Superpowers is an upstream skill methodology bridged directly into PHOENIX.
+// Keep it outside profile parsing so sync/verify can repair a fresh install
+// even when no agent profile can boot yet.
+if (rawArgs[0] === 'superpowers') {
+  const { runSuperpowers } = await import('./superpowers.ts')
+  process.exit(runSuperpowers(rawArgs.slice(1)))
+}
+
 // OpenClaw skills are a launcher capability rather than a profile plugin:
 // syncing and auditing them must work before any profile is parsed or booted.
 if (rawArgs[0] === 'openclaw-skills') {
