@@ -29,6 +29,7 @@ interface CliResult {
   readonly stderr: string
 }
 
+/** Fixed-argv runner used to invoke verified OpenClaw companion CLIs without a shell. */
 export type OpenClawCliRunner = (
   command: string,
   args: readonly string[],
@@ -167,7 +168,11 @@ async function validGogAccounts(signal?: AbortSignal): Promise<GogAccount[]> {
   })
 }
 
-/** Return one verified gog account, if the official CLI exists and is authenticated. */
+/**
+ * Return one verified gog account, if the official CLI exists and is authenticated.
+ * @param signal - Optional cancellation signal for the bounded CLI probes.
+ * @returns The verified Google account email, or undefined when gog is unavailable or unauthenticated.
+ */
 export async function findOpenClawGoogleAccount(signal?: AbortSignal): Promise<string | undefined> {
   if (!await available('gog', signal)) return undefined
   try {
@@ -200,6 +205,8 @@ function missingGogCredentials(error: unknown): boolean {
 /**
  * Prefer OpenClaw's official gog authorization. Undefined means gog is absent,
  * so the caller may safely use the native PHOENIX Google OAuth fallback.
+ * @param session - Human authorization interaction and cancellation scope.
+ * @returns The verified Google account email, or undefined when gog is not installed.
  */
 export async function authorizeGoogleWithOpenClaw(
   session: AuthorizationSession,
@@ -344,6 +351,7 @@ function parseRawMessage(raw: string): {
   }
 }
 
+/** Stable subset of Google broker requests that can be translated to the official gog CLI. */
 export interface OpenClawGoogleRequest {
   readonly service: 'gmail' | 'calendar' | 'drive' | 'docs' | 'sheets' | 'slides' | 'contacts'
   readonly path: string
@@ -355,6 +363,9 @@ export interface OpenClawGoogleRequest {
 /**
  * Translate PHOENIX's stable Google broker calls to the official gog CLI.
  * Returns undefined when a legacy advanced REST path has no safe translation.
+ * @param account - Verified gog account email selected for the operation.
+ * @param request - Bounded Google Workspace operation from the existing broker contract.
+ * @returns A broker-compatible JSON response, or undefined when no safe gog mapping exists.
  */
 export async function requestGoogleWithOpenClaw(
   account: string,
@@ -496,7 +507,6 @@ async function inspectGithub(ctx: Context, signal?: AbortSignal): Promise<Author
     kind: 'account',
     provider: 'GitHub',
     accountType: 'openclaw-gh',
-    email: login,
     connectors: [{
       id: 'github',
       name: 'GitHub',
@@ -551,7 +561,11 @@ async function authorizeGithub(session: AuthorizationSession): Promise<string> {
   return login
 }
 
-/** Register one non-Copilot GitHub account flow backed by the official gh CLI. */
+/**
+ * Register one non-Copilot GitHub account flow backed by the official gh CLI.
+ * @param ctx - Host Cordis context owning authorization and credential services.
+ * @returns Disposer that unregisters the GitHub authorization flow.
+ */
 export function registerOpenClawGithubAuthorization(ctx: Context): () => void {
   return ctx.authorization.registerFlow({
     key: OPENCLAW_GITHUB_ACCOUNT_KEY,
