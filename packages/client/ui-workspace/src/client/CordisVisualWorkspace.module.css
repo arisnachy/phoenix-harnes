@@ -15,6 +15,11 @@
   box-shadow: var(--dsw-shadow-lv2);
 }
 
+.root[data-cordis-dock='left'] {
+  border-right: 1px solid var(--dsw-alias-border-l2);
+  border-left: 0;
+}
+
 /* KIRA remains the upper occupant; the shared parent rail supplies the split. */
 .root[data-under-subagent='true'] {
   border-top: 1px solid var(--dsw-alias-border-l2);
