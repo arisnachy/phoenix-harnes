@@ -651,10 +651,14 @@ export function interruptVoiceAssistantSpeech(): boolean {
   const hadBrowserSpeech = voiceAssistantSpeech !== undefined
   const hadRemoteSpeech = remoteSpeech !== undefined
   const realtime = codexRealtimeVoiceSession
-  const hadRealtimeSpeech = realtime !== undefined && voiceAssistantSnapshot.phase === 'speaking'
+  const hadPendingRealtimeSpeech = realtime !== undefined
+    && pendingCodexRealtimeUtterances.some(item => item.sessionKey === realtime.key)
+  const hadRealtimeSpeech = realtime !== undefined
+    && (voiceAssistantSnapshot.phase === 'speaking' || hadPendingRealtimeSpeech)
   if (hadRealtimeSpeech && realtime.events.readyState === 'open') {
     try { realtime.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* peer cleanup owns closure */ }
   }
+  if (realtime !== undefined && hadPendingRealtimeSpeech) discardCodexRealtimeUtterances(realtime.key)
   voiceAssistantSpeech?.dispose()
   voiceAssistantSpeech = undefined
   voiceAssistantSpeechKey = undefined
@@ -761,7 +765,7 @@ export function speakVoiceAssistantAttention(title: string, detail?: string): bo
       'PHOENIX needs the user\'s input or review before continuing.',
       'Use the same voice and persona already active in this call.',
       'Do not read UUIDs, task ids, hashes, timestamps, field names, or raw numbers used only as identifiers.',
-      'Do not literally say "need attention" or "needs attention".',
+      'Avoid mechanical status-label wording; ask for the required review or input like a person would.',
       'Use the following context only to explain naturally what the user should look at:',
       context,
     ].join(' '),
@@ -776,7 +780,7 @@ function naturalAttentionContext(title: string, detail?: string): string {
   const combined = [title, detail].filter((value): value is string =>
     typeof value === 'string' && value.trim() !== '').join('. ')
   const cleaned = conversationalSpeechText(combined)
-    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/giu, ' ')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu, ' ')
     .replace(/\b[0-9a-f]{16,}\b/giu, ' ')
     .replace(/\b\d{6,}\b/gu, ' ')
     .replace(/\bneeds? attention\b/giu, ' ')
