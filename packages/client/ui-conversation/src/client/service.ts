@@ -147,6 +147,7 @@ export class ConversationController extends Service implements IConversation {
    * @param text - serialized prompt text.
    * @param imageIds - ordered draft-local attachment ids.
    * @param mode - queue or steer delivery selected by composer policy.
+   * @param clientSubmissionId - browser visual correlation id.
    * @param signal - optional cancellation for the complete Host admission.
    * @returns the Host admission outcome; local attachment preparation failures reject.
    */
@@ -155,6 +156,7 @@ export class ConversationController extends Service implements IConversation {
     text: string,
     imageIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
+    clientSubmissionId: string,
     signal?: AbortSignal,
   ): Promise<SubmitOutcome> {
     const attachments = this.draftImages(imageIds)
@@ -163,7 +165,7 @@ export class ConversationController extends Service implements IConversation {
     }
     const uploaded = await this.serializeAttachments(attachments.map(attachment => attachment.file))
     const content = [...uploaded, ...(text === '' ? [] : [{ type: 'text' as const, text }])]
-    const result = await session.prompt(content, mode, signal)
+    const result = await session.prompt(content, mode, signal, clientSubmissionId)
     if (!result.ok) return { kind: 'error' }
     this.releaseDraftImages(attachments)
     return { kind: 'success' }
