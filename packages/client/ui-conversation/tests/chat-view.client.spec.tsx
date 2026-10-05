@@ -638,6 +638,71 @@ describe('ChatView', () => {
     expect(view.container.querySelectorAll('[data-pending-steering]')).toHaveLength(1)
   })
 
+  it('keeps a busy-turn user message before later assistant work while steering admission settles', () => {
+    const startedAt = Date.now()
+    const first = assistant(1, 'trabajo que ya estaba en curso')
+    const pending = {
+      id: 'priority-steer-occurrence' as never,
+      messageId: 'priority-steer-message' as never,
+      placement: 'steering' as const,
+      content: [{ type: 'text' as const, text: 'abre el juego para irlo viendo' }],
+      preview: 'abre el juego para irlo viendo',
+      text: 'abre el juego para irlo viendo',
+    }
+    const h = makeHarness(
+      { nodes: [first], running: true },
+      { pendingSubmit: { seq: 77, text: 'abre el juego para irlo viendo', startedAt } },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    const localBubble = view.getByText('abre el juego para irlo viendo').closest('[data-pending-steering]')
+    expect(localBubble).not.toBeNull()
+
+    // Host acknowledgement must not replace the local owner with a second
+    // tail bubble; it only confirms the same gesture is now steering.
+    act(() => { h.set({ queue: [pending] }) })
+    expect(view.getAllByText('abre el juego para irlo viendo')).toHaveLength(1)
+
+    // More output from the interrupted work may land while cancellation and
+    // replay converge. It belongs AFTER the human interruption in the UI.
+    act(() => {
+      h.set({
+        queue: [pending],
+        nodes: [first, assistant(2, 'respuesta posterior al mensaje del usuario')],
+      })
+    })
+    const userBubble = view.getByText('abre el juego para irlo viendo').closest('[data-pending-steering]')
+    const laterAnswer = view.getByText('respuesta posterior al mensaje del usuario').closest('[data-chat-flow-key]')
+    expect(userBubble).not.toBeNull()
+    expect(laterAnswer).not.toBeNull()
+    expect(userBubble!.compareDocumentPosition(laterAnswer!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+
+    // Durable steering takes ownership in place without ever showing two
+    // copies of the same human message.
+    act(() => {
+      h.set({
+        queue: [],
+        nodes: [
+          first,
+          {
+            kind: 'steering',
+            messageId: pending.messageId,
+            seq: 1.5,
+            time: startedAt + 1,
+            content: pending.content,
+            source: null,
+          },
+          assistant(2, 'respuesta posterior al mensaje del usuario'),
+        ],
+      })
+    })
+    expect(view.getAllByText('abre el juego para irlo viendo')).toHaveLength(1)
+    expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+    const durableBubble = view.getByText('abre el juego para irlo viendo').closest('[class*="userRow"]')
+    expect(durableBubble).not.toBeNull()
+    expect(durableBubble!.compareDocumentPosition(laterAnswer!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
   it('does not double-render when durable steering lands before the transient queue retires it', () => {
     const pending = {
       id: 'steer-overlap-occurrence' as never,
