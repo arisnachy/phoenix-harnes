@@ -14,6 +14,7 @@ interface CommandResult {
   readonly error?: Error
 }
 
+/** Synchronous fixed-argv runner used for secret-free OpenClaw connector readiness probes. */
 export type OpenClawCommandRunner = (bin: string, args: readonly string[]) => CommandResult
 
 function defaultRun(bin: string, args: readonly string[]): CommandResult {
