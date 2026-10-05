@@ -14,6 +14,8 @@ Update the affected test fixtures to exercise the current contracts without weak
 
 The vendor rescope gate excludes only `packages/client/ui-layout/src/client/service.ts` from the upstream `cordis` name match, alongside its existing stores and test exclusions: this literal identifies a workspace occupant, not an imported package. Keep unrelated package references checked. Make `SuperpowersSkillRecord` in `apps/cli/src/superpowers.ts` local because only the owning module uses it; this removes the unused export without changing runtime behavior.
 
+The advanced ACP and headless replay fixtures retain their manual Cordis approval lifecycle through a test-only definition adapter that sets `autoApprove: false` and restores the original method on disposal. Both replay configurations explicitly require Host approval; the real definition, activation and approval receipts remain in use. Main commit `b075e3a33e` changed the production `cordis_define` and `cordis_run` tool descriptions, so those two ACP header descriptions and their system-prompt copies, plus the matching policy sentence, follow the current prose; behavioral approval goldens remain unchanged. The product headless profile golden also records the new durable default `agent/model-selection` event and adjusts its three source-event references, retaining the tool round trip and original runtime-context text. Its keyless CLI-mock overlay disables only the unrelated native `subagent-codex` account probe, so success and model-failure assertions remain deterministic without real-account setup.
+
 ## Alternatives considered
 
 **Relax thresholds or skip failing tests.** This would hide existing release failures and weaken the integration evidence.

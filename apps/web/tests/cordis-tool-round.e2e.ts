@@ -8,7 +8,9 @@
 // stop turn. The package therefore carries a browser half whose only
 // job is to be visible (`[data-snapshot-probe]`): its absence before the answer
 // and presence after it is the v3 user gate, proven rather than described.
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { Browser, Page } from 'playwright'
 import { chromium } from 'playwright'
@@ -22,6 +24,7 @@ import { connectFreshWorkspace, newEnglishPage, saveFailureShot } from './suppor
 
 const FIXTURE = fileURLToPath(new URL('./snapshots/cordis-tool-round/session.jsonl', import.meta.url))
 const UI_EXPECTED = fileURLToPath(new URL('./snapshots/cordis-tool-round/ui.expected.md', import.meta.url))
+const MANUAL_APPROVAL = fileURLToPath(new URL('../../../examples/acp-agent/tests/fixtures/manual-cordis-approval.mjs', import.meta.url))
 const MODE = webSnapshotMode()
 const CORDIS_TOOLS = ['cordis_inspect_self', 'cordis_define', 'cordis_run', 'cordis_stop'] as const
 const PACKAGE_CODE = 'return { name: "snapshot-noop", apply(ctx) {} }'
@@ -75,6 +78,7 @@ function assertCompleteCordisLifecycle(events: readonly SessionEvent[]): void {
 }
 
 describe('web e2e: Cordis tools use their owned cards', () => {
+  let overlayRoot: string
   let scaffold: WebScaffold
   let browser: Browser
   let page: Page
@@ -82,12 +86,21 @@ describe('web e2e: Cordis tools use their owned cards', () => {
   const sessionEvents: SessionEvent[] = []
 
   beforeAll(async () => {
+    // Keep this manual-approval corpus explicit when authored packages default to auto-approval.
+    overlayRoot = await mkdtemp(join(tmpdir(), 'phoenix-web-cordis-manual-'))
+    const overlay = join(overlayRoot, 'manual-approval.yml')
+    await writeFile(overlay, `- insert:
+    - id: snapshot-manual-cordis-approval
+      name: ${JSON.stringify(MANUAL_APPROVAL)}
+`)
     scaffold = await launchWebScaffold({
       cordisTools: true,
+      extraOverlayPath: overlay,
       ...(MODE === 'record' ? {} : { replayFixture: FIXTURE, paceMs: 15 }),
     })
     scaffold.ctx.on('session/event', (_session, event: SessionEvent) => { sessionEvents.push(event) })
-    browser = await chromium.launch()
+    browser = await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH === undefined
+      ? {} : { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH })
     page = await newEnglishPage(browser)
     tripwire = watchConsole(page)
     await page.goto(scaffold.baseUrl, { waitUntil: 'load' })
@@ -97,7 +110,11 @@ describe('web e2e: Cordis tools use their owned cards', () => {
 
   afterAll(async () => {
     await browser?.close()
-    await scaffold?.close()
+    try {
+      await scaffold?.close()
+    } finally {
+      if (overlayRoot !== undefined) await rm(overlayRoot, { recursive: true, force: true })
+    }
   })
 
   it('drives the recorded Cordis lifecycle to a settled turn (all modes)', async () => {

@@ -14,6 +14,8 @@ Team 集成验证发现既有聊天和 Host 测试夹具没有提供当前投影
 
 vendor 重命名检查仅在既有 stores 和测试排除项之外，将 `packages/client/ui-layout/src/client/service.ts` 排除于上游 `cordis` 名称匹配：该字面量标识工作区占用者，并非导入的包。其他包引用仍接受检查。将 `apps/cli/src/superpowers.ts` 中的 `SuperpowersSkillRecord` 保持为模块内部接口，因为只有所属模块使用它；这会移除未使用的导出，不改变运行时行为。
 
+高级 ACP 和 headless 回放夹具通过仅用于测试的定义适配器保留手动 Cordis 审批生命周期：适配器设置 `autoApprove: false`，并在释放时恢复原方法。两个回放配置均明确要求 Host 审批，仍使用真实的定义、激活和审批回执。主分支提交 `b075e3a33e` 修改了生产环境 `cordis_define` 和 `cordis_run` 的工具描述，因此更新这两项 ACP 请求头描述及其系统提示副本，以及对应的策略句子，以匹配当前文案；审批行为的预期输出保持不变。产品 headless 配置的预期输出还记录新增的持久化默认 `agent/model-selection` 事件，并调整三处源事件引用，同时保留工具往返行为和原有运行时上下文文本。其无密钥 CLI-mock 覆盖配置仅禁用无关的原生 `subagent-codex` 账户探测，使成功和模型失败断言无需真实账户配置即可保持确定性。
+
 ## 考虑过的替代方案
 
 **放宽阈值或跳过失败测试。** 这会隐藏既有发布失败并削弱集成证据。
