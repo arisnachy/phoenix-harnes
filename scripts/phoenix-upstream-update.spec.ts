@@ -103,4 +103,30 @@ describe('PHOENIX upstream update intake', () => {
     expect(operations.some(operation => operation.from.includes('user-owned'))).toBe(false)
     expect(operations.every(operation => !operation.from.includes('..'))).toBe(true)
   })
+  it('accepts only the Superpowers-owned namespace during transactional activation', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-superpowers-update-test-'))
+    temporaryPaths.push(home)
+    const stage = join(home, 'stage')
+    const backup = join(home, 'backup')
+    mkdirSync(join(stage, 'superpowers'), { recursive: true })
+    mkdirSync(join(stage, 'skills', 'superpowers-using-superpowers'), { recursive: true })
+    writeFileSync(join(stage, 'skills', 'superpowers-using-superpowers', 'SKILL.md'), 'new')
+
+    const operations = buildActivationPlan(home, stage, backup, [{
+      key: 'superpowers',
+      previous: { managedSkills: [] },
+      candidate: { managedSkills: ['superpowers-using-superpowers'] },
+    }])
+
+    expect(operations.map(operation => operation.kind)).toEqual([
+      'provider-activate',
+      'skill-activate',
+    ])
+    expect(() => buildActivationPlan(home, stage, backup, [{
+      key: 'superpowers',
+      previous: { managedSkills: [] },
+      candidate: { managedSkills: ['openclaw-using-superpowers'] },
+    }])).toThrow('unsafe managed skill path')
+  })
+
 })
