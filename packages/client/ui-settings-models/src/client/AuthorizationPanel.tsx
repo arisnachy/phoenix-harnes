@@ -536,6 +536,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const oauthAccount = account !== undefined && account.methods.some(candidate => candidate.id === 'oauth')
     ? account
     : undefined
+  const openClawRuntimeMissing = definition.id === 'github' && openClaw?.phase === 'missing-runtime'
   const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed')
   const canRepair = brokenManaged && managed?.source !== undefined && onRepair !== undefined
   return (
@@ -573,7 +574,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : installUrl !== undefined ? (
             <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
           ) : null}
-          {oauthAccount !== undefined && !connectedByAccount && openClaw?.connected !== true ? (
+          {oauthAccount !== undefined && !connectedByAccount && openClaw?.connected !== true && !openClawRuntimeMissing ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
               {connected ? t('reauthorize') : t('authorize')}
             </button>
@@ -598,7 +599,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               {removing ? t('uninstalling') : t('uninstall')}
             </button>
           ) : null}
-          {managed === undefined && oauthAccount === undefined && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
+          {managed === undefined && (oauthAccount === undefined || openClawRuntimeMissing) && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
               {t('findOfficialConnector')}
             </button>
