@@ -114,8 +114,10 @@ describe('connector_install', () => {
 
   it('fails closed when the curated Devpost installer is unavailable', async () => {
     const service = installer()
-    service.installCuratedMcpConnector = undefined as never
-    const tool = createConnectorInstallTool({ request: vi.fn() }, service)
+    const registryOnly: McpRegistryInstallerService = {
+      installMcpRegistryServer: service.installMcpRegistryServer,
+    }
+    const tool = createConnectorInstallTool({ request: vi.fn() }, registryOnly)
 
     await expect(tool.execute({ connectorId: 'devpost' }, exec({} as Agent)))
       .rejects.toThrow('curated Devpost MCP installation is unavailable')
