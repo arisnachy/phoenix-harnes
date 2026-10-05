@@ -349,6 +349,32 @@ describe('connectors settings section', () => {
     expect(await screen.findByText('Registry-listed · vendor not verified')).toBeTruthy()
   })
 
+  it('keeps Official MCP Registry transport internals out of the connector UI', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const search = vi.fn(async () => {
+      throw new Error('pluginInventory.searchMcpRegistry failed: internal: Official MCP Registry lookup failed: This operation was aborted')
+    })
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(),
+      remove: vi.fn(),
+      repair: vi.fn(),
+      search,
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'Canva' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Find official / install' }))
+
+    expect(await screen.findByText('The Official MCP Registry is unavailable right now.')).toBeTruthy()
+    expect(screen.queryByText(/pluginInventory\.searchMcpRegistry failed/)).toBeNull()
+  })
+
   it('shows broken managed connectors with repair and uninstall actions', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
