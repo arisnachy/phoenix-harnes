@@ -1031,7 +1031,7 @@ export function InputBar({
                   data-voice-state={voiceState}
                   disabled={locked || machineBusy}
                   onMouseDown={keepFocus}
-                  onClick={toggleVoice}
+                  onClick={() => { void toggleVoice() }}
                 >
                   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                     <path d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4 6.5a4 4 0 0 0 8 0h1.5a5.5 5.5 0 0 1-4.75 5.44V15h-1.5v-1.56A5.5 5.5 0 0 1 2.5 8H4Z" fill="currentColor" />
