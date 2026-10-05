@@ -110,7 +110,7 @@ describe('Google Workspace OAuth authorization boundary', () => {
     expect(described).toEqual({ configured: true, kind: 'api-key', writable: true })
     expect(JSON.stringify(described)).not.toMatch(/access-token|refresh-token|authorization-code/)
 
-    expect(ctx.authorization.list()).toMatchObject([{
+    expect(ctx.authorization.list().filter(flow => flow.key === GOOGLE_ACCOUNT_KEY)).toMatchObject([{
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Workspace',
       methods: [{ id: 'oauth', label: 'Sign in with Google' }],
@@ -136,6 +136,10 @@ describe('Google Workspace OAuth authorization boundary', () => {
 
   it('retries a rejected Desktop token exchange with a safely prompted client secret', async () => {
     const ctx = await harness()
+    let storedSecret: string | undefined
+    vi.spyOn(ctx.credentials, 'set').mockImplementation(async (_ref, value) => { storedSecret = value })
+    vi.spyOn(ctx.credentials, 'resolve').mockImplementation(async () => storedSecret === undefined
+      ? undefined : { value: storedSecret, source: 'test' })
     internals.openLoopback = async () => ({
       redirectUri: 'http://127.0.0.1:49152/oauth2/callback',
       code: Promise.resolve('authorization-code-private'),
@@ -144,7 +148,7 @@ describe('Google Workspace OAuth authorization boundary', () => {
     const seenBodies: string[] = []
     internals.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = init?.body
-      seenBodies.push(body instanceof URLSearchParams ? body.toString() : String(body ?? ''))
+      seenBodies.push(body instanceof URLSearchParams ? body.toString() : typeof body === 'string' ? body : '')
       if (seenBodies.length === 1) return new Response('{"error":"invalid_client"}', { status: 401 })
       return tokenResponse()
     })
@@ -282,9 +286,13 @@ describe('Google Workspace API broker', () => {
     internals.now = () => 2_000_000
     const refresh = Promise.withResolvers<Response>()
     let apiCalls = 0
+    let refreshCalls = 0
     internals.fetch = (async (input: RequestInfo | URL) => {
       const inputUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
-      if (inputUrl === 'https://oauth2.googleapis.com/token') return refresh.promise
+      if (inputUrl === 'https://oauth2.googleapis.com/token') {
+        refreshCalls += 1
+        return refresh.promise
+      }
       apiCalls += 1
       return new Response('{}', { status: 200 })
     })
@@ -299,6 +307,7 @@ describe('Google Workspace API broker', () => {
 
     await expect(gmailRequest).resolves.toMatchObject({ status: 200, ok: true })
     await expect(driveRequest).rejects.toMatchObject({ code: 'GOOGLE_SCOPE_DENIED' })
+    expect(refreshCalls).toBe(1)
     expect(apiCalls).toBe(1)
     expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toEqual({ kind: 'api-key' })
   })

@@ -189,9 +189,17 @@ export async function commitPreparedImageFile(
   root: string,
   prepared: PreparedImageFile,
 ): Promise<ImageAttachmentRef> {
-  const normalized = prepared.data
+  return commitPreparedAttachment(root, prepared, 'image')
+}
+
+/** Publish verified bytes with one durability and cleanup protocol for both attachment types. */
+async function commitPreparedAttachment<Ref extends { attachmentId: AttachmentId; bytes: number }>(
+  root: string,
+  prepared: { data: Uint8Array; ref: Ref },
+  kind: 'image' | 'file',
+): Promise<Ref> {
   const sha256 = ensureReference(prepared.ref)
-  if (digest(normalized) !== sha256 || normalized.byteLength !== prepared.ref.bytes) {
+  if (digest(prepared.data) !== sha256 || prepared.data.byteLength !== prepared.ref.bytes) {
     throw new AttachmentError('Prepared attachment bytes do not match their reference.', 'ATTACHMENT_CORRUPT')
   }
   const bucket = join(root, 'objects', sha256.slice(0, 2))
@@ -207,7 +215,7 @@ export async function commitPreparedImageFile(
   let handle
   try {
     handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
-    await handle.writeFile(normalized)
+    await handle.writeFile(prepared.data)
     await handle.sync()
     await handle.close()
     handle = undefined
@@ -240,7 +248,7 @@ export async function commitPreparedImageFile(
       },
     )
     if (error instanceof AttachmentError) throw error
-    throw new AttachmentError('Unable to persist image attachment.', 'ATTACHMENT_WRITE_FAILED', { cause: error })
+    throw new AttachmentError(`Unable to persist ${kind} attachment.`, 'ATTACHMENT_WRITE_FAILED', { cause: error })
   }
   return prepared.ref
 }
@@ -347,52 +355,7 @@ export async function commitPreparedFileAttachment(
   root: string,
   prepared: PreparedFileAttachment,
 ): Promise<FileAttachmentRef> {
-  const sha256 = ensureReference(prepared.ref)
-  if (digest(prepared.data) !== sha256 || prepared.data.byteLength !== prepared.ref.bytes) {
-    throw new AttachmentError('Prepared attachment bytes do not match their reference.', 'ATTACHMENT_CORRUPT')
-  }
-  const bucket = join(root, 'objects', sha256.slice(0, 2))
-  const staging = join(root, 'tmp')
-  const boundary = await ensureDurableHome(dirname(dirname(resolve(root))))
-  await ensureDurableDirectory(bucket, boundary)
-  await ensureDurableDirectory(staging, boundary)
-  const temporary = join(staging, randomUUID())
-  const target = objectPath(root, sha256)
-  let handle
-  try {
-    handle = await open(temporary, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o600)
-    await handle.writeFile(prepared.data)
-    await handle.sync()
-    await handle.close()
-    handle = undefined
-    try {
-      await link(temporary, target)
-    } catch (error) {
-      /* v8 ignore next -- Private same-filesystem directories make EEXIST the only recoverable link race. */
-      if (!(error instanceof Error && 'code' in error && error.code === 'EEXIST')) throw error
-      const existing = new Uint8Array(await readFile(target))
-      if (digest(existing) !== sha256) throw new AttachmentError('Stored attachment failed integrity verification.', 'ATTACHMENT_CORRUPT')
-    }
-    await syncDirectory(bucket)
-    await syncDirectory(join(root, 'objects'))
-    await unlink(temporary)
-  } catch (error) {
-    /* v8 ignore next -- A descriptor can remain open only when the underlying write/sync/close operation fails. */
-    if (handle !== undefined) await handle.close().catch(
-      /* v8 ignore next -- Close failure is superseded by the storage operation that entered cleanup. */
-      () => {},
-    )
-    await unlink(temporary).catch(
-      /* v8 ignore next -- Cleanup is best-effort only for a staging file already removed by a failed operation. */
-      (cleanupError: unknown) => {
-        /* v8 ignore next -- Cleanup failure is irrelevant when the temporary file was already removed. */
-        if (!(cleanupError instanceof Error && 'code' in cleanupError && cleanupError.code === 'ENOENT')) throw cleanupError
-      },
-    )
-    if (error instanceof AttachmentError) throw error
-    throw new AttachmentError('Unable to persist file attachment.', 'ATTACHMENT_WRITE_FAILED', { cause: error })
-  }
-  return prepared.ref
+  return commitPreparedAttachment(root, prepared, 'file')
 }
 
 /**

@@ -136,7 +136,7 @@ describe('in-process structured output', () => {
       { type: 'usage', usage: { inputTokens: 10, outputTokens: 5 } },
       { type: 'finish', reason: { kind: 'tool-calls' } },
     ] as Script[number]
-    const { ctx, parent } = await setup([response])
+    const { ctx, parent, adapter } = await setup([response])
     let sideEffectRan = false
     ctx.tools.register(defineContentToolFixture({
       name: 'side_effect',
@@ -150,6 +150,7 @@ describe('in-process structured output', () => {
     const run = await ctx.subagents.start('spawn', structuredRequest(parent))
     const result = await run.result
     expect(result.stopReason).toBe('completed')
+    expect(adapter.requests).toHaveLength(1)
     expect(result.structured).toEqual({ answer: 5 })
     // The deny skipped dispatch entirely: the probe body never ran.
     expect(sideEffectRan).toBe(false)

@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HardnessArtifactNodeView } from '../src/client/chat/HardnessArtifactNodeView.tsx'
+
+afterEach(cleanup)
 
 function props(data: {
   readonly artifactId: string
@@ -23,6 +25,7 @@ function props(data: {
       visibility: 'visible',
       data: {
         ...data,
+        executable: data.executable ?? (data.mime === 'text/html' || data.mime === 'application/vnd.hardness.app+html'),
         callId: 'call-1',
         seq: 1,
         time: 1,
@@ -246,7 +249,9 @@ describe('HARDNESS inline artifact renderer', () => {
     })} />)
 
     expect(document.querySelector('[data-phoenix-visual-kind="chart"]')).toBeTruthy()
-    expect(screen.getByText('Ventas')).toBeTruthy()
+    expect(screen.getByText('Lun · Ventas: 18', { selector: 'title' })).toBeTruthy()
+    expect(screen.getByText('Mar · Ventas: 22', { selector: 'title' })).toBeTruthy()
+    expect(screen.getByText('Mié · Ventas: 15', { selector: 'title' })).toBeTruthy()
     expect(screen.queryByText(/"labels"/)).toBeNull()
   })
 

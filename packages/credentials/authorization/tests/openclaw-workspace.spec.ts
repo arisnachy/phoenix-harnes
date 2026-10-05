@@ -25,7 +25,7 @@ function session(overrides: Partial<AuthorizationSession> = {}): AuthorizationSe
     notify: vi.fn(),
     prompt: vi.fn(async () => ''),
     ...overrides,
-  } as unknown as AuthorizationSession
+  }
 }
 
 describe('OpenClaw Workspace authorization bridge', () => {
@@ -40,9 +40,10 @@ describe('OpenClaw Workspace authorization bridge', () => {
       throw new Error(`unexpected command: ${command} ${args.join(' ')}`)
     }
 
-    const activeSession = session()
+    const prompt = vi.fn(async () => '')
+    const activeSession = session({ prompt })
     await expect(authorizeGoogleWithOpenClaw(activeSession)).resolves.toBe('owner@example.com')
-    expect(activeSession.prompt).not.toHaveBeenCalled()
+    expect(prompt).not.toHaveBeenCalled()
     expect(calls.some(call => call.args.includes('add'))).toBe(false)
   })
 
@@ -60,15 +61,13 @@ describe('OpenClaw Workspace authorization bridge', () => {
 
     expect(response?.ok).toBe(true)
     expect(calls).toHaveLength(1)
-    expect(calls[0]).toEqual({
-      command: 'gog',
-      args: expect.arrayContaining([
-        'gmail', 'messages', 'search', 'is:unread',
-        '--max', '5',
-        '--account', 'owner@example.com',
-        '--json', '--no-input',
-      ]),
-    })
+    expect(calls[0]?.command).toBe('gog')
+    expect(calls[0]?.args).toEqual(expect.arrayContaining([
+      'gmail', 'messages', 'search', 'is:unread',
+      '--max', '5',
+      '--account', 'owner@example.com',
+      '--json', '--no-input',
+    ]))
   })
 
   it('routes Docs, Sheets, Slides and Contacts reads through their official gog surfaces', async () => {

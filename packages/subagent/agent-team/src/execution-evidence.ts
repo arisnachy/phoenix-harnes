@@ -16,14 +16,14 @@ export interface TeamExecutionProof {
 // oxlint-disable-next-line @stylistic/max-len -- Bilingual operational vocabulary stays auditable as one regex.
 const OPERATIONAL_OBJECT = /\b(?:email|e-mail|mail|gmail|correo|mensaje|message|file|files|archivo|archivos|repo|repository|repositorio|branch|rama|commit|pull\s+request|\bpr\b|code|c[oó]digo|script|package|paquete|dependency|dependencia|test|tests|prueba|pruebas|build|cli|api|app|application|aplicaci[oó]n|web|website|sitio|form|formulario|calendar|calendario|event|evento|database|base\s+de\s+datos|document|documento|sheet|spreadsheet|drive|github|slack|setting|settings|config|configuraci[oó]n|account|cuenta|record|registro|deployment|despliegue)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Bilingual action vocabulary stays auditable as one regex.
-const EFFECT_ACTION = /\b(?:send|create|update|edit|modify|write|save|upload|deploy|publish|commit|push|install|uninstall|delete|remove|move|rename|copy|submit|schedule|book|fill|reply|forward|archive|label|merge|apply|execute|run|env[ií]a\p{L}*|mand\p{L}*|crea\p{L}*|actualiz\p{L}*|edit\p{L}*|modific\p{L}*|escrib\p{L}*|guard\p{L}*|sub\p{L}*|despleg\p{L}*|public\p{L}*|fusion\p{L}*|instal\p{L}*|desinstal\p{L}*|elimin\p{L}*|borr\p{L}*|muev\p{L}*|mov\p{L}*|renombr\p{L}*|copi\p{L}*|rellen\p{L}*|complet\p{L}*|respond\p{L}*|reenv[ií]\p{L}*|archiv\p{L}*|etiquet\p{L}*|ejecut\p{L}*)\b/iu
+const EFFECT_ACTION = /\b(?:send|create|update|edit|modify|write|save|upload|deploy|publish|commit|push|install|uninstall|delete|remove|move|rename|copy|submit|schedule|book|fill|reply|forward|archive|label|merge|apply|execute|run|env[ií]a\p{L}*|mand\p{L}*|crea\p{L}*|actualiz\p{L}*|edit\p{L}*|modific\p{L}*|escrib\p{L}*|guard\p{L}*|sub\p{L}*|despleg\p{L}*|public\p{L}*|fusion\p{L}*|instal\p{L}*|desinstal\p{L}*|elimin\p{L}*|borr\p{L}*|muev\p{L}*|mov\p{L}*|renombr\p{L}*|copi\p{L}*|rellen\p{L}*|complet\p{L}*|respond\p{L}*|reenv[ií]\p{L}*|archiva\p{L}*|archiv[eéó]\p{L}*|etiquet\p{L}*|ejecut\p{L}*)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Bilingual verification vocabulary stays auditable as one regex.
 const VERIFY_ACTION = /\b(?:verify|check|test|inspect|review|audit|search|research|investigate|validate|confirm|compare|verific\p{L}*|comprob\p{L}*|prueb\p{L}*|inspeccion\p{L}*|revis\p{L}*|audit\p{L}*|busc\p{L}*|investig\p{L}*|valid\p{L}*|confirm\p{L}*|compar\p{L}*)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Paired send-noun matcher is clearer as one expression.
 const SEND_NOUN = /(?:\b(?:env[ií]o|delivery|sending)\b.{0,80}\b(?:correo|email|e-mail|mail|mensaje|message)\b|\b(?:correo|email|e-mail|mail|mensaje|message)\b.{0,80}\b(?:env[ií]o|delivery|sending)\b)/iu
 
 // oxlint-disable-next-line @stylistic/max-len -- Keep the non-evidence Team tool set in one visible gate.
-const COORDINATION_TOOL = /^(?:spawn_teammate|send_message|followup_task|team_react|team_chat_react|team_chat_read|list_agents|wait_agent|interrupt_agent|team_task_.+|subagent(?:_fork)?|todo_write|ask_user_question|report)$/u
+const COORDINATION_TOOL = /^(?:spawn_teammate|send_message|followup_task|team_react|team_chat_react|team_chat_read|team_chat_answer|list_agents|wait_agent|interrupt_agent|team_task_.+|subagent(?:_fork)?|todo_write|ask_user_question|report)$/u
 // oxlint-disable-next-line @stylistic/max-len -- Effectful tool verbs are intentionally one auditable allowlist.
 const EFFECT_TOOL = /^(?:send|create|update|edit|modify|write|save|upload|deploy|publish|commit|push|install|uninstall|delete|remove|move|rename|copy|submit|schedule|book|fill|reply|forward|archive|label|merge|apply|set|add|insert|execute|run|bash|pwsh|run_code|click|type|press|select|navigate)(?:_|$)/u
 
@@ -53,6 +53,49 @@ export function teamExecutionRequirement(text: string): TeamExecutionRequirement
   return 'none'
 }
 
+/** Distinguish a request for explanation from authorization to perform an operation.
+ * @param text - Original directed human request.
+ * @returns Whether a bounded answer may precede the existing mission's execution.
+ */
+export function isConversationalTeamUserRequest(text: string): boolean {
+  const request = text.trim().replace(/^(?:@[^\s]+\s+)+/u, '').replace(/^[¿¡]/u, '')
+  // Explain how the user can act; polite requests for the agent to act remain operational.
+  const explanatory = new RegExp([
+    '^(?:how (?:do|can|should|would) (?:i|we)\\b|',
+    'how does\\b|what (?:does|do|is|are)\\b|why (?:does|do|did|is|are)\\b|explain (?:how|what|why)\\b|',
+    'c[oó]mo (?:puedo|podemos|debo|funciona)\\b|qu[eé] (?:hace|hacen|significa|es|son)\\b|explica(?:me)? (?:c[oó]mo|qu[eé]|por qu[eé])\\b)',
+  ].join(''), 'iu')
+  const separators = new RegExp([
+    '[,;.!?]\\s+|\\s+(?:then|and then|despu[eé]s|luego)\\s+|',
+    '\\s+and\\s+(?=(?:can you|could you|please|then)\\b|\\w+\\s+(?:it|them)\\s+now\\b)',
+  ].join(''), 'iu')
+  const subsequentClauses = request.split(separators).slice(1)
+  const imperativeContinuation = new RegExp([
+    '^(?:and )?(?:then |luego |despu[eé]s )?(?:(?:can|could|would) you |please )?',
+    '(?:send|create|write|update|deploy|publish|install|delete|remove|submit|verify|test|',
+    'env[ií]a|crea|escribe|actualiza|publica|instala|elimina|verifica)\\b',
+  ].join(''), 'iu')
+  const hasOperationalContinuation = subsequentClauses.some(clause =>
+    imperativeContinuation.test(clause.trim()) || (!explanatory.test(clause.trim()) && teamExecutionRequirement(clause) !== 'none'))
+  return (!hasOperationalContinuation && explanatory.test(request)) || teamExecutionRequirement(request) === 'none'
+}
+
+/** Extract the original human request from a durable directed Team message.
+ * @param text - Delivered user-role message text.
+ * @returns Original human text only for the framed Team-user protocol.
+ */
+export function directedTeamUserText(text: string): string | undefined {
+  if (!/^\[Team user message [a-zA-Z0-9_-]{1,128}\]\n/u.test(text)) return undefined
+  const encoded = text.match(/^User request: (.+)$/mu)?.[1]
+  if (encoded === undefined) return undefined
+  try {
+    const value: unknown = JSON.parse(encoded)
+    return typeof value === 'string' ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
 function latestAssignment(
   events: readonly SessionEvent[],
   upToSeq: number,
@@ -65,8 +108,12 @@ function latestAssignment(
     // Review/status/blocker chatter must not erase an unfinished assignment's
     // proof obligation. Only an explicit Team assignment starts a new scope.
     if (source.kind === 'team-message' && source.purpose !== 'assignment') continue
-    const text = textOf(event.data.content)
+    const delivered = textOf(event.data.content)
+    const directed = source.kind === 'user' ? directedTeamUserText(delivered) : undefined
+    const text = directed ?? delivered
     const requirement = teamExecutionRequirement(text)
+    // A conversational intervention preserves the unfinished assignment.
+    if (directed !== undefined && isConversationalTeamUserRequest(directed)) continue
     return { seq: event.seq, requirement, text }
   }
   return undefined

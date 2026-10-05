@@ -148,7 +148,7 @@ export class TeamService extends TypertRemoteService {
         void this.trackChat(this.chat.presence(root, session, event)).catch((error: unknown) => { ctx.logger.warn(`Team presence publication failed: ${errorMessage(error)}`) })
       }
       if (root !== undefined && event.type === 'assistant/message') {
-        void this.trackChat(this.chat.capture(root, session.header, [event])).catch((error: unknown) => {
+        void this.trackChat(this.chat.capture(root, session.header, session.events.slice(0, event.seq + 1))).catch((error: unknown) => {
           ctx.logger.warn(`Team chat publication failed: ${errorMessage(error)}`)
         })
       }
@@ -178,6 +178,15 @@ export class TeamService extends TypertRemoteService {
    */
   async readChatFor(actor: Agent, limit: number): Promise<TeamChatReadResult> {
     return await this.trackChat(this.chat.readFor(actor, limit))
+  }
+
+  /** Answer an accepted directed human question while retaining the caller's mission.
+   * @param actor - Exact live addressed child.
+   * @param request - Durable human request identity and bounded answer.
+   * @returns Stable visible answer identity.
+   */
+  async answerChat(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }> {
+    return await this.trackChat(this.chat.answer(actor, request))
   }
 
   /** Set/remove a human reaction.

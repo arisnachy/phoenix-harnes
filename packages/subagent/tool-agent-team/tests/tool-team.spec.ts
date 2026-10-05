@@ -14,6 +14,7 @@ import {
 } from '@phoenix-ai/dsh-llm'
 import { scopeOf } from '@phoenix-ai/dsh-scope'
 import { SessionId } from '@phoenix-ai/dsh-session'
+import SessionProjections from '@phoenix-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
 import SubagentService from '@phoenix-ai/dsh-subagent'
 import * as SubagentFork from '@phoenix-ai/dsh-subagent-fork-in-process'
@@ -59,6 +60,7 @@ async function setup(
   roots.push(storageRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
   await ctx.plugin(AgentLoop, { agents: [] })
+  await ctx.plugin(SessionProjections)
   await ctx.plugin(SubagentService)
   if (legacyControl) await ctx.plugin(ToolSubagentControl)
   await ctx.plugin(SubagentSpawn, { providerName: 'spawn' })
@@ -129,13 +131,15 @@ describe('dsh-tool-team', () => {
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
     expect(leadPrompt).toContain('real shared work, not role-play')
-    expect(leadPrompt).toContain('Phoenix Auto is explicitly authorized to use this Team path')
+    expect(leadPrompt).toContain('Phoenix Orquesta is explicitly authorized to use this Team path')
     expect(leadPrompt).toContain('prefer spawn_teammate over legacy subagent delegation')
     expect(leadPrompt).toContain('one teammate is normal')
     expect(leadPrompt).toContain('a third is reserved for exceptional complexity')
     expect(leadPrompt).toContain('never exceed three')
     expect(leadPrompt).toContain('outside OpenAI Codex every teammate MUST inherit exactly the currently selected provider and model')
     expect(leadPrompt).toContain('Never claim a teammate is running from intent alone')
+    expect(leadPrompt).toContain('compare expected quality gain and time saved against added model consumption')
+    expect(leadPrompt).toContain('stop a redundant worker when its outcome is no longer needed')
     expect(leadPrompt).toContain('unused KIRA codename')
     expect(leadPrompt).toContain('vortice, aurora, atlas')
     expect(leadPrompt).toContain('FS_STALE_VERSION')
@@ -145,7 +149,9 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('cognitively independent only when its reported modelProvider or model differs')
     expect(leadPrompt).toContain('team_chat_react')
     expect(leadPrompt).toContain('team_chat_react as the canonical visible social reaction')
-    expect(leadPrompt).toContain('emit exactly one natural reaction')
+    expect(leadPrompt).toContain('Reactions are optional')
+    expect(leadPrompt).not.toContain('emit exactly one natural reaction')
+    expect(leadPrompt).toContain('A directed user question takes priority at the next safe boundary')
     expect(leadPrompt).toContain('Routine status updates are exempt')
     expect(leadPrompt).toContain('team_react is a legacy semantic peer-message compatibility tool')
     expect(leadPrompt).toContain('must send it to lead with purpose result before ending its turn')
@@ -215,7 +221,7 @@ describe('dsh-tool-team', () => {
     expect(['cobalto', 'eclipse', 'zenith']).toContain(securityValue.member.name)
     const securityChild = await waitRunning(ctx, SessionId(securityValue.member.id))
     const securityPrompt = renderPrompt(await assembly(ctx, securityChild))
-    expect(securityPrompt).toContain(`Your Team name is ${securityValue.member.name}`)
+    expect(securityPrompt.toLowerCase()).toContain(`Your Team name is ${securityValue.member.name}`.toLowerCase())
     expect(securityPrompt).not.toContain('Natural, concise, collegial')
 
     const design = await execute(ctx, lead, 'spawn_teammate', {
@@ -478,6 +484,41 @@ describe('dsh-tool-team', () => {
 
     await execute(ctx, lead, 'interrupt_agent', { target: 'mail-worker' })
     await waitNoAgent(ctx, childId)
+  })
+
+  it('reads bounded conversation context and applies optional visible reactions through the actual child tools', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'chat-worker', description: 'Discuss the approach.', prompt: 'Discuss the approach.', context: 'fresh',
+    })
+    const childId = spawnedChildId(spawned)
+    const child = await waitRunning(ctx, childId)
+    await ctx.agentTeams.chatReply({ requestId: 'visible-chat-question', sessionId: lead.id, targetId: childId, text: 'Why this approach?' })
+    const recent = await execute(ctx, child, 'team_chat_read', {})
+    expect(recent.isError).toBe(false)
+    const recentParsed = JSON.parse(text(recent)) as { messages: unknown[] }
+    expect(recentParsed.messages).toContainEqual({ id: 'visible-chat-question', sender: 'User', text: 'Why this approach?' })
+    const limited = await execute(ctx, child, 'team_chat_read', { limit: 1 })
+    expect(JSON.parse(text(limited))).toMatchObject({ messages: [
+      { id: 'visible-chat-question', sender: 'User', text: 'Why this approach?' },
+    ] })
+    for (const limit of [0, 51]) {
+      const invalid = await execute(ctx, child, 'team_chat_read', { limit })
+      expect(invalid.isError).toBe(true)
+      expect(text(invalid)).toContain('limit must be between')
+    }
+    const reaction = await execute(ctx, child, 'team_chat_react', { message_id: 'visible-chat-question', emoji: '👍' })
+    expect(reaction.isError).toBe(false)
+    expect(JSON.parse(text(reaction))).toEqual({ applied: true })
+    const removed = await execute(ctx, child, 'team_chat_react', { message_id: 'visible-chat-question', emoji: '👍', active: false })
+    expect(removed.isError).toBe(false)
+    expect((await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages.find(row => row.id === 'visible-chat-question')?.reactions).toEqual([])
+    const rootRead = await execute(ctx, lead, 'team_chat_read', { limit: 1 })
+    expect(rootRead.isError).toBe(false)
+    child.cancel({ kind: 'user' })
+    await waitNoAgent(ctx, child.id)
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
   })
 
   it('adapts roster, mailbox, wait, and task CAS operations to canonical JSON', async () => {

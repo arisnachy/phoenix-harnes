@@ -95,9 +95,10 @@ async undefine(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCo
 @Remote('undefineFromPanel') async undefineFromPanel(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCordisUndefineReceipt>
 
 /**
- * Start or update one Package for a model tool call. An unauthorized Client
- * Package waits for approval; when configured, host-only Packages also wait
- * for approval. Plugin-wide authorization covers later versions.
+ * Start or update one Package for a model tool call. Phoenix-authored Packages
+ * marked autoApprove skip the redundant human confirmation; other Client
+ * Packages wait for approval, and host-only Packages follow requireHostApproval.
+ * Plugin-wide user authorization still covers later manual versions.
  * @param agent - Agent whose Session must own the Plugin.
  * @param pluginId - Stable Plugin identity to activate.
  * @param packageId - Immutable Package version to activate.

@@ -729,9 +729,11 @@ export default class GoogleApiBroker extends Service {
     if (refreshToken === undefined) {
       throw new AuthorizationError('Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED')
     }
-    const clientId = await this.resolveClientId()
-    const clientSecret = await this.resolveClientSecret()
-    const running = this.refreshGrant(current, clientId, clientSecret, refreshToken, signal).finally(() => {
+    const running = (async () => {
+      const clientId = await this.resolveClientId()
+      const clientSecret = await this.resolveClientSecret()
+      return this.refreshGrant(current, clientId, clientSecret, refreshToken, signal)
+    })().finally(() => {
       if (this.refreshInFlight === running) this.refreshInFlight = undefined
     })
     this.refreshInFlight = running

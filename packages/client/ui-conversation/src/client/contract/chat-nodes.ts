@@ -1,5 +1,5 @@
 import type {
-  AssistantBlock, AssistantMessageNode, ChatConversationViewNode, CommandNode,
+  AssistantBlock, AssistantMessageNode, AssistantProvenanceView, ChatConversationViewNode, CommandNode,
   CompactionSummaryNode, ModelRetryNode, RunningToolCall, ToolCallBlock,
 } from '@phoenix-ai/dsh-client-runtime/client'
 
@@ -56,6 +56,8 @@ export interface AssistantChatData {
   readonly blocks: readonly AssistantBlock[]
   readonly time: number
   readonly usage?: unknown
+  /** Actual model source of this output; absent when no durable model source exists. */
+  readonly provenance?: AssistantProvenanceView
   readonly finalNode?: AssistantMessageNode
 }
 

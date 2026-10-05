@@ -719,6 +719,13 @@ describe('headless stream-json snapshots', () => {
         const logs = await persistedLogs(cwd)
         const parent = logs.find(log => typeof log.header.parentSession !== 'string')
         if (parent === undefined) throw new Error('Agent Teams snapshot did not persist its Lead')
+        expect(await readFile(join(cwd, 'research/finding.txt'), 'utf8')).toBe('Deterministic finding: reuse the measured result.')
+        expect(await readFile(join(cwd, 'implementation/result.txt'), 'utf8')).toBe('Applied deterministic finding: reuse the measured result.')
+        for (const child of logs.filter(log => typeof log.header.parentSession === 'string')) {
+          const childRows = parseJsonl(child.content)
+          expect(childRows.some(row => row.type === 'tool/call' && (row.data as JsonObject).name === 'write')).toBe(true)
+          expect(childRows.some(row => row.type === 'tool/result' && (row.data as JsonObject).isError === true)).toBe(false)
+        }
         const rows = parseJsonl(parent.content)
         const members = rows.filter(row => row.type === 'team/member')
           .map(row => ((row.data as JsonObject).member as JsonObject))

@@ -4,6 +4,7 @@
  */
 
 import type { Context } from '@phoenix-ai/cordis'
+import type { Session } from '@phoenix-ai/dsh-session'
 import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 /** Complete provider, model, and optional reasoning effort selected for one live Agent. */
@@ -14,6 +15,57 @@ export interface ModelSelection {
   model: string
   /** Adapter-owned reasoning effort, or provider/default behavior when absent. */
   reasoningEffort?: ReasoningEffortId
+}
+
+/** Durable selector intent, independent of the real model serving a request. */
+export interface ModelSelectionPreference {
+  /** Selected planner/router/provider route. */
+  readonly selection: ModelSelection
+  /** Whether the preference was captured from a default or explicitly chosen. */
+  readonly source: 'explicit' | 'default'
+}
+
+declare module '@phoenix-ai/dsh-session/types' {
+  interface SessionEventMap {
+    /**
+     * Durable model-routing preference, hidden from model history. Required on
+     * read: dropping it would change future provider/model and cost decisions.
+     */
+    'agent/model-selection': ModelSelectionPreference
+  }
+}
+
+/** Read the last durable selector preference without using serving request headers.
+ * @param session - Session owning the authoritative event stream.
+ * @returns Latest preference, or undefined for sessions predating preference capture.
+ */
+export function latestModelSelectionPreference(session: Pick<Session, 'events'>): ModelSelectionPreference | undefined {
+  return session.events.findLast(event => event.type === 'agent/model-selection')?.data
+}
+
+/** Persist a changed selector preference without emitting a model-visible message.
+ * @param session - Session owning the selection.
+ * @param selection - Selected route, independently of the executing model.
+ * @param source - Explicit user choice or a default captured at first dispatch.
+ * @returns Whether a new preference event was appended.
+ */
+export function persistModelSelectionPreference(
+  session: Session,
+  selection: ModelSelection,
+  source: ModelSelectionPreference['source'],
+): boolean {
+  const prior = latestModelSelectionPreference(session)
+  if (prior?.source === source && prior.selection.provider === selection.provider
+    && prior.selection.model === selection.model && prior.selection.reasoningEffort === selection.reasoningEffort) return false
+  session.append('agent/model-selection', {
+    selection: {
+      provider: selection.provider,
+      model: selection.model,
+      ...selection.reasoningEffort === undefined ? {} : { reasoningEffort: selection.reasoningEffort },
+    },
+    source,
+  })
+  return true
 }
 
 /** Mutable model selection plus the value captured for the current step. */
@@ -79,17 +131,6 @@ function pinGpt6LunaMax(selection: ModelSelection): ModelSelection {
   return { ...selection, reasoningEffort: ReasoningEffortId('max') }
 }
 
-/**
- * Whether one Codex model is expensive/capable enough to act as planner.
- * The rule is deliberately explicit: unknown future tiers keep the user's
- * normal configuration until Phoenix learns their place in the family.
- * @param model - Codex model identifier to classify.
- * @returns true when the model belongs to a planner tier.
- */
-export function isCodexPlannerModel(model: string): boolean {
-  return codexPlannerGeneration(model) !== undefined
-}
-
 function lunaWorkerFor(model: string): string | undefined {
   if (model === PHOENIX_CODEX_AUTO_PLANNER_MODEL) return PHOENIX_CODEX_AUTO_WORKER_MODEL
   const plannerGeneration = codexPlannerGeneration(model)
@@ -141,15 +182,12 @@ export function jevSelectedModelId(value: unknown, candidates: readonly string[]
  */
 export function defaultExecutionHandoff(selection: ModelSelection | undefined): ModelSelectionHandoff | undefined {
   if (selection?.provider !== 'openai-codex') return undefined
-  const worker = lunaWorkerFor(selection.model)
-  if (worker === undefined || !isCodexPlannerModel(selection.model)) return undefined
   return {
-    // Agent-loop steps are 1-based. Sol/Astra/Terra keep the first reasoning
-    // step; the matching Luna generation executes subsequent steps at Max.
+    // The selected Codex model plans; the active Luna worker executes.
     afterStep: 1,
     selection: {
       provider: 'openai-codex',
-      model: worker,
+      model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
       reasoningEffort: ReasoningEffortId('max'),
     },
   }
@@ -283,24 +321,6 @@ function defaultConversationalSelection(selection: ModelSelection | undefined): 
     provider: 'openai-codex',
     model: lunaWorkerFor(selection.model) ?? PHOENIX_CODEX_AUTO_WORKER_MODEL,
     reasoningEffort: ReasoningEffortId('low'),
-  }
-}
-
-/**
- * Low-latency first action for explicit operational Codex turns that already
- * selected Luna. Premium Sol/Astra/Terra selections keep their first planning
- * step; Luna-only turns use medium for first evidence and then resume the
- * person's selected effort.
- */
-function defaultToolAcquisitionSelection(selection: ModelSelection | undefined): ModelSelection | undefined {
-  if (selection?.provider !== 'openai-codex') return undefined
-  // Premium selections are planners. Do not steal their first step merely
-  // because tools are present; Luna takes over after the plan via handoff.
-  if (isCodexPlannerModel(selection.model)) return undefined
-  return {
-    provider: 'openai-codex',
-    model: lunaWorkerFor(selection.model) ?? PHOENIX_CODEX_AUTO_WORKER_MODEL,
-    reasoningEffort: ReasoningEffortId('medium'),
   }
 }
 
@@ -539,7 +559,7 @@ function directCodexPlannerRescue(
   step: number,
   state: PhoenixAutoRouterState,
 ): ModelSelection | undefined {
-  if (selection.provider !== 'openai-codex' || !isCodexPlannerModel(selection.model) || step <= 1) return undefined
+  if (selection.provider !== 'openai-codex' || step <= 1) return undefined
   resetPhoenixAutoTurnState(state, turn)
   const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
   if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
@@ -708,6 +728,10 @@ export function installModelSelection(
       const resolved = await next()
       const selected = selection.assembled
       if (selected === undefined) return resolved
+      const scopedAgent = agentCtx.agent
+      if (scopedAgent !== undefined && latestModelSelectionPreference(scopedAgent.session) === undefined) {
+        persistModelSelectionPreference(scopedAgent.session, selected, 'default')
+      }
       // A concrete picker choice with no adaptive handoff is authoritative.
       // Resolve this before reading turn text so an exact route is also the
       // lowest-latency path; only Phoenix Auto needs to inspect the request.
@@ -746,12 +770,7 @@ export function installModelSelection(
         && (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText))
         ? defaultConversationalSelection(selected)
         : undefined
-      const acquisition = _payload.step === 1
-        && (selection.assembledToolCount ?? 0) > 0
-        && isToolAcquisitionRequest(directText)
-        ? defaultToolAcquisitionSelection(selected)
-        : undefined
-      const plannerRescue = directCodexPlannerRescue(
+      const plannerRescue = resolvedHandoff === undefined ? undefined : directCodexPlannerRescue(
         selected,
         _payload.agent,
         _payload.turn,
@@ -760,7 +779,6 @@ export function installModelSelection(
       )
       const candidateRoute = plannerRescue
         ?? conversation
-        ?? acquisition
         ?? (resolvedHandoff !== undefined && _payload.step > resolvedHandoff.afterStep
           ? resolvedHandoff.selection
           : selected)

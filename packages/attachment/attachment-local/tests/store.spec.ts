@@ -302,14 +302,19 @@ describe('local attachment store', () => {
       .rejects.toMatchObject({ code: 'ATTACHMENT_CORRUPT' })
   })
 
-  it('maps unexpected publication failures to a stable storage error', async () => {
+  it.each(['image', 'file'] as const)('maps unexpected %s publication failures to a stable storage error', async (kind) => {
     const storageRoot = await root()
-    const sha256 = createHash('sha256').update(PNG).digest('hex')
+    const data = kind === 'image' ? PNG : TEXT_FILE
+    const sha256 = createHash('sha256').update(data).digest('hex')
     const target = join(storageRoot, 'objects', sha256.slice(0, 2), sha256)
     await mkdir(target, { recursive: true })
 
-    await expect(saveImageFile(storageRoot, { data: PNG, mediaType: 'image/png' }, LIMITS, POLICY))
-      .rejects.toMatchObject({ code: 'ATTACHMENT_WRITE_FAILED' })
+    const saving = kind === 'image'
+      ? saveImageFile(storageRoot, { data, mediaType: 'image/png' }, LIMITS, POLICY)
+      : saveFileAttachment(storageRoot, { data, mediaType: 'text/csv' }, FILE_LIMITS)
+    await expect(saving).rejects.toMatchObject({
+      code: 'ATTACHMENT_WRITE_FAILED', message: `Unable to persist ${kind} attachment.`,
+    })
   })
 
   it('rejects prepared bytes that no longer match their content-addressed reference', async () => {

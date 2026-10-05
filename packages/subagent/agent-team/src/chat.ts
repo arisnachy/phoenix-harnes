@@ -5,6 +5,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { isAppendSurfaceEvent } from '@phoenix-ai/dsh-session/surface'
 import { foldSubagentDescriptor } from '@phoenix-ai/dsh-subagent'
+import { teamWorkerSelection } from './model-route.ts'
 import { messageAccepted } from './session-message.ts'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId, type Session, type SessionEvent, type SessionHeader } from '@phoenix-ai/dsh-session'
@@ -12,7 +13,7 @@ import emojiRegex from 'emoji-regex'
 import { inferTeamSkill, TEAM_PERSONAS, TEAM_SKILL_POOLS } from './personas.ts'
 import { chatMessageSchema, chatParticipantSchema, chatReactionSchema } from './chat-projection.ts'
 import { foldTeam } from './fold.ts'
-import { teamExecutionProof } from './execution-evidence.ts'
+import { teamExecutionProof, isConversationalTeamUserRequest } from './execution-evidence.ts'
 import { TeamId } from './types.ts'
 import type { TeamJournal } from './journal.ts'
 import type { TeamChatMessage, TeamChatParticipant, TeamChatReadResult, TeamChatReaction, TeamChatReactRequest, TeamChatReplyRequest } from './chat-types.ts'
@@ -23,6 +24,35 @@ function chatVersion(value: unknown): boolean { return value === 1 }
 const EMOJI = new RegExp(`^(?:${emojiRegex().source})$`)
 function textOf(content: readonly { readonly type: string; readonly text?: unknown }[]): string {
   return content.flatMap(block => block.type === 'text' && typeof block.text === 'string' ? [block.text] : []).join('\n')
+}
+
+/** Conservative claim vocabulary; explicit negated status does not assert an effect. */
+function answerNeedsEvidence(text: string): boolean {
+  const completion = [
+    'sent|emailed|delivered|verified|checked|tested|updated|created|written|saved|uploaded|deployed|published|installed',
+    'deleted|removed|submitted|done|completed|finished|enviado|entregado|verificado|comprobado|actualizado|creado',
+    'guardado|publicado|instalado|eliminado|terminado|completado|hecho',
+  ].join('|')
+  const negativeStatus = new RegExp([
+    "\\b(?:haven['’]t|hasn['’]t|hadn['’]t|didn['’]t|not|never|no)\\s+",
+    `(?:(?:yet|lo|la|los|las|he|ha|hemos)\\s+)*(?:${completion})\\b`,
+  ].join(''), 'giu')
+  const assertions = text.replace(negativeStatus, '')
+  const actorAction = new RegExp([
+    '\\b(?:i|we|yo|nosotros|nosotras)\\s+(?:(?:have|had|am|are|he|hemos)\\s+)?',
+    '(?:(?:already|successfully|ya)\\s+)?',
+    `(?:${completion}|send|create|write|update|deploy|publish|install|delete|remove|submit|verify|test)\\b`,
+  ].join(''), 'iu')
+  // Definitions and conditional instructions never suppress an actual actor claim.
+  if (actorAction.test(assertions)) return true
+  const conditional = /\b(?:when|if|once|after|before|cuando|si|despu[eé]s|antes|una vez)\b/iu
+  const passive = new RegExp(`\\b(?:was|were|is|are|has been|have been|fue|fueron|est[aá]|ha sido)\\s+(?:${completion})\\b`, 'iu')
+  const status = new RegExp([
+    '^(?:(?:the |your |el |la |tu )?(?:email|mail|correo|file|archivo|task|tarea|test|prueba)\\s+)?',
+    `(?:${completion})(?:[.!]|$|\\s+(?:to|and|y|a)\\b)`,
+  ].join(''), 'iu')
+  return assertions.split(/(?<=[.!?])\s+|\n/u)
+    .some(clause => !conditional.test(clause) && (passive.test(clause) || status.test(clause.trim())))
 }
 
 /** Owns actual output publication and authorized reaction mutations. */
@@ -284,6 +314,54 @@ export class TeamChat {
     return { ...result, messages }
   }
 
+  /** Publish one answer to an accepted conversational user request without completing the mission.
+   * @param actor - Exact live addressed child.
+   * @param request - Durable human request identity and answer text.
+   * @returns Stable answer identity, reused for exact retries.
+   */
+  async answer(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }> {
+    if (this.ctx.agents.get(actor.id) !== actor || actor.session.header.origin !== 'subagent') throw new Error('stale or non-child team actor')
+    const rootId = actor.session.header.parentSession
+    if (rootId === undefined) throw new Error('team root not found')
+    const root = this.root(rootId)
+    if (typeof request.text !== 'string' || request.text.trim() === '' || Buffer.byteLength(request.text) > this.maxBytes) throw new Error('invalid or oversized team answer')
+    const id = `${actor.id}:answer:${request.messageId}`
+    await this.journal.transact(root.id, async () => {
+      this.assertLive(root)
+      if (this.ctx.agents.get(actor.id) !== actor || this.ctx.sessions.get(actor.id) !== actor.session) throw new Error('stale team actor')
+      const rows = this.messages(root)
+      const addressed = rows.find(row => row.id === request.messageId)
+      if (addressed === undefined || addressed.senderKind !== 'user' || addressed.missionId !== root.id
+        || !addressed.deliveries?.some(item => item.targetId === actor.id && item.accepted)) throw new Error('user request was not accepted by this actor')
+      if (!isConversationalTeamUserRequest(addressed.text)) throw new Error('operational requests require execution evidence, not a conversational answer')
+      if (answerNeedsEvidence(request.text)) {
+        const original = teamExecutionProof(actor.session.events)
+        const proof = original.requirement === 'none'
+          ? teamExecutionProof(actor.session.events, { requirement: 'effect', assignmentText: request.text }) : original
+        const answerProof = teamExecutionProof(actor.session.events, {
+          requirement: proof.requirement, assignmentText: request.text,
+        })
+        if (!proof.satisfied || !answerProof.satisfied) throw new Error('operational answer requires matching execution evidence')
+      }
+      const marker = `[Team user message ${addressed.id}]`
+      const delivered = actor.session.events.slice(actor.session.header.seedLength ?? 0).find(event => event.type === 'user/message'
+        && event.data.source.kind === 'user' && textOf(event.data.content).startsWith(marker))
+      if (delivered === undefined) throw new Error('user request has not reached this actor')
+      const prior = rows.find(row => row.id === id)
+      if (prior !== undefined) {
+        if (prior.text !== request.text) throw new Error('answer identity conflicts')
+        return
+      }
+      const person = this.participant(root, actor.session.header, actor.session.events, 'working')
+      root.append('team/chat-message', { version: 1, message: { id, senderId: actor.id,
+        senderName: person.name, senderKind: 'agent', avatar: person.avatar, role: person.role,
+        missionId: root.id, text: request.text, time: Date.now(), sourceSeq: delivered.seq,
+        replyTo: addressed.id, replyQuote: `User: ${addressed.text}`, mentions: [], reactions: [] } })
+      await this.ctx.sessions.flush(root)
+    })
+    return { messageId: id }
+  }
+
   /** Persist an idempotent reaction set/remove after validating the actual message and actor.
    * @param request - message and Unicode reaction mutation.
    * @param actor - exact live agent, or the human when absent.
@@ -376,8 +454,10 @@ export class TeamChat {
             ? await this.ctx.sessionPersistence.inspect(target) : { meta: child.header, events: child.events }
           const already = messageAccepted(saved.events.slice(saved.meta.seedLength ?? 0), message =>
             message.source.kind === 'user' && textOf(message.content).startsWith(marker))
-          if (!already) await this.ctx.subagents.followup(lead, target, [{ type: 'text', text: `${marker}\n${text}` }],
-            { source: { kind: 'user' }, delivery: 'next-step', signal: this.signal })
+          const modelSelection = teamWorkerSelection(lead)
+          if (!already) await this.ctx.subagents.followup(lead, target, [{ type: 'text', text: `${marker}\nUser priority: answer this person at the next safe boundary; do not interrupt an in-flight action.\nThen continue your existing mission unless the user explicitly changes or cancels it. Use team_chat_answer for a conversational question; operational corrections still require execution evidence.\nUser request: ${JSON.stringify(request.text)}\nReply context:\n${text}` }],
+            { source: { kind: 'user' }, delivery: 'next-safe-step', signal: this.signal,
+              ...modelSelection === undefined ? {} : { modelSelection } })
           const active = this.ctx.sessions.get(target)
           if (active !== undefined) await this.ctx.sessions.flush(active)
           current = { ...current,

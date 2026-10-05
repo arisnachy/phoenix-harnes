@@ -172,8 +172,12 @@ interface CoordinatorMessageSource {
 ```ts type-equiv
 /** Options for following up with one continuable child. */
 interface SubagentFollowupOptions {
-  /** Human interventions can reach the nearest step; ordinary peer work stays FIFO. */
-  readonly delivery?: 'next-turn' | 'next-step'
+  /** Optional next-request route supplied by a managed Team; omission preserves the child's own route. */
+  readonly modelSelection?: ModelSelection
+  /** next-turn queues work; next-step interrupts active work.
+   * next-safe-step waits for the current action before joining the next model step.
+   */
+  readonly delivery?: 'next-turn' | 'next-step' | 'next-safe-step'
   /** Durable attribution retained on the delivered message; it grants no authority. */
   readonly source: MessageSource
   /** Caller cancellation, owning the operation only until inbox acceptance. */

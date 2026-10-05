@@ -28,8 +28,8 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
     if (routedCanvasRef.current === artifact.artifactId) return
     const opened = openCanvas({
       title: artifact.title,
-      html: artifact.data as string,
-      executable: artifact.executable !== false,
+      html: artifact.data,
+      executable: artifact.executable,
     })
     setCanvasRouted(opened)
     if (opened) routedCanvasRef.current = artifact.artifactId
@@ -49,7 +49,7 @@ export const HardnessArtifactNodeView = memo(function HardnessArtifactNodeView({
       const opened = openCanvas({
         title: artifact.title,
         html: artifact.data as string,
-        executable: artifact.executable !== false,
+        executable: artifact.executable,
       })
       setCanvasRouted(opened)
       if (opened) routedCanvasRef.current = artifact.artifactId

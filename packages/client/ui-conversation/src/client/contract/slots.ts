@@ -116,7 +116,11 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
     /** Register additive author badges for the current ordinary chat message.
      * Components receive session runtime and projection hooks. No entry leaves the built-in author presentation intact.
      */
-    'conversation.chat.message-author': { kind: 'list'; scope: 'session' }
+    'conversation.chat.message-author': {
+      kind: 'list'
+      scope: 'session'
+      owner: { provenance?: { provider: string; model: string } }
+    }
     /** Register additive controls beside every ordinary or team transcript message.
      * Components receive message/author identity and a public reply preview; no entry leaves messages without extra controls.
      */

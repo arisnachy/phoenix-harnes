@@ -134,7 +134,7 @@ function projectCandidate(value: unknown): McpRegistryCandidate | undefined {
     remoteTransports.push(transport)
     if (remoteUrl === undefined && transport === 'streamable-http') {
       const candidate = safeHttpsUrl(item?.url)
-      if (candidate !== undefined && !candidate.includes('{')) remoteUrl = candidate
+      if (candidate !== undefined && !/(?:[{}]|%7[bd])/iu.test(candidate)) remoteUrl = candidate
     }
   }
   const transports = [...new Set<McpRegistryTransport>([
@@ -205,7 +205,8 @@ function registrySnapshot(
 }
 
 function isTransientFetchFailure(error: Error): boolean {
-  const code = String((error as Error & { code?: unknown }).code ?? '').toUpperCase()
+  const rawCode = (error as Error & { code?: unknown }).code
+  const code = typeof rawCode === 'string' ? rawCode.toUpperCase() : ''
   const message = error.message.toLowerCase()
   return error.name === 'AbortError'
     || ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENETUNREACH'].includes(code)

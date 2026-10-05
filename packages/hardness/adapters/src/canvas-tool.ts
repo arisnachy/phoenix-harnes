@@ -9,6 +9,7 @@ export const PHOENIX_CANVAS_MIME = 'application/vnd.phoenix.canvas+html'
  * A Phoenix canvas is an HTML mini-app or visual composition that must be
  * presented inside Phoenix itself. It is deliberately distinct from editor-
  * specific ".canvas.tsx" files or Cursor/Codex canvas folders.
+ * @returns The interactive canvas tool definition.
  */
 export function createPhoenixCanvasTool(): ToolDefinition {
   return defineTool({
@@ -41,18 +42,19 @@ export function createPhoenixCanvasTool(): ToolDefinition {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Canvas ready in Phoenix: ${String(value.title)}`,
+        text: `Canvas ready in Phoenix: ${value.title}`,
       }],
       presentationMeta: (args, value) => ({
         artifact: {
-          id: String(value.artifactId),
+          id: value.artifactId,
           mime: PHOENIX_CANVAS_MIME,
-          title: String(value.title),
+          title: value.title,
           data: args.html,
           executable: args.interactive !== false,
         },
       }),
     },
+    // oxlint-disable-next-line typescript/require-await -- Tool execution requires Promise results and rejected validation errors.
     async execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0) throw new Error('title must be a non-empty string')

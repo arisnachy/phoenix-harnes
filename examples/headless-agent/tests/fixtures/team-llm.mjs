@@ -75,6 +75,9 @@ function researcher(messages) {
       task_id: 'task-1', expected_revision: 1, action: 'claim',
     } }])
   }
+  if (!names.includes('write')) {
+    return toolChunks([{ name: 'write', args: { file_path: 'research/finding.txt', content: 'Deterministic finding: reuse the measured result.' } }])
+  }
   if (!names.includes('send_message')) {
     return toolChunks([
       { name: 'team_task_update', args: { task_id: 'task-1', expected_revision: 2, action: 'complete' } },
@@ -115,6 +118,9 @@ function implementer(messages) {
       return toolChunks([{ name: 'team_task_get', args: { task_id: 'task-1' } }])
     }
     return toolChunks([{ name: 'team_task_get', args: { task_id: 'task-1' } }])
+  }
+  if (!names.includes('write')) {
+    return toolChunks([{ name: 'write', args: { file_path: 'implementation/result.txt', content: 'Applied deterministic finding: reuse the measured result.' } }])
   }
   if (!names.includes('send_message')) {
     return toolChunks([

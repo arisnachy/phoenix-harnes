@@ -103,6 +103,7 @@ describe('Official MCP Registry proxy', () => {
               { type: 'sse', url: 'https://events.example.com/' },
               { type: 'streamable-http', url: 'javascript:alert(1)' },
               { type: 'streamable-http', url: 'https://templated.example.com/{tenant}' },
+              { type: 'streamable-http', url: 'https://encoded-template.example.com/%7Btenant%7D' },
               { type: 'streamable-http', url: 'https://mcp.example.com/full' },
               { type: 'streamable-http', url: 'https://ignored.example.com/second' },
             ],

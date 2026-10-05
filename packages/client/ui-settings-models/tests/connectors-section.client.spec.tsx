@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IApiClient, RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
 import { AuthorizationPanel, ConnectorsSettingsSection, safeExternalHref } from '../src/client/AuthorizationPanel.tsx'
@@ -43,7 +43,8 @@ describe('connectors settings section', () => {
       })),
       disable: vi.fn(),
     }
-    const settings = { mutate: vi.fn(async () => ok({})) } as unknown as IApiClient['settings']
+    const mutate = vi.fn(async () => ok({}))
+    const settings = { mutate } as unknown as IApiClient['settings']
 
     renderHub(api, { chatGptWeb, settings })
     const toggle = await screen.findByRole('switch', { name: 'Enable ChatGPT Web' })
@@ -51,7 +52,7 @@ describe('connectors settings section', () => {
     fireEvent.click(toggle)
     await waitFor(() => { expect(chatGptWeb.enable).toHaveBeenCalledTimes(1) })
     await waitFor(() => { expect(toggle).toHaveProperty('checked', true) })
-    expect(settings.mutate).toHaveBeenCalledWith({
+    expect(mutate).toHaveBeenCalledWith({
       ns: 'llm-pi-ai',
       ops: [{ op: 'set', path: ['providers', 'chatgpt-web'], value: {} }],
     })
@@ -63,6 +64,7 @@ describe('connectors settings section', () => {
   })
 
   it('reuses verified OpenClaw Google/GitHub sessions without duplicating provider cards', async () => {
+    const begin = vi.fn()
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [
         {
@@ -84,7 +86,7 @@ describe('connectors settings section', () => {
           inFlight: false,
         },
       ] }))),
-      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+      begin, status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
     const mcpRegistry = {
       state: vi.fn(async () => ({ runtime: [], managed: [] })),
@@ -128,14 +130,17 @@ describe('connectors settings section', () => {
     expect(googleCard?.textContent).toContain('Connected · OpenClaw')
     expect(githubCard?.textContent).toContain('Connected · OpenClaw')
 
-    expect(screen.getByText('GitHub Copilot')).toBeTruthy()
+    const copilotCards = document.querySelectorAll('[data-authorization-key="llm-pi-ai/github-copilot"]')
+    expect(copilotCards).toHaveLength(1)
+    expect(copilotCards[0]?.textContent).toContain('GitHub Copilot')
     expect(githubCard?.textContent).not.toContain('GitHub Copilot')
     expect(document.querySelector('[data-authorization-key="authorization-openclaw/github"]')).toBeNull()
     expect(document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')).toBeTruthy()
-    expect(api.begin).not.toHaveBeenCalled()
+    expect(begin).not.toHaveBeenCalled()
   })
 
   it('offers the official GitHub MCP instead of a dead Authorize action when gh is missing', async () => {
+    const begin = vi.fn()
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
         key: 'authorization-openclaw/github',
@@ -143,7 +148,7 @@ describe('connectors settings section', () => {
         methods: [{ id: 'oauth', label: 'Authorize GitHub' }],
         inFlight: false,
       }] }))),
-      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+      begin, status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
     const mcpRegistry = {
       state: vi.fn(async () => ({ runtime: [], managed: [] })),
@@ -168,7 +173,7 @@ describe('connectors settings section', () => {
     expect(githubCard).toBeTruthy()
     expect(githubCard?.textContent).toContain('Find official / install')
     expect(githubCard?.textContent).not.toContain('Authorize')
-    expect(api.begin).not.toHaveBeenCalled()
+    expect(begin).not.toHaveBeenCalled()
   })
 
   it('recovers transient plugin inventory fetch failures without breaking Connectors', async () => {
@@ -299,7 +304,9 @@ describe('connectors settings section', () => {
     expect(canvaButton).toBeTruthy()
     fireEvent.click(canvaButton!)
 
-    expect(await screen.findByText('Registry-listed · vendor not verified')).toBeTruthy()
+    await waitFor(() => { expect(search).toHaveBeenCalledWith({ query: 'com.canva.mcp/mcp', limit: 12 }) })
+    await waitFor(() => { expect(canvaButton).toHaveProperty('disabled', false) })
+    expect(screen.getByRole('searchbox', { name: 'Search connectors' })).toHaveProperty('value', '')
     expect(search).toHaveBeenCalledWith({ query: 'com.canva.mcp/mcp', limit: 12 })
     expect(officialButtons.length).toBeGreaterThan(0)
   })
@@ -371,7 +378,8 @@ describe('connectors settings section', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Find official / install' }))
 
-    expect(await screen.findByText('The Official MCP Registry is unavailable right now.')).toBeTruthy()
+    const registry = screen.getByRole('region', { name: connectorEn.officialRegistry })
+    expect(await within(registry).findByText(connectorEn.registryUnavailable)).toBeTruthy()
     expect(screen.queryByText(/pluginInventory\.searchMcpRegistry failed/)).toBeNull()
   })
 
@@ -464,15 +472,15 @@ describe('connectors settings section', () => {
     })))
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'authorization-google/account',
-        label: 'Google Workspace',
-        methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+        key: 'authorization-orchard/account',
+        label: 'Orchard',
+        methods: [{ id: 'oauth', label: 'Sign in with Orchard' }],
         inFlight: false,
         telemetry: {
           kind: 'account' as const,
-          provider: 'Google Workspace',
+          provider: 'Orchard',
           connectors: [{
-            id: 'gmail', name: 'Gmail', description: 'Read and send mail.',
+            id: 'google-workspace', name: 'Google Workspace', description: 'Read and send mail.',
             category: 'Communication', accessible: true, enabled: true,
             installed: false, callable: false,
           }],
@@ -487,13 +495,14 @@ describe('connectors settings section', () => {
     const authorize = await screen.findAllByRole('button', { name: 'Authorize' })
     fireEvent.click(authorize[0]!)
     await waitFor(() => {
-      expect(begin).toHaveBeenCalledWith({ key: 'authorization-google/account', method: 'oauth' })
+      expect(begin).toHaveBeenCalledWith({ key: 'authorization-orchard/account', method: 'oauth' })
     })
     expect(screen.getByText('Permission needed')).toBeTruthy()
-    expect(screen.queryByText(/access-token|refresh-token|password/i)).toBeNull()
+    expect(screen.queryByText(/access-token|refresh-token/i)).toBeNull()
+    expect(screen.getByText(/never your account password/)).toBeTruthy()
   })
 
-  it('cancels a pending OAuth attempt when the user closes the consent window and restores connector actions', async () => {
+  it('keeps OAuth pending after popup closure and restores connector actions after explicit cancellation', async () => {
     vi.useFakeTimers()
     const popup = {
       closed: false,
@@ -513,9 +522,9 @@ describe('connectors settings section', () => {
     })))
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'authorization-google/account',
-        label: 'Google Workspace',
-        methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+        key: 'authorization-orchard/account',
+        label: 'Orchard',
+        methods: [{ id: 'oauth', label: 'Sign in with Orchard' }],
         inFlight: false,
       }] }))),
       begin,
@@ -540,8 +549,13 @@ describe('connectors settings section', () => {
         await Promise.resolve()
       })
 
+      expect(status).toHaveBeenCalled()
+      expect(cancel).not.toHaveBeenCalled()
+      expect(screen.getByRole('button', { name: en.signingIn }).hasAttribute('disabled')).toBe(true)
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      await act(async () => { await Promise.resolve() })
       expect(cancel).toHaveBeenCalledWith({ attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546015' })
-      expect(screen.getByText('Authorization cancelled')).toBeTruthy()
+      expect(screen.getByText(en.authorizationCancelled)).toBeTruthy()
       expect((screen.getAllByRole('button', { name: 'Authorize' })[0] as HTMLButtonElement).disabled).toBe(false)
     } finally {
       open.mockRestore()
@@ -568,9 +582,9 @@ describe('connectors settings section', () => {
     })))
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'authorization-google/account',
-        label: 'Google Workspace',
-        methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+        key: 'authorization-orchard/account',
+        label: 'Orchard',
+        methods: [{ id: 'oauth', label: 'Sign in with Orchard' }],
         inFlight: false,
       }] }))),
       begin,
@@ -586,10 +600,8 @@ describe('connectors settings section', () => {
       fireEvent.click(screen.getAllByRole('button', { name: 'Authorize' })[0]!)
       await act(async () => {
         await Promise.resolve()
-        vi.advanceTimersByTime(700)
-        await Promise.resolve()
-        await Promise.resolve()
       })
+      await act(async () => { await vi.advanceTimersByTimeAsync(700) })
 
       const notice = document.querySelector('[data-authorization-outcome="success"]')
       expect(notice).not.toBeNull()
@@ -614,7 +626,7 @@ describe('connectors settings section', () => {
           kind: 'account' as const,
           provider: 'Google Workspace',
           connectors: [{
-            id: 'gmail', name: 'Gmail', description: 'Read and send mail.',
+            id: 'google-workspace', name: 'Google Workspace', description: 'Read and send mail.',
             category: 'Communication', accessible: true, enabled: true,
             installed: true, callable: true,
           }],
@@ -626,7 +638,7 @@ describe('connectors settings section', () => {
     renderHub(api)
     await screen.findAllByText('Connected · callable')
     fireEvent.click(screen.getByRole('button', { name: 'Connected' }))
-    expect(screen.getByText('Gmail')).toBeTruthy()
+    expect(screen.getByText('Google Workspace')).toBeTruthy()
     expect(screen.queryByText('Firebase')).toBeNull()
     expect(screen.queryByText('BigQuery')).toBeNull()
   })
@@ -634,9 +646,9 @@ describe('connectors settings section', () => {
   it('marks a stored OAuth grant without live telemetry as reconnect-required', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'mcp-client/example',
-        label: 'MCP example',
-        methods: [{ id: 'oauth', label: 'Authorize example' }],
+        key: 'mcp-client/orchard',
+        label: 'MCP orchard',
+        methods: [{ id: 'oauth', label: 'Authorize orchard' }],
         inFlight: false,
         stored: { kind: 'grant' as const },
         disconnectable: true as const,
@@ -645,8 +657,10 @@ describe('connectors settings section', () => {
     } as unknown as IApiClient['authorization']
 
     renderHub(api)
-    expect(await screen.findByText('Reconnect required')).toBeTruthy()
-    expect(screen.queryByText('Connected', { selector: 'span' })).toBeNull()
+    const reconnect = await screen.findByText('Reconnect required')
+    const accountCard = reconnect.closest('article')
+    expect(accountCard).not.toBeNull()
+    expect(within(accountCard!).queryByText('Connected', { selector: 'span' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy()
   })
 
@@ -746,12 +760,12 @@ describe('connectors settings section', () => {
     })
   })
 
-  it('replaces duplicated MCP account labels with the friendly catalog identity and token state', async () => {
+  it('replaces duplicated MCP account labels with the friendly account identity and token state', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
-        key: 'mcp-client/figma-figma',
-        label: 'MCP figma-figma',
-        methods: [{ id: 'oauth', label: 'Authorize Figma' }],
+        key: 'mcp-client/orchard-orchard',
+        label: 'MCP orchard-orchard',
+        methods: [{ id: 'oauth', label: 'Authorize Orchard' }],
         inFlight: false,
         stored: { kind: 'grant' as const },
         disconnectable: true as const,
@@ -764,7 +778,7 @@ describe('connectors settings section', () => {
       state: vi.fn(async () => ({
         managed: [],
         runtime: [{
-          serverName: 'figma-figma',
+          serverName: 'orchard-orchard',
           transport: 'streamable-http' as const,
           status: 'auth-required' as const,
           reasonCode: 'authorization-required' as const,
@@ -774,8 +788,8 @@ describe('connectors settings section', () => {
     }
 
     renderHub(api, { mcpRegistry })
-    expect(await screen.findByText('Figma')).toBeTruthy()
-    expect(screen.queryByText('MCP figma-figma')).toBeNull()
+    expect(await screen.findByText('Orchard')).toBeTruthy()
+    expect(screen.queryByText('MCP orchard-orchard')).toBeNull()
     expect(screen.getByText('Token expired')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Reauthorize' })).toBeTruthy()
   })
@@ -837,7 +851,7 @@ describe('connectors settings section', () => {
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
     const search = screen.getByRole('searchbox', { name: 'Search connectors' })
     fireEvent.change(search, { target: { value: 'hackathons' } })
-    expect(screen.getByText('Devpost')).toBeTruthy()
+    expect(screen.getByText('Devpost Hackathons')).toBeTruthy()
     expect(screen.queryByText('Gmail')).toBeNull()
   })
 })

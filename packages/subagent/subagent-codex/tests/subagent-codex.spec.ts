@@ -1,11 +1,12 @@
-import { readFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { PassThrough } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { Context } from '@phoenix-ai/cordis'
 import Loader from '@phoenix-ai/cordis-plugin-loader'
 import * as yaml from 'js-yaml'
-import { describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { InvariantInstaller } from '@phoenix-ai/dsh-invariants'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -66,6 +67,22 @@ vi.mock('node:fs', async (importOriginal) => {
 })
 
 type JsonObject = Record<string, unknown>
+
+const fixtureHome = mkdtempSync(resolve(tmpdir(), 'phoenix-codex-unit-'))
+const fixtureSqliteHome = resolve(fixtureHome, 'sqlite', 'subagent')
+
+beforeAll(() => {
+  // Fake subprocesses still pass through production environment resolution.
+  vi.stubEnv('CODEX_HOME', fixtureHome)
+  vi.stubEnv('CODEX_SQLITE_HOME', undefined)
+  vi.stubEnv('PHOENIX_CODEX_SQLITE_HOME', resolve(fixtureHome, 'sqlite'))
+  vi.stubEnv('DSH_HOME', resolve(fixtureHome, 'dsh'))
+})
+
+afterAll(() => {
+  vi.unstubAllEnvs()
+  rmSync(fixtureHome, { recursive: true, force: true })
+})
 
 const CODEX_VERSION = '0.147.0'
 const CODEX_PLATFORM_PACKAGES = [
@@ -1599,7 +1616,11 @@ describe('run lifecycle and quiescence', () => {
       cwd: process.cwd(),
       stdio: { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' },
       graceMs: DEFAULT_DISPOSE_GRACE_MS,
-      env: { OPENAI_API_KEY: 'fake' },
+      env: {
+        OPENAI_API_KEY: 'fake',
+        CODEX_HOME: fixtureHome,
+        CODEX_SQLITE_HOME: fixtureSqliteHome,
+      },
     })
     expect(run.localAgent).toBeUndefined()
 
@@ -2302,7 +2323,11 @@ describe('run lifecycle and quiescence', () => {
       stopReason: 'error',
     })
     expect(spawn).toHaveBeenCalledWith(expect.objectContaining({
-      env: { OPENAI_API_KEY: 'fake' },
+      env: {
+        OPENAI_API_KEY: 'fake',
+        CODEX_HOME: fixtureHome,
+        CODEX_SQLITE_HOME: fixtureSqliteHome,
+      },
       graceMs: 25,
       cwd: process.cwd(),
     }))

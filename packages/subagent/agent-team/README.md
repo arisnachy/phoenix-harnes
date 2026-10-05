@@ -34,7 +34,7 @@ Every ordinary runtime root is the implicit Lead of a Team whose `TeamId` equals
 
 Fresh children have no parent-history seed. Fork children capture the Lead's completed-turn prefix once; the in-flight delegation turn is excluded. Inherited Team records carry the old root's `TeamId` and are ignored when an ordinary fork becomes an independent runtime root. Provider-owned subagents outside the roster do not become nested Team Leads.
 
-The roster reports durable provisioning/failed phases and live `running`/`idle` status. An active but non-resident teammate is `inactive`; later waking delivery cold-resumes it through the continuation owner. Creation may carry provider-neutral `agentOptions`; the continuation manager validates and persists that route, while the roster reports its LLM `modelProvider` and `model` separately from the subagent transport provider.
+The roster reports durable provisioning/failed phases and live `running`/`idle` status. An active but non-resident teammate is `inactive`; later waking delivery cold-resumes it through the continuation owner. Creation may carry provider-neutral `agentOptions`; the continuation manager validates and persists that route, while the roster reports its LLM `modelProvider` and `model` separately from the subagent transport provider. Waking mailbox deliveries and directed user replies refresh an existing teammate from the lead's latest durable selection, falling back to its configured route. Codex selections use the Luna execution handoff; other providers retain the selected provider and model. An in-flight action finishes before a safe-boundary user reply uses the refreshed route.
 
 ## Durable mailbox
 
@@ -43,6 +43,8 @@ The roster reports durable provisioning/failed phases and live `running`/`idle` 
 The target message begins with `Team message <id> from <name>:` and retains the same id and sender in `TeamMessageSource`. Once the target Session durably holds that identity either in its pending inbox or recorded user-message history, the Lead log appends `team/message/delivered`. Immediate admissions are serialized per target in durable queue order, and recovery dispatches queued-minus-delivered records in the same order. Delivery folds both live and persisted inbox/history state before retrying, so a crash between inbox acceptance and model claim does not duplicate the message. A successful Lead-log flush wakes current `waitForChange()` callers, which then re-list authoritative state.
 
 The guarantee is process-local retry plus target-Session de-duplication, not cross-process exactly-once delivery. This release has no shared mailbox transaction across processes.
+
+Directed human questions join the child’s next safe model step without aborting its current action. The child answers an accepted conversational request through `answerChat()`, producing one retry-stable transcript row correlated by `replyTo`, then continues its mission. Operational corrections retain their execution-proof requirement; conversational questions and their answer receipts cannot clear the original task obligation. Recognized operational or completion claims in answers require matching execution evidence; the bilingual vocabulary is conservative and does not establish that arbitrary prose is truthful.
 
 ## Shared task board
 

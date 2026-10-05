@@ -10,7 +10,10 @@ import { dirname, join } from 'node:path'
 import { z as zod } from 'zod'
 import type { Context } from '@phoenix-ai/cordis'
 import {
+  defaultExecutionHandoff,
   installModelSelection,
+  latestModelSelectionPreference,
+  persistModelSelectionPreference,
   isPhoenixCodexAutoSelection,
   PHOENIX_CODEX_AUTO_MODEL,
   PHOENIX_CODEX_AUTO_PLANNER_MODEL,
@@ -429,7 +432,7 @@ async function buildModelCatalog(ctx: Context): Promise<{
         models: hasPhoenixAutoPair
           ? [{
             id: PHOENIX_CODEX_AUTO_MODEL,
-            name: 'Phoenix Auto',
+            name: 'Phoenix Orquesta',
             description: 'GPT-6.1 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
           }, ...entries]
           : entries,
@@ -1253,7 +1256,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     }
     return { provider: selected.provider, model: selected.model }
   }
-  type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection }
+  type WebModelSelectionRef = ModelSelectionRef & { current: ModelSelection; accept(next: ModelSelection): Promise<void> }
   const selections = new WeakMap<Agent, WebModelSelectionRef>()
   /**
    * Serializes `agentPreset.select` per session. Two concurrent selects both
@@ -1300,6 +1303,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     const selection: WebModelSelectionRef = {
       get current(): ModelSelection {
         if (picked !== undefined) return picked
+        const preference = latestModelSelectionPreference(agent.session)
+        if (preference !== undefined) return preference.selection
         // Incrementally folded by the session, so a per-step read costs
         // O(new events) rather than a rescan.
         const logged = agent.session.requestHeader()?.config
@@ -1312,14 +1317,34 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             : { reasoningEffort: logged.reasoningEffort },
         }
       },
-      set current(next: ModelSelection) {
+      async accept(next: ModelSelection): Promise<void> {
+        const previous = selection.current
+        const prior = latestModelSelectionPreference(agent.session)
+        // Keep readers and prompt assembly on the accepted route while its
+        // replacement waits for the session's durable write barrier.
+        picked = previous
+        persistModelSelectionPreference(agent.session, next, 'explicit')
+        try {
+          await ctx.sessions.flush(agent.session)
+        } catch (error: unknown) {
+          persistModelSelectionPreference(agent.session, prior?.selection ?? previous, prior?.source ?? 'default')
+          try {
+            await ctx.sessions.flush(agent.session)
+          } catch (rollbackError: unknown) {
+            throw new Error(
+              `Model selection was not saved; the previous live route is retained, but durable storage is uncertain: ${String(error)}; `
+              + `restoring the persisted preference also failed: ${String(rollbackError)}`,
+            )
+          }
+          throw new Error(`Model selection was not saved; the previous route was restored: ${String(error)}`)
+        }
         picked = next
       },
       assembled: undefined,
     }
-    // A concrete picker choice is authoritative. Adaptive Sol/Luna routing is
-    // reserved for the synthetic Phoenix Auto row handled inside the selector.
-    installModelSelection(agent.ctx, selection)
+    // The picker retains the planner/rescue preference while Codex workers
+    // execute on Luna Max. Other providers retain the selected route.
+    installModelSelection(agent.ctx, selection, defaultExecutionHandoff)
     selections.set(agent, selection)
     return selection
   }
@@ -1932,8 +1957,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           }),
         )
         const summaries: SessionSummary[] = []
-        for (let index = 0; index < settled.length; index++) {
-          const result = settled[index]!
+        for (const [index, result] of settled.entries()) {
           if (result.status === 'fulfilled') {
             summaries.push(result.value)
             continue
@@ -1942,7 +1966,8 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           // temporarily unreadable cold row does not. A single persisted
           // conversation must never blank the entire sidebar on a fresh page.
           signal?.throwIfAborted()
-          const meta = batch[index]!
+          const meta = batch[index]
+          if (meta === undefined) throw new Error('session.list: missing metadata for settled summary')
           ctx.logger.warn(
             `session.list: cold summary for "${meta.id}" failed (serving header fallback): ${String(result.reason)}`,
           )
@@ -2665,7 +2690,13 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
               }
               liveRoute = selected
             }
-            selectionFor(found.agent).current = selected
+            try {
+              await selectionFor(found.agent).accept(selected)
+            } catch (error: unknown) {
+              return err(request, {
+                code: 'internal', message: error instanceof Error ? error.message : String(error), details: {},
+              })
+            }
             // Synchronize the live Agent route so delegators inherit a real
             // provider route. Phoenix Auto itself remains a selector-level
             // virtual model and resolves Sol/Luna immediately before requests.

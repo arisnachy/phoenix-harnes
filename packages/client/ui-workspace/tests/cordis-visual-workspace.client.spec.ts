@@ -9,7 +9,7 @@ import {
   CordisVisualWorkspaceController,
 } from '@phoenix-ai/dsh-client-ui-workspace/src/client/CordisVisualWorkspace.tsx'
 
-function fakeLayout(subagent = false): ILayout {
+function fakeLayout(subagent = false) {
   const occupancy: WorkspaceOccupancy = Object.freeze({ subagent, cordis: false })
   return {
     toggleSidebar: vi.fn(),

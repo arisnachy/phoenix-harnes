@@ -96,7 +96,7 @@ export async function executeToolCalls(
     const mode = ctx.tools.executionMode(first.exec).kind
     const group = mode === 'parallel' ? planned.slice(next) : [first]
     const outcome = await runGroup(
-      ctx, turn, step, group, mode, signal, acceptContext,
+      ctx, turn, step, group, mode, signal, acceptContext, concluded,
     )
     next += outcome.consumed
     concluded ||= outcome.concluded
@@ -134,6 +134,7 @@ async function runGroup(
   mode: ToolExecutionMode['kind'],
   signal: AbortSignal,
   acceptContext: (context: UserMessage) => void,
+  previouslyConcluded: boolean,
 ): Promise<GroupOutcome> {
   const { session } = ctx.agents.requireInitiator()
   const { maxParallelToolCalls } = ctx.agentLoop.config
@@ -144,7 +145,7 @@ async function runGroup(
   let committed = 0
   let started = 0
   let aborted: boolean = signal.aborted
-  let concluded = false
+  let concluded = previouslyConcluded
   let schedulerFailure: { error: unknown } | undefined
   const throwSchedulerFailure = (): void => {
     if (schedulerFailure !== undefined) throw schedulerFailure.error
@@ -164,14 +165,14 @@ async function runGroup(
         : ctx.tools[TOOL_RUNTIME_SCHEDULER].finish(slot.exec, slot.result)
       appendToolResult(session, turn, step, call.block, result, callSeq)
       for (const context of result.additionalContexts ?? []) acceptContext(context)
-      if (result.isError && result.error.info?.code !== TOOL_ABORTED
+      concluded ||= result.concludesTurn === true
+      if (!concluded && result.isError && result.error.info?.code !== TOOL_ABORTED
         && result.error.info?.code !== TOOL_ABORTED_BEFORE_DISPATCH) {
         acceptContext(createUserMessage({
           content: [{ type: 'text', text: TOOL_FAILURE_RECOVERY_PROMPT(call.block.name) }],
           source: { kind: 'plugin', plugin: 'agent-loop' },
         }))
       }
-      concluded ||= result.concludesTurn === true
       committed++
     }
   }

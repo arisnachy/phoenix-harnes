@@ -510,6 +510,25 @@ describe('SubagentRuntime.followup residency routing', () => {
     expect(userTexts(loaded.events)).toEqual(['child task', 'first follow-up', 'second follow-up'])
   })
 
+  it('persists an explicit followup route across cold resume and preserves it when omitted', async () => {
+    const { ctx, parent, adapter } = await setup([
+      textResponse('initial'), textResponse('changed'), textResponse('preserved'),
+    ])
+    parkParent(ctx, parent)
+    ctx.llm.registerAdapter(['other'], adapter)
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    await waitNoActivation(ctx, started.childId)
+    await ctx.subagents.followup(parent, started.childId, message('change route'), {
+      source: { kind: 'user' }, signal: testSignal,
+      modelSelection: { provider: 'other', model: 'selected' },
+    })
+    await waitNoActivation(ctx, started.childId)
+    await followup(ctx, parent, started.childId, message('keep route'))
+    await waitNoActivation(ctx, started.childId)
+    expect(adapter.requests.map(request => [request.provider, request.model]))
+      .toEqual([['mock', 'mock'], ['other', 'selected'], ['other', 'selected']])
+  })
+
   it('cold-resumes a settled child into a new Activation', async () => {
     const { ctx, parent } = await setup([textResponse('first'), textResponse('after resume')])
     const started = await ctx.subagents.startContinuable(startSpec(parent))

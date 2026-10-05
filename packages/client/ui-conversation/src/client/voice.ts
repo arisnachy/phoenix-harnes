@@ -444,13 +444,13 @@ export async function tryStartCodexRealtimeVoice(
     peer.onconnectionstatechange = () => {
       const liveSession = codexRealtimeVoiceSession
       if (liveSession === undefined || liveSession.peer !== peer) return
-      if (peer?.connectionState === 'connected') {
+      if (peer.connectionState === 'connected') {
         // WebRTC "disconnected" is explicitly transient. A long Hardness/tool
         // turn can pass through it and reconnect without renegotiating voice.
         flushCodexRealtimeUtterances(liveSession)
         return
       }
-      if (peer?.connectionState === 'failed' || peer?.connectionState === 'closed') {
+      if (peer.connectionState === 'failed' || peer.connectionState === 'closed') {
         // A terminal transport failure stops native voice rather than silently
         // substituting a different system/browser voice.
         discardCodexRealtimeUtterances(liveSession.key)
@@ -751,6 +751,9 @@ export function speakVoiceAssistantResponse(messageKey: string, text: string, me
  * Use the already-active Codex realtime voice for an approval/proactive alert.
  * No browser/system TTS fallback is attempted here: when Codex owns the call,
  * the user hears one continuous selected voice and never internal ids.
+ * @param title - Brief context for the requested review or input.
+ * @param detail - Additional context for the spoken notification.
+ * @returns Whether the active realtime voice accepted the notification.
  */
 export function speakVoiceAssistantAttention(title: string, detail?: string): boolean {
   const realtime = codexRealtimeVoiceSession

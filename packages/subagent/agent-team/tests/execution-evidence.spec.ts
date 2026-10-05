@@ -168,3 +168,37 @@ describe('Team execution evidence', () => {
     })
   })
 })
+
+it('retains the original operational obligation across a directed conversational user question', () => {
+  const events = [
+    userEvent(0, 'Update the file with the verified result.'),
+    userEvent(1, '[Team user message question]\nUser request: "Why do you start there?"\nReply context:\nWhy do you start there?'),
+    toolCall(2, 'answer', 'team_chat_answer'), toolResult(3, 'answer'),
+  ]
+  expect(teamExecutionProof(events)).toMatchObject({ requirement: 'effect', assignmentSeq: 0, satisfied: false })
+  expect(teamExecutionProof([...events, toolCall(4, 'edit', 'write_file'), toolResult(5, 'edit')]))
+    .toMatchObject({ requirement: 'effect', assignmentSeq: 0, satisfied: true, tools: ['write_file'] })
+})
+
+it('retains operational directed corrections as the latest assignment', () => {
+  const events = [
+    userEvent(0, 'Update the file.'),
+    toolCall(1, 'edit', 'write_file'), toolResult(2, 'edit'),
+    userEvent(3, '[Team user message correction]\nUser request: "Send the corrected email instead."\nReply context:\nSend the corrected email instead.'),
+  ]
+  expect(teamExecutionProof(events)).toMatchObject({ requirement: 'effect', assignmentSeq: 3, satisfied: false })
+})
+
+it.each(['How do I send an email?', '¿Cómo puedo enviar un correo?', 'What does the test do?', 'Explain how to create a file'])('keeps a directed explanatory question separate from the original task: %s', (question) => {
+  expect(teamExecutionProof([
+    userEvent(0, 'Send the email.'),
+    userEvent(1, `[Team user message explanation]\nUser request: ${JSON.stringify(question)}\nReply context:\n${question}`),
+  ])).toMatchObject({ requirement: 'effect', assignmentSeq: 0, satisfied: false })
+})
+
+it('does not treat a polite directed action request as a conversational explanation', () => {
+  expect(teamExecutionProof([
+    userEvent(0, 'Update the file.'),
+    userEvent(1, '[Team user message actual-action]\nUser request: "Can you send the email?"\nReply context:\nCan you send the email?'),
+  ])).toMatchObject({ requirement: 'effect', assignmentSeq: 1, satisfied: false })
+})

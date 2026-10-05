@@ -81,6 +81,7 @@ const GENERIC_SKIPS: readonly GenericSkip[] = [
   { file: 'apps/cli/tests/full-preset-memory-parity.spec.ts', upstream: ['cordis'] },
   { file: 'apps/cli/tests/phoenix-auto-parallel-luna.spec.ts', upstream: ['cordis'] },
   { file: 'packages/client/ui-layout/src/client/stores.ts', upstream: ['cordis'] },
+  { file: 'packages/client/ui-layout/src/client/service.ts', upstream: ['cordis'] },
   { file: 'packages/client/ui-layout/tests/layout-store.client.spec.ts', upstream: ['cordis'] },
   { file: 'packages/client/ui-layout/tests/service.client.spec.ts', upstream: ['cordis'] },
   { file: 'packages/client/ui-layout/tests/visual-workspace-frame.client.spec.tsx', upstream: ['cordis'] },

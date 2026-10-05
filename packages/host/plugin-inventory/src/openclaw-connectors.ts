@@ -42,8 +42,10 @@ function validGogAccount(stdout: string): string | undefined {
     if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
     const accounts = (parsed as { accounts?: unknown }).accounts
     if (!Array.isArray(accounts)) return undefined
-    for (const account of accounts as GogAccount[]) {
-      if (account?.valid !== true || typeof account.email !== 'string') continue
+    for (const value of accounts as unknown[]) {
+      if (value === null || typeof value !== 'object') continue
+      const account = value as GogAccount
+      if (account.valid !== true || typeof account.email !== 'string') continue
       const email = account.email.trim()
       if (email.length > 0 && email.includes('@')) return email
     }
