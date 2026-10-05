@@ -755,6 +755,9 @@ export function speakVoiceAssistantResponse(messageKey: string, text: string, me
  * Use the already-active Codex realtime voice for an approval/proactive alert.
  * No browser/system TTS fallback is attempted here: when Codex owns the call,
  * the user hears one continuous selected voice and never internal ids.
+ * @param title - Human-facing attention title.
+ * @param detail - Optional human-facing context for the notification.
+ * @returns Whether active Codex Realtime accepted or queued the notification.
  */
 export function speakVoiceAssistantAttention(title: string, detail?: string): boolean {
   const realtime = codexRealtimeVoiceSession
