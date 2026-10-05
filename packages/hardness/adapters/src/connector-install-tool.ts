@@ -101,25 +101,27 @@ export function createConnectorInstallTool(
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
     },
     async execute(args, exec) {
-      const name = args.name?.trim()
+      const name = args.name?.trim() || undefined
       const connectorId = args.connectorId
-      const hasName = name !== undefined && name.length > 0
-      const hasCurated = connectorId !== undefined
-      if (hasName === hasCurated) {
+      if ((name === undefined) === (connectorId === undefined)) {
         throw new Error('connector_install requires exactly one of name or connectorId')
       }
-      if (hasName && name.length < 2) throw new Error('connector_install requires an exact registry server name')
-      if (hasCurated && connectorId !== 'devpost') throw new Error('connector_install supports only the curated devpost connector')
-      if (hasCurated && installer.installCuratedMcpConnector === undefined) {
+      if (name !== undefined && name.length < 2) {
+        throw new Error('connector_install requires an exact registry server name')
+      }
+      if (connectorId !== undefined && connectorId !== 'devpost') {
+        throw new Error('connector_install supports only the curated devpost connector')
+      }
+      if (connectorId === 'devpost' && installer.installCuratedMcpConnector === undefined) {
         throw new Error('curated Devpost MCP installation is unavailable in this Phoenix runtime')
       }
       if (exec.agent === undefined) throw new Error('connector_install requires an active agent session')
-      const label = hasCurated ? 'Devpost Hackathons' : name
+      const label = connectorId === 'devpost' ? 'Devpost Hackathons' : name
       const outcome = await approval.request({
         agent: exec.agent,
         toolName: 'connector_install',
         callId: exec.callId,
-        reason: hasCurated
+        reason: connectorId === 'devpost'
           ? 'Activate the Phoenix-curated official Devpost Hackathons MCP'
           : `Install registry-listed MCP ${name}${args.version === undefined ? '' : ` @ ${args.version}`} into PHOENIX`,
         risk: 'medium',
@@ -132,8 +134,8 @@ export function createConnectorInstallTool(
           message: `MCP installation was not approved (${outcome}).`,
         }
       }
-      const receipt = hasCurated
-        ? await installer.installCuratedMcpConnector!({ connectorId: 'devpost' })
+      const receipt = connectorId === 'devpost'
+        ? await installer.installCuratedMcpConnector!({ connectorId })
         : await installer.installMcpRegistryServer({
             name: name!,
             ...(args.version === undefined ? {} : { version: args.version }),
