@@ -53,6 +53,9 @@ function strings() {
       connect: 'Conectar',
       reconnect: 'Reconectar',
       connecting: 'Conectando…',
+      preparing: 'Preparando la autorización…',
+      openAuth: 'Abrir autorización',
+      code: 'Código',
       connected: 'Conectado',
       failed: 'No se pudo conectar',
       cancelled: 'Conexión cancelada',
@@ -64,6 +67,9 @@ function strings() {
       connect: 'Connect',
       reconnect: 'Reconnect',
       connecting: 'Connecting…',
+      preparing: 'Preparing authorization…',
+      openAuth: 'Open authorization',
+      code: 'Code',
       connected: 'Connected',
       failed: 'Connection failed',
       cancelled: 'Connection cancelled',
@@ -83,6 +89,9 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
   const [stored, setStored] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'pending' | 'authorized' | 'cancelled' | 'failed'>('idle')
   const [error, setError] = useState<string | undefined>()
+  const [detail, setDetail] = useState<string | undefined>()
+  const [authorizationUrl, setAuthorizationUrl] = useState<string | undefined>()
+  const [authorizationCode, setAuthorizationCode] = useState<string | undefined>()
   const alive = useRef(true)
 
   useEffect(() => {
@@ -112,24 +121,51 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
   const begin = async (): Promise<void> => {
     if (flowKey === undefined || phase === 'pending') return
     setError(undefined)
+    setDetail(copy.preparing)
+    setAuthorizationUrl(undefined)
+    setAuthorizationCode(undefined)
     setPhase('pending')
     const popup = window.open('', '_blank')
+    if (popup !== null) {
+      try {
+        popup.document.title = `${connector.label} · PHOENIX`
+        popup.document.body.textContent = copy.preparing
+      } catch {
+        // The reserved popup is best-effort. The card exposes a manual link once the Host emits one.
+      }
+    }
     try {
       const started = await authorization.begin({ key: flowKey, method: 'oauth' })
       if (!started.result.ok) throw new Error(started.result.error.message)
       let after = 0
+      let openedUrl: string | undefined
       while (alive.current) {
-        await sleep(500)
         const status = await authorization.status({ attemptId: started.result.value.attemptId, after })
         if (!status.result.ok) throw new Error(status.result.error.message)
         const view = status.result.value
         after = view.nextSeq
-        const notice = view.notices.at(-1)?.notice
-        if (notice?.url !== undefined) {
-          if (popup !== null && !popup.closed) popup.location.replace(notice.url)
-          else window.open(notice.url, '_blank')
+        const latest = view.notices.at(-1)?.notice
+        const consent = view.notices.findLast(item => item.notice.url !== undefined)?.notice
+        const codeNotice = view.notices.findLast(item => item.notice.code !== undefined)?.notice
+        if (latest?.message !== undefined) setDetail(latest.message)
+        if (consent?.url !== undefined) {
+          setAuthorizationUrl(consent.url)
+          if (consent.url !== openedUrl) {
+            openedUrl = consent.url
+            if (popup !== null && !popup.closed) {
+              try {
+                popup.location.href = consent.url
+              } catch {
+                // Browser isolation can reject scripted navigation; the visible manual link remains usable.
+              }
+            }
+          }
         }
-        if (view.status === 'pending') continue
+        if (codeNotice?.code !== undefined) setAuthorizationCode(codeNotice.code)
+        if (view.status === 'pending') {
+          await sleep(350)
+          continue
+        }
         if (popup !== null && !popup.closed) popup.close()
         if (view.status === 'authorized') {
           setStored(true)
@@ -165,7 +201,9 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
       ? copy.cancelled
       : phase === 'authorized'
         ? copy.connected
-        : copy.needs
+        : phase === 'pending' && detail !== undefined
+          ? detail
+          : copy.needs
 
   return (
     <div className={css.card} data-connector-auth-card>
@@ -177,6 +215,10 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
       <div className={css.copy}>
         <strong>{displayLabel}</strong>
         <span>{statusText}</span>
+        {authorizationCode === undefined ? null : <span>{`${copy.code}: ${authorizationCode}`}</span>}
+        {authorizationUrl === undefined ? null : (
+          <a href={authorizationUrl} target="_blank" rel="noreferrer">{copy.openAuth}</a>
+        )}
         {error === undefined ? null : <span className={css.error}>{error}</span>}
       </div>
       {phase === 'authorized' ? (
