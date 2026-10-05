@@ -72,6 +72,12 @@ describe('connectors settings section', () => {
           inFlight: false,
         },
         {
+          key: 'authorization-openclaw/github',
+          label: 'GitHub',
+          methods: [{ id: 'oauth', label: 'Authorize GitHub' }],
+          inFlight: false,
+        },
+        {
           key: 'llm-pi-ai/github-copilot',
           label: 'GitHub Copilot',
           methods: [{ id: 'oauth', label: 'GitHub Copilot' }],
@@ -124,6 +130,8 @@ describe('connectors settings section', () => {
 
     expect(screen.getByText('GitHub Copilot')).toBeTruthy()
     expect(githubCard?.textContent).not.toContain('GitHub Copilot')
+    expect(document.querySelector('[data-authorization-key="authorization-openclaw/github"]')).toBeNull()
+    expect(document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')).toBeTruthy()
     expect(api.begin).not.toHaveBeenCalled()
   })
 
