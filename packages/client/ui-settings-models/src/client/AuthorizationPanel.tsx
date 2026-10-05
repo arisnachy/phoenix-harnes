@@ -71,6 +71,22 @@ export interface ManagedMcpConnectorView {
     | { kind: 'curated'; connectorId: string }
 }
 
+/** Secret-free readiness for an existing OpenClaw connector route. */
+export interface OpenClawConnectorView {
+  id: 'google-workspace' | 'github'
+  skillAlias: 'openclaw-gog' | 'openclaw-github'
+  skillInstalled: boolean
+  runtimeAvailable: boolean
+  connected: boolean
+  account?: string
+  phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill'
+}
+
+/** OpenClaw connector routes currently reusable by Phoenix. */
+export interface OpenClawConnectorSnapshot {
+  connectors: OpenClawConnectorView[]
+}
+
 /** Combined runtime + managed MCP state returned by the Host. */
 export interface McpConnectorHubSnapshot {
   runtime: McpConnectorRuntimeView[]
@@ -114,6 +130,8 @@ export interface McpRegistryClient {
     status: 'installed' | 'already-installed'
     connector: ManagedMcpConnectorView
   }>
+  /** Reuse already-authenticated OpenClaw connector routes when present. */
+  openClawState?(): Promise<OpenClawConnectorSnapshot>
   /** Read Jev setup/runtime state without exposing its secret. Optional for older hosts. */
   jevState?(): Promise<JevMcpSnapshot>
   /** Store a Jev key in Phoenix credentials and activate the pinned MCP endpoint. Optional for older hosts. */
@@ -384,9 +402,8 @@ function accountPresentation(entry: Entry): {
   logoUrl?: string
   technical?: string
 } {
-  const definition = catalogDefinitionForText(
-    `${entry.label} ${entry.key} ${entry.telemetry?.provider ?? ''}`,
-  )
+  const definition = CONNECTOR_CATALOG.find(candidate =>
+    candidate.providerFamily !== undefined && entryMatchesFamily(entry, candidate.providerFamily))
   const technical = collapsedTechnicalName(entry.telemetry?.provider ?? entry.label)
   if (definition !== undefined) {
     return {
@@ -455,13 +472,14 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, connected, t, onAuthorize, onConfigure,
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, onAuthorize, onConfigure,
   onFindOfficial, onFindRegistry, onRepair, onRemove, pending, repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
   mcpRuntime?: McpConnectorRuntimeView | undefined
   managed?: ManagedMcpConnectorView | undefined
+  openClaw?: OpenClawConnectorView | undefined
   connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
@@ -490,7 +508,10 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
             : managed !== undefined
               ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
               : undefined
-  const status = liveStatus ?? mcpStatus ?? (connectedByAccount
+  const openClawStatus = openClaw?.connected === true
+    ? { text: t('openClawConnectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+    : undefined
+  const status = openClawStatus ?? liveStatus ?? mcpStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
       ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -532,6 +553,11 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, connected
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {openClaw?.connected !== true ? null : (
+        <p className={styles['advancedHint']}>
+          {openClaw.account === undefined ? openClaw.skillAlias : `${openClaw.skillAlias} · ${openClaw.account}`}
+        </p>
+      )}
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
         <div className={connectorStyles['connectorActions']}>
@@ -795,6 +821,7 @@ export function ConnectorsSettingsSection({ api,
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryFailure, setRegistryFailure] = useState(false)
   const [mcpHub, setMcpHub] = useState<McpConnectorHubSnapshot>({ runtime: [], managed: [] })
+  const [openClaw, setOpenClaw] = useState<OpenClawConnectorSnapshot>({ connectors: [] })
   const [jevState, setJevState] = useState<JevMcpSnapshot | undefined>()
   const [jevSetupOpen, setJevSetupOpen] = useState(false)
   const [jevApiKey, setJevApiKey] = useState('')
@@ -850,6 +877,19 @@ export function ConnectorsSettingsSection({ api,
         if (!stale && !isTransientConnectorRemoteFailure(error)) {
           setCatalogFailure(String(error))
         }
+      },
+    )
+    return () => { stale = true }
+  }, [mcpRegistry, refresh])
+
+  useEffect(() => {
+    const readOpenClaw = mcpRegistry?.openClawState
+    if (readOpenClaw === undefined) return
+    let stale = false
+    void readConnectorRemoteWithRetry(() => readOpenClaw(), () => stale).then(
+      (snapshot) => { if (!stale) setOpenClaw(snapshot) },
+      (error) => {
+        if (!stale && !isTransientConnectorRemoteFailure(error)) setCatalogFailure(String(error))
       },
     )
     return () => { stale = true }
@@ -928,13 +968,17 @@ export function ConnectorsSettingsSection({ api,
       : definition.id === 'jev'
         ? mcpHub.managed.find(candidate => candidate.serverName === 'jev')
         : mcpHub.managed.find(candidate => managedMatchesDefinition(candidate, definition))
-    const connected = live?.installed === true
+    const openClawRoute = definition.openClawConnectorId === undefined
+      ? undefined
+      : openClaw.connectors.find(candidate => candidate.id === definition.openClawConnectorId)
+    const connected = openClawRoute?.connected === true
+      || live?.installed === true
       || live?.callable === true
       || accountGrantConnectsCatalogEntry(account)
       || mcpRuntime?.status === 'ready'
       || definition.id === 'binance'
-    return { definition, live, account, mcpRuntime, managed, connected }
-  }), [entries, liveConnectors, mcpHub])
+    return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
+  }), [entries, liveConnectors, mcpHub, openClaw])
 
   const visibleRows = catalogRows.filter(({ definition, connected }) => {
     if (filter === 'connected' && !connected) return false
@@ -943,6 +987,11 @@ export function ConnectorsSettingsSection({ api,
     if (needle.length === 0) return true
     return `${definition.name} ${definition.category} ${definition.description} ${definition.capabilities.join(' ')}`.toLowerCase().includes(needle)
   })
+
+  const visibleAccountEntries = useMemo(() => entries.filter(entry =>
+    !CONNECTOR_CATALOG.some(definition =>
+      definition.providerFamily !== undefined && entryMatchesFamily(entry, definition.providerFamily))),
+  [entries])
 
   const toggleChatGptWeb = (enabled: boolean): void => {
     if (chatGptWeb === undefined || settings === undefined || chatGptWebBusy) return
@@ -1146,14 +1195,14 @@ export function ConnectorsSettingsSection({ api,
         </section>
       )}
 
-      {entries.length === 0 ? null : (
+      {visibleAccountEntries.length === 0 ? null : (
         <section className={hubStyles['block']} aria-label={connectorT('accounts')}>
           <div className={hubStyles['heading']}>
             <h3>{connectorT('accounts')}</h3>
             <p>{connectorT('accountsHint')}</p>
           </div>
           <div className={connectorStyles['connectorGrid']}>
-            {entries.map((entry) => {
+            {visibleAccountEntries.map((entry) => {
               const lines = telemetryLines(entry.telemetry)
               const presentation = accountPresentation(entry)
               const runtime = runtimeForEntry(entry, mcpHub.runtime)
@@ -1255,6 +1304,7 @@ export function ConnectorsSettingsSection({ api,
                 account={row.account}
                 mcpRuntime={row.mcpRuntime}
                 managed={row.managed}
+                openClaw={row.openClaw}
                 connected={row.connected}
                 t={connectorT}
                 pending={attempt?.status === 'pending' || jevBusy}
