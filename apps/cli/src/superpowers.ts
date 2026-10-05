@@ -96,9 +96,12 @@ export function superpowersAlias(sourceName: string): string {
  * Translate Superpowers cross-skill references into PHOENIX skill names.
  * Project directories such as `.superpowers/` are intentionally untouched.
  */
-export function rewriteSuperpowersReferences(source: string): string {
-  return source.replace(/\bsuperpowers:([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi, (_match, name: string) =>
+export function rewriteSuperpowersReferences(source: string, siblingSkillNames: readonly string[] = []): string {
+  const siblings = new Set(siblingSkillNames.map(name => kebab(name)))
+  const namespaced = source.replace(/\bsuperpowers:([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi, (_match, name: string) =>
     superpowersAlias(name))
+  return namespaced.replace(/\.\.\/([a-z0-9]+(?:-[a-z0-9]+)*)(?=\/)/gi, (match, name: string) =>
+    siblings.has(kebab(name)) ? `../${superpowersAlias(name)}` : match)
 }
 
 function frontmatter(source: string): string {
@@ -114,13 +117,13 @@ function frontmatterValue(source: string, field: string): string | undefined {
   return match?.[1]?.trim().replace(/^['"]|['"]$/g, '')
 }
 
-function rewriteSkill(source: string, alias: string): string {
+function rewriteSkill(source: string, alias: string, siblingSkillNames: readonly string[]): string {
   const head = frontmatter(source)
   if (!/^name\s*:/mi.test(head)) throw new Error('skill frontmatter has no name')
   const rewritten = head.replace(/^name\s*:.*$/mi, `name: ${alias}`)
   const end = source.search(/\r?\n---(?:\r?\n|$)/)
   if (end < 0) throw new Error('skill frontmatter is unterminated')
-  return rewriteSuperpowersReferences(`${rewritten}${source.slice(end)}`)
+  return rewriteSuperpowersReferences(`${rewritten}${source.slice(end)}`, siblingSkillNames)
 }
 
 function discoverSkillEntries(root: string): Array<{ source: string; entryName: string }> {
@@ -143,13 +146,13 @@ function resourceFiles(root: string, current = root): string[] {
 
 const REWRITABLE_EXTENSIONS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.toml'])
 
-function rewriteTextResources(root: string, resources: readonly string[]): void {
+function rewriteTextResources(root: string, resources: readonly string[], siblingSkillNames: readonly string[]): void {
   for (const resource of resources) {
     const extension = extname(resource).toLowerCase()
     if (!REWRITABLE_EXTENSIONS.has(extension)) continue
     const path = join(root, resource)
     const source = readFileSync(path, 'utf8')
-    const rewritten = rewriteSuperpowersReferences(source)
+    const rewritten = rewriteSuperpowersReferences(source, siblingSkillNames)
     if (rewritten !== source) writeFileSync(path, rewritten, 'utf8')
   }
 }
@@ -196,7 +199,9 @@ function syncSource(repository: string): string {
 function mirrorSkills(sourceRoot: string, skillRoot: string): { records: SuperpowersSkillRecord[]; managed: string[] } {
   const records: SuperpowersSkillRecord[] = []
   const managed: string[] = []
-  for (const entry of discoverSkillEntries(sourceRoot)) {
+  const entries = discoverSkillEntries(sourceRoot)
+  const siblingSkillNames = entries.map(entry => entry.entryName)
+  for (const entry of entries) {
     const alias = superpowersAlias(entry.entryName)
     const target = join(skillRoot, alias)
     const sourceFile = join(entry.source, 'SKILL.md')
@@ -204,9 +209,9 @@ function mirrorSkills(sourceRoot: string, skillRoot: string): { records: Superpo
     const description = frontmatterValue(sourceText, 'description') ?? ''
     rmSync(target, { recursive: true, force: true })
     cpSync(entry.source, target, { recursive: true, force: true })
-    writeFileSync(join(target, 'SKILL.md'), rewriteSkill(sourceText, alias), 'utf8')
+    writeFileSync(join(target, 'SKILL.md'), rewriteSkill(sourceText, alias, siblingSkillNames), 'utf8')
     const resources = resourceFiles(target)
-    rewriteTextResources(target, resources)
+    rewriteTextResources(target, resources, siblingSkillNames)
     records.push({
       sourceName: entry.entryName,
       alias,
