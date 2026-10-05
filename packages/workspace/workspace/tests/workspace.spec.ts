@@ -233,6 +233,74 @@ describe('WorkspaceRegistry lifecycle and bootstrap', () => {
     })
   })
 
+  it('does not synthesize a Workspace from unscoped sessions at the Host cwd', async () => {
+    const hostCwd = await makeDir('host-cwd')
+    const project = await makeDir('real-project')
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(hostCwd)
+    try {
+      const result = await harness({
+        sessions: [
+          header('host-stray', hostCwd, 500),
+          header('project-session', project, 400),
+        ],
+      })
+
+      expect(result.registry.list().map(workspace => workspace.path)).toEqual([project])
+      expect(result.registry.list()[0]?.sessionIds).toEqual(['project-session'])
+      expect(storedState(result.pool).workspaceIds).toEqual([result.registry.list()[0]!.id])
+    } finally {
+      cwd.mockRestore()
+    }
+  })
+
+  it('prunes a legacy bootstrap-shaped Host-cwd Workspace without deleting its session history', async () => {
+    const hostCwd = await makeDir('legacy-host-cwd')
+    const legacyId = WorkspaceId('legacy-host-cwd')
+    const createdAt = new Date(500).toISOString()
+    const pool = storedPool(
+      [[legacyId, record(hostCwd, ['host-stray'], createdAt)]],
+      { initialized: true, workspaceIds: [legacyId] },
+    )
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(hostCwd)
+    try {
+      const result = await harness({
+        pool,
+        sessions: [header('host-stray', hostCwd, 500)],
+      })
+
+      expect(result.registry.list()).toEqual([])
+      expect(storedState(pool)).toEqual({
+        initialized: true,
+        workspaceIds: [],
+        archivedSessionIds: [],
+      })
+      expect(result.list).toHaveBeenCalledTimes(1)
+    } finally {
+      cwd.mockRestore()
+    }
+  })
+
+  it('keeps an explicitly registered Host-cwd Workspace', async () => {
+    const hostCwd = await makeDir('explicit-host-cwd')
+    const explicitId = WorkspaceId('explicit-host-cwd')
+    const pool = storedPool(
+      [[explicitId, record(hostCwd, ['member'], new Date(100).toISOString())]],
+      { initialized: true, workspaceIds: [explicitId] },
+    )
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(hostCwd)
+    try {
+      const result = await harness({
+        pool,
+        sessions: [header('member', hostCwd, 500)],
+      })
+
+      expect(result.registry.list().map(workspace => workspace.id)).toEqual([explicitId])
+      expect(result.registry.list()[0]?.sessionIds).toEqual(['member'])
+    } finally {
+      cwd.mockRestore()
+    }
+  })
+
   it('breaks equal bootstrap timestamps by session id and canonical path', async () => {
     const first = await makeDir('tie-first')
     const second = await makeDir('tie-second')
