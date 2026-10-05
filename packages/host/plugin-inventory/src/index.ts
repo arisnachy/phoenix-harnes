@@ -260,10 +260,11 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('installCuratedMcpConnector')
   async installCuratedMcpConnector(request: CuratedMcpInstallRequest): Promise<McpRegistryInstallReceipt> {
     const connectorId: unknown = request.connectorId
-    if (connectorId !== 'devpost') {
-      throw new Error(`unsupported curated MCP connector: ${typeof connectorId === 'string' ? connectorId : 'invalid id'}`)
+    switch (connectorId) {
+      case 'devpost': return this.managedMcp.installDevpostHackathons()
+      case 'canva': return this.managedMcp.installCanva()
+      default: throw new Error(`unsupported curated MCP connector: ${typeof connectorId === 'string' ? connectorId : 'invalid id'}`)
     }
-    return this.managedMcp.installDevpostHackathons()
   }
 
   /**

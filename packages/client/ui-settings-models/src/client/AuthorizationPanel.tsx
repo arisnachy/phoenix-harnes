@@ -124,7 +124,7 @@ export interface McpRegistryClient {
     connector: ManagedMcpConnectorView
   }>
   /** Install a Host-pinned curated MCP by connector id; no endpoint crosses the browser boundary. */
-  installCurated?(request: { connectorId: 'devpost' }): Promise<{
+  installCurated?(request: { connectorId: 'devpost' | 'canva' }): Promise<{
     status: 'installed' | 'already-installed'
     connector: ManagedMcpConnectorView
   }>
@@ -537,7 +537,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               ? { text: t('apiKeyStatus'), className: '' }
               : account !== undefined
                 ? { text: t('availableStatus'), className: '' }
-                : definition.registryName !== undefined
+                : definition.curatedMcp === true || definition.registryName !== undefined
                   ? { text: t('officialInstallAvailableStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
                   : { text: t('officialAdapterUnavailableStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
   const oauthAccount = account !== undefined && account.methods.some(candidate => candidate.id === 'oauth')
@@ -1125,11 +1125,11 @@ export function ConnectorsSettingsSection({ api,
 
   const installCuratedConnector = (definition: ConnectorDefinition): void => {
     const installCurated = mcpRegistry?.installCurated
-    if (installCurated === undefined || definition.id !== 'devpost' || definition.curatedMcp !== true
+    if (installCurated === undefined || (definition.id !== 'devpost' && definition.id !== 'canva') || definition.curatedMcp !== true
       || installingCuratedId !== undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
     setCatalogFailure(undefined)
     setInstallingCuratedId(definition.id)
-    void installCurated({ connectorId: 'devpost' }).then(
+    void installCurated({ connectorId: definition.id }).then(
       () => {
         setRefresh(current => current + 1)
         onAuthorized()
@@ -1357,6 +1357,7 @@ export function ConnectorsSettingsSection({ api,
                   ? undefined
                   : () => { installCuratedConnector(row.definition) }}
                 onFindOfficial={mcpRegistry === undefined || row.definition.registryName === undefined
+                  || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
                   ? undefined
                   : () => { findOfficialConnector(row.definition) }}
                 onFindRegistry={mcpRegistry === undefined || row.definition.provenance !== 'registry-listed'
