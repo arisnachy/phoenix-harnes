@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { CONNECTOR_CATALOG, CONNECTOR_PRESETS } from '../src/client/connector-catalog.ts'
 
 const REQUIRED_CONNECTORS = [
-  'gmail', 'google-calendar', 'google-drive', 'google-contacts',
+  'google-workspace',
   'outlook-mail', 'outlook-calendar', 'onedrive', 'sharepoint', 'box', 'notion',
   'slack', 'microsoft-teams', 'zoom', 'github', 'linear', 'vercel', 'firebase',
   'supabase', 'neon', 'posthog', 'hugging-face', 'canva', 'heygen', 'magnific',
@@ -30,6 +30,25 @@ describe('connector catalog', () => {
     expect(byId.get('openclaw')?.provenance).toBe('native')
     expect(byId.get('custom-mcp')?.provenance).toBe('registry-listed')
     expect(byId.get('canva')?.mode).toBe('oauth')
+  })
+
+  it('deduplicates Google Workspace and keeps GitHub separate from GitHub Copilot auth', () => {
+    const byId = new Map(CONNECTOR_CATALOG.map(connector => [connector.id, connector]))
+    const google = byId.get('google-workspace')
+    expect(google?.openClawConnectorId).toBe('google-workspace')
+    expect(google?.aliases).toEqual(expect.arrayContaining(['gmail', 'google-calendar', 'google-drive', 'google-contacts']))
+    expect(byId.has('gmail')).toBe(false)
+    expect(byId.has('google-calendar')).toBe(false)
+    expect(byId.has('google-drive')).toBe(false)
+    expect(byId.has('google-contacts')).toBe(false)
+
+    const github = byId.get('github')
+    expect(github?.openClawConnectorId).toBe('github')
+    expect(github?.mode).toBe('mcp')
+    expect(github?.authorizationKey).toBe('authorization-openclaw/github')
+    expect(google?.authorizationKey).toBe('authorization-google/account')
+    expect(byId.get('firebase')?.providerFamily).toBe('firebase')
+    expect(byId.get('bigquery')?.providerFamily).toBe('bigquery')
   })
 
   it('keeps retired Jev out of the connector catalog', () => {

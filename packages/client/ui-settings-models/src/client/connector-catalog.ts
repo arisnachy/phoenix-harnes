@@ -16,6 +16,10 @@ export interface ConnectorDefinition {
   readonly mode: ConnectorMode
   readonly provenance: ConnectorProvenance
   readonly providerFamily?: string
+  /** Exact authorization entry key when substring provider matching would be ambiguous. */
+  readonly authorizationKey?: string
+  /** Existing OpenClaw skill-backed route Phoenix can verify and reuse. */
+  readonly openClawConnectorId?: 'google-workspace' | 'github'
   /** Exact Official MCP Registry identity accepted for curated install, when one is verified. */
   readonly registryName?: string
   readonly logoUrl?: string
@@ -36,10 +40,19 @@ const icon = (slug: string): string => `https://cdn.simpleicons.org/${slug}`
 
 /** Curated connector directory before explicit provenance is attached. */
 const PUBLIC_CONNECTOR_CATALOG = [
-  { id: 'gmail', name: 'Gmail', category: 'Email', description: 'Read, search, draft, send, label, and organize email.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('gmail'), capabilities: ['mail.read', 'mail.write', 'mail.search'] },
-  { id: 'google-calendar', aliases: ['calendar'], name: 'Google Calendar', category: 'Calendar', description: 'Read availability and create or update calendar events.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googlecalendar'), capabilities: ['calendar.read', 'calendar.write'] },
-  { id: 'google-drive', aliases: ['drive'], name: 'Google Drive', category: 'Files', description: 'Search and work with Drive, Docs, Sheets, Slides, and files.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googledrive'), capabilities: ['files.read', 'files.write', 'documents'] },
-  { id: 'google-contacts', aliases: ['contacts'], name: 'Google Contacts', category: 'Contacts', description: 'Find contacts, email addresses, phones, and organizations.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googlecontacts'), capabilities: ['contacts.read'] },
+  {
+    id: 'google-workspace',
+    aliases: ['gmail', 'google-calendar', 'calendar', 'google-drive', 'drive', 'google-contacts', 'contacts', 'google-docs', 'google-sheets', 'google-slides'],
+    name: 'Google Workspace',
+    category: 'Productivity',
+    description: 'Gmail, Calendar, Drive, Contacts, Docs, Sheets, and Slides through one Google account.',
+    mode: 'oauth',
+    providerFamily: 'google-workspace',
+    authorizationKey: 'authorization-google/account',
+    openClawConnectorId: 'google-workspace',
+    logoUrl: icon('google'),
+    capabilities: ['mail.read', 'mail.write', 'calendar.read', 'calendar.write', 'files.read', 'files.write', 'contacts.read', 'documents', 'spreadsheets', 'presentations'],
+  },
   { id: 'outlook-mail', name: 'Outlook Mail', category: 'Email', description: 'Read, search, draft, and send Microsoft 365 email.', mode: 'oauth', providerFamily: 'microsoft', logoUrl: icon('microsoftoutlook'), capabilities: ['mail.read', 'mail.write'] },
   { id: 'outlook-calendar', name: 'Outlook Calendar', category: 'Calendar', description: 'Read availability and manage Microsoft 365 meetings.', mode: 'oauth', providerFamily: 'microsoft', logoUrl: icon('microsoftoutlook'), capabilities: ['calendar.read', 'calendar.write'] },
   { id: 'onedrive', name: 'OneDrive', category: 'Files', description: 'Search, read, create, and manage OneDrive files.', mode: 'oauth', providerFamily: 'microsoft', logoUrl: icon('microsoftonedrive'), capabilities: ['files.read', 'files.write'] },
@@ -51,16 +64,27 @@ const PUBLIC_CONNECTOR_CATALOG = [
   { id: 'slack', name: 'Slack', category: 'Communication', description: 'Search channels and messages and collaborate with teams.', mode: 'oauth', providerFamily: 'slack', logoUrl: icon('slack'), capabilities: ['messages.read', 'messages.write'] },
   { id: 'microsoft-teams', aliases: ['teams'], name: 'Microsoft Teams', category: 'Communication', description: 'Work with teams, chats, channels, meetings, and collaboration.', mode: 'oauth', providerFamily: 'microsoft', logoUrl: icon('microsoftteams'), capabilities: ['messages.read', 'messages.write', 'meetings'] },
   { id: 'zoom', name: 'Zoom', category: 'Meetings', description: 'Manage meetings, recordings, and meeting metadata.', mode: 'oauth', providerFamily: 'zoom', logoUrl: icon('zoom'), capabilities: ['meetings.read', 'meetings.write'] },
-  { id: 'github', registryName: 'io.github.github/github-mcp-server', name: 'GitHub', category: 'Development', description: 'Work with repositories, commits, issues, pull requests, and CI.', mode: 'oauth', providerFamily: 'github', logoUrl: icon('github'), capabilities: ['code.read', 'code.write', 'issues', 'pull-requests', 'ci'] },
+  {
+    id: 'github',
+    registryName: 'io.github.github/github-mcp-server',
+    name: 'GitHub',
+    category: 'Development',
+    description: 'Repositories, commits, issues, pull requests, releases, and CI via an authenticated OpenClaw gh session or the official GitHub MCP.',
+    mode: 'mcp',
+    authorizationKey: 'authorization-openclaw/github',
+    openClawConnectorId: 'github',
+    logoUrl: icon('github'),
+    capabilities: ['code.read', 'code.write', 'issues', 'pull-requests', 'ci'],
+  },
   { id: 'linear', name: 'Linear', category: 'Development', description: 'Search, create, and update issues, projects, and initiatives.', mode: 'oauth', providerFamily: 'linear', logoUrl: icon('linear'), capabilities: ['issues', 'projects'] },
   { id: 'jira', name: 'Jira', category: 'Development', description: 'Work with issues, projects, boards, and engineering workflows.', mode: 'oauth', providerFamily: 'jira', logoUrl: icon('jira'), capabilities: ['issues', 'projects'] },
   { id: 'vercel', name: 'Vercel', category: 'Deploy', description: 'Build, inspect, and deploy web applications and agents.', mode: 'oauth', providerFamily: 'vercel', logoUrl: icon('vercel'), capabilities: ['deployments', 'hosting'] },
-  { id: 'firebase', name: 'Firebase', category: 'Cloud', description: 'Work with Firebase projects, hosting, databases, auth, and functions.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('firebase'), capabilities: ['database', 'auth', 'hosting', 'functions'] },
+  { id: 'firebase', name: 'Firebase', category: 'Cloud', description: 'Work with Firebase projects, hosting, databases, auth, and functions.', mode: 'oauth', providerFamily: 'firebase', logoUrl: icon('firebase'), capabilities: ['database', 'auth', 'hosting', 'functions'] },
   { id: 'supabase', registryName: 'com.supabase/mcp', name: 'Supabase', category: 'Database', description: 'Manage Postgres, auth, storage, realtime, and Edge Functions.', mode: 'mcp', providerFamily: 'supabase', logoUrl: icon('supabase'), capabilities: ['database', 'auth', 'storage', 'functions'] },
   { id: 'neon', name: 'Neon', category: 'Database', description: 'Manage serverless PostgreSQL projects, branches, and computes.', mode: 'mcp', providerFamily: 'neon', logoUrl: icon('neon'), capabilities: ['database', 'postgres'] },
   { id: 'mongodb', name: 'MongoDB', category: 'Database', description: 'Inspect and operate MongoDB databases and Atlas resources.', mode: 'mcp', providerFamily: 'mongodb', logoUrl: icon('mongodb'), capabilities: ['database'] },
   { id: 'snowflake', name: 'Snowflake', category: 'Data', description: 'Query warehouses and analyze governed enterprise data.', mode: 'mcp', providerFamily: 'snowflake', logoUrl: icon('snowflake'), capabilities: ['sql', 'analytics'] },
-  { id: 'bigquery', name: 'BigQuery', category: 'Data', description: 'Query and analyze Google Cloud data warehouses.', mode: 'oauth', providerFamily: 'google', logoUrl: icon('googlebigquery'), capabilities: ['sql', 'analytics'] },
+  { id: 'bigquery', name: 'BigQuery', category: 'Data', description: 'Query and analyze Google Cloud data warehouses.', mode: 'oauth', providerFamily: 'bigquery', logoUrl: icon('googlebigquery'), capabilities: ['sql', 'analytics'] },
   { id: 'posthog', registryName: 'io.github.PostHog/mcp', name: 'PostHog', category: 'Analytics', description: 'Use product analytics, funnels, experiments, flags, logs, and surveys.', mode: 'mcp', providerFamily: 'posthog', logoUrl: icon('posthog'), capabilities: ['analytics', 'experiments', 'feature-flags'] },
   { id: 'sentry', registryName: 'io.github.getsentry/sentry-mcp', name: 'Sentry', category: 'Observability', description: 'Inspect application errors, traces, releases, and performance.', mode: 'mcp', providerFamily: 'sentry', logoUrl: icon('sentry'), capabilities: ['errors', 'traces', 'observability'] },
   { id: 'cloudflare', name: 'Cloudflare', category: 'Cloud', description: 'Manage Workers, domains, DNS, deployments, and edge services.', mode: 'api-key', providerFamily: 'cloudflare', logoUrl: icon('cloudflare'), capabilities: ['edge', 'dns', 'deployments'] },
@@ -130,15 +154,15 @@ export const CONNECTOR_CATALOG: readonly ConnectorDefinition[] = [
 
 /** Domain presets shown above the connector catalog. */
 export const CONNECTOR_PRESETS: readonly ConnectorPreset[] = [
-  { id: 'default', name: 'Default', description: 'Balanced everyday Phoenix toolkit for research, files, communication, and development.', kind: 'native-preset', capabilities: ['agents', 'web', 'files', 'calendar', 'code'], recommendedConnectors: ['google-drive', 'google-calendar', 'github', 'notion'] },
+  { id: 'default', name: 'Default', description: 'Balanced everyday Phoenix toolkit for research, files, communication, and development.', kind: 'native-preset', capabilities: ['agents', 'web', 'files', 'calendar', 'code'], recommendedConnectors: ['google-workspace', 'github', 'notion'] },
   { id: 'development', name: 'Development', description: 'Coding, repositories, issues, deployment, databases, and cloud delivery.', kind: 'native-preset', capabilities: ['code', 'terminal', 'filesystem', 'lsp', 'deploy', 'database'], recommendedConnectors: ['github', 'linear', 'vercel', 'firebase', 'supabase', 'neon'] },
   { id: 'security', name: 'Security / Codex Security', description: 'Code review, dependency and secret scanning, hardening, and security workflows when the relevant tools are present.', kind: 'native-preset', capabilities: ['security-review', 'dependency-audit', 'secret-scan', 'hardening'], recommendedConnectors: ['github', 'sentry', 'cloudflare'] },
   { id: 'data-analytics', name: 'Data Analytics', description: 'Analyze tables, files, SQL sources, metrics, experiments, and charts.', kind: 'native-preset', capabilities: ['dataframes', 'charts', 'sql', 'statistics'], recommendedConnectors: ['posthog', 'bigquery', 'snowflake', 'supabase', 'neon'] },
   { id: 'cloud-data', name: 'Cloud & Data', description: 'Backends, databases, deployment, observability, and application data services.', kind: 'native-preset', capabilities: ['database', 'cloud', 'deploy', 'analytics'], recommendedConnectors: ['supabase', 'neon', 'firebase', 'vercel', 'posthog'] },
-  { id: 'documents', name: 'Documents', description: 'Create, read, search, transform, and organize working documents.', kind: 'native-preset', capabilities: ['documents', 'files', 'knowledge'], recommendedConnectors: ['google-drive', 'onedrive', 'sharepoint', 'box', 'notion'] },
-  { id: 'pdf', name: 'PDF', description: 'Read, analyze, assemble, and generate PDF deliverables when PDF tooling is installed.', kind: 'native-preset', capabilities: ['pdf.read', 'pdf.create'], recommendedConnectors: ['google-drive', 'onedrive', 'box'] },
-  { id: 'presentations', name: 'Presentations', description: 'Build and refine presentation artifacts and publish them through connected design/file services.', kind: 'native-preset', capabilities: ['slides.create', 'slides.edit'], recommendedConnectors: ['canva', 'google-drive', 'onedrive'] },
-  { id: 'meetings', name: 'Meetings & Collaboration', description: 'Coordinate calendars, chat, meetings, and team communication.', kind: 'native-preset', capabilities: ['calendar', 'messages', 'meetings'], recommendedConnectors: ['google-calendar', 'outlook-calendar', 'slack', 'microsoft-teams', 'zoom'] },
+  { id: 'documents', name: 'Documents', description: 'Create, read, search, transform, and organize working documents.', kind: 'native-preset', capabilities: ['documents', 'files', 'knowledge'], recommendedConnectors: ['google-workspace', 'onedrive', 'sharepoint', 'box', 'notion'] },
+  { id: 'pdf', name: 'PDF', description: 'Read, analyze, assemble, and generate PDF deliverables when PDF tooling is installed.', kind: 'native-preset', capabilities: ['pdf.read', 'pdf.create'], recommendedConnectors: ['google-workspace', 'onedrive', 'box'] },
+  { id: 'presentations', name: 'Presentations', description: 'Build and refine presentation artifacts and publish them through connected design/file services.', kind: 'native-preset', capabilities: ['slides.create', 'slides.edit'], recommendedConnectors: ['canva', 'google-workspace', 'onedrive'] },
+  { id: 'meetings', name: 'Meetings & Collaboration', description: 'Coordinate calendars, chat, meetings, and team communication.', kind: 'native-preset', capabilities: ['calendar', 'messages', 'meetings'], recommendedConnectors: ['google-workspace', 'outlook-calendar', 'slack', 'microsoft-teams', 'zoom'] },
   { id: 'finance', name: 'Finance', description: 'Market, payment, banking-data, billing, and accounting workflows through connected read/write adapters.', kind: 'native-preset', capabilities: ['market-data', 'payments', 'transactions', 'accounting'], recommendedConnectors: ['binance', 'stripe', 'plaid', 'quickbooks'] },
   { id: 'research-ai', name: 'Research & AI', description: 'Research, model discovery, datasets, courses, and AI platform development.', kind: 'native-preset', capabilities: ['research', 'web', 'models', 'datasets'], recommendedConnectors: ['hugging-face', 'openai-platform', 'coursera'] },
   { id: 'ai-media', name: 'AI & Media', description: 'Model, design, image, video, voice, and presentation workflows.', kind: 'native-preset', capabilities: ['models', 'design', 'image', 'video', 'voice'], recommendedConnectors: ['hugging-face', 'canva', 'heygen', 'magnific'] },
