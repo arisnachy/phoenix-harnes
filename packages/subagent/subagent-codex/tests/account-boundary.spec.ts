@@ -42,7 +42,7 @@ describe('native Codex managed-account boundary', () => {
 
   it('keeps slow app-server teardown from becoming a Host-fatal account probe failure', () => {
     expect(accountSource).toContain('ACCOUNT_CLOSE_MIN_TIMEOUT_MS')
-    expect(accountSource).toContain('ACCOUNT_NATURAL_EXIT_GRACE_MS')
+    expect(accountSource).toContain('const ACCOUNT_NATURAL_EXIT_GRACE_MS = 3_000')
     expect(accountSource).toContain('if (!naturalExit) this.child.terminate()')
     expect(accountSource).toContain('ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS')
     expect(accountSource).toContain('continuing without failing the Host')

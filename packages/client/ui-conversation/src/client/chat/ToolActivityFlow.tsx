@@ -24,7 +24,12 @@ interface OrderedChatNode {
 interface ToolActivityFlowProps extends SeatProps {
   readonly nodes: readonly OrderedChatNode[]
   /** Ordinary prompt admitted locally but not yet present in the durable transcript. */
-  readonly optimisticSubmit?: { readonly text: string } | undefined
+  readonly optimisticSubmit?: {
+    readonly startedAt: number
+    readonly text: string
+    /** Last durable node that existed when Enter was pressed; null means before the first node. */
+    readonly afterNodeKey: string | null
+  } | undefined
   readonly turnStatus: {
     readonly startTime: number | null
     readonly progress: TurnProgress | null
@@ -45,6 +50,7 @@ type ActivityItem =
 
 type FlowItem =
   | { readonly kind: 'node'; readonly key: string }
+  | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
     readonly kind: 'activity'
     readonly key: string
@@ -180,6 +186,33 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
 
   flush()
   return flow
+}
+
+/**
+ * Insert the local user gesture at the durable boundary that existed when it
+ * was sent. Building the two sides independently also prevents later tool
+ * activity from being folded into a group that visually crosses the user.
+ */
+function buildAnchoredFlow(
+  nodes: readonly OrderedChatNode[],
+  optimisticSubmit: ToolActivityFlowProps['optimisticSubmit'],
+): FlowItem[] {
+  if (optimisticSubmit === undefined || optimisticSubmit.text === '') return buildFlow(nodes)
+  const anchorIndex = optimisticSubmit.afterNodeKey === null
+    ? -1
+    : nodes.findIndex(node => node.key === optimisticSubmit.afterNodeKey)
+  const splitAt = anchorIndex < 0
+    ? (optimisticSubmit.afterNodeKey === null ? 0 : nodes.length)
+    : anchorIndex + 1
+  return [
+    ...buildFlow(nodes.slice(0, splitAt)),
+    {
+      kind: 'optimistic',
+      key: `optimistic-user:${optimisticSubmit.startedAt}`,
+      text: optimisticSubmit.text,
+    },
+    ...buildFlow(nodes.slice(splitAt)),
+  ]
 }
 
 function ToolActivityIcon() {
@@ -349,15 +382,14 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
 /**
  * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
  * Visible assistant prose precedes its technical activity, and the running status precedes a trailing Tools group.
- * An ordinary locally admitted send stays at the transcript tail ahead of the current turn status until its durable user node arrives.
+ * An ordinary locally admitted send stays at its send-time transcript boundary until its durable user/steering node arrives.
  * Running Tool rows stay live above the disclosure and join history once settled.
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
 export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
-  const flow = useMemo(() => buildFlow(nodes), [nodes])
-  const hasOptimisticSubmit = optimisticSubmit !== undefined && optimisticSubmit.text !== ''
-  const statusBeforeIndex = hasOptimisticSubmit || turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
+  const flow = useMemo(() => buildAnchoredFlow(nodes, optimisticSubmit), [nodes, optimisticSubmit])
+  const statusBeforeIndex = turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
     ? -1
     : flow.length - 1
   return (
@@ -374,28 +406,29 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
           )}
           {item.kind === 'node'
             ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
-            : item.kind === 'images'
+            : item.kind === 'optimistic'
               ? (
-                <div data-chat-flow-kind="generated-image">
-                  {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
-                </div>
-              )
-              : (
-                <ToolActivityGroup
-                  items={item.items}
-                  anchorKey={item.anchorKey}
-                  {...seatProps}
+                <PendingSteeringBubble
+                  content={[{ type: 'text', text: item.text }]}
+                  renderMessageImages={seatProps.renderMessageImages}
+                  t={seatProps.t}
                 />
-              )}
+              )
+              : item.kind === 'images'
+                ? (
+                  <div data-chat-flow-kind="generated-image">
+                    {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+                  </div>
+                )
+                : (
+                  <ToolActivityGroup
+                    items={item.items}
+                    anchorKey={item.anchorKey}
+                    {...seatProps}
+                  />
+                )}
         </Fragment>
       ))}
-      {hasOptimisticSubmit && (
-        <PendingSteeringBubble
-          content={[{ type: 'text', text: optimisticSubmit.text }]}
-          renderMessageImages={seatProps.renderMessageImages}
-          t={seatProps.t}
-        />
-      )}
       {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
         <TurnStatus
           startTime={turnStatus.startTime}

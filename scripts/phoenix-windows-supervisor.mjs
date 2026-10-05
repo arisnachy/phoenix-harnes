@@ -88,7 +88,7 @@ const PROFILE_REQUIRED_RUNTIME_PACKAGES = [
 function repairDesktopShortcut() {
   if (process.platform !== 'win32') return
   try {
-    const result = ensurePhoenixDesktopShortcut(root)
+    const result = ensurePhoenixDesktopShortcut(root, { sourceRoot: runtimeRoot })
     if (result.status === 'ready' && result.shortcut !== undefined) {
       console.error(`[PHOENIX] desktop shortcut ready: ${result.shortcut}`)
     }
@@ -455,7 +455,47 @@ function runtimeProtectedByOwningCheckout(path) {
   }
 }
 
-function removeManagedWorktree(path) {
+function registeredWorktreePaths() {
+  const result = spawnSync('git', ['worktree', 'list', '--porcelain'], {
+    cwd: root,
+    encoding: 'utf8',
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  if (result.status !== 0 || typeof result.stdout !== 'string') return undefined
+
+  const paths = new Set()
+  for (const line of result.stdout.split(/\r?\n/u)) {
+    if (!line.startsWith('worktree ')) continue
+    const worktreePath = line.slice('worktree '.length).trim()
+    if (worktreePath.length > 0) paths.add(runtimePathKey(worktreePath))
+  }
+  return paths
+}
+
+function removeOrphanedManagedDirectory(path) {
+  try {
+    rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })
+    return !existsSync(path)
+  } catch (error) {
+    const code = typeof error?.code === 'string' ? error.code : 'unknown'
+    console.error(
+      `[PHOENIX UPDATE] orphaned managed runtime is no longer a Git worktree but Windows still has it open; cleanup deferred: ${path} (${code})`,
+    )
+    return false
+  }
+}
+
+function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePaths()) {
+  // Some old runtime directories can survive after their Git worktree metadata
+  // has already been pruned. Calling `git worktree remove` on those paths emits
+  // the misleading fatal "is not a working tree" message forever. They are safe
+  // to treat as orphaned managed storage only after the caller has already
+  // applied active-runtime protection and retention-age checks.
+  if (registeredWorktrees !== undefined && !registeredWorktrees.has(runtimePathKey(path))) {
+    return removeOrphanedManagedDirectory(path)
+  }
+
   const result = spawnSync('git', ['worktree', 'remove', '--force', path], {
     cwd: root,
     encoding: 'utf8',
@@ -465,15 +505,12 @@ function removeManagedWorktree(path) {
 
   if (result.status === 0 || !existsSync(path)) return true
 
-  // On Windows an updater/build process can still own cwd, DLL, node_modules,
-  // or compiler handles for a managed worktree. Never fall back to recursive
-  // deletion after git reports that removal failed: rmSync can partially erase
-  // a live tree before eventually throwing EBUSY, which turns a harmless
-  // cleanup race into a missing-path build failure. Cleanup is opportunistic;
-  // leave the intact worktree for a later pass after all handles are released.
+  // For an actually registered worktree, a failed remove usually means Windows
+  // still owns cwd, DLL, node_modules, or compiler handles. Never recursively
+  // delete a registered tree after Git refuses removal.
   const detail = typeof result.stderr === 'string' ? result.stderr.trim() : ''
   console.error(
-    `[PHOENIX UPDATE] deferred managed worktree cleanup while it is still in use: ${path}`
+    `[PHOENIX UPDATE] registered managed worktree cleanup deferred because it is still in use: ${path}`
     + (detail.length > 0 ? ` (${detail})` : ''),
   )
   return false
@@ -489,6 +526,7 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
     keep.add(runtimePathKey(inheritedRuntimeRoot))
   }
 
+  const registeredWorktrees = registeredWorktreePaths()
   let removedRuntimes = 0
   let removedStages = 0
   for (const candidate of runtimeDirectoriesForCleanup()) {
@@ -502,7 +540,7 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
     if (runtimeProtectedByOwningCheckout(candidate)) continue
     if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue
 
-    if (!removeManagedWorktree(candidate)) continue
+    if (!removeManagedWorktree(candidate, registeredWorktrees)) continue
     removedRuntimes += 1
     console.error(`[PHOENIX UPDATE] removed obsolete isolated runtime: ${candidate}`)
   }
@@ -518,7 +556,7 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
     if (key === currentStage) continue
     if (stageProtectedByOwningCheckout(candidate)) continue
     if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
-    if (!removeManagedWorktree(candidate)) continue
+    if (!removeManagedWorktree(candidate, registeredWorktrees)) continue
     removedStages += 1
     console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
   }
@@ -1315,9 +1353,9 @@ function requestShutdown() {
 process.once('SIGINT', requestShutdown)
 process.once('SIGTERM', requestShutdown)
 
-repairDesktopShortcut()
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
+repairDesktopShortcut()
 cleanupObsoleteRuntimes()
 recoverConfigurationBeforeFirstBoot()
 

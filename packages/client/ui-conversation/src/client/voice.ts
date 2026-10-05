@@ -71,7 +71,7 @@ let voiceAssistantSpeechKey: string | undefined
 let voiceAssistantMicListening = false
 let voiceAssistantSpokenText = ''
 let voiceAssistantRemote: VoiceAssistantRemote | undefined
-let voiceAssistantRemoteNatural = false
+let voiceAssistantRemoteSpeech = false
 let voiceAssistantRemoteEpoch = 0
 let remoteSpeech: RemoteSpeechState | undefined
 
@@ -82,6 +82,7 @@ export interface VoiceModelRoute {
 }
 
 type VoiceModelRouteResolver = (sessionKey: string) => Promise<VoiceModelRoute | undefined>
+type CodexRealtimeUserTranscriptHandler = (text: string) => void
 
 interface CodexRealtimeVoiceSession {
   readonly key: string
@@ -100,6 +101,7 @@ interface PendingCodexRealtimeUtterance {
 }
 
 let voiceModelRouteResolver: VoiceModelRouteResolver | undefined
+let codexRealtimeUserTranscriptHandler: CodexRealtimeUserTranscriptHandler | undefined
 let codexRealtimeVoiceSession: CodexRealtimeVoiceSession | undefined
 let codexRealtimeVoiceGeneration = 0
 const pendingCodexRealtimeUtterances: PendingCodexRealtimeUtterance[] = []
@@ -200,7 +202,7 @@ function remoteSpeechFinished(state: RemoteSpeechState, generation: number): voi
 
 function streamRemoteSpeech(messageKey: string, text: string, final: boolean): boolean {
   const remote = voiceAssistantRemote
-  if (!voiceAssistantRemoteNatural || remote === undefined) return false
+  if (!voiceAssistantRemoteSpeech || remote === undefined) return false
   const transcript = conversationalSpeechText(text)
   if (transcript === '') return true
 
@@ -240,9 +242,10 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
     }).then((result) => {
       if (remoteSpeech !== state || state.generation !== generation) return
       if (!result.ok || !result.value.accepted) {
-        // Host lost the neural route after the capability probe. Disable it
-        // until the next explicit refresh and preserve audible output locally.
-        voiceAssistantRemoteNatural = false
+        // Host lost its selected conversation TTS route after the capability
+        // probe. Disable it until the next explicit refresh and preserve audible
+        // output locally. The Host normally orders Kokoro before system TTS.
+        voiceAssistantRemoteSpeech = false
         resetRemoteSpeech(true)
         browserSpeech(messageKey, text, final)
         return
@@ -250,7 +253,7 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
       remoteSpeechFinished(state, generation)
     }, () => {
       if (remoteSpeech !== state || state.generation !== generation) return
-      voiceAssistantRemoteNatural = false
+      voiceAssistantRemoteSpeech = false
       resetRemoteSpeech(true)
       browserSpeech(messageKey, text, final)
     })
@@ -274,6 +277,22 @@ export function configureVoiceModelRouteResolver(resolver: VoiceModelRouteResolv
   voiceModelRouteResolver = resolver
   return () => {
     if (voiceModelRouteResolver === resolver) voiceModelRouteResolver = undefined
+  }
+}
+
+/**
+ * Bind the current conversation composer as the admission path for finalized
+ * native Codex Live user speech. The WebRTC microphone remains the only audio
+ * capture while Live is active; this callback receives text, not microphone data.
+ * @param handler - Composer-owned finalized user-transcript admission callback.
+ * @returns Disposer that removes this exact handler registration.
+ */
+export function configureCodexRealtimeUserTranscriptHandler(
+  handler: CodexRealtimeUserTranscriptHandler,
+): () => void {
+  codexRealtimeUserTranscriptHandler = handler
+  return () => {
+    if (codexRealtimeUserTranscriptHandler === handler) codexRealtimeUserTranscriptHandler = undefined
   }
 }
 
@@ -314,9 +333,9 @@ export type CodexRealtimeVoiceStartResult =
 
 /**
  * Prefer native Codex realtime when the selected PHOENIX provider is
- * openai-codex. A Codex route never silently degrades to browser/local speech:
- * failures stay failures so the UI cannot make a fallback voice sound like
- * native Codex Realtime.
+ * openai-codex. Startup failures remain classified so the caller can deliberately
+ * enter the documented Kokoro -> platform fallback without mislabeling that
+ * fallback as native Codex Realtime.
  * @param sessionKey Conversation whose selected model route determines the voice provider.
  * @returns Started, non-Codex route, or a classified startup failure.
  */
@@ -391,6 +410,7 @@ export async function tryStartCodexRealtimeVoice(
     }
     events.onmessage = (event) => {
       if (codexRealtimeVoiceGeneration !== generation || typeof event.data !== 'string') return
+      forwardCodexRealtimeUserTranscript(event.data)
       updateCodexRealtimePhase(event.data)
     }
     events.onopen = () => {
@@ -451,11 +471,14 @@ export async function tryStartCodexRealtimeVoice(
         return
       }
       if (peer.connectionState === 'failed' || peer.connectionState === 'closed') {
-        // A terminal transport failure stops native voice rather than silently
-        // substituting a different system/browser voice.
+        // Native Live lost ownership. Keep the explicit hands-free mode active:
+        // InputBar observes the published idle state and attaches browser
+        // recognition, while assistant output falls through Host TTS in the
+        // strict Kokoro -> platform order. The PHOENIX task itself keeps running.
         discardCodexRealtimeUtterances(liveSession.key)
-        void stopCodexRealtimeVoice()
-        setVoiceAssistantActive(false)
+        void stopCodexRealtimeVoice().finally(() => {
+          if (voiceAssistantSnapshot.active) publishVoiceIdle()
+        })
       }
     }
     return { kind: 'started' }
@@ -503,6 +526,37 @@ export async function stopCodexRealtimeVoice(): Promise<boolean> {
     await remote.conversationRealtimeStop?.({ key: session.key }).catch(() => undefined)
   }
   return true
+}
+
+function forwardCodexRealtimeUserTranscript(payload: string): void {
+  const handler = codexRealtimeUserTranscriptHandler
+  if (handler === undefined) return
+  let value: unknown
+  try {
+    value = JSON.parse(payload) as unknown
+  } catch {
+    return
+  }
+  if (typeof value !== 'object' || value === null) return
+  const event = value as Record<string, unknown>
+  const type = typeof event.type === 'string' ? event.type : ''
+
+  let transcript: string | undefined
+  if (type === 'turn.done') {
+    const turn = typeof event.turn === 'object' && event.turn !== null
+      ? event.turn as Record<string, unknown>
+      : undefined
+    if (turn?.role === 'user' && typeof turn.transcript === 'string') {
+      transcript = turn.transcript
+    }
+  } else if (type === 'conversation.input_transcript.turn_marked'
+    || type === 'conversation.item.input_audio_transcription.completed') {
+    if (typeof event.transcript === 'string') transcript = event.transcript
+  }
+
+  const text = transcript?.trim()
+  if (text === undefined || text === '') return
+  handler(text)
 }
 
 function updateCodexRealtimePhase(payload: string): void {
@@ -560,30 +614,30 @@ export function configureVoiceAssistantRemote(remote: VoiceAssistantRemote): () 
     if (voiceAssistantRemote !== remote || epoch !== voiceAssistantRemoteEpoch) return
     resetRemoteSpeech(true)
     voiceAssistantRemote = undefined
-    voiceAssistantRemoteNatural = false
+    voiceAssistantRemoteSpeech = false
     voiceAssistantRemoteEpoch += 1
   }
 }
 
 /**
  * Re-probe the Host voice route after initial mount or connection reset.
- * @returns Whether the Host currently exposes the natural neural route.
+ * @returns Whether the Host currently exposes any conversation speech route.
  */
 export async function refreshVoiceAssistantRemote(): Promise<boolean> {
   const remote = voiceAssistantRemote
   if (remote === undefined) {
-    voiceAssistantRemoteNatural = false
+    voiceAssistantRemoteSpeech = false
     return false
   }
   const epoch = voiceAssistantRemoteEpoch
   try {
     const result = await remote.conversationStatus()
     if (epoch !== voiceAssistantRemoteEpoch || voiceAssistantRemote !== remote) return false
-    voiceAssistantRemoteNatural = result.ok && result.value.enabled && result.value.natural
-    return voiceAssistantRemoteNatural
+    voiceAssistantRemoteSpeech = result.ok && result.value.enabled && result.value.provider !== undefined
+    return voiceAssistantRemoteSpeech
   } catch {
     if (epoch === voiceAssistantRemoteEpoch && voiceAssistantRemote === remote) {
-      voiceAssistantRemoteNatural = false
+      voiceAssistantRemoteSpeech = false
     }
     return false
   }
@@ -751,9 +805,9 @@ export function speakVoiceAssistantResponse(messageKey: string, text: string, me
  * Use the already-active Codex realtime voice for an approval/proactive alert.
  * No browser/system TTS fallback is attempted here: when Codex owns the call,
  * the user hears one continuous selected voice and never internal ids.
- * @param title - Brief context for the requested review or input.
- * @param detail - Additional context for the spoken notification.
- * @returns Whether the active realtime voice accepted the notification.
+ * @param title - Human-facing attention title.
+ * @param detail - Optional human-facing context for the notification.
+ * @returns Whether active Codex Realtime accepted or queued the notification.
  */
 export function speakVoiceAssistantAttention(title: string, detail?: string): boolean {
   const realtime = codexRealtimeVoiceSession

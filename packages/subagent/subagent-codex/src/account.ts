@@ -45,7 +45,10 @@ const ACCOUNT_RATE_LIMIT_TIMEOUT_MS = 12_000
 const ACCOUNT_USAGE_TIMEOUT_MS = 5_000
 /** Minimum bounded wait for asynchronous Windows taskkill /T /F cleanup. */
 const ACCOUNT_CLOSE_MIN_TIMEOUT_MS = 4_000
-const ACCOUNT_NATURAL_EXIT_GRACE_MS = 750
+// Account probes also refresh the shared model catalog. On Windows the async cache
+// writer can outlive the RPC by >750 ms, so preserve the process until its normal
+// shutdown completes instead of cancelling the Tokio task during models_cache.json.
+const ACCOUNT_NATURAL_EXIT_GRACE_MS = 3_000
 /** Small teardown headroom beyond the configured subprocess grace. */
 const ACCOUNT_CLOSE_EXTRA_TIMEOUT_MS = 1_000
 

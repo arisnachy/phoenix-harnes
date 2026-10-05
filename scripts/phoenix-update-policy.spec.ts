@@ -64,6 +64,19 @@ describe('PHOENIX stable update policy', () => {
     })).toBe('development')
   })
 
+  it('replaces a divergent unmanaged main or stable checkout through the supervised isolated runtime', () => {
+    for (const branch of ['main', 'stable']) {
+      expect(classifyStableUpdate({
+        status: 'diverged',
+        branch,
+        managed: false,
+        mode: 'auto',
+        stableBranch: 'stable',
+        isolatedRuntime: true,
+      })).toBe('isolate')
+    }
+  })
+
   it('allows supervised development checkouts to update only through an isolated runtime', () => {
     expect(classifyStableUpdate({
       status: 'upgrade',

@@ -10,7 +10,7 @@ const REQUIRED_CONNECTORS = [
 ] as const
 
 const REQUIRED_PRESETS = [
-  'default', 'development', 'security', 'data-analytics', 'cloud-data', 'documents',
+  'hackathon', 'default', 'development', 'security', 'data-analytics', 'cloud-data', 'documents',
   'pdf', 'presentations', 'meetings', 'finance', 'research-ai', 'ai-media',
 ] as const
 
@@ -62,7 +62,19 @@ describe('connector catalog', () => {
     })
     expect(devpost?.aliases).toContain('devpost-hackathons')
     expect(devpost?.capabilities).toEqual(expect.arrayContaining([
-      'hackathons', 'registration', 'rules', 'prizes', 'projects', 'submissions',
+      'hackathons', 'registration', 'rules', 'dates', 'judging', 'requirements',
+      'projects', 'thumbnails', 'submissions', 'submission-verification',
+    ]))
+  })
+
+  it('defines an end-to-end Hackathon mission kit without treating it as authentication', () => {
+    const preset = CONNECTOR_PRESETS.find(candidate => candidate.id === 'hackathon')
+    expect(preset?.kind).toBe('native-preset')
+    expect(preset?.capabilities).toEqual(expect.arrayContaining([
+      'hackathons', 'planning', 'code', 'qa', 'deploy', 'evidence', 'video', 'voice', 'submission',
+    ]))
+    expect(preset?.recommendedConnectors).toEqual(expect.arrayContaining([
+      'devpost', 'github', 'vercel', 'canva', 'heygen', 'google-workspace',
     ]))
   })
 

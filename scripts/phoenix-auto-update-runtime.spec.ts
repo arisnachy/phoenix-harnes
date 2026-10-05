@@ -32,6 +32,15 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain('Restart PHOENIX to reconcile the runtime')
   })
 
+  it('drops a prepared SHA when stable moves during preflight and immediately repolls', () => {
+    expect(updater).toContain('function promotedTargetStillCurrent(root, target)')
+    expect(updater).toContain("phase: 'superseded'")
+    expect(updater).toContain('became stale during preflight')
+    expect(updater).toContain('if (!staged.prepared) return false')
+    expect(updater).toContain('let repollImmediately = false')
+    expect(updater).toContain('if (repollImmediately) continue')
+  })
+
   it('uses a verified active isolated runtime as the effective update baseline', () => {
     expect(updater).toContain('function validatedActiveRuntime(root)')
     expect(updater).toContain('function effectiveCurrentCommit(root)')

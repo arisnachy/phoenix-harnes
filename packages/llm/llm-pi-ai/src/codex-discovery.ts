@@ -21,7 +21,9 @@ import type { LlmDiscoveredModel } from '@phoenix-ai/dsh-llm'
 // Cold Codex catalog refreshes can spend tens of seconds in the upstream models manager.
 // Stay bounded, but do not abort the app-server before its own refresh path can settle.
 const RPC_TIMEOUT_MS = 45_000
-const CODEX_METADATA_EXIT_GRACE_MS = 750
+// Windows can need more than 750 ms to finish Codex's async models_cache.json store after EOF.
+// Wait up to the normal subprocess disposal grace; natural exits return immediately.
+const CODEX_METADATA_EXIT_GRACE_MS = 3_000
 /** Failed metadata probes cool down globally so Settings cannot spawn a process storm. */
 const DISCOVERY_FAILURE_COOLDOWN_MS = 30_000
 const PAGE_LIMIT = 100

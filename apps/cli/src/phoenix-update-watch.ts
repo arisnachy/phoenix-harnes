@@ -30,13 +30,10 @@ export function startPhoenixUpdateWatcher(): void {
     : resolve(installRoot)
   if (root.length === 0) return
 
-  if (process.platform === 'win32') {
-    const supervisor = resolve(root, 'scripts', 'phoenix-windows-supervisor.mjs')
-    if (existsSync(supervisor)) {
-      startWatcher(root, supervisor, 'PHOENIX STORAGE', ['--cleanup-storage'])
-    }
-  }
-
+  // Windows runtime/storage garbage collection is owned by the external
+  // supervisor at startup and safe handoff boundaries. Launching another
+  // cleanup-only supervisor from every Host duplicated cleanup passes and
+  // raced the same stale directories during update handoff.
   const updateMode = (process.env.PHOENIX_UPDATE_MODE ?? 'auto').trim().toLowerCase()
 
   // The external Windows supervisor owns the authoritative stable watcher.

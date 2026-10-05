@@ -8,9 +8,10 @@ describe('PHOENIX Windows desktop shortcut', () => {
   it('resolves a durable launcher and Windows PowerShell from the checkout', () => {
     const resolved = phoenixDesktopShortcutSpec('C:\\Phoenix', { SystemRoot: 'C:\\Windows' })
     expect(resolved.root).toContain('Phoenix')
+    expect(resolved.sourceRoot).toContain('Phoenix')
     expect(resolved.setupScript).toMatch(/phoenix-desktop-shortcut\.ps1$/u)
     expect(resolved.launchScript).toMatch(/phoenix-desktop-launch\.ps1$/u)
-    expect(resolved.iconSource).toMatch(/phoenix-windows-icon\.ico\.b64$/u)
+    expect(resolved.iconSource).toMatch(/phoenix-emblem\.png$/u)
     expect(resolved.powershell).toMatch(/WindowsPowerShell.*powershell\.exe$/u)
   })
 
@@ -23,8 +24,10 @@ describe('PHOENIX Windows desktop shortcut', () => {
   it('uses a versioned icon path so Explorer cannot reuse the legacy icon cache', async () => {
     const { readFileSync } = await import('node:fs')
     const source = readFileSync(new URL('./phoenix-desktop-shortcut.ps1', import.meta.url), 'utf8')
-    expect(source).toContain('$iconRevision = \'v3\'')
+    expect(source).toContain('$iconRevision = \'v4\'')
     expect(source).toContain('phoenix-browser-$iconRevision-$iconHash.ico')
+    expect(source).toContain('phoenix-emblem.png')
+    expect(source).toContain('System.Drawing')
     expect(source).toContain('ie4uinit.exe')
   })
 
@@ -58,6 +61,7 @@ describe('PHOENIX Windows desktop shortcut', () => {
     expect(args).not.toContain('-WindowStyle')
     expect(args).toContain('-File')
     expect(args).toContain('-Root')
+    expect(args).toContain('-AssetRoot')
     expect(options.windowsHide).toBe(true)
   })
 })

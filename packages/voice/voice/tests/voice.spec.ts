@@ -98,6 +98,35 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     expect(system).not.toHaveBeenCalled()
   })
 
+  it('uses Kokoro then the platform voice for hands-free conversation fallback', async () => {
+    const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural' })
+    const natural = vi.fn(() => Promise.resolve())
+    const kokoro = vi.fn(() => Promise.reject(new Error('kokoro unavailable for this utterance')))
+    const system = vi.fn(() => Promise.resolve())
+    voice.registerTextToSpeechProvider(provider('phoenix-natural', natural, 300))
+    voice.registerTextToSpeechProvider(provider('system', system, 10))
+    voice.registerTextToSpeechProvider(provider('kokoro', kokoro, 100))
+
+    await expect(voice.conversationStatus()).resolves.toEqual({
+      enabled: true,
+      natural: true,
+      provider: 'kokoro',
+    })
+    await expect(voice.conversationSpeak({
+      key: 'assistant:fallback',
+      sequence: 0,
+      text: 'La tarea terminó.',
+      final: true,
+    })).resolves.toEqual({
+      accepted: true,
+      provider: 'system',
+    })
+
+    expect(kokoro).toHaveBeenCalledTimes(1)
+    expect(system).toHaveBeenCalledTimes(1)
+    expect(natural).not.toHaveBeenCalled()
+  })
+
   it('never mixes fallback TTS into an active native Codex realtime call', async () => {
     const { voice } = await mountVoice()
     const speak = vi.fn(() => Promise.resolve())
@@ -301,7 +330,7 @@ describe('Codex realtime optional session context', () => {
 })
 
 describe('Codex realtime harness dispatch', () => {
-  it('routes finalized user speech through the live Phoenix Agent and ignores the parallel realtime answer', async () => {
+  it('does not duplicate browser-admitted Live speech through the app-server transcript', async () => {
     const { ctx, voice } = await mountVoice()
     const followup = vi.fn()
     const context = ctx as unknown as { get(name: string): unknown }
@@ -333,11 +362,7 @@ describe('Codex realtime harness dispatch', () => {
       { role: 'assistant', text: 'respuesta paralela del realtime' },
     )
 
-    expect(followup).toHaveBeenCalledTimes(1)
-    expect(followup).toHaveBeenCalledWith(expect.objectContaining({
-      source: { kind: 'user' },
-      content: [{ type: 'text', text: 'revisa el proyecto y ejecuta la tarea' }],
-    }))
+    expect(followup).not.toHaveBeenCalled()
   })
 })
 

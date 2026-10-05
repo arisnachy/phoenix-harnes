@@ -22,6 +22,7 @@ import type { DraftAttachmentId } from '../src/client/input/contract.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
+import * as voiceAdapter from '../src/client/voice.ts'
 import type { VoiceRecognitionLike } from '../src/client/voice.ts'
 
 afterEach(cleanup)
@@ -1695,6 +1696,64 @@ describe('command launcher chrome and control seats', () => {
     expect((live.view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(false)
   })
 
+  it('does not open a competing browser microphone while Codex Live owns transcript input', async () => {
+    class FakeRecognition implements VoiceRecognitionLike {
+      static instance: FakeRecognition | undefined
+      lang = ''
+      continuous = false
+      interimResults = true
+      maxAlternatives = 0
+      onstart: (() => void) | null = null
+      onend: (() => void) | null = null
+      onerror: VoiceRecognitionLike['onerror'] = null
+      onresult: VoiceRecognitionLike['onresult'] = null
+      constructor() { FakeRecognition.instance = this }
+      start(): void { this.onstart?.() }
+      stop(): void { this.onend?.() }
+      abort(): void {}
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'SpeechRecognition')
+    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeRecognition })
+    let transcriptHandler: ((text: string) => void) | undefined
+    const transcript = vi.spyOn(voiceAdapter, 'configureCodexRealtimeUserTranscriptHandler')
+      .mockImplementation((handler) => {
+        transcriptHandler = handler
+        return () => {
+          if (transcriptHandler === handler) transcriptHandler = undefined
+        }
+      })
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice').mockImplementation(async () => {
+      voiceAdapter.setVoiceAssistantActive(true)
+      return { kind: 'started' }
+    })
+    try {
+      const { view, sink } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+
+      expect(FakeRecognition.instance).toBeUndefined()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(true)
+      expect(transcriptHandler).toBeDefined()
+
+      await act(async () => {
+        transcriptHandler?.('usa el harness y escribe en el chat')
+      })
+      expect(sink).toHaveBeenCalledWith(
+        'usa el harness y escribe en el chat',
+        [],
+        'queue',
+        expect.any(AbortSignal),
+      )
+    } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
+      live.mockRestore()
+      transcript.mockRestore()
+      cleanup()
+      if (descriptor === undefined) delete (window as Window & { SpeechRecognition?: unknown }).SpeechRecognition
+      else Object.defineProperty(window, 'SpeechRecognition', descriptor)
+    }
+  })
+
   it('submits each final browser speech fragment automatically in assistant mode', async () => {
     class FakeRecognition implements VoiceRecognitionLike {
       static instance: FakeRecognition | undefined
@@ -1716,6 +1775,10 @@ describe('command launcher chrome and control seats', () => {
     try {
       const { view, sink } = bench({ draft: 'Hola' })
       fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      // Voice now probes native Codex Realtime first. This test has no Codex
+      // route resolver, so let that classified failure settle before exercising
+      // the browser-recognition fallback.
+      await act(async () => { await Promise.resolve() })
       await act(async () => {
         FakeRecognition.instance?.onstart?.()
         FakeRecognition.instance?.onresult?.({

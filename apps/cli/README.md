@@ -21,6 +21,10 @@ The invoking directory is the default workspace root. The `web` and `headless` p
 
 The standard and code presets load the shipped [game-development skill](config/agent-presets/standard/skills/game-development/SKILL.md) for game work. It routes browser arcade, Godot 2D/3D, modern retro aesthetics and explicitly requested native homebrew separately, with lazy platform recipes and a Node-based tool doctor. Godot/Blender installation is explicit through trusted platform package managers; native SDKs, export templates and emulators require their own verification. Genre-specific technical, visual and executed-play evidence is required before delivery.
 
+## Hackathon Autopilot
+
+The standard and code presets ship the [hackathon-autopilot skill](config/agent-presets/standard/skills/hackathon-autopilot/SKILL.md). It treats a competition as one durable mission: verify or activate Devpost and supporting connectors, read live rules and judging criteria, plan and build against them, test and deploy the real product, produce truthful demo media with natural English narration, run an adversarial judge pass, prepare evidence-backed Devpost copy, and verify the final submission. Devpost registration/terms and the final submit remain explicit human-confirmation gates; premium media services are optional because the skill preserves local fallbacks.
+
 ## ChatGPT Web bridge
 
 PHOENIX can use the local [codex-chatgpt-web](https://github.com/miuuyy/codex-chatgpt-web) bridge as the `chatgpt-web` model route. The bridge owns browser login and cookies; PHOENIX never imports or stores them. On Windows, complete `Setup > Browser-only` in the installed Codex Web GPT launcher; `dsh chatgpt-web start` then discovers the complete packaged runtime automatically. An incomplete runtime is ignored. A manual JSON argv configuration remains available for other installations:

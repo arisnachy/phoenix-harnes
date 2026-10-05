@@ -31,8 +31,10 @@ import { ContextMeter } from './ContextMeter.tsx'
 import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
+  configureCodexRealtimeUserTranscriptHandler,
   createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, interruptVoiceAssistantSpeech,
   isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
+  tryStartCodexRealtimeVoice,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -189,12 +191,14 @@ export function InputBar({
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
-  // Voice is an input/output layer over the ordinary composer path. Every
-  // finalized transcript is submitted through the same queue admission as
-  // typed text so the selected PHOENIX agent keeps its full harness: tools,
-  // planning, approvals, policies, and orchestration. Native Codex Realtime is
-  // intentionally not the composer transport because its direct model session
-  // can speak but does not own the PHOENIX execution loop.
+  // Voice is an input/output layer over the ordinary PHOENIX execution path.
+  // For an OpenAI Codex route, native Realtime owns microphone/audio and its
+  // finalized transcript is admitted through this same composer path as typed
+  // input. The PHOENIX agent therefore remains
+  // the only planner/executor for tools, Hardness, approvals and orchestration.
+  // If native Realtime is unavailable or its account quota cannot open a call,
+  // browser recognition stays as the input fallback while Host TTS selects
+  // Kokoro first and the platform voice second.
   const [voiceState, setVoiceState] = useState<VoiceInputState>(() => (
     hasVoiceRecognition() ? 'idle' : 'unsupported'
   ))
@@ -223,6 +227,8 @@ export function InputBar({
     voiceSubmitPendingRef.current = true
     requestAnimationFrame(() => { inputRef.current?.focus({ preventScroll: true }) })
   }, [keyboard, locked, machineBusy])
+  useEffect(() => configureCodexRealtimeUserTranscriptHandler(appendVoiceText), [appendVoiceText])
+
   const startVoiceRecognition = useCallback((): void => {
     const recognition = voiceRef.current
     if (recognition === null || voiceState === 'listening' || locked || machineBusy
@@ -235,6 +241,26 @@ export function InputBar({
       setVoiceState('error')
     }
   }, [locked, machineBusy, running, voiceAssistant.phase, voiceState])
+  const ensureHarnessVoiceRecognition = useCallback((): VoiceRecognitionLike | undefined => {
+    if (voiceRef.current !== null) return voiceRef.current
+    const recognition = createVoiceRecognition(
+      appendVoiceText,
+      (next) => {
+        setVoiceState(next)
+        setVoiceAssistantListening(next === 'listening')
+        if (next === 'permission-denied' || next === 'error') {
+          setVoiceAssistantActive(false)
+          voiceRef.current = null
+        }
+      },
+    )
+    if (recognition === undefined) {
+      setVoiceState('unsupported')
+      return undefined
+    }
+    voiceRef.current = recognition
+    return recognition
+  }, [appendVoiceText])
   useEffect(() => () => {
     voiceStartingRef.current = false
     // Approval/Hardness composer takeovers temporarily unmount InputBar. Keep
@@ -246,38 +272,54 @@ export function InputBar({
     voiceRef.current = null
     if (!keepNativeCodex) setVoiceAssistantActive(false)
   }, [])
-  const toggleVoice = useCallback((): void => {
+  const toggleVoice = useCallback(async (): Promise<void> => {
     if (locked || machineBusy || voiceStartingRef.current) return
     if (voiceEnabled) {
       setVoiceAssistantActive(false)
       voiceRef.current?.stop()
+      voiceRef.current = null
       return
     }
 
     voiceStartingRef.current = true
     try {
-      const recognition = createVoiceRecognition(
-        appendVoiceText,
-        (next) => {
-          setVoiceState(next)
-          setVoiceAssistantListening(next === 'listening')
-          if (next === 'permission-denied' || next === 'error') {
-            setVoiceAssistantActive(false)
-            voiceRef.current = null
-          }
-        },
-      )
-      if (recognition === undefined) {
-        setVoiceState('unsupported')
-        return
-      }
+      // Codex Live + the profile voice (Juniper for Kira's feminine profile)
+      // owns microphone/audio whenever the selected Codex account can open
+      // native Realtime. Do not start a second SpeechRecognition microphone:
+      // the app-server's finalized Live transcript is the single source of the
+      // human turn and is dispatched by VoiceRuntime into the live PHOENIX Agent.
+      // Agent.followup then owns normal chat/session persistence and the harness.
+      const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
+      if (realtime.kind === 'started') return
+
+      // A non-Codex route, exhausted/unavailable Codex Realtime, or an older
+      // browser uses the same recognizer as its input path. Output still prefers
+      // the Host chain Kokoro -> platform voice before browser speech.
+      const recognition = ensureHarnessVoiceRecognition()
+      if (recognition === undefined) return
       setVoiceAssistantActive(true)
-      voiceRef.current = recognition
       startVoiceRecognition()
     } finally {
       voiceStartingRef.current = false
     }
-  }, [appendVoiceText, locked, machineBusy, startVoiceRecognition, voiceEnabled])
+  }, [ensureHarnessVoiceRecognition, locked, machineBusy, sessionId, startVoiceRecognition, voiceEnabled])
+
+  // Browser recognition is fallback input only. Never compete with an active
+  // Codex Live microphone; when Live ends, the published assistant state causes
+  // this effect to attach SpeechRecognition automatically.
+  useEffect(() => {
+    if (!voiceAssistant.active || isCodexRealtimeVoiceActive()
+      || voiceRef.current !== null || voiceStartingRef.current) return
+    const recognition = ensureHarnessVoiceRecognition()
+    if (recognition === undefined) {
+      setVoiceAssistantActive(false)
+      return
+    }
+    startVoiceRecognition()
+  }, [
+    ensureHarnessVoiceRecognition, running, startVoiceRecognition,
+    voiceAssistant.active, voiceAssistant.phase,
+  ])
 
   // A final recognition fragment is a complete voice turn. Waiting for the
   // machine's published draft avoids submitting the previous draft snapshot.
@@ -979,7 +1021,7 @@ export function InputBar({
                   data-voice-state={voiceState}
                   disabled={locked || machineBusy}
                   onMouseDown={keepFocus}
-                  onClick={toggleVoice}
+                  onClick={() => { void toggleVoice() }}
                 >
                   <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
                     <path d="M8 1.5a2.5 2.5 0 0 0-2.5 2.5v4a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 8 1.5Zm-4 6.5a4 4 0 0 0 8 0h1.5a5.5 5.5 0 0 1-4.75 5.44V15h-1.5v-1.56A5.5 5.5 0 0 1 2.5 8H4Z" fill="currentColor" />
