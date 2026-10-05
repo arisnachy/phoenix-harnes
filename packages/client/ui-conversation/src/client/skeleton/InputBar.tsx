@@ -281,26 +281,13 @@ export function InputBar({
     voiceStartingRef.current = true
     try {
       // Codex Live + the profile voice (Juniper for Kira's feminine profile)
-      // owns the full hands-free session whenever the selected route/account can
-      // open native Realtime. Browser recognition still submits final human
-      // speech through the ordinary composer/session path, so using Realtime
-      // never bypasses the PHOENIX harness or chat transcript.
+      // owns microphone/audio whenever the selected Codex account can open
+      // native Realtime. Do not start a second SpeechRecognition microphone:
+      // the app-server's finalized Live transcript is the single source of the
+      // human turn and is dispatched by VoiceRuntime into the live PHOENIX Agent.
+      // Agent.followup then owns normal chat/session persistence and the harness.
       const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
-      if (realtime.kind === 'started') {
-        // Codex Live owns audio output, but the browser recognizer still owns
-        // human input admission. That makes a spoken turn indistinguishable
-        // from typed composer input: it is written into the chat/session first
-        // and then executed by the live PHOENIX Agent with the full harness.
-        const recognition = ensureHarnessVoiceRecognition()
-        if (recognition === undefined) {
-          // Do not leave a voice-only parallel agent running when PHOENIX has
-          // no reliable transcript path into the harness.
-          setVoiceAssistantActive(false)
-          return
-        }
-        startVoiceRecognition()
-        return
-      }
+      if (realtime.kind === 'started') return
 
       // A non-Codex route, exhausted/unavailable Codex Realtime, or an older
       // browser uses the same recognizer as its input path. Output still prefers
@@ -314,12 +301,12 @@ export function InputBar({
     }
   }, [ensureHarnessVoiceRecognition, locked, machineBusy, sessionId, startVoiceRecognition, voiceEnabled])
 
-  // Input recognition is deliberately independent from the output transport.
-  // Recreate it after composer remounts (for example after Approval/Hardness)
-  // even when the Codex Live WebRTC call itself stayed alive. Otherwise Live
-  // keeps speaking but no human turn can enter the PHOENIX Agent/chat.
+  // Browser recognition is fallback input only. Never compete with an active
+  // Codex Live microphone; when Live ends, the published assistant state causes
+  // this effect to attach SpeechRecognition automatically.
   useEffect(() => {
-    if (!voiceAssistant.active || voiceRef.current !== null || voiceStartingRef.current) return
+    if (!voiceAssistant.active || isCodexRealtimeVoiceActive()
+      || voiceRef.current !== null || voiceStartingRef.current) return
     const recognition = ensureHarnessVoiceRecognition()
     if (recognition === undefined) {
       setVoiceAssistantActive(false)
