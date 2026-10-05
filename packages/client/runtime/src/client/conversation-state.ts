@@ -325,7 +325,7 @@ export interface QueuedMessage {
    * Pending steering is rendered immediately after this boundary so later
    * assistant/tool output cannot jump visually above the user's interruption.
    */
-  readonly anchorSeq: number | null
+  readonly anchorSeq?: number | null
   /** Complete content used to render pending steering before it becomes durable. */
   readonly content: readonly ContentBlock[]
   readonly preview: string
