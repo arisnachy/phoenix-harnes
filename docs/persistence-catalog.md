@@ -117,6 +117,20 @@ Sources: [`packages/core/session/src/types.ts:345`](../packages/core/session/src
 
 Source: [`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types.ts)
 
+<a id="agentmodel-selection--log-only"></a>
+
+#### `agent/model-selection` — log-only
+
+```ts persistence-catalog
+/**
+ * Durable model-routing preference, hidden from model history. Required on
+ * read: dropping it would change future provider/model and cost decisions.
+ */
+'agent/model-selection': ModelSelectionPreference
+```
+
+Source: [`packages/core/agent/src/model-selection.ts:34`](../packages/core/agent/src/model-selection.ts)
+
 ### `agent-preset/*`
 
 <a id="agent-presetselected--log-only"></a>

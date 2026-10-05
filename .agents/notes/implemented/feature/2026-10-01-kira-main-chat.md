@@ -14,6 +14,8 @@ Agent Teams owns model-hidden root records for actual append-only child text and
 
 The main composer addresses existing continuable direct children and retains a request id across retries. Durable per-target receipts and acceptance markers in child inbox/history permit partial-delivery recovery. Kira receives a quiet, deduplicated supervisory notice; its acceptance is flushed before the supervisory checkpoint. Reactions use authenticated runtime identities, idempotent actor/emoji sets and the existing projection stream without model wakeups. Chat operations share the Team admission cutoff, cancellation signal and bounded disposal settlement.
 
+Safe-boundary human intervention, conversational answers, and actual model badges follow the [user-priority and provenance decision](../bug-fix/2026-10-04-kira-user-priority-and-model-provenance.md).
+
 ## Alternatives considered
 
 **Separate child conversations.** This exposes child history but breaks the requested common transcript and forces users to switch conversations to participate. The rail highlights the existing public interventions instead.

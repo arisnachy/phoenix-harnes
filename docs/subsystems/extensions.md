@@ -95,9 +95,10 @@ async undefine(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCo
 @Remote('undefineFromPanel') async undefineFromPanel(agent: Agent, pluginId: CordisDynamicPluginId): Promise<DynamicCordisUndefineReceipt>
 
 /**
- * Start or update one Package for a model tool call. An unauthorized Client
- * Package waits for approval; when configured, host-only Packages also wait
- * for approval. Plugin-wide authorization covers later versions.
+ * Start or update one Package for a model tool call. Phoenix-authored Packages
+ * marked autoApprove skip the redundant human confirmation; other Client
+ * Packages wait for approval, and host-only Packages follow requireHostApproval.
+ * Plugin-wide user authorization still covers later manual versions.
  * @param agent - Agent whose Session must own the Plugin.
  * @param pluginId - Stable Plugin identity to activate.
  * @param packageId - Immutable Package version to activate.
@@ -330,7 +331,8 @@ Provider registry and non-blocking important-event announcement queue.
 
 ```ts cordis-catalog
 /**
- * Report whether the local Client can route conversation speech through neural TTS.
+ * Report whether the local Client can route conversation speech through the
+ * deterministic Kokoro -> platform fallback chain.
  * @returns Current conversational voice availability and selected provider.
  */
 @Remote('conversationStatus') async conversationStatus(): Promise<VoiceConversationStatus>
@@ -359,7 +361,7 @@ Provider registry and non-blocking important-event announcement queue.
 /**
  * Play one stable semantic segment on the Host without blocking the browser thread.
  * @param request - Message identity, ordering, text, language, and final-segment metadata.
- * @returns Admission/playback receipt for the selected neural provider.
+ * @returns Admission/playback receipt for the selected conversation TTS provider.
  */
 @Remote('conversationSpeak') async conversationSpeak(request: VoiceConversationSpeakRequest): Promise<VoiceConversationSpeakReceipt>
 

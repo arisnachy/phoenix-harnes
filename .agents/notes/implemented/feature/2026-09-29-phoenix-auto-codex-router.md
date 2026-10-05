@@ -36,6 +36,6 @@ The router does not create an extra orchestrator or subagent. KIRA remains the r
 
 ## Consequences
 
-The selector now offers one stable automatic route that can plan with Sol, execute with Luna Max, and recover from deterministic no-progress signals without user intervention. Existing direct model selections keep their previous behavior.
+The selector now offers one stable automatic route that can plan with Sol, execute with Luna Max, and recover from deterministic no-progress signals without user intervention. Direct consumers that omit an adaptive handoff dispatch concrete selections exactly.
 
-The synthetic selection is process-local for an already-running session after its first routed request: durable request headers intentionally record the real provider route that executed the request. Phoenix therefore saves the real Luna Max worker as the deployment default instead of leaking the synthetic id into CLI/headless entry points. A future per-session durable routing-preference event can remove this restart limitation without falsifying request-header provenance.
+The required-on-read, model-hidden `agent/model-selection` event preserves the synthetic selector preference across actual requests and restarts. Request headers still record the real provider/model that executed each request. A default is captured only at first dispatch, so blank sessions remain responsive to later default changes; accepted explicit picks record their own preference immediately. Legacy sessions without a preference event retain the request-header fallback. The [selected Codex handoff decision](2026-10-04-codex-selected-planner-handoff.md) owns concrete-model planning and execution routing.

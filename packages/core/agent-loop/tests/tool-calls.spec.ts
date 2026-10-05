@@ -97,6 +97,35 @@ async function until(predicate: () => boolean): Promise<void> {
 }
 
 describe('tool-call scheduler: grouping and barriers', () => {
+  it.each([false, true])('keeps a concluding result terminal after a later tool error (parallel=%s)', async (parallel) => {
+    const adapter = new MockAdapter([
+      multiCall([{ id: 'c1', name: 'finalize', args: {} }, { id: 'c2', name: 'failing', args: {} }]),
+    ])
+    const ctx = await harness(adapter)
+    ctx.tools.register(defineContentToolFixture({
+      name: 'finalize', description: 'conclude the answer', parameters: {},
+      ...parallel ? { isConcurrencySafe: () => true } : {},
+      async execute(_args, exec) {
+        exec.concludeTurn()
+        return [{ type: 'text', text: 'answer recorded' }]
+      },
+    }))
+    ctx.tools.register(defineContentToolFixture({
+      name: 'failing', description: 'report a later failure', parameters: {},
+      ...parallel ? { isConcurrencySafe: () => true } : {},
+      async execute() { throw new Error('later failure') },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('terminal-error'), { provider: 'mock', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'finish' }], source: { kind: 'user' } }))
+    await agent.whenIdle()
+
+    expect(adapter.requests).toHaveLength(1)
+    const results = events(agent).filter(event => event.type === 'tool/result')
+    expect(results).toHaveLength(2)
+    expect(results[1]?.data.message.content[0]).toMatchObject({ type: 'tool-result', isError: true })
+    expect(events(agent).filter(event => event.type === 'turn/end').map(event => event.data.reason.kind)).toEqual(['completed'])
+  })
+
   it('adds a durable recovery instruction after an invalid exit_plan_mode call', async () => {
     const adapter = new MockAdapter([
       toolCallResponse('c1', 'failing', { id: '1' }),

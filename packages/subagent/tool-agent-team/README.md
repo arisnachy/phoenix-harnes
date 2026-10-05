@@ -32,6 +32,8 @@ Every tool requires the exact calling `Agent`. `spawn_teammate` and `interrupt_a
 
 `send_message` succeeds once mail is durable and never wakes an inactive target. `followup_task` also makes the message the target's next turn and can cold-resume it. A `queued` result is accepted durable work and must not be retried. Task readiness does not start an owner. Before arming its 10,000-through-3,600,000-millisecond edge wait, `wait_agent` checks for another member that is running or provisioning; without one it returns `noProgress` immediately with instructions to re-list and use `followup_task`. Otherwise it waits for one post-call Team edge, defaulting to 30,000 milliseconds, and callers re-list after wakeup or timeout because earlier changes are not replayed.
 
+`team_chat_answer` publishes a bounded answer only to a conversational user request actually accepted by the addressed child. Its stable `replyTo` correlation preserves the shared transcript while task completion still requires execution evidence. The policy gives such questions priority at the next safe boundary and then resumes the mission. Reactions are optional and add no mandatory model turns; delivered peer messages carry their usable identity in the existing sender header.
+
 The plugin listens to Agent publication and installs its registrations through that Agent's scope. Fresh creation and cold resume therefore receive the same tool/prompt set before the first model request. Agent disposal and plugin HMR remove every scoped registration; reloading the plugin installs one fresh set in each still-live member without changing its continuation Activation.
 
 ## Model Experience

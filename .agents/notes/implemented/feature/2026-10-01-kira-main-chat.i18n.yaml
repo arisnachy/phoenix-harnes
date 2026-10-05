@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-01-kira-main-chat.md
-2026-10-01-kira-main-chat.md: 0dad01ea7bed1dd1fcd78e3bcb77b7a9015e7944
-2026-10-01-kira-main-chat.zh.md: 23edde5707d8f86cf7a04a5f208652a6c93c674b
+2026-10-01-kira-main-chat.md: e27ec9bb7df2afee3879cb42477b04e80e54e7b7
+2026-10-01-kira-main-chat.zh.md: 0d6492af1e7c3e4b7fc78f5491a5e051aa60c7b9

@@ -119,6 +119,20 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 
 来源：[`packages/core/agent/src/types.ts:19`](../packages/core/agent/src/types.ts)
 
+<a id="agentmodel-selection--log-only"></a>
+
+#### `agent/model-selection` — 仅日志
+
+```ts persistence-catalog
+/**
+ * Durable model-routing preference, hidden from model history. Required on
+ * read: dropping it would change future provider/model and cost decisions.
+ */
+'agent/model-selection': ModelSelectionPreference
+```
+
+来源： [`packages/core/agent/src/model-selection.ts:34`](../packages/core/agent/src/model-selection.ts)
+
 ### `agent-preset/*`
 
 <a id="agent-presetselected--log-only"></a>

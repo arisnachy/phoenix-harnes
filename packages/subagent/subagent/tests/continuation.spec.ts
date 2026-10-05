@@ -12,7 +12,7 @@ import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
 import * as SubagentSpawn from '@phoenix-ai/dsh-subagent-spawn-in-process'
 import * as SubagentFork from '@phoenix-ai/dsh-subagent-fork-in-process'
 import type { GenerateOptions, MessageId, StreamChunk } from '@phoenix-ai/dsh-llm'
-import { CallId, createUserMessage, LlmAdapter } from '@phoenix-ai/dsh-llm'
+import { CallId, ReasoningEffortId, createUserMessage, LlmAdapter } from '@phoenix-ai/dsh-llm'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import InvariantRegistry from '@phoenix-ai/dsh-invariants'
 import { MockAdapter, maxTokensResponse, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
@@ -508,6 +508,27 @@ describe('SubagentRuntime.followup residency routing', () => {
     await waitNoActivation(ctx, started.childId)
     const loaded = await ctx.sessionPersistence.load(started.childId)
     expect(userTexts(loaded.events)).toEqual(['child task', 'first follow-up', 'second follow-up'])
+  })
+
+  it('persists an explicit followup route across cold resume and preserves it when omitted', async () => {
+    const adapter = new MockAdapter([
+      textResponse('initial'), textResponse('changed'), textResponse('preserved'),
+    ], { efforts: [{ id: ReasoningEffortId('high'), name: 'High' }] })
+    const { ctx, parent } = await setupWith(adapter)
+    parkParent(ctx, parent)
+    ctx.llm.registerAdapter(['other'], adapter)
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    await waitNoActivation(ctx, started.childId)
+    await ctx.subagents.followup(parent, started.childId, message('change route'), {
+      source: { kind: 'user' }, signal: testSignal,
+      modelSelection: { provider: 'other', model: 'selected', reasoningEffort: ReasoningEffortId('high') },
+    })
+    await waitNoActivation(ctx, started.childId)
+    await followup(ctx, parent, started.childId, message('keep route'))
+    await waitNoActivation(ctx, started.childId)
+    expect(adapter.requests.map(request => [request.provider, request.model]))
+      .toEqual([['mock', 'mock'], ['other', 'selected'], ['other', 'selected']])
+    expect(adapter.requests.slice(1).map(request => request.reasoningEffort)).toEqual(['high', 'high'])
   })
 
   it('cold-resumes a settled child into a new Activation', async () => {
@@ -1650,6 +1671,66 @@ function settlementNotices(agent: Agent): { sender: string; text: string; summar
     }]
   })
 }
+
+describe('continuable route and report admission', () => {
+  it('rejects a different agent instance, a missing parent, and parent inbox refusal before report acceptance', async () => {
+    const gate = Promise.withResolvers<undefined>()
+    const { ctx, parent } = await setupWith(new GatedAdapter([
+      { chunks: textResponse('child'), gate: gate.promise },
+    ]))
+    parkParent(ctx, parent)
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    const child = ctx.agents.get(started.childId)!
+    await expect(ctx.subagents.drainContinuableChildren(parent, [SessionId('absent-child')])).resolves.toBeUndefined()
+    await expect(ctx.subagents.reportFrom(parent, message('root cannot impersonate child'), {
+      delivery: 'quiet', signal: testSignal,
+    })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    await expect(ctx.subagents.reportFrom({ id: child.id, session: child.session } as Agent, message('forged instance'), {
+      delivery: 'quiet', signal: testSignal,
+    })).rejects.toMatchObject({ code: 'UNAUTHORIZED' })
+    const get = ctx.agents.get.bind(ctx.agents)
+    const missing = vi.spyOn(ctx.agents, 'get').mockImplementation(id => id === parent.id ? undefined : get(id))
+    await expect(ctx.subagents.reportFrom(child, message('parent gone'), {
+      delivery: 'quiet', signal: testSignal,
+    })).rejects.toMatchObject({ code: 'PARENT_UNAVAILABLE' })
+    missing.mockRestore()
+    const refuse = vi.spyOn(parent, 'steer').mockImplementation(() => { throw new Error('inbox closed') })
+    await expect(ctx.subagents.reportFrom(child, message('inbox refusal'), {
+      delivery: 'next-step', signal: testSignal,
+    })).rejects.toMatchObject({ code: 'PARENT_UNAVAILABLE' })
+    refuse.mockRestore()
+    expect(hasUserText(parent.session.events, 'parent gone')).toBe(false)
+    expect(hasUserText(parent.session.events, 'inbox refusal')).toBe(false)
+    gate.resolve(undefined)
+    await waitNoActivation(ctx, started.childId)
+  })
+
+  it.each(['next-step', 'next-safe-step'] as const)('changes the next live request route with %s without altering an in-flight request and can clear reasoning effort', async (delivery) => {
+    const gate = Promise.withResolvers<undefined>()
+    const adapter = new GatedAdapter([
+      { chunks: toolCallResponse('route-observe', 'observe', {}), gate: gate.promise },
+      { chunks: textResponse('after steer') },
+    ])
+    const { ctx, parent } = await setupWith(adapter)
+    parkParent(ctx, parent)
+    ctx.llm.registerAdapter(['other'], adapter)
+    ctx.tools.register(defineTool({ name: 'observe', description: 'observe', parameters: {}, output: { schema: { type: 'object', additionalProperties: false, properties: {} }, render: () => message('ok') },
+      execute: () => Promise.resolve({}) }))
+    const started = await ctx.subagents.startContinuable(startSpec(parent))
+    await vi.waitFor(() => { expect(adapter.requests).toHaveLength(1) })
+    const child = ctx.agents.get(started.childId)!
+    await ctx.subagents.followup(parent, started.childId, message('live route'), {
+      source: { kind: 'user' }, signal: testSignal, delivery,
+      modelSelection: { provider: 'other', model: 'selected' },
+    })
+    expect(child.options).not.toHaveProperty('reasoningEffort')
+    expect(adapter.requests[0]).toMatchObject({ provider: 'mock', model: 'mock' })
+    gate.resolve(undefined)
+    await waitNoActivation(ctx, started.childId)
+    expect(adapter.requests[1]).toMatchObject({ provider: 'other', model: 'selected' })
+    expect(adapter.requests[1]).not.toHaveProperty('reasoningEffort')
+  })
+})
 
 describe('continuable report delivery', () => {
   it('wakes an idle parent for a next-step report', async () => {

@@ -296,7 +296,7 @@
   .avatar { width: 32px; }
   .avatar { height: 32px; }
   .column { max-width: calc(100% - 39px); }
-  [data-chat-flow-kind="kira-team-message"] .reactions { padding-left: 39px; }
+  [data-chat-flow-kind="kira-team-message"] .reactions:not([data-author-kind="user"]) { padding-left: 39px; }
   .bubble { padding: 8px 10px; }
 }
 
@@ -402,4 +402,19 @@
   .reaction,
   .reactionEmoji,
   .reactionAvatar { transition: none !important; }
+}
+
+.modelBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: var(--dsh-color-surface, #fff);
+  color: var(--dsh-color-text-secondary, #536079);
+  font-size: 12px;
+  line-height: 1;
 }

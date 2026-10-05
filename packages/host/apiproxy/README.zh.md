@@ -10,7 +10,7 @@
 
 `ApiProxyService` 消费 `ctx.agentDefaultModel`；它不持有提供方／模型配置或 Settings 分节。共享服务在 `agent-default-model` 下注册 `{provider, model, reasoningEffort?}`：base 组合包的组合条目是底层，`settings.yaml` 把用户选择叠加其上。
 
-会话每次访问时都按三级解析模型选择：本进程内作出的选择，其次是该会话日志中最新的 `request/header`，最后是这个默认值。已经跑过一轮的会话从自己的日志推导选择，空白会话则能观察到创建之后保存的默认值。
+会话每次访问时依次解析本进程内作出的选择、最新持久化的 `agent/model-selection` 偏好、日志中最新的 `request/header`，最后是这个默认值。持久化偏好将所选规划模型与最后实际执行的工作模型分开。空白会话能观察到创建之后保存的默认值，并在首次实际请求时记录该偏好。
 
 `session.selectModel` 会把接受的切换保存为部署默认值；没有单独的选择动作。它存储已解析的 `ModelSelection`，包括适配器实体化的默认推理（reasoning）强度。完整分节写入会在所选模型没有推理强度时清除已存值。存储失败只记日志，不会撤销会话选择。没有设置提供方的部署保留组合条目，切换只对当前会话生效。
 
@@ -19,6 +19,8 @@ Settings 分节中的 `reasoningEffort` 在 agent-default-model 插件配置中�
 存储的选择独立于目录成员关系。默认值指向不可用的提供方时，它仍会作为会话的 `current` 送到 `session.models`，让选择器请求用户重新选择，而不是静默选用其他模型。反过来，适配器也可以服务其目录中未公布的模型。
 
 当可选的 `user-profile` 服务保存了 `modelProviderOrder` 时，网关按该偏好对建议分组排序，并按原生顺序追加未列出的提供方。这只改变显示；所有已注册路由仍然是可路由候选项。
+
+OpenAI Codex 模型选择器以持久标识 `phoenix-auto` 显示 Phoenix Orquesta：Sol 负责规划与解困，Kira 和专家使用 Luna Max 执行。选择具体 Codex 模型时，该模型负责规划与解困，后续执行步骤交给 Luna Max；其他提供商始终使用选定模型。
 
 ## 约定层（`/api`）
 

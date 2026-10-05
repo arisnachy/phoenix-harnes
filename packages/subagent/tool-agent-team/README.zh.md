@@ -32,6 +32,8 @@ Team 策略只有在 JUDGE 报告的 `modelProvider` 或 `model` 与 Lead 不同
 
 `send_message` 在 mail 持久化后即成功，并且绝不会唤醒 inactive target。`followup_task` 还会让该消息成为 target 的下一个 turn，并可冷恢复 target。`queued` 结果表示持久工作已经接受，不能重试。任务 ready 不会启动 owner。`wait_agent` 在注册 10,000 到 3,600,000 毫秒的边等待前，会检查是否有另一个 running 或 provisioning member；如果没有，它会立即返回 `noProgress`，提示重新 list 并使用 `followup_task`。否则它会等待调用后发生的一条 Team 边，默认 30,000 毫秒；由于不会回放更早的变化，调用方需要在唤醒或超时后重新 list。
 
+`team_chat_answer` 仅向目标 child 已实际接受的对话用户请求发布有界回答。稳定的 `replyTo` 关联保留共享转录，而任务完成仍需执行证据。策略要求在下一次安全边界优先回答这类问题，然后继续任务。表情回应是可选项，不要求额外模型轮次；已投递 peer 消息在现有发送者头部中携带可用身份。
+
 插件监听 Agent publication，并通过对应 Agent scope 安装注册。因此，fresh 创建与 cold resume 都会在第一次模型请求前获得相同工具／提示词集合。Agent dispose 和插件 HMR 会移除全部 scoped 注册；重新加载插件会为仍 live 的每个成员安装一套新注册，而不改变 continuation Activation。
 
 ## 模型体验
