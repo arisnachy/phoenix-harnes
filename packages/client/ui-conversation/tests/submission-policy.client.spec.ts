@@ -7,7 +7,7 @@ import {
 import type { ConversationSettings } from '../src/submission-settings.ts'
 
 describe('ComposerSubmissionPolicy', () => {
-  it('defaults to Steer while running; Queue remains the explicit alternate preference', () => {
+  it('always steers plain Enter while busy and reserves the accelerated chord for Queue', () => {
     const policy = new ComposerSubmissionPolicy()
     expect(policy.busyEnter.getSnapshot()).toBe(DEFAULT_BUSY_ENTER_BEHAVIOR)
     expect(policy.resolve(false, 'enter', true)).toBe('queue')
@@ -17,14 +17,14 @@ describe('ComposerSubmissionPolicy', () => {
     expect(policy.resolve(true, 'enter', false)).toBe('queue')
     expect(policy.resolve(true, 'accelerated', false)).toBe('queue')
 
+    // A legacy persisted Queue preference must never make ordinary human
+    // guidance wait behind the active mission.
     const changed = vi.fn()
     policy.busyEnter.subscribe(changed)
     policy.setBusyEnter('queue')
     expect(changed).toHaveBeenCalledTimes(1)
-    expect(policy.resolve(true, 'enter', true)).toBe('queue')
-    expect(policy.resolve(true, 'accelerated', true)).toBe('steer')
-    expect(policy.resolve(false, 'enter', true)).toBe('queue')
-    expect(policy.resolve(false, 'accelerated', true)).toBe('queue')
+    expect(policy.resolve(true, 'enter', true)).toBe('steer')
+    expect(policy.resolve(true, 'accelerated', true)).toBe('queue')
   })
 
   it('writes an explicit change through the scope after publishing it locally', () => {
