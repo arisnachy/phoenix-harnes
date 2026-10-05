@@ -99,7 +99,7 @@ describe('Phoenix local email assistant', () => {
     await page.getByLabel('Tu correo para recibir el código de verificación').fill('owner@example.com')
     await page.getByRole('button', { name: 'Configurar correo de Kira' }).click({ timeout: 10_000 })
     await page.getByRole('button', { name: 'Recuperar y continuar' }).click({ timeout: 10_000 })
-    expect(signupAttempts).toBe(2)
+    await expect.poll(() => signupAttempts).toBe(2)
     await page.getByText('kira-keyless@agentmail.to', { exact: true }).waitFor()
     await page.getByLabel('Código de verificación').fill('123456')
     await page.getByRole('button', { name: 'Verificar y activar' }).click()

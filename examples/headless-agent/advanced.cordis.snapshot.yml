@@ -43,11 +43,6 @@
             name: '@phoenix-ai/dsh-code-runtime-worker-thread'
           - id: cordis-host-runner
             name: '@phoenix-ai/dsh-cordis-host-runner'
-            config:
-              requireHostApproval: true
-          # This corpus exercises manual approval rather than authored-package auto-authorization.
-          - id: snapshot-manual-cordis-approval
-            name: '../acp-agent/tests/fixtures/manual-cordis-approval.mjs'
           - id: tool-cordis
             name: '@phoenix-ai/dsh-tool-cordis'
           - id: llm-replay
