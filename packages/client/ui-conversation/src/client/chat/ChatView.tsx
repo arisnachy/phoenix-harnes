@@ -113,9 +113,15 @@ function runningTurnStartTime(timeline: ConversationTimelineSnapshot): number | 
   return latest
 }
 
-/** Plain-text projection used only to disambiguate Host/browser clock jitter during optimistic handoff. */
+/** Plain-text projection used only as a backwards-compatible optimistic handoff fallback. */
 function userMessageText(node: UserMessageNode): string {
   return node.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+}
+
+function clientSubmissionIdOf(source: unknown): string | undefined {
+  if (typeof source !== 'object' || source === null) return undefined
+  const value = (source as { clientSubmissionId?: unknown }).clientSubmissionId
+  return typeof value === 'string' && value !== '' ? value : undefined
 }
 
 /**
@@ -210,47 +216,62 @@ export function ChatView({
     [durableUserMessageIds, transientSteering],
   )
   const progress = useMemo(() => turnProgress(timeline, chatNodes), [chatNodes, timeline])
-  // Optimistic bubble lives only until a durable user message appears after
-  // this admission began. The 1s tolerance covers browser/Host clock jitter.
+  // One browser-minted identity now crosses optimistic → queue → durable
+  // projections. Text/time matching remains only as a compatibility fallback
+  // for an older Host during a rolling update.
   const pendingSubmitDurable = useMemo(() => {
     if (pendingSubmit === undefined) return false
+    const exact = chatNodes.some((node) => {
+      if (node.kind !== 'user' && node.kind !== 'steering') return false
+      return clientSubmissionIdOf((node.data as { source?: unknown }).source) === pendingSubmit.clientSubmissionId
+    })
+    if (exact) return true
     const floor = pendingSubmit.startedAt - 1_000
     return chatNodes.some((node) => {
       if (node.kind !== 'user') return false
       const user = node.data as UserMessageNode
       const expectedText = pendingSubmit.modelText ?? pendingSubmit.text
-      return user.time >= floor && userMessageText(user) === expectedText
+      return clientSubmissionIdOf((user as { source?: unknown }).source) === undefined
+        && user.time >= floor
+        && userMessageText(user) === expectedText
     })
   }, [chatNodes, pendingSubmit])
-  // Host queue acknowledgement can arrive before the durable transcript node.
-  // Once the same submission is visible as steering, that authoritative bubble
-  // replaces the optimistic one immediately; rendering both is the duplicate
-  // message race seen when a user sends during a long-running turn.
-  const pendingSubmitInSteering = useMemo(() => {
-    if (pendingSubmit === undefined) return false
+
+  const pendingSubmitSteeringIds = useMemo(() => {
+    if (pendingSubmit === undefined) return new Set<string>()
     const expected = new Set(
       [pendingSubmit.text, pendingSubmit.modelText]
         .filter((value): value is string => value !== undefined && value !== ''),
     )
-    return pendingSteering.some((item) => {
+    return new Set(pendingSteering.flatMap((item) => {
+      const exact = item.clientSubmissionId === pendingSubmit.clientSubmissionId
+      if (exact) return [String(item.id)]
+      if (item.clientSubmissionId !== undefined) return []
       const text = item.content
         .flatMap(block => block.type === 'text' ? [block.text] : [])
         .join('')
-      return expected.has(text)
-    })
+      return expected.has(text) ? [String(item.id)] : []
+    }))
   }, [pendingSteering, pendingSubmit])
+
+  // Keep the local bubble as the single visual owner until the durable event
+  // arrives. The queue mirror may acknowledge the same steer first; filter that
+  // occurrence instead of swapping render owners, which used to flash two
+  // identical bubbles and move the message to the transcript bottom.
+  const visiblePendingSteering = useMemo(
+    () => pendingSteering.filter(item => !pendingSubmitSteeringIds.has(String(item.id))),
+    [pendingSteering, pendingSubmitSteeringIds],
+  )
   const optimisticSubmit = useMemo(() => (
-    pendingSubmit !== undefined && !pendingSubmitDurable && !pendingSubmitInSteering && pendingSubmit.text !== ''
-      ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
+    pendingSubmit !== undefined && !pendingSubmitDurable && pendingSubmit.text !== ''
+      ? {
+        text: pendingSubmit.text,
+        startedAt: pendingSubmit.startedAt,
+        clientSubmissionId: pendingSubmit.clientSubmissionId,
+      }
       : undefined
-  ), [pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
-  // A stale pendingSubmit must never resurrect "preparing" after the durable
-  // transcript (or steering mirror) has already taken ownership of the send.
-  // This is a defensive handoff in addition to the input facade retiring the
-  // optimistic submit when Host admission settles.
-  const visiblePendingSubmit = pendingSubmit !== undefined
-    && !pendingSubmitDurable
-    && !pendingSubmitInSteering
+  ), [pendingSubmit, pendingSubmitDurable])
+  const visiblePendingSubmit = pendingSubmit !== undefined && !pendingSubmitDurable
     ? pendingSubmit
     : undefined
   // Enter is a local UX boundary: show PHOENIX as preparing in the same render
@@ -328,7 +349,7 @@ export function ChatView({
   const firstSeq = firstKey === undefined ? null : nodeStore.get(firstKey)?.anchorSeq ?? null
   const lastKey = order.at(-1) ?? null
   const lastNode = lastKey === null ? undefined : nodeStore.get(lastKey)
-  const lastSteeringId = pendingSteering[pendingSteering.length - 1]?.id ?? null
+  const lastSteeringId = visiblePendingSteering[visiblePendingSteering.length - 1]?.id ?? null
   const followSig = `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${optimisticSubmit?.startedAt ?? ''}:${lastSteeringId ?? ''}`
 
   const toBottom = (el: HTMLElement): void => {
@@ -548,7 +569,7 @@ export function ChatView({
               </span>
             </div>
           )}
-          {pendingSteering.map(item => (
+          {visiblePendingSteering.map(item => (
             <PendingSteeringBubble
               key={item.id}
               content={item.content}
