@@ -35,6 +35,7 @@
      Do not gate this through :has(): slot wrappers can make that selector
      miss KIRA even while the floating card is visible. */
   --dsh-chat-floating-overlay-axis-shift: var(--dsh-overlay-stable-chat-axis-offset, 0px);
+  --dsh-cordis-rail-width: clamp(320px, 22vw, 380px);
 }
 
 /* Floating shell entries remain a true overlay and never participate in the
@@ -85,8 +86,8 @@
 .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace],
 .centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) > [data-shell-workspace] {
   order: 2;
-  flex: 0 0 min(360px, calc(100% - 56px));
-  width: min(360px, calc(100% - 56px));
+  flex: 0 0 min(var(--dsh-cordis-rail-width), 38%);
+  width: min(var(--dsh-cordis-rail-width), 38%);
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -101,15 +102,21 @@
   min-height: 0;
 }
 
+/* Cordis may deliberately use the otherwise-empty left gutter. The workspace
+   stays a real flex item, so neither side can ever paint over the chat. */
+.centerCol:has(> [data-shell-workspace] [data-cordis-workspace][data-cordis-dock='left']) > [data-shell-workspace] {
+  order: -1;
+}
 
-@media (max-width: 760px) {
+@media (max-width: 1240px) {
   .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]),
   .centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) {
     flex-direction: column;
   }
 
   .centerCol:has(> [data-shell-workspace] [data-cordis-workspace]) > [data-shell-workspace],
-  .centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) > [data-shell-workspace] {
+  .centerCol:has(> [data-shell-workspace] [data-surface-recovery='workspace']) > [data-shell-workspace],
+  .centerCol:has(> [data-shell-workspace] [data-cordis-workspace][data-cordis-dock='left']) > [data-shell-workspace] {
     order: 2;
     flex: 0 0 min(42vh, 360px);
     width: 100%;
