@@ -627,7 +627,7 @@ export class VoiceRuntime extends TypertRemoteService {
     // The browser realtime surface (or the finalized harness answer) owns these
     // audible notifications while the authenticated Codex session is alive.
     if (this.codexRealtime?.hasActiveSession() === true) {
-      return { id, accepted: false, reason: 'native-realtime', text }
+      return { id, accepted: false, reason: 'native-realtime' }
     }
     const key = event.dedupeKey
     if (key !== undefined && (this.pendingKeys.has(key) || this.current?.event.dedupeKey === key)) {
