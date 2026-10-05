@@ -746,11 +746,18 @@ export class VoiceRuntime extends TypertRemoteService {
     } | undefined
     const agent = agents?.get(sessionId)
     if (agent !== undefined) {
-      // Browser PHOENIX sessions admit spoken input through the ordinary
-      // composer/session.prompt path so the user message is rendered in chat
-      // before the live Agent claims it. The app-server transcript is only a
-      // compatibility source for standalone voice compositions; dispatching it
-      // here as well would race/duplicate the browser-admitted user turn.
+      // Native Codex Live is transport only. Its finalized user transcript is
+      // the canonical human turn while the WebRTC call owns the microphone.
+      // Feed it into the real PHOENIX Agent; Agent.followup wakes the ordinary
+      // loop, which durably appends user/message and runs the full harness.
+      // Realtime assistant transcripts are ignored because PHOENIX is the
+      // single source of truth for tool work and the assistant response.
+      if (transcript.role === 'user') {
+        agent.followup(createUserMessage({
+          source: { kind: 'user' },
+          content: [{ type: 'text', text }],
+        }))
+      }
       return
     }
 
