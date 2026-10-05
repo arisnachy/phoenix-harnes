@@ -516,7 +516,7 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   // it before declaring the directory "in use". If Git itself says the path is
   // not a worktree, treat it as orphaned managed storage and remove it directly.
   const refreshedWorktrees = registeredWorktreePaths()
-  const becameOrphaned = /(?:is|isn't|not) a working tree/iu.test(detail)
+  const becameOrphaned = /(?:is )?not a working tree/iu.test(detail)
     || (refreshedWorktrees !== undefined && !refreshedWorktrees.has(key))
   if (becameOrphaned) {
     return removeOrphanedManagedDirectory(path)
