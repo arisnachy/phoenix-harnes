@@ -127,7 +127,7 @@ function Surface({ content }: { content: CordisVisualContent }) {
   }
 }
 
-/** Visual surface mounted in Phoenix's shared KIRA/Cordis right rail. */
+/** Visual surface mounted in Phoenix's shared KIRA/Cordis side rail. */
 export function CordisVisualWorkspace({
   controller,
   layout,
