@@ -661,14 +661,36 @@ function buildAndSmoke(root, label, plan, onPhase = () => {}) {
   node(root, ['--import', 'tsx/esm', 'apps/cli/src/bin.ts', '--version'], { inherit: true })
 }
 
+function promotedTargetStillCurrent(root, target) {
+  const latest = fetchBranchCommit(root, STABLE_SOURCE_BRANCH, `${STABLE_SOURCE_BRANCH}-final`, 1)
+  if (latest === target) return { current: true, latest }
+
+  clearPrepared(root)
+  writeState(root, {
+    status: 'checking',
+    phase: 'superseded',
+    current: effectiveCurrentCommit(root),
+    target: latest,
+    detail: `Prepared stable ${target.slice(0, 12)} was superseded by ${latest.slice(0, 12)} during preflight; the stale candidate will not be activated.`,
+  })
+  console.error(
+    `[PHOENIX UPDATE] prepared candidate ${target.slice(0, 12)} became stale during preflight; `
+    + `latest stable is ${latest.slice(0, 12)}. Discarding the stale activation and checking again now.`,
+  )
+  return { current: false, latest }
+}
+
 function stageCandidate(root, inspection) {
   const target = inspection.target
   const facts = updateFacts(inspection)
   const plan = updatePlan(root, inspection)
   if (stagedCandidateValid(root, target)) {
+    const freshness = promotedTargetStillCurrent(root, target)
+    if (!freshness.current) return { prepared: false, plan, latestTarget: freshness.latest }
+
     console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} was already prepared; reusing cached staging result.`)
     writePreparedState(root, inspection, plan)
-    return plan
+    return { prepared: true, plan, latestTarget: target }
   }
 
   clearPrepared(root)
@@ -679,6 +701,13 @@ function stageCandidate(root, inspection) {
     buildAndSmoke(stage, `preflight ${target.slice(0, 12)}`, plan, (phase) => {
       writeState(root, { status: 'preparing', phase, ...facts })
     })
+
+    // The stable pointer may advance while a full build is running. Never queue
+    // activation for the SHA observed before the build unless it is still the
+    // promoted stable target now that preflight has completed.
+    const freshness = promotedTargetStillCurrent(root, target)
+    if (!freshness.current) return { prepared: false, plan, latestTarget: freshness.latest }
+
     writePrepared(root, inspection, plan)
     writePreparedState(root, inspection, plan)
     if (cleanWorktree(root)) {
@@ -686,7 +715,7 @@ function stageCandidate(root, inspection) {
     } else {
       console.error(`[PHOENIX UPDATE] stable ${target.slice(0, 12)} is prepared in isolated staging; local changes remain protected; restart to activate the verified isolated runtime.`)
     }
-    return plan
+    return { prepared: true, plan, latestTarget: target }
   } catch (error) {
     clearPrepared(root)
     throw error
@@ -780,7 +809,10 @@ function applyUpdate(root, inspection, options = {}) {
   const action = replacingDivergedRelease ? 'replacing divergent managed release' : 'activating stable update'
   console.error(`[PHOENIX UPDATE] ${action} (${plan.mode}): ${previous.slice(0, 12)} -> ${target.slice(0, 12)}`)
   git(root, ['diff', '--check', previous, target])
-  if (!options.prepared || !preparedCandidateValid(root, target)) stageCandidate(root, inspection)
+  if (!options.prepared || !preparedCandidateValid(root, target)) {
+    const staged = stageCandidate(root, inspection)
+    if (!staged.prepared) return false
+  }
   if (!cleanWorktree(root)) throw new Error('worktree changed during preflight; refusing live update')
 
   recoveryRef(root, previous)
@@ -963,6 +995,7 @@ async function watch(root, parentPid) {
   while (parentAlive(parentPid)) {
     clearRefreshRequest(root)
     let inspection
+    let repollImmediately = false
     try {
       // Watch mode makes one network attempt per poll. A failed internet
       // connection must never hold the updater in three consecutive ~20s Git
@@ -1030,8 +1063,14 @@ async function watch(root, parentPid) {
               announcedTarget = inspection.target
               console.error(`[PHOENIX UPDATE] new stable version ${inspection.target.slice(0, 12)} detected.`)
             }
-            stageCandidate(root, inspection)
-            preparedTarget = inspection.target
+            const staged = stageCandidate(root, inspection)
+            if (staged.prepared) {
+              preparedTarget = inspection.target
+            } else {
+              pending = undefined
+              preparedTarget = undefined
+              repollImmediately = true
+            }
           } else {
             writePreparedState(root, inspection, updatePlan(root, inspection))
           }
@@ -1093,6 +1132,7 @@ async function watch(root, parentPid) {
       })
     }
 
+    if (repollImmediately) continue
     await waitForPollOrParentExit(root, parentPid, pollInterval())
   }
 
