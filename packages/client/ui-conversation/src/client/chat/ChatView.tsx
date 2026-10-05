@@ -193,6 +193,18 @@ export function ChatView({
     }),
     [nodeStore, order],
   )
+  // Freeze the durable flow position that existed when this local submission
+  // appeared. Later assistant/tool nodes must render after the user's bubble,
+  // not above it while Host steering admission is still settling.
+  const pendingSubmitAnchor = useRef<{ seq: number; afterNodeKey: string | null } | null>(null)
+  if (pendingSubmit === undefined) {
+    pendingSubmitAnchor.current = null
+  } else if (pendingSubmitAnchor.current?.seq !== pendingSubmit.seq) {
+    pendingSubmitAnchor.current = {
+      seq: pendingSubmit.seq,
+      afterNodeKey: order.at(-1) ?? null,
+    }
+  }
   // Session events and the transient queue arrive on independent streams.
   // A claimed steer can briefly be projected as either a durable steering node
   // or an ordinary durable user node before the queue mirror retires. Suppress
@@ -210,47 +222,56 @@ export function ChatView({
     [durableUserMessageIds, transientSteering],
   )
   const progress = useMemo(() => turnProgress(timeline, chatNodes), [chatNodes, timeline])
-  // Optimistic bubble lives only until a durable user message appears after
-  // this admission began. The 1s tolerance covers browser/Host clock jitter.
+  // Keep the local submission until either durable user OR durable steering
+  // owns it. Steering and transcript streams can arrive in either order.
   const pendingSubmitDurable = useMemo(() => {
     if (pendingSubmit === undefined) return false
     const floor = pendingSubmit.startedAt - 1_000
+    const expectedText = pendingSubmit.modelText ?? pendingSubmit.text
     return chatNodes.some((node) => {
-      if (node.kind !== 'user') return false
-      const user = node.data as UserMessageNode
-      const expectedText = pendingSubmit.modelText ?? pendingSubmit.text
-      return user.time >= floor && userMessageText(user) === expectedText
+      if (node.kind !== 'user' && node.kind !== 'steering') return false
+      const message = node.data as UserMessageNode
+      return message.time >= floor && userMessageText(message) === expectedText
     })
   }, [chatNodes, pendingSubmit])
-  // Host queue acknowledgement can arrive before the durable transcript node.
-  // Once the same submission is visible as steering, that authoritative bubble
-  // replaces the optimistic one immediately; rendering both is the duplicate
-  // message race seen when a user sends during a long-running turn.
-  const pendingSubmitInSteering = useMemo(() => {
-    if (pendingSubmit === undefined) return false
+  // Host steering acknowledgement is a transport mirror of the same local
+  // gesture, not a second visual message. Keep the optimistic bubble as the
+  // single owner so its chronological anchor cannot jump to the transcript tail.
+  const pendingSubmitSteeringId = useMemo(() => {
+    if (pendingSubmit === undefined) return undefined
     const expected = new Set(
       [pendingSubmit.text, pendingSubmit.modelText]
         .filter((value): value is string => value !== undefined && value !== ''),
     )
-    return pendingSteering.some((item) => {
+    for (let index = pendingSteering.length - 1; index >= 0; index -= 1) {
+      const item = pendingSteering[index]
+      if (item === undefined) continue
       const text = item.content
         .flatMap(block => block.type === 'text' ? [block.text] : [])
         .join('')
-      return expected.has(text)
-    })
+      if (expected.has(text)) return item.id
+    }
+    return undefined
   }, [pendingSteering, pendingSubmit])
-  const optimisticSubmit = useMemo(() => (
-    pendingSubmit !== undefined && !pendingSubmitDurable && !pendingSubmitInSteering && pendingSubmit.text !== ''
-      ? { text: pendingSubmit.text, startedAt: pendingSubmit.startedAt }
-      : undefined
-  ), [pendingSubmit, pendingSubmitDurable, pendingSubmitInSteering])
+  const visiblePendingSteering = useMemo(
+    () => pendingSubmitSteeringId === undefined
+      ? pendingSteering
+      : pendingSteering.filter(item => item.id !== pendingSubmitSteeringId),
+    [pendingSteering, pendingSubmitSteeringId],
+  )
+  const optimisticSubmit = useMemo(() => {
+    if (pendingSubmit === undefined || pendingSubmitDurable || pendingSubmit.text === '') return undefined
+    const anchor = pendingSubmitAnchor.current
+    return {
+      seq: pendingSubmit.seq,
+      text: pendingSubmit.text,
+      startedAt: pendingSubmit.startedAt,
+      afterNodeKey: anchor?.seq === pendingSubmit.seq ? anchor.afterNodeKey : null,
+    }
+  }, [pendingSubmit, pendingSubmitDurable])
   // A stale pendingSubmit must never resurrect "preparing" after the durable
-  // transcript (or steering mirror) has already taken ownership of the send.
-  // This is a defensive handoff in addition to the input facade retiring the
-  // optimistic submit when Host admission settles.
-  const visiblePendingSubmit = pendingSubmit !== undefined
-    && !pendingSubmitDurable
-    && !pendingSubmitInSteering
+  // transcript has already taken ownership of the send.
+  const visiblePendingSubmit = pendingSubmit !== undefined && !pendingSubmitDurable
     ? pendingSubmit
     : undefined
   // Enter is a local UX boundary: show PHOENIX as preparing in the same render
@@ -328,7 +349,7 @@ export function ChatView({
   const firstSeq = firstKey === undefined ? null : nodeStore.get(firstKey)?.anchorSeq ?? null
   const lastKey = order.at(-1) ?? null
   const lastNode = lastKey === null ? undefined : nodeStore.get(lastKey)
-  const lastSteeringId = pendingSteering[pendingSteering.length - 1]?.id ?? null
+  const lastSteeringId = visiblePendingSteering[visiblePendingSteering.length - 1]?.id ?? null
   const followSig = `${openState}:${firstSeq}:${lastKey}:${order.length}:${running ? 1 : 0}:${optimisticSubmit?.startedAt ?? ''}:${lastSteeringId ?? ''}`
 
   const toBottom = (el: HTMLElement): void => {
@@ -548,7 +569,7 @@ export function ChatView({
               </span>
             </div>
           )}
-          {pendingSteering.map(item => (
+          {visiblePendingSteering.map(item => (
             <PendingSteeringBubble
               key={item.id}
               content={item.content}
