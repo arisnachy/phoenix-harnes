@@ -82,6 +82,7 @@ export interface VoiceModelRoute {
 }
 
 type VoiceModelRouteResolver = (sessionKey: string) => Promise<VoiceModelRoute | undefined>
+type CodexRealtimeUserTranscriptHandler = (text: string) => void
 
 interface CodexRealtimeVoiceSession {
   readonly key: string
@@ -100,6 +101,7 @@ interface PendingCodexRealtimeUtterance {
 }
 
 let voiceModelRouteResolver: VoiceModelRouteResolver | undefined
+let codexRealtimeUserTranscriptHandler: CodexRealtimeUserTranscriptHandler | undefined
 let codexRealtimeVoiceSession: CodexRealtimeVoiceSession | undefined
 let codexRealtimeVoiceGeneration = 0
 const pendingCodexRealtimeUtterances: PendingCodexRealtimeUtterance[] = []
@@ -278,6 +280,22 @@ export function configureVoiceModelRouteResolver(resolver: VoiceModelRouteResolv
   }
 }
 
+/**
+ * Bind the current conversation composer as the admission path for finalized
+ * native Codex Live user speech. The WebRTC microphone remains the only audio
+ * capture while Live is active; this callback receives text, not microphone data.
+ * @param handler - Composer-owned finalized user-transcript admission callback.
+ * @returns Disposer that removes this exact handler registration.
+ */
+export function configureCodexRealtimeUserTranscriptHandler(
+  handler: CodexRealtimeUserTranscriptHandler,
+): () => void {
+  codexRealtimeUserTranscriptHandler = handler
+  return () => {
+    if (codexRealtimeUserTranscriptHandler === handler) codexRealtimeUserTranscriptHandler = undefined
+  }
+}
+
 /** Minimal browser surface needed to capability-probe Codex Realtime WebRTC. */
 export interface CodexRealtimeVoiceWindow {
   readonly RTCPeerConnection?: unknown
@@ -392,6 +410,7 @@ export async function tryStartCodexRealtimeVoice(
     }
     events.onmessage = (event) => {
       if (codexRealtimeVoiceGeneration !== generation || typeof event.data !== 'string') return
+      forwardCodexRealtimeUserTranscript(event.data)
       updateCodexRealtimePhase(event.data)
     }
     events.onopen = () => {
@@ -507,6 +526,37 @@ export async function stopCodexRealtimeVoice(): Promise<boolean> {
     await remote.conversationRealtimeStop?.({ key: session.key }).catch(() => undefined)
   }
   return true
+}
+
+function forwardCodexRealtimeUserTranscript(payload: string): void {
+  const handler = codexRealtimeUserTranscriptHandler
+  if (handler === undefined) return
+  let value: unknown
+  try {
+    value = JSON.parse(payload) as unknown
+  } catch {
+    return
+  }
+  if (typeof value !== 'object' || value === null) return
+  const event = value as Record<string, unknown>
+  const type = typeof event.type === 'string' ? event.type : ''
+
+  let transcript: string | undefined
+  if (type === 'turn.done') {
+    const turn = typeof event.turn === 'object' && event.turn !== null
+      ? event.turn as Record<string, unknown>
+      : undefined
+    if (turn?.role === 'user' && typeof turn.transcript === 'string') {
+      transcript = turn.transcript
+    }
+  } else if (type === 'conversation.input_transcript.turn_marked'
+    || type === 'conversation.item.input_audio_transcription.completed') {
+    if (typeof event.transcript === 'string') transcript = event.transcript
+  }
+
+  const text = transcript?.trim()
+  if (text === undefined || text === '') return
+  handler(text)
 }
 
 function updateCodexRealtimePhase(payload: string): void {
