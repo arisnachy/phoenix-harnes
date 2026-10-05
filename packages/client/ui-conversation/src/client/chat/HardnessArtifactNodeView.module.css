@@ -8,6 +8,50 @@
   width: 100%;
 }
 
+.canvasLauncher {
+  box-sizing: border-box;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  background: var(--dsw-alias-button-floating-fill);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.canvasLauncher:hover,
+.canvasLauncher:focus-visible {
+  background: var(--dsw-alias-button-floating-hover);
+  border-color: var(--dsw-alias-border-l3);
+}
+
+.canvasLauncher:focus-visible {
+  outline: 2px solid #9bb9d3;
+  outline-offset: 2px;
+}
+
+.canvasTitle {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvasHint {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+}
+
+
 .visuallyHidden {
   position: absolute;
   width: 1px;
