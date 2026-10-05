@@ -321,11 +321,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('removed stale updater staging worktree')
   })
 
-  it('defers Windows worktree cleanup instead of recursively deleting a busy tree', () => {
+  it('distinguishes registered worktrees from orphaned runtime directories during cleanup', () => {
+    expect(source).toContain("spawnSync('git', ['worktree', 'list', '--porcelain']")
+    expect(source).toContain('function removeOrphanedManagedDirectory(path)')
+    expect(source).toContain("rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })")
     expect(source).toContain("spawnSync('git', ['worktree', 'remove', '--force', path]")
-    expect(source).toContain('if (result.status === 0 || !existsSync(path)) return true')
-    expect(source).toContain('deferred managed worktree cleanup while it is still in use')
-    expect(source).not.toContain('rmSync(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 250 })')
+    expect(source).toContain('registered managed worktree cleanup deferred because it is still in use')
+    expect(source).toContain('orphaned managed runtime is no longer a Git worktree but Windows still has it open')
   })
 
   it('repairs an incompletely materialized updater stage before running the build', () => {
@@ -337,12 +339,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(autoUpdateSource).toContain('staging worktree remains incomplete after repair')
   })
 
-  it('offers a cleanup-only supervisor mode and invokes it from each new Windows Host', () => {
+  it('keeps cleanup-only mode available without spawning duplicate cleanup passes from each Host', () => {
     expect(source).toContain("if (process.argv.includes('--cleanup-storage'))")
     expect(source).toContain('recoverStaleStagingIndexLock()')
     expect(source).toContain('cleanupObsoleteRuntimes()')
     expect(updateWatchSource).toContain('const installRoot = process.env.PHOENIX_INSTALL_ROOT?.trim()')
-    expect(updateWatchSource).toContain("startWatcher(root, supervisor, 'PHOENIX STORAGE', ['--cleanup-storage'])")
+    expect(updateWatchSource).not.toContain("startWatcher(root, supervisor, 'PHOENIX STORAGE', ['--cleanup-storage'])")
+    expect(updateWatchSource).toContain('garbage collection is owned by the external')
   })
 
   it('runs runtime garbage collection at startup and after safe runtime handoff paths', () => {
