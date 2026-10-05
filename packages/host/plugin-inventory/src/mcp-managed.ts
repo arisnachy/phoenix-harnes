@@ -68,6 +68,10 @@ export const JEV_API_KEY_REF = 'JEV_API_KEY'
 export const BINANCE_AGENT_OS_SERVER_NAME = 'binance-agent-os'
 /** Official Binance Agent OS Streamable HTTP MCP endpoint. */
 export const BINANCE_AGENT_OS_URL = 'https://agent.binance.com/mcp/agentic'
+/** Stable local MCP namespace for the official Devpost Hackathons connector. */
+export const DEVPOST_HACKATHONS_SERVER_NAME = 'devpost-hackathons'
+/** Official Devpost Hackathons Streamable HTTP MCP endpoint. */
+export const DEVPOST_HACKATHONS_URL = 'https://devpost.com/mcp'
 /** Stable local MCP namespace for the official X API bridge. */
 export const X_API_MCP_SERVER_NAME = 'x-api'
 /** Official X API hosted MCP endpoint reached through xurl. */
@@ -119,6 +123,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isEmptyRecord(value: unknown): value is Record<string, never> {
   return isRecord(value) && Object.keys(value).length === 0
+}
+
+function devpostHackathonsMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    transport: 'streamable-http',
+    serverName: DEVPOST_HACKATHONS_SERVER_NAME,
+    url: DEVPOST_HACKATHONS_URL,
+    headers: {},
+    oauth: true,
+  }
 }
 
 function xDocsMcpConfig(): ManagedStreamableHttpMcpConfig {
@@ -309,6 +323,11 @@ function isRetiredJevCandidate(candidate: McpRegistryCandidate): boolean {
   return name === 'jev' || name.endsWith('/jev') || title === 'jev'
 }
 
+function isDevpostHackathonsManagedRow(row: ManagedMcpRow): boolean {
+  return row.config.serverName === DEVPOST_HACKATHONS_SERVER_NAME
+    || (row.config.transport === 'streamable-http' && row.config.url === DEVPOST_HACKATHONS_URL)
+}
+
 function isBinanceAgentOsManagedRow(row: ManagedMcpRow): boolean {
   return row.config.serverName === BINANCE_AGENT_OS_SERVER_NAME
     || (row.config.transport === 'streamable-http' && row.config.url === BINANCE_AGENT_OS_URL)
@@ -480,8 +499,18 @@ export class ManagedMcpController {
     if (row.source === undefined) {
       throw new Error(`managed MCP entry "${entryId}" has no trusted repair source`)
     }
-    if (row.source.kind !== 'registry') {
-      throw new Error(`managed MCP entry "${entryId}" uses an unsupported curated repair source`)
+    if (row.source.kind === 'curated') {
+      if (row.source.connectorId !== 'devpost') {
+        throw new Error(`managed MCP entry "${entryId}" uses an unsupported curated repair source`)
+      }
+      const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
+      if (!removed.removed) throw new Error(`managed MCP entry "${entryId}" disappeared during repair`)
+      if (!removed.liveUnloaded) {
+        throw new Error(
+          `managed MCP entry "${entryId}" was removed from persistence but its live runtime could not be unloaded; restart Phoenix before retrying repair`,
+        )
+      }
+      return this.installDevpostHackathons()
     }
 
     const snapshot = await this.registrySearch({ query: row.source.name, limit: 20 })
@@ -531,6 +560,27 @@ export class ManagedMcpController {
    */
   async configureJev(): Promise<McpRegistryInstallReceipt> {
     throw new Error('Jev integration is retired because new Jev accounts are unavailable; PHOENIX uses native routing instead')
+  }
+
+  /**
+   * Install the pinned official Devpost Hackathons MCP.
+   * The endpoint is Host-owned so browser/model input cannot substitute another URL.
+   * @returns Idempotent managed connector installation receipt.
+   */
+  async installDevpostHackathons(): Promise<McpRegistryInstallReceipt> {
+    return this.installManagedConfig(
+      devpostHackathonsMcpConfig(),
+      'Devpost Hackathons',
+      { kind: 'curated', connectorId: 'devpost' },
+    )
+  }
+
+  /**
+   * Remove only the PHOENIX-managed Devpost Hackathons MCP.
+   * @returns true when one or more Devpost rows were removed.
+   */
+  async removeDevpostHackathons(): Promise<boolean> {
+    return this.removeManagedRows(isDevpostHackathonsManagedRow, 'Devpost Hackathons')
   }
 
   /**
