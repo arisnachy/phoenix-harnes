@@ -165,6 +165,64 @@ describe('ManagedMcpController', () => {
     await expect(controller.snapshot()).resolves.toEqual([])
   })
 
+
+  it('installs, persists, repairs, and removes Canva\'s pinned official MCP', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create
+      .mockResolvedValueOnce('canva-entry')
+      .mockResolvedValueOnce('canva-repaired')
+    const search = registry([])
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
+
+    const installed = await controller.installCanva()
+    expect(installed).toEqual({
+      status: 'installed',
+      connector: {
+        entryId: 'canva-entry',
+        serverName: 'canva',
+        url: 'https://mcp.canva.com/mcp',
+        source: { kind: 'curated', connectorId: 'canva' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: {
+        transport: 'streamable-http',
+        serverName: 'canva',
+        url: 'https://mcp.canva.com/mcp',
+        headers: {},
+        oauth: true,
+        toolCallTimeoutMs: 60_000,
+      },
+    })
+    expect(search).not.toHaveBeenCalled()
+    expect(readFileSync(patchPath, 'utf8')).toContain('https://mcp.canva.com/mcp')
+
+    await expect(controller.installCanva()).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { entryId: 'canva-entry' },
+    })
+    expect(live.create).toHaveBeenCalledTimes(1)
+
+    const repaired = await controller.repair({ entryId: 'canva-entry' })
+    expect(live.remove).toHaveBeenCalledWith('canva-entry')
+    expect(repaired).toMatchObject({
+      status: 'installed',
+      connector: {
+        entryId: 'canva-repaired',
+        serverName: 'canva',
+        url: 'https://mcp.canva.com/mcp',
+        source: { kind: 'curated', connectorId: 'canva' },
+      },
+    })
+    expect(search).not.toHaveBeenCalled()
+
+    await expect(controller.removeCanva()).resolves.toBe(true)
+    expect(live.remove).toHaveBeenCalledWith('canva-repaired')
+    await expect(controller.snapshot()).resolves.toEqual([])
+  })
+
   it('installs and removes only the pinned official Binance Agent OS connector', async () => {
     const patchPath = tempPatch()
     const live = loader()
