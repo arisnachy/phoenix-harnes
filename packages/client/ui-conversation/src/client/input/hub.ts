@@ -29,8 +29,8 @@ interface ConversationAttachmentFace {
     text: string,
     imageIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
-    clientSubmissionId: string,
     signal?: AbortSignal,
+    clientSubmissionId?: string,
   ): Promise<SubmitOutcome>
   serializeDraftImages(imageIds: readonly DraftAttachmentId[]): Promise<readonly SubmitImageAttachment[]>
   releaseDraftImage(id: DraftAttachmentId): void
@@ -175,7 +175,7 @@ export class InputHub implements SessionInputResolver {
     if (text === '' && imageIds.length === 0) return Promise.resolve({ kind: 'success' })
     const addressed = await this.rootCtx.bail(this.rootCtx, 'conversation/addressed-submit', { sessionId: session.sessionId, text, hasImages: imageIds.length > 0, signal })
     return addressed ?? this.conversation().sendSession(
-      session, text, imageIds, mode, clientSubmissionId, signal,
+      session, text, imageIds, mode, signal, clientSubmissionId,
     )
   }
 
