@@ -651,10 +651,14 @@ export function interruptVoiceAssistantSpeech(): boolean {
   const hadBrowserSpeech = voiceAssistantSpeech !== undefined
   const hadRemoteSpeech = remoteSpeech !== undefined
   const realtime = codexRealtimeVoiceSession
-  const hadRealtimeSpeech = realtime !== undefined && voiceAssistantSnapshot.phase === 'speaking'
+  const hadPendingRealtimeSpeech = realtime !== undefined
+    && pendingCodexRealtimeUtterances.some(item => item.sessionKey === realtime.key)
+  const hadRealtimeSpeech = realtime !== undefined
+    && (voiceAssistantSnapshot.phase === 'speaking' || hadPendingRealtimeSpeech)
   if (hadRealtimeSpeech && realtime.events.readyState === 'open') {
     try { realtime.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* peer cleanup owns closure */ }
   }
+  if (realtime !== undefined && hadPendingRealtimeSpeech) discardCodexRealtimeUtterances(realtime.key)
   voiceAssistantSpeech?.dispose()
   voiceAssistantSpeech = undefined
   voiceAssistantSpeechKey = undefined
