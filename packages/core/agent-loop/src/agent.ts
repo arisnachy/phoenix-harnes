@@ -332,7 +332,7 @@ export class ReactLoopAgent implements Agent {
       : this.runtimeContext.project(joinContextSections(sections), sections)
     const decision = await this.dispatch.waterfall(
       'agent/pre-step', {
-        messages: claimed,
+        messages: entering,
         ...position,
         signal,
         ...fastConversation ? { fastConversation: true } : {},
