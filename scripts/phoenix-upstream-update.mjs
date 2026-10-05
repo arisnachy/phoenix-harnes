@@ -1,5 +1,5 @@
 /**
- * Receive updates from the official Codex plugin and OpenClaw skill sources.
+ * Receive updates from the official Codex plugin, OpenClaw skill, and Superpowers sources.
  *
  * Each update is staged in a private DSH_HOME, verified through the native
  * bridge commands, and activated as one filesystem transaction. A failed
@@ -240,6 +240,7 @@ function inspect(home) {
       if (PROVIDERS[key].bootstrap === true) {
         const latestCommit = fetchHead(PROVIDERS[key])
         providers[key] = { status: 'available', latestCommit, bootstrap: true }
+        initialized += 1
       } else {
         providers[key] = { status: 'not-configured' }
       }
