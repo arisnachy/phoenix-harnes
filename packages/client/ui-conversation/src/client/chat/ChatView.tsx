@@ -539,6 +539,7 @@ export function ChatView({
           <ToolActivityFlow
             nodes={chatNodes}
             optimisticSubmit={optimisticSubmit}
+            pendingSteering={pendingSteeringFlow}
             turnStatus={visibleTurnStatus}
             useSession={useSession}
             selectedCallId={selectedCallId}
