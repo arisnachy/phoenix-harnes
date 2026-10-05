@@ -100,7 +100,7 @@ export function rewriteSuperpowersReferences(source: string, siblingSkillNames: 
   const siblings = new Set(siblingSkillNames.map(name => kebab(name)))
   const namespaced = source.replace(/\bsuperpowers:([a-z0-9]+(?:-[a-z0-9]+)*)\b/gi, (_match, name: string) =>
     superpowersAlias(name))
-  return namespaced.replace(/((?:\.\.\/)+)([a-z0-9]+(?:-[a-z0-9]+)*)(?=\/|[\s"'\`)\]}.,;:]|$)/gi,
+  return namespaced.replace(/((?:\.\.\/)+)([a-z0-9]+(?:-[a-z0-9]+)*)(?=\/|[\s"'\x60)\]}.,;:]|$)/gi,
     (match, parents: string, name: string) =>
       siblings.has(kebab(name)) ? `${parents}${superpowersAlias(name)}` : match)
 }
