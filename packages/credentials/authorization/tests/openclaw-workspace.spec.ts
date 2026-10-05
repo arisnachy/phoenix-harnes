@@ -153,6 +153,7 @@ describe('OpenClaw Workspace authorization bridge', () => {
     await flow?.run(session({ notify }))
     expect(notify).toHaveBeenCalledWith(expect.objectContaining({
       url: 'https://github.com/login/device',
+      code: 'ABCD-EFGH',
     }))
     await expect(flow?.inspect()).resolves.toEqual(expect.objectContaining({
       kind: 'account',
