@@ -1,9 +1,9 @@
 /**
  * The root entry's transient layout store: panel geometry as plain widths in
  * px (0 = closed). Subagent and Cordis surfaces share occupancy metadata, but
- * only Cordis temporarily borrows shell geometry: opening Cordis snapshots
- * the user's sidebar/details preferences, minimizes navigation, closes ordinary
- * details, and closing Cordis restores that snapshot exactly.
+ * only Cordis temporarily borrows shell geometry. A right-docked Cordis rail
+ * borrows the details side; a left-docked rail borrows the navigation side.
+ * The untouched side remains interactive and the borrowed side restores exactly.
  */
 import { defineStore, type EngineStoreHandle } from '@phoenix-ai/dsh-client-runtime/client'
 import {
@@ -13,6 +13,8 @@ import {
 
 /** Named owners that can occupy the shared visual-workspace rail. */
 export type WorkspaceOccupant = 'subagent' | 'cordis'
+/** Physical side reserved for a Cordis visual rail. */
+export type WorkspaceSide = 'left' | 'right'
 
 type LayoutState = {
   sidebar: number
@@ -21,8 +23,10 @@ type LayoutState = {
   narrowExpanded: boolean
   workspaceSubagent: boolean
   workspaceCordis: boolean
+  workspaceCordisSide: WorkspaceSide | null
   workspaceRestoreSidebar: number | null
   workspaceRestoreDetails: number | null
+  workspaceRestoreNarrowExpanded: boolean | null
 }
 
 type LayoutActions = {
@@ -32,7 +36,7 @@ type LayoutActions = {
   setNarrow: (draft: LayoutState, narrow: boolean) => void
   openDetails: (draft: LayoutState) => void
   closeDetails: (draft: LayoutState) => void
-  setWorkspaceOccupant: (draft: LayoutState, occupant: WorkspaceOccupant, active: boolean) => void
+  setWorkspaceOccupant: (draft: LayoutState, occupant: WorkspaceOccupant, active: boolean, side?: WorkspaceSide) => void
 }
 
 /**
@@ -48,15 +52,23 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       narrowExpanded: false,
       workspaceSubagent: false,
       workspaceCordis: false,
+      workspaceCordisSide: null,
       workspaceRestoreSidebar: null,
       workspaceRestoreDetails: null,
+      workspaceRestoreNarrowExpanded: null,
     }),
     actions: {
-      setSidebar: (d, px: number) => { d.sidebar = clampWidth(px, SIDEBAR_MIN, SIDEBAR_MAX) },
-      setDetails: (d, px: number) => { d.details = clampWidth(px, DETAILS_MIN, DETAILS_MAX) },
+      setSidebar: (d, px: number) => {
+        if (d.workspaceCordis && d.workspaceCordisSide === 'left') return
+        d.sidebar = clampWidth(px, SIDEBAR_MIN, SIDEBAR_MAX)
+      },
+      setDetails: (d, px: number) => {
+        if (d.workspaceCordis && d.workspaceCordisSide === 'right') return
+        d.details = clampWidth(px, DETAILS_MIN, DETAILS_MAX)
+      },
       toggleSidebar: (d) => {
-        // Cordis keeps navigation minimized for the lifetime of its visual rail.
-        if (d.workspaceCordis) return
+        // A left Cordis rail owns the navigation side until it closes.
+        if (d.workspaceCordis && d.workspaceCordisSide === 'left') return
         if (d.narrow) d.narrowExpanded = !d.narrowExpanded
         else d.sidebar = d.sidebar === 0 ? SIDEBAR_DEFAULT : 0
       },
@@ -66,40 +78,63 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
         d.narrowExpanded = false
       },
       openDetails: (d) => {
-        // The Cordis rail owns the available right-side visual space while open.
-        if (d.workspaceCordis) return
+        // A right Cordis rail owns the details side until it closes.
+        if (d.workspaceCordis && d.workspaceCordisSide === 'right') return
         if (d.details === 0) d.details = DETAILS_DEFAULT
       },
       closeDetails: (d) => { d.details = 0 },
-      setWorkspaceOccupant: (d, occupant, active) => {
-        const current = occupant === 'subagent' ? d.workspaceSubagent : d.workspaceCordis
-        if (current === active) return
-
-        // The subagent flag coordinates vertical stacking only. KIRA already
-        // reserves its own in-flow width, so changing shell geometry here would
-        // double-shrink the conversation.
+      setWorkspaceOccupant: (d, occupant, active, side) => {
+        // The subagent flag coordinates stacking only. KIRA already owns its
+        // own paint/layout behavior, so shell geometry must stay untouched.
         if (occupant === 'subagent') {
+          if (d.workspaceSubagent === active) return
           d.workspaceSubagent = active
           return
         }
 
+        const requestedSide: WorkspaceSide = side ?? d.workspaceCordisSide ?? 'right'
         if (active) {
-          d.workspaceRestoreSidebar = d.sidebar
-          d.workspaceRestoreDetails = d.details
+          if (d.workspaceCordis && d.workspaceCordisSide === requestedSide) return
+
+          // Switching sides first gives back the previously borrowed edge.
+          if (d.workspaceCordisSide === 'left') {
+            if (d.workspaceRestoreSidebar !== null) d.sidebar = d.workspaceRestoreSidebar
+            if (d.workspaceRestoreNarrowExpanded !== null) d.narrowExpanded = d.workspaceRestoreNarrowExpanded
+            d.workspaceRestoreSidebar = null
+            d.workspaceRestoreNarrowExpanded = null
+          } else if (d.workspaceCordisSide === 'right') {
+            if (d.workspaceRestoreDetails !== null) d.details = d.workspaceRestoreDetails
+            d.workspaceRestoreDetails = null
+          }
+
           d.workspaceCordis = true
-          d.sidebar = 0
-          d.narrowExpanded = false
-          // Cordis renders in the same center-flow visual rail as KIRA, so the
-          // ordinary details column is temporarily closed rather than duplicated.
-          d.details = 0
+          d.workspaceCordisSide = requestedSide
+
+          if (requestedSide === 'left') {
+            d.workspaceRestoreSidebar = d.sidebar
+            d.workspaceRestoreNarrowExpanded = d.narrowExpanded
+            d.sidebar = 0
+            d.narrowExpanded = false
+          } else {
+            d.workspaceRestoreDetails = d.details
+            d.details = 0
+          }
           return
         }
 
+        if (!d.workspaceCordis) return
+        if (d.workspaceCordisSide === 'left') {
+          if (d.workspaceRestoreSidebar !== null) d.sidebar = d.workspaceRestoreSidebar
+          if (d.workspaceRestoreNarrowExpanded !== null) d.narrowExpanded = d.workspaceRestoreNarrowExpanded
+        } else if (d.workspaceCordisSide === 'right') {
+          if (d.workspaceRestoreDetails !== null) d.details = d.workspaceRestoreDetails
+        }
+
         d.workspaceCordis = false
-        if (d.workspaceRestoreSidebar !== null) d.sidebar = d.workspaceRestoreSidebar
-        if (d.workspaceRestoreDetails !== null) d.details = d.workspaceRestoreDetails
+        d.workspaceCordisSide = null
         d.workspaceRestoreSidebar = null
         d.workspaceRestoreDetails = null
+        d.workspaceRestoreNarrowExpanded = null
       },
     },
   })
