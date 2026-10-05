@@ -32,7 +32,7 @@ import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
   createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, interruptVoiceAssistantSpeech,
-  isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
+  isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -237,9 +237,14 @@ export function InputBar({
   }, [locked, machineBusy, running, voiceAssistant.phase, voiceState])
   useEffect(() => () => {
     voiceStartingRef.current = false
-    setVoiceAssistantActive(false)
+    // Approval/Hardness composer takeovers temporarily unmount InputBar. Keep
+    // the native Codex WebRTC call alive across that UI swap so the same voice
+    // can announce the request and resume the harness answer. Legacy browser
+    // recognition remains component-owned and still shuts down on unmount.
+    const keepNativeCodex = isCodexRealtimeVoiceActive()
     voiceRef.current?.abort()
     voiceRef.current = null
+    if (!keepNativeCodex) setVoiceAssistantActive(false)
   }, [])
   const toggleVoice = useCallback((): void => {
     if (locked || machineBusy || voiceStartingRef.current) return
