@@ -1696,7 +1696,7 @@ describe('command launcher chrome and control seats', () => {
     expect((live.view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('keeps browser transcript admission active while Codex Live owns audio', async () => {
+  it('does not open a competing browser microphone while Codex Live owns transcript input', async () => {
     class FakeRecognition implements VoiceRecognitionLike {
       static instance: FakeRecognition | undefined
       lang = ''
@@ -1714,6 +1714,14 @@ describe('command launcher chrome and control seats', () => {
     }
     const descriptor = Object.getOwnPropertyDescriptor(window, 'SpeechRecognition')
     Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeRecognition })
+    let transcriptHandler: ((text: string) => void) | undefined
+    const transcript = vi.spyOn(voiceAdapter, 'configureCodexRealtimeUserTranscriptHandler')
+      .mockImplementation((handler) => {
+        transcriptHandler = handler
+        return () => {
+          if (transcriptHandler === handler) transcriptHandler = undefined
+        }
+      })
     const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice').mockImplementation(async () => {
       voiceAdapter.setVoiceAssistantActive(true)
       return { kind: 'started' }
@@ -1722,17 +1730,16 @@ describe('command launcher chrome and control seats', () => {
       const { view, sink } = bench()
       fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
       await act(async () => { await Promise.resolve() })
-      expect(FakeRecognition.instance).toBeDefined()
+
+      expect(FakeRecognition.instance).toBeUndefined()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(true)
+      expect(transcriptHandler).toBeDefined()
 
       await act(async () => {
-        FakeRecognition.instance?.onresult?.({
-          resultIndex: 0,
-          results: [{ isFinal: true, 0: { transcript: 'revisa el proyecto con el harness' } }],
-        })
+        transcriptHandler?.('usa el harness y escribe en el chat')
       })
-
       expect(sink).toHaveBeenCalledWith(
-        'revisa el proyecto con el harness',
+        'usa el harness y escribe en el chat',
         [],
         'queue',
         expect.any(AbortSignal),
@@ -1740,6 +1747,7 @@ describe('command launcher chrome and control seats', () => {
     } finally {
       voiceAdapter.setVoiceAssistantActive(false)
       live.mockRestore()
+      transcript.mockRestore()
       cleanup()
       if (descriptor === undefined) delete (window as Window & { SpeechRecognition?: unknown }).SpeechRecognition
       else Object.defineProperty(window, 'SpeechRecognition', descriptor)

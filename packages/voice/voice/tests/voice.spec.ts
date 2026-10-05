@@ -330,7 +330,7 @@ describe('Codex realtime optional session context', () => {
 })
 
 describe('Codex realtime harness dispatch', () => {
-  it('does not duplicate browser-admitted speech through the app-server transcript when a live Agent exists', async () => {
+  it('does not duplicate browser-admitted Live speech through the app-server transcript', async () => {
     const { ctx, voice } = await mountVoice()
     const followup = vi.fn()
     const context = ctx as unknown as { get(name: string): unknown }

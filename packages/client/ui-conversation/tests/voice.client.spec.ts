@@ -2,6 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  configureCodexRealtimeUserTranscriptHandler,
   configureVoiceAssistantRemote,
   configureVoiceModelRouteResolver,
   createVoiceRecognition,
@@ -125,6 +126,8 @@ describe('browser voice adapter', () => {
         })),
       },
     })
+    const transcript = vi.fn<(text: string) => void>()
+    const disposeTranscript = configureCodexRealtimeUserTranscriptHandler(transcript)
     const disposeRoute = configureVoiceModelRouteResolver(async () => ({
       provider: 'openai-codex',
       model: 'gpt-6-luna',
@@ -175,6 +178,25 @@ describe('browser voice adapter', () => {
       }
       expect(sessionUpdate.type).toBe('session.update')
       expect(sessionUpdate.session.turn_detection.create_response).toBe(false)
+
+      // The same Live data channel is the canonical microphone/transcript
+      // source. V3 and V1 final-user events both feed the composer handler.
+      channel?.onmessage?.({
+        data: JSON.stringify({
+          type: 'turn.done',
+          turn: { role: 'user', transcript: '  usa el harness y escribe en el chat  ' },
+        }),
+      })
+      channel?.onmessage?.({
+        data: JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          transcript: 'segunda orden',
+        }),
+      })
+      expect(transcript.mock.calls).toEqual([
+        ['usa el harness y escribe en el chat'],
+        ['segunda orden'],
+      ])
 
       const peer = FakePeer.instance
       expect(peer).toBeDefined()
@@ -231,6 +253,7 @@ describe('browser voice adapter', () => {
       await stopCodexRealtimeVoice()
       disposeRemote()
       disposeRoute()
+      disposeTranscript()
       pause.mockRestore()
       if (rtcDescriptor === undefined) Reflect.deleteProperty(window, 'RTCPeerConnection')
       else Object.defineProperty(window, 'RTCPeerConnection', rtcDescriptor)
