@@ -33,6 +33,7 @@ import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
   createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, interruptVoiceAssistantSpeech,
   isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
+  tryStartCodexRealtimeVoice,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -189,12 +190,14 @@ export function InputBar({
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
-  // Voice is an input/output layer over the ordinary composer path. Every
-  // finalized transcript is submitted through the same queue admission as
-  // typed text so the selected PHOENIX agent keeps its full harness: tools,
-  // planning, approvals, policies, and orchestration. Native Codex Realtime is
-  // intentionally not the composer transport because its direct model session
-  // can speak but does not own the PHOENIX execution loop.
+  // Voice is an input/output layer over the ordinary PHOENIX execution path.
+  // For an OpenAI Codex route, native Realtime is the preferred microphone/audio
+  // transport, while finalized human speech is dispatched by the Host into the
+  // same live Agent inbox as typed input. The PHOENIX agent therefore remains
+  // the only planner/executor for tools, Hardness, approvals and orchestration.
+  // If native Realtime is unavailable or its account quota cannot open a call,
+  // browser recognition stays as the input fallback while Host TTS selects
+  // Kokoro first and the platform voice second.
   const [voiceState, setVoiceState] = useState<VoiceInputState>(() => (
     hasVoiceRecognition() ? 'idle' : 'unsupported'
   ))
@@ -235,6 +238,26 @@ export function InputBar({
       setVoiceState('error')
     }
   }, [locked, machineBusy, running, voiceAssistant.phase, voiceState])
+  const ensureFallbackVoiceRecognition = useCallback((): VoiceRecognitionLike | undefined => {
+    if (voiceRef.current !== null) return voiceRef.current
+    const recognition = createVoiceRecognition(
+      appendVoiceText,
+      (next) => {
+        setVoiceState(next)
+        setVoiceAssistantListening(next === 'listening')
+        if (next === 'permission-denied' || next === 'error') {
+          setVoiceAssistantActive(false)
+          voiceRef.current = null
+        }
+      },
+    )
+    if (recognition === undefined) {
+      setVoiceState('unsupported')
+      return undefined
+    }
+    voiceRef.current = recognition
+    return recognition
+  }, [appendVoiceText])
   useEffect(() => () => {
     voiceStartingRef.current = false
     // Approval/Hardness composer takeovers temporarily unmount InputBar. Keep
@@ -246,38 +269,56 @@ export function InputBar({
     voiceRef.current = null
     if (!keepNativeCodex) setVoiceAssistantActive(false)
   }, [])
-  const toggleVoice = useCallback((): void => {
+  const toggleVoice = useCallback(async (): Promise<void> => {
     if (locked || machineBusy || voiceStartingRef.current) return
     if (voiceEnabled) {
       setVoiceAssistantActive(false)
       voiceRef.current?.stop()
+      voiceRef.current = null
       return
     }
 
     voiceStartingRef.current = true
     try {
-      const recognition = createVoiceRecognition(
-        appendVoiceText,
-        (next) => {
-          setVoiceState(next)
-          setVoiceAssistantListening(next === 'listening')
-          if (next === 'permission-denied' || next === 'error') {
-            setVoiceAssistantActive(false)
-            voiceRef.current = null
-          }
-        },
-      )
-      if (recognition === undefined) {
-        setVoiceState('unsupported')
+      // Codex Live + the profile voice (Juniper for Kira's feminine profile)
+      // owns the full hands-free session whenever the selected route/account can
+      // open native Realtime. The Host forwards final user speech into the live
+      // PHOENIX Agent, so using Realtime here never bypasses the harness.
+      const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
+      if (realtime.kind === 'started') {
+        setVoiceState('listening')
         return
       }
+
+      // A non-Codex route, exhausted/unavailable Codex Realtime, or an older
+      // browser falls through to ordinary recognition. Output still prefers the
+      // Host chain Kokoro -> platform voice before browser speech.
+      const recognition = ensureFallbackVoiceRecognition()
+      if (recognition === undefined) return
       setVoiceAssistantActive(true)
-      voiceRef.current = recognition
       startVoiceRecognition()
     } finally {
       voiceStartingRef.current = false
     }
-  }, [appendVoiceText, locked, machineBusy, startVoiceRecognition, voiceEnabled])
+  }, [ensureFallbackVoiceRecognition, locked, machineBusy, sessionId, startVoiceRecognition, voiceEnabled])
+
+  // If a native Codex call ends because its transport/quota is no longer
+  // available, keep the explicit hands-free session alive and attach the local
+  // input fallback. This state transition is published by voice.ts; it does not
+  // create a second agent loop and it never interrupts a running PHOENIX task.
+  useEffect(() => {
+    if (!voiceAssistant.active || isCodexRealtimeVoiceActive()
+      || voiceRef.current !== null || voiceStartingRef.current) return
+    const recognition = ensureFallbackVoiceRecognition()
+    if (recognition === undefined) {
+      setVoiceAssistantActive(false)
+      return
+    }
+    startVoiceRecognition()
+  }, [
+    ensureFallbackVoiceRecognition, running, startVoiceRecognition,
+    voiceAssistant.active, voiceAssistant.phase,
+  ])
 
   // A final recognition fragment is a complete voice turn. Waiting for the
   // machine's published draft avoids submitting the previous draft snapshot.
@@ -965,7 +1006,7 @@ export function InputBar({
             {rightItems}
             {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
-            {voiceState !== 'unsupported' && (
+            {(voiceState !== 'unsupported' || sessionId !== undefined) && (
               <Tooltip
                 label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
