@@ -746,13 +746,11 @@ export class VoiceRuntime extends TypertRemoteService {
     } | undefined
     const agent = agents?.get(sessionId)
     if (agent !== undefined) {
-      if (transcript.role === 'user') {
-        this.closeRealtimeTranscriptTurn(key, 'user')
-        agent.followup(createUserMessage({
-          source: { kind: 'user' },
-          content: [{ type: 'text', text }],
-        }))
-      }
+      // Browser PHOENIX sessions admit spoken input through the ordinary
+      // composer/session.prompt path so the user message is rendered in chat
+      // before the live Agent claims it. The app-server transcript is only a
+      // compatibility source for standalone voice compositions; dispatching it
+      // here as well would race/duplicate the browser-admitted user turn.
       return
     }
 
