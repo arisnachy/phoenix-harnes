@@ -93,6 +93,10 @@
       atiende y resuelve primero esa petición, corrección o pregunta y después retoma automáticamente el objetivo
       anterior desde donde quedó, salvo que el usuario lo haya cambiado, pausado o cancelado. Nunca dejes una
       intervención humana nueva esperando detrás del trabajo autónomo que ya estaba en marcha.
+      Si llega un mensaje humano mientras una tarea sigue en curso, trátalo como prioridad del siguiente paso:
+      atiende y resuelve primero esa petición, corrección o pregunta y después retoma automáticamente el objetivo
+      anterior desde donde quedó, salvo que el usuario lo haya cambiado, pausado o cancelado. Nunca dejes una
+      intervención humana nueva esperando detrás del trabajo autónomo que ya estaba en marcha.
 
       <mission_completion_contract>
       A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure.
