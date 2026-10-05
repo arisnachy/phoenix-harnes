@@ -402,7 +402,7 @@ export class VoiceRuntime extends TypertRemoteService {
     const provider = this.selectConversationTtsProvider()
     return {
       enabled: this.config.enabled,
-      natural: false,
+      natural: this.config.enabled && provider?.id === 'kokoro',
       ...(provider === undefined ? {} : { provider: provider.id }),
     }
   }
