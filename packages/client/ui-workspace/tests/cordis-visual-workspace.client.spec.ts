@@ -107,6 +107,25 @@ describe('CordisVisualWorkspace', () => {
     expect(layout.setWorkspaceOccupant).toHaveBeenLastCalledWith('cordis', false)
   })
 
+  it('renders interactive Phoenix canvas HTML inside the reserved side workspace', () => {
+    const layout = fakeLayout()
+    const controller = new CordisVisualWorkspaceController(layout)
+    controller.show({
+      kind: 'html',
+      html: '<canvas id="art"></canvas><script>document.body.dataset.ready="1"</script>',
+      title: 'Floral dream',
+      executable: true,
+    })
+    const view = renderWorkspace(controller, layout)
+    const frame = view.getByTitle('Floral dream') as HTMLIFrameElement
+
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame.getAttribute('referrerpolicy')).toBe('no-referrer')
+    expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")
+    expect(frame.getAttribute('srcdoc')).toContain('<canvas id="art"></canvas>')
+    expect(layout.setWorkspaceOccupant).toHaveBeenCalledWith('cordis', true)
+  })
+
   it('renders HTTP(S) pages sandboxed with an external escape hatch', () => {
     const layout = fakeLayout()
     const controller = new CordisVisualWorkspaceController(layout)
