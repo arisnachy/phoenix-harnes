@@ -135,6 +135,42 @@ describe('connectors settings section', () => {
     expect(api.begin).not.toHaveBeenCalled()
   })
 
+  it('offers the official GitHub MCP instead of a dead Authorize action when gh is missing', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'authorization-openclaw/github',
+        label: 'GitHub',
+        methods: [{ id: 'oauth', label: 'Authorize GitHub' }],
+        inFlight: false,
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      openClawState: vi.fn(async () => ({
+        connectors: [{
+          id: 'github' as const,
+          skillAlias: 'openclaw-github' as const,
+          skillInstalled: true,
+          runtimeAvailable: false,
+          connected: false,
+          phase: 'missing-runtime' as const,
+        }],
+      })),
+      install: vi.fn(),
+      search: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    await waitFor(() => { expect(mcpRegistry.openClawState).toHaveBeenCalled() })
+
+    const githubCard = document.querySelector('[data-connector-id="github"]')
+    expect(githubCard).toBeTruthy()
+    expect(githubCard?.textContent).toContain('Find official / install')
+    expect(githubCard?.textContent).not.toContain('Authorize')
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
   it('recovers transient plugin inventory fetch failures without breaking Connectors', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
