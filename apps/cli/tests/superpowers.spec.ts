@@ -22,6 +22,15 @@ describe('Superpowers bridge contract', () => {
     ].join('\n'))
   })
 
+  it('rewrites relative links to sibling Superpowers skills without touching local resources', () => {
+    expect(rewriteSuperpowersReferences(
+      'See ../using-superpowers/references/codex-tools.md and ../scripts/helper.md',
+      ['using-superpowers', 'brainstorming'],
+    )).toBe(
+      'See ../superpowers-using-superpowers/references/codex-tools.md and ../scripts/helper.md',
+    )
+  })
+
   it('rewrites repeated references case-insensitively', () => {
     expect(rewriteSuperpowersReferences(
       'Superpowers:Brainstorming then superpowers:writing-plans',
