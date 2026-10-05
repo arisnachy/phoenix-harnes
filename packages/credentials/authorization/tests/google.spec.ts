@@ -3,6 +3,7 @@ import { Context } from '@phoenix-ai/cordis'
 import AuthorizationService from '@phoenix-ai/dsh-authorization'
 import GoogleApiBroker, {
   GOOGLE_ACCOUNT_KEY,
+  GOOGLE_CLIENT_SECRET_REF,
   internals,
   resolveGoogleSpec,
 } from '@phoenix-ai/dsh-authorization/google'
@@ -131,6 +132,40 @@ describe('Google Workspace OAuth authorization boundary', () => {
     expect(ui.notices[0]?.url).toContain('accounts.google.com/o/oauth2/v2/auth')
     expect(ui.notices[0]?.url).toContain('code_challenge_method=S256')
     expect(ui.notices[0]?.url).not.toContain('authorization-code-private')
+  })
+
+  it('retries a rejected Desktop token exchange with a safely prompted client secret', async () => {
+    const ctx = await harness()
+    internals.openLoopback = async () => ({
+      redirectUri: 'http://127.0.0.1:49152/oauth2/callback',
+      code: Promise.resolve('authorization-code-private'),
+      close: () => Promise.resolve(),
+    })
+    const seenBodies: string[] = []
+    internals.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = init?.body
+      seenBodies.push(body instanceof URLSearchParams ? body.toString() : String(body ?? ''))
+      if (seenBodies.length === 1) return new Response('{"error":"invalid_client"}', { status: 401 })
+      return tokenResponse()
+    })
+    const notices: Array<{ message: string; url?: string }> = []
+    const prompts: string[] = []
+    const interaction = {
+      notify(notice: { message: string; url?: string }) { notices.push(notice) },
+      prompt: async (prompt: { kind: string; message: string }) => {
+        prompts.push(`${prompt.kind}:${prompt.message}`)
+        return 'desktop-client-secret-private'
+      },
+    }
+
+    await expect(ctx.authorization.begin({ key: GOOGLE_ACCOUNT_KEY, interaction }))
+      .resolves.toEqual({ status: 'authorized' })
+    expect(seenBodies).toHaveLength(2)
+    expect(seenBodies[0]).not.toContain('client_secret=')
+    expect(seenBodies[1]).toContain('client_secret=desktop-client-secret-private')
+    expect(prompts).toEqual(['secret:Google Desktop OAuth client secret'])
+    expect((await ctx.credentials.resolve(GOOGLE_CLIENT_SECRET_REF))?.value).toBe('desktop-client-secret-private')
+    expect(JSON.stringify(notices)).not.toContain('desktop-client-secret-private')
   })
 
   it('preserves the exact scopes Google granted in Host memory and denies capabilities not consented to', async () => {
