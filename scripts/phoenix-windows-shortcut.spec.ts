@@ -8,9 +8,10 @@ describe('PHOENIX Windows desktop shortcut', () => {
   it('resolves a durable launcher and Windows PowerShell from the checkout', () => {
     const resolved = phoenixDesktopShortcutSpec('C:\\Phoenix', { SystemRoot: 'C:\\Windows' })
     expect(resolved.root).toContain('Phoenix')
+    expect(resolved.sourceRoot).toContain('Phoenix')
     expect(resolved.setupScript).toMatch(/phoenix-desktop-shortcut\.ps1$/u)
     expect(resolved.launchScript).toMatch(/phoenix-desktop-launch\.ps1$/u)
-    expect(resolved.iconSource).toMatch(/phoenix-windows-icon\.ico\.b64$/u)
+    expect(resolved.iconSource).toMatch(/phoenix-emblem\.png$/u)
     expect(resolved.powershell).toMatch(/WindowsPowerShell.*powershell\.exe$/u)
   })
 
