@@ -15,9 +15,10 @@ import type { ConversationSettings } from '../../submission-settings.ts'
 export { DEFAULT_BUSY_ENTER_BEHAVIOR } from '../../submission-settings.ts'
 
 /**
- * Busy-Enter policy used by both the composer inject face and its Settings row.
- * Direct `steer` is intentionally best-effort: AgentLoop turns a closed-window
- * submission into the next waking Queue item.
+ * Busy-Enter policy. Human plain Enter is always interactive while an Agent is
+ * running: it steers the active work so guidance is handled promptly. The
+ * accelerated chord is the explicit Queue alternate. The persisted preference
+ * is retained only for backwards-compatible settings reads during migration.
  */
 export class ComposerSubmissionPolicy {
   /** Reactive preference source for the Settings row. */
@@ -51,9 +52,7 @@ export class ComposerSubmissionPolicy {
     steeringAvailable: boolean,
   ): InputSubmitMode {
     if (!running || !steeringAvailable) return 'queue'
-    const preferred = this.busyEnter.getSnapshot()
-    if (gesture === 'enter') return preferred
-    return preferred === 'queue' ? 'steer' : 'queue'
+    return gesture === 'enter' ? 'steer' : 'queue'
   }
 
   /**

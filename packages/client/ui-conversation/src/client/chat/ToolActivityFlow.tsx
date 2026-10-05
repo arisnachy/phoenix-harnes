@@ -24,7 +24,11 @@ interface OrderedChatNode {
 interface ToolActivityFlowProps extends SeatProps {
   readonly nodes: readonly OrderedChatNode[]
   /** Ordinary prompt admitted locally but not yet present in the durable transcript. */
-  readonly optimisticSubmit?: { readonly text: string } | undefined
+  readonly optimisticSubmit?: {
+    readonly text: string
+    readonly startedAt: number
+    readonly clientSubmissionId: string
+  } | undefined
   readonly turnStatus: {
     readonly startTime: number | null
     readonly progress: TurnProgress | null
@@ -55,6 +59,11 @@ type FlowItem =
     readonly kind: 'images'
     readonly key: string
     readonly images: readonly { readonly attachment: ImageAttachmentRef }[]
+  }
+  | {
+    readonly kind: 'pending-user'
+    readonly key: string
+    readonly text: string
   }
 
 function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
@@ -120,10 +129,30 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
   })
 }
 
-function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
+function nodeTime(node: OrderedChatNode): number | undefined {
+  const direct = (node.data as { time?: unknown }).time
+  if (typeof direct === 'number') return direct
+  if (node.kind === 'tool-call') {
+    const time = ((node.data as ToolChatData).root as { time?: unknown }).time
+    return typeof time === 'number' ? time : undefined
+  }
+  const nested = node.data as {
+    command?: { time?: unknown }
+    current?: { time?: unknown }
+  }
+  if (typeof nested.command?.time === 'number') return nested.command.time
+  if (typeof nested.current?.time === 'number') return nested.current.time
+  return undefined
+}
+
+function buildFlow(
+  nodes: readonly OrderedChatNode[],
+  optimisticSubmit?: ToolActivityFlowProps['optimisticSubmit'],
+): FlowItem[] {
   const flow: FlowItem[] = []
   let pending: ActivityItem[] = []
   let pendingAnchorKey: string | undefined
+  let optimisticInserted = false
 
   const flush = (avoidAnchorKey?: string): void => {
     const first = pending[0]
@@ -139,7 +168,26 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     pendingAnchorKey = undefined
   }
 
+  const insertOptimistic = (): void => {
+    if (optimisticInserted || optimisticSubmit === undefined || optimisticSubmit.text === '') return
+    flush()
+    flow.push({
+      kind: 'pending-user',
+      key: `pending-user:${optimisticSubmit.clientSubmissionId}`,
+      text: optimisticSubmit.text,
+    })
+    optimisticInserted = true
+  }
+
   for (const node of nodes) {
+    const time = nodeTime(node)
+    if (!optimisticInserted
+      && optimisticSubmit !== undefined
+      && time !== undefined
+      && time > optimisticSubmit.startedAt) {
+      insertOptimistic()
+    }
+
     // Connector authorization is a user action, not background tool telemetry.
     // Keep its compact Connect/Reconnect card directly in the chat flow instead
     // of burying it inside the collapsed Tools disclosure.
@@ -179,6 +227,7 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   }
 
   flush()
+  insertOptimistic()
   return flow
 }
 
@@ -349,13 +398,13 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
 /**
  * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
  * Visible assistant prose precedes its technical activity, and the running status precedes a trailing Tools group.
- * An ordinary locally admitted send stays at the transcript tail ahead of the current turn status until its durable user node arrives.
+ * A locally admitted send is inserted at its Enter-time chronological boundary and keeps that position until its durable user node arrives.
  * Running Tool rows stay live above the disclosure and join history once settled.
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
 export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
-  const flow = useMemo(() => buildFlow(nodes), [nodes])
+  const flow = useMemo(() => buildFlow(nodes, optimisticSubmit), [nodes, optimisticSubmit])
   const hasOptimisticSubmit = optimisticSubmit !== undefined && optimisticSubmit.text !== ''
   const statusBeforeIndex = hasOptimisticSubmit || turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
     ? -1
@@ -380,22 +429,23 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
                   {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
                 </div>
               )
-              : (
-                <ToolActivityGroup
-                  items={item.items}
-                  anchorKey={item.anchorKey}
-                  {...seatProps}
-                />
-              )}
+              : item.kind === 'pending-user'
+                ? (
+                  <PendingSteeringBubble
+                    content={[{ type: 'text', text: item.text }]}
+                    renderMessageImages={seatProps.renderMessageImages}
+                    t={seatProps.t}
+                  />
+                )
+                : (
+                  <ToolActivityGroup
+                    items={item.items}
+                    anchorKey={item.anchorKey}
+                    {...seatProps}
+                  />
+                )}
         </Fragment>
       ))}
-      {hasOptimisticSubmit && (
-        <PendingSteeringBubble
-          content={[{ type: 'text', text: optimisticSubmit.text }]}
-          renderMessageImages={seatProps.renderMessageImages}
-          t={seatProps.t}
-        />
-      )}
       {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
         <TurnStatus
           startTime={turnStatus.startTime}

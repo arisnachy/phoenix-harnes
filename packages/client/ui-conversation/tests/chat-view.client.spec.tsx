@@ -638,6 +638,72 @@ describe('ChatView', () => {
     expect(view.container.querySelectorAll('[data-pending-steering]')).toHaveLength(1)
   })
 
+  it('keeps a live user steer single and at its Enter-time position while Kira keeps working', () => {
+    const startedAt = 50_000
+    const clientSubmissionId = 'submit-live-guidance-1'
+    const before = { ...assistant(1, 'trabajo antes del mensaje'), time: startedAt - 100 }
+    const after = { ...assistant(2, 'trabajo posterior de Kira'), time: startedAt + 100 }
+    const pending = {
+      id: 'live-steer-occurrence' as never,
+      messageId: 'live-steer-message' as never,
+      clientSubmissionId,
+      placement: 'steering' as const,
+      content: [{ type: 'text' as const, text: 'abre el juego para irlo viendo' }],
+      preview: 'abre el juego para irlo viendo',
+      text: 'abre el juego para irlo viendo',
+    }
+    const h = makeHarness(
+      { nodes: [before, after], queue: [pending], running: true },
+      {
+        pendingSubmit: {
+          clientSubmissionId,
+          text: 'abre el juego para irlo viendo',
+          startedAt,
+        },
+      },
+    )
+    const view = render(<h.ChatView {...h.props} />)
+
+    expect(view.getAllByText('abre el juego para irlo viendo')).toHaveLength(1)
+    const bubble = view.getByText('abre el juego para irlo viendo').closest('[data-pending-steering]')
+    const beforeRow = view.getByText('trabajo antes del mensaje').closest('[data-chat-flow-key]')
+    const afterRow = view.getByText('trabajo posterior de Kira').closest('[data-chat-flow-key]')
+    expect(bubble).not.toBeNull()
+    expect(beforeRow).not.toBeNull()
+    expect(afterRow).not.toBeNull()
+    expect(beforeRow!.compareDocumentPosition(bubble!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    expect(bubble!.compareDocumentPosition(afterRow!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+
+    // The Host can publish the durable steer before its transient queue frame
+    // disappears. The same browser correlation id makes that a handoff, never
+    // a second visible bubble.
+    act(() => {
+      h.set({
+        queue: [pending],
+        nodes: [
+          before,
+          {
+            kind: 'steering',
+            messageId: pending.messageId,
+            seq: 3,
+            time: startedAt + 1,
+            content: pending.content,
+            source: { kind: 'user', clientSubmissionId } as never,
+          },
+          after,
+        ],
+      })
+    })
+
+    expect(view.getAllByText('abre el juego para irlo viendo')).toHaveLength(1)
+    expect(view.container.querySelector('[data-pending-steering]')).toBeNull()
+    const durable = view.getByText('abre el juego para irlo viendo').closest('[data-chat-flow-key]')
+    const later = view.getByText('trabajo posterior de Kira').closest('[data-chat-flow-key]')
+    expect(durable).not.toBeNull()
+    expect(later).not.toBeNull()
+    expect(durable!.compareDocumentPosition(later!) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
   it('does not double-render when durable steering lands before the transient queue retires it', () => {
     const pending = {
       id: 'steer-overlap-occurrence' as never,

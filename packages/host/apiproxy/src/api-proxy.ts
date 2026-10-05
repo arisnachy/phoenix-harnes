@@ -2863,7 +2863,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       },
 
       async prompt(request) {
-        const { sessionId, mode, content, clientTimeZone, clientLocation } = request.payload
+        const { sessionId, mode, content, clientTimeZone, clientSubmissionId, clientLocation } = request.payload
         const canonicalTimeZone = clientTimeZone === undefined
           ? undefined
           : canonicalClientTimeZone(clientTimeZone)
@@ -2883,6 +2883,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           kind: 'user',
           rpcId: request.rpcId,
           ...(canonicalTimeZone === undefined ? {} : { clientTimeZone: canonicalTimeZone }),
+          ...(clientSubmissionId === undefined ? {} : { clientSubmissionId }),
         }
         const hasImage = content.some(part => part.type === 'image')
         // Borrowed-eyes output: durable blocks with every image already
