@@ -451,7 +451,9 @@ describe('real agent-loop request history', () => {
 
     expect(adapter.requests).toHaveLength(2)
     const contexts = agent.session.events.filter(
-      (event): event is SessionEvent<'user/message'> => event.type === 'user/message' && event.data.source.kind === 'plugin')
+      (event): event is SessionEvent<'user/message'> => event.type === 'user/message'
+        && event.data.source.kind === 'plugin'
+        && event.data.source.plugin === 'time-context')
     const starts = agent.session.events.filter(event => event.type === 'step/start')
     expect(contexts).toHaveLength(adapter.requests.length)
     expect(starts).toHaveLength(adapter.requests.length)

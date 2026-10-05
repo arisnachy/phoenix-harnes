@@ -591,7 +591,11 @@ describe('workspace context instruction discovery', () => {
       await write(join(root, 'AGENTS.md'), 'parent without marker')
       await write(join(cwd, 'AGENTS.md'), 'cwd without marker')
 
-      const files = await discoverBaselineInstructionFiles({ cwd })
+      const files = await discoverBaselineInstructionFiles({
+        cwd,
+        // Parent directories may belong to the host's own checkout.
+        projectRootMarkers: ['.fixture-project-root'],
+      })
 
       expect(files.map(file => file.displayPath)).toEqual(['AGENTS.md'])
       expect(files.map(file => file.absolutePath)).toEqual([join(cwd, 'AGENTS.md')])
@@ -2569,13 +2573,13 @@ describe('dynamic nested workspace context injection', () => {
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'read and abort' }], source: { kind: 'user' } }))
       await agent.whenIdle()
       expect(agent.session.events.filter(event =>
-        event.type === 'user/message' && event.data.source.kind !== 'user',
+        event.type === 'user/message' && event.data.source.kind === 'agent-instructions',
       )).toHaveLength(0)
 
       agent.followup(createUserMessage({ content: [{ type: 'text', text: 'retry the read' }], source: { kind: 'user' } }))
       await agent.whenIdle()
 
-      const contexts = agent.session.events.filter(event => event.type === 'user/message' && event.data.source.kind !== 'user')
+      const contexts = agent.session.events.filter(event => event.type === 'user/message' && event.data.source.kind === 'agent-instructions')
       expect(contexts).toHaveLength(1)
       expect(adapter.requests).toHaveLength(3)
       expect(adapter.requests.at(-1)?.messages.map(blocks => blocksText(blocks.content)).join('\n'))

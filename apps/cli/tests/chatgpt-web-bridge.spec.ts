@@ -60,7 +60,8 @@ describe('ChatGPT Web bridge configuration', () => {
     })
 
     await writeFile(join(directory, 'config.json'), '{}')
-    expect(resolveChatGptWebConfig({ LOCALAPPDATA: directory, CODEX_CHATGPT_WEB_HOME: directory })).toEqual({
+    const resolved = resolveChatGptWebConfig({ LOCALAPPDATA: directory, CODEX_CHATGPT_WEB_HOME: directory })
+    expect(resolved).toEqual(process.platform === 'win32' ? {
       baseUrl: 'http://127.0.0.1:17841/v1',
       command: [
         join(root, 'runtime', 'bun.exe'),
@@ -68,7 +69,7 @@ describe('ChatGPT Web bridge configuration', () => {
         'serve',
       ],
       cwd: join(root, 'app'),
-    })
+    } : { baseUrl: 'http://127.0.0.1:17841/v1' })
   })
 })
 

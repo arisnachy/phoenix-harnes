@@ -822,35 +822,43 @@ describe('provider profile lifecycle', () => {
   })
 
   it('registers every profile atomically and unregisters on dispose', async () => {
-    const ctx = new Context()
-    await ctx.plugin(LlmRuntime)
-    const fiber = await ctx.plugin(LlmPiAi, {
-      providers: {
-        openai: {
-          retryPolicy: {
-            mode: 'always',
-            backoff: { initialDelayMs: 25, maxDelayMs: 100, jitterRatio: 0.2 },
+    // Registration and disposal must not wait for the live free-model catalog.
+    const catalogFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"data":[]}'))
+    try {
+      const ctx = new Context()
+      await ctx.plugin(LlmRuntime)
+      const fiber = await ctx.plugin(LlmPiAi, {
+        providers: {
+          openai: {
+            retryPolicy: {
+              mode: 'always',
+              backoff: { initialDelayMs: 25, maxDelayMs: 100, jitterRatio: 0.2 },
+            },
           },
+          anthropic: {},
         },
-        anthropic: {},
-      },
-    })
-    expect(ctx.llm.listProviders()).toEqual([
-      { id: 'openai', name: 'openai' },
-      { id: 'anthropic', name: 'anthropic' },
-    ])
-    expect(ctx.llm.providerRetryPolicy('openai')).toEqual({
-      mode: 'always',
-      initialDelayMs: 25,
-      maxDelayMs: 100,
-      jitterRatio: 0.2,
-    })
-    expect(ctx.llm.providerRetryPolicy('anthropic')).toMatchObject({
-      mode: 'normal',
-      maxRetries: 2,
-    })
-    await fiber.dispose()
-    expect(ctx.llm.listProviders()).toEqual([])
+      })
+      expect(ctx.llm.listProviders()).toEqual([
+        { id: 'openai', name: 'openai' },
+        { id: 'anthropic', name: 'anthropic' },
+        { id: 'phoenix-local', name: '🔥 Phoenix Local · Offline' },
+        { id: 'opencode-free', name: '🟢 OpenCode · Gratis' },
+      ])
+      expect(ctx.llm.providerRetryPolicy('openai')).toEqual({
+        mode: 'always',
+        initialDelayMs: 25,
+        maxDelayMs: 100,
+        jitterRatio: 0.2,
+      })
+      expect(ctx.llm.providerRetryPolicy('anthropic')).toMatchObject({
+        mode: 'normal',
+        maxRetries: 2,
+      })
+      await fiber.dispose()
+      expect(ctx.llm.listProviders()).toEqual([])
+    } finally {
+      catalogFetch.mockRestore()
+    }
   })
 
   it('exposes the installed pi-ai model catalog through provider-neutral metadata', async () => {
@@ -1271,7 +1279,11 @@ describe('provider profile lifecycle', () => {
   })
 
   it('advertises current DeepSeek Flash aliases as vision-capable before provider I/O', async () => {
-    const adapter = adapterOf({ deepseek: {} })
+    const adapter = adapterOf({ deepseek: { models: [
+      { id: 'deepseek-flash' },
+      { id: 'deepseek-v4-flash' },
+      { id: 'deepseek-v4-flash-vision-exp' },
+    ] } })
     await expect(adapter.resolveModel('deepseek', 'deepseek-flash')).resolves.toMatchObject({
       id: 'deepseek-flash',
       inputModalities: ['text', 'image'],
