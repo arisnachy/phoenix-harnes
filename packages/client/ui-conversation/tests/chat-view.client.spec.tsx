@@ -638,6 +638,30 @@ describe('ChatView', () => {
     expect(view.container.querySelectorAll('[data-pending-steering]')).toHaveLength(1)
   })
 
+  it('keeps a live user interruption before task output that arrives after its send boundary', () => {
+    const pending = {
+      id: 'steer-ordered-occurrence' as never,
+      messageId: 'steer-ordered-message' as never,
+      placement: 'steering' as const,
+      anchorSeq: 1,
+      content: [{ type: 'text' as const, text: 'cambia los controles primero' }],
+      preview: 'cambia los controles primero',
+      text: 'cambia los controles primero',
+    }
+    const h = makeHarness({
+      nodes: [assistant(1, 'trabajo anterior'), assistant(2, 'respuesta posterior')],
+      queue: [pending],
+      running: true,
+    })
+    const view = render(<h.ChatView {...h.props} />)
+
+    const interruption = view.getByText('cambia los controles primero')
+      .closest('[data-pending-steering]') as HTMLElement
+    const later = view.getByText('respuesta posterior')
+    expect(interruption).not.toBeNull()
+    expect(interruption.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+  })
+
   it('does not double-render when durable steering lands before the transient queue retires it', () => {
     const pending = {
       id: 'steer-overlap-occurrence' as never,
