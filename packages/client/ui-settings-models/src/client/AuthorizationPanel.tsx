@@ -329,6 +329,11 @@ function entryMatchesFamily(entry: Entry, family: string | undefined): boolean {
   return [entry.key, entry.label, entry.telemetry?.provider ?? ''].some(value => normalize(value).includes(needle))
 }
 
+function entryMatchesDefinitionAuthorization(entry: Entry, definition: ConnectorDefinition): boolean {
+  if (definition.authorizationKey !== undefined) return entry.key === definition.authorizationKey
+  return entryMatchesFamily(entry, definition.providerFamily)
+}
+
 function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDefinition): boolean {
   const ids = [definition.id, ...(definition.aliases ?? [])].map(normalize)
   const liveId = normalize(live.id)
@@ -403,7 +408,7 @@ function accountPresentation(entry: Entry): {
   technical?: string
 } {
   const definition = CONNECTOR_CATALOG.find(candidate =>
-    candidate.providerFamily !== undefined && entryMatchesFamily(entry, candidate.providerFamily))
+    entryMatchesDefinitionAuthorization(entry, candidate))
   const technical = collapsedTechnicalName(entry.telemetry?.provider ?? entry.label)
   if (definition !== undefined) {
     return {
@@ -956,7 +961,7 @@ export function ConnectorsSettingsSection({ api,
 
   const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
-    const account = entries.find(entry => entryMatchesFamily(entry, definition.providerFamily))
+    const account = entries.find(entry => entryMatchesDefinitionAuthorization(entry, definition))
     const mcpRuntime = definition.id === 'binance'
       ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
       : definition.id === 'jev'
@@ -990,7 +995,7 @@ export function ConnectorsSettingsSection({ api,
 
   const visibleAccountEntries = useMemo(() => entries.filter(entry =>
     !CONNECTOR_CATALOG.some(definition =>
-      definition.providerFamily !== undefined && entryMatchesFamily(entry, definition.providerFamily))),
+      entryMatchesDefinitionAuthorization(entry, definition))),
   [entries])
 
   const toggleChatGptWeb = (enabled: boolean): void => {
