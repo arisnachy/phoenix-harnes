@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { ContentBlock } from '@phoenix-ai/dsh-llm/types'
 import { PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
@@ -19,12 +20,22 @@ interface OrderedChatNode {
   readonly key: string
   readonly kind: string
   readonly data: unknown
+  readonly anchorSeq: number
+}
+
+interface PendingUserInterruption {
+  readonly key: string
+  readonly content: readonly ContentBlock[]
+  /** Last durable seq visible when the human interruption entered the inbox. */
+  readonly anchorSeq: number | null
 }
 
 interface ToolActivityFlowProps extends SeatProps {
   readonly nodes: readonly OrderedChatNode[]
   /** Ordinary prompt admitted locally but not yet present in the durable transcript. */
-  readonly optimisticSubmit?: { readonly text: string } | undefined
+  readonly optimisticSubmit?: { readonly text: string; readonly anchorSeq: number | null } | undefined
+  /** Host-acknowledged steering messages that have not entered durable history yet. */
+  readonly pendingSteering?: readonly PendingUserInterruption[]
   readonly turnStatus: {
     readonly startTime: number | null
     readonly progress: TurnProgress | null
@@ -55,6 +66,11 @@ type FlowItem =
     readonly kind: 'images'
     readonly key: string
     readonly images: readonly { readonly attachment: ImageAttachmentRef }[]
+  }
+  | {
+    readonly kind: 'pending-user'
+    readonly key: string
+    readonly content: readonly ContentBlock[]
   }
 
 function imageActivity(node: OrderedChatNode): readonly { readonly attachment: ImageAttachmentRef }[] {
@@ -120,10 +136,19 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
   })
 }
 
-function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
+function buildFlow(
+  nodes: readonly OrderedChatNode[],
+  pendingUsers: readonly PendingUserInterruption[],
+): FlowItem[] {
   const flow: FlowItem[] = []
   let pending: ActivityItem[] = []
   let pendingAnchorKey: string | undefined
+  let nextPendingUser = 0
+  const orderedPendingUsers = [...pendingUsers].sort((left, right) => {
+    if (left.anchorSeq === null) return right.anchorSeq === null ? 0 : 1
+    if (right.anchorSeq === null) return -1
+    return left.anchorSeq - right.anchorSeq
+  })
 
   const flush = (avoidAnchorKey?: string): void => {
     const first = pending[0]
@@ -139,7 +164,18 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
     pendingAnchorKey = undefined
   }
 
+  const flushPendingUsersBefore = (anchorSeq: number): void => {
+    while (true) {
+      const interruption = orderedPendingUsers[nextPendingUser]
+      if (interruption === undefined || interruption.anchorSeq === null || interruption.anchorSeq >= anchorSeq) return
+      flush()
+      flow.push({ kind: 'pending-user', key: interruption.key, content: interruption.content })
+      nextPendingUser += 1
+    }
+  }
+
   for (const node of nodes) {
+    flushPendingUsersBefore(node.anchorSeq)
     // Connector authorization is a user action, not background tool telemetry.
     // Keep its compact Connect/Reconnect card directly in the chat flow instead
     // of burying it inside the collapsed Tools disclosure.
@@ -179,6 +215,12 @@ function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   }
 
   flush()
+  for (; nextPendingUser < orderedPendingUsers.length; nextPendingUser += 1) {
+    const interruption = orderedPendingUsers[nextPendingUser]
+    if (interruption !== undefined) {
+      flow.push({ kind: 'pending-user', key: interruption.key, content: interruption.content })
+    }
+  }
   return flow
 }
 
@@ -349,15 +391,26 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
 /**
  * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
  * Visible assistant prose precedes its technical activity, and the running status precedes a trailing Tools group.
- * An ordinary locally admitted send stays at the transcript tail ahead of the current turn status until its durable user node arrives.
+ * Human interruptions are anchored at the durable boundary where they were sent, so later task output renders below them until durable handoff.
  * Running Tool rows stay live above the disclosure and join history once settled.
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
-export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
-  const flow = useMemo(() => buildFlow(nodes), [nodes])
-  const hasOptimisticSubmit = optimisticSubmit !== undefined && optimisticSubmit.text !== ''
-  const statusBeforeIndex = hasOptimisticSubmit || turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
+export function ToolActivityFlow({
+  nodes, optimisticSubmit, pendingSteering = [], turnStatus, ...seatProps
+}: ToolActivityFlowProps) {
+  const pendingUsers = useMemo<PendingUserInterruption[]>(() => [
+    ...(optimisticSubmit === undefined || optimisticSubmit.text === ''
+      ? []
+      : [{
+        key: 'optimistic-user-submit',
+        content: [{ type: 'text' as const, text: optimisticSubmit.text }],
+        anchorSeq: optimisticSubmit.anchorSeq,
+      }]),
+    ...pendingSteering,
+  ], [optimisticSubmit, pendingSteering])
+  const flow = useMemo(() => buildFlow(nodes, pendingUsers), [nodes, pendingUsers])
+  const statusBeforeIndex = turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
     ? -1
     : flow.length - 1
   return (
@@ -380,22 +433,23 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
                   {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
                 </div>
               )
-              : (
-                <ToolActivityGroup
-                  items={item.items}
-                  anchorKey={item.anchorKey}
-                  {...seatProps}
-                />
-              )}
+              : item.kind === 'pending-user'
+                ? (
+                  <PendingSteeringBubble
+                    content={item.content}
+                    renderMessageImages={seatProps.renderMessageImages}
+                    t={seatProps.t}
+                  />
+                )
+                : (
+                  <ToolActivityGroup
+                    items={item.items}
+                    anchorKey={item.anchorKey}
+                    {...seatProps}
+                  />
+                )}
         </Fragment>
       ))}
-      {hasOptimisticSubmit && (
-        <PendingSteeringBubble
-          content={[{ type: 'text', text: optimisticSubmit.text }]}
-          renderMessageImages={seatProps.renderMessageImages}
-          t={seatProps.t}
-        />
-      )}
       {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
         <TurnStatus
           startTime={turnStatus.startTime}
