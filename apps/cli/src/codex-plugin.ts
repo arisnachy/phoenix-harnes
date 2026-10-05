@@ -360,7 +360,10 @@ function sync(): number {
     const declaredSkills = typeof manifest.skills === 'string' ? manifest.skills : './skills/'
     const skillSource = resolve(pluginDir, declaredSkills)
     let mirrored = { aliases: [] as string[], managed: [] as string[] }
-    if (existsSync(skillSource)) {
+    // Superpowers has a dedicated PHOENIX bridge so its cross-skill references
+    // can be translated consistently. Do not create a second codex-superpowers-*
+    // copy when the general Codex marketplace is synchronized.
+    if (pluginName !== 'superpowers' && existsSync(skillSource)) {
       try {
         mirrored = mirrorSkills(pluginName, p.skills, skillSource)
       } catch (error) {
