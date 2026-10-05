@@ -14,14 +14,16 @@ import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 
 /** Resolve the durable files used by the Windows desktop shortcut. */
-export function phoenixDesktopShortcutSpec(root, env = process.env) {
+export function phoenixDesktopShortcutSpec(root, env = process.env, sourceRoot = root) {
   const resolvedRoot = resolve(root)
+  const resolvedSourceRoot = resolve(sourceRoot)
   const systemRoot = env.SystemRoot ?? env.WINDIR
   return {
     root: resolvedRoot,
-    setupScript: join(resolvedRoot, 'scripts', 'phoenix-desktop-shortcut.ps1'),
+    sourceRoot: resolvedSourceRoot,
+    setupScript: join(resolvedSourceRoot, 'scripts', 'phoenix-desktop-shortcut.ps1'),
     launchScript: join(resolvedRoot, 'scripts', 'phoenix-desktop-launch.ps1'),
-    iconSource: join(resolvedRoot, 'scripts', 'phoenix-windows-icon.ico.b64'),
+    iconSource: join(resolvedSourceRoot, 'apps', 'web', 'public', 'phoenix-emblem.png'),
     powershell: systemRoot === undefined || systemRoot.trim().length === 0
       ? 'powershell.exe'
       : join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'),
@@ -41,7 +43,8 @@ export function ensurePhoenixDesktopShortcut(root, options = {}) {
   const env = options.env ?? process.env
   const existsSync = options.existsSync ?? nodeExistsSync
   const spawnSync = options.spawnSync ?? nodeSpawnSync
-  const spec = phoenixDesktopShortcutSpec(root, env)
+  const sourceRoot = options.sourceRoot ?? root
+  const spec = phoenixDesktopShortcutSpec(root, env, sourceRoot)
 
   if (!existsSync(spec.setupScript)) {
     throw new Error(`desktop shortcut setup script is missing: ${spec.setupScript}`)
@@ -63,6 +66,8 @@ export function ensurePhoenixDesktopShortcut(root, options = {}) {
     spec.setupScript,
     '-Root',
     spec.root,
+    '-AssetRoot',
+    spec.sourceRoot,
   ], {
     cwd: spec.root,
     env,
