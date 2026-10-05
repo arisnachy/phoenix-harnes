@@ -359,7 +359,8 @@ export async function requestGoogleWithOpenClaw(
   request: OpenClawGoogleRequest,
 ): Promise<{ status: number; ok: boolean; contentType: string; body: string } | undefined> {
   const method = (request.method ?? 'GET').toUpperCase()
-  const url = new URL(request.path, 'https://phoenix.invalid/')
+  const relativePath = request.path.startsWith('/') ? request.path : `./${request.path}`
+  const url = new URL(relativePath, 'https://phoenix.invalid/')
   const path = url.pathname.replace(/^\//u, '')
   const common = baseArgs(account)
   let args: string[] | undefined
