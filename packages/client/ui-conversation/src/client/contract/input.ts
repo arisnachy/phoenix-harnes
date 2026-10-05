@@ -221,7 +221,7 @@ export interface InputState {
    */
   readonly pendingSubmit?: {
     /** Browser-minted identity shared with transient queue and durable user source. */
-    readonly clientSubmissionId: string
+    readonly clientSubmissionId?: string
     /** Display text echoed immediately in the transcript. */
     readonly text: string
     /** Serialized model-facing text, when references rewrite the display form. */
