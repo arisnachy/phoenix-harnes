@@ -62,7 +62,7 @@ declare module '@phoenix-ai/dsh-llm' {
      * carries no transport vocabulary; rpcId and the optional Host-validated browser zone are
      * durable JSON fields passed back to the client with the event.
      */
-    'user-rpc': { kind: 'user'; rpcId: RpcId; clientTimeZone?: string }
+    'user-rpc': { kind: 'user'; rpcId: RpcId; clientTimeZone?: string; clientSubmissionId?: string }
   }
 }
 
@@ -379,6 +379,8 @@ export interface SessionsApi {
     mode: 'queue' | 'steer'
     content: PromptContentPart[]
     clientTimeZone?: string
+    /** Browser-minted visual correlation id for optimistic/transient/durable handoff. */
+    clientSubmissionId?: string
     /** Ephemeral browser position; host reality cache consumes it but message history does not persist it. */
     clientLocation?: ClientLocation
   }>):
