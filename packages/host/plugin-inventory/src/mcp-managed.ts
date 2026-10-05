@@ -69,7 +69,7 @@ export const BINANCE_AGENT_OS_SERVER_NAME = 'binance-agent-os'
 /** Official Binance Agent OS Streamable HTTP MCP endpoint. */
 export const BINANCE_AGENT_OS_URL = 'https://agent.binance.com/mcp/agentic'
 /** Stable local MCP namespace for the official Devpost Hackathons connector. */
-export const DEVPOST_HACKATHONS_SERVER_NAME = 'devpost-hackathons'
+export const DEVPOST_HACKATHONS_SERVER_NAME = 'devpost'
 /** Official Devpost Hackathons Streamable HTTP MCP endpoint. */
 export const DEVPOST_HACKATHONS_URL = 'https://devpost.com/mcp'
 /** Stable local MCP namespace for the official X API bridge. */
