@@ -285,7 +285,7 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
 function naturalEventSummary(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const text = value
-    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/giu, ' ')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu, ' ')
     .replace(/\b[0-9a-f]{16,}\b/giu, ' ')
     .replace(/\b\d{6,}\b/gu, ' ')
     .replace(/\s+/gu, ' ')
