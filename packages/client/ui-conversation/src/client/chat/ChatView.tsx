@@ -15,7 +15,6 @@ import type {
 } from '@phoenix-ai/dsh-client-runtime/client'
 import { Button, IconChevronDownOutline14, Modal, PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.ts'
-import { PendingSteeringBubble } from './MessageItem.tsx'
 import { turnProgress } from './turn-progress.ts'
 import { ToolActivityFlow } from './ToolActivityFlow.tsx'
 import css from './ChatView.module.css'
@@ -539,6 +538,7 @@ export function ChatView({
           <ToolActivityFlow
             nodes={chatNodes}
             optimisticSubmit={optimisticSubmit}
+            pendingSteering={pendingSteeringFlow}
             turnStatus={visibleTurnStatus}
             useSession={useSession}
             selectedCallId={selectedCallId}
@@ -565,14 +565,6 @@ export function ChatView({
               </span>
             </div>
           )}
-          {pendingSteering.map(item => (
-            <PendingSteeringBubble
-              key={item.id}
-              content={item.content}
-              renderMessageImages={renderMessageImages}
-              t={t}
-            />
-          ))}
         </div>
         {!atBottom && (
           <div className={css.toBottomSlot}>
