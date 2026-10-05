@@ -171,12 +171,21 @@ async function validGogAccounts(signal?: AbortSignal): Promise<GogAccount[]> {
 /**
  * Return one verified gog account, if the official CLI exists and is authenticated.
  * @param signal - Optional cancellation signal for the bounded CLI probes.
+ * @param preferredAccount - Optional account email previously adopted by PHOENIX.
  * @returns The verified Google account email, or undefined when gog is unavailable or unauthenticated.
  */
-export async function findOpenClawGoogleAccount(signal?: AbortSignal): Promise<string | undefined> {
+export async function findOpenClawGoogleAccount(
+  signal?: AbortSignal,
+  preferredAccount?: string,
+): Promise<string | undefined> {
   if (!await available('gog', signal)) return undefined
   try {
-    return (await validGogAccounts(signal))[0]?.email
+    const accounts = await validGogAccounts(signal)
+    if (preferredAccount !== undefined) {
+      return accounts.find(candidate =>
+        candidate.email.toLowerCase() === preferredAccount.toLowerCase())?.email
+    }
+    return accounts[0]?.email
   } catch {
     return undefined
   }
@@ -287,6 +296,25 @@ export async function authorizeGoogleWithOpenClaw(
     throw new AuthorizationError('gog completed authorization but the account did not verify', 'OPENCLAW_GOOGLE_VERIFY')
   }
   return verified.email
+}
+
+/**
+ * Remove the exact gog account PHOENIX adopted.
+ * @param account - Verified Google account email to remove from gog.
+ * @param signal - Optional cancellation signal for the CLI mutation.
+ * @returns True once gog no longer reports that account as a valid session.
+ */
+export async function disconnectGoogleWithOpenClaw(
+  account: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  if (!await available('gog', signal)) return false
+  await openClawInternals.run(
+    'gog',
+    ['--json', '--force', '--no-input', 'auth', 'remove', account],
+    { signal },
+  )
+  return await findOpenClawGoogleAccount(signal, account) === undefined
 }
 
 function output(text: string): { status: number; ok: boolean; contentType: string; body: string } {
