@@ -223,7 +223,8 @@ export function ChatView({
     if (pendingSubmit === undefined) return false
     const exact = chatNodes.some((node) => {
       if (node.kind !== 'user' && node.kind !== 'steering') return false
-      return clientSubmissionIdOf((node.data as { source?: unknown }).source) === pendingSubmit.clientSubmissionId
+      return pendingSubmit.clientSubmissionId !== undefined
+        && clientSubmissionIdOf((node.data as { source?: unknown }).source) === pendingSubmit.clientSubmissionId
     })
     if (exact) return true
     const floor = pendingSubmit.startedAt - 1_000
@@ -244,7 +245,8 @@ export function ChatView({
         .filter((value): value is string => value !== undefined && value !== ''),
     )
     return new Set(pendingSteering.flatMap((item) => {
-      const exact = item.clientSubmissionId === pendingSubmit.clientSubmissionId
+      const exact = pendingSubmit.clientSubmissionId !== undefined
+        && item.clientSubmissionId === pendingSubmit.clientSubmissionId
       if (exact) return [String(item.id)]
       if (item.clientSubmissionId !== undefined) return []
       const text = item.content
@@ -267,7 +269,8 @@ export function ChatView({
       ? {
         text: pendingSubmit.text,
         startedAt: pendingSubmit.startedAt,
-        clientSubmissionId: pendingSubmit.clientSubmissionId,
+        clientSubmissionId: pendingSubmit.clientSubmissionId
+          ?? `legacy-${pendingSubmit.startedAt.toString(36)}`,
       }
       : undefined
   ), [pendingSubmit, pendingSubmitDurable])
