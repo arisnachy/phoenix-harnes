@@ -98,6 +98,17 @@ type PluginInventoryMcpRegistryRemote = {
       source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
     }
   }>>
+  openClawConnectorState(): Promise<PluginInventoryRemoteResult<{
+    connectors: Array<{
+      id: 'google-workspace' | 'github'
+      skillAlias: 'openclaw-gog' | 'openclaw-github'
+      skillInstalled: boolean
+      runtimeAvailable: boolean
+      connected: boolean
+      account?: string
+      phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill'
+    }>
+  }>>
 }
 
 type PluginInventoryLocalRemote = {
@@ -149,6 +160,10 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     repair: async request => unwrapPluginInventory(
       'repairManagedMcpConnector',
       await remote().repairManagedMcpConnector(request),
+    ),
+    openClawState: async () => unwrapPluginInventory(
+      'openClawConnectorState',
+      await remote().openClawConnectorState(),
     ),
   }
 }

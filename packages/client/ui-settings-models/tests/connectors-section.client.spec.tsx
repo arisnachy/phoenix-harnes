@@ -62,6 +62,71 @@ describe('connectors settings section', () => {
     expect(container.childElementCount).toBe(0)
   })
 
+  it('reuses verified OpenClaw Google/GitHub sessions without duplicating provider cards', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [
+        {
+          key: 'authorization-google/account',
+          label: 'Google Workspace',
+          methods: [{ id: 'oauth', label: 'Sign in with Google' }],
+          inFlight: false,
+        },
+        {
+          key: 'llm-pi-ai/github-copilot',
+          label: 'GitHub Copilot',
+          methods: [{ id: 'oauth', label: 'GitHub Copilot' }],
+          inFlight: false,
+        },
+      ] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      openClawState: vi.fn(async () => ({
+        connectors: [
+          {
+            id: 'google-workspace' as const,
+            skillAlias: 'openclaw-gog' as const,
+            skillInstalled: true,
+            runtimeAvailable: true,
+            connected: true,
+            account: 'owner@example.com',
+            phase: 'ready' as const,
+          },
+          {
+            id: 'github' as const,
+            skillAlias: 'openclaw-github' as const,
+            skillInstalled: true,
+            runtimeAvailable: true,
+            connected: true,
+            phase: 'ready' as const,
+          },
+        ],
+      })),
+      install: vi.fn(),
+      search: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+
+    await waitFor(() => { expect(mcpRegistry.openClawState).toHaveBeenCalled() })
+    expect(screen.getAllByText('Google Workspace')).toHaveLength(1)
+    expect(screen.queryByText('Gmail')).toBeNull()
+    expect(screen.queryByText('Google Drive')).toBeNull()
+    expect(screen.queryByText('Google Calendar')).toBeNull()
+    expect(screen.queryByText('Google Contacts')).toBeNull()
+    expect(screen.getByText('openclaw-gog · owner@example.com')).toBeTruthy()
+
+    const googleCard = document.querySelector('[data-connector-id="google-workspace"]')
+    const githubCard = document.querySelector('[data-connector-id="github"]')
+    expect(googleCard?.textContent).toContain('Connected · OpenClaw')
+    expect(githubCard?.textContent).toContain('Connected · OpenClaw')
+
+    expect(screen.getByText('GitHub Copilot')).toBeTruthy()
+    expect(githubCard?.textContent).not.toContain('GitHub Copilot')
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
   it('recovers transient plugin inventory fetch failures without breaking Connectors', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
