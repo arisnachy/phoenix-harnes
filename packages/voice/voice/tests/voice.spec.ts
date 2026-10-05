@@ -330,7 +330,7 @@ describe('Codex realtime optional session context', () => {
 })
 
 describe('Codex realtime harness dispatch', () => {
-  it('does not duplicate browser-admitted speech through the app-server transcript when a live Agent exists', async () => {
+  it('dispatches finalized Live user speech into the real Phoenix Agent and ignores realtime assistant output', async () => {
     const { ctx, voice } = await mountVoice()
     const followup = vi.fn()
     const context = ctx as unknown as { get(name: string): unknown }
@@ -362,7 +362,11 @@ describe('Codex realtime harness dispatch', () => {
       { role: 'assistant', text: 'respuesta paralela del realtime' },
     )
 
-    expect(followup).not.toHaveBeenCalled()
+    expect(followup).toHaveBeenCalledTimes(1)
+    expect(followup).toHaveBeenCalledWith(expect.objectContaining({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'revisa el proyecto y ejecuta la tarea' }],
+    }))
   })
 })
 
