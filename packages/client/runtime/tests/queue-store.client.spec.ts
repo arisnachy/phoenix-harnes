@@ -135,7 +135,7 @@ describe('queue snapshot intake', () => {
     ])
   })
 
-  it('hands off exactly one current occurrence when live steering becomes durable', async () => {
+  it('deduplicates one message identity before durable steering handoff', async () => {
     const session = makeSession()
     await session.open()
     const message = createUserMessage({
@@ -146,6 +146,8 @@ describe('queue snapshot intake', () => {
       { id: 's-first', body: '', placement: 'steering', message },
       { id: 's-second', body: '', placement: 'steering', message },
     ]))
+    expect(session.getSnapshot().queue.map(item => item.id)).toEqual(['s-first'])
+
     const durable = {
       seq: 0,
       time: 1_700_000_000_000,
@@ -153,11 +155,10 @@ describe('queue snapshot intake', () => {
       surfaceOp: 'append',
       data: message,
     } as SessionEvent
-
     session.handleMuxEnvelope(rid('env-durable'), {
       type: 'session/event', sessionId: SID, event: durable,
     })
-    expect(session.getSnapshot().queue.map(item => item.id)).toEqual(['s-second'])
+    expect(session.getSnapshot().queue).toEqual([])
 
     session.handleMuxEnvelope(rid('env-reused-id'), queueFrame([
       { id: 's-later', body: '', placement: 'steering', message },
@@ -166,6 +167,28 @@ describe('queue snapshot intake', () => {
       type: 'session/event', sessionId: SID, event: durable,
     })
     expect(session.getSnapshot().queue.map(item => item.id)).toEqual(['s-later'])
+  })
+
+  it('anchors a new steering row to the durable tail visible when its queue frame arrives', async () => {
+    const session = makeSession()
+    await session.open()
+    const first = createUserMessage({ content: text('before interruption'), source: { kind: 'user' } })
+    session.handleMuxEnvelope(rid('env-before'), {
+      type: 'session/event',
+      sessionId: SID,
+      event: {
+        seq: 0,
+        time: 1_700_000_000_000,
+        type: 'user/message',
+        surfaceOp: 'append',
+        data: first,
+      } as SessionEvent,
+    })
+    session.handleMuxEnvelope(rid('env-anchor'), queueFrame([
+      { id: 's-anchored', body: 'interrupt now', placement: 'steering' },
+    ]))
+
+    expect(session.getSnapshot().queue[0]?.anchorSeq).toBe(0)
   })
 
   it('hands off live steering when the agent claims it as a user message', async () => {
