@@ -238,7 +238,7 @@ export function InputBar({
       setVoiceState('error')
     }
   }, [locked, machineBusy, running, voiceAssistant.phase, voiceState])
-  const ensureFallbackVoiceRecognition = useCallback((): VoiceRecognitionLike | undefined => {
+  const ensureHarnessVoiceRecognition = useCallback((): VoiceRecognitionLike | undefined => {
     if (voiceRef.current !== null) return voiceRef.current
     const recognition = createVoiceRecognition(
       appendVoiceText,
@@ -286,37 +286,47 @@ export function InputBar({
       // PHOENIX Agent, so using Realtime here never bypasses the harness.
       const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
       if (realtime.kind === 'started') {
-        setVoiceState('listening')
+        // Codex Live owns audio output, but the browser recognizer still owns
+        // human input admission. That makes a spoken turn indistinguishable
+        // from typed composer input: it is written into the chat/session first
+        // and then executed by the live PHOENIX Agent with the full harness.
+        const recognition = ensureHarnessVoiceRecognition()
+        if (recognition === undefined) {
+          // Do not leave a voice-only parallel agent running when PHOENIX has
+          // no reliable transcript path into the harness.
+          setVoiceAssistantActive(false)
+          return
+        }
+        startVoiceRecognition()
         return
       }
 
       // A non-Codex route, exhausted/unavailable Codex Realtime, or an older
-      // browser falls through to ordinary recognition. Output still prefers the
-      // Host chain Kokoro -> platform voice before browser speech.
-      const recognition = ensureFallbackVoiceRecognition()
+      // browser uses the same recognizer as its input path. Output still prefers
+      // the Host chain Kokoro -> platform voice before browser speech.
+      const recognition = ensureHarnessVoiceRecognition()
       if (recognition === undefined) return
       setVoiceAssistantActive(true)
       startVoiceRecognition()
     } finally {
       voiceStartingRef.current = false
     }
-  }, [ensureFallbackVoiceRecognition, locked, machineBusy, sessionId, startVoiceRecognition, voiceEnabled])
+  }, [ensureHarnessVoiceRecognition, locked, machineBusy, sessionId, startVoiceRecognition, voiceEnabled])
 
-  // If a native Codex call ends because its transport/quota is no longer
-  // available, keep the explicit hands-free session alive and attach the local
-  // input fallback. This state transition is published by voice.ts; it does not
-  // create a second agent loop and it never interrupts a running PHOENIX task.
+  // Input recognition is deliberately independent from the output transport.
+  // Recreate it after composer remounts (for example after Approval/Hardness)
+  // even when the Codex Live WebRTC call itself stayed alive. Otherwise Live
+  // keeps speaking but no human turn can enter the PHOENIX Agent/chat.
   useEffect(() => {
-    if (!voiceAssistant.active || isCodexRealtimeVoiceActive()
-      || voiceRef.current !== null || voiceStartingRef.current) return
-    const recognition = ensureFallbackVoiceRecognition()
+    if (!voiceAssistant.active || voiceRef.current !== null || voiceStartingRef.current) return
+    const recognition = ensureHarnessVoiceRecognition()
     if (recognition === undefined) {
       setVoiceAssistantActive(false)
       return
     }
     startVoiceRecognition()
   }, [
-    ensureFallbackVoiceRecognition, running, startVoiceRecognition,
+    ensureHarnessVoiceRecognition, running, startVoiceRecognition,
     voiceAssistant.active, voiceAssistant.phase,
   ])
 
