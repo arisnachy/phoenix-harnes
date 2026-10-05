@@ -123,7 +123,7 @@ describe('ManagedMcpController', () => {
       status: 'installed',
       connector: {
         entryId: 'devpost-entry',
-        serverName: 'devpost-hackathons',
+        serverName: 'devpost',
         url: 'https://devpost.com/mcp',
         source: { kind: 'curated', connectorId: 'devpost' },
       },
@@ -132,7 +132,7 @@ describe('ManagedMcpController', () => {
       name: '@phoenix-ai/dsh-mcp-client',
       config: {
         transport: 'streamable-http',
-        serverName: 'devpost-hackathons',
+        serverName: 'devpost',
         url: 'https://devpost.com/mcp',
         headers: {},
         oauth: true,
@@ -153,7 +153,7 @@ describe('ManagedMcpController', () => {
       status: 'installed',
       connector: {
         entryId: 'devpost-repaired',
-        serverName: 'devpost-hackathons',
+        serverName: 'devpost',
         url: 'https://devpost.com/mcp',
         source: { kind: 'curated', connectorId: 'devpost' },
       },
