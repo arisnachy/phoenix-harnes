@@ -22,6 +22,7 @@ import type { DraftAttachmentId } from '../src/client/input/contract.ts'
 import { InputBar } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
+import * as voiceAdapter from '../src/client/voice.ts'
 import type { VoiceRecognitionLike } from '../src/client/voice.ts'
 
 afterEach(cleanup)
@@ -1693,6 +1694,56 @@ describe('command launcher chrome and control seats', () => {
     cleanup()
     const live = bench({ running: true, permissions })
     expect((live.view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('keeps browser transcript admission active while Codex Live owns audio', async () => {
+    class FakeRecognition implements VoiceRecognitionLike {
+      static instance: FakeRecognition | undefined
+      lang = ''
+      continuous = false
+      interimResults = true
+      maxAlternatives = 0
+      onstart: (() => void) | null = null
+      onend: (() => void) | null = null
+      onerror: VoiceRecognitionLike['onerror'] = null
+      onresult: VoiceRecognitionLike['onresult'] = null
+      constructor() { FakeRecognition.instance = this }
+      start(): void { this.onstart?.() }
+      stop(): void { this.onend?.() }
+      abort(): void {}
+    }
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'SpeechRecognition')
+    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeRecognition })
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice').mockImplementation(async () => {
+      voiceAdapter.setVoiceAssistantActive(true)
+      return { kind: 'started' }
+    })
+    try {
+      const { view, sink } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      expect(FakeRecognition.instance).toBeDefined()
+
+      await act(async () => {
+        FakeRecognition.instance?.onresult?.({
+          resultIndex: 0,
+          results: [{ isFinal: true, 0: { transcript: 'revisa el proyecto con el harness' } }],
+        })
+      })
+
+      expect(sink).toHaveBeenCalledWith(
+        'revisa el proyecto con el harness',
+        [],
+        'queue',
+        expect.any(AbortSignal),
+      )
+    } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
+      live.mockRestore()
+      cleanup()
+      if (descriptor === undefined) delete (window as Window & { SpeechRecognition?: unknown }).SpeechRecognition
+      else Object.defineProperty(window, 'SpeechRecognition', descriptor)
+    }
   })
 
   it('submits each final browser speech fragment automatically in assistant mode', async () => {
