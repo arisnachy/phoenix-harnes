@@ -319,6 +319,7 @@ export const sessionPromptRequestSchema = z.object({
   mode: z.union([z.literal('queue'), z.literal('steer')]),
   content: z.array(promptContentPartSchema),
   clientTimeZone: z.string().optional(),
+  clientSubmissionId: z.string().min(1).max(128).optional(),
   clientLocation: clientLocationSchema.optional(),
 }) as unknown as z.ZodType<RequestPayload<'session.prompt'>>
 
