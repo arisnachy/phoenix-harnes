@@ -651,7 +651,7 @@ describe('ChatView', () => {
     }
     const h = makeHarness(
       { nodes: [first], running: true },
-      { pendingSubmit: { seq: 77, text: 'abre el juego para irlo viendo', startedAt } },
+      { pendingSubmit: { text: 'abre el juego para irlo viendo', startedAt } },
     )
     const view = render(<h.ChatView {...h.props} />)
 
