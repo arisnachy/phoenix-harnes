@@ -156,8 +156,8 @@ export class ConversationController extends Service implements IConversation {
     text: string,
     imageIds: readonly DraftAttachmentId[],
     mode: InputSubmitMode,
-    clientSubmissionId: string,
     signal?: AbortSignal,
+    clientSubmissionId?: string,
   ): Promise<SubmitOutcome> {
     const attachments = this.draftImages(imageIds)
     if (attachments.length !== imageIds.length) {
