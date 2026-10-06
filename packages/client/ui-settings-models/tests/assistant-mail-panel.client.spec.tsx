@@ -87,3 +87,26 @@ it('can replace an unrecoverable mailbox in one click', async () => {
   expect(calls).toContain('replace')
   vi.unstubAllGlobals()
 })
+
+
+it('turns an AgentMail permission 403 into a visible recovery action', async () => {
+  const calls: string[] = []
+  const client = { call: async (action: string) => {
+    calls.push(action)
+    return {
+      account: {
+        state: action === 'recover' ? 'pending-verification' : 'ready',
+        inboxId: 'kira@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        contacts: [],
+      },
+      connection: action === 'recover' ? 'verification-required' : 'recovery-required',
+      jobs: [],
+    }
+  } }
+  render(<AssistantMailPanel client={client} />)
+  expect(await screen.findByText('AgentMail requiere recuperar acceso')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Recuperar acceso y verificar' }))
+  expect(await screen.findByText('Verifica una vez')).toBeTruthy()
+  expect(calls).toContain('recover')
+})
