@@ -136,18 +136,18 @@ describe('goal completion judge', () => {
     const start = vi.fn(async (_name: string, request: Record<string, unknown>) => {
       if (request.label === 'goal-completion-judge') finalPrompts.push(request.prompt)
       return {
-      result: Promise.resolve({
-        output: [],
-        stopReason: 'completed' as const,
-        structured: structuredGateResponse(request.label) ?? {
-          verdict: 'pass',
-          summary: 'All acceptance evidence is present.',
-          findings: [],
-          required_changes: [],
-        },
-      }),
-      dispose: vi.fn(async () => {}),
-      request,
+        result: Promise.resolve({
+          output: [],
+          stopReason: 'completed' as const,
+          structured: structuredGateResponse(request.label) ?? {
+            verdict: 'pass',
+            summary: 'All acceptance evidence is present.',
+            findings: [],
+            required_changes: [],
+          },
+        }),
+        dispose: vi.fn(async () => {}),
+        request,
       }
     })
     const result = await judgeGoalCompletion({
