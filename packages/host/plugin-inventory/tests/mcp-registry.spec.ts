@@ -118,6 +118,11 @@ describe('Official MCP Registry proxy', () => {
               { type: 'sse', url: 'https://events.example.com/' },
               { type: 'streamable-http', url: 'javascript:alert(1)' },
               { type: 'streamable-http', url: 'https://templated.example.com/{tenant}' },
+              {
+                type: 'streamable-http',
+                url: 'https://header-auth.example.com/mcp',
+                headers: [{ name: 'X-API-Key', isRequired: true, isSecret: true }],
+              },
               { type: 'streamable-http', url: 'https://mcp.example.com/full' },
               { type: 'streamable-http', url: 'https://ignored.example.com/second' },
             ],
