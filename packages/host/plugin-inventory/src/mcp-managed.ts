@@ -5,6 +5,7 @@ import { withFileLock, writeFileAtomic } from '@phoenix-ai/dsh-atomic-write'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import type {
+  CuratedMcpConnectorId,
   ManagedMcpConnector,
   ManagedMcpSource,
   McpRegistryCandidate,
@@ -77,6 +78,22 @@ export const DEVPOST_HACKATHONS_URL = 'https://devpost.com/mcp'
 export const CANVA_MCP_SERVER_NAME = 'canva'
 /** Official Canva Streamable HTTP MCP endpoint. */
 export const CANVA_MCP_URL = 'https://mcp.canva.com/mcp'
+/** Official hosted Supabase MCP endpoint. */
+export const SUPABASE_MCP_URL = 'https://mcp.supabase.com/mcp'
+/** Official HeyGen remote MCP endpoint. */
+export const HEYGEN_MCP_URL = 'https://mcp.heygen.com/mcp/v1/'
+/** Official Figma remote MCP endpoint. */
+export const FIGMA_MCP_URL = 'https://mcp.figma.com/mcp'
+/** Official Notion remote MCP endpoint. */
+export const NOTION_MCP_URL = 'https://mcp.notion.com/mcp'
+/** Official Linear remote MCP endpoint. */
+export const LINEAR_MCP_URL = 'https://mcp.linear.app/mcp'
+/** Official Cloudflare API MCP endpoint. */
+export const CLOUDFLARE_MCP_URL = 'https://mcp.cloudflare.com/mcp'
+/** Official Slack MCP endpoint. Slack requires a registered client for custom harnesses. */
+export const SLACK_MCP_URL = 'https://mcp.slack.com/mcp'
+/** Vault reference used by the official Brave Search MCP. */
+export const BRAVE_SEARCH_API_KEY_REF = 'BRAVE_API_KEY'
 /** Stable local MCP namespace for the official X API bridge. */
 export const X_API_MCP_SERVER_NAME = 'x-api'
 /** Official X API hosted MCP endpoint reached through xurl. */
@@ -140,15 +157,133 @@ function devpostHackathonsMcpConfig(): ManagedStreamableHttpMcpConfig {
   }
 }
 
-function canvaMcpConfig(): ManagedStreamableHttpMcpConfig {
+function remoteOauthMcpConfig(
+  serverName: string,
+  url: string,
+  toolCallTimeoutMs = 60_000,
+): ManagedStreamableHttpMcpConfig {
   return {
     transport: 'streamable-http',
-    serverName: CANVA_MCP_SERVER_NAME,
-    url: CANVA_MCP_URL,
+    serverName,
+    url,
     headers: {},
     oauth: true,
-    toolCallTimeoutMs: CANVA_TOOL_TIMEOUT_MS,
+    toolCallTimeoutMs,
+    startupTimeoutMs: 5_000,
+    failOnStartupError: false,
   }
+}
+
+function canvaMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    ...remoteOauthMcpConfig(CANVA_MCP_SERVER_NAME, CANVA_MCP_URL, CANVA_TOOL_TIMEOUT_MS),
+  }
+}
+
+function localNpxMcpConfig(
+  serverName: string,
+  pkg: string,
+  extraArgs: readonly string[] = [],
+  envCredentialRefs: Readonly<Record<string, string>> = {},
+): ManagedStdioMcpConfig {
+  return {
+    transport: 'stdio',
+    serverName,
+    command: 'npx',
+    args: ['-y', pkg, ...extraArgs],
+    env: {},
+    envCredentialRefs: { ...envCredentialRefs },
+    cwd: '',
+    toolCallTimeoutMs: 60_000,
+    startupTimeoutMs: 20_000,
+    failOnStartupError: false,
+    reconnect: {
+      enabled: true,
+      initialDelayMs: 1000,
+      maxDelayMs: 30_000,
+      maxAttempts: 3,
+    },
+  }
+}
+
+function fetchMcpConfig(): ManagedStdioMcpConfig {
+  return {
+    transport: 'stdio',
+    serverName: 'fetch',
+    command: 'uvx',
+    args: ['mcp-server-fetch'],
+    env: {},
+    envCredentialRefs: {},
+    cwd: '',
+    toolCallTimeoutMs: 60_000,
+    startupTimeoutMs: 20_000,
+    failOnStartupError: false,
+    reconnect: {
+      enabled: true,
+      initialDelayMs: 1000,
+      maxDelayMs: 30_000,
+      maxAttempts: 3,
+    },
+  }
+}
+
+interface CuratedMcpSpec {
+  readonly label: string
+  readonly config: () => ManagedMcpConfig
+}
+
+const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>> = {
+  devpost: { label: 'Devpost Hackathons', config: devpostHackathonsMcpConfig },
+  canva: { label: 'Canva', config: canvaMcpConfig },
+  supabase: { label: 'Supabase', config: () => remoteOauthMcpConfig('supabase', SUPABASE_MCP_URL) },
+  heygen: { label: 'HeyGen', config: () => remoteOauthMcpConfig('heygen', HEYGEN_MCP_URL, 120_000) },
+  figma: { label: 'Figma', config: () => remoteOauthMcpConfig('figma', FIGMA_MCP_URL) },
+  notion: { label: 'Notion', config: () => remoteOauthMcpConfig('notion', NOTION_MCP_URL) },
+  linear: { label: 'Linear', config: () => remoteOauthMcpConfig('linear', LINEAR_MCP_URL) },
+  cloudflare: { label: 'Cloudflare', config: () => remoteOauthMcpConfig('cloudflare', CLOUDFLARE_MCP_URL) },
+  slack: { label: 'Slack', config: () => remoteOauthMcpConfig('slack', SLACK_MCP_URL) },
+  'brave-search': {
+    label: 'Brave Search',
+    config: () => localNpxMcpConfig(
+      'brave-search',
+      '@brave/brave-search-mcp-server',
+      ['--transport', 'stdio'],
+      { BRAVE_API_KEY: BRAVE_SEARCH_API_KEY_REF },
+    ),
+  },
+  filesystem: {
+    label: 'Filesystem MCP',
+    config: () => localNpxMcpConfig('filesystem', '@modelcontextprotocol/server-filesystem', ['.']),
+  },
+  memory: {
+    label: 'Memory MCP',
+    config: () => localNpxMcpConfig('memory', '@modelcontextprotocol/server-memory'),
+  },
+  fetch: { label: 'Fetch MCP', config: fetchMcpConfig },
+}
+
+/**
+ * Core MCPs restored automatically on Phoenix startup.
+ * Binance is intentionally excluded: REAL Binance remains behind the existing
+ * high-risk activation/approval boundary.
+ */
+export const CORE_MCP_PACK_IDS: readonly CuratedMcpConnectorId[] = [
+  'canva',
+  'supabase',
+  'heygen',
+  'figma',
+  'notion',
+  'linear',
+  'cloudflare',
+  'slack',
+  'brave-search',
+  'filesystem',
+  'memory',
+  'fetch',
+]
+
+function isCuratedMcpConnectorId(value: string): value is CuratedMcpConnectorId {
+  return Object.prototype.hasOwnProperty.call(CURATED_MCP_SPECS, value)
 }
 
 function xDocsMcpConfig(): ManagedStreamableHttpMcpConfig {
