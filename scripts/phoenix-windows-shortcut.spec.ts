@@ -31,6 +31,17 @@ describe('PHOENIX Windows desktop shortcut', () => {
     expect(source).toContain('ie4uinit.exe')
   })
 
+  it('prefers the installed native shell for Agent Desktop and keeps the web launcher fallback', async () => {
+    const { readFileSync } = await import('node:fs')
+    const source = readFileSync(new URL('./phoenix-desktop-shortcut.ps1', import.meta.url), 'utf8')
+    expect(source).toContain("Programs\\Phoenix\\Phoenix.exe")
+    expect(source).toContain("Test-Path -LiteralPath $installedPhoenixExe")
+    expect(source).toContain("$targetPath = $installedPhoenixExe")
+    expect(source).toContain("$targetPath = $powerShellExe")
+    expect(source).toContain("Agent Desktop/Computer")
+    expect(source).not.toContain("never targets Phoenix.exe")
+  })
+
   it('invokes the setup script without exposing a console window', () => {
     const spawnSync = vi.fn(() => ({
       status: 0,
