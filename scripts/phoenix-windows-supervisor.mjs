@@ -1388,6 +1388,13 @@ if (startupFallbackMissing) {
 }
 
 let watcherSupervisor = superviseWatcher()
+
+async function stopWatcherSupervisor(): Promise<void> {
+  const supervisor = watcherSupervisor
+  watcherSupervisor = undefined
+  if (supervisor !== undefined) await supervisor.stop()
+}
+
 let finalCode = 0
 while (true) {
   if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()
@@ -1423,8 +1430,7 @@ while (true) {
 
   if (hostEvent.kind === 'safe-restart' || hostEvent.kind === 'safe-update-handoff') {
     plannedHostRestart = true
-    await watcherSupervisor.stop()
-    watcherSupervisor = undefined
+    await stopWatcherSupervisor()
     if (hostEvent.kind === 'safe-update-handoff') {
       console.error('[PHOENIX UPDATE] replacement runtime is fully ready; handing off from the current Host.')
     } else {
@@ -1455,8 +1461,7 @@ while (true) {
 
   if (crashPreparedUpdate !== undefined) {
     try {
-      await watcherSupervisor.stop()
-      watcherSupervisor = undefined
+      await stopWatcherSupervisor()
       console.error(
         '[PHOENIX UPDATE] prepared stable ' + crashPreparedUpdate.target.slice(0, 12)
         + ' completed while the Host was unavailable; activating its verified isolated runtime '
@@ -1476,8 +1481,7 @@ while (true) {
       continue
     } catch (error) {
       if (watcherSupervisor !== undefined) {
-        await watcherSupervisor.stop()
-        watcherSupervisor = undefined
+        await stopWatcherSupervisor()
       }
       clearPreparedRecord()
       clearRestartRequest()
@@ -1495,8 +1499,7 @@ while (true) {
 
   const requestedTarget = restartRequestTarget()
   if (requestedTarget !== undefined) {
-    await watcherSupervisor.stop()
-    watcherSupervisor = undefined
+    await stopWatcherSupervisor()
     const alreadyActive = healthyRuntimeForTarget(requestedTarget)
     if (alreadyActive !== undefined) {
       runtimeRoot = alreadyActive.path
@@ -1629,5 +1632,5 @@ while (true) {
   continue
 }
 
-if (watcherSupervisor !== undefined) await watcherSupervisor.stop()
+await stopWatcherSupervisor()
 process.exitCode = finalCode
