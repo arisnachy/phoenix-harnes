@@ -21,14 +21,14 @@ describe('PHOENIX managed Windows installation', () => {
     expect(launcher).not.toMatch(/^pnpm\s/mu)
   })
 
-  it('owns one canonical browser shortcut and removes legacy Phoenix.exe shell entries', () => {
+  it('owns one canonical source-aware shortcut and removes only obsolete aliases', () => {
     const iss = read('installer/windows/Phoenix.iss')
     const shortcut = read('scripts/phoenix-desktop-shortcut.ps1')
     const launcher = read('scripts/phoenix-desktop-launch.ps1')
     expect(iss).not.toContain('{autodesktop}\\Phoenix')
     expect(iss).not.toContain('Filename: "{app}\\Phoenix.exe"; Description: "Abrir Phoenix"')
     expect(shortcut).toContain("$shortcutPath = Join-Path $desktopPath 'Phoenix.lnk'")
-    expect(shortcut).toContain("$targetFile -ieq 'Phoenix.exe'")
+    expect(shortcut).not.toContain("$targetFile -ieq 'Phoenix.exe'")
     expect(shortcut).toContain("$shortcutName -ieq 'PHOENIX HARDNESS.lnk'")
     expect(shortcut).toContain('$targetPath = $powerShellExe')
     expect(shortcut).toContain('$workingDirectory = $rootPath')
@@ -37,22 +37,14 @@ describe('PHOENIX managed Windows installation', () => {
     expect(launcher).toContain('& $pnpm.Source phoenix')
   })
 
-  it('installs Phoenix shell integration with a shipped ICO, taskbar entry, and Markdown reader', () => {
+  it('installs Phoenix shell integration with the product emblem, taskbar entry, and Markdown reader', () => {
     const shortcut = read('scripts/phoenix-desktop-shortcut.ps1')
-    const icon = read('scripts/phoenix-windows-icon.ico.b64')
     const markdownOpen = read('scripts/phoenix-markdown-open.ps1')
     const markdownReader = read('scripts/phoenix-markdown-reader.mjs')
-    const encodedIcon = icon.trim()
-    expect(encodedIcon.length).toBeGreaterThan(1000)
-    expect(encodedIcon.length % 4).toBe(0)
-    expect(encodedIcon).toMatch(/^[A-Za-z0-9+/]+={0,2}$/u)
-    const decodedIcon = Buffer.from(encodedIcon, 'base64')
-    expect([...decodedIcon.subarray(0, 4)]).toEqual([0, 0, 1, 0])
-    expect(decodedIcon.length).toBeGreaterThan(512)
-    expect(shortcut).toContain('phoenix-windows-icon.ico.b64')
-    expect(shortcut).toContain('[Convert]::FromBase64String')
+    expect(shortcut).toContain('apps\\web\\public\\phoenix-emblem.png')
+    expect(shortcut).toContain('[Drawing.Image]::FromFile')
     expect(shortcut).toContain('phoenix-browser-$iconRevision-$iconHash.ico')
-    expect(shortcut).toContain("$iconRevision = 'v2'")
+    expect(shortcut).toContain("$iconRevision = 'v4'")
     expect(shortcut).toContain('$taskbarDirectory = Join-Path $env:APPDATA')
     expect(shortcut).toContain("'Phoenix.lnk'")
     expect(shortcut).toContain("'Phoenix.Markdown'")
