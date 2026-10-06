@@ -651,7 +651,7 @@ internal sealed class PhoenixDesktopWindow : Form
             var title = NativeWindowTitle(hWnd);
             if (title.Length == 0) return true;
             _ = GetWindowThreadProcessId(hWnd, out var pid);
-            lines.Add($"hwnd=0x{hWnd.ToInt64():X} pid={pid} active={string.Equals(hWnd.ToString(), active.ToString(), StringComparison.Ordinal).ToString().ToLowerInvariant()} title={title}");
+            lines.Add($"hwnd=0x{hWnd.ToInt64():X} pid={pid} active={(hWnd == active).ToString().ToLowerInvariant()} title={title}");
             return true;
         }, IntPtr.Zero);
         if (!success)
