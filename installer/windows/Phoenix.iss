@@ -31,9 +31,10 @@ RestartApplications=no
 [Files]
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; The native shell is retained for compatibility/testing only.
-; User-facing Desktop/Start/taskbar entries are owned by the normal browser launcher.
-; Do not create shortcuts that target Phoenix.exe.
+; The installer keeps shortcut ownership in the repository launcher scripts.
+; Those scripts prefer this installed Phoenix.exe when present so Agent Desktop
+; runs in the interactive Windows session, while source-only installs retain
+; the browser launcher fallback.
 
 [Registry]
 Root: HKCU; Subkey: "Software\Phoenix AI\Phoenix"; ValueType: string; ValueName: "InstallLocation"; ValueData: "{app}"; Flags: uninsdeletekeyifempty
