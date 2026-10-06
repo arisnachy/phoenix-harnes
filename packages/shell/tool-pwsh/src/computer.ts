@@ -347,7 +347,7 @@ function desktopControlErrorDetail(value: unknown): string {
   if (value === undefined || value === null) return 'unknown error'
   try {
     const serialized = JSON.stringify(value)
-    return serialized === undefined || serialized.length === 0 ? 'unknown error' : serialized
+    return serialized.length === 0 ? 'unknown error' : serialized
   } catch {
     return 'unknown error'
   }
