@@ -57,6 +57,53 @@ describe('mail onboarding', () => {
     } finally { await rm(directory, { recursive: true, force: true }) }
   })
 
+  it('rotates a rejected key for an already verified mailbox and proves the exact inbox before keeping ready state', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-restore-key-'))
+    try {
+      const path = join(directory, 'account.json')
+      await writeFile(path, JSON.stringify({
+        state: 'ready',
+        inboxId: 'kira-existing@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        contacts: ['trusted@example.com'],
+        signupUsername: 'kira-original',
+      }))
+      let saved = ''
+      const requests: string[] = []
+      const account = new MailOnboarding({
+        path,
+        timeoutMs: 1000,
+        saveKey: async (value) => { saved = value },
+        fetch: async (url, init) => {
+          const address = requestAddress(url)
+          requests.push(address)
+          if (address.endsWith('/agent/sign-up')) {
+            expect(requestBody(init)).toMatchObject({
+              human_email: 'owner@example.com',
+              username: 'kira-original',
+              source: 'phoenix-local',
+            })
+            return Response.json({ api_key: 'am_rotated', inbox_id: 'kira-original@agentmail.to' })
+          }
+          expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_rotated')
+          return Response.json({ inbox_id: 'kira-existing@agentmail.to' })
+        },
+      })
+
+      await expect(account.restoreCredential()).resolves.toMatchObject({
+        state: 'ready',
+        inboxId: 'kira-existing@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        contacts: ['trusted@example.com'],
+      })
+      expect(saved).toBe('am_rotated')
+      expect(requests).toEqual([
+        'https://api.agentmail.to/v0/agent/sign-up',
+        'https://api.agentmail.to/v0/inboxes/kira-existing%40agentmail.to',
+      ])
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+
   it('stores the actual inbox and secret, then verifies owner before enabling jobs', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-'))
     try {

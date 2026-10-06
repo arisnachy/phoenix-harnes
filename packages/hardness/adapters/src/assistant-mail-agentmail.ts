@@ -6,14 +6,17 @@ import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 /** Sanitized AgentMail rejection category used by Phoenix recovery logic without exposing provider bodies. */
 export type AgentMailFailureReason =
   | 'verification-required'
+  | 'credential-rejected'
   | 'permission-missing'
   | 'limit-exceeded'
   | 'message-rejected'
 
 function providerFailureReason(status: number, code: string | undefined, fix: string | undefined): AgentMailFailureReason | undefined {
+  if (status === 401) return 'credential-rejected'
   if (status !== 403) return undefined
   if ((code === 'missing_permission' || code === 'message_rejected')
     && fix !== undefined && /agent\/verify|verif(?:y|ication)/iu.test(fix)) return 'verification-required'
+  if (code === undefined) return 'credential-rejected'
   if (code === 'missing_permission') return 'permission-missing'
   if (code === 'limit_exceeded') return 'limit-exceeded'
   if (code === 'message_rejected') return 'message-rejected'
@@ -23,6 +26,7 @@ function providerFailureReason(status: number, code: string | undefined, fix: st
 function providerFailureMessage(status: number, reason: AgentMailFailureReason | undefined): string {
   if (status === 429) return 'mail quota reached; no paid upgrade will be requested'
   if (reason === 'verification-required') return 'AgentMail requires Kira mailbox verification again; recover access and enter the six-digit owner code'
+  if (reason === 'credential-rejected') return 'AgentMail rejected the stored credential; Phoenix can recover the existing Kira mailbox automatically'
   if (reason === 'permission-missing') return 'AgentMail credential permissions are insufficient; recover Kira mailbox access to renew the credential'
   if (reason === 'limit-exceeded') return 'AgentMail free mailbox/resource limit reached; remove an old inbox before creating another'
   if (reason === 'message-rejected') return 'AgentMail rejected the message; review the recipient or mailbox verification state'
