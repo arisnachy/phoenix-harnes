@@ -74,12 +74,12 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
         ? configuredState
         : () => configuredState,
     async clientInformation() {
-      const stored = (await options.store.read())?.clientInformation
-      if (stored !== undefined) return stored
-      if (options.clientInformation === undefined) return undefined
-      return typeof options.clientInformation === 'function'
-        ? options.clientInformation()
-        : options.clientInformation
+      if (options.clientInformation !== undefined) {
+        return typeof options.clientInformation === 'function'
+          ? options.clientInformation()
+          : options.clientInformation
+      }
+      return (await options.store.read())?.clientInformation
     },
     async saveClientInformation(clientInformation) {
       await updateState(options.store, current => ({ ...current, clientInformation }))
