@@ -78,7 +78,15 @@ describe('Google Workspace runtime guards', () => {
     await expect(ctx.credentials.resolve(GOOGLE_CLIENT_ID_REF)).resolves.toMatchObject({
       value: 'desktop.apps.googleusercontent.com',
     })
-    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toEqual({ kind: 'api-key' })
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+      kind: 'grant',
+      payload: {
+        provider: 'google-oauth',
+        version: 1,
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+      },
+    })
   })
 
   it('never treats a durable marker as a reusable OAuth grant', async () => {
