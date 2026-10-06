@@ -129,8 +129,9 @@ export interface StreamableHttpConfig {
   bearerTokenRef?: string
   /** Whether to attach the host-managed OAuth provider when available. */
   oauth?: boolean
-  /** Optional fixed OAuth client references for servers that do not support DCR. */
+  /** Credential reference containing a fixed OAuth client id for servers that do not support DCR. */
   oauthClientIdRef?: string
+  /** Credential reference containing the matching fixed OAuth client secret. */
   oauthClientSecretRef?: string
   /** Optional deterministic loopback callback port required by a pre-registered OAuth app. */
   oauthCallbackPort?: number
