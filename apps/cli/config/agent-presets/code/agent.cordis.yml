@@ -102,6 +102,8 @@
 - id: tool-pwsh
   name: '@phoenix-ai/dsh-tool-pwsh'
   disabled: !!js process.platform !== 'win32'
+  config:
+    enableComputerUse: true
 
 # ── filesystem ──────────────────────────────────────────────────────────────
 
