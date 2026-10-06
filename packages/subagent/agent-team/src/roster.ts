@@ -312,13 +312,13 @@ export class TeamRoster {
       ...request.prompt,
       name === 'aegis'
         ? {
-            type: 'text' as const,
-            text: 'Aegis silent review mode. Do not acknowledge this assignment with a reaction or status message. Work quietly and send a Team message only for a real blocker, a required user decision, or material verification evidence.',
-          }
+          type: 'text' as const,
+          text: 'Aegis silent review mode. Do not acknowledge this assignment with a reaction or status message. Work quietly and send a Team message only for a real blocker, a required user decision, or material verification evidence.',
+        }
         : {
-            type: 'text' as const,
-            text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. Before substantive work, acknowledge it once with team_chat_react and one natural contextual Unicode emoji unless a reaction would be socially inappropriate or redundant. Do not add filler prose just to acknowledge it.`,
-          },
+          type: 'text' as const,
+          text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. Before substantive work, acknowledge it once with team_chat_react and one natural contextual Unicode emoji unless a reaction would be socially inappropriate or redundant. Do not add filler prose just to acknowledge it.`,
+        },
     ]
     let started: ContinuableStart
     try {
