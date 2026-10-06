@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -10,6 +12,25 @@ namespace Phoenix.Desktop;
 /// </summary>
 internal sealed class PhoenixDesktopWindow : Form
 {
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
     private readonly Uri phoenixUri;
     private readonly SplitContainer split = new();
     private readonly WebView2 phoenixView = new();
@@ -593,6 +614,10 @@ internal sealed class PhoenixDesktopWindow : Form
     {
         switch (command.Type)
         {
+            case "phoenix.desktop.windows":
+                return ListNativeDesktopWindows();
+            case "phoenix.desktop.screenshot":
+                return CaptureNativeDesktopScreenshot();
             case "phoenix.browser.inspect":
                 return await InspectBrowserAsync();
             case "phoenix.browser.fill-form":
@@ -605,6 +630,46 @@ internal sealed class PhoenixDesktopWindow : Form
                 ExecuteBrowserCommand(command);
                 return null;
         }
+    }
+
+    private static string NativeWindowTitle(IntPtr hWnd)
+    {
+        var length = GetWindowTextLength(hWnd);
+        if (length <= 0) return string.Empty;
+        var text = new StringBuilder(length + 1);
+        _ = GetWindowText(hWnd, text, text.Capacity);
+        return text.ToString().Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ').Trim();
+    }
+
+    private static string ListNativeDesktopWindows()
+    {
+        var active = GetForegroundWindow();
+        var lines = new List<string>();
+        var success = EnumWindows((hWnd, _) =>
+        {
+            if (!IsWindowVisible(hWnd)) return true;
+            var title = NativeWindowTitle(hWnd);
+            if (title.Length == 0) return true;
+            _ = GetWindowThreadProcessId(hWnd, out var pid);
+            lines.Add($"hwnd=0x{hWnd.ToInt64():X} pid={pid} active={string.Equals(hWnd.ToString(), active.ToString(), StringComparison.Ordinal).ToString().ToLowerInvariant()} title={title}");
+            return true;
+        }, IntPtr.Zero);
+        if (!success)
+            throw new InvalidOperationException($"EnumWindows failed with Win32 error {Marshal.GetLastWin32Error()}.");
+        return lines.Count == 0 ? "<no visible top-level windows>" : string.Join(Environment.NewLine, lines);
+    }
+
+    private static string CaptureNativeDesktopScreenshot()
+    {
+        var bounds = SystemInformation.VirtualScreen;
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            throw new InvalidOperationException("Desktop has no capturable virtual screen.");
+        using var bitmap = new Bitmap(bounds.Width, bounds.Height);
+        using (var graphics = Graphics.FromImage(bitmap))
+            graphics.CopyFromScreen(bounds.Left, bounds.Top, 0, 0, bitmap.Size, CopyPixelOperation.SourceCopy);
+        using var stream = new MemoryStream();
+        bitmap.Save(stream, System.Drawing.Imaging.ImageFormat.Png);
+        return Convert.ToBase64String(stream.ToArray());
     }
 
     private void ExecuteBrowserCommand(BrowserCommand command)
