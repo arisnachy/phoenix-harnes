@@ -1584,6 +1584,14 @@ export interface StreamableHttpConfig {
   bearerTokenRef?: string
   /** Whether to attach the host-managed OAuth provider when available. */
   oauth?: boolean
+  /** Credential reference containing a fixed OAuth client id for servers that do not support DCR. */
+  oauthClientIdRef?: string
+  /** Credential reference containing the matching fixed OAuth client secret. */
+  oauthClientSecretRef?: string
+  /** Optional deterministic loopback callback port required by a pre-registered OAuth app. */
+  oauthCallbackPort?: number
+  /** Token endpoint client authentication method for a pre-registered OAuth app. */
+  oauthTokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -1610,7 +1618,7 @@ export interface ReconnectConfig {
 }
 ```
 
-Source: [`packages/mcp/mcp-client/src/index.ts:143`](../packages/mcp/mcp-client/src/index.ts)
+Source: [`packages/mcp/mcp-client/src/index.ts:151`](../packages/mcp/mcp-client/src/index.ts)
 
 <a id="phoenix-aidsh-message-feedback"></a>
 

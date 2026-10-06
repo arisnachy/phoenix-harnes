@@ -314,6 +314,107 @@ describe('connectors settings section', () => {
     expect(search).not.toHaveBeenCalled()
   })
 
+  it('surfaces a non-OAuth MCP credential flow and starts its real auth method', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'brave-auth-1' }))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/brave-search',
+        label: 'MCP brave-search',
+        methods: [{ id: 'credentials', label: 'Configure brave-search' }],
+        inFlight: false,
+      }] }))),
+      begin,
+      status: vi.fn(async () => ok({
+        attemptId: 'brave-auth-1',
+        status: 'pending' as const,
+        nextSeq: 0,
+        notices: [],
+      })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'brave-entry',
+          serverName: 'brave-search',
+          url: 'stdio://brave-search',
+          source: { kind: 'curated' as const, connectorId: 'brave-search' },
+        }],
+        runtime: [{
+          serverName: 'brave-search',
+          transport: 'stdio' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const braveCard = await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="brave-search"]')
+      if (card === null) throw new Error('Brave Search connector card was not rendered')
+      return card
+    })
+    expect(braveCard.textContent).toContain('Authorization required')
+    const authorize = Array.from(braveCard.querySelectorAll('button'))
+      .find(button => button.textContent === 'Authorize')
+    expect(authorize).toBeTruthy()
+    fireEvent.click(authorize!)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/brave-search', method: 'credentials' })
+    })
+  })
+
+  it('refreshes a starting MCP until the store shows it connected', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/canva',
+        label: 'MCP canva',
+        methods: [{ id: 'oauth', label: 'Authorize canva' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+        disconnectable: true as const,
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const managed = [{
+      entryId: 'canva-entry',
+      serverName: 'canva',
+      url: 'https://mcp.canva.com/mcp',
+      source: { kind: 'curated' as const, connectorId: 'canva' },
+    }]
+    const state = vi.fn()
+      .mockResolvedValueOnce({
+        managed,
+        runtime: [{
+          serverName: 'canva', transport: 'streamable-http' as const,
+          status: 'starting' as const, toolNames: [],
+        }],
+      })
+      .mockResolvedValue({
+        managed,
+        runtime: [{
+          serverName: 'canva', transport: 'streamable-http' as const,
+          status: 'ready' as const, toolNames: ['mcp__canva__design'],
+        }],
+      })
+    const mcpRegistry = { state, install: vi.fn(), installCurated: vi.fn(), search: vi.fn() }
+
+    renderHub(api, { mcpRegistry })
+    const canvaCard = await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="canva"]')
+      if (card === null) throw new Error('Canva connector card was not rendered')
+      expect(card.textContent).toContain('Connecting')
+      return card
+    })
+    await waitFor(() => {
+      expect(state).toHaveBeenCalledTimes(2)
+      expect(canvaCard.textContent).toContain('Connected')
+    }, { timeout: 2_000 })
+  })
+
   it('shows an explicit official lookup even when the search box is empty', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),

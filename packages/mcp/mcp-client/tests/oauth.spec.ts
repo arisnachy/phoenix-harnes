@@ -66,6 +66,30 @@ describe('createMcpOAuthProvider', () => {
     expect(provider.clientMetadata).not.toHaveProperty('client_secret')
   })
 
+  it('uses a configured confidential client instead of stale dynamic registration', async () => {
+    const backing = store({ clientInformation: { client_id: 'stale-dcr-client' } })
+    const provider = createMcpOAuthProvider({
+      serverName: 'slack',
+      redirectUrl: 'http://127.0.0.1:17844/mcp/oauth/slack',
+      store: backing,
+      onAuthorizationUrl: vi.fn(),
+      clientInformation: async () => ({
+        client_id: 'phoenix-slack-client',
+        client_secret: 'phoenix-slack-secret',
+      }),
+      tokenEndpointAuthMethod: 'client_secret_post',
+    })
+
+    expect(provider.clientMetadata).toMatchObject({
+      redirect_uris: ['http://127.0.0.1:17844/mcp/oauth/slack'],
+      token_endpoint_auth_method: 'client_secret_post',
+    })
+    await expect(provider.clientInformation()).resolves.toEqual({
+      client_id: 'phoenix-slack-client',
+      client_secret: 'phoenix-slack-secret',
+    })
+  })
+
   it('clears only requested credentials and preserves discovery state', async () => {
     const clientInformation: OAuthClientInformationMixed = { client_id: 'client-id' }
     const discoveryState: OAuthDiscoveryState = { authorizationServerUrl: 'https://mcp.notion.com' }

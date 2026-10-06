@@ -6,7 +6,7 @@ const REQUIRED_CONNECTORS = [
   'outlook-mail', 'outlook-calendar', 'onedrive', 'sharepoint', 'box', 'notion',
   'slack', 'microsoft-teams', 'zoom', 'github', 'linear', 'vercel', 'firebase',
   'supabase', 'neon', 'posthog', 'hugging-face', 'canva', 'heygen', 'magnific',
-  'coursera', 'devpost', 'apollo', 'binance', 'x', 'openai-platform',
+  'coursera', 'devpost', 'brave-search', 'filesystem', 'memory', 'fetch', 'apollo', 'binance', 'x', 'openai-platform',
 ] as const
 
 const REQUIRED_PRESETS = [
@@ -52,6 +52,22 @@ describe('connector catalog', () => {
     expect(google?.authorizationKey).toBe('authorization-google/account')
     expect(byId.get('firebase')?.providerFamily).toBe('firebase')
     expect(byId.get('bigquery')?.providerFamily).toBe('bigquery')
+  })
+
+  it('ships the requested core MCP pack as branded Host-curated integrations', () => {
+    const byId = new Map(CONNECTOR_CATALOG.map(connector => [connector.id, connector]))
+    const ids = [
+      'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
+      'brave-search', 'filesystem', 'memory', 'fetch',
+    ] as const
+    for (const id of ids) {
+      expect(byId.get(id)?.mode, id).toBe('mcp')
+      expect(byId.get(id)?.curatedMcp, id).toBe(true)
+      expect(byId.get(id)?.logoUrl, id).toMatch(/^https:\/\/cdn\.simpleicons\.org\//)
+    }
+    expect(byId.get('heygen')?.providerFamily).toBe('heygen')
+    expect(byId.get('brave-search')?.aliases).toContain('brave')
+    expect(byId.get('filesystem')?.capabilities).toContain('filesystem')
   })
 
   it('exposes Devpost Hackathons as a Host-curated MCP', () => {
