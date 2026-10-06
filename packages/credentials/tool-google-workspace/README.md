@@ -30,7 +30,7 @@ Tool definitions remain prefix-stable while the package is mounted. OAuth state 
 
 ## Known Limitations and Deferred Work
 
-- Google OAuth is currently process-local, so restarting Phoenix requires explicit Google authorization again until a credential backend isolated from same-UID tool processes is available.
+- Google OAuth survives normal Phoenix restarts through the Host-owned durable grant and silent token refresh. The default local credential provider is owner-only but not isolated from deliberately malicious same-UID processes; deployments needing that stronger boundary should use an OS-isolated provider.
 - Google installed applications request the configured Workspace scope set in one consent ceremony; a capability whose scope was not granted fails closed and requires an explicit reconnect to change consent.
 - The dedicated high-level surface currently focuses on Gmail, Calendar, and Drive. Docs, Sheets, Slides, Contacts, and less common operations use `google_workspace_request` until dedicated tools are added.
 - The advanced request tool deliberately does not accept arbitrary URLs, caller authentication headers, cookies, or caller-selected OAuth scopes.
