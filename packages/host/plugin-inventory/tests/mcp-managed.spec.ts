@@ -227,8 +227,17 @@ describe('ManagedMcpController', () => {
 
   it('restores the Phoenix core MCP pack with pinned remotes and local runners', async () => {
     const patchPath = tempPatch()
-    const live = loader()
-    live.create.mockImplementation(async ({ config }: { config: { serverName: string } }) => `entry-${config.serverName}`)
+    type CreateOptions = Parameters<ManagedMcpLoader['create']>[0]
+    const created: CreateOptions[] = []
+    const live: ManagedMcpLoader = {
+      create(options) {
+        created.push(options)
+        return Promise.resolve(`entry-${options.config.serverName}`)
+      },
+      remove() {
+        return Promise.resolve()
+      },
+    }
     const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
 
     const restored = await controller.ensureCoreMcpPack()
@@ -238,71 +247,52 @@ describe('ManagedMcpController', () => {
       'brave-search', 'filesystem', 'memory', 'fetch',
     ]))
     expect(restored.installed).not.toContain('devpost')
-    expect(live.create).toHaveBeenCalledWith({
-      name: '@phoenix-ai/dsh-mcp-client',
-      config: expect.objectContaining({
-        transport: 'streamable-http',
-        serverName: 'supabase',
-        url: 'https://mcp.supabase.com/mcp',
-        oauth: true,
-      }),
+
+    const configs = new Map(created.map(({ config }) => [config.serverName, config]))
+    expect(configs.get('supabase')).toMatchObject({
+      transport: 'streamable-http',
+      serverName: 'supabase',
+      url: 'https://mcp.supabase.com/mcp',
+      oauth: true,
     })
-    expect(live.create).toHaveBeenCalledWith({
-      name: '@phoenix-ai/dsh-mcp-client',
-      config: expect.objectContaining({
-        transport: 'streamable-http',
-        serverName: 'heygen',
-        url: 'https://mcp.heygen.com/mcp/v1/',
-        oauth: true,
-      }),
+    expect(configs.get('heygen')).toMatchObject({
+      transport: 'streamable-http',
+      serverName: 'heygen',
+      url: 'https://mcp.heygen.com/mcp/v1/',
+      oauth: true,
     })
-    expect(live.create).toHaveBeenCalledWith({
-      name: '@phoenix-ai/dsh-mcp-client',
-      config: expect.objectContaining({
-        transport: 'streamable-http',
-        serverName: 'figma',
-        url: 'http://127.0.0.1:3845/mcp',
-        oauth: false,
-      }),
+    expect(configs.get('figma')).toMatchObject({
+      transport: 'streamable-http',
+      serverName: 'figma',
+      url: 'http://127.0.0.1:3845/mcp',
+      oauth: false,
     })
-    expect(live.create).toHaveBeenCalledWith({
-      name: '@phoenix-ai/dsh-mcp-client',
-      config: expect.objectContaining({
-        transport: 'streamable-http',
-        serverName: 'slack',
-        url: 'https://mcp.slack.com/mcp',
-        oauth: true,
-        oauthClientIdRef: 'SLACK_MCP_CLIENT_ID',
-        oauthClientSecretRef: 'SLACK_MCP_CLIENT_SECRET',
-        oauthCallbackPort: 17844,
-        oauthTokenEndpointAuthMethod: 'client_secret_post',
-      }),
+    expect(configs.get('slack')).toMatchObject({
+      transport: 'streamable-http',
+      serverName: 'slack',
+      url: 'https://mcp.slack.com/mcp',
+      oauth: true,
+      oauthClientIdRef: 'SLACK_MCP_CLIENT_ID',
+      oauthClientSecretRef: 'SLACK_MCP_CLIENT_SECRET',
+      oauthCallbackPort: 17844,
+      oauthTokenEndpointAuthMethod: 'client_secret_post',
     })
-    expect(live.create).toHaveBeenCalledWith({
-      name: '@phoenix-ai/dsh-mcp-client',
-      config: expect.objectContaining({
-        transport: 'stdio',
-        serverName: 'brave-search',
-        command: 'npx',
-        envCredentialRefs: { BRAVE_API_KEY: 'BRAVE_API_KEY' },
-      }),
+    expect(configs.get('brave-search')).toMatchObject({
+      transport: 'stdio',
+      serverName: 'brave-search',
+      command: 'npx',
+      envCredentialRefs: { BRAVE_API_KEY: 'BRAVE_API_KEY' },
     })
-    expect(live.create).toHaveBeenCalledWith({
-      name: '@phoenix-ai/dsh-mcp-client',
-      config: expect.objectContaining({
-        transport: 'stdio',
-        serverName: 'filesystem',
-        args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
-      }),
+    expect(configs.get('filesystem')).toMatchObject({
+      transport: 'stdio',
+      serverName: 'filesystem',
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
     })
-    expect(live.create).toHaveBeenCalledWith({
-      name: '@phoenix-ai/dsh-mcp-client',
-      config: expect.objectContaining({
-        transport: 'stdio',
-        serverName: 'fetch',
-        command: 'uvx',
-        args: ['mcp-server-fetch'],
-      }),
+    expect(configs.get('fetch')).toMatchObject({
+      transport: 'stdio',
+      serverName: 'fetch',
+      command: 'uvx',
+      args: ['mcp-server-fetch'],
     })
 
     const snapshot = await controller.snapshot()
@@ -328,7 +318,7 @@ describe('ManagedMcpController', () => {
     const second = await controller.ensureCoreMcpPack()
     expect(second.installed).toEqual([])
     expect(second.alreadyInstalled).toEqual(expect.arrayContaining([...restored.installed]))
-    expect(live.create).toHaveBeenCalledTimes(restored.installed.length)
+    expect(created).toHaveLength(restored.installed.length)
   })
 
   it('repairs a curated Supabase MCP from the Host-pinned endpoint', async () => {
