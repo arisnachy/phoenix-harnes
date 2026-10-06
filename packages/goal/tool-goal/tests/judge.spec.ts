@@ -164,8 +164,7 @@ describe('goal completion judge', () => {
     expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
       label: 'goal-completion-judge',
       prompt: expect.arrayContaining([
-        expect.objectContaining({ text: expect.stringContaining('Act as Aegis') }),
-        expect.objectContaining({ text: expect.stringContaining('operationally silent') }),
+        expect.objectContaining({ text: expect.stringMatching(/Act as Aegis.*operationally silent/u) }),
       ]),
       agentOptions: {},
       toolFilter: { allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] },
