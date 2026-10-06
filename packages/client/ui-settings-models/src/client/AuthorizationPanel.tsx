@@ -269,6 +269,7 @@ function normalize(value: string): string {
 }
 
 const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
+const MCP_AUTH_FLOW_RETRY_MS = [0, 120, 350, 800, 1_600] as const
 
 function isTransientConnectorRemoteFailure(error: unknown): boolean {
   const message = String(error).toLowerCase()
@@ -521,7 +522,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   repairing: boolean
   removing: boolean
 }): ReactNode {
-  const connectedByAccount = accountGrantConnectsCatalogEntry(account)
+  const connectedByAccount = (mcpRuntime === undefined || mcpRuntime.status === 'ready')
+    && accountGrantConnectsCatalogEntry(account)
   const installUrl = safeExternalHref(live?.installUrl)
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
   const mcpStatus = mcpRuntime?.status === 'ready'
@@ -560,6 +562,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const authorizationAccount = account !== undefined && account.methods.length > 0
     ? account
     : undefined
+  const reauthorizationRequired = mcpRuntime?.status === 'auth-required'
+    && authorizationAccount?.stored !== undefined
   const openClawRuntimeMissing = definition.id === 'github' && openClaw?.phase === 'missing-runtime'
   const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed')
   const canRepair = brokenManaged && managed.source !== undefined && onRepair !== undefined
@@ -600,7 +604,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : null}
           {authorizationAccount !== undefined && !connectedByAccount && openClaw?.connected !== true && !openClawRuntimeMissing ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || authorizationAccount.inFlight} onClick={() => { onAuthorize(authorizationAccount) }}>
-              {connected ? t('reauthorize') : t('authorize')}
+              {reauthorizationRequired || connected ? t('reauthorize') : t('authorize')}
             </button>
           ) : null}
           {canRepair ? (
@@ -923,6 +927,38 @@ export function ConnectorsSettingsSection({ api,
   }, [mcpRegistry, mcpHub.runtime])
 
   useEffect(() => {
+    if (api === undefined) return
+    const expectedKeys = mcpHub.managed.flatMap((connector) => {
+      const runtime = mcpHub.runtime.find(entry => entry.serverName === connector.serverName)
+      if (runtime?.status !== 'auth-required') return []
+      return [`mcp-client/${connector.serverName.toLowerCase().replaceAll('_', '-')}`]
+    })
+    if (expectedKeys.length === 0) return
+
+    const controller = new AbortController()
+    void (async () => {
+      for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
+        if (delayMs > 0) {
+          await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
+        }
+        if (controller.signal.aborted) return
+        try {
+          const allEntries = await readAuthorizationEntries(api)
+          if (controller.signal.aborted) return
+          setEntries(allEntries)
+          if (expectedKeys.every(key => allEntries.some(entry => entry.key === key))) return
+        } catch (error: unknown) {
+          if (!isTransientConnectorRemoteFailure(error)) {
+            if (!controller.signal.aborted) setCatalogFailure(String(error))
+            return
+          }
+        }
+      }
+    })()
+    return () => { controller.abort() }
+  }, [api, mcpHub.managed, mcpHub.runtime])
+
+  useEffect(() => {
     const readOpenClaw = mcpRegistry?.openClawState?.bind(mcpRegistry)
     if (readOpenClaw === undefined) return
     let stale = false
@@ -996,7 +1032,6 @@ export function ConnectorsSettingsSection({ api,
 
   const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
-    const account = entries.find(entry => entryMatchesDefinitionAuthorization(entry, definition))
     const mcpRuntime = definition.id === 'binance'
       ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
       : definition.id === 'jev'
@@ -1008,13 +1043,19 @@ export function ConnectorsSettingsSection({ api,
       : definition.id === 'jev'
         ? mcpHub.managed.find(candidate => candidate.serverName === 'jev')
         : mcpHub.managed.find(candidate => managedMatchesDefinition(candidate, definition))
+    const catalogAccount = entries.find(entry => entryMatchesDefinitionAuthorization(entry, definition))
+    const account = managed === undefined
+      ? catalogAccount
+      : managedAuthorizationEntry(managed, entries) ?? catalogAccount
     const openClawRoute = definition.openClawConnectorId === undefined
       ? undefined
       : openClaw.connectors.find(candidate => candidate.id === definition.openClawConnectorId)
+    const accountConnected = (mcpRuntime === undefined || mcpRuntime.status === 'ready')
+      && accountGrantConnectsCatalogEntry(account)
     const connected = openClawRoute?.connected === true
       || live?.installed === true
       || live?.callable === true
-      || accountGrantConnectsCatalogEntry(account)
+      || accountConnected
       || mcpRuntime?.status === 'ready'
       || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
@@ -1267,6 +1308,7 @@ export function ConnectorsSettingsSection({ api,
                 : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
               const authorizationPending = attempt?.status === 'pending'
               const thisAuthorizationPending = authorizationPending && attempt.key === entry.key
+              const preferredMethod = entry.methods[0]
               return (
                 <article key={entry.key} className={connectorStyles['connectorCard']} data-authorization-key={entry.key}>
                   <div className={connectorStyles['connectorTop']}>
@@ -1294,14 +1336,16 @@ export function ConnectorsSettingsSection({ api,
                   <div className={connectorStyles['connectorFooter']}>
                     <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
                     <div className={connectorStyles['connectorActions']}>
-                      <button
-                        type="button"
-                        className={connectorStyles['connectorPrimaryButton']}
-                        disabled={authorizationPending || entry.inFlight}
-                        onClick={() => { begin(entry.key, 'oauth') }}
-                      >
-                        {thisAuthorizationPending ? t('signingIn') : actionLabel}
-                      </button>
+                      {preferredMethod === undefined ? null : (
+                        <button
+                          type="button"
+                          className={connectorStyles['connectorPrimaryButton']}
+                          disabled={authorizationPending || entry.inFlight}
+                          onClick={() => { begin(entry.key, preferredMethod.id) }}
+                        >
+                          {thisAuthorizationPending ? t('signingIn') : actionLabel}
+                        </button>
+                      )}
                       {entry.stored === undefined || entry.disconnectable !== true ? null : (
                         <button
                           type="button"
@@ -1366,7 +1410,10 @@ export function ConnectorsSettingsSection({ api,
                 installingCurated={installingCuratedId === row.definition.id}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                 removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
-                onAuthorize={(entry) => { begin(entry.key, entry.methods[0]?.id ?? 'oauth') }}
+                onAuthorize={(entry) => {
+                  const method = entry.methods[0]
+                  if (method !== undefined) begin(entry.key, method.id)
+                }}
                 onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
                   ? undefined
                   : () => { installCuratedConnector(row.definition) }}
