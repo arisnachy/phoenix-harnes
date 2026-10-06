@@ -898,7 +898,7 @@ export function ConnectorsSettingsSection({ api,
         setCatalogFailure(response.result.error.message)
         return
       }
-      setEntries(response.result.value.entries.filter(entry => entry.methods.some(method => method.id === 'oauth')) as Entry[])
+      setEntries(response.result.value.entries as Entry[])
     }, (error: unknown) => { if (!stale) setCatalogFailure(String(error)) })
     return () => { stale = true }
   }, [api, refresh])
@@ -916,6 +916,14 @@ export function ConnectorsSettingsSection({ api,
     )
     return () => { stale = true }
   }, [mcpRegistry, refresh])
+
+  useEffect(() => {
+    if (mcpRegistry === undefined || !mcpHub.runtime.some(entry => entry.status === 'starting')) return
+    const timer = window.setTimeout(() => {
+      setRefresh(current => current + 1)
+    }, 650)
+    return () => { window.clearTimeout(timer) }
+  }, [mcpRegistry, mcpHub.runtime])
 
   useEffect(() => {
     const readOpenClaw = mcpRegistry?.openClawState
