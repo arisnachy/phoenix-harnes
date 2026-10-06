@@ -211,6 +211,27 @@ export function installAssistantMail(ctx: Context,
       status = 'recovery-required'
     }
   }
+  const withCredentialRecovery = async <T>(
+    inboxId: string,
+    operation: (transport: AgentMailTransport) => Promise<T>,
+  ): Promise<T> => {
+    const transport = new AgentMailTransport(resolveKey, inboxId, config.timeoutMs, fetch, controller.signal)
+    try {
+      return await operation(transport)
+    } catch (error) {
+      await handleProviderFailure(error)
+      const recoverable = error instanceof AgentMailHttpError
+        && (error.reason === 'credential-rejected' || error.reason === 'permission-missing')
+        && status === 'connecting'
+      if (!recoverable) throw error
+      try {
+        return await operation(new AgentMailTransport(resolveKey, inboxId, config.timeoutMs, fetch, controller.signal))
+      } catch (retryError) {
+        await handleProviderFailure(retryError, false)
+        throw retryError
+      }
+    }
+  }
   let resetting = false
   let disposed = false
   const controller = new AbortController()
@@ -232,11 +253,7 @@ export function installAssistantMail(ctx: Context,
     const account = await onboarding.status()
     assertActive()
     if (account.state !== 'ready' || account.inboxId !== reply.inboxId || ![account.ownerEmail, ...account.contacts].includes(reply.to)) throw new Error('mail sender authorization revoked')
-    const transport = new AgentMailTransport(resolveKey, reply.inboxId, config.timeoutMs, fetch, controller.signal)
-    try { return await transport.reply(reply) } catch (error) {
-      await handleProviderFailure(error)
-      throw error
-    }
+    return withCredentialRecovery(reply.inboxId, transport => transport.reply(reply))
   }, Date.now, async (message) => {
     assertActive()
     const account = await onboarding.status()
@@ -245,11 +262,8 @@ export function installAssistantMail(ctx: Context,
       || ![account.ownerEmail, ...account.contacts].includes(message.to)) throw new ProactivityDeferredError('mail sender authorization is unavailable')
     if (!await config.authorizeOutgoing(message)) throw new ProactivityDeferredError('mail task authorization is no longer active')
     assertActive()
-    const transport = new AgentMailTransport(resolveKey, message.inboxId, config.timeoutMs, fetch, controller.signal)
-    try { return await transport.send(message.to, message.subject, message.text, message.idempotencyKey) } catch (error) {
-      await handleProviderFailure(error)
-      throw error
-    }
+    return withCredentialRecovery(message.inboxId,
+      transport => transport.send(message.to, message.subject, message.text, message.idempotencyKey))
   }, ownership => config.authorizeOutgoing(ownership))
   const ownerOutbox = new MailOutbox(join(config.directory, 'owner-outbox.json'),
     () => Promise.reject(new Error('owner outbox does not accept incoming replies')), Date.now, async (message) => {
@@ -259,13 +273,8 @@ export function installAssistantMail(ctx: Context,
       if (account.state !== 'ready' || account.inboxId !== message.inboxId || account.ownerEmail !== message.to) {
         throw new ProactivityDeferredError('Kira mailbox owner verification is required')
       }
-      try {
-        return await new AgentMailTransport(resolveKey, message.inboxId, config.timeoutMs, fetch, controller.signal)
-          .send(message.to, message.subject, message.text, message.idempotencyKey)
-      } catch (error) {
-        await handleProviderFailure(error)
-        throw error
-      }
+      return withCredentialRecovery(message.inboxId,
+        transport => transport.send(message.to, message.subject, message.text, message.idempotencyKey))
     }, async (message) => {
       const account = await onboarding.status()
       return account.state === 'ready' && account.ownerEmail === message.to
@@ -349,7 +358,9 @@ export function installAssistantMail(ctx: Context,
         try { await recover() } catch (error) {
           await handleProviderFailure(error)
           socketDispose?.(); socketDispose = undefined
-          // Keep durable work for the queued wake or the next polling interval.
+          // A successfully rotated credential should be consumed immediately instead of
+          // waiting for the next poll. Other failures keep durable work for later recovery.
+          if (status === 'connecting') repumpRequested = true
         }
       } while (hasQueuedWake() && !isDisposed())
     })().finally(() => {
