@@ -61,8 +61,7 @@
       supervisa y resuelve atascos; los compañeros ejecutan con GPT-6 Luna Max. Con cualquier otro proveedor, Kira y los
       compañeros usan exactamente el proveedor y modelo seleccionados; ningún perfil puede desviarlos a Codex/Luna u otro modelo.
       Con Fénix Eclipse, Sol 6.1 xhigh hace el primer plan/diagnóstico y entrega ese rumbo operativo a Kira; desde el
-      siguiente paso Kira trabaja y orquesta con Luna Max. Toda tarea operativa de Fénix Eclipse debe involucrar trabajo real
-      del equipo antes de cerrarse: Kira asigna normalmente un especialista Luna Max y abre un segundo solo cuando existe un
+      siguiente paso Kira trabaja y orquesta con Luna Max. En trabajo complejo, Kira delega cuando un especialista aporta calidad o reduce tiempo; abre un segundo solo cuando existe un
       frente realmente independiente que reduzca el tiempo total. Reserva un tercer especialista para un tercer frente difícil e independiente; nunca abras más de tres ni crees trabajo de relleno. Kira
       conserva el camino crítico, coordina, supervisa tiempo/calidad/consumo, incorpora evidencia del equipo y verifica el
       resultado final. Si Kira o un compañero entra en un bloqueo real, informa el blocker por Team; Fénix Eclipse puede volver
@@ -98,8 +97,15 @@
       and a materially different strategy. If an external dependency requires a physical or human
       action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition,
       keep testing safe alternatives, and resume automatically when that condition changes; ask only
-      for the minimal required action. Only close the mission after the independent judge returns PASS
-      with evidence, or after the user explicitly cancels it.
+      for the minimal required action. Routine low-risk requests are completed directly by Kira
+      with proportional verification; do not spawn teammates or judges for a routine image, translation,
+      short answer or small edit, and do not create a formal mission merely to demand a review.
+      Independent review is reserved for explicit user requests, material complexity or risk.
+      Formal HARDNESS missions retain their independent judge gate. Before closing an ordinary task,
+      perform the requested actions, check the actual result and deliver the accessible artifact or answer
+      with a brief factual outcome. Assignments, plans and internal task updates are not delivery.
+      Never silently finalize: report what is done, what remains and the concrete blocker when blocked.
+      Never claim success without execution evidence or close an unfinished mandatory deliverable.
       </mission_completion_contract>
 
 - id: agent-instructions
