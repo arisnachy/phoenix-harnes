@@ -16,7 +16,7 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
-import { credentialRef } from '@phoenix-ai/dsh-credentials'
+import { credentialKey, credentialRef } from '@phoenix-ai/dsh-credentials'
 import { RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { McpOAuthController } from './oauth.ts'
@@ -279,6 +279,47 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
   const connection = startConnection(ctx, effectiveConnectionConfig(config), reconnect, registration, transportOptions)
   reconnectRef.current = () => { connection.reconnect() }
+
+  if (config.transport === 'stdio' && config.envCredentialRefs !== undefined
+    && Object.keys(config.envCredentialRefs).length > 0
+    && authorization !== undefined && credentials !== undefined) {
+    const credentialEntries = Object.entries(config.envCredentialRefs)
+    const authorizationKey = credentialKey(
+      'mcp-client',
+      config.serverName.toLowerCase().replaceAll('_', '-'),
+    )
+    ctx.effect(() => authorization.registerFlow({
+      key: authorizationKey,
+      label: `MCP ${config.serverName}`,
+      methods: [{ id: 'credentials', label: `Configure ${config.serverName}` }],
+      inspect: async () => {
+        const lifecycle = mcpConnectors?.list().find(entry => entry.serverName === config.serverName)
+        if (lifecycle?.status === 'auth-required') return undefined
+        const states = await Promise.all(
+          credentialEntries.map(([, refName]) => credentials.describe(credentialRef(refName))),
+        )
+        return states.every(state => state.configured)
+          ? { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'apiKey' }
+          : undefined
+      },
+      run: async (session) => {
+        for (const [envName, refName] of credentialEntries) {
+          const ref = credentialRef(refName)
+          const state = await credentials.describe(ref)
+          if (state.configured) continue
+          const value = (await session.prompt({
+            kind: 'secret',
+            message: `Introduce ${envName} para ${config.serverName}. PHOENIX lo guarda en el vault local y no lo expone al chat.`,
+            placeholder: envName,
+          })).trim()
+          if (value.length === 0) throw new Error(`${envName} cannot be empty`)
+          await credentials.set(ref, value)
+        }
+        await credentials.modifyRecord(authorizationKey, async () => ({ kind: 'api-key' }))
+        connection.reconnect()
+      },
+    }), 'mcp-client.credential-flow')
+  }
 
   if (oauthController !== undefined && authorization !== undefined && credentials !== undefined) {
     const controller = oauthController
