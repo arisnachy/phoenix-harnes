@@ -132,20 +132,24 @@ describe('goal completion judge', () => {
   })
 
   it('runs a fresh structured read-only review and returns pass', async () => {
-    const start = vi.fn(async (_name: string, request: Record<string, unknown>) => ({
-      result: Promise.resolve({
-        output: [],
-        stopReason: 'completed' as const,
-        structured: structuredGateResponse(request.label) ?? {
-          verdict: 'pass',
-          summary: 'All acceptance evidence is present.',
-          findings: [],
-          required_changes: [],
-        },
-      }),
-      dispose: vi.fn(async () => {}),
-      request,
-    }))
+    const finalPrompts: unknown[] = []
+    const start = vi.fn(async (_name: string, request: Record<string, unknown>) => {
+      if (request.label === 'goal-completion-judge') finalPrompts.push(request.prompt)
+      return {
+        result: Promise.resolve({
+          output: [],
+          stopReason: 'completed' as const,
+          structured: structuredGateResponse(request.label) ?? {
+            verdict: 'pass',
+            summary: 'All acceptance evidence is present.',
+            findings: [],
+            required_changes: [],
+          },
+        }),
+        dispose: vi.fn(async () => {}),
+        request,
+      }
+    })
     const result = await judgeGoalCompletion({
       subagents: { getProvider: () => provider() as never, start: start as never },
       provider: 'spawn',
@@ -163,13 +167,12 @@ describe('goal completion judge', () => {
     })
     expect(start).toHaveBeenCalledWith('spawn', expect.objectContaining({
       label: 'goal-completion-judge',
-      prompt: expect.arrayContaining([
-        expect.objectContaining({ text: expect.stringMatching(/Act as Aegis.*operationally silent/u) }),
-      ]),
       agentOptions: {},
       toolFilter: { allow: ['read', 'read_image', 'glob', 'grep', 'session_search', 'session_event_search', 'web_search', 'web_fetch'] },
       outputSchema: expect.objectContaining({ required: ['verdict', 'summary', 'findings', 'required_changes'] }) as unknown,
     }))
+    expect(JSON.stringify(finalPrompts)).toContain('Act as Aegis')
+    expect(JSON.stringify(finalPrompts)).toContain('operationally silent')
   })
 
   it('keeps the goal open when the judge requires changes', async () => {
