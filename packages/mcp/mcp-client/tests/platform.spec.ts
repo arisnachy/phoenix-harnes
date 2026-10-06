@@ -3,8 +3,53 @@ import {
   checkPlatformCompatibility,
   resolveSupportedPlatforms,
 } from '@phoenix-ai/dsh-mcp-client/src/platform.ts'
+import { normalizeWindowsNpxMcpLaunch } from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
 
 describe('MCP stdio platform compatibility', () => {
+  it('wraps the official Memory MCP NPX launcher with cmd on Windows', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-memory'],
+      'win32',
+    )).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', '@modelcontextprotocol/server-memory'],
+    })
+  })
+
+  it('wraps the official Filesystem MCP NPX launcher with cmd on Windows', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+      'win32',
+    )).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', '@modelcontextprotocol/server-filesystem', '.'],
+    })
+  })
+
+  it('does not introduce a shell for arbitrary registry NPX packages', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@example/untrusted-mcp', 'a&whoami'],
+      'win32',
+    )).toEqual({
+      command: 'npx',
+      args: ['-y', '@example/untrusted-mcp', 'a&whoami'],
+    })
+  })
+
+  it('keeps curated NPX launchers unchanged off Windows', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-memory'],
+      'linux',
+    )).toEqual({
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-memory'],
+    })
+  })
+
   it('blocks persisted XcodeBuildMCP configs on Windows before spawn', () => {
     const compatibility = checkPlatformCompatibility({
       serverName: 'XcodeBuildMCP',
