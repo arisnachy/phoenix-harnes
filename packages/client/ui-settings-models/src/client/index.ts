@@ -76,6 +76,7 @@ type PluginInventoryChatGptWebRemote = {
 type PluginInventoryMcpRegistryRemote = {
   searchMcpRegistry(request: { query: string; limit?: number }): Promise<PluginInventoryRemoteResult<McpRegistrySearchSnapshot>>
   mcpConnectorHubState(): Promise<PluginInventoryRemoteResult<McpConnectorHubSnapshot>>
+  reconnectMcpConnector(request: { serverName: string }): Promise<PluginInventoryRemoteResult<{ accepted: boolean }>>
   installMcpRegistryServer(request: { name: string; version?: string }): Promise<PluginInventoryRemoteResult<{
     status: 'installed' | 'already-installed'
     connector: {
@@ -157,6 +158,10 @@ function mcpRegistryClient(ctx: ClientContext): McpRegistryClient {
     state: async () => unwrapPluginInventory(
       'mcpConnectorHubState',
       await remote().mcpConnectorHubState(),
+    ),
+    reconnect: async request => unwrapPluginInventory(
+      'reconnectMcpConnector',
+      await remote().reconnectMcpConnector(request),
     ),
     install: async request => unwrapPluginInventory(
       'installMcpRegistryServer',
