@@ -125,6 +125,8 @@ export interface McpRegistryClient {
    * @returns Runtime and persistent managed connector state.
    */
   state(): Promise<McpConnectorHubSnapshot>
+  /** Retry one already-installed live MCP without clearing its stored authorization. */
+  reconnect?(request: { serverName: string }): Promise<{ accepted: boolean }>
   /**
    * Install an exact registry identity after Host-side endpoint revalidation.
    * @param request - Registry name and optional version selected by the user.
@@ -501,7 +503,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
 }
 
 function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, onAuthorize, onConfigure,
-  onInstallCurated, onFindOfficial, onFindRegistry, onRepair, onRemove, pending, installingCurated, repairing, removing }: {
+  onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove, pending, installingCurated, reconnecting, repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
@@ -515,10 +517,12 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   onInstallCurated?: (() => void) | undefined
   onFindOfficial?: (() => void) | undefined
   onFindRegistry?: (() => void) | undefined
+  onReconnect?: ((runtime: McpConnectorRuntimeView) => void) | undefined
   onRepair?: ((connector: ManagedMcpConnectorView) => void) | undefined
   onRemove?: ((connector: ManagedMcpConnectorView) => void) | undefined
   pending: boolean
   installingCurated: boolean
+  reconnecting: boolean
   repairing: boolean
   removing: boolean
 }): ReactNode {
@@ -565,6 +569,16 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const reauthorizationRequired = mcpRuntime?.status === 'auth-required'
     && authorizationAccount?.stored !== undefined
   const openClawRuntimeMissing = definition.id === 'github' && openClaw?.phase === 'missing-runtime'
+  const shouldShowAuthorization = authorizationAccount !== undefined
+    && !connectedByAccount
+    && openClaw?.connected !== true
+    && !openClawRuntimeMissing
+    && (authorizationAccount.stored === undefined
+      || mcpRuntime?.status === 'auth-required'
+      || mcpRuntime === undefined)
+  const canReconnect = mcpRuntime !== undefined
+    && (mcpRuntime.status === 'failed' || mcpRuntime.status === 'disconnected')
+    && onReconnect !== undefined
   const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed')
   const canRepair = brokenManaged && managed.source !== undefined && onRepair !== undefined
   return (
@@ -602,9 +616,19 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : installUrl !== undefined ? (
             <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
           ) : null}
-          {authorizationAccount !== undefined && !connectedByAccount && openClaw?.connected !== true && !openClawRuntimeMissing ? (
+          {shouldShowAuthorization ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || authorizationAccount.inFlight} onClick={() => { onAuthorize(authorizationAccount) }}>
               {reauthorizationRequired || connected ? t('reauthorize') : t('authorize')}
+            </button>
+          ) : null}
+          {canReconnect ? (
+            <button
+              className={hubStyles['compactButton']}
+              type="button"
+              disabled={pending || reconnecting || repairing || removing}
+              onClick={() => { onReconnect(mcpRuntime) }}
+            >
+              {reconnecting ? t('connectingStatus') : t('reconnect')}
             </button>
           ) : null}
           {canRepair ? (
@@ -870,6 +894,7 @@ export function ConnectorsSettingsSection({ api,
   const [installingCuratedId, setInstallingCuratedId] = useState<string | undefined>()
   const [repairingEntryId, setRepairingEntryId] = useState<string | undefined>()
   const [removingEntryId, setRemovingEntryId] = useState<string | undefined>()
+  const [reconnectingServerName, setReconnectingServerName] = useState<string | undefined>()
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
@@ -1131,6 +1156,24 @@ export function ConnectorsSettingsSection({ api,
         setCatalogFailure(connectorT('registryUnavailable'))
       },
     ).finally(() => { setRegistryBusy(false) })
+  }
+
+  const reconnectMcpConnector = (runtime: McpConnectorRuntimeView): void => {
+    const reconnect = mcpRegistry?.reconnect?.bind(mcpRegistry)
+    if (reconnect === undefined || reconnectingServerName !== undefined) return
+    setCatalogFailure(undefined)
+    setReconnectingServerName(runtime.serverName)
+    void reconnect({ serverName: runtime.serverName }).then(
+      (result) => {
+        if (!result.accepted) {
+          setCatalogFailure(connectorT('reconnectRequiredStatus'))
+          return
+        }
+        setRefresh(current => current + 1)
+        onAuthorized()
+      },
+      (error: unknown) => { setCatalogFailure(String(error)) },
+    ).finally(() => { setReconnectingServerName(undefined) })
   }
 
   const repairManagedConnector = (connector: ManagedMcpConnectorView): void => {
@@ -1408,6 +1451,7 @@ export function ConnectorsSettingsSection({ api,
                 t={connectorT}
                 pending={attempt?.status === 'pending' || jevBusy}
                 installingCurated={installingCuratedId === row.definition.id}
+                reconnecting={row.mcpRuntime !== undefined && reconnectingServerName === row.mcpRuntime.serverName}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                 removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
                 onAuthorize={(entry) => {
@@ -1429,6 +1473,7 @@ export function ConnectorsSettingsSection({ api,
                     setFilter('available')
                     setQuery(row.definition.name)
                   }}
+                onReconnect={mcpRegistry?.reconnect === undefined ? undefined : reconnectMcpConnector}
                 onRepair={mcpRegistry?.repair === undefined ? undefined : repairManagedConnector}
                 onRemove={mcpRegistry?.remove === undefined ? undefined : removeManagedConnector}
                 onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
