@@ -225,7 +225,9 @@ export function installAssistantMail(ctx: Context,
         && status === 'connecting'
       if (!recoverable) throw error
       try {
-        return await operation(new AgentMailTransport(resolveKey, inboxId, config.timeoutMs, fetch, controller.signal))
+        const result = await operation(new AgentMailTransport(resolveKey, inboxId, config.timeoutMs, fetch, controller.signal))
+        automaticCredentialRecoveryAttempted = false
+        return result
       } catch (retryError) {
         await handleProviderFailure(retryError, false)
         throw retryError
