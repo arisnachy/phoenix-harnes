@@ -628,7 +628,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               className={hubStyles['compactButton']}
               type="button"
               disabled={pending || reconnecting || repairing || removing}
-              onClick={() => { onReconnect(mcpRuntime) }}
+              onClick={() => {
+                if (mcpRuntime !== undefined) onReconnect?.(mcpRuntime)
+              }}
             >
               {reconnecting ? t('connectingStatus') : t('reconnect')}
             </button>
