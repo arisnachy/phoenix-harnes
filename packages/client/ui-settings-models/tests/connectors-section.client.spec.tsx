@@ -354,7 +354,7 @@ describe('connectors settings section', () => {
     renderHub(api, { mcpRegistry })
     const braveCard = await waitFor(() => {
       const card = document.querySelector('[data-connector-id="brave-search"]')
-      expect(card).toBeTruthy()
+      if (card === null) throw new Error('Brave Search connector card was not rendered')
       return card
     })
     expect(braveCard.textContent).toContain('Authorization required')
@@ -405,7 +405,8 @@ describe('connectors settings section', () => {
     renderHub(api, { mcpRegistry })
     const canvaCard = await waitFor(() => {
       const card = document.querySelector('[data-connector-id="canva"]')
-      expect(card?.textContent).toContain('Connecting')
+      if (card === null) throw new Error('Canva connector card was not rendered')
+      expect(card.textContent).toContain('Connecting')
       return card
     })
     await waitFor(() => {
