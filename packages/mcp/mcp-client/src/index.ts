@@ -357,6 +357,15 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           ? { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'apiKey' }
           : undefined
       },
+      disconnect: async () => {
+        for (const [, refName] of credentialEntries) {
+          const ref = credentialRef(refName)
+          const state = await credentials.describe(ref)
+          if (state.configured && state.writable) await credentials.unset(ref)
+        }
+        await credentials.deleteRecord(authorizationKey)
+        connection.reconnect()
+      },
       run: async (session) => {
         for (const [envName, refName] of credentialEntries) {
           const ref = credentialRef(refName)
