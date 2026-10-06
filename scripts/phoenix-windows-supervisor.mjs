@@ -954,15 +954,26 @@ function hostRestartRequestPath() {
   return gitControlPath(HOST_RESTART_REQUEST_FILE)
 }
 
-function hostRestartRequested() {
+function readHostRestartRequest() {
   const path = hostRestartRequestPath()
-  if (path === undefined || !existsSync(path)) return false
+  if (path === undefined || !existsSync(path)) return undefined
   try {
     const value = JSON.parse(readFileSync(path, 'utf8'))
-    return value?.schema === 1 && value.kind === 'host-restart'
+    return value?.schema === 1 && value.kind === 'host-restart' ? value : undefined
   } catch {
-    return false
+    return undefined
   }
+}
+
+function hostRestartRequested() {
+  return readHostRestartRequest() !== undefined
+}
+
+function activeRuntimeForUpdaterHostRestart(request) {
+  if (request?.source !== 'updater-ready-state' || typeof request.reason !== 'string') return undefined
+  const active = readActiveRuntimeRecord()
+  if (active === undefined || !request.reason.includes(active.target.slice(0, 12))) return undefined
+  return healthyRuntimeForTarget(active.target)
 }
 
 function clearHostRestartRequest() {
@@ -1339,7 +1350,20 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
       }
     }
 
-    if (hostRestartRequested()) {
+    const hostRestart = readHostRestartRequest()
+    if (hostRestart !== undefined) {
+      const alreadyActive = activeRuntimeForUpdaterHostRestart(hostRestart)
+      if (alreadyActive !== undefined) {
+        runtimeRoot = alreadyActive.path
+        if (readPreparedRecord()?.target === alreadyActive.target) clearPreparedRecord()
+        if (restartRequestTarget() === alreadyActive.target) clearRestartRequest()
+        clearHostRestartRequest()
+        console.error(
+          `[PHOENIX UPDATE] ignored stale Host restart request for ${alreadyActive.target.slice(0, 12)} because that runtime is already active and healthy.`,
+        )
+        continue
+      }
+
       const preflight = preflightBootConfiguration()
       if (!preflight.ok) {
         clearHostRestartRequest()

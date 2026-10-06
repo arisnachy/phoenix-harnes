@@ -64,6 +64,16 @@ describe('prepared update auto-activation bridge', () => {
         target: activeTarget,
         path: runtime,
       }), 'utf8')
+      writeFileSync(join(control, 'phoenix-update-restart-request.json'), JSON.stringify({
+        schema: 1,
+        target: activeTarget,
+      }), 'utf8')
+      writeFileSync(join(control, 'phoenix-host-restart-request.json'), JSON.stringify({
+        schema: 1,
+        kind: 'host-restart',
+        reason: `verified stable update ${activeTarget.slice(0, 12)} ready; activate and restart`,
+        source: 'updater-ready-state',
+      }), 'utf8')
 
       const result = spawnSync(process.execPath, [
         resolve('scripts/phoenix-prepared-restart-bridge.mjs'),
@@ -77,6 +87,7 @@ describe('prepared update auto-activation bridge', () => {
 
       expect(result.status, result.stderr).toBe(0)
       expect(existsSync(join(control, 'phoenix-update-restart-request.json'))).toBe(false)
+      expect(existsSync(join(control, 'phoenix-host-restart-request.json'))).toBe(false)
       expect(result.stderr).toContain('already active')
     } finally {
       rmSync(control, { recursive: true, force: true })

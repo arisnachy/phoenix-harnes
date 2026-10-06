@@ -91,12 +91,32 @@ function targetAlreadyActive(controlDir, target) {
   return existsSync(activePath) && currentTarget(activePath) === target
 }
 
-function clearDuplicateRestartRequest(controlDir, target) {
-  const path = join(controlDir, UPDATE_RESTART_FILE)
-  if (!existsSync(path)) return
+function clearDuplicateRestartRequests(controlDir, target) {
+  const updatePath = join(controlDir, UPDATE_RESTART_FILE)
+  if (existsSync(updatePath)) {
+    try {
+      const value = JSON.parse(readFileSync(updatePath, 'utf8'))
+      if (value?.schema === 1 && value.target === target) unlinkSync(updatePath)
+    } catch {
+      // A malformed request is left for the supervisor's fail-closed parser.
+    }
+  }
+
+  // Older ready-state writers also emitted a generic Host restart marker.
+  // If the exact verified SHA is already active, leaving that marker behind
+  // makes the supervisor perform a safe-restart with no update handoff. The
+  // updater then recreates the same ready state and the Host loops forever.
+  // Remove only the updater-owned marker tied to this exact target.
+  const hostPath = join(controlDir, 'phoenix-host-restart-request.json')
+  if (!existsSync(hostPath)) return
   try {
-    const value = JSON.parse(readFileSync(path, 'utf8'))
-    if (value?.schema === 1 && value.target === target) unlinkSync(path)
+    const value = JSON.parse(readFileSync(hostPath, 'utf8'))
+    const sameTarget = value?.schema === 1
+      && value.kind === 'host-restart'
+      && typeof value.reason === 'string'
+      && value.reason.includes(target.slice(0, 12))
+      && value.source === 'updater-ready-state'
+    if (sameTarget) unlinkSync(hostPath)
   } catch {
     // A malformed request is left for the supervisor's fail-closed parser.
   }
@@ -110,7 +130,7 @@ function writeJsonAtomic(path, value) {
 
 function requestActivation(controlDir, target) {
   if (targetAlreadyActive(controlDir, target)) {
-    clearDuplicateRestartRequest(controlDir, target)
+    clearDuplicateRestartRequests(controlDir, target)
     console.error(`[PHOENIX UPDATE] activation request for ${target.slice(0, 12)} suppressed because that verified runtime is already active.`)
     return false
   }
@@ -222,7 +242,7 @@ function armFromStaging() {
   if (controlDir.toLowerCase() === gitDir.toLowerCase()) return 0
   if (!/^[0-9a-f]{40}$/iu.test(target)) return 0
   if (targetAlreadyActive(controlDir, target)) {
-    clearDuplicateRestartRequest(controlDir, target)
+    clearDuplicateRestartRequests(controlDir, target)
     console.error(`[PHOENIX UPDATE] staging bridge skipped ${target.slice(0, 12)} because that verified runtime is already active.`)
     return 0
   }

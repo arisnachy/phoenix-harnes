@@ -138,6 +138,18 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('clearPreparedRecord()')
   })
 
+  it('ignores updater-owned Host restart markers for the already-active verified runtime', () => {
+    expect(source).toContain('function readHostRestartRequest()')
+    expect(source).toContain('function activeRuntimeForUpdaterHostRestart(request)')
+    expect(source).toContain("request?.source !== 'updater-ready-state'")
+    expect(source).toContain('ignored stale Host restart request')
+    expect(source).toContain('if (readPreparedRecord()?.target === alreadyActive.target) clearPreparedRecord()')
+    expect(source).toContain('if (restartRequestTarget() === alreadyActive.target) clearRestartRequest()')
+    expect(source).toContain('clearHostRestartRequest()')
+    expect(restartBridgeSource).toContain("join(controlDir, 'phoenix-host-restart-request.json')")
+    expect(restartBridgeSource).toContain("value.source === 'updater-ready-state'")
+  })
+
   it('keeps the current Host online until the replacement runtime is fully prewarmed', () => {
     expect(source).toContain('warming replacement runtime while current Host remains online')
     expect(source).toContain('const runtime = activatePreparedRuntime(updateTarget)')
