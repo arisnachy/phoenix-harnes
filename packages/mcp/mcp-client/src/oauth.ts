@@ -29,6 +29,7 @@ export interface McpOAuthProviderOptions {
   onAuthorizationUrl: (url: URL) => void | Promise<void>
   state?: string | (() => string | Promise<string>)
   clientInformation?: OAuthClientInformationMixed | (() => Promise<OAuthClientInformationMixed | undefined>)
+  tokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
 }
 
 function cloneWithout<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> {
@@ -61,7 +62,7 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
     redirect_uris: [options.redirectUrl],
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
-    token_endpoint_auth_method: 'none',
+    token_endpoint_auth_method: options.tokenEndpointAuthMethod ?? 'none',
   }
 
   return {
@@ -358,6 +359,7 @@ function mcpCredentialKey(serverName: string): CredentialKey {
 export interface McpOAuthControllerOptions {
   callbackPort?: number
   resolveClientInformation?: () => Promise<OAuthClientInformationMixed | undefined>
+  tokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
 }
 
 /** Host controller for one MCP server's OAuth lifecycle. */
@@ -372,6 +374,7 @@ export class McpOAuthController {
   private readonly serverName: string
   private readonly serverUrl: string
   private readonly resolveClientInformation?: () => Promise<OAuthClientInformationMixed | undefined>
+  private readonly tokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
   private closed = false
 
   constructor(
@@ -383,6 +386,7 @@ export class McpOAuthController {
     this.serverName = serverName
     this.serverUrl = serverUrl
     this.resolveClientInformation = options.resolveClientInformation
+    this.tokenEndpointAuthMethod = options.tokenEndpointAuthMethod
     this.key = mcpCredentialKey(serverName)
     this.store = createCredentialStateStore(credentials, this.key)
     this.callbackServer = new McpOAuthCallbackServer(serverName, options.callbackPort)
@@ -411,6 +415,9 @@ export class McpOAuthController {
       ...(this.resolveClientInformation === undefined
         ? {}
         : { clientInformation: this.resolveClientInformation }),
+      ...(this.tokenEndpointAuthMethod === undefined
+        ? {}
+        : { tokenEndpointAuthMethod: this.tokenEndpointAuthMethod }),
     })
   }
 
@@ -458,6 +465,9 @@ export class McpOAuthController {
       ...(this.resolveClientInformation === undefined
         ? {}
         : { clientInformation: this.resolveClientInformation }),
+      ...(this.tokenEndpointAuthMethod === undefined
+        ? {}
+        : { tokenEndpointAuthMethod: this.tokenEndpointAuthMethod }),
     })
     try {
       const first = await auth(provider, { serverUrl: this.serverUrl })
