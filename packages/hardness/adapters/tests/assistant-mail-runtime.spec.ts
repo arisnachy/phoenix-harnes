@@ -111,8 +111,8 @@ describe('owned durable outgoing mail', () => {
       expect(recoveries).toBe(1)
       expect(sends).toBe(2)
       expect((await firstOutgoing(directory)).state).toBe('sent')
-      const status = await runtime.control.status()
-      expect(status.state).toBe('ready')
+      const account: unknown = JSON.parse(await readFile(join(directory, 'account.json'), 'utf8'))
+      expect(mailRecord(account).state).toBe('ready')
     } finally { await runtime.dispose(); vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }) }
   })
 
