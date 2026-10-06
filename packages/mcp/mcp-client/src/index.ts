@@ -403,7 +403,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           if (!current.configured) {
             const value = (await session.prompt({
               kind: 'text',
-              message: `Introduce el OAuth client ID para ${config.serverName}. Se guardará solo en el vault local de PHOENIX.`,
+              message: `Introduce el OAuth client ID para ${config.serverName}. Registra como redirect URI ${controller.callbackServer.redirectUri}. Se guardará solo en el vault local de PHOENIX.`,
               placeholder: String(oauthClientIdRef),
             })).trim()
             if (value.length === 0) throw new Error('OAuth client ID cannot be empty')
