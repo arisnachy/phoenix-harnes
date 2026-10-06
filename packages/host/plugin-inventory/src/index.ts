@@ -132,6 +132,22 @@ export class PluginInventoryGateway extends TypertRemoteService {
       }
       return () => undefined
     }, 'managed Jev retirement')
+    void ctx.effect(() => {
+      let active = true
+      void this.managedMcp.ensureCoreMcpPack().then((result) => {
+        if (!active) return
+        if (result.failed.length > 0) {
+          ctx.logger.warn(
+            `core MCP pack restored with ${result.failed.length} connector(s) pending recovery: ${result.failed.map(item => item.connectorId).join(', ')}`,
+          )
+        }
+      }, (error: unknown) => {
+        if (!active) return
+        ctx.logger.warn('core MCP pack restore failed safely; Phoenix remains available and will retry on the next start')
+        ctx.logger.warn(error)
+      })
+      return () => { active = false }
+    }, 'core MCP pack restore')
     void ctx.effect(async () => {
       try {
         await this.chatGptWeb.restore()
@@ -259,11 +275,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
    */
   @Remote('installCuratedMcpConnector')
   async installCuratedMcpConnector(request: CuratedMcpInstallRequest): Promise<McpRegistryInstallReceipt> {
-    switch (request.connectorId) {
-      case 'devpost': return this.managedMcp.installDevpostHackathons()
-      case 'canva': return this.managedMcp.installCanva()
-      default: throw new Error(`unsupported curated MCP connector: ${String(request.connectorId)}`)
-    }
+    return this.managedMcp.installCuratedMcp(request.connectorId)
   }
 
   /**

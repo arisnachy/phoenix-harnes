@@ -101,6 +101,17 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
+type CuratedMcpConnectorId = 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+
+const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
+  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare',
+  'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
+])
+
+function isCuratedMcpConnectorId(value: string): value is CuratedMcpConnectorId {
+  return CURATED_MCP_CONNECTOR_IDS.has(value)
+}
+
 /** Browser-safe client for the Host-owned Official MCP Registry proxy and installer. */
 export interface McpRegistryClient {
   /**
@@ -124,7 +135,7 @@ export interface McpRegistryClient {
     connector: ManagedMcpConnectorView
   }>
   /** Install a Host-pinned curated MCP by connector id; no endpoint crosses the browser boundary. */
-  installCurated?(request: { connectorId: 'devpost' | 'canva' }): Promise<{
+  installCurated?(request: { connectorId: CuratedMcpConnectorId }): Promise<{
     status: 'installed' | 'already-installed'
     connector: ManagedMcpConnectorView
   }>
@@ -540,7 +551,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
                 : definition.curatedMcp === true || definition.registryName !== undefined
                   ? { text: t('officialInstallAvailableStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
                   : { text: t('officialAdapterUnavailableStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
-  const oauthAccount = account !== undefined && account.methods.some(candidate => candidate.id === 'oauth')
+  const authorizationAccount = account !== undefined && account.methods.length > 0
     ? account
     : undefined
   const openClawRuntimeMissing = definition.id === 'github' && openClaw?.phase === 'missing-runtime'
@@ -581,8 +592,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : installUrl !== undefined ? (
             <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
           ) : null}
-          {oauthAccount !== undefined && !connectedByAccount && openClaw?.connected !== true && !openClawRuntimeMissing ? (
-            <button className={hubStyles['compactButton']} type="button" disabled={pending || oauthAccount.inFlight} onClick={() => { onAuthorize(oauthAccount) }}>
+          {authorizationAccount !== undefined && !connectedByAccount && openClaw?.connected !== true && !openClawRuntimeMissing ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending || authorizationAccount.inFlight} onClick={() => { onAuthorize(authorizationAccount) }}>
               {connected ? t('reauthorize') : t('authorize')}
             </button>
           ) : null}
@@ -606,7 +617,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               {removing ? t('uninstalling') : t('uninstall')}
             </button>
           ) : null}
-          {managed === undefined && mcpRuntime === undefined && oauthAccount === undefined && openClaw?.connected !== true && definition.curatedMcp === true && onInstallCurated !== undefined ? (
+          {managed === undefined && mcpRuntime === undefined && authorizationAccount === undefined && openClaw?.connected !== true && definition.curatedMcp === true && onInstallCurated !== undefined ? (
             <button
               className={connectorStyles['connectorPrimaryButton']}
               type="button"
@@ -616,12 +627,12 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               {installingCurated ? t('installing') : t('install')}
             </button>
           ) : null}
-          {managed === undefined && (oauthAccount === undefined || openClawRuntimeMissing) && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
+          {managed === undefined && (authorizationAccount === undefined || openClawRuntimeMissing) && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
               {t('findOfficialConnector')}
             </button>
           ) : null}
-          {managed === undefined && oauthAccount === undefined && openClaw?.connected !== true && definition.provenance === 'registry-listed' && onFindRegistry !== undefined ? (
+          {managed === undefined && authorizationAccount === undefined && openClaw?.connected !== true && definition.provenance === 'registry-listed' && onFindRegistry !== undefined ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindRegistry}>
               {t('findConnector')}
             </button>
@@ -887,7 +898,7 @@ export function ConnectorsSettingsSection({ api,
         setCatalogFailure(response.result.error.message)
         return
       }
-      setEntries(response.result.value.entries.filter(entry => entry.methods.some(method => method.id === 'oauth')) as Entry[])
+      setEntries(response.result.value.entries as Entry[])
     }, (error: unknown) => { if (!stale) setCatalogFailure(String(error)) })
     return () => { stale = true }
   }, [api, refresh])
@@ -905,6 +916,14 @@ export function ConnectorsSettingsSection({ api,
     )
     return () => { stale = true }
   }, [mcpRegistry, refresh])
+
+  useEffect(() => {
+    if (mcpRegistry === undefined || !mcpHub.runtime.some(entry => entry.status === 'starting')) return
+    const timer = window.setTimeout(() => {
+      setRefresh(current => current + 1)
+    }, 650)
+    return () => { window.clearTimeout(timer) }
+  }, [mcpRegistry, mcpHub.runtime])
 
   useEffect(() => {
     const readOpenClaw = mcpRegistry?.openClawState
@@ -1123,7 +1142,7 @@ export function ConnectorsSettingsSection({ api,
 
   const installCuratedConnector = (definition: ConnectorDefinition): void => {
     const installCurated = mcpRegistry?.installCurated
-    if (installCurated === undefined || (definition.id !== 'devpost' && definition.id !== 'canva') || definition.curatedMcp !== true
+    if (installCurated === undefined || definition.curatedMcp !== true || !isCuratedMcpConnectorId(definition.id)
       || installingCuratedId !== undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
     setCatalogFailure(undefined)
     setInstallingCuratedId(definition.id)
@@ -1350,7 +1369,7 @@ export function ConnectorsSettingsSection({ api,
                 installingCurated={installingCuratedId === row.definition.id}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                 removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
-                onAuthorize={(entry) => { begin(entry.key, 'oauth') }}
+                onAuthorize={(entry) => { begin(entry.key, entry.methods[0]?.id ?? 'oauth') }}
                 onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
                   ? undefined
                   : () => { installCuratedConnector(row.definition) }}
