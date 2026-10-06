@@ -76,6 +76,7 @@ describe('Kira team in the existing main chat', () => {
   it('shows real avatars, routes a contextual multi-target reply, persists reactions and reloads without duplicate rows', async () => {
     const lead = scaffold.ctx.agents.list().find(agent => agent.session.header.origin !== 'subagent')
     if (lead === undefined) throw new Error('real main session is not active')
+    expect(lead.ctx.tools.schemas(lead).map(tool => tool.name)).toContain('image_generation')
     const selected = await scaffold.ctx.apiProxy.sessions.selectModel({ rpcId: 'team-model' as never, payload: { sessionId: lead.id, provider: 'team-chat-test', model: 'team-chat-test' } })
     expect(selected.result.ok).toBe(true)
     await page.locator('textarea:enabled').last().fill('USER_TEAM_MISSION')

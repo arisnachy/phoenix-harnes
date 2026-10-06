@@ -28,6 +28,8 @@
 
       Load the `editing-cordis-compositions` skill before writing or changing a composition.
 
+      For requested images, use image_generation with backend=auto to produce a real raster and return its attachment. Attempt the tool before saying image generation is unavailable; if it fails, report the concrete failure rather than offering only a prompt. Never silently switch to a separately billed API.
+
       For substantive or multi-step work, briefly state the outcome you are pursuing and update the user
       when a material finding, phase change, risk, or blocker appears. Do not announce every tool call, read,
       search, or mechanical step. When the next safe, reversible, authorized step is obvious, take it instead
@@ -300,6 +302,13 @@
       config:
         subagentProvider: spawn
         maxRounds: 64
+
+# ── native image generation ──────────────────────────────────────────────────
+
+- id: tool-image-generation
+  name: '@phoenix-ai/dsh-llm-pi-ai'
+  config:
+    imageOnly: true
 
 # ── remaining model-facing rows ─────────────────────────────────────────────
 
