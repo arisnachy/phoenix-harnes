@@ -954,20 +954,21 @@ export function ConnectorsSettingsSection({ api,
     if (expectedKeys.length === 0) return
 
     const controller = new AbortController()
+    const cancelled = (): boolean => controller.signal.aborted
     void (async () => {
       for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
         if (delayMs > 0) {
           await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
         }
-        if (controller.signal.aborted) return
+        if (cancelled()) return
         try {
           const allEntries = await readAuthorizationEntries(api)
-          if (controller.signal.aborted) return
+          if (cancelled()) return
           setEntries(allEntries)
           if (expectedKeys.every(key => allEntries.some(entry => entry.key === key))) return
         } catch (error: unknown) {
           if (!isTransientConnectorRemoteFailure(error)) {
-            if (!controller.signal.aborted) setCatalogFailure(String(error))
+            if (!cancelled()) setCatalogFailure(String(error))
             return
           }
         }
