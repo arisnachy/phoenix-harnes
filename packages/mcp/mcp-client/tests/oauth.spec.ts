@@ -148,7 +148,48 @@ describe('createMcpOAuthProvider', () => {
     expect(await state.read()).toEqual({ clientInformation, tokens })
 
     await state.write({ clientInformation })
-    expect(records.size).toBe(0)
+    expect(records.size).toBe(1)
+    expect(await state.read()).toEqual({ clientInformation, tokens })
+  })
+
+  it('restores a usable OAuth grant after the MCP controller is recreated', async () => {
+    const key = credentialKey('mcp-client', 'notion')
+    const persisted = {
+      kind: 'grant' as const,
+      payload: {
+        clientInformation: { client_id: 'notion-client' },
+        tokens: {
+          access_token: 'still-valid-access',
+          refresh_token: 'refresh-token',
+          token_type: 'Bearer',
+        },
+      },
+    }
+    const records = new Map<string, unknown>([[String(key), persisted]])
+    const credentials = {
+      readRecord: vi.fn(async (recordKey: unknown) => records.get(String(recordKey))),
+      modifyRecord: vi.fn(async (recordKey: unknown, mutate: (current: unknown) => Promise<unknown>) => {
+        const next = await mutate(records.get(String(recordKey)))
+        if (next === undefined) records.delete(String(recordKey))
+        else records.set(String(recordKey), next)
+        return next
+      }),
+      deleteRecord: vi.fn(async (recordKey: unknown) => { records.delete(String(recordKey)) }),
+    } as unknown as CredentialProvider
+
+    const first = new McpOAuthController(credentials, 'notion', 'https://mcp.notion.com/mcp')
+    await first.ready
+    await expect(first.isAuthorized()).resolves.toBe(true)
+    await first.close()
+
+    const restarted = new McpOAuthController(credentials, 'notion', 'https://mcp.notion.com/mcp')
+    try {
+      await restarted.ready
+      await expect(restarted.isAuthorized()).resolves.toBe(true)
+      expect(records.get(String(key))).toEqual(persisted)
+    } finally {
+      await restarted.close()
+    }
   })
 
   it('drops a stale dynamic client registration before reauthorization on a new loopback redirect', async () => {
