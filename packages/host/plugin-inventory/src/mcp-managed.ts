@@ -763,7 +763,7 @@ function selectInstallableCandidate(
 export class ManagedMcpController {
   private readonly path: string
   private readonly registrySearch: ManagedMcpRegistrySearch
-  private readonly runtimeSnapshot?: ManagedMcpRuntimeSnapshot
+  private readonly runtimeSnapshot: ManagedMcpRuntimeSnapshot | undefined
 
   /**
    * @param loader - Live Loader used for immediate activation and rollback.
