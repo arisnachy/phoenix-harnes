@@ -269,6 +269,7 @@ function normalize(value: string): string {
 }
 
 const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
+const MCP_AUTH_FLOW_RETRY_MS = [0, 120, 350, 800, 1_600] as const
 
 function isTransientConnectorRemoteFailure(error: unknown): boolean {
   const message = String(error).toLowerCase()
@@ -923,6 +924,38 @@ export function ConnectorsSettingsSection({ api,
   }, [mcpRegistry, mcpHub.runtime])
 
   useEffect(() => {
+    if (api === undefined) return
+    const expectedKeys = mcpHub.managed.flatMap((connector) => {
+      const runtime = mcpHub.runtime.find(entry => entry.serverName === connector.serverName)
+      if (runtime?.status !== 'auth-required') return []
+      return [`mcp-client/${connector.serverName.toLowerCase().replaceAll('_', '-')}`]
+    })
+    if (expectedKeys.length === 0) return
+
+    let stale = false
+    void (async () => {
+      for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
+        if (delayMs > 0) {
+          await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
+        }
+        if (stale) return
+        try {
+          const allEntries = await readAuthorizationEntries(api)
+          if (stale) return
+          setEntries(allEntries)
+          if (expectedKeys.every(key => allEntries.some(entry => entry.key === key))) return
+        } catch (error: unknown) {
+          if (!isTransientConnectorRemoteFailure(error)) {
+            if (!stale) setCatalogFailure(String(error))
+            return
+          }
+        }
+      }
+    })()
+    return () => { stale = true }
+  }, [api, mcpHub.managed, mcpHub.runtime])
+
+  useEffect(() => {
     const readOpenClaw = mcpRegistry?.openClawState?.bind(mcpRegistry)
     if (readOpenClaw === undefined) return
     let stale = false
@@ -996,7 +1029,6 @@ export function ConnectorsSettingsSection({ api,
 
   const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
-    const account = entries.find(entry => entryMatchesDefinitionAuthorization(entry, definition))
     const mcpRuntime = definition.id === 'binance'
       ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
       : definition.id === 'jev'
@@ -1008,6 +1040,10 @@ export function ConnectorsSettingsSection({ api,
       : definition.id === 'jev'
         ? mcpHub.managed.find(candidate => candidate.serverName === 'jev')
         : mcpHub.managed.find(candidate => managedMatchesDefinition(candidate, definition))
+    const catalogAccount = entries.find(entry => entryMatchesDefinitionAuthorization(entry, definition))
+    const account = managed === undefined
+      ? catalogAccount
+      : managedAuthorizationEntry(managed, entries) ?? catalogAccount
     const openClawRoute = definition.openClawConnectorId === undefined
       ? undefined
       : openClaw.connectors.find(candidate => candidate.id === definition.openClawConnectorId)
@@ -1267,6 +1303,7 @@ export function ConnectorsSettingsSection({ api,
                 : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
               const authorizationPending = attempt?.status === 'pending'
               const thisAuthorizationPending = authorizationPending && attempt.key === entry.key
+              const preferredMethod = entry.methods[0]
               return (
                 <article key={entry.key} className={connectorStyles['connectorCard']} data-authorization-key={entry.key}>
                   <div className={connectorStyles['connectorTop']}>
@@ -1294,14 +1331,16 @@ export function ConnectorsSettingsSection({ api,
                   <div className={connectorStyles['connectorFooter']}>
                     <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
                     <div className={connectorStyles['connectorActions']}>
-                      <button
-                        type="button"
-                        className={connectorStyles['connectorPrimaryButton']}
-                        disabled={authorizationPending || entry.inFlight}
-                        onClick={() => { begin(entry.key, 'oauth') }}
-                      >
-                        {thisAuthorizationPending ? t('signingIn') : actionLabel}
-                      </button>
+                      {preferredMethod === undefined ? null : (
+                        <button
+                          type="button"
+                          className={connectorStyles['connectorPrimaryButton']}
+                          disabled={authorizationPending || entry.inFlight}
+                          onClick={() => { begin(entry.key, preferredMethod.id) }}
+                        >
+                          {thisAuthorizationPending ? t('signingIn') : actionLabel}
+                        </button>
+                      )}
                       {entry.stored === undefined || entry.disconnectable !== true ? null : (
                         <button
                           type="button"
