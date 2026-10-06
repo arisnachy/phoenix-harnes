@@ -117,9 +117,25 @@ export interface McpRegistryInstallRequest {
   readonly version?: string
 }
 
-/** Exact curated connector id accepted by the Host-owned pinned installer. */
+/** Exact curated connector ids accepted by the Host-owned pinned installer. */
+export type CuratedMcpConnectorId =
+  | 'devpost'
+  | 'canva'
+  | 'supabase'
+  | 'heygen'
+  | 'figma'
+  | 'notion'
+  | 'linear'
+  | 'cloudflare'
+  | 'slack'
+  | 'brave-search'
+  | 'filesystem'
+  | 'memory'
+  | 'fetch'
+
+/** Browser/model-safe request selecting one Host-curated MCP identity. */
 export interface CuratedMcpInstallRequest {
-  readonly connectorId: 'devpost' | 'canva'
+  readonly connectorId: CuratedMcpConnectorId
 }
 
 /** Result of installing a safe registry-listed Streamable HTTP MCP. */

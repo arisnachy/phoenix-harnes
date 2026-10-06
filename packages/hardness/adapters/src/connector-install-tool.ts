@@ -16,7 +16,7 @@ export interface McpRegistryInstallerService {
       url: string
     }
   }>
-  installCuratedMcpConnector?(request: { connectorId: 'devpost' }): Promise<{
+  installCuratedMcpConnector?(request: { connectorId: 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch' }): Promise<{
     status: 'installed' | 'already-installed'
     connector: {
       entryId: string
@@ -82,11 +82,11 @@ export function createConnectorInstallTool(
 ): ToolDefinition {
   return defineTool({
     name: 'connector_install',
-    description: 'Install a missing MCP after connector_discover found its exact Official MCP Registry identity, or activate the built-in curated Devpost connector with connectorId=devpost. This always asks the user for one-shot approval. PHOENIX resolves every endpoint Host-side and never executes an arbitrary GitHub URL or package from this tool.',
+    description: 'Install a missing MCP after connector_discover found its exact Official MCP Registry identity, or activate one Phoenix-curated MCP by connectorId. Curated ids include devpost, canva, supabase, heygen, figma, notion, linear, cloudflare, slack, brave-search, filesystem, memory, and fetch. This always asks the user for one-shot approval. PHOENIX resolves every endpoint/package Host-side and never executes an arbitrary URL, GitHub repository, or command from this tool. Binance REAL is intentionally excluded and must use binance_trading_activate.',
     parameters: {
       name: { type: 'string', description: 'Exact Official MCP Registry name. Use either name or connectorId, never both.' },
       version: { type: 'string' },
-      connectorId: { type: 'string', enum: ['devpost'], description: 'Phoenix-curated MCP identity. Use devpost for the official Devpost Hackathons connector.' },
+      connectorId: { type: 'string', enum: ['devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack', 'brave-search', 'filesystem', 'memory', 'fetch'], description: 'Phoenix-curated MCP identity. Binance REAL is intentionally not installable through this generic route.' },
     },
     output: {
       schema: {
@@ -110,13 +110,13 @@ export function createConnectorInstallTool(
         throw new Error('connector_install requires an exact registry server name')
       }
       if (exec.agent === undefined) throw new Error('connector_install requires an active agent session')
-      const label = connectorId === 'devpost' ? 'Devpost Hackathons' : name
+      const label = connectorId ?? name
       const outcome = await approval.request({
         agent: exec.agent,
         toolName: 'connector_install',
         callId: exec.callId,
-        reason: connectorId === 'devpost'
-          ? 'Activate the Phoenix-curated official Devpost Hackathons MCP'
+        reason: connectorId !== undefined
+          ? `Activate the Phoenix-curated ${connectorId} MCP`
           : `Install registry-listed MCP ${name}${args.version === undefined ? '' : ` @ ${args.version}`} into PHOENIX`,
         risk: 'medium',
         reversible: true,
@@ -129,9 +129,9 @@ export function createConnectorInstallTool(
         }
       }
       let receipt: Awaited<ReturnType<McpRegistryInstallerService['installMcpRegistryServer']>>
-      if (connectorId === 'devpost') {
+      if (connectorId !== undefined) {
         if (installer.installCuratedMcpConnector === undefined) {
-          throw new Error('curated Devpost MCP installation is unavailable in this Phoenix runtime')
+          throw new Error('curated MCP installation is unavailable in this Phoenix runtime')
         }
         receipt = await installer.installCuratedMcpConnector({ connectorId })
       } else {
@@ -150,7 +150,7 @@ export function createConnectorInstallTool(
       }
     },
     presentCall(args) {
-      const label = args.connectorId === 'devpost' ? 'Devpost Hackathons' : args.name
+      const label = args.connectorId ?? args.name
       return {
         card: 'generic',
         title: `Install MCP: ${label}`,
