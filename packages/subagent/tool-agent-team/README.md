@@ -6,7 +6,7 @@ Scoped model-facing adapter for [`ctx.agentTeams`](../agent-team/README.md). It 
 
 ## Main conversation tools
 
-`team_chat_read` exposes bounded canonical message ids and real public text to the exact Lead or direct child. `team_chat_react` sets or removes any valid Unicode emoji with the backend-authenticated actor identity. Generic direct children receive these chat tools without receiving Team task or roster authority. Guidance requires sparse useful collaboration, no private reasoning in public messages, and Kira review before the final result; a shared model does not imply independent verification.
+`team_chat_read` exposes bounded canonical message ids and real public text to the exact Lead or direct child. `team_chat_react` sets or removes any valid Unicode emoji with the backend-authenticated actor identity. Generic direct children receive these chat tools without receiving Team task or roster authority. Assignments name the owner, deliverable, constraints and acceptance evidence; concise replies retain results and blockers, and changes after review require affected behavior to be checked again. Guidance requires sparse useful collaboration, no private reasoning in public messages, and Kira review before the final result; a shared model does not imply independent verification.
 ## Config
 
 ```yaml

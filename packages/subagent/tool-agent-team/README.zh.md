@@ -57,3 +57,5 @@ Team 插件 generation、配置、member role／name 与 schema 不变时，前�
 - **提示词策略只负责协调，不负责 confinement**：它无法阻止 Bash 或外部进程写入重叠文件。
 - **不会自主创建 Team**：除非用户明确要求 delegation，普通任务不会触发组队。
 - **没有 Web 控制功能**：浏览器 roster、model profile 编辑与任务板呈现不属于该 runtime 包。
+
+任务分配明确负责人、交付物、约束与验收证据；简短回复保留结果和阻塞原因，审查后的修改需要重新检查受影响的行为。

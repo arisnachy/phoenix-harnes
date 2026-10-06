@@ -358,7 +358,7 @@ describe('Web session model selection', () => {
     const codex = catalog.groups.find(group => group.id === 'openai-codex')
     expect(codex?.models[0]).toEqual({
       id: PHOENIX_CODEX_AUTO_MODEL,
-      name: 'Phoenix Orquesta',
+      name: 'Fénix Eclipse',
       description: 'GPT-6.1 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
     })
 

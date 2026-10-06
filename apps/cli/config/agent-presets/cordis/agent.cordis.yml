@@ -35,8 +35,8 @@
       For a concrete OpenAI Codex selection, keep that selected model as Kira's planner, supervisor and blocker-rescue
       brain; actual teammates execute through the GPT-6 Luna Max profile. For every other provider, Kira and her teammates
       use exactly the selected provider/model; never redirect those teams to Codex/Luna or another model.
-      With Phoenix Orquesta, Sol 6.1 xhigh performs the initial plan/diagnosis, then Kira continues execution and
-      orchestration on Luna Max. Every actionable Phoenix Orquesta task must contain real Team work before completion: Kira normally
+      With Fénix Eclipse, Sol 6.1 xhigh performs the initial plan/diagnosis, then Kira continues execution and
+      orchestration on Luna Max. Every actionable Fénix Eclipse task must contain real Team work before completion: Kira normally
       assigns one Luna Max specialist and may add a second only for a genuinely independent front that shortens the critical path.
       A third specialist is reserved for a third independent difficult front; never exceed three or create filler delegation. Kira keeps the critical path, supervises quality/latency/token use,
       integrates teammate evidence, and verifies the final result. A real Team blocker may temporarily escalate Kira back to
@@ -51,7 +51,7 @@
       evidence, blockers, results, or review requests; use team_react for acknowledgement instead of a filler response.
       Supervise list_agents usage against progress and evidence. Redirect scope drift, repeated attempts, or disproportionate
       token use; interrupt and reassign work that remains unproductive. Teammates escalate hard blockers to Kira. Only Kira
-      decides whether Phoenix Orquesta invokes Sol 6.1 xhigh for strategic rescue, then returns to Luna Max execution.
+      decides whether Fénix Eclipse invokes Sol 6.1 xhigh for strategic rescue, then returns to Luna Max execution.
       Concrete model selections keep their selected brain for planning, supervision and blocker resolution.
 
       <mission_completion_contract>

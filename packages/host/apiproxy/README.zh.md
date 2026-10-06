@@ -20,7 +20,7 @@ Settings 分节中的 `reasoningEffort` 在 agent-default-model 插件配置中�
 
 当可选的 `user-profile` 服务保存了 `modelProviderOrder` 时，网关按该偏好对建议分组排序，并按原生顺序追加未列出的提供方。这只改变显示；所有已注册路由仍然是可路由候选项。
 
-OpenAI Codex 模型选择器以持久标识 `phoenix-auto` 显示 Phoenix Orquesta：Sol 负责规划与解困，Kira 和专家使用 Luna Max 执行。选择具体 Codex 模型时，该模型负责规划与解困，后续执行步骤交给 Luna Max；其他提供商始终使用选定模型。
+OpenAI Codex 模型选择器以持久标识 `phoenix-auto` 显示 Fénix Eclipse：Sol 负责规划与解困，Kira 和专家使用 Luna Max 执行。选择具体 Codex 模型时，该模型负责规划与解困，后续执行步骤交给 Luna Max；其他提供商始终使用选定模型。
 
 ## 约定层（`/api`）
 
