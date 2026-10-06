@@ -98,8 +98,9 @@ export const LINEAR_MCP_URL = 'https://mcp.linear.app/mcp'
 export const CLOUDFLARE_MCP_URL = 'https://mcp.cloudflare.com/mcp'
 /** Official Slack MCP endpoint. Slack requires a registered client for custom harnesses. */
 export const SLACK_MCP_URL = 'https://mcp.slack.com/mcp'
-/** Phoenix vault references for the Slack app backing the custom MCP client. */
+/** Phoenix vault reference for the Slack app OAuth client id. */
 export const SLACK_MCP_CLIENT_ID_REF = 'SLACK_MCP_CLIENT_ID'
+/** Phoenix vault reference for the Slack app OAuth client secret. */
 export const SLACK_MCP_CLIENT_SECRET_REF = 'SLACK_MCP_CLIENT_SECRET'
 /** Stable loopback callback registered in the Phoenix Slack app. */
 export const SLACK_MCP_CALLBACK_PORT = 17844
@@ -786,6 +787,8 @@ export class ManagedMcpController {
    * Install one Phoenix-curated MCP from its exact Host-owned specification.
    * No caller-supplied URL, executable, package, or environment value crosses
    * this boundary.
+   * @param connectorId - Curated connector identity admitted by Phoenix.
+   * @returns Idempotent managed installation receipt.
    */
   async installCuratedMcp(connectorId: CuratedMcpConnectorId): Promise<McpRegistryInstallReceipt> {
     const spec = CURATED_MCP_SPECS[connectorId]
@@ -800,6 +803,7 @@ export class ManagedMcpController {
    * Restore the default Phoenix MCP pack without blocking one provider on
    * another. Missing live entries are created in parallel and then committed
    * to the managed overlay in one atomic write.
+   * @returns Installed, already-present, and failed curated connector ids.
    */
   async ensureCoreMcpPack(): Promise<{
     installed: readonly CuratedMcpConnectorId[]
@@ -883,12 +887,18 @@ export class ManagedMcpController {
     return this.removeManagedRows(isDevpostHackathonsManagedRow, 'Devpost Hackathons')
   }
 
-  /** Install Canva's pinned official remote MCP with user-scoped OAuth. */
+  /**
+   * Install Canva's pinned official remote MCP with user-scoped OAuth.
+   * @returns Idempotent managed Canva installation receipt.
+   */
   async installCanva(): Promise<McpRegistryInstallReceipt> {
     return this.installCuratedMcp('canva')
   }
 
-  /** Remove only the PHOENIX-managed Canva MCP. */
+  /**
+   * Remove only the PHOENIX-managed Canva MCP.
+   * @returns Whether one or more managed Canva entries were removed.
+   */
   async removeCanva(): Promise<boolean> {
     return this.removeManagedRows(isCanvaManagedRow, 'Canva')
   }
