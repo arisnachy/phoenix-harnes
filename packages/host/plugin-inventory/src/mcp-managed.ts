@@ -386,9 +386,15 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
     && reconnect.maxAttempts === 3
 }
 
+function validCuratedStdioConfig(value: Record<string, unknown>): boolean {
+  return Object.values(CURATED_MCP_SPECS)
+    .map(spec => spec.config())
+    .some(config => config.transport === 'stdio' && exactJson(value, config))
+}
+
 function validConfig(value: unknown): value is ManagedMcpConfig {
   if (!isRecord(value)) return false
-  if (value.transport === 'stdio') return validXApiConfig(value)
+  if (value.transport === 'stdio') return validXApiConfig(value) || validCuratedStdioConfig(value)
   return value.transport === 'streamable-http' && validHttpConfig(value)
 }
 
@@ -448,10 +454,15 @@ async function writeManagedRows(path: string, rows: readonly ManagedMcpRow[]): P
 }
 
 function connectorOf(row: ManagedMcpRow): ManagedMcpConnector {
+  const url = row.config.transport === 'streamable-http'
+    ? row.config.url
+    : row.config.serverName === X_API_MCP_SERVER_NAME || row.config.serverName === X_PHOENIX_API_MCP_SERVER_NAME
+      ? X_API_MCP_URL
+      : `stdio://${row.config.serverName}`
   return {
     entryId: row.id,
     serverName: row.config.serverName,
-    url: row.config.transport === 'streamable-http' ? row.config.url : X_API_MCP_URL,
+    url,
     ...(row.source === undefined ? {} : { source: row.source }),
   }
 }
@@ -657,7 +668,7 @@ export class ManagedMcpController {
     }
     if (row.source.kind === 'curated') {
       const connectorId = row.source.connectorId
-      if (connectorId !== 'devpost' && connectorId !== 'canva') {
+      if (!isCuratedMcpConnectorId(connectorId)) {
         throw new Error(`managed MCP entry "${entryId}" uses an unsupported curated repair source`)
       }
       const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
@@ -667,7 +678,7 @@ export class ManagedMcpController {
           `managed MCP entry "${entryId}" was removed from persistence but its live runtime could not be unloaded; restart Phoenix before retrying repair`,
         )
       }
-      return connectorId === 'devpost' ? this.installDevpostHackathons() : this.installCanva()
+      return this.installCuratedMcp(connectorId)
     }
 
     const snapshot = await this.registrySearch({ query: row.source.name, limit: 20 })
