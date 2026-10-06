@@ -36,7 +36,9 @@ export type TeamPersonaGender = 'male' | 'female'
 
 function personaOf(name: string): typeof TEAM_PERSONAS[number] | undefined {
   const key = personaKey(name)
-  const alias = key === 'la-forja' || key === 'forja' || key === 'forge' ? 'atlas' : key
+  const alias = key === 'la-forja' || key === 'forja' || key === 'forge' ? 'atlas'
+    : key === 'aegis' ? 'zenith'
+      : key
   return TEAM_PERSONAS.find(candidate => personaKey(candidate.kind) === alias || personaKey(candidate.name) === alias)
 }
 
