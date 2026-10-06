@@ -12,7 +12,12 @@ import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { type JsonValue } from '@phoenix-ai/dsh-tools'
 import type { PostToolDecision } from '@phoenix-ai/dsh-tools'
 import { publicToolName, syncTools, type ToolBridgeOptions } from '@phoenix-ai/dsh-mcp-client/src/tools.ts'
-import { createTransport, normalizeBearerToken, repairPhoenixStdioProxyArgs } from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
+import {
+  createTransport,
+  normalizeBearerToken,
+  normalizeWindowsNpxMcpLaunch,
+  repairPhoenixStdioProxyArgs,
+} from '@phoenix-ai/dsh-mcp-client/src/transport.ts'
 import type { Config } from '@phoenix-ai/dsh-mcp-client'
 
 const testToolSignal = new AbortController().signal
@@ -1279,6 +1284,41 @@ describe('tool execution edge cases', () => {
 })
 
 describe('createTransport', () => {
+  it('launches the bundled Filesystem MCP entrypoint directly on Windows', () => {
+    const launch = normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+      'win32',
+    )
+
+    expect(launch.command).toBe(process.execPath)
+    expect(launch.args[0]?.replace(/\\/g, '/')).toMatch(
+      /@modelcontextprotocol\/server-filesystem\/dist\/index\.js$/u,
+    )
+    expect(launch.args.slice(1)).toEqual(['.'])
+  })
+
+  it('repairs a legacy direct mcp-server-filesystem command on Windows', () => {
+    const launch = normalizeWindowsNpxMcpLaunch('mcp-server-filesystem', ['.'], 'win32')
+
+    expect(launch.command).toBe(process.execPath)
+    expect(launch.args[0]?.replace(/\\/g, '/')).toMatch(
+      /@modelcontextprotocol\/server-filesystem\/dist\/index\.js$/u,
+    )
+    expect(launch.args.slice(1)).toEqual(['.'])
+  })
+
+  it('keeps the safe cmd wrapper for other curated NPX MCPs on Windows', () => {
+    expect(normalizeWindowsNpxMcpLaunch(
+      'npx',
+      ['-y', '@modelcontextprotocol/server-memory'],
+      'win32',
+    )).toEqual({
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', '@modelcontextprotocol/server-memory'],
+    })
+  })
+
   it('repairs a stale absolute PHOENIX stdio proxy path from a previous installation', () => {
     const stale = 'C:\\Users\\old\\Fenix-evolution\\phoenix-harnes\\scripts\\mcp-stdio-proxy.mjs'
     const repaired = repairPhoenixStdioProxyArgs([stale, 'npx', '--yes'])
