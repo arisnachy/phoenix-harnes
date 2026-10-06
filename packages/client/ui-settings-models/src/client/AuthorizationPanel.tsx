@@ -932,27 +932,27 @@ export function ConnectorsSettingsSection({ api,
     })
     if (expectedKeys.length === 0) return
 
-    let stale = false
+    const controller = new AbortController()
     void (async () => {
       for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
         if (delayMs > 0) {
           await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
         }
-        if (stale) return
+        if (controller.signal.aborted) return
         try {
           const allEntries = await readAuthorizationEntries(api)
-          if (stale) return
+          if (controller.signal.aborted) return
           setEntries(allEntries)
           if (expectedKeys.every(key => allEntries.some(entry => entry.key === key))) return
         } catch (error: unknown) {
           if (!isTransientConnectorRemoteFailure(error)) {
-            if (!stale) setCatalogFailure(String(error))
+            if (!controller.signal.aborted) setCatalogFailure(String(error))
             return
           }
         }
       }
     })()
-    return () => { stale = true }
+    return () => { controller.abort() }
   }, [api, mcpHub.managed, mcpHub.runtime])
 
   useEffect(() => {
