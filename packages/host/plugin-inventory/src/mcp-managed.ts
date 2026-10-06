@@ -8,7 +8,10 @@ import type {
   CuratedMcpConnectorId,
   ManagedMcpConnector,
   ManagedMcpSource,
+  McpConnectorRuntimeEntry,
+  McpRegistryArgument,
   McpRegistryCandidate,
+  McpRegistryPackage,
   McpRegistryInstallReceipt,
   McpRegistryInstallRequest,
   McpRegistrySearchSnapshot,
@@ -23,6 +26,9 @@ const JEV_LEGACY_STARTUP_TIMEOUT_MS = 1_200
 const X_API_TOOL_TIMEOUT_MS = 60_000
 const X_API_STARTUP_TIMEOUT_MS = 300_000
 const CANVA_TOOL_TIMEOUT_MS = 60_000
+const REGISTRY_PACKAGE_STARTUP_TIMEOUT_MS = 30_000
+const REGISTRY_RUNTIME_VERIFY_TIMEOUT_MS = 10_000
+const REGISTRY_RUNTIME_POLL_MS = 100
 
 interface ManagedMcpReconnect {
   enabled: boolean
@@ -145,10 +151,14 @@ export type ManagedMcpRegistrySearch = (
   request: { query: string; limit?: number },
 ) => Promise<McpRegistrySearchSnapshot>
 
+/** Optional runtime lifecycle reader used to verify a generic registry install before persistence. */
+export type ManagedMcpRuntimeSnapshot = () => readonly McpConnectorRuntimeEntry[] | undefined
+
 /** Optional construction seams used by tests and alternate host embeddings. */
 export interface ManagedMcpControllerOptions {
   readonly patchPath?: string
   readonly registrySearch?: ManagedMcpRegistrySearch
+  readonly runtimeSnapshot?: ManagedMcpRuntimeSnapshot
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -571,6 +581,165 @@ function serverNameFor(candidate: McpRegistryCandidate): string {
   return `${base.slice(0, maxBase)}-${digest}`
 }
 
+function registryInputValue(
+  input: Pick<McpRegistryArgument, 'value' | 'default' | 'isRequired'>,
+  label: string,
+): string | undefined {
+  const value = input.value ?? input.default
+  if (value === undefined) {
+    if (input.isRequired) throw new Error(`${label} requires user input that Phoenix cannot infer safely`)
+    return undefined
+  }
+  if (/\{[^{}]+\}/.test(value)) {
+    throw new Error(`${label} contains an unresolved registry variable template`)
+  }
+  return value
+}
+
+function renderRegistryArguments(
+  values: readonly McpRegistryArgument[],
+  label: string,
+): string[] {
+  const rendered: string[] = []
+  for (const [index, argument] of values.entries()) {
+    const value = registryInputValue(argument, `${label} argument ${index + 1}`)
+    if (value === undefined) continue
+    if (argument.type === 'named') {
+      if (argument.name === undefined) throw new Error(`${label} has a named argument without a flag name`)
+      rendered.push(argument.name, value)
+    } else {
+      rendered.push(value)
+    }
+  }
+  return rendered
+}
+
+function registryCredentialRef(candidate: McpRegistryCandidate, envName: string): string {
+  const digest = createHash('sha256').update(candidate.name).digest('hex').slice(0, 10).toUpperCase()
+  const safeName = envName.toUpperCase().replace(/[^A-Z0-9_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 48)
+  return `MCP_${digest}_${safeName || 'CREDENTIAL'}`
+}
+
+function packageRegistryIsSupported(pkg: McpRegistryPackage): boolean {
+  if (pkg.registryBaseUrl === undefined) return true
+  try {
+    const url = new URL(pkg.registryBaseUrl)
+    const path = url.pathname.replace(/\/+$/, '') || '/'
+    if (path !== '/') return false
+    if (pkg.registryType === 'npm') return url.hostname === 'registry.npmjs.org'
+    if (pkg.registryType === 'pypi') return url.hostname === 'pypi.org'
+    return false
+  } catch {
+    return false
+  }
+}
+
+function registryPackageMcpConfig(
+  candidate: McpRegistryCandidate,
+  pkg: McpRegistryPackage,
+): ManagedStdioMcpConfig | undefined {
+  if (pkg.transport !== 'stdio' || !packageRegistryIsSupported(pkg)) return undefined
+
+  const registryType = pkg.registryType.toLowerCase()
+  const runtimeHint = pkg.runtimeHint?.toLowerCase()
+  let command: string
+  let packageSpec: string
+  let baseArgs: string[]
+
+  if (registryType === 'npm' && (runtimeHint === undefined || runtimeHint === 'npx')) {
+    if (!/^(?:@[A-Za-z0-9_.-]+\/)?[A-Za-z0-9_.-]+$/.test(pkg.identifier)) {
+      throw new Error(`Registry npm package "${pkg.identifier}" has an unsafe identifier`)
+    }
+    command = 'npx'
+    packageSpec = pkg.version === undefined ? pkg.identifier : `${pkg.identifier}@${pkg.version}`
+    baseArgs = ['-y']
+  } else if (registryType === 'pypi' && (runtimeHint === undefined || runtimeHint === 'uvx')) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(pkg.identifier)) {
+      throw new Error(`Registry PyPI package "${pkg.identifier}" has an unsafe identifier`)
+    }
+    command = 'uvx'
+    packageSpec = pkg.version === undefined ? pkg.identifier : `${pkg.identifier}==${pkg.version}`
+    baseArgs = []
+  } else {
+    return undefined
+  }
+
+  const runtimeArguments = renderRegistryArguments(pkg.runtimeArguments, `${candidate.name} runtime`)
+  const packageArguments = renderRegistryArguments(pkg.packageArguments, `${candidate.name} package`)
+  const env: Record<string, string> = {}
+  const envCredentialRefs: Record<string, string> = {}
+  for (const variable of pkg.environmentVariables) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(variable.name)) {
+      throw new Error(`${candidate.name} declares invalid environment variable "${variable.name}"`)
+    }
+    const value = variable.value ?? variable.default
+    if (value !== undefined) {
+      if (/\{[^{}]+\}/.test(value)) {
+        throw new Error(`${candidate.name} environment variable ${variable.name} contains an unresolved template`)
+      }
+      env[variable.name] = value
+    } else if (variable.isRequired) {
+      envCredentialRefs[variable.name] = registryCredentialRef(candidate, variable.name)
+    }
+  }
+
+  return {
+    transport: 'stdio',
+    serverName: serverNameFor(candidate),
+    command,
+    args: [...baseArgs, ...runtimeArguments, packageSpec, ...packageArguments],
+    env,
+    envCredentialRefs,
+    cwd: '',
+    toolCallTimeoutMs: 60_000,
+    startupTimeoutMs: REGISTRY_PACKAGE_STARTUP_TIMEOUT_MS,
+    failOnStartupError: false,
+    reconnect: {
+      enabled: true,
+      initialDelayMs: 1_000,
+      maxDelayMs: 30_000,
+      maxAttempts: 3,
+    },
+  }
+}
+
+function registryMcpConfig(candidate: McpRegistryCandidate): ManagedMcpConfig {
+  if (candidate.remoteUrl !== undefined) {
+    return {
+      transport: 'streamable-http',
+      serverName: serverNameFor(candidate),
+      url: candidate.remoteUrl,
+      headers: {},
+      oauth: true,
+      toolCallTimeoutMs: 60_000,
+      startupTimeoutMs: 10_000,
+      failOnStartupError: false,
+      reconnect: {
+        enabled: true,
+        initialDelayMs: 1_000,
+        maxDelayMs: 30_000,
+        maxAttempts: 3,
+      },
+    }
+  }
+
+  const failures: string[] = []
+  for (const pkg of candidate.packages) {
+    try {
+      const config = registryPackageMcpConfig(candidate, pkg)
+      if (config !== undefined) return config
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error(`Registry candidate ${candidate.name} cannot be installed safely: ${failures[0]}`)
+  }
+  throw new Error(
+    'Registry candidate has no Phoenix-installable endpoint or stdio package; supported package registries are npm and PyPI',
+  )
+}
+
 function selectInstallableCandidate(
   snapshot: McpRegistrySearchSnapshot,
   request: McpRegistryInstallRequest,
@@ -583,9 +752,6 @@ function selectInstallableCandidate(
   if (candidate.status !== 'active') {
     throw new Error(`MCP registry candidate ${candidate.name} is not active`)
   }
-  if (candidate.remoteUrl === undefined) {
-    throw new Error('Only registry-listed Streamable HTTP MCP servers can be installed automatically; review package-based servers manually')
-  }
   return candidate
 }
 
@@ -597,6 +763,7 @@ function selectInstallableCandidate(
 export class ManagedMcpController {
   private readonly path: string
   private readonly registrySearch: ManagedMcpRegistrySearch
+  private readonly runtimeSnapshot?: ManagedMcpRuntimeSnapshot
 
   /**
    * @param loader - Live Loader used for immediate activation and rollback.
@@ -608,12 +775,37 @@ export class ManagedMcpController {
   ) {
     this.path = options.patchPath ?? managedMcpPatchPath()
     this.registrySearch = options.registrySearch ?? searchOfficialMcpRegistry
+    this.runtimeSnapshot = options.runtimeSnapshot
+  }
+
+  private async verifyRuntime(serverName: string, label: string): Promise<void> {
+    if (this.runtimeSnapshot === undefined) return
+    const deadline = Date.now() + REGISTRY_RUNTIME_VERIFY_TIMEOUT_MS
+    let last: McpConnectorRuntimeEntry | undefined
+    do {
+      const snapshot = this.runtimeSnapshot()
+      if (snapshot === undefined) return
+      last = snapshot.find(entry => entry.serverName === serverName)
+      if (last?.status === 'ready' || last?.status === 'auth-required') return
+      if (last?.status === 'failed' || (last?.status === 'disconnected' && last.reasonCode === 'retry-exhausted')) {
+        throw new Error(
+          `${label} MCP failed its post-install health check${last.reasonCode === undefined ? '' : ` (${last.reasonCode})`}`,
+        )
+      }
+      await new Promise<void>(resolve => setTimeout(resolve, REGISTRY_RUNTIME_POLL_MS))
+    } while (Date.now() < deadline)
+
+    const detail = last === undefined
+      ? 'runtime never registered'
+      : `runtime remained ${last.status}${last.reasonCode === undefined ? '' : ` (${last.reasonCode})`}`
+    throw new Error(`${label} MCP did not become ready after installation: ${detail}`)
   }
 
   private async installManagedConfig(
     config: ManagedMcpConfig,
     label: string,
     source?: ManagedMcpSource,
+    verifyRuntime = false,
   ): Promise<McpRegistryInstallReceipt> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
@@ -630,6 +822,7 @@ export class ManagedMcpController {
         ...(source === undefined ? {} : { source }),
       }
       try {
+        if (verifyRuntime) await this.verifyRuntime(config.serverName, label)
         await writeManagedRows(this.path, [...rows, row])
       } catch (error) {
         try {
@@ -637,7 +830,7 @@ export class ManagedMcpController {
         } catch (rollbackError) {
           throw new AggregateError(
             [error, rollbackError],
-            `failed to persist ${label} MCP and roll back live activation`,
+            `failed to activate/persist ${label} MCP and roll back live activation`,
           )
         }
         throw error
@@ -742,8 +935,7 @@ export class ManagedMcpController {
     if (isRetiredJevCandidate(candidate)) {
       throw new Error('Jev integration is retired and cannot be repaired through the Official MCP Registry')
     }
-    const remoteUrl = candidate.remoteUrl
-    if (remoteUrl === undefined) throw new Error('Registry candidate no longer exposes a Streamable HTTP endpoint')
+    const config = registryMcpConfig(candidate)
 
     const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
     if (!removed.removed) throw new Error(`managed MCP entry "${entryId}" disappeared during repair`)
@@ -753,17 +945,11 @@ export class ManagedMcpController {
       )
     }
 
-    return this.installManagedConfig({
-      transport: 'streamable-http',
-      serverName: serverNameFor(candidate),
-      url: remoteUrl,
-      headers: {},
-      oauth: true,
-    }, candidate.name, {
+    return this.installManagedConfig(config, candidate.name, {
       kind: 'registry',
       name: candidate.name,
       version: candidate.version,
-    })
+    }, true)
   }
 
   /**
@@ -967,21 +1153,12 @@ export class ManagedMcpController {
     if (isRetiredJevCandidate(candidate)) {
       throw new Error('Jev integration is retired and cannot be installed through the Official MCP Registry')
     }
-    const remoteUrl = candidate.remoteUrl
-    if (remoteUrl === undefined) {
-      throw new Error('Registry candidate no longer exposes a Streamable HTTP endpoint')
-    }
-    return this.installManagedConfig({
-      transport: 'streamable-http',
-      serverName: serverNameFor(candidate),
-      url: remoteUrl,
-      headers: {},
-      oauth: true,
-    }, candidate.name, {
+    const config = registryMcpConfig(candidate)
+    return this.installManagedConfig(config, candidate.name, {
       kind: 'registry',
       name: candidate.name,
       version: candidate.version,
-    })
+    }, true)
   }
 }
 
