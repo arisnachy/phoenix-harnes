@@ -3,6 +3,7 @@ import { MailMessageId, MailThreadId } from './assistant-mail-types.ts'
 import type { AssistantMailTransport, MailDelivery, MailMessage, MailPage, MailReply } from './assistant-mail-types.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 
+/** Sanitized AgentMail rejection category used by Phoenix recovery logic without exposing provider bodies. */
 export type AgentMailFailureReason =
   | 'verification-required'
   | 'permission-missing'
