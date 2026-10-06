@@ -85,6 +85,59 @@ function transportOf(value: unknown): McpRegistryTransport | undefined {
   return undefined
 }
 
+function inputString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
+function projectArgument(value: unknown): McpRegistryPackage['runtimeArguments'][number] | undefined {
+  const item = record(value)
+  if (item === undefined) return undefined
+  const type = text(item.type)
+  if (type !== 'positional' && type !== 'named') return undefined
+  const name = text(item.name)
+  if (type === 'named' && name === undefined) return undefined
+  const valueText = inputString(item.value)
+  const defaultValue = inputString(item.default)
+  const valueHint = text(item.valueHint)
+  return {
+    type,
+    isRequired: item.isRequired === true,
+    isSecret: item.isSecret === true,
+    isRepeated: item.isRepeated === true,
+    ...(name === undefined ? {} : { name }),
+    ...(valueText === undefined ? {} : { value: valueText }),
+    ...(defaultValue === undefined ? {} : { default: defaultValue }),
+    ...(valueHint === undefined ? {} : { valueHint }),
+  }
+}
+
+function projectArguments(value: unknown): McpRegistryPackage['runtimeArguments'] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((item) => {
+    const projected = projectArgument(item)
+    return projected === undefined ? [] : [projected]
+  })
+}
+
+function projectEnvironmentVariables(value: unknown): McpRegistryPackage['environmentVariables'] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => {
+    const item = record(entry)
+    if (item === undefined) return []
+    const name = text(item.name)
+    if (name === undefined) return []
+    const valueText = inputString(item.value)
+    const defaultValue = inputString(item.default)
+    return [{
+      name,
+      isRequired: item.isRequired === true,
+      isSecret: item.isSecret === true,
+      ...(valueText === undefined ? {} : { value: valueText }),
+      ...(defaultValue === undefined ? {} : { default: defaultValue }),
+    }]
+  })
+}
+
 function projectPackages(server: Record<string, unknown>): McpRegistryPackage[] {
   if (!Array.isArray(server.packages)) return []
   return server.packages.flatMap((value) => {
@@ -96,12 +149,17 @@ function projectPackages(server: Record<string, unknown>): McpRegistryPackage[] 
     if (registryType === undefined || identifier === undefined || transport === undefined) return []
     const version = text(item.version)
     const runtimeHint = text(item.runtimeHint)
+    const registryBaseUrl = safeHttpsUrl(item.registryBaseUrl)
     return [{
       registryType,
       identifier,
       transport,
+      runtimeArguments: projectArguments(item.runtimeArguments),
+      packageArguments: projectArguments(item.packageArguments),
+      environmentVariables: projectEnvironmentVariables(item.environmentVariables),
       ...(version === undefined ? {} : { version }),
       ...(runtimeHint === undefined ? {} : { runtimeHint }),
+      ...(registryBaseUrl === undefined ? {} : { registryBaseUrl }),
     }]
   })
 }
