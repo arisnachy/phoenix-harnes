@@ -711,7 +711,7 @@ describe('task admission and package contracts', () => {
     await expect(ctx.subagents.start('codex-auto-review', {
       prompt: [{ type: 'text', text: 'task' }],
       parent: {
-        id: SessionId('non-codex-parent'),
+        id: 'non-codex-parent',
         options: { provider: 'deepseek', model: 'deepseek-v4-pro' },
         session: { header: { cwd: process.cwd() } },
       } as unknown as Agent,
