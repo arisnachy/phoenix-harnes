@@ -101,17 +101,9 @@ Get-ChildItem -LiteralPath $phoenixState -Filter 'phoenix-browser-*.ico' -File -
   Remove-Item -Force -ErrorAction SilentlyContinue
 
 $powerShellExe = Join-Path $PSHOME 'powershell.exe'
-$installedPhoenixExe = Join-Path $localAppData 'Programs\Phoenix\Phoenix.exe'
-if (Test-Path -LiteralPath $installedPhoenixExe -PathType Leaf) {
-  $targetPath = $installedPhoenixExe
-  $arguments = ''
-  $workingDirectory = Split-Path -Parent $installedPhoenixExe
-}
-else {
-  $targetPath = $powerShellExe
-  $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`""
-  $workingDirectory = $rootPath
-}
+$targetPath = $powerShellExe
+$arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`""
+$workingDirectory = $rootPath
 $iconLocation = "$iconPath,0"
 $windowStyle = 7
 $shell = New-Object -ComObject WScript.Shell
@@ -163,15 +155,16 @@ function Set-PhoenixShortcut([string]$ShortcutPath) {
   $shortcut.TargetPath = $targetPath
   $shortcut.Arguments = $arguments
   $shortcut.WorkingDirectory = $workingDirectory
-  $shortcut.Description = if ($targetPath -ieq $installedPhoenixExe) { 'Phoenix AI — escritorio' } else { 'Phoenix AI — navegador' }
+  $shortcut.Description = 'Phoenix AI — escritorio'
   $shortcut.IconLocation = $iconLocation
   $shortcut.WindowStyle = $windowStyle
   $shortcut.Save()
 }
 
-# One canonical shortcut name everywhere. Prefer the installed native shell so
-# Agent Desktop/Computer runs in the interactive Windows session; fall back to
-# the browser launcher only when Phoenix.exe is not installed.
+# One canonical shortcut name everywhere. The launcher prefers the installed
+# native shell (bound to this exact source checkout) so Agent Desktop/Computer
+# runs in the interactive Windows session; it falls back to the browser runtime
+# only when Phoenix.exe is not installed.
 $shortcutPath = Join-Path $desktopPath 'Phoenix.lnk'
 $startMenuShortcutPath = Join-Path $programsPath 'Phoenix.lnk'
 $taskbarShortcutPath = Join-Path $taskbarDirectory 'Phoenix.lnk'
