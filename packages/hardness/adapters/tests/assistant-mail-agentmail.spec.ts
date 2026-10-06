@@ -54,6 +54,20 @@ describe('AgentMail transport', () => {
     expect((error as Error).message).toContain('verification')
     expect((error as Error).message).not.toContain('private-key')
   })
+  it('classifies a bare gateway 403 as a rejected stored credential', async () => {
+    const error = await agentMailRequest('/inboxes/kira%40agentmail.to/messages', 'stale-key', 1000, async () =>
+      Response.json({ message: 'Forbidden' }, { status: 403 })).catch((value: unknown) => value)
+    expect(error).toMatchObject({ status: 403, reason: 'credential-rejected' })
+    expect((error as Error).message).toContain('recover')
+    expect((error as Error).message).not.toContain('stale-key')
+  })
+
+  it('classifies AgentMail authentication 401 as a rejected stored credential', async () => {
+    const error = await agentMailRequest('/inboxes/kira%40agentmail.to/messages', 'stale-key', 1000, async () =>
+      Response.json({ code: 'unknown_api_key', message: 'Unknown API key' }, { status: 401 })).catch((value: unknown) => value)
+    expect(error).toMatchObject({ status: 401, code: 'unknown_api_key', reason: 'credential-rejected' })
+  })
+
   it('classifies free-plan resource exhaustion instead of returning an opaque 403', async () => {
     const error = await agentMailRequest('/inboxes', 'private-key', 1000, async () =>
       Response.json({ code: 'limit_exceeded', message: 'Forbidden', fix: 'Delete an old inbox.' }, { status: 403 }))
