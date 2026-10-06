@@ -1009,7 +1009,7 @@ export function ConnectorsSettingsSection({ api,
     if (filter === 'available' && connected) return false
     const needle = query.trim().toLowerCase()
     if (needle.length === 0) return true
-    return `${definition.name} ${definition.category} ${definition.description} ${definition.capabilities.join(' ')}`.toLowerCase().includes(needle)
+    return `${definition.name} ${(definition.aliases ?? []).join(' ')} ${definition.category} ${definition.description} ${definition.capabilities.join(' ')}`.toLowerCase().includes(needle)
   })
 
   const visibleAccountEntries = useMemo(() => entries.filter(entry =>
