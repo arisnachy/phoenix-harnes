@@ -297,8 +297,12 @@ describe('connectors settings section', () => {
     }
 
     renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'Canvas' },
+    })
     const canvaCard = document.querySelector('[data-connector-id="canva"]')
     expect(canvaCard?.textContent).toContain('Canva')
+    expect(canvaCard?.textContent).toContain('MCP')
     const installButton = Array.from(canvaCard?.querySelectorAll('button') ?? [])
       .find(button => button.textContent === 'Install')
     expect(installButton).toBeTruthy()
