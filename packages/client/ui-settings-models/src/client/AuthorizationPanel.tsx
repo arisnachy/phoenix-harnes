@@ -689,17 +689,19 @@ function registryCandidateLogo(candidate: McpRegistryCandidateView): string | un
     .find((src): src is string => src !== undefined)
 }
 
-function OfficialMcpCard({ candidate, stale, managed, runtime, installing, repairing, removing, t,
-  onInstall, onRepair, onRemove }: {
+function OfficialMcpCard({ candidate, stale, managed, runtime, installing, reconnecting, repairing, removing, t,
+  onInstall, onReconnect, onRepair, onRemove }: {
   candidate: McpRegistryCandidateView
   stale: boolean
   managed?: ManagedMcpConnectorView | undefined
   runtime?: McpConnectorRuntimeView | undefined
   installing: boolean
+  reconnecting: boolean
   repairing: boolean
   removing: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onInstall: (candidate: McpRegistryCandidateView) => void
+  onReconnect?: ((runtime: McpConnectorRuntimeView) => void) | undefined
   onRepair?: ((connector: ManagedMcpConnectorView) => void) | undefined
   onRemove?: ((connector: ManagedMcpConnectorView) => void) | undefined
 }): ReactNode {
@@ -709,6 +711,9 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, repai
   const technicalName = normalize(displayName) === normalize(candidate.name) ? undefined : candidate.name
   const installable = candidate.status === 'active' && candidate.remoteUrl !== undefined
   const broken = managed !== undefined && (runtime === undefined || runtime.status === 'failed')
+  const canReconnect = runtime !== undefined
+    && (runtime.status === 'failed' || runtime.status === 'disconnected')
+    && onReconnect !== undefined
   const status = broken
     ? t('brokenStatus')
     : managed !== undefined
@@ -762,6 +767,18 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, repai
               onClick={() => { onInstall(candidate) }}
             >
               {installing ? t('installing') : t('install')}
+            </button>
+          ) : null}
+          {canReconnect ? (
+            <button
+              type="button"
+              className={hubStyles['compactButton']}
+              disabled={reconnecting || repairing || removing}
+              onClick={() => {
+                if (runtime !== undefined) onReconnect?.(runtime)
+              }}
+            >
+              {reconnecting ? t('connectingStatus') : t('reconnect')}
             </button>
           ) : null}
           {broken && managed.source !== undefined && onRepair !== undefined ? (
@@ -1393,6 +1410,10 @@ export function ConnectorsSettingsSection({ api,
               const actionLabel = runtime?.status === 'auth-required' && entry.stored !== undefined
                 ? connectorT('reauthorize')
                 : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
+              const runtimeReconnect = entry.stored !== undefined
+                && runtime !== undefined
+                && (runtime.status === 'failed' || runtime.status === 'disconnected')
+                && mcpRegistry?.reconnect !== undefined
               const authorizationPending = attempt?.status === 'pending'
               const thisAuthorizationPending = authorizationPending && attempt.key === entry.key
               const preferredMethod = entry.methods[0]
@@ -1427,10 +1448,19 @@ export function ConnectorsSettingsSection({ api,
                         <button
                           type="button"
                           className={connectorStyles['connectorPrimaryButton']}
-                          disabled={authorizationPending || entry.inFlight}
-                          onClick={() => { begin(entry.key, preferredMethod.id) }}
+                          disabled={authorizationPending || entry.inFlight
+                            || (runtimeReconnect && reconnectingServerName !== undefined)}
+                          onClick={() => {
+                            if (runtimeReconnect && runtime !== undefined) {
+                              reconnectMcpConnector(runtime)
+                              return
+                            }
+                            begin(entry.key, preferredMethod.id)
+                          }}
                         >
-                          {thisAuthorizationPending ? t('signingIn') : actionLabel}
+                          {runtimeReconnect && reconnectingServerName === runtime?.serverName
+                            ? connectorT('connectingStatus')
+                            : thisAuthorizationPending ? t('signingIn') : actionLabel}
                         </button>
                       )}
                       {entry.stored === undefined || entry.disconnectable !== true ? null : (
@@ -1607,10 +1637,12 @@ export function ConnectorsSettingsSection({ api,
                     managed={managed}
                     runtime={runtime}
                     installing={installingRegistryName === candidate.name}
+                    reconnecting={runtime !== undefined && reconnectingServerName === runtime.serverName}
                     repairing={managed !== undefined && repairingEntryId === managed.entryId}
                     removing={managed !== undefined && removingEntryId === managed.entryId}
                     t={connectorT}
                     onInstall={installRegistryCandidate}
+                    onReconnect={mcpRegistry.reconnect === undefined ? undefined : reconnectMcpConnector}
                     onRepair={mcpRegistry.repair === undefined ? undefined : repairManagedConnector}
                     onRemove={mcpRegistry.remove === undefined ? undefined : removeManagedConnector}
                   />
