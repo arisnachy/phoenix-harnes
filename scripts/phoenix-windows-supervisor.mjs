@@ -1389,7 +1389,7 @@ if (startupFallbackMissing) {
 
 let watcherSupervisor = superviseWatcher()
 
-async function stopWatcherSupervisor(): Promise<void> {
+async function stopWatcherSupervisor() {
   const supervisor = watcherSupervisor
   watcherSupervisor = undefined
   if (supervisor !== undefined) await supervisor.stop()
