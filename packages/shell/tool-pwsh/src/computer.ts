@@ -377,6 +377,35 @@ async function runResidentComputerAction(
     : `resident desktop command accepted: ${args.action}`
 }
 
+async function runLegacyDesktopObservation(
+  args: Extract<ComputerToolArgs, { action: 'windows' | 'screenshot' }> | ComputerToolArgs,
+  descriptor: DesktopBrowserControlDescriptor,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (descriptor.schema !== LEGACY_DESKTOP_CONTROL_SCHEMA
+    || (args.action !== 'windows' && args.action !== 'screenshot')) {
+    throw new Error('Legacy Phoenix Desktop observation supports only windows and screenshot')
+  }
+  const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
+  const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify({
+    type: args.action === 'windows' ? 'phoenix.desktop.windows' : 'phoenix.desktop.screenshot',
+  }), signal)
+  let reply: unknown
+  try {
+    reply = JSON.parse(rawReply)
+  } catch {
+    throw new Error('Phoenix Desktop native observation returned invalid JSON')
+  }
+  if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
+    throw new Error('Phoenix Desktop native observation returned an invalid reply')
+  }
+  const response = reply as Record<string, unknown>
+  if (response.ok !== true) {
+    throw new Error(`Phoenix Desktop native observation rejected the command: ${String(response.error ?? 'unknown error')}`)
+  }
+  return typeof response.details === 'string' ? response.details : ''
+}
+
 async function runEmbeddedBrowserAction(
   args: ComputerToolArgs,
   signal?: AbortSignal,
@@ -1096,12 +1125,21 @@ function executeComputerInvocation(invocation: ComputerInvocation, signal?: Abor
       timeout: DESKTOP_ACTION_TIMEOUT_MS,
       env: { ...process.env, ...invocation.env },
       ...signal === undefined ? {} : { signal },
-    }, (error, stdout) => {
+    }, (error, stdout, stderr) => {
+      const detail = typeof stderr === 'string' ? stderr.trim() : ''
       if (error !== null) {
-        reject(error)
+        reject(new Error(
+          detail.length > 0 ? `Computer Use PowerShell driver failed: ${detail}` : error.message,
+          { cause: error },
+        ))
         return
       }
-      resolve(stdout.trim())
+      const output = stdout.trim()
+      if (output.length === 0 && detail.length > 0) {
+        reject(new Error(`Computer Use PowerShell driver reported: ${detail}`))
+        return
+      }
+      resolve(output)
     })
 
     if (child.stdin === null) {
@@ -1135,6 +1173,17 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
   }
 
   const descriptor = await readDesktopControlDescriptorIfAvailable()
+  if (descriptor?.schema === LEGACY_DESKTOP_CONTROL_SCHEMA
+    && (args.action === 'windows' || args.action === 'screenshot')) {
+    try {
+      const nativeObservation = await runLegacyDesktopObservation(args, descriptor, signal)
+      if (nativeObservation.length > 0) return nativeObservation
+    } catch {
+      // Rolling upgrades can pair a new runtime with an older Phoenix.exe that
+      // does not know the native observation commands yet. Observation is
+      // side-effect-free, so falling back to the fixed PowerShell driver is safe.
+    }
+  }
   if (descriptor?.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
     try {
       const resident = await runResidentComputerAction(args, descriptor, signal)
