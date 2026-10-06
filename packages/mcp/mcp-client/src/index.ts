@@ -129,6 +129,13 @@ export interface StreamableHttpConfig {
   bearerTokenRef?: string
   /** Whether to attach the host-managed OAuth provider when available. */
   oauth?: boolean
+  /** Optional fixed OAuth client references for servers that do not support DCR. */
+  oauthClientIdRef?: string
+  oauthClientSecretRef?: string
+  /** Optional deterministic loopback callback port required by a pre-registered OAuth app. */
+  oauthCallbackPort?: number
+  /** Token endpoint client authentication method for a pre-registered OAuth app. */
+  oauthTokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
   /** Per-tool-call timeout in milliseconds. */
   toolCallTimeoutMs: number
   /** Fail plugin activation when the initial connection or tool synchronization fails. */
@@ -171,6 +178,14 @@ export const Config = z.union([
     headers: z.dict(String).default({}),
     bearerTokenRef: z.string(),
     oauth: z.boolean().default(true),
+    oauthClientIdRef: z.string(),
+    oauthClientSecretRef: z.string(),
+    oauthCallbackPort: z.number().step(1).min(1).max(65_535),
+    oauthTokenEndpointAuthMethod: z.union([
+      z.const('none'),
+      z.const('client_secret_post'),
+      z.const('client_secret_basic'),
+    ]),
     toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
     failOnStartupError: z.boolean().default(false),
     startupTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STARTUP_TIMEOUT_MS),
@@ -257,9 +272,49 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       }
     }
   }
+  const oauthClientIdRef = config.transport === 'streamable-http' && config.oauthClientIdRef !== undefined
+    ? credentialRef(config.oauthClientIdRef)
+    : undefined
+  const oauthClientSecretRef = config.transport === 'streamable-http' && config.oauthClientSecretRef !== undefined
+    ? credentialRef(config.oauthClientSecretRef)
+    : undefined
+  const resolveFixedOAuthClientInformation = oauthClientIdRef === undefined
+    ? undefined
+    : async () => {
+      if (credentials === undefined) {
+        throw Object.assign(new Error(`mcp-client(${config.serverName}): credential service unavailable`), { status: 401 })
+      }
+      const clientId = (await credentials.resolve(oauthClientIdRef))?.value
+      if (clientId === undefined) {
+        throw Object.assign(
+          new Error(`mcp-client(${config.serverName}): credential reference "${String(oauthClientIdRef)}" is not configured`),
+          { status: 401 },
+        )
+      }
+      const clientSecret = oauthClientSecretRef === undefined
+        ? undefined
+        : (await credentials.resolve(oauthClientSecretRef))?.value
+      if (oauthClientSecretRef !== undefined && clientSecret === undefined) {
+        throw Object.assign(
+          new Error(`mcp-client(${config.serverName}): credential reference "${String(oauthClientSecretRef)}" is not configured`),
+          { status: 401 },
+        )
+      }
+      return {
+        client_id: clientId,
+        ...(clientSecret === undefined ? {} : { client_secret: clientSecret }),
+      }
+    }
+
   if (config.transport === 'streamable-http' && config.oauth !== false
     && authorization !== undefined && credentials !== undefined) {
-    oauthController = new McpOAuthController(credentials, config.serverName, config.url)
+    oauthController = new McpOAuthController(credentials, config.serverName, config.url, {
+      ...(config.oauthCallbackPort === undefined ? {} : { callbackPort: config.oauthCallbackPort }),
+      ...(resolveFixedOAuthClientInformation === undefined ? {} : { resolveClientInformation: resolveFixedOAuthClientInformation }),
+      ...(config.oauthTokenEndpointAuthMethod === undefined
+        ? {}
+        : { tokenEndpointAuthMethod: config.oauthTokenEndpointAuthMethod }),
+    })
     await oauthController.ready
     transportOptions = {
       authProvider: oauthController.provider(() => {
@@ -343,6 +398,30 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         connection.reconnect()
       },
       run: async (session) => {
+        if (oauthClientIdRef !== undefined) {
+          const current = await credentials.describe(oauthClientIdRef)
+          if (!current.configured) {
+            const value = (await session.prompt({
+              kind: 'text',
+              message: `Introduce el OAuth client ID para ${config.serverName}. Se guardará solo en el vault local de PHOENIX.`,
+              placeholder: String(oauthClientIdRef),
+            })).trim()
+            if (value.length === 0) throw new Error('OAuth client ID cannot be empty')
+            await credentials.set(oauthClientIdRef, value)
+          }
+        }
+        if (oauthClientSecretRef !== undefined) {
+          const current = await credentials.describe(oauthClientSecretRef)
+          if (!current.configured) {
+            const value = (await session.prompt({
+              kind: 'secret',
+              message: `Introduce el OAuth client secret para ${config.serverName}. Se guardará solo en el vault local de PHOENIX.`,
+              placeholder: String(oauthClientSecretRef),
+            })).trim()
+            if (value.length === 0) throw new Error('OAuth client secret cannot be empty')
+            await credentials.set(oauthClientSecretRef, value)
+          }
+        }
         await controller.authorize(session)
         connection.reconnect()
       },
