@@ -185,9 +185,9 @@ export function installAssistantMail(ctx: Context,
     }
     return error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
   }
-  const handleProviderFailure = async (error: unknown): Promise<void> => {
+  const handleProviderFailure = async (error: unknown, recoverVerification = true): Promise<void> => {
     status = providerStatus(error)
-    if (!(error instanceof AgentMailHttpError) || error.reason !== 'verification-required') return
+    if (!recoverVerification || !(error instanceof AgentMailHttpError) || error.reason !== 'verification-required') return
     // A Phoenix-owned mailbox can repair a provider/local verification mismatch without
     // asking the owner for an API key. Recovery rotates the credential and requests one OTP.
     try {
@@ -467,7 +467,7 @@ export function installAssistantMail(ctx: Context,
               summary: job.summary,
               error: job.error })) } }
       } catch (error) {
-        await handleProviderFailure(error)
+        await handleProviderFailure(error, endpoint !== 'recover')
         // Provider bodies and fetch/socket errors never cross this secret-free status projection.
         const message = error instanceof Error && !/fetch|network|socket/iu.test(error.message) ? error.message : 'mail connection failed; check the local setup'
         return { ok: false as const, error: { code: 'internal', message, details: {} } }
