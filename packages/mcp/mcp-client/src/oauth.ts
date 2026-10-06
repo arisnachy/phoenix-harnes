@@ -88,7 +88,15 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
       return (await options.store.read())?.tokens
     },
     async saveTokens(tokens) {
-      await updateState(options.store, current => ({ ...current, tokens }))
+      await updateState(options.store, (current) => {
+        const previousRefreshToken = current.tokens?.refresh_token
+        const nextRefreshToken = tokens.refresh_token
+        const durableTokens = (typeof previousRefreshToken === 'string' && previousRefreshToken.length > 0)
+          && (typeof nextRefreshToken !== 'string' || nextRefreshToken.length === 0)
+          ? { ...tokens, refresh_token: previousRefreshToken }
+          : tokens
+        return { ...current, tokens: durableTokens }
+      })
     },
     async redirectToAuthorization(authorizationUrl) {
       await options.onAuthorizationUrl(authorizationUrl)
