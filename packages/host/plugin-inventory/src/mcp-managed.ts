@@ -455,9 +455,54 @@ function validCuratedStdioConfig(value: Record<string, unknown>): boolean {
     .some(config => config.transport === 'stdio' && exactJson(value, config))
 }
 
-function validConfig(value: unknown): value is ManagedMcpConfig {
+function validStringRecord(value: unknown): value is Record<string, string> {
+  return isRecord(value) && Object.values(value).every(entry => typeof entry === 'string')
+}
+
+function validRegistryStdioConfig(value: Record<string, unknown>): boolean {
+  if (typeof value.serverName !== 'string'
+    || !/^[A-Za-z0-9_-]{1,32}$/.test(value.serverName)
+    || (value.command !== 'npx' && value.command !== 'uvx')
+    || !Array.isArray(value.args)
+    || !value.args.every(argument => typeof argument === 'string')
+    || !validStringRecord(value.env)
+    || !validStringRecord(value.envCredentialRefs)
+    || value.cwd !== ''
+    || value.toolCallTimeoutMs !== 60_000
+    || value.startupTimeoutMs !== REGISTRY_PACKAGE_STARTUP_TIMEOUT_MS
+    || value.failOnStartupError !== false) return false
+
+  const reconnect = value.reconnect
+  if (!isRecord(reconnect)
+    || reconnect.enabled !== true
+    || reconnect.initialDelayMs !== 1_000
+    || reconnect.maxDelayMs !== 30_000
+    || reconnect.maxAttempts !== 3) return false
+
+  for (const [name, ref] of Object.entries(value.envCredentialRefs)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+      || !/^MCP_[A-F0-9]{10}_[A-Z0-9_]{1,48}$/.test(ref)) return false
+  }
+  for (const name of Object.keys(value.env)) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) return false
+  }
+
+  if (value.command === 'npx') {
+    if (value.args[0] !== '-y') return false
+    return value.args.slice(1).some(argument =>
+      /^(?:@[A-Za-z0-9_.-]+\/)?[A-Za-z0-9_.-]+(?:@[A-Za-z0-9][A-Za-z0-9_.+-]*)?$/.test(argument))
+  }
+  return value.args.some(argument =>
+    /^[A-Za-z0-9][A-Za-z0-9_.-]*(?:==[A-Za-z0-9][A-Za-z0-9_.+-]*)?$/.test(argument))
+}
+
+function validConfig(value: unknown, source?: ManagedMcpSource): value is ManagedMcpConfig {
   if (!isRecord(value)) return false
-  if (value.transport === 'stdio') return validXApiConfig(value) || validCuratedStdioConfig(value)
+  if (value.transport === 'stdio') {
+    return validXApiConfig(value)
+      || validCuratedStdioConfig(value)
+      || (source?.kind === 'registry' && validRegistryStdioConfig(value))
+  }
   return value.transport === 'streamable-http' && validHttpConfig(value)
 }
 
@@ -483,17 +528,21 @@ function parseManagedRows(raw: string): ManagedMcpRow[] {
     throw new Error('managed MCP patch is missing its insert list')
   }
   return patch.insert.map((value, index) => {
-    if (!isRecord(value) || typeof value.id !== 'string' || value.name !== MCP_CLIENT_PACKAGE || !validConfig(value.config)) {
+    if (!isRecord(value) || typeof value.id !== 'string' || value.name !== MCP_CLIENT_PACKAGE) {
       throw new Error(`managed MCP patch row ${index} is invalid`)
     }
-    if (value.source !== undefined && !validManagedSource(value.source)) {
+    const source = value.source
+    if (source !== undefined && !validManagedSource(source)) {
       throw new Error(`managed MCP patch row ${index} has an invalid source`)
+    }
+    if (!validConfig(value.config, source)) {
+      throw new Error(`managed MCP patch row ${index} is invalid`)
     }
     return {
       id: value.id,
       name: MCP_CLIENT_PACKAGE,
       config: value.config,
-      ...(value.source === undefined ? {} : { source: value.source }),
+      ...(source === undefined ? {} : { source }),
     }
   })
 }
