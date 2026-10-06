@@ -11,4 +11,3 @@
       config:
         providerName: codex-auto-review
         permissionMode: approve-for-me
-        accountBridge: false
