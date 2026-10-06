@@ -31,6 +31,17 @@ try {
   Set-Location -LiteralPath $rootPath
   $env:PHOENIX_DESKTOP_LAUNCH = '1'
   $env:PHOENIX_DESKTOP_CONSOLE = '0'
+
+  # Prefer the installed native shell so Computer/Agent Desktop executes in the
+  # interactive user's desktop. PHOENIX_SOURCE_ROOT keeps its managed runtime
+  # bound to this exact checkout instead of an older bundled installer revision.
+  $installedPhoenixExe = Join-Path $localAppData 'Programs\Phoenix\Phoenix.exe'
+  if (Test-Path -LiteralPath $installedPhoenixExe -PathType Leaf) {
+    $env:PHOENIX_SOURCE_ROOT = $rootPath
+    Start-Process -FilePath $installedPhoenixExe | Out-Null
+    exit 0
+  }
+
   $launchArgs = @()
   if ($Background) { $launchArgs = @('--no-open') }
 
