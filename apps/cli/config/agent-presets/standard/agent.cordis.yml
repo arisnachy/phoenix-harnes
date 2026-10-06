@@ -344,7 +344,6 @@
         provider: codex-auto-review
         toolName: codex_auto_review
         backgroundMode: one-shot
-        whenParentProvider: openai-codex
         maxDepth: provider-managed
 
     - id: tool-subagent-codex
