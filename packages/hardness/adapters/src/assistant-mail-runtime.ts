@@ -179,22 +179,36 @@ export function installAssistantMail(ctx: Context,
   const providerStatus = (error: unknown): string => {
     if (error instanceof AgentMailHttpError) {
       if (error.reason === 'verification-required') return 'verification-required'
-      if (error.reason === 'permission-missing') return 'recovery-required'
+      if (error.reason === 'credential-rejected' || error.reason === 'permission-missing') return 'recovery-required'
       if (error.reason === 'limit-exceeded' || error.status === 429) return 'quota-reached'
       if (error.reason === 'message-rejected') return 'message-rejected'
     }
     return error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
   }
+  let automaticCredentialRecoveryAttempted = false
   const handleProviderFailure = async (error: unknown, recoverVerification = true): Promise<void> => {
     status = providerStatus(error)
-    if (!recoverVerification || !(error instanceof AgentMailHttpError) || error.reason !== 'verification-required') return
-    // A Phoenix-owned mailbox can repair a provider/local verification mismatch without
-    // asking the owner for an API key. Recovery rotates the credential and requests one OTP.
+    if (!recoverVerification || !(error instanceof AgentMailHttpError)) return
+    if (error.reason === 'verification-required') {
+      // The organization itself needs OTP verification. Preserve that explicit owner gate.
+      try {
+        await onboarding.recover()
+        status = 'verification-required'
+      } catch {
+        // Keep the actionable status. Manual Recover remains available if provider recovery is refused.
+      }
+      return
+    }
+    if (!['credential-rejected', 'permission-missing'].includes(error.reason ?? '') || automaticCredentialRecoveryAttempted) return
+    automaticCredentialRecoveryAttempted = true
+    // A stale/rejected stored key is recoverable without a manually pasted API key:
+    // AgentMail's owner-bound sign-up rotates the credential idempotently, and
+    // restoreCredential proves the replacement against the exact persisted inbox.
     try {
-      await onboarding.recover()
-      status = 'verification-required'
+      await onboarding.restoreCredential()
+      status = 'connecting'
     } catch {
-      // Keep the actionable status. Manual Recover remains available if provider recovery is refused.
+      status = 'recovery-required'
     }
   }
   let resetting = false
@@ -321,6 +335,7 @@ export function installAssistantMail(ctx: Context,
       await receiver.reconcile()
     }
     if (status === 'connecting') status = 'connected'
+    automaticCredentialRecoveryAttempted = false
   }
   const pump = (): Promise<void> => {
     if (isDisposed()) return Promise.resolve()
@@ -367,6 +382,7 @@ export function installAssistantMail(ctx: Context,
       await onboarding.discard()
       await credentials.unset(ref)
       status = 'not-configured'
+      automaticCredentialRecoveryAttempted = false
       repumpRequested = false
       return await identity()
     } finally {
