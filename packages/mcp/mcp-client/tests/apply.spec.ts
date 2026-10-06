@@ -5,6 +5,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import CredentialsLocal from '@phoenix-ai/dsh-credentials-local'
+import AuthorizationService from '@phoenix-ai/dsh-authorization'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime from '@phoenix-ai/dsh-tools'
 import McpConnectorRegistry from '@phoenix-ai/dsh-mcp-connector-registry/src/index.ts'
@@ -492,6 +493,43 @@ describe('apply (plugin lifecycle)', () => {
     } finally {
       delete process.env.X_TEST_CLIENT_ID
     }
+  })
+
+  it('waits to start an OAuth MCP until authorization and credentials services are mounted', async () => {
+    const delayed = await mountRegistry()
+    const oauthConfig: Config = {
+      transport: 'streamable-http',
+      serverName: 'deferred-oauth',
+      url: 'https://mcp.example.com/mcp',
+      headers: {},
+      oauth: true,
+      toolCallTimeoutMs: 30_000,
+      failOnStartupError: false,
+    }
+
+    const fiber = delayed.plugin({ name: 'mcp-client-deferred-oauth', inject, apply }, oauthConfig)
+    await fiber
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(delayed.mcpConnectors.list()).toEqual([])
+
+    await delayed.plugin(CredentialsLocal, {
+      path: `${process.cwd()}/.tmp-mcp-client-deferred-auth-${process.pid}.yaml`,
+      watch: false,
+    })
+    await delayed.plugin(AuthorizationService)
+
+    await vi.waitFor(() => {
+      expect(mockConnect).toHaveBeenCalled()
+      expect(delayed.mcpConnectors.list()).toEqual([expect.objectContaining({
+        serverName: 'deferred-oauth',
+      })])
+      expect(delayed.authorization.list()).toEqual(expect.arrayContaining([expect.objectContaining({
+        key: 'mcp-client/deferred-oauth',
+        methods: [{ id: 'oauth', label: 'Authorize deferred-oauth' }],
+      })]))
+    })
+
+    await delayed.fiber.dispose()
   })
 
   it('uses streamable-http config path', async () => {
