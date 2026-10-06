@@ -97,18 +97,28 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const pendingVerification = state === 'pending-verification'
   const ambiguous = state === 'signup-ambiguous'
   const connection = snapshot?.connection ?? 'disconnected'
+  const recoveryRequired = ready && (connection === 'verification-required' || connection === 'recovery-required')
+  const providerWarning = recoveryRequired || (ready && ['quota-reached', 'message-rejected'].includes(connection))
   const statusText = ready
     ? connection === 'connected'
       ? 'Correo verificado · Activo'
       : connection === 'connecting'
         ? 'Correo verificado · Conectando'
-        : 'Correo verificado'
+        : connection === 'verification-required'
+          ? 'AgentMail requiere verificación'
+          : connection === 'recovery-required'
+            ? 'AgentMail requiere recuperar acceso'
+            : connection === 'quota-reached'
+              ? 'Límite gratuito alcanzado'
+              : connection === 'message-rejected'
+                ? 'Último envío rechazado'
+                : 'Correo verificado · Sin conexión'
     : pendingVerification ? 'Verifica una vez'
       : ambiguous ? 'Necesita recuperación'
         : 'Aún sin correo'
-  const statusClass = ready
+  const statusClass = ready && !providerWarning
     ? `${styles.status} ${styles.statusReady}`
-    : pendingVerification || ambiguous
+    : pendingVerification || ambiguous || providerWarning
       ? `${styles.status} ${styles.statusWarn}`
       : styles.status
 
@@ -147,6 +157,33 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         </button>
       </div>
     </div>}
+
+    {recoveryRequired ? <div className={styles.setup}>
+      <p className={styles.failure}>
+        AgentMail rechazó la credencial actual. Phoenix puede renovar el acceso con el propietario
+        ya guardado; no necesitas crear ni pegar una clave API.
+      </p>
+      <button type="button" className={styles.button} disabled={busy}
+        onClick={() => { void operate('recover') }}>
+        Recuperar acceso y verificar
+      </button>
+    </div> : null}
+
+    {ready && connection === 'quota-reached' ? <div className={styles.setup}>
+      <p className={styles.failure}>
+        AgentMail alcanzó el límite gratuito de buzones o recursos. No se solicitará ningún plan de pago.
+        Si quieres sustituir este buzón, elimina el actual antes de crear el nuevo.
+      </p>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={replaceMailbox}>
+        Sustituir este buzón
+      </button>
+    </div> : null}
+
+    {ready && connection === 'message-rejected' ? <p className={styles.failure}>
+      AgentMail rechazó el último envío. Revisa que el destinatario siga autorizado; si AgentMail pide
+      verificación, usa Recuperar acceso.
+    </p> : null}
 
     {state === 'not-configured' || state === undefined ? <div className={styles.setup}>
       <p className={styles.note}>
