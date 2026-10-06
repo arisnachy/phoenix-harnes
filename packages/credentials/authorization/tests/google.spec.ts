@@ -97,17 +97,25 @@ describe('Google Workspace OAuth configuration', () => {
 })
 
 describe('Google Workspace OAuth authorization boundary', () => {
-  it('persists only a secret-free marker while tokens, verifier, and authorization code stay Host-only', async () => {
+  it('persists the reusable OAuth grant only in Credentials while public authorization surfaces stay redacted', async () => {
     const ctx = await harness()
     internals.now = () => 1_000_000
     const ui = await authorize(ctx)
 
     const record = await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
-    expect(record).toEqual({ kind: 'api-key' })
-    expect(JSON.stringify(record)).not.toMatch(/access-token|refresh-token|authorization-code/)
+    expect(record).toMatchObject({
+      kind: 'grant',
+      payload: {
+        provider: 'google-oauth',
+        version: 1,
+        accessToken: 'access-token-private',
+        refreshToken: 'refresh-token-private',
+        expiresAt: 4_600_000,
+      },
+    })
 
     const described = await ctx.credentials.describeRecord(GOOGLE_ACCOUNT_KEY)
-    expect(described).toEqual({ configured: true, kind: 'api-key', writable: true })
+    expect(described).toEqual({ configured: true, kind: 'grant', writable: true })
     expect(JSON.stringify(described)).not.toMatch(/access-token|refresh-token|authorization-code/)
 
     expect(ctx.authorization.list()).toMatchObject([{
@@ -177,7 +185,7 @@ describe('Google Workspace OAuth authorization boundary', () => {
 
     await expect(googleApi(ctx).request({ service: 'drive', path: 'files' }))
       .rejects.toMatchObject({ code: 'GOOGLE_SCOPE_DENIED' })
-    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toEqual({ kind: 'api-key' })
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({ kind: 'grant' })
   })
 
   it('rejects a mismatched OAuth state before accepting an authorization code', async () => {
@@ -235,16 +243,60 @@ describe('Google Workspace API broker', () => {
     expect(JSON.stringify(result)).not.toMatch(/access-token-private|refresh-token-private/)
   })
 
-  it('does not restore a Google session from the durable marker after a process restart', async () => {
-    const ctx = await harness()
-    await ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
+  it('restores and silently refreshes a durable Google grant after a process restart', async () => {
+    const ctx = new Context()
+    await ctx.plugin(MemoryCredentials)
+    await ctx.plugin(AuthorizationService)
+    await ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({
+      kind: 'grant',
+      payload: {
+        provider: 'google-oauth',
+        version: 1,
+        accessToken: 'expired-before-restart',
+        refreshToken: 'durable-refresh',
+        expiresAt: 1_000_001,
+        scopes: [...SCOPES],
+      },
+    }))
+
+    internals.now = () => 2_000_000
+    let calls = 0
+    internals.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls += 1
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url === 'https://oauth2.googleapis.com/token') {
+        const body = init?.body
+        const bodyText = body instanceof URLSearchParams ? body.toString() : String(body ?? '')
+        expect(bodyText).toContain('refresh_token=durable-refresh')
+        return tokenResponse({
+          access_token: 'restored-access',
+          refresh_token: 'restored-refresh',
+          expires_in: 3600,
+        })
+      }
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer restored-access')
+      return new Response('{}', { status: 200 })
+    })
+
+    await ctx.plugin(GoogleApiBroker, {
+      clientId: 'client.apps.googleusercontent.com',
+      scopes: SCOPES,
+    })
 
     await expect(googleApi(ctx).request({ service: 'calendar', path: 'calendars/primary/events' }))
-      .rejects.toMatchObject({ code: 'GOOGLE_REAUTH_REQUIRED' })
-    expect(await ctx.authorization.inspect(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
+      .resolves.toMatchObject({ status: 200, ok: true })
+    expect(calls).toBe(2)
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+      kind: 'grant',
+      payload: {
+        provider: 'google-oauth',
+        accessToken: 'restored-access',
+        refreshToken: 'restored-refresh',
+      },
+    })
   })
 
-  it('refreshes an expired token in Host memory and never persists rotated refresh material', async () => {
+  it('refreshes an expired token and persists the rotated grant for the next restart', async () => {
     const ctx = await harness()
     internals.now = () => 1_000_000
     await authorize(ctx, { expires_in: 1 })
@@ -269,9 +321,14 @@ describe('Google Workspace API broker', () => {
 
     await googleApi(ctx).request({ service: 'drive', path: 'files?pageSize=1' })
 
-    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toEqual({ kind: 'api-key' })
-    expect(JSON.stringify(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)))
-      .not.toMatch(/refreshed-access|rotated-refresh|refresh-token-private/)
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+      kind: 'grant',
+      payload: {
+        provider: 'google-oauth',
+        accessToken: 'refreshed-access',
+        refreshToken: 'rotated-refresh',
+      },
+    })
   })
 
   it('rechecks each caller scope after callers share one in-flight refresh', async () => {
@@ -300,7 +357,15 @@ describe('Google Workspace API broker', () => {
     await expect(gmailRequest).resolves.toMatchObject({ status: 200, ok: true })
     await expect(driveRequest).rejects.toMatchObject({ code: 'GOOGLE_SCOPE_DENIED' })
     expect(apiCalls).toBe(1)
-    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toEqual({ kind: 'api-key' })
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+      kind: 'grant',
+      payload: {
+        provider: 'google-oauth',
+        accessToken: 'gmail-only-access',
+        refreshToken: 'gmail-only-refresh',
+        scopes: [GMAIL_SCOPE],
+      },
+    })
   })
 
   it('fails closed on caller-controlled destinations and credential headers', async () => {
