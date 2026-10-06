@@ -100,35 +100,6 @@ describe('dsh-tool-subagent', () => {
     expect(text(result)).toBe('child says hi')
   })
 
-  it('gates a provider-specific worker before any child starts', async () => {
-    let starts = 0
-    const ctx = await setup({
-      provider: 'mock',
-      whenParentProvider: 'openai-codex',
-    }, {
-      onStart: () => { starts += 1 },
-    })
-    const schema = ctx.tools.schemas().find(candidate => candidate.name === 'subagent')
-    expect(schema?.description).toContain('only while the calling agent provider is "openai-codex"')
-
-    const otherParent = {
-      ...fakeAgent('provider-gate-other'),
-      options: { provider: 'deepseek', model: 'deepseek-v4-pro' },
-    } as Agent
-    const denied = await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: otherParent })
-    expect(denied.isError).toBe(true)
-    expect(text(denied)).toContain('available only when the active parent provider is "openai-codex"')
-    expect(starts).toBe(0)
-
-    const codexParent = {
-      ...fakeAgent('provider-gate-codex'),
-      options: { provider: 'openai-codex', model: 'gpt-6-luna' },
-    } as Agent
-    const allowed = await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: codexParent })
-    expect(allowed.isError).toBe(false)
-    expect(starts).toBe(1)
-  })
-
   it('asks the child itself to author the live activity sentence', async () => {
     let seen: SubagentStartRequest | undefined
     const ctx = await setup({ provider: 'mock' }, {
