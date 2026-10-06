@@ -791,6 +791,55 @@ describe('ManagedMcpController', () => {
     expect(persisted).toContain('@example/calendar-mcp@2.4.1')
     expect(persisted).toContain('CALENDAR_API_KEY')
     expect(persisted).not.toContain('secret-value')
+
+    await expect(controller.snapshot()).resolves.toEqual([
+      expect.objectContaining({
+        entryId: installed.connector.entryId,
+        serverName: installed.connector.serverName,
+        url: `stdio://${installed.connector.serverName}`,
+        source: {
+          kind: 'registry',
+          name: packageCandidate.name,
+          version: packageCandidate.version,
+        },
+      }),
+    ])
+    const restarted = new ManagedMcpController(loader(), {
+      patchPath,
+      registrySearch: registry([packageCandidate]),
+    })
+    await expect(restarted.snapshot()).resolves.toHaveLength(1)
+  })
+
+  it('rejects tampered registry stdio persistence that tries to escape through npx command flags', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{
+      insert: [{
+        id: 'tampered-registry',
+        name: '@phoenix-ai/dsh-mcp-client',
+        source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
+        config: {
+          transport: 'stdio',
+          serverName: 'calendar-a1b2c3d',
+          command: 'npx',
+          args: ['-y', '-c', 'node -e process.exit(0)', '@example/calendar-mcp@1.0.0'],
+          env: {},
+          envCredentialRefs: {},
+          cwd: '',
+          toolCallTimeoutMs: 60_000,
+          startupTimeoutMs: 30_000,
+          failOnStartupError: false,
+          reconnect: { enabled: true, initialDelayMs: 1_000, maxDelayMs: 30_000, maxAttempts: 3 },
+        },
+      }],
+    }]))
+
+    const restarted = new ManagedMcpController(loader(), {
+      patchPath,
+      registrySearch: registry([]),
+    })
+    await expect(restarted.snapshot()).rejects.toThrow('managed MCP patch row 0 is invalid')
   })
 
   it('rolls back a registry install when the live MCP runtime confirms startup failure', async () => {
