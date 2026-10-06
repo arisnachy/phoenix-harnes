@@ -500,8 +500,8 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, onAuthorize, onConfigure,
-  onInstallCurated, onFindOfficial, onFindRegistry, onRepair, onRemove, pending, installingCurated, repairing, removing }: {
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, onAuthorize, onAuthorizeManaged,
+  onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onRepair, onRemove, pending, installingCurated, repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
@@ -511,6 +511,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   onAuthorize: (entry: Entry) => void
+  onAuthorizeManaged?: ((connector: ManagedMcpConnectorView) => void) | undefined
   onConfigure?: (() => void) | undefined
   onInstallCurated?: (() => void) | undefined
   onFindOfficial?: (() => void) | undefined
@@ -537,12 +538,12 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           : mcpRuntime?.status === 'disconnected'
             ? { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
             : managed !== undefined
-              ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
+              ? { text: t('connectingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
               : undefined
   const openClawStatus = openClaw?.connected === true
     ? { text: t('openClawConnectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : undefined
-  const status = openClawStatus ?? liveStatus ?? mcpStatus ?? (connectedByAccount
+  const status = openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
       ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -551,21 +552,33 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         : definition.mode === 'native'
           ? { text: t('availableStatus'), className: '' }
           : definition.mode === 'mcp'
-            ? { text: t('mcpReadyStatus'), className: '' }
+            ? definition.curatedMcp === true || definition.registryName !== undefined
+              ? { text: t('officialInstallAvailableStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
+              : { text: t('mcpReadyStatus'), className: '' }
             : definition.mode === 'api-key'
               ? { text: t('apiKeyStatus'), className: '' }
               : account !== undefined
                 ? { text: t('availableStatus'), className: '' }
-                : definition.curatedMcp === true || definition.registryName !== undefined
-                  ? { text: t('officialInstallAvailableStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
-                  : { text: t('officialAdapterUnavailableStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
+                : { text: t('officialAdapterUnavailableStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' })
   const authorizationAccount = account !== undefined && account.methods.length > 0
     ? account
     : undefined
   const reauthorizationRequired = mcpRuntime?.status === 'auth-required'
     && authorizationAccount?.stored !== undefined
   const openClawRuntimeMissing = definition.id === 'github' && openClaw?.phase === 'missing-runtime'
-  const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed')
+  const managedNeedsAuthorization = managed !== undefined && mcpRuntime?.status === 'auth-required'
+  const canAuthorizeAccount = authorizationAccount !== undefined
+    && openClaw?.connected !== true
+    && !openClawRuntimeMissing
+    && (definition.mode === 'mcp' ? managedNeedsAuthorization : !connectedByAccount)
+  const canAuthorizeManagedFallback = managedNeedsAuthorization
+    && authorizationAccount === undefined
+    && onAuthorizeManaged !== undefined
+    && openClaw?.connected !== true
+    && !openClawRuntimeMissing
+  const brokenManaged = managed !== undefined
+    && (mcpRuntime?.status === 'failed'
+      || (mcpRuntime?.status === 'disconnected' && mcpRuntime.reasonCode === 'retry-exhausted'))
   const canRepair = brokenManaged && managed.source !== undefined && onRepair !== undefined
   return (
     <article className={connectorStyles['connectorCard']} data-connector-id={definition.id}>
@@ -602,9 +615,13 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : installUrl !== undefined ? (
             <a className={connectorStyles['connectorLink']} href={installUrl} target="_blank" rel="noreferrer">{t('configure')}</a>
           ) : null}
-          {authorizationAccount !== undefined && !connectedByAccount && openClaw?.connected !== true && !openClawRuntimeMissing ? (
+          {canAuthorizeAccount ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || authorizationAccount.inFlight} onClick={() => { onAuthorize(authorizationAccount) }}>
               {reauthorizationRequired || connected ? t('reauthorize') : t('authorize')}
+            </button>
+          ) : canAuthorizeManagedFallback ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={() => { onAuthorizeManaged(managed) }}>
+              {t('authorize')}
             </button>
           ) : null}
           {canRepair ? (
@@ -627,7 +644,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               {removing ? t('uninstalling') : t('uninstall')}
             </button>
           ) : null}
-          {managed === undefined && mcpRuntime === undefined && authorizationAccount === undefined && openClaw?.connected !== true && definition.curatedMcp === true && onInstallCurated !== undefined ? (
+          {managed === undefined && mcpRuntime === undefined && openClaw?.connected !== true && definition.curatedMcp === true && onInstallCurated !== undefined ? (
             <button
               className={connectorStyles['connectorPrimaryButton']}
               type="button"
@@ -870,6 +887,7 @@ export function ConnectorsSettingsSection({ api,
   const [installingCuratedId, setInstallingCuratedId] = useState<string | undefined>()
   const [repairingEntryId, setRepairingEntryId] = useState<string | undefined>()
   const [removingEntryId, setRemovingEntryId] = useState<string | undefined>()
+  const [resolvingAuthorizationEntryId, setResolvingAuthorizationEntryId] = useState<string | undefined>()
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
@@ -1050,7 +1068,8 @@ export function ConnectorsSettingsSection({ api,
     const openClawRoute = definition.openClawConnectorId === undefined
       ? undefined
       : openClaw.connectors.find(candidate => candidate.id === definition.openClawConnectorId)
-    const accountConnected = (mcpRuntime === undefined || mcpRuntime.status === 'ready')
+    const accountConnected = definition.mode !== 'mcp'
+      && (mcpRuntime === undefined || mcpRuntime.status === 'ready')
       && accountGrantConnectsCatalogEntry(account)
     const connected = openClawRoute?.connected === true
       || live?.installed === true
@@ -1131,6 +1150,35 @@ export function ConnectorsSettingsSection({ api,
         setCatalogFailure(connectorT('registryUnavailable'))
       },
     ).finally(() => { setRegistryBusy(false) })
+  }
+
+  const authorizeManagedConnector = (connector: ManagedMcpConnectorView): void => {
+    if (api === undefined || resolvingAuthorizationEntryId !== undefined) return
+    const key = `mcp-client/${connector.serverName.toLowerCase().replaceAll('_', '-')}`
+    setCatalogFailure(undefined)
+    setResolvingAuthorizationEntryId(connector.entryId)
+    void (async () => {
+      try {
+        for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
+          if (delayMs > 0) {
+            await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
+          }
+          const allEntries = await readAuthorizationEntries(api)
+          setEntries(allEntries)
+          const entry = allEntries.find(candidate => candidate.key === key)
+          const method = entry?.methods[0]
+          if (entry !== undefined && method !== undefined) {
+            begin(entry.key, method.id)
+            return
+          }
+        }
+        setCatalogFailure(connectorT('authorizationFlowUnavailable'))
+      } catch (error: unknown) {
+        setCatalogFailure(String(error))
+      } finally {
+        setResolvingAuthorizationEntryId(undefined)
+      }
+    })()
   }
 
   const repairManagedConnector = (connector: ManagedMcpConnectorView): void => {
@@ -1406,7 +1454,7 @@ export function ConnectorsSettingsSection({ api,
                 openClaw={row.openClaw}
                 connected={row.connected}
                 t={connectorT}
-                pending={attempt?.status === 'pending' || jevBusy}
+                pending={attempt?.status === 'pending' || jevBusy || resolvingAuthorizationEntryId !== undefined}
                 installingCurated={installingCuratedId === row.definition.id}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                 removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
@@ -1414,6 +1462,7 @@ export function ConnectorsSettingsSection({ api,
                   const method = entry.methods[0]
                   if (method !== undefined) begin(entry.key, method.id)
                 }}
+                onAuthorizeManaged={row.managed === undefined ? undefined : authorizeManagedConnector}
                 onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
                   ? undefined
                   : () => { installCuratedConnector(row.definition) }}
