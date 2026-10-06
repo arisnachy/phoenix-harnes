@@ -650,7 +650,7 @@ internal sealed class PhoenixDesktopWindow : Form
             if (!IsWindowVisible(hWnd)) return true;
             var title = NativeWindowTitle(hWnd);
             if (title.Length == 0) return true;
-            _ = GetWindowThreadProcessId(hWnd, out var pid);
+            GetWindowThreadProcessId(hWnd, out var pid);
             lines.Add($"hwnd=0x{hWnd.ToInt64():X} pid={pid} active={(hWnd == active).ToString().ToLowerInvariant()} title={title}");
             return true;
         }, IntPtr.Zero);
