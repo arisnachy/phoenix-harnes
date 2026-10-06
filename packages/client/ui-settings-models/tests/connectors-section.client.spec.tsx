@@ -888,6 +888,56 @@ describe('connectors settings section', () => {
     })
   })
 
+  it('offers installation for registry npm stdio packages without requiring a remote URL', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const install = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: { entryId: 'pkg-entry', serverName: 'package-mcp-a1b2c3d', url: 'stdio://package-mcp-a1b2c3d' },
+    }))
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install,
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'package-fixture',
+        fetchedAt: '2026-10-05T00:00:00.000Z',
+        stale: false,
+        candidates: [{
+          name: 'io.example/package-fixture',
+          title: 'Package Fixture MCP',
+          description: 'Package-only registry fixture.',
+          version: '1.0.0',
+          status: 'active' as const,
+          trust: 'registry-listed' as const,
+          icons: [],
+          transports: ['stdio' as const],
+          packages: [{
+            registryType: 'npm',
+            identifier: '@example/package-fixture',
+            transport: 'stdio' as const,
+            version: '1.0.0',
+            runtimeHint: 'npx',
+          }],
+        }],
+      })),
+    }
+
+    renderHub(api, { mcpRegistry })
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), {
+      target: { value: 'package-fixture' },
+    })
+
+    expect(await screen.findByText('Package Fixture MCP')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Install' }))
+    await waitFor(() => {
+      expect(install).toHaveBeenCalledWith({ name: 'io.example/package-fixture', version: '1.0.0' })
+    })
+  })
+
   it('replaces duplicated MCP account labels with the friendly catalog identity and token state', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
@@ -922,7 +972,7 @@ describe('connectors settings section', () => {
     expect(screen.getByRole('button', { name: 'Reauthorize' })).toBeTruthy()
   })
 
-  it('marks a persisted registry connector with no runtime as broken and removable', async () => {
+  it('keeps a persisted registry connector with no runtime in connecting state and removable', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
@@ -957,7 +1007,7 @@ describe('connectors settings section', () => {
     renderHub(api, { mcpRegistry })
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
-    expect(await screen.findByText('Broken')).toBeTruthy()
+    expect(await screen.findByText('Connecting…')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Repair' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
