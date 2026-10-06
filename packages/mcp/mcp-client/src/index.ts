@@ -164,6 +164,24 @@ const ConnectionConfigFields = {
   reconnect: Reconnect,
 }
 
+function deferOauthUntilCoreServices(ctx: Context, config: Config): boolean {
+  if (config.transport !== 'streamable-http' || config.oauth === false) return false
+  if (ctx.get('authorization') !== undefined
+    && ctx.get('credentials') !== undefined
+    && ctx.get('mcpConnectors') !== undefined) return false
+
+  // Dynamic managed MCPs can be created while the Host is still composing.
+  // Starting an OAuth remote before these services exist produces the exact
+  // invalid state "auth-required but no authorization flow". Keep the parent
+  // plugin lightweight and let this child fiber activate automatically once
+  // the Host's auth/vault/lifecycle services are all available.
+  ctx.inject(['authorization', 'credentials', 'mcpConnectors'], async (readyCtx) => {
+    await apply(readyCtx, config)
+  })
+  ctx.logger.info(`mcp-client(${config.serverName}): waiting for authorization, credentials, and connector registry services`)
+  return true
+}
+
 export const Config = z.union([
   z.object({
     transport: z.const('stdio'),
@@ -206,6 +224,8 @@ export const Config = z.union([
  * @returns startup readiness after connection and initial tool discovery settle.
  */
 export async function apply(ctx: Context, config: Config): Promise<void> {
+  if (deferOauthUntilCoreServices(ctx, config)) return
+
   // Platform-bound stdio servers must be rejected before startConnection() can
   // construct an SDK transport and spawn a child process. This keeps persisted
   // XcodeBuildMCP configs harmless on Windows/Linux and prevents pointless
