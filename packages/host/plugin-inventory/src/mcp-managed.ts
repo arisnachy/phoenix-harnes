@@ -858,6 +858,9 @@ export class ManagedMcpController {
     source?: ManagedMcpSource,
     verifyRuntime = false,
   ): Promise<McpRegistryInstallReceipt> {
+    if (!validConfig(config, source)) {
+      throw new Error(`${label} MCP resolved to a configuration Phoenix cannot persist safely`)
+    }
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
       const rows = await readManagedRows(this.path)
