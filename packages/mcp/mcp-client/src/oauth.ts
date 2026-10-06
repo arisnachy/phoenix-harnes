@@ -373,8 +373,8 @@ export class McpOAuthController {
   private readonly store: McpOAuthStateStore
   private readonly serverName: string
   private readonly serverUrl: string
-  private readonly resolveClientInformation?: () => Promise<OAuthClientInformationMixed | undefined>
-  private readonly tokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
+  private readonly resolveClientInformation: (() => Promise<OAuthClientInformationMixed | undefined>) | undefined
+  private readonly tokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic' | undefined
   private closed = false
 
   constructor(
