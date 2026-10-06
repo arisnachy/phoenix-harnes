@@ -3,13 +3,15 @@
  *
  * The browser ceremony uses Google's Desktop/installed-application flow with a
  * loopback redirect, PKCE S256, and state. Access and refresh tokens remain
- * private fields of this Host Service and are never written to the file-backed
- * credential provider. The credential store receives only a secret-free marker
- * so the neutral authorization seam can observe a completed human login.
+ * Host-owned and are persisted only as an opaque authorization grant in the
+ * credential provider so a normal PHOENIX restart can resume the user's Google
+ * session and refresh it silently. They are never exposed through model-facing
+ * authorization telemetry or Google tool results.
  *
  * API callers choose a fixed Google service rather than supplying an arbitrary
- * URL or OAuth scope. A PHOENIX restart intentionally requires Google login
- * again until a credential backend isolated from same-UID tool processes exists.
+ * URL or OAuth scope. The local credential provider's documented same-UID
+ * filesystem limitation still applies; deployments needing a stronger boundary
+ * can replace that provider without changing this broker's grant contract.
  *
  * @module @phoenix-ai/dsh-authorization/google
  */
@@ -63,6 +65,17 @@ interface GoogleGrant {
   expiresAt: number
   scopes: readonly string[]
 }
+
+interface DurableGoogleGrantV1 {
+  provider: 'google-oauth'
+  version: 1
+  accessToken: string
+  refreshToken?: string
+  expiresAt: number
+  scopes: string[]
+}
+
+const GOOGLE_GRANT_VERSION = 1
 
 interface TokenResponse {
   access_token: string
@@ -272,6 +285,26 @@ function parseGrantedScopes(value: string | undefined): readonly string[] {
     )
   }
   return [...new Set(value.trim().split(/\s+/u))]
+}
+
+function durableGoogleGrant(value: unknown): GoogleGrant | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const payload = value as Partial<DurableGoogleGrantV1>
+  if (payload.provider !== 'google-oauth' || payload.version !== GOOGLE_GRANT_VERSION) return undefined
+  if (!nonEmpty(payload.accessToken)
+    || (payload.refreshToken !== undefined && !nonEmpty(payload.refreshToken))
+    || typeof payload.expiresAt !== 'number'
+    || !Number.isFinite(payload.expiresAt)
+    || payload.expiresAt <= 0
+    || !Array.isArray(payload.scopes)
+    || payload.scopes.length === 0
+    || !payload.scopes.every(nonEmpty)) return undefined
+  return {
+    accessToken: payload.accessToken,
+    ...(payload.refreshToken === undefined ? {} : { refreshToken: payload.refreshToken }),
+    expiresAt: payload.expiresAt,
+    scopes: [...new Set(payload.scopes)],
+  }
 }
 
 function parseTokenResponse(value: unknown): TokenResponse {
@@ -489,7 +522,7 @@ export default class GoogleApiBroker extends Service {
   static inject = ['authorization', 'credentials']
 
   private readonly spec: ResolvedSpec
-  private readonly startupCleanup: Promise<void>
+  private readonly startupRestore: Promise<void>
   private grant: GoogleGrant | undefined
   private refreshInFlight: Promise<GoogleGrant> | undefined
   private accountEmail: string | undefined
@@ -498,12 +531,12 @@ export default class GoogleApiBroker extends Service {
   constructor(ctx: Context, config: Config) {
     super(ctx, 'googleApi')
     this.spec = resolveGoogleSpec(config)
-    this.startupCleanup = this.purgeStaleRecord()
-    // Cleanup starts at construction so a secret grant or marker left by an
-    // earlier process cannot be mistaken for this process's live session.
-    // Attach a rejection handler immediately to avoid an unhandled rejection;
-    // every public operation still awaits the original promise and fails loud.
-    void this.startupCleanup.catch(() => {})
+    this.startupRestore = this.restoreStoredGrant()
+    // Restore starts at construction so authorization inspection and tool calls
+    // see one consistent persisted session. Attach a rejection handler
+    // immediately to avoid an unhandled rejection; every public operation still
+    // awaits the original promise and fails loud.
+    void this.startupRestore.catch(() => {})
     ctx.effect(() => ctx.authorization.registerFlow({
       key: GOOGLE_ACCOUNT_KEY,
       label: 'Google Workspace',
@@ -523,7 +556,7 @@ export default class GoogleApiBroker extends Service {
    * @returns sanitized Google account and service capability telemetry, when connected.
    */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
-    await this.startupCleanup
+    await this.startupRestore
     const preferredOpenClawAccount = await this.openClawMarkerAccount()
     const openClawAccount = await findOpenClawGoogleAccount(undefined, preferredOpenClawAccount)
     if (openClawAccount !== undefined) {
@@ -604,7 +637,7 @@ export default class GoogleApiBroker extends Service {
    * @returns whether Google acknowledged token revocation.
    */
   async disconnect(): Promise<{ revoked: boolean }> {
-    await this.startupCleanup
+    await this.startupRestore
     const openClawAccount = await this.openClawMarkerAccount()
     const grant = this.grant
     this.grant = undefined
@@ -636,7 +669,7 @@ export default class GoogleApiBroker extends Service {
   }
 
   private async authorize(session: AuthorizationSession): Promise<void> {
-    await this.startupCleanup
+    await this.startupRestore
     const openClawAccount = await authorizeGoogleWithOpenClaw(session)
     if (openClawAccount !== undefined) {
       await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({
@@ -695,7 +728,7 @@ export default class GoogleApiBroker extends Service {
         expiresAt: internals.now() + token.expires_in * 1000,
         scopes: parseGrantedScopes(token.scope),
       }
-      await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({ kind: 'api-key' }))
+      await this.persistGrant(next)
       this.accountEmail = undefined
       this.emailLookupInFlight = undefined
       this.grant = next
@@ -705,7 +738,7 @@ export default class GoogleApiBroker extends Service {
   }
 
   private async usableGrant(requiredScope: string, signal?: AbortSignal): Promise<GoogleGrant> {
-    await this.startupCleanup
+    await this.startupRestore
     const current = this.grant
     if (current === undefined) {
       throw new AuthorizationError('Google is not signed in for this PHOENIX process', 'GOOGLE_REAUTH_REQUIRED')
@@ -821,8 +854,24 @@ export default class GoogleApiBroker extends Service {
       expiresAt: internals.now() + token.expires_in * 1000,
       scopes: token.scope === undefined ? current.scopes : parseGrantedScopes(token.scope),
     }
+    await this.persistGrant(next)
     this.grant = next
     return next
+  }
+
+  private async persistGrant(grant: GoogleGrant): Promise<void> {
+    const payload: DurableGoogleGrantV1 = {
+      provider: 'google-oauth',
+      version: GOOGLE_GRANT_VERSION,
+      accessToken: grant.accessToken,
+      ...(grant.refreshToken === undefined ? {} : { refreshToken: grant.refreshToken }),
+      expiresAt: grant.expiresAt,
+      scopes: [...grant.scopes],
+    }
+    await this.ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({
+      kind: 'grant',
+      payload,
+    }))
   }
 
   /** Read the durable, secret-free OpenClaw account adoption marker. */
@@ -837,11 +886,22 @@ export default class GoogleApiBroker extends Service {
       : undefined
   }
 
-  /** Remove only stale process-local OAuth markers; durable OpenClaw adoption survives restart. */
-  private async purgeStaleRecord(): Promise<void> {
-    const info = await this.ctx.credentials.describeRecord(GOOGLE_ACCOUNT_KEY)
-    if (!info.configured) return
+  /**
+   * Restore a durable native Google grant or OpenClaw adoption. Legacy
+   * secret-free markers and pre-versioned secret payloads are not guessed:
+   * they cannot prove a reusable current authorization and are removed once.
+   */
+  private async restoreStoredGrant(): Promise<void> {
+    const stored = await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
+    if (stored === undefined) return
     if (await this.openClawMarkerAccount() !== undefined) return
+    if (stored.kind === 'grant') {
+      const restored = durableGoogleGrant(stored.payload)
+      if (restored !== undefined) {
+        this.grant = restored
+        return
+      }
+    }
     await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
   }
 }
