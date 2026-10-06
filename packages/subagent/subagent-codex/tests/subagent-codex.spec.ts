@@ -360,7 +360,7 @@ function expectedFailureDiagnostic(
 }
 
 describe('task admission and package contracts', () => {
-  it('ships one independently installable provider-only Bundle patch', () => {
+  it('ships independently installable safe and auto-review provider rows without model-facing tools', () => {
     const root = fileURLToPath(new URL('..', import.meta.url))
     const manifest = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
       dependencies?: Record<string, string>
@@ -432,12 +432,23 @@ describe('task admission and package contracts', () => {
 
     const parsed = yaml.load(readFileSync(resolve(root, manifest.dsh!.bundle!.patch!), 'utf8'))
     const rows = Array.isArray(parsed)
-      ? (parsed as Array<{ insert?: Array<{ id?: string; name?: string }> }>).flatMap(entry => entry.insert ?? [])
+      ? (parsed as Array<{ insert?: Array<{ id?: string; name?: string; config?: Record<string, string | boolean> }> }>).flatMap(entry => entry.insert ?? [])
       : []
-    expect(rows).toEqual([{
-      id: 'subagent-codex',
-      name: '@phoenix-ai/dsh-subagent-codex',
-    }])
+    expect(rows).toEqual([
+      {
+        id: 'subagent-codex',
+        name: '@phoenix-ai/dsh-subagent-codex',
+      },
+      {
+        id: 'subagent-codex-auto-review',
+        name: '@phoenix-ai/dsh-subagent-codex',
+        config: {
+          providerName: 'codex-auto-review',
+          permissionMode: 'approve-for-me',
+          accountBridge: false,
+        },
+      },
+    ])
     expect(JSON.stringify(rows)).not.toContain('tool-subagent')
   })
 
@@ -635,6 +646,8 @@ describe('task admission and package contracts', () => {
       .toBe('codex-safe')
     expect(() => codex.Config({ providerName: '' })).toThrow()
     expect(codex.Config({}).permissionMode).toBe(DEFAULT_CODEX_PERMISSION_MODE)
+    expect(codex.Config({}).accountBridge).toBe(true)
+    expect(codex.Config({ accountBridge: false }).accountBridge).toBe(false)
     for (const permissionMode of CODEX_PERMISSION_MODES) {
       expect(codex.Config({ permissionMode }).permissionMode).toBe(permissionMode)
     }
