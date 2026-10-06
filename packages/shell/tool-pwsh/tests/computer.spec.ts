@@ -4,6 +4,7 @@ import {
   browserCommandForAction,
   computerActionNeedsApproval,
   computerModeForSandbox,
+  legacyDesktopObservationCommandForAction,
   parseDesktopBrowserControlDescriptor,
   residentComputerRequestForAction,
   runWindowsComputerAction,
@@ -38,6 +39,15 @@ describe('Computer Use permissions', () => {
     expect(computerActionNeedsApproval('workspace-write', 'browser_inspect')).toBe(false)
     expect(computerActionNeedsApproval('workspace-write', 'browser_login')).toBe(true)
     expect(computerActionNeedsApproval('read-only', 'click')).toBe(false)
+  })
+})
+
+describe('Computer Use native observation routing', () => {
+  it('routes only side-effect-free observations over the legacy desktop pipe', () => {
+    expect(legacyDesktopObservationCommandForAction('windows')).toEqual({ type: 'phoenix.desktop.windows' })
+    expect(legacyDesktopObservationCommandForAction('screenshot')).toEqual({ type: 'phoenix.desktop.screenshot' })
+    expect(legacyDesktopObservationCommandForAction('click')).toBeUndefined()
+    expect(legacyDesktopObservationCommandForAction('type')).toBeUndefined()
   })
 })
 
