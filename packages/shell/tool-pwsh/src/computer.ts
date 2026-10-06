@@ -377,8 +377,21 @@ async function runResidentComputerAction(
     : `resident desktop command accepted: ${args.action}`
 }
 
+/**
+ * Map side-effect-free Computer observations onto the legacy Phoenix Desktop pipe.
+ * @param action - Computer action requested by the model.
+ * @returns Native pipe command when the legacy desktop shell can own it.
+ */
+export function legacyDesktopObservationCommandForAction(
+  action: ComputerAction,
+): { type: 'phoenix.desktop.windows' | 'phoenix.desktop.screenshot' } | undefined {
+  if (action === 'windows') return { type: 'phoenix.desktop.windows' }
+  if (action === 'screenshot') return { type: 'phoenix.desktop.screenshot' }
+  return undefined
+}
+
 async function runLegacyDesktopObservation(
-  args: Extract<ComputerToolArgs, { action: 'windows' | 'screenshot' }> | ComputerToolArgs,
+  args: ComputerToolArgs,
   descriptor: DesktopBrowserControlDescriptor,
   signal?: AbortSignal,
 ): Promise<string> {
@@ -387,9 +400,11 @@ async function runLegacyDesktopObservation(
     throw new Error('Legacy Phoenix Desktop observation supports only windows and screenshot')
   }
   const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
-  const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify({
-    type: args.action === 'windows' ? 'phoenix.desktop.windows' : 'phoenix.desktop.screenshot',
-  }), signal)
+  const command = legacyDesktopObservationCommandForAction(args.action)
+  if (command === undefined) {
+    throw new Error('Legacy Phoenix Desktop observation supports only windows and screenshot')
+  }
+  const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(command), signal)
   let reply: unknown
   try {
     reply = JSON.parse(rawReply)
