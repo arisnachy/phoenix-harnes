@@ -242,6 +242,13 @@ describe('the shipped Web composition', () => {
     expect(ctx.agentPresets.defaultId).toBe('standard')
   })
 
+  it('keeps Windows Computer Use enabled in every full shipped preset', async () => {
+    for (const preset of ['standard', 'code', 'cordis']) {
+      const composition = await readFile(join(CONFIG_DIR, 'agent-presets', preset, 'agent.cordis.yml'), 'utf8')
+      expect(composition).toMatch(/- id: tool-pwsh\n\s+name: '@phoenix-ai\/dsh-tool-pwsh'\n\s+disabled: !!js process\.platform !== 'win32'\n\s+config:\n\s+enableComputerUse: true/u)
+    }
+  })
+
   it('composes the full agent from `standard`', async () => {
     const handle = await ctx.agents.create({
       sessionId: SessionId('preset-standard'),
