@@ -191,8 +191,12 @@ function projectCandidate(value: unknown): McpRegistryCandidate | undefined {
     if (transport === undefined) continue
     remoteTransports.push(transport)
     if (remoteUrl === undefined && transport === 'streamable-http') {
+      // Phoenix can auto-install only remotes whose connection recipe is fully
+      // represented by the URL/OAuth transport today. Registry-declared custom
+      // headers must not be silently discarded or the connector will be born broken.
+      const hasCustomHeaders = Array.isArray(item?.headers) && item.headers.length > 0
       const candidate = safeHttpsUrl(item?.url)
-      if (candidate !== undefined && !candidate.includes('{')) remoteUrl = candidate
+      if (!hasCustomHeaders && candidate !== undefined && !candidate.includes('{')) remoteUrl = candidate
     }
   }
   const transports = [...new Set<McpRegistryTransport>([
