@@ -124,7 +124,7 @@ export interface McpRegistryClient {
     connector: ManagedMcpConnectorView
   }>
   /** Install a Host-pinned curated MCP by connector id; no endpoint crosses the browser boundary. */
-  installCurated?(request: { connectorId: 'devpost' | 'canva' }): Promise<{
+  installCurated?(request: { connectorId: 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch' }): Promise<{
     status: 'installed' | 'already-installed'
     connector: ManagedMcpConnectorView
   }>
@@ -1123,7 +1123,7 @@ export function ConnectorsSettingsSection({ api,
 
   const installCuratedConnector = (definition: ConnectorDefinition): void => {
     const installCurated = mcpRegistry?.installCurated
-    if (installCurated === undefined || (definition.id !== 'devpost' && definition.id !== 'canva') || definition.curatedMcp !== true
+    if (installCurated === undefined || definition.curatedMcp !== true || definition.id === 'binance'
       || installingCuratedId !== undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
     setCatalogFailure(undefined)
     setInstallingCuratedId(definition.id)
