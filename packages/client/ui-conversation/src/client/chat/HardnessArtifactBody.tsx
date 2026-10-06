@@ -238,7 +238,7 @@ function sandboxDocument(html: string, executable: boolean): string {
   ].join('; ') + ';'
   const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
   const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
-  const heightReporter = '<script>(function(){function report(){var root=document.documentElement;parent.postMessage({type:\'phoenix-artifact-height\',height:Math.max(root.scrollHeight,root.offsetHeight)},\'*\')}if(window.ResizeObserver){new ResizeObserver(report).observe(document.documentElement)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);report()})()<\/script>'
+  const heightReporter = '<script>(function(){function height(){var root=document.documentElement,body=document.body;return Math.max(root?root.scrollHeight:0,root?root.offsetHeight:0,body?body.scrollHeight:0,body?body.offsetHeight:0,1)}function report(){parent.postMessage({type:\'phoenix-artifact-height\',height:height()},\'*\')}if(window.ResizeObserver){var ro=new ResizeObserver(report);ro.observe(document.documentElement);if(document.body)ro.observe(document.body)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);window.addEventListener(\'resize\',report);report()})()<\/script>'
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${body}${heightReporter}</body></html>`
 }
 
@@ -429,7 +429,9 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
       const url = safeWebPreviewUrl(data)
       return url === undefined ? <p className={styles.note}>Page preview URL was rejected.</p> : <WebPagePreview url={url} title={title} />
     }
-    if (mime === 'text/html' || mime === 'application/vnd.hardness.app+html') {
+    if (mime === 'text/html'
+      || mime === 'application/vnd.hardness.app+html'
+      || mime === 'application/vnd.phoenix.canvas+html') {
       const pageUrl = safeWebPreviewUrl(data)
       if (pageUrl !== undefined && !data.includes('<')) return <WebPagePreview url={pageUrl} title={title} />
       return <MiniApp html={data} title={title} executable={executable} />
