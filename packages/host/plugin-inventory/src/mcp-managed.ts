@@ -489,8 +489,10 @@ function validRegistryStdioConfig(value: Record<string, unknown>): boolean {
 
   if (value.command === 'npx') {
     if (value.args[0] !== '-y') return false
+    const dangerousRuntimeFlags = new Set(['-c', '--call', '-p', '--package', '--shell', '--script-shell'])
+    if (value.args.slice(1).some(argument => dangerousRuntimeFlags.has(argument))) return false
     return value.args.slice(1).some(argument =>
-      /^(?:@[A-Za-z0-9_.-]+\/)?[A-Za-z0-9_.-]+(?:@[A-Za-z0-9][A-Za-z0-9_.+-]*)?$/.test(argument))
+      /^(?:@[A-Za-z0-9][A-Za-z0-9_.-]*\/)?[A-Za-z0-9][A-Za-z0-9_.-]*(?:@[A-Za-z0-9][A-Za-z0-9_.+-]*)?$/.test(argument))
   }
   return value.args.some(argument =>
     /^[A-Za-z0-9][A-Za-z0-9_.-]*(?:==[A-Za-z0-9][A-Za-z0-9_.+-]*)?$/.test(argument))
@@ -696,7 +698,7 @@ function registryPackageMcpConfig(
   let baseArgs: string[]
 
   if (registryType === 'npm' && (runtimeHint === undefined || runtimeHint === 'npx')) {
-    if (!/^(?:@[A-Za-z0-9_.-]+\/)?[A-Za-z0-9_.-]+$/.test(pkg.identifier)) {
+    if (!/^(?:@[A-Za-z0-9][A-Za-z0-9_.-]*\/)?[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(pkg.identifier)) {
       throw new Error(`Registry npm package "${pkg.identifier}" has an unsafe identifier`)
     }
     command = 'npx'
