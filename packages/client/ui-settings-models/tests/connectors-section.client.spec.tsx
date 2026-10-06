@@ -560,6 +560,88 @@ describe('connectors settings section', () => {
     await waitFor(() => { expect(remove).toHaveBeenCalledWith({ entryId: 'broken-id' }) })
   })
 
+  it('reconnects a failed MCP with its stored OAuth grant instead of forcing authorization again', async () => {
+    const begin = vi.fn()
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/supabase-broken',
+        label: 'MCP supabase-broken',
+        methods: [{ id: 'oauth', label: 'Authorize supabase-broken' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+        disconnectable: true as const,
+      }] }))),
+      begin, status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-supabase',
+          serverName: 'supabase-broken',
+          url: 'https://mcp.supabase.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'supabase' },
+        }],
+        runtime: [{
+          serverName: 'supabase-broken',
+          transport: 'streamable-http' as const,
+          status: 'failed' as const,
+          reasonCode: 'connection-failed' as const,
+          toolNames: [],
+        }],
+      })),
+      reconnect,
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const card = (await screen.findByText('Supabase')).closest('article')
+    const reconnectButton = Array.from(card?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Reconnect')
+
+    expect(reconnectButton).toBeTruthy()
+    expect(Array.from(card?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Reauthorize')).toBe(false)
+
+    fireEvent.click(reconnectButton!)
+    await waitFor(() => {
+      expect(reconnect).toHaveBeenCalledWith({ serverName: 'supabase-broken' })
+    })
+    expect(begin).not.toHaveBeenCalled()
+  })
+
+  it('keeps a recovery action visible while an auth-required MCP flow is still registering', async () => {
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-notion',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' },
+        }],
+        runtime: [{
+          serverName: 'notion',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      reconnect,
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const card = (await screen.findByText('Notion')).closest('article')
+    expect(Array.from(card?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Reconnect')).toBe(true)
+  })
+
   it('disconnects an installed MCP account before removing the managed connector', async () => {
     const disconnect = vi.fn(() => Promise.resolve(ok({})))
     const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
