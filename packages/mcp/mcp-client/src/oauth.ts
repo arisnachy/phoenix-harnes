@@ -28,6 +28,7 @@ export interface McpOAuthProviderOptions {
   store: McpOAuthStateStore
   onAuthorizationUrl: (url: URL) => void | Promise<void>
   state?: string | (() => string | Promise<string>)
+  clientInformation?: OAuthClientInformationMixed | (() => Promise<OAuthClientInformationMixed | undefined>)
 }
 
 function cloneWithout<T extends object, K extends keyof T>(value: T, key: K): Omit<T, K> {
@@ -72,7 +73,12 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
         ? configuredState
         : () => configuredState,
     async clientInformation() {
-      return (await options.store.read())?.clientInformation
+      const stored = (await options.store.read())?.clientInformation
+      if (stored !== undefined) return stored
+      if (options.clientInformation === undefined) return undefined
+      return typeof options.clientInformation === 'function'
+        ? options.clientInformation()
+        : options.clientInformation
     },
     async saveClientInformation(clientInformation) {
       await updateState(options.store, current => ({ ...current, clientInformation }))
@@ -170,11 +176,13 @@ interface PendingCallback {
 export class McpOAuthCallbackServer {
   private readonly server: Server
   private readonly path: string
+  private readonly port: number
   private pending: PendingCallback | undefined
   private _redirectUri: string | undefined
 
-  constructor(serverName: string) {
+  constructor(serverName: string, port = 0) {
     this.path = `/mcp/oauth/${encodeURIComponent(serverName)}`
+    this.port = port
     this.server = createServer((request, response) => { this.handle(request, response) })
   }
 
@@ -198,7 +206,7 @@ export class McpOAuthCallbackServer {
       }
       this.server.once('error', onError)
       this.server.once('listening', onListening)
-      this.server.listen(0, '127.0.0.1')
+      this.server.listen(this.port, '127.0.0.1')
     })
     const address = this.server.address()
     if (address === null || typeof address === 'string') {
@@ -346,6 +354,12 @@ function mcpCredentialKey(serverName: string): CredentialKey {
   return credentialKey('mcp-client', id)
 }
 
+/** Optional fixed-client settings for OAuth servers that do not support DCR. */
+export interface McpOAuthControllerOptions {
+  callbackPort?: number
+  resolveClientInformation?: () => Promise<OAuthClientInformationMixed | undefined>
+}
+
 /** Host controller for one MCP server's OAuth lifecycle. */
 export class McpOAuthController {
   /** Credential-store key for this MCP server's OAuth state. */
@@ -357,14 +371,21 @@ export class McpOAuthController {
   private readonly store: McpOAuthStateStore
   private readonly serverName: string
   private readonly serverUrl: string
+  private readonly resolveClientInformation?: () => Promise<OAuthClientInformationMixed | undefined>
   private closed = false
 
-  constructor(credentials: CredentialProvider, serverName: string, serverUrl: string) {
+  constructor(
+    credentials: CredentialProvider,
+    serverName: string,
+    serverUrl: string,
+    options: McpOAuthControllerOptions = {},
+  ) {
     this.serverName = serverName
     this.serverUrl = serverUrl
+    this.resolveClientInformation = options.resolveClientInformation
     this.key = mcpCredentialKey(serverName)
     this.store = createCredentialStateStore(credentials, this.key)
-    this.callbackServer = new McpOAuthCallbackServer(serverName)
+    this.callbackServer = new McpOAuthCallbackServer(serverName, options.callbackPort)
     this.ready = this.callbackServer.start()
   }
 
@@ -387,6 +408,9 @@ export class McpOAuthController {
       redirectUrl: this.callbackServer.redirectUri,
       store: this.store,
       onAuthorizationUrl,
+      ...(this.resolveClientInformation === undefined
+        ? {}
+        : { clientInformation: this.resolveClientInformation }),
     })
   }
 
@@ -431,6 +455,9 @@ export class McpOAuthController {
           url: String(url),
         })
       },
+      ...(this.resolveClientInformation === undefined
+        ? {}
+        : { clientInformation: this.resolveClientInformation }),
     })
     try {
       const first = await auth(provider, { serverUrl: this.serverUrl })
