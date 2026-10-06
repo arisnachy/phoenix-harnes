@@ -170,10 +170,14 @@ export function startConnection(
   transportOptions?: TransportOptions,
 ): ConnectionHandle {
   const label = `mcp-client(${config.serverName})`
+  const publishStatus = lifecycle?.setStatus.bind(lifecycle)
+  const publishTools = lifecycle?.setTools.bind(lifecycle)
+  let markAuthorizationRequired: (() => void) | undefined
   const opts: ToolBridgeOptions = {
     registrationFailure: 'contain',
     serverName: config.serverName,
     toolCallTimeoutMs: config.toolCallTimeoutMs,
+    onAuthorizationRequired: () => { markAuthorizationRequired?.() },
   }
   // The initial sync uses 'throw' when failOnStartupError is configured, so
   // a registration conflict propagates to the startup-await path. Re-syncs
@@ -196,8 +200,6 @@ export function startConnection(
   let connectedAt: number | undefined
   /** The real error from the first connection attempt, for startup-await diagnostics. */
   let firstAttemptError: unknown
-  const publishStatus = lifecycle?.setStatus.bind(lifecycle)
-  const publishTools = lifecycle?.setTools.bind(lifecycle)
   publishStatus?.('starting')
 
   /** A generation may act only while it is the current one on a live plugin. */
@@ -235,6 +237,24 @@ export function startConnection(
     // is the only transition that can succeed from here.
     if (status?.status === 'auth-required') return
     scheduleReconnect()
+  }
+
+  markAuthorizationRequired = () => {
+    const generation = client
+    if (generation === undefined) {
+      publishStatus?.('auth-required', 'authorization-required')
+      return
+    }
+    generationDown(generation, { status: 'auth-required', reasonCode: 'authorization-required' })
+    connectedAt = undefined
+    syncChain = syncChain.then(() => {
+      for (const dispose of disposers.values()) dispose()
+      disposers = new Map()
+      publishTools?.([])
+    })
+    void generation.close().catch((error: unknown) => {
+      ctx.logger.warn(`${label}: failed to close generation after an authorization rejection: ${String(error)}`)
+    })
   }
 
   /** Wait for the transport-owned close signal without letting a broken transport wedge teardown forever. */

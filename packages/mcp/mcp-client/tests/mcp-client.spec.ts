@@ -1010,6 +1010,22 @@ describe('tool execution', () => {
     expect('value' in result).toBe(false)
   })
 
+  it('reports JWT authentication failures returned by a real MCP tool call', async () => {
+    const onAuthorizationRequired = vi.fn()
+    const client = createMockClient(
+      [{ name: 'protected', inputSchema: { type: 'object' } }],
+      { content: [{ type: 'text', text: 'JWT authentication required' }], isError: true },
+    )
+
+    await syncTools(client as never, ctx, { ...defaultOpts, onAuthorizationRequired }, new Map())
+    const result = await ctx.tools.execute({
+      signal: testToolSignal, callId: CallId('jwt-auth'), name: 'mcp__srv__protected', arguments: {},
+    })
+
+    expect(result.isError).toBe(true)
+    expect(onAuthorizationRequired).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects tools that require task-based execution', async () => {
     const client = createMockClient([
       { name: 'task-only', inputSchema: { type: 'object' }, execution: { taskSupport: 'required' } },

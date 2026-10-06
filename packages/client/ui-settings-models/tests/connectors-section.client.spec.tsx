@@ -367,6 +367,59 @@ describe('connectors settings section', () => {
     })
   })
 
+  it('lets auth-required runtime state override stale connected telemetry', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'telemetry/source',
+        label: 'Telemetry source',
+        methods: [{ id: 'oauth', label: 'Authorize source' }],
+        inFlight: false,
+        telemetry: {
+          kind: 'account' as const,
+          provider: 'Telemetry',
+          connectors: [{
+            id: 'devpost',
+            name: 'Devpost',
+            enabled: true,
+            accessible: true,
+            installed: true,
+            callable: true,
+          }],
+        },
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-devpost',
+          serverName: 'devpost',
+          url: 'https://devpost.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'devpost' },
+        }],
+        runtime: [{
+          serverName: 'devpost',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      reconnect: vi.fn(async () => ({ accepted: true })),
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const card = await waitFor(() => {
+      const current = document.querySelector('[data-connector-id="devpost"]')
+      if (current === null || !current.textContent?.includes('Authorization required')) {
+        throw new Error('auth-required runtime did not win status precedence')
+      }
+      return current
+    })
+    expect(card.textContent).not.toContain('Connected · callable')
+  })
+
   it('refreshes a starting MCP until the store shows it connected', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
@@ -610,36 +663,52 @@ describe('connectors settings section', () => {
     expect(begin).not.toHaveBeenCalled()
   })
 
-  it('keeps a recovery action visible while an auth-required MCP flow is still registering', async () => {
+  it('keeps Authorize visible while an auth-required MCP flow is still registering', async () => {
     const reconnect = vi.fn(async () => ({ accepted: true }))
+    const begin = vi.fn()
+    const list = vi.fn()
+      .mockResolvedValueOnce(ok({ entries: [] }))
+      .mockResolvedValue(ok({ entries: [{
+        key: 'mcp-client/notion',
+        label: 'MCP notion',
+        methods: [{ id: 'oauth', label: 'Authorize notion' }],
+        inFlight: false,
+      }] }))
     const api = {
-      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
-      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+      list,
+      begin, status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
     } as unknown as IApiClient['authorization']
+    const authRequired = {
+      managed: [{
+        entryId: 'managed-notion',
+        serverName: 'notion',
+        url: 'https://mcp.notion.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'notion' },
+      }],
+      runtime: [{
+        serverName: 'notion',
+        transport: 'streamable-http' as const,
+        status: 'auth-required' as const,
+        reasonCode: 'authorization-required' as const,
+        toolNames: [],
+      }],
+    }
     const mcpRegistry = {
-      state: vi.fn(async () => ({
-        managed: [{
-          entryId: 'managed-notion',
-          serverName: 'notion',
-          url: 'https://mcp.notion.com/mcp',
-          source: { kind: 'curated' as const, connectorId: 'notion' },
-        }],
-        runtime: [{
-          serverName: 'notion',
-          transport: 'streamable-http' as const,
-          status: 'auth-required' as const,
-          reasonCode: 'authorization-required' as const,
-          toolNames: [],
-        }],
-      })),
+      state: vi.fn(async () => authRequired),
       reconnect,
       install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
     }
 
     renderHub(api, { mcpRegistry })
     const card = (await screen.findByText('Notion')).closest('article')
-    expect(Array.from(card?.querySelectorAll('button') ?? [])
-      .some(button => button.textContent === 'Reconnect')).toBe(true)
+    const authorize = Array.from(card?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Authorize')
+    expect(authorize).toBeTruthy()
+    fireEvent.click(authorize!)
+    await waitFor(() => {
+      expect(reconnect).toHaveBeenCalledWith({ serverName: 'notion' })
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+    })
   })
 
   it('disconnects an installed MCP account before removing the managed connector', async () => {

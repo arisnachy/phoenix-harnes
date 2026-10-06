@@ -272,6 +272,7 @@ function normalize(value: string): string {
 
 const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
 const MCP_AUTH_FLOW_RETRY_MS = [0, 120, 350, 800, 1_600] as const
+const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
 function isTransientConnectorRemoteFailure(error: unknown): boolean {
   const message = String(error).toLowerCase()
@@ -472,9 +473,6 @@ function accountStatus(
   runtime: McpConnectorRuntimeView | undefined,
   t: ConnectorsSettingsSectionProps['connectorT'],
 ): { text: string; className: string } {
-  if (runtime?.status === 'ready' || entry.telemetry !== undefined) {
-    return { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
-  }
   if (runtime?.status === 'starting') {
     return { text: t('connectingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
   }
@@ -489,6 +487,9 @@ function accountStatus(
   }
   if (runtime?.status === 'disconnected') {
     return { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
+  }
+  if (runtime?.status === 'ready' || entry.telemetry !== undefined) {
+    return { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
   }
   if (entry.stored !== undefined) {
     return { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
@@ -526,7 +527,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   repairing: boolean
   removing: boolean
 }): ReactNode {
-  const connectedByAccount = (mcpRuntime === undefined || mcpRuntime.status === 'ready')
+  const connectedByAccount = managed === undefined
+    && mcpRuntime === undefined
     && accountGrantConnectsCatalogEntry(account)
   const installUrl = safeExternalHref(live?.installUrl)
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
@@ -546,7 +548,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const openClawStatus = openClaw?.connected === true
     ? { text: t('openClawConnectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : undefined
-  const status = openClawStatus ?? liveStatus ?? mcpStatus ?? (connectedByAccount
+  const status = openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
       ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -632,7 +634,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
                 if (mcpRuntime !== undefined) onReconnect?.(mcpRuntime)
               }}
             >
-              {reconnecting ? t('connectingStatus') : t('reconnect')}
+              {reconnecting ? t('connectingStatus') : mcpRuntime.status === 'auth-required' ? t('authorize') : t('reconnect')}
             </button>
           ) : null}
           {canRepair ? (
@@ -965,6 +967,7 @@ export function ConnectorsSettingsSection({ api,
     if (expectedKeys.length === 0) return
 
     const controller = new AbortController()
+    let retryTimer: ReturnType<typeof globalThis.setTimeout> | undefined
     void (async () => {
       for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
         if (delayMs > 0) {
@@ -983,8 +986,16 @@ export function ConnectorsSettingsSection({ api,
           }
         }
       }
+      if (!controller.signal.aborted) {
+        retryTimer = globalThis.setTimeout(() => {
+          setRefresh(current => current + 1)
+        }, MCP_AUTH_FLOW_REFRESH_MS)
+      }
     })()
-    return () => { controller.abort() }
+    return () => {
+      controller.abort()
+      if (retryTimer !== undefined) globalThis.clearTimeout(retryTimer)
+    }
   }, [api, mcpHub.managed, mcpHub.runtime])
 
   useEffect(() => {
@@ -1079,13 +1090,14 @@ export function ConnectorsSettingsSection({ api,
     const openClawRoute = definition.openClawConnectorId === undefined
       ? undefined
       : openClaw.connectors.find(candidate => candidate.id === definition.openClawConnectorId)
-    const accountConnected = (mcpRuntime === undefined || mcpRuntime.status === 'ready')
+    const accountConnected = managed === undefined
+      && mcpRuntime === undefined
       && accountGrantConnectsCatalogEntry(account)
+    const runtimeAuthoritative = managed !== undefined || mcpRuntime !== undefined
     const connected = openClawRoute?.connected === true
-      || live?.installed === true
-      || live?.callable === true
-      || accountConnected
-      || mcpRuntime?.status === 'ready'
+      || (runtimeAuthoritative
+        ? mcpRuntime?.status === 'ready'
+        : live?.installed === true || live?.callable === true || accountConnected)
       || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
   }), [entries, liveConnectors, mcpHub, openClaw])
@@ -1163,21 +1175,41 @@ export function ConnectorsSettingsSection({ api,
   }
 
   const reconnectMcpConnector = (runtime: McpConnectorRuntimeView): void => {
-    const reconnect = mcpRegistry?.reconnect?.bind(mcpRegistry)
-    if (reconnect === undefined || reconnectingServerName !== undefined) return
+    const registry = mcpRegistry
+    const reconnect = registry?.reconnect?.bind(registry)
+    if (registry === undefined || reconnect === undefined || reconnectingServerName !== undefined) return
+    const recoverAuthorization = runtime.status === 'auth-required'
     setCatalogFailure(undefined)
     setReconnectingServerName(runtime.serverName)
-    void reconnect({ serverName: runtime.serverName }).then(
-      (result) => {
-        if (!result.accepted) {
-          setCatalogFailure(connectorT('reconnectRequiredStatus'))
+    void reconnect({ serverName: runtime.serverName }).then(async (result) => {
+      if (!result.accepted) {
+        setCatalogFailure(connectorT('reconnectRequiredStatus'))
+        return
+      }
+      setRefresh(current => current + 1)
+      onAuthorized()
+      if (!recoverAuthorization || api === undefined) return
+
+      const expectedKey = `mcp-client/${runtime.serverName.toLowerCase().replaceAll('_', '-')}`
+      for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
+        if (delayMs > 0) await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
+        const [snapshot, allEntries] = await Promise.all([
+          registry.state(),
+          readAuthorizationEntries(api),
+        ])
+        setMcpHub(snapshot)
+        setEntries(allEntries)
+        const currentRuntime = snapshot.runtime.find(entry => entry.serverName === runtime.serverName)
+        if (currentRuntime?.status === 'ready') return
+        const entry = allEntries.find(candidate => candidate.key === expectedKey)
+        const method = entry?.methods[0]
+        if (entry !== undefined && method !== undefined) {
+          begin(entry.key, method.id)
           return
         }
-        setRefresh(current => current + 1)
-        onAuthorized()
-      },
-      (error: unknown) => { setCatalogFailure(String(error)) },
-    ).finally(() => { setReconnectingServerName(undefined) })
+      }
+    }).catch((error: unknown) => { setCatalogFailure(String(error)) })
+      .finally(() => { setReconnectingServerName(undefined) })
   }
 
   const repairManagedConnector = (connector: ManagedMcpConnectorView): void => {

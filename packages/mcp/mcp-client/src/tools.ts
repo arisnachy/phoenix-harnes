@@ -31,6 +31,8 @@ export interface ToolBridgeOptions {
   registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
+  /** Report a real tool-call authentication rejection back to connector lifecycle state. */
+  onAuthorizationRequired?: (error: unknown) => void
 }
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
@@ -190,6 +192,19 @@ function modelInputSchema(candidate: SchemaObject): SchemaObject {
 
 /** Raw result record: the bridge owns JSON-value validation after transport. */
 const RawCallToolResultSchema = z.record(z.string(), z.unknown())
+
+function isToolAuthorizationFailure(value: unknown): boolean {
+  if (typeof value === 'object' && value !== null) {
+    const { status, code } = value as { status?: unknown; code?: unknown }
+    if (status === 401 || status === 403 || code === 401 || code === 403) return true
+  }
+  const message = value instanceof Error ? value.message : String(value)
+  return /(?:jwt\s+authentication\s+required|authentication\s+required|authorization\s+required|unauthori[sz]ed|invalid\s+(?:jwt|token)|expired\s+(?:jwt|token)|\b(?:401|403)\b)/i.test(message)
+}
+
+function reportToolAuthorizationFailure(opts: ToolBridgeOptions, error: unknown): void {
+  if (isToolAuthorizationFailure(error)) opts.onAuthorizationRequired?.(error)
+}
 
 /** Raster formats supported by the durable attachment vocabulary. */
 const IMAGE_MEDIA_TYPES: readonly ImageMediaType[] = [
@@ -465,7 +480,10 @@ function createExecutor(
     // specific "missing required param" error the model can learn from.
     const argsObj = (typeof args === 'object' && args !== null ? args : {}) as Record<string, unknown>
     const wireArgs = transformArguments === undefined ? argsObj : transformArguments(argsObj)
-    const result = await callToolUncached(client, rawName, wireArgs, exec, opts)
+    const result = await callToolUncached(client, rawName, wireArgs, exec, opts).catch((error: unknown) => {
+      reportToolAuthorizationFailure(opts, error)
+      throw error
+    })
 
     // The SDK may return a legacy `toolResult` shape; normalize to content array.
     if (!Array.isArray(result.content)) {
@@ -473,7 +491,11 @@ function createExecutor(
         ? JSON.stringify(result.toolResult)
         : '(no output)'
       const text = typeof rendered === 'string' ? rendered : '(no output)'
-      if (result.isError === true) throw new Error(text)
+      if (result.isError === true) {
+        const error = new Error(text)
+        reportToolAuthorizationFailure(opts, error)
+        throw error
+      }
       return {
         content: [{ type: 'text', text }],
         ...result.structuredContent !== undefined
@@ -490,7 +512,9 @@ function createExecutor(
 
     // MCP isError → throw so ToolRuntime produces an isError result for the model.
     if (result.isError === true) {
-      throw new Error(text)
+      const error = new Error(text)
+      reportToolAuthorizationFailure(opts, error)
+      throw error
     }
 
     const value: McpResult = {
