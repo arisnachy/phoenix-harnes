@@ -608,6 +608,7 @@ describe('connectors settings section', () => {
         label: 'MCP notion',
         methods: [{ id: 'oauth', label: 'Authorize notion' }],
         inFlight: false,
+        stored: { kind: 'grant' as const },
       }] }))
     const api = {
       list,
@@ -638,9 +639,10 @@ describe('connectors settings section', () => {
     await waitFor(() => {
       expect(list).toHaveBeenCalledTimes(2)
       expect(Array.from(notionCard?.querySelectorAll('button') ?? [])
-        .some(button => button.textContent === 'Authorize')).toBe(true)
+        .some(button => button.textContent === 'Reauthorize')).toBe(true)
     })
     expect(notionCard?.textContent).toContain('Authorization required')
+    expect(notionCard?.textContent).not.toContain('Connected')
   })
 
   it('uses the authorization method actually offered by non-OAuth provider flows', async () => {
