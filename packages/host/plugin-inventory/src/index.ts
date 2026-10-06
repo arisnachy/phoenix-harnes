@@ -257,6 +257,25 @@ export class PluginInventoryGateway extends TypertRemoteService {
   }
 
   /**
+   * Ask one already-registered MCP runtime to reconnect immediately.
+   * The browser supplies only the stable server namespace; no URL, credential,
+   * command, header, or provider detail crosses this boundary.
+   * @param request - MCP server namespace currently present in the live registry.
+   * @returns Whether a live connector accepted the reconnect request.
+   */
+  @Remote('reconnectMcpConnector')
+  reconnectMcpConnector(request: { serverName: string }): { accepted: boolean } {
+    const serverName = request.serverName.trim()
+    if (!/^[A-Za-z0-9_-]{1,32}$/.test(serverName)) {
+      throw new Error('invalid MCP server name')
+    }
+    const service = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
+      | { reconnect(serverName: string): boolean }
+      | undefined
+    return { accepted: service?.reconnect(serverName) ?? false }
+  }
+
+  /**
    * Install one registry-listed Streamable HTTP MCP after Host-side revalidation.
    * Browser arguments cannot supply a URL, executable, environment, or headers.
    * @param request - Exact registry identity selected from a search result.
