@@ -368,7 +368,7 @@ export function installAssistantMail(ctx: Context,
       await credentials.unset(ref)
       status = 'not-configured'
       repumpRequested = false
-      return identity()
+      return await identity()
     } finally {
       resetting = false
     }
