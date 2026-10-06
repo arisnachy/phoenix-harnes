@@ -88,6 +88,8 @@ describe('approved KIRA compact live-agent dock', () => {
     expect(card).toMatchObject({ name: 'La Forja', kind: 'atlas' })
     expect(kiraTeamSpecialistOf('la-forja'))
       .toMatchObject({ name: 'La Forja', kind: 'atlas' })
+    expect(kiraTeamSpecialistOf('aegis'))
+      .toMatchObject({ name: 'Aegis', kind: 'zenith' })
     expect(kiraTeamSpecialistOf('nova'))
       .toMatchObject({ name: 'Nova', kind: 'nova' })
   })

@@ -1,4 +1,4 @@
-/** Independent completion judge backed by an adversarial clean-room gate. */
+/** Aegis: Phoenix's silent independent completion judge backed by an adversarial clean-room gate. */
 
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { ContentBlock, LlmRuntime } from '@phoenix-ai/dsh-llm'
@@ -416,7 +416,7 @@ export async function judgeGoalCompletion(input: {
       + `Candidate completion round: ${input.round}\n`
       + `Durable mission review history: ${JSON.stringify(history)}\n`
       + `Independent adversarial gate evidence: ${JSON.stringify(gate)}\n\n`
-      + 'Act as the final independent completion Judge. Inspect the current workspace and durable session evidence using only read-only tools. '
+      + 'Act as Aegis, Phoenix’s independent silent final completion reviewer. Stay operationally silent: do not emit social or status chatter; return only the structured review result through this verifier channel. Inspect the current workspace and durable session evidence using only read-only tools. '
       + 'Do not edit files, run commands, call other agents, or change goal state. Treat the original requirement as authoritative. '
       + 'The durable mission review history is cumulative: do not forget earlier findings, required corrections, false passes, or verified evidence merely because a new round started. '
       + 'Confirm that every previously required correction was actually addressed, and use the current workspace plus session evidence to determine what the Builder really changed. '

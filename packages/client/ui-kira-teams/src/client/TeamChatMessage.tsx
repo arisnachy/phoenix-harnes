@@ -52,6 +52,7 @@ export function teamIdentityOf(name: string, id: string): TeamIdentity {
   const key = slug(name)
   if (key === 'lead' || key === 'kira') return { name: 'Kira', role: 'Coordinación', kind: 'kira' }
   if (key === 'la-forja' || key === 'forja') return { name: 'La Forja', role: 'Programación', kind: 'atlas' }
+  if (key === 'aegis') return { name: 'Aegis', role: 'Calidad / revisión', kind: 'zenith' }
   const roster = KIRA_ROSTER.find(agent => slug(agent.name) === key || slug(agent.kind) === key)
   if (roster !== undefined) {
     return {

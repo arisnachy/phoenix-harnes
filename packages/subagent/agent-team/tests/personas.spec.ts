@@ -32,6 +32,7 @@ describe('KIRA Team social personalities', () => {
     expect(teamSocialStyle('argo', 'teammate')).toContain('detective-like')
     expect(teamSocialStyle('orion', 'teammate')).toContain('Playfully adversarial')
     expect(teamSocialStyle('zenith', 'teammate')).toContain('hard to impress')
+    expect(teamSocialStyle('aegis', 'teammate')).toContain('hard to impress')
     expect(teamSocialStyle('la-forja', 'teammate')).toContain('Calm, pragmatic, precise')
   })
 
@@ -39,6 +40,7 @@ describe('KIRA Team social personalities', () => {
     expect(teamPersonaGender('lead', 'lead')).toBe('female')
     expect(teamPersonaGender('Kira', 'lead')).toBe('female')
     expect(teamPersonaGender('la-forja', 'teammate')).toBe('male')
+    expect(teamPersonaGender('aegis', 'teammate')).toBe('male')
     expect(teamPersonaGender('orion', 'teammate')).toBe('male')
     expect(teamPersonaGender('aurora', 'teammate')).toBe('female')
     expect(teamSocialStyle('la-forja', 'teammate')).toContain('Your persona is male')

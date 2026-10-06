@@ -162,6 +162,7 @@ const TEAM_LABEL = /^KIRA:([a-z0-9]+(?:-[a-z0-9]+)*)\s+·\s+/u
 const TEAM_ALIASES: Readonly<Record<string, { readonly kind: ModelAvatarKind; readonly name: string }>> = {
   'la-forja': { kind: 'atlas', name: 'La Forja' },
   forja: { kind: 'atlas', name: 'La Forja' },
+  aegis: { kind: 'zenith', name: 'Aegis' },
 }
 
 function stablePersonaIndex(value: string, length: number): number {
