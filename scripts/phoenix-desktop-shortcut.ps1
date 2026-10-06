@@ -101,9 +101,17 @@ Get-ChildItem -LiteralPath $phoenixState -Filter 'phoenix-browser-*.ico' -File -
   Remove-Item -Force -ErrorAction SilentlyContinue
 
 $powerShellExe = Join-Path $PSHOME 'powershell.exe'
-$targetPath = $powerShellExe
-$arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`""
-$workingDirectory = $rootPath
+$installedPhoenixExe = Join-Path $localAppData 'Programs\Phoenix\Phoenix.exe'
+if (Test-Path -LiteralPath $installedPhoenixExe -PathType Leaf) {
+  $targetPath = $installedPhoenixExe
+  $arguments = ''
+  $workingDirectory = Split-Path -Parent $installedPhoenixExe
+}
+else {
+  $targetPath = $powerShellExe
+  $arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`""
+  $workingDirectory = $rootPath
+}
 $iconLocation = "$iconPath,0"
 $windowStyle = 7
 $shell = New-Object -ComObject WScript.Shell
@@ -116,10 +124,7 @@ function Remove-LegacyPhoenixShortcut([string]$ShortcutPath) {
     $legacy = $shell.CreateShortcut($ShortcutPath)
     $targetFile = [IO.Path]::GetFileName([string]$legacy.TargetPath)
     $shortcutName = [IO.Path]::GetFileName($ShortcutPath)
-    if (
-      $targetFile -ieq 'Phoenix.exe' -or
-      $shortcutName -ieq 'PHOENIX HARDNESS.lnk'
-    ) {
+    if ($shortcutName -ieq 'PHOENIX HARDNESS.lnk') {
       Remove-Item -LiteralPath $ShortcutPath -Force -ErrorAction Stop
     }
   }
@@ -130,8 +135,8 @@ function Remove-LegacyPhoenixShortcut([string]$ShortcutPath) {
 
 $taskbarDirectory = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
 
-# Remove all known shortcuts created by the old native EXE/managed installer
-# before writing the one canonical browser launcher.
+# Remove only obsolete PHOENIX HARDNESS aliases. The canonical Phoenix.lnk may
+# legitimately point at the installed native Phoenix.exe when Agent Desktop is available.
 $legacyLocations = @(
   (Join-Path $desktopPath 'Phoenix.lnk'),
   (Join-Path $desktopPath 'PHOENIX HARDNESS.lnk'),
@@ -158,14 +163,15 @@ function Set-PhoenixShortcut([string]$ShortcutPath) {
   $shortcut.TargetPath = $targetPath
   $shortcut.Arguments = $arguments
   $shortcut.WorkingDirectory = $workingDirectory
-  $shortcut.Description = 'Phoenix AI — navegador'
+  $shortcut.Description = if ($targetPath -ieq $installedPhoenixExe) { 'Phoenix AI — escritorio' } else { 'Phoenix AI — navegador' }
   $shortcut.IconLocation = $iconLocation
   $shortcut.WindowStyle = $windowStyle
   $shortcut.Save()
 }
 
-# One canonical shortcut name everywhere. It launches pnpm phoenix through
-# phoenix-desktop-launch.ps1 and never targets Phoenix.exe.
+# One canonical shortcut name everywhere. Prefer the installed native shell so
+# Agent Desktop/Computer runs in the interactive Windows session; fall back to
+# the browser launcher only when Phoenix.exe is not installed.
 $shortcutPath = Join-Path $desktopPath 'Phoenix.lnk'
 $startMenuShortcutPath = Join-Path $programsPath 'Phoenix.lnk'
 $taskbarShortcutPath = Join-Path $taskbarDirectory 'Phoenix.lnk'
