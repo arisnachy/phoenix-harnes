@@ -341,6 +341,35 @@ async function readDesktopControlDescriptorIfAvailable(): Promise<DesktopBrowser
   }
 }
 
+function desktopControlErrorDetail(value: unknown): string {
+  if (typeof value === 'string' && value.length > 0) return value
+  if (value instanceof Error && value.message.length > 0) return value.message
+  if (value === undefined || value === null) return 'unknown error'
+  try {
+    const serialized = JSON.stringify(value)
+    return serialized === undefined || serialized.length === 0 ? 'unknown error' : serialized
+  } catch {
+    return 'unknown error'
+  }
+}
+
+function parseDesktopControlReply(rawReply: string, label: string): Record<string, unknown> {
+  let reply: unknown
+  try {
+    reply = JSON.parse(rawReply)
+  } catch {
+    throw new Error(`${label} returned invalid JSON`)
+  }
+  if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
+    throw new Error(`${label} returned an invalid reply`)
+  }
+  const response = reply as Record<string, unknown>
+  if (response.ok !== true) {
+    throw new Error(`${label} rejected the command: ${desktopControlErrorDetail(response.error)}`)
+  }
+  return response
+}
+
 async function runResidentComputerAction(
   args: ComputerToolArgs,
   descriptor: DesktopBrowserControlDescriptor,
@@ -353,21 +382,9 @@ async function runResidentComputerAction(
   const requestId = request.requestId as string
   const pipePath = `\\\\.\\pipe\\${descriptor.pipeName}`
   const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(request), signal)
-  let reply: unknown
-  try {
-    reply = JSON.parse(rawReply)
-  } catch {
-    throw new Error('Phoenix Desktop resident Computer returned invalid JSON')
-  }
-  if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
-    throw new Error('Phoenix Desktop resident Computer returned an invalid reply')
-  }
-  const response = reply as Record<string, unknown>
+  const response = parseDesktopControlReply(rawReply, 'Phoenix Desktop resident Computer')
   if (response.schema !== RESIDENT_DESKTOP_CONTROL_SCHEMA || response.requestId !== requestId) {
     throw new Error('Phoenix Desktop resident Computer returned an incompatible or uncorrelated reply')
-  }
-  if (response.ok !== true) {
-    throw new Error(`Phoenix Desktop resident Computer rejected the command: ${String(response.error ?? 'unknown error')}`)
   }
   if (args.action === 'screenshot') {
     return typeof response.screenshotBase64 === 'string' ? response.screenshotBase64 : ''
@@ -405,19 +422,7 @@ async function runLegacyDesktopObservation(
     throw new Error('Legacy Phoenix Desktop observation supports only windows and screenshot')
   }
   const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(command), signal)
-  let reply: unknown
-  try {
-    reply = JSON.parse(rawReply)
-  } catch {
-    throw new Error('Phoenix Desktop native observation returned invalid JSON')
-  }
-  if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
-    throw new Error('Phoenix Desktop native observation returned an invalid reply')
-  }
-  const response = reply as Record<string, unknown>
-  if (response.ok !== true) {
-    throw new Error(`Phoenix Desktop native observation rejected the command: ${String(response.error ?? 'unknown error')}`)
-  }
+  const response = parseDesktopControlReply(rawReply, 'Phoenix Desktop native observation')
   return typeof response.details === 'string' ? response.details : ''
 }
 
@@ -438,19 +443,7 @@ async function runEmbeddedBrowserAction(
   const command: DesktopBrowserCommand = login === undefined ? baseCommand : { ...baseCommand, ...login }
   const rawReply = await requestNamedPipeLine(pipePath, JSON.stringify(command), signal)
 
-  let reply: unknown
-  try {
-    reply = JSON.parse(rawReply)
-  } catch {
-    throw new Error('Phoenix Desktop browser control returned invalid JSON')
-  }
-  if (typeof reply !== 'object' || reply === null || Array.isArray(reply)) {
-    throw new Error('Phoenix Desktop browser control returned an invalid reply')
-  }
-  const response = reply as Record<string, unknown>
-  if (response.ok !== true) {
-    throw new Error(`Phoenix Desktop browser control rejected the command: ${String(response.error ?? 'unknown error')}`)
-  }
+  const response = parseDesktopControlReply(rawReply, 'Phoenix Desktop browser control')
   return typeof response.details === 'string'
     ? response.details
     : `embedded browser command accepted: ${command.type}`
