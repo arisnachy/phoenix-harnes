@@ -194,6 +194,8 @@ describe('ManagedMcpController', () => {
         headers: {},
         oauth: true,
         toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 5_000,
+        failOnStartupError: false,
       },
     })
     expect(search).not.toHaveBeenCalled()
@@ -221,6 +223,111 @@ describe('ManagedMcpController', () => {
     await expect(controller.removeCanva()).resolves.toBe(true)
     expect(live.remove).toHaveBeenCalledWith('canva-repaired')
     await expect(controller.snapshot()).resolves.toEqual([])
+  })
+
+  it('restores the Phoenix core MCP pack with pinned remotes and local runners', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockImplementation(async ({ config }: { config: { serverName: string } }) => `entry-${config.serverName}`)
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    const restored = await controller.ensureCoreMcpPack()
+    expect(restored.failed).toEqual([])
+    expect(restored.installed).toEqual(expect.arrayContaining([
+      'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
+      'brave-search', 'filesystem', 'memory', 'fetch',
+    ]))
+    expect(restored.installed).not.toContain('devpost')
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: expect.objectContaining({
+        transport: 'streamable-http',
+        serverName: 'supabase',
+        url: 'https://mcp.supabase.com/mcp',
+        oauth: true,
+      }),
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: expect.objectContaining({
+        transport: 'streamable-http',
+        serverName: 'heygen',
+        url: 'https://mcp.heygen.com/mcp/v1/',
+        oauth: true,
+      }),
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: expect.objectContaining({
+        transport: 'stdio',
+        serverName: 'brave-search',
+        command: 'npx',
+        envCredentialRefs: { BRAVE_API_KEY: 'BRAVE_API_KEY' },
+      }),
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: expect.objectContaining({
+        transport: 'stdio',
+        serverName: 'filesystem',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+      }),
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: expect.objectContaining({
+        transport: 'stdio',
+        serverName: 'fetch',
+        command: 'uvx',
+        args: ['mcp-server-fetch'],
+      }),
+    })
+
+    const snapshot = await controller.snapshot()
+    expect(snapshot).toHaveLength(restored.installed.length)
+    expect(snapshot).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        serverName: 'linear',
+        url: 'https://mcp.linear.app/mcp',
+        source: { kind: 'curated', connectorId: 'linear' },
+      }),
+      expect.objectContaining({
+        serverName: 'memory',
+        url: 'stdio://memory',
+        source: { kind: 'curated', connectorId: 'memory' },
+      }),
+    ]))
+
+    const second = await controller.ensureCoreMcpPack()
+    expect(second.installed).toEqual([])
+    expect(second.alreadyInstalled).toEqual(expect.arrayContaining(restored.installed))
+    expect(live.create).toHaveBeenCalledTimes(restored.installed.length)
+  })
+
+  it('repairs a curated Supabase MCP from the Host-pinned endpoint', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create
+      .mockResolvedValueOnce('supabase-entry')
+      .mockResolvedValueOnce('supabase-repaired')
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    const installed = await controller.installCuratedMcp('supabase')
+    expect(installed.connector).toEqual({
+      entryId: 'supabase-entry',
+      serverName: 'supabase',
+      url: 'https://mcp.supabase.com/mcp',
+      source: { kind: 'curated', connectorId: 'supabase' },
+    })
+    await expect(controller.repair({ entryId: 'supabase-entry' })).resolves.toMatchObject({
+      status: 'installed',
+      connector: {
+        entryId: 'supabase-repaired',
+        serverName: 'supabase',
+        url: 'https://mcp.supabase.com/mcp',
+        source: { kind: 'curated', connectorId: 'supabase' },
+      },
+    })
   })
 
   it('installs and removes only the pinned official Binance Agent OS connector', async () => {
