@@ -91,6 +91,15 @@ describe('ManagedMcpController', () => {
         url: 'https://mcp.example.com/calendar',
         headers: {},
         oauth: true,
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 10_000,
+        failOnStartupError: false,
+        reconnect: {
+          enabled: true,
+          initialDelayMs: 1_000,
+          maxDelayMs: 30_000,
+          maxAttempts: 3,
+        },
       },
     })
     const persisted = JSON.parse(readFileSync(patchPath, 'utf8')) as unknown[]
@@ -684,7 +693,7 @@ describe('ManagedMcpController', () => {
       patchPath,
       registrySearch: registry([withoutRemote]),
     }).install({ name: 'io.example/calendar' }))
-      .rejects.toThrow('Streamable HTTP')
+      .rejects.toThrow('no Phoenix-installable endpoint or stdio package')
 
     await expect(new ManagedMcpController(live, {
       patchPath,
@@ -698,6 +707,190 @@ describe('ManagedMcpController', () => {
     }).install({ name: ' ' }))
       .rejects.toThrow('valid server name')
     expect(live.create).not.toHaveBeenCalled()
+  })
+
+  it('installs registry npm stdio packages with versioned args and vault-backed required env', async () => {
+    const patchPath = tempPatch()
+    const { remoteUrl: _remoteUrl, ...base } = candidate()
+    const packageCandidate: McpRegistryCandidate = {
+      ...base,
+      transports: ['stdio'],
+      packages: [{
+        registryType: 'npm',
+        registryBaseUrl: 'https://registry.npmjs.org/',
+        identifier: '@example/calendar-mcp',
+        version: '2.4.1',
+        runtimeHint: 'npx',
+        transport: 'stdio',
+        runtimeArguments: [],
+        packageArguments: [
+          {
+            type: 'positional',
+            value: 'serve',
+            isRequired: true,
+            isSecret: false,
+            isRepeated: false,
+          },
+          {
+            type: 'named',
+            name: '--mode',
+            default: 'stdio',
+            isRequired: false,
+            isSecret: false,
+            isRepeated: false,
+          },
+        ],
+        environmentVariables: [
+          {
+            name: 'CALENDAR_API_KEY',
+            isRequired: true,
+            isSecret: true,
+          },
+          {
+            name: 'LOG_LEVEL',
+            default: 'info',
+            isRequired: false,
+            isSecret: false,
+          },
+        ],
+      }],
+    }
+    const live = loader()
+    const controller = new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([packageCandidate]),
+    })
+
+    const installed = await controller.install({ name: packageCandidate.name, version: packageCandidate.version })
+
+    expect(installed.connector.url).toBe(`stdio://${installed.connector.serverName}`)
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: {
+        transport: 'stdio',
+        serverName: installed.connector.serverName,
+        command: 'npx',
+        args: ['-y', '@example/calendar-mcp@2.4.1', 'serve', '--mode', 'stdio'],
+        env: { LOG_LEVEL: 'info' },
+        envCredentialRefs: {
+          CALENDAR_API_KEY: expect.stringMatching(/^MCP_[A-F0-9]{10}_CALENDAR_API_KEY$/),
+        },
+        cwd: '',
+        toolCallTimeoutMs: 60_000,
+        startupTimeoutMs: 30_000,
+        failOnStartupError: false,
+        reconnect: {
+          enabled: true,
+          initialDelayMs: 1_000,
+          maxDelayMs: 30_000,
+          maxAttempts: 3,
+        },
+      },
+    })
+    const persisted = readFileSync(patchPath, 'utf8')
+    expect(persisted).toContain('@example/calendar-mcp@2.4.1')
+    expect(persisted).toContain('CALENDAR_API_KEY')
+    expect(persisted).not.toContain('secret-value')
+
+    await expect(controller.snapshot()).resolves.toEqual([
+      expect.objectContaining({
+        entryId: installed.connector.entryId,
+        serverName: installed.connector.serverName,
+        url: `stdio://${installed.connector.serverName}`,
+        source: {
+          kind: 'registry',
+          name: packageCandidate.name,
+          version: packageCandidate.version,
+        },
+      }),
+    ])
+    const restarted = new ManagedMcpController(loader(), {
+      patchPath,
+      registrySearch: registry([packageCandidate]),
+    })
+    await expect(restarted.snapshot()).resolves.toHaveLength(1)
+  })
+
+  it('rejects tampered registry stdio persistence that tries to escape through npx command flags', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{
+      insert: [{
+        id: 'tampered-registry',
+        name: '@phoenix-ai/dsh-mcp-client',
+        source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
+        config: {
+          transport: 'stdio',
+          serverName: 'calendar-a1b2c3d',
+          command: 'npx',
+          args: ['-y', '-c', 'node -e process.exit(0)', '@example/calendar-mcp@1.0.0'],
+          env: {},
+          envCredentialRefs: {},
+          cwd: '',
+          toolCallTimeoutMs: 60_000,
+          startupTimeoutMs: 30_000,
+          failOnStartupError: false,
+          reconnect: { enabled: true, initialDelayMs: 1_000, maxDelayMs: 30_000, maxAttempts: 3 },
+        },
+      }],
+    }]))
+
+    const restarted = new ManagedMcpController(loader(), {
+      patchPath,
+      registrySearch: registry([]),
+    })
+    await expect(restarted.snapshot()).rejects.toThrow('managed MCP patch row 0 is invalid')
+  })
+
+  it('rolls back a registry install when the live MCP runtime confirms startup failure', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([candidate()]),
+      runtimeSnapshot: () => {
+        const createCall = live.create.mock.calls[0]?.[0]
+        if (createCall === undefined) return []
+        return [{
+          serverName: createCall.config.serverName,
+          transport: createCall.config.transport,
+          status: 'failed',
+          toolNames: [],
+          reasonCode: 'connection-failed',
+        }]
+      },
+    })
+
+    await expect(controller.install({ name: 'io.example/calendar' }))
+      .rejects.toThrow('failed its post-install health check')
+    expect(live.remove).toHaveBeenCalledWith('live-entry-id')
+    await expect(controller.snapshot()).resolves.toEqual([])
+  })
+
+  it('accepts auth-required as a valid installed lifecycle instead of marking the connector broken', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([candidate()]),
+      runtimeSnapshot: () => {
+        const createCall = live.create.mock.calls[0]?.[0]
+        if (createCall === undefined) return []
+        return [{
+          serverName: createCall.config.serverName,
+          transport: createCall.config.transport,
+          status: 'auth-required',
+          toolNames: [],
+          reasonCode: 'authorization-required',
+        }]
+      },
+    })
+
+    await expect(controller.install({ name: 'io.example/calendar' })).resolves.toMatchObject({
+      status: 'installed',
+    })
+    expect(live.remove).not.toHaveBeenCalled()
+    await expect(controller.snapshot()).resolves.toHaveLength(1)
   })
 
   it('uses a bounded readable server name even when the registry tail is unusable or very long', async () => {

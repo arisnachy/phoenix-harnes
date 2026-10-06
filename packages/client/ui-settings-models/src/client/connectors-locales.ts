@@ -6,7 +6,7 @@ export const connectorEn = {
   intelligenceTitle: 'Phoenix knows which MCPs you already have',
   intelligenceHint: 'If the model needs a missing connector, it can discover it in the Official MCP Registry, present it for approval, and then check whether authorization is required.',
   intelligenceAuth: 'Detects expired authorization and broken connections instead of opening blind OAuth windows.',
-  intelligenceOfficial: 'Automatic installation is limited to active registry-listed HTTPS MCP remotes.',
+  intelligenceOfficial: 'Automatic installation uses active registry-listed HTTPS remotes or supported npm/PyPI stdio packages, then verifies runtime health before persistence.',
   searchRegistry: 'Search connectors or the Official MCP Registry',
   accounts: 'Connected accounts & authorization',
   accountsHint: 'OAuth credentials stay in the Host. Phoenix receives connection state and callable tools, never your account password.',

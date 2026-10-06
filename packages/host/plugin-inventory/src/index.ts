@@ -121,7 +121,14 @@ export class PluginInventoryGateway extends TypertRemoteService {
     super(ctx, 'pluginInventory')
     this.localModel = createNodeLocalModelRuntimeManager()
     this.chatGptWeb = createChatGptWebIntegration()
-    this.managedMcp = new ManagedMcpController(ctx.loader)
+    this.managedMcp = new ManagedMcpController(ctx.loader, {
+      runtimeSnapshot: () => {
+        const service = (ctx.get as (name: string) => unknown)('mcpConnectors') as
+          | { list(): readonly McpConnectorRuntimeEntry[] }
+          | undefined
+        return service?.list()
+      },
+    })
     this.openClawConnectors = new OpenClawConnectorBridge()
     void ctx.effect(async () => {
       try {

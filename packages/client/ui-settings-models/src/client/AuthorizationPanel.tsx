@@ -677,15 +677,31 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, repai
   const logoUrl = registryCandidateLogo(candidate)
   const displayName = candidate.title
   const technicalName = normalize(displayName) === normalize(candidate.name) ? undefined : candidate.name
-  const installable = candidate.status === 'active' && candidate.remoteUrl !== undefined
-  const broken = managed !== undefined && (runtime === undefined || runtime.status === 'failed')
+  const packageInstallable = candidate.packages.some(pkg =>
+    pkg.transport === 'stdio'
+    && (
+      (pkg.registryType.toLowerCase() === 'npm' && (pkg.runtimeHint === undefined || pkg.runtimeHint.toLowerCase() === 'npx'))
+      || (pkg.registryType.toLowerCase() === 'pypi' && (pkg.runtimeHint === undefined || pkg.runtimeHint.toLowerCase() === 'uvx'))
+    ))
+  const installable = candidate.status === 'active' && (candidate.remoteUrl !== undefined || packageInstallable)
+  const broken = managed !== undefined
+    && (runtime?.status === 'failed' || (runtime?.status === 'disconnected' && runtime.reasonCode === 'retry-exhausted'))
+  const connecting = managed !== undefined && (runtime === undefined || runtime.status === 'starting')
   const status = broken
     ? t('brokenStatus')
-    : managed !== undefined
-      ? t('installedStatus')
-      : candidate.status === 'deprecated' || candidate.status === 'deleted'
-        ? t('registryDeprecatedStatus')
-        : t('registryListedStatus')
+    : managed !== undefined && runtime?.status === 'auth-required'
+      ? t('authorizationRequiredStatus')
+      : connecting
+        ? t('connectingStatus')
+        : managed !== undefined && runtime?.status === 'disconnected'
+          ? t('disconnectedStatus')
+          : managed !== undefined && runtime?.status === 'ready'
+            ? t('connectedStatus')
+            : managed !== undefined
+              ? t('installedStatus')
+              : candidate.status === 'deprecated' || candidate.status === 'deleted'
+                ? t('registryDeprecatedStatus')
+                : t('registryListedStatus')
   return (
     <article className={`${connectorStyles['connectorCard'] ?? ''} ${connectorStyles['registryCard'] ?? ''}`.trim()} data-registry-server={candidate.name}>
       <div className={connectorStyles['connectorTop']}>
@@ -717,7 +733,7 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, repai
       </div>
       <p className={connectorStyles['connectorDescription']}>{candidate.description}</p>
       <div className={connectorStyles['connectorFooter']}>
-        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${broken ? connectorStyles['connectorStatusError'] ?? '' : managed !== undefined ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
+        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${broken ? connectorStyles['connectorStatusError'] ?? '' : runtime?.status === 'ready' ? connectorStyles['connectorStatusReady'] ?? '' : managed !== undefined ? connectorStyles['connectorStatusInfo'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
           {status}{stale ? ` · ${t('registryCachedStatus')}` : ''}
         </span>
         <div className={connectorStyles['connectorActions']}>
