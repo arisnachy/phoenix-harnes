@@ -11,7 +11,13 @@ const input = { taskId: 'mail-task', scheduledFor: '2026-09-28T02:53:29.000Z', t
 async function fixture(ready = true, existingDirectory?: string, authorizeOutgoing = async (_ownership: MailOutgoingOwnership) => true) {
   const directory = existingDirectory ?? await mkdtemp(join(tmpdir(), 'phoenix-runtime-'))
   await writeFile(join(directory, 'account.json'), JSON.stringify({ state: ready ? 'ready' : 'pending-verification', inboxId: 'kira@agentmail.to', ownerEmail: input.to, contacts: [] }))
-  const ctx = { get: (name: string) => name === 'credentials' ? { resolve: async () => ({ value: 'secret' }) } : undefined, on: () => () => {}, effect: () => {} }
+  let credential: string | undefined = 'secret'
+  const credentials = {
+    resolve: async () => credential === undefined ? undefined : ({ value: credential }),
+    set: async (_ref: unknown, value: string) => { credential = value },
+    unset: async () => { credential = undefined },
+  }
+  const ctx = { get: (name: string) => name === 'credentials' ? credentials : undefined, on: () => () => {}, effect: () => {} }
   const runtime = installAssistantMail(ctx as never, { directory, authorizeOutgoing, credentialRef: 'MAIL_KEY', pollMs: 60000, timeoutMs: 1000, workTimeoutMs: 1000 }, { pollMs: 60000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000 })
   return { runtime, directory }
 }
@@ -77,6 +83,36 @@ describe('owned durable outgoing mail', () => {
       const row = await firstOutgoing(directory)
       expect(row.state).toBe('pending')
     } finally { vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }) }
+  })
+
+  it('recovers a provider verification 403 once and preserves the pending send for owner OTP', async () => {
+    const { runtime, directory } = await fixture()
+    let recoveries = 0
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url.endsWith('/send')) {
+        return Response.json({
+          code: 'missing_permission',
+          message: 'Forbidden',
+          fix: 'Complete POST /v0/agent/verify before retrying.',
+        }, { status: 403 })
+      }
+      if (url.endsWith('/agent/sign-up')) {
+        recoveries++
+        return Response.json({ api_key: 'rotated-secret', inbox_id: 'kira@agentmail.to' })
+      }
+      return Response.json({ messages: [] })
+    })
+    try {
+      await expect(runtime.send(input)).rejects.toThrow('pending')
+      await vi.waitFor(async () => {
+        const account: unknown = JSON.parse(await readFile(join(directory, 'account.json'), 'utf8'))
+        expect(mailRecord(account).state).toBe('pending-verification')
+      })
+      expect(recoveries).toBe(1)
+      const row = await firstOutgoing(directory)
+      expect(row.state).toBe('pending')
+      expect(mailRecord(row.reply).text).toBe('Done')
+    } finally { await runtime.dispose(); vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }) }
   })
 
   it('defers a pending-verification account without issuing provider requests', async () => {

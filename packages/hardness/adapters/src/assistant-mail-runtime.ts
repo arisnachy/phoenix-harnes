@@ -9,7 +9,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
-import { AgentMailTransport } from './assistant-mail-agentmail.ts'
+import { AgentMailHttpError, AgentMailTransport } from './assistant-mail-agentmail.ts'
 import { MailOnboarding } from './assistant-mail-onboarding.ts'
 import { MailJournal } from './assistant-mail-journal.ts'
 import { MailOutbox } from './assistant-mail-outbox.ts'
@@ -176,6 +176,27 @@ export function installAssistantMail(ctx: Context,
   let socketDispose: (() => void) | undefined
   let transportInbox: string | undefined
   let status = 'not-configured'
+  const providerStatus = (error: unknown): string => {
+    if (error instanceof AgentMailHttpError) {
+      if (error.reason === 'verification-required') return 'verification-required'
+      if (error.reason === 'permission-missing') return 'recovery-required'
+      if (error.reason === 'limit-exceeded' || error.status === 429) return 'quota-reached'
+      if (error.reason === 'message-rejected') return 'message-rejected'
+    }
+    return error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
+  }
+  const handleProviderFailure = async (error: unknown, recoverVerification = true): Promise<void> => {
+    status = providerStatus(error)
+    if (!recoverVerification || !(error instanceof AgentMailHttpError) || error.reason !== 'verification-required') return
+    // A Phoenix-owned mailbox can repair a provider/local verification mismatch without
+    // asking the owner for an API key. Recovery rotates the credential and requests one OTP.
+    try {
+      await onboarding.recover()
+      status = 'verification-required'
+    } catch {
+      // Keep the actionable status. Manual Recover remains available if provider recovery is refused.
+    }
+  }
   let resetting = false
   let disposed = false
   const controller = new AbortController()
@@ -199,7 +220,7 @@ export function installAssistantMail(ctx: Context,
     if (account.state !== 'ready' || account.inboxId !== reply.inboxId || ![account.ownerEmail, ...account.contacts].includes(reply.to)) throw new Error('mail sender authorization revoked')
     const transport = new AgentMailTransport(resolveKey, reply.inboxId, config.timeoutMs, fetch, controller.signal)
     try { return await transport.reply(reply) } catch (error) {
-      status = error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
+      await handleProviderFailure(error)
       throw error
     }
   }, Date.now, async (message) => {
@@ -212,7 +233,7 @@ export function installAssistantMail(ctx: Context,
     assertActive()
     const transport = new AgentMailTransport(resolveKey, message.inboxId, config.timeoutMs, fetch, controller.signal)
     try { return await transport.send(message.to, message.subject, message.text, message.idempotencyKey) } catch (error) {
-      status = error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
+      await handleProviderFailure(error)
       throw error
     }
   }, ownership => config.authorizeOutgoing(ownership))
@@ -224,8 +245,13 @@ export function installAssistantMail(ctx: Context,
       if (account.state !== 'ready' || account.inboxId !== message.inboxId || account.ownerEmail !== message.to) {
         throw new ProactivityDeferredError('Kira mailbox owner verification is required')
       }
-      return new AgentMailTransport(resolveKey, message.inboxId, config.timeoutMs, fetch, controller.signal)
-        .send(message.to, message.subject, message.text, message.idempotencyKey)
+      try {
+        return await new AgentMailTransport(resolveKey, message.inboxId, config.timeoutMs, fetch, controller.signal)
+          .send(message.to, message.subject, message.text, message.idempotencyKey)
+      } catch (error) {
+        await handleProviderFailure(error)
+        throw error
+      }
     }, async (message) => {
       const account = await onboarding.status()
       return account.state === 'ready' && account.ownerEmail === message.to
@@ -306,7 +332,7 @@ export function installAssistantMail(ctx: Context,
       do {
         repumpRequested = false
         try { await recover() } catch (error) {
-          status = error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
+          await handleProviderFailure(error)
           socketDispose?.(); socketDispose = undefined
           // Keep durable work for the queued wake or the next polling interval.
         }
@@ -342,7 +368,7 @@ export function installAssistantMail(ctx: Context,
       await credentials.unset(ref)
       status = 'not-configured'
       repumpRequested = false
-      return identity()
+      return await identity()
     } finally {
       resetting = false
     }
@@ -441,6 +467,7 @@ export function installAssistantMail(ctx: Context,
               summary: job.summary,
               error: job.error })) } }
       } catch (error) {
+        await handleProviderFailure(error, endpoint !== 'recover')
         // Provider bodies and fetch/socket errors never cross this secret-free status projection.
         const message = error instanceof Error && !/fetch|network|socket/iu.test(error.message) ? error.message : 'mail connection failed; check the local setup'
         return { ok: false as const, error: { code: 'internal', message, details: {} } }

@@ -3,12 +3,61 @@ import { MailMessageId, MailThreadId } from './assistant-mail-types.ts'
 import type { AssistantMailTransport, MailDelivery, MailMessage, MailPage, MailReply } from './assistant-mail-types.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 
-/** Confirmed HTTP rejection, excluding provider response bodies and credentials. */
+/** Sanitized AgentMail rejection category used by Phoenix recovery logic without exposing provider bodies. */
+export type AgentMailFailureReason =
+  | 'verification-required'
+  | 'permission-missing'
+  | 'limit-exceeded'
+  | 'message-rejected'
+
+function providerFailureReason(status: number, code: string | undefined, fix: string | undefined): AgentMailFailureReason | undefined {
+  if (status !== 403) return undefined
+  if ((code === 'missing_permission' || code === 'message_rejected')
+    && fix !== undefined && /agent\/verify|verif(?:y|ication)/iu.test(fix)) return 'verification-required'
+  if (code === 'missing_permission') return 'permission-missing'
+  if (code === 'limit_exceeded') return 'limit-exceeded'
+  if (code === 'message_rejected') return 'message-rejected'
+  return undefined
+}
+
+function providerFailureMessage(status: number, reason: AgentMailFailureReason | undefined): string {
+  if (status === 429) return 'mail quota reached; no paid upgrade will be requested'
+  if (reason === 'verification-required') return 'AgentMail requires Kira mailbox verification again; recover access and enter the six-digit owner code'
+  if (reason === 'permission-missing') return 'AgentMail credential permissions are insufficient; recover Kira mailbox access to renew the credential'
+  if (reason === 'limit-exceeded') return 'AgentMail free mailbox/resource limit reached; remove an old inbox before creating another'
+  if (reason === 'message-rejected') return 'AgentMail rejected the message; review the recipient or mailbox verification state'
+  return `mail provider request failed (${status})`
+}
+
+/** Confirmed HTTP rejection. Provider bodies and credentials are never exposed. */
 export class AgentMailHttpError extends Error {
   override readonly name = 'AgentMailHttpError'
-  constructor(readonly status: number) {
-    super(status === 429 ? 'mail quota reached; no paid upgrade will be requested' : `mail provider request failed (${status})`)
+  constructor(
+    readonly status: number,
+    readonly code?: string,
+    readonly reason?: AgentMailFailureReason,
+  ) {
+    super(providerFailureMessage(status, reason))
   }
+}
+
+async function responseError(response: Response): Promise<AgentMailHttpError> {
+  let code: string | undefined
+  let fix: string | undefined
+  try {
+    const text = await response.text()
+    if (text.length <= 65_536) {
+      const data = JSON.parse(text) as unknown
+      if (typeof data === 'object' && data !== null) {
+        const record = data as Record<string, unknown>
+        if (typeof record.code === 'string' && /^[a-z0-9_]{1,64}$/u.test(record.code)) code = record.code
+        if (typeof record.fix === 'string') fix = record.fix.slice(0, 4096)
+      }
+    }
+  } catch {
+    // A malformed provider error body must not hide the confirmed HTTP status.
+  }
+  return new AgentMailHttpError(response.status, code, providerFailureReason(response.status, code, fix))
 }
 
 /** Official provider API; errors deliberately exclude provider bodies and secrets.
@@ -34,7 +83,7 @@ export async function agentMailRequest(path: string,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
   })
-  if (!response.ok) throw new AgentMailHttpError(response.status)
+  if (!response.ok) throw await responseError(response)
   const text = await response.text()
   if (text.length > 2_000_000) throw new Error('mail provider response exceeds limit')
   try { return JSON.parse(text) as unknown } catch { throw new Error('invalid mail provider JSON response') }
@@ -58,7 +107,7 @@ export async function agentMailDeleteInbox(inboxId: string,
     headers: { Authorization: `Bearer ${mailString(key, 8192)}` },
     signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
   })
-  if (!response.ok && response.status !== 404) throw new AgentMailHttpError(response.status)
+  if (!response.ok && response.status !== 404) throw await responseError(response)
 }
 
 /** AgentMail implementation with outgoing WebSocket notifications and authenticated-only reconciliation. */

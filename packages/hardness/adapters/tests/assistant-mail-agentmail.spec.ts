@@ -1,6 +1,6 @@
 import { MailMessageId } from '../src/assistant-mail-types.ts'
 import { describe, expect, it, vi } from 'vitest'
-import { AgentMailTransport, agentMailDeleteInbox } from '../src/assistant-mail-agentmail.ts'
+import { AgentMailHttpError, AgentMailTransport, agentMailDeleteInbox, agentMailRequest } from '../src/assistant-mail-agentmail.ts'
 
 describe('AgentMail transport', () => {
   it('uses authenticated-only listing and idempotent reply pinned to the verified sender', async () => {
@@ -41,6 +41,25 @@ describe('AgentMail transport', () => {
     })
     await expect(transport.listMessages()).rejects.toThrow('quota')
     expect(requests).toBe(1)
+  })
+  it('classifies provider verification 403 without exposing the provider body', async () => {
+    const error = await agentMailRequest('/inboxes/kira%40agentmail.to/messages', 'private-key', 1000, async () =>
+      Response.json({
+        code: 'missing_permission',
+        message: 'Forbidden',
+        fix: 'Complete POST /v0/agent/verify; diagnostic private-key must never cross the boundary',
+      }, { status: 403 })).catch((value: unknown) => value)
+    expect(error).toBeInstanceOf(AgentMailHttpError)
+    expect(error).toMatchObject({ status: 403, code: 'missing_permission', reason: 'verification-required' })
+    expect((error as Error).message).toContain('verification')
+    expect((error as Error).message).not.toContain('private-key')
+  })
+  it('classifies free-plan resource exhaustion instead of returning an opaque 403', async () => {
+    const error = await agentMailRequest('/inboxes', 'private-key', 1000, async () =>
+      Response.json({ code: 'limit_exceeded', message: 'Forbidden', fix: 'Delete an old inbox.' }, { status: 403 }))
+      .catch((value: unknown) => value)
+    expect(error).toMatchObject({ status: 403, code: 'limit_exceeded', reason: 'limit-exceeded' })
+    expect((error as Error).message).toContain('free')
   })
 })
 
