@@ -133,6 +133,7 @@ export type CuratedMcpConnectorId =
   | 'memory'
   | 'fetch'
 
+/** Browser/model-safe request selecting one Host-curated MCP identity. */
 export interface CuratedMcpInstallRequest {
   readonly connectorId: CuratedMcpConnectorId
 }
