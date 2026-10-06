@@ -259,6 +259,28 @@ describe('ManagedMcpController', () => {
     expect(live.create).toHaveBeenCalledWith({
       name: '@phoenix-ai/dsh-mcp-client',
       config: expect.objectContaining({
+        transport: 'streamable-http',
+        serverName: 'figma',
+        url: 'http://127.0.0.1:3845/mcp',
+        oauth: false,
+      }),
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: expect.objectContaining({
+        transport: 'streamable-http',
+        serverName: 'slack',
+        url: 'https://mcp.slack.com/mcp',
+        oauth: true,
+        oauthClientIdRef: 'SLACK_MCP_CLIENT_ID',
+        oauthClientSecretRef: 'SLACK_MCP_CLIENT_SECRET',
+        oauthCallbackPort: 17844,
+        oauthTokenEndpointAuthMethod: 'client_secret_post',
+      }),
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: expect.objectContaining({
         transport: 'stdio',
         serverName: 'brave-search',
         command: 'npx',
@@ -290,6 +312,11 @@ describe('ManagedMcpController', () => {
         serverName: 'linear',
         url: 'https://mcp.linear.app/mcp',
         source: { kind: 'curated', connectorId: 'linear' },
+      }),
+      expect.objectContaining({
+        serverName: 'figma',
+        url: 'http://127.0.0.1:3845/mcp',
+        source: { kind: 'curated', connectorId: 'figma' },
       }),
       expect.objectContaining({
         serverName: 'memory',
