@@ -85,6 +85,37 @@ describe('owned durable outgoing mail', () => {
     } finally { vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }) }
   })
 
+  it('recovers a bare AgentMail 403 by rotating the stored key and retries the same send once', async () => {
+    const { runtime, directory } = await fixture()
+    let sends = 0
+    let recoveries = 0
+    vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+      if (url.endsWith('/agent/sign-up')) {
+        recoveries++
+        return Response.json({ api_key: 'am_rotated', inbox_id: 'kira@agentmail.to' })
+      }
+      if (url.endsWith('/inboxes/kira%40agentmail.to')) {
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_rotated')
+        return Response.json({ inbox_id: 'kira@agentmail.to' })
+      }
+      if (url.endsWith('/send')) {
+        sends++
+        if (sends === 1) return Response.json({ message: 'Forbidden' }, { status: 403 })
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_rotated')
+        return Response.json({ message_id: 'sent-after-recovery', thread_id: 'thread-after-recovery' })
+      }
+      return Response.json({ messages: [] })
+    })
+    try {
+      await expect(runtime.send(input)).resolves.toBeUndefined()
+      expect(recoveries).toBe(1)
+      expect(sends).toBe(2)
+      expect((await firstOutgoing(directory)).state).toBe('sent')
+      const status = await runtime.control.status()
+      expect(status.state).toBe('ready')
+    } finally { await runtime.dispose(); vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }) }
+  })
+
   it('recovers a provider verification 403 once and preserves the pending send for owner OTP', async () => {
     const { runtime, directory } = await fixture()
     let recoveries = 0
