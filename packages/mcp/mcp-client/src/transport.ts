@@ -7,6 +7,8 @@
  */
 
 import { existsSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
@@ -68,11 +70,19 @@ function isPhoenixStdioProxyPath(value: string): boolean {
   return value.replace(/\\/g, '/').toLowerCase().endsWith('/scripts/mcp-stdio-proxy.mjs')
 }
 
+const FILESYSTEM_MCP_PACKAGE = '@modelcontextprotocol/server-filesystem'
+const FILESYSTEM_MCP_BIN_NAMES = new Set([
+  'mcp-server-filesystem',
+  'mcp-server-filesystem.cmd',
+])
+
 const WINDOWS_NPX_MCP_PACKAGES = new Set([
-  '@modelcontextprotocol/server-filesystem',
+  FILESYSTEM_MCP_PACKAGE,
   '@modelcontextprotocol/server-memory',
   '@brave/brave-search-mcp-server',
 ])
+
+const moduleRequire = createRequire(import.meta.url)
 
 function npxPackageName(args: readonly string[]): string | undefined {
   const packageArg = args[0] === '-y' ? args[1] : undefined
@@ -82,13 +92,27 @@ function npxPackageName(args: readonly string[]): string | undefined {
   )
 }
 
+function bundledFilesystemMcpEntryPoint(): string | undefined {
+  try {
+    const packageJson = moduleRequire.resolve(`${FILESYSTEM_MCP_PACKAGE}/package.json`)
+    const entry = join(dirname(packageJson), 'dist', 'index.js')
+    return existsSync(entry) ? entry : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /**
  * Normalize PHOENIX-curated NPX MCP launchers for Windows.
  *
- * Node's shell-free stdio transport cannot directly execute npm's `npx.cmd`.
- * The official Filesystem and Memory MCP docs therefore require `cmd /c npx`
- * on Windows. PHOENIX applies that wrapper only to its allow-listed curated
- * NPX packages so arbitrary registry arguments never gain a command shell.
+ * Filesystem is launched through Node directly whenever its package is already
+ * installed with Phoenix. This bypasses npm's generated `mcp-server-filesystem`
+ * shim, which can be missing from PATH or fail to resolve on Windows. Legacy
+ * persisted configs that name that shim directly are repaired here too.
+ *
+ * Other allow-listed NPX MCPs retain the `cmd.exe /c npx` wrapper required
+ * for npm's Windows command shims. Arbitrary registry commands never gain a
+ * command shell through this compatibility path.
  *
  * @param command - Persisted stdio executable.
  * @param args - Persisted stdio arguments.
@@ -101,9 +125,29 @@ export function normalizeWindowsNpxMcpLaunch(
   platform: NodeJS.Platform = process.platform,
 ): { command: string; args: string[] } {
   const normalizedArgs = [...args]
-  if (platform !== 'win32' || command.toLowerCase() !== 'npx' || npxPackageName(normalizedArgs) === undefined) {
+  if (platform !== 'win32') return { command, args: normalizedArgs }
+
+  const normalizedCommand = command.toLowerCase()
+  if (FILESYSTEM_MCP_BIN_NAMES.has(normalizedCommand)) {
+    const entry = bundledFilesystemMcpEntryPoint()
+    if (entry !== undefined) return { command: process.execPath, args: [entry, ...normalizedArgs] }
     return { command, args: normalizedArgs }
   }
+
+  if (normalizedCommand !== 'npx') return { command, args: normalizedArgs }
+  const packageName = npxPackageName(normalizedArgs)
+  if (packageName === undefined) return { command, args: normalizedArgs }
+
+  if (packageName === FILESYSTEM_MCP_PACKAGE) {
+    const entry = bundledFilesystemMcpEntryPoint()
+    if (entry !== undefined) {
+      return {
+        command: process.execPath,
+        args: [entry, ...normalizedArgs.slice(2)],
+      }
+    }
+  }
+
   return {
     command: 'cmd.exe',
     args: ['/d', '/c', 'npx', ...normalizedArgs],
