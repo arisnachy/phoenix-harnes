@@ -27,3 +27,13 @@ it('keeps image_generation exposed in Creator and Code modes just like the stand
   expect(code).toContain('backend=auto')
   expect(code).toContain('Higgsfield')
 })
+
+it('makes image generation a host capability inherited by new presets', async () => {
+  const base = await readFile(new URL('../../../packages/bundle/base/cordis.patch.yml', import.meta.url), 'utf8')
+  expect(base).toContain([
+    '    - id: host-image-generation',
+    "      name: '@phoenix-ai/dsh-llm-pi-ai'",
+    '      config:',
+    '        imageOnly: true',
+  ].join('\n'))
+})

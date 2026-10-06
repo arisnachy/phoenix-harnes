@@ -158,6 +158,12 @@
           # until the user configures PHOENIX_CHATGPT_WEB_COMMAND and starts it.
           chatgpt-web: {}
 
+    # Host-owned image tool: every current or newly authored preset inherits it.
+    - id: host-image-generation
+      name: '@phoenix-ai/dsh-llm-pi-ai'
+      config:
+        imageOnly: true
+
     - id: session-persistence-jsonl
       name: '@phoenix-ai/dsh-session-persistence-jsonl'
       config:
