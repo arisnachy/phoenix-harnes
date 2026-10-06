@@ -101,6 +101,17 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
+type CuratedMcpConnectorId = 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+
+const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
+  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare',
+  'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
+])
+
+function isCuratedMcpConnectorId(value: string): value is CuratedMcpConnectorId {
+  return CURATED_MCP_CONNECTOR_IDS.has(value)
+}
+
 /** Browser-safe client for the Host-owned Official MCP Registry proxy and installer. */
 export interface McpRegistryClient {
   /**
@@ -124,7 +135,7 @@ export interface McpRegistryClient {
     connector: ManagedMcpConnectorView
   }>
   /** Install a Host-pinned curated MCP by connector id; no endpoint crosses the browser boundary. */
-  installCurated?(request: { connectorId: 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch' }): Promise<{
+  installCurated?(request: { connectorId: CuratedMcpConnectorId }): Promise<{
     status: 'installed' | 'already-installed'
     connector: ManagedMcpConnectorView
   }>
@@ -1123,7 +1134,7 @@ export function ConnectorsSettingsSection({ api,
 
   const installCuratedConnector = (definition: ConnectorDefinition): void => {
     const installCurated = mcpRegistry?.installCurated
-    if (installCurated === undefined || definition.curatedMcp !== true || definition.id === 'binance'
+    if (installCurated === undefined || definition.curatedMcp !== true || !isCuratedMcpConnectorId(definition.id)
       || installingCuratedId !== undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
     setCatalogFailure(undefined)
     setInstallingCuratedId(definition.id)
