@@ -327,7 +327,7 @@ describe('ManagedMcpController', () => {
 
     const second = await controller.ensureCoreMcpPack()
     expect(second.installed).toEqual([])
-    expect(second.alreadyInstalled).toEqual(expect.arrayContaining(restored.installed))
+    expect(second.alreadyInstalled).toEqual(expect.arrayContaining([...restored.installed]))
     expect(live.create).toHaveBeenCalledTimes(restored.installed.length)
   })
 
