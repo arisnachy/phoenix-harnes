@@ -432,7 +432,7 @@ async function buildModelCatalog(ctx: Context): Promise<{
         models: hasPhoenixAutoPair
           ? [{
             id: PHOENIX_CODEX_AUTO_MODEL,
-            name: 'Phoenix Orquesta',
+            name: 'Fénix Eclipse',
             description: 'GPT-6.1 Sol plans · GPT-6 Luna Max executes · Sol rescues stalled work',
           }, ...entries]
           : entries,

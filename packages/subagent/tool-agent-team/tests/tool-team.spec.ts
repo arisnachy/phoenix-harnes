@@ -131,7 +131,7 @@ describe('dsh-tool-team', () => {
       .toEqual(TOOL_NAMES)
     const leadPrompt = renderPrompt(leadAssembly)
     expect(leadPrompt).toContain('real shared work, not role-play')
-    expect(leadPrompt).toContain('Phoenix Orquesta is explicitly authorized to use this Team path')
+    expect(leadPrompt).toContain('Fénix Eclipse is explicitly authorized to use this Team path')
     expect(leadPrompt).toContain('prefer spawn_teammate over legacy subagent delegation')
     expect(leadPrompt).toContain('one teammate is normal')
     expect(leadPrompt).toContain('a third is reserved for exceptional complexity')

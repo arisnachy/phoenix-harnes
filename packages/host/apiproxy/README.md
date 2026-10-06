@@ -16,7 +16,7 @@ A session resolves its model selection from a choice made in this process, other
 
 The section's `reasoningEffort` has no counterpart in the agent-default-model plugin config, deliberately: the seam merges the user layer over the composition entry per field, so an absent key cannot override a present one and a composition-set effort would survive every later switch to a model without one. A deployment default for effort belongs on the adapter profile, which resolves per model.
 
-The OpenAI Codex selector exposes Phoenix Orquesta with the durable id `phoenix-auto`: Sol plans and rescues, while Kira and her specialists execute on Luna Max. A concrete Codex selection retains the selected model for planning and rescue and hands later execution steps to Luna Max; other providers use the selected model throughout.
+The OpenAI Codex selector exposes Fénix Eclipse with the durable id `phoenix-auto`: Sol plans and rescues, while Kira and her specialists execute on Luna Max. A concrete Codex selection retains the selected model for planning and rescue and hands later execution steps to Luna Max; other providers use the selected model throughout.
 
 The stored selection is independent of catalog membership. A default naming an unavailable provider still reaches `session.models` as the session's `current`, allowing the selector to request a replacement instead of silently choosing another model. Conversely, an adapter may serve a model that its catalog does not advertise.
 
