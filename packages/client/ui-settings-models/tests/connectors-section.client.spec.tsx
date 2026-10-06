@@ -600,6 +600,77 @@ describe('connectors settings section', () => {
     })
     expect(disconnect.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]!)
   })
+  it('refreshes late MCP authorization flows so installed auth-required connectors remain connectable', async () => {
+    const list = vi.fn()
+      .mockResolvedValueOnce(ok({ entries: [] }))
+      .mockResolvedValue(ok({ entries: [{
+        key: 'mcp-client/notion',
+        label: 'MCP notion',
+        methods: [{ id: 'oauth', label: 'Authorize notion' }],
+        inFlight: false,
+      }] }))
+    const api = {
+      list,
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-notion',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' },
+        }],
+        runtime: [{
+          serverName: 'notion',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+
+    const notionCard = (await screen.findByText('Notion')).closest('article')
+    await waitFor(() => {
+      expect(list).toHaveBeenCalledTimes(2)
+      expect(Array.from(notionCard?.querySelectorAll('button') ?? [])
+        .some(button => button.textContent === 'Authorize')).toBe(true)
+    })
+    expect(notionCard?.textContent).toContain('Authorization required')
+  })
+
+  it('uses the authorization method actually offered by non-OAuth provider flows', async () => {
+    const begin = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546099', status: 'pending' as const,
+    })))
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'llm-pi-ai/z-ai',
+        label: 'Z.AI',
+        methods: [{ id: 'api-key', label: 'API key' }],
+        inFlight: false,
+      }] }))),
+      begin,
+      status: vi.fn(() => new Promise(() => undefined)),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+
+    renderHub(api)
+    const card = (await screen.findByText('Z.AI')).closest('article')
+    const authorize = Array.from(card?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Authorize')
+    expect(authorize).toBeTruthy()
+    fireEvent.click(authorize!)
+
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'llm-pi-ai/z-ai', method: 'api-key' })
+    })
+  })
+
   it('reuses registered OAuth flows and live connector telemetry', async () => {
     const begin = vi.fn(() => Promise.resolve(ok({
       attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546014', status: 'pending' as const,
