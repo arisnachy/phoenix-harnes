@@ -86,8 +86,10 @@ export const CANVA_MCP_URL = 'https://mcp.canva.com/mcp'
 export const SUPABASE_MCP_URL = 'https://mcp.supabase.com/mcp'
 /** Official HeyGen remote MCP endpoint. */
 export const HEYGEN_MCP_URL = 'https://mcp.heygen.com/mcp/v1/'
-/** Official Figma remote MCP endpoint. */
+/** Official Figma remote MCP endpoint (available only to Figma-catalog clients). */
 export const FIGMA_MCP_URL = 'https://mcp.figma.com/mcp'
+/** Official Figma Desktop local MCP endpoint usable by a custom Phoenix client. */
+export const FIGMA_DESKTOP_MCP_URL = 'http://127.0.0.1:3845/mcp'
 /** Official Notion remote MCP endpoint. */
 export const NOTION_MCP_URL = 'https://mcp.notion.com/mcp'
 /** Official Linear remote MCP endpoint. */
@@ -199,6 +201,25 @@ function slackMcpConfig(): ManagedStreamableHttpMcpConfig {
   }
 }
 
+function figmaDesktopMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    transport: 'streamable-http',
+    serverName: 'figma',
+    url: FIGMA_DESKTOP_MCP_URL,
+    headers: {},
+    oauth: false,
+    toolCallTimeoutMs: 60_000,
+    startupTimeoutMs: 2_000,
+    failOnStartupError: false,
+    reconnect: {
+      enabled: true,
+      initialDelayMs: 1_000,
+      maxDelayMs: 30_000,
+      maxAttempts: 120,
+    },
+  }
+}
+
 function localNpxMcpConfig(
   serverName: string,
   pkg: string,
@@ -256,7 +277,7 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   canva: { label: 'Canva', config: canvaMcpConfig },
   supabase: { label: 'Supabase', config: () => remoteOauthMcpConfig('supabase', SUPABASE_MCP_URL) },
   heygen: { label: 'HeyGen', config: () => remoteOauthMcpConfig('heygen', HEYGEN_MCP_URL, 120_000) },
-  figma: { label: 'Figma', config: () => remoteOauthMcpConfig('figma', FIGMA_MCP_URL) },
+  figma: { label: 'Figma', config: figmaDesktopMcpConfig },
   notion: { label: 'Notion', config: () => remoteOauthMcpConfig('notion', NOTION_MCP_URL) },
   linear: { label: 'Linear', config: () => remoteOauthMcpConfig('linear', LINEAR_MCP_URL) },
   cloudflare: { label: 'Cloudflare', config: () => remoteOauthMcpConfig('cloudflare', CLOUDFLARE_MCP_URL) },
@@ -379,6 +400,7 @@ function validXApiConfig(value: Record<string, unknown>): boolean {
 
 function validHttpConfig(value: Record<string, unknown>): boolean {
   if (exactJson(value, xDocsMcpConfig())) return true
+  if (exactJson(value, figmaDesktopMcpConfig())) return true
   if (typeof value.serverName !== 'string' || typeof value.url !== 'string'
     || typeof value.oauth !== 'boolean' || !isEmptyRecord(value.headers)) return false
   try {
