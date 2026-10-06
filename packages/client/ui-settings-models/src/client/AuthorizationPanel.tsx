@@ -1405,7 +1405,10 @@ export function ConnectorsSettingsSection({ api,
                 installingCurated={installingCuratedId === row.definition.id}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
                 removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
-                onAuthorize={(entry) => { begin(entry.key, entry.methods[0]?.id ?? 'oauth') }}
+                onAuthorize={(entry) => {
+                  const method = entry.methods[0]
+                  if (method !== undefined) begin(entry.key, method.id)
+                }}
                 onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
                   ? undefined
                   : () => { installCuratedConnector(row.definition) }}
