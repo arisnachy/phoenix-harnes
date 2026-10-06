@@ -150,6 +150,26 @@ describe('mcp-client plugin module exports', () => {
     expect(partial.startupTimeoutMs).toBe(5_000)
   })
 
+  it('Config schema preserves fixed OAuth client settings for confidential MCP servers', () => {
+    const resolved = ConfigSchema({
+      transport: 'streamable-http',
+      serverName: 'slack',
+      url: 'https://mcp.slack.com/mcp',
+      headers: {},
+      oauth: true,
+      oauthClientIdRef: 'SLACK_MCP_CLIENT_ID',
+      oauthClientSecretRef: 'SLACK_MCP_CLIENT_SECRET',
+      oauthCallbackPort: 17844,
+      oauthTokenEndpointAuthMethod: 'client_secret_post',
+    } as never)
+    expect(resolved.transport).toBe('streamable-http')
+    if (resolved.transport !== 'streamable-http') throw new Error('expected streamable-http config')
+    expect(resolved.oauthClientIdRef).toBe('SLACK_MCP_CLIENT_ID')
+    expect(resolved.oauthClientSecretRef).toBe('SLACK_MCP_CLIENT_SECRET')
+    expect(resolved.oauthCallbackPort).toBe(17844)
+    expect(resolved.oauthTokenEndpointAuthMethod).toBe('client_secret_post')
+  })
+
   it('Config schema rejects an invalid reconnect block', () => {
     // schemastery unions wrap branch errors, so assert the throw only.
     expect(() => ConfigSchema({
