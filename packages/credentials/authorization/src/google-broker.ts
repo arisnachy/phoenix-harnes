@@ -29,7 +29,7 @@ import {
   requestGoogleWithOpenClaw,
 } from './openclaw-workspace.ts'
 
-/** Secret-free durable marker for the process-local Google account. */
+/** Durable Host-owned Google account authorization record. */
 export const GOOGLE_ACCOUNT_KEY: CredentialKey = credentialKey('authorization-google', 'account')
 /** Durable public OAuth application id used when deployment env does not provide one. */
 export const GOOGLE_CLIENT_ID_REF = credentialRef('PHOENIX_GOOGLE_OAUTH_CLIENT_ID')
@@ -633,7 +633,7 @@ export default class GoogleApiBroker extends Service {
   }
 
   /**
-   * Clear the process grant and secret-free marker even when provider revocation fails.
+   * Clear the in-memory and durable grant even when provider revocation fails.
    * @returns whether Google acknowledged token revocation.
    */
   async disconnect(): Promise<{ revoked: boolean }> {
@@ -689,7 +689,7 @@ export default class GoogleApiBroker extends Service {
     const receiver = await internals.openLoopback(state, session.signal)
     try {
       session.notify({
-        message: 'Continue with Google in your browser. PHOENIX keeps OAuth tokens inside the Host process.',
+        message: 'Continue with Google in your browser. PHOENIX keeps OAuth tokens in its Host-only credential store so this connection survives normal restarts.',
         url: createAuthorizationUrl({ ...this.spec, clientId }, receiver.redirectUri, state, pkce.challenge),
       })
       const code = await receiver.code
