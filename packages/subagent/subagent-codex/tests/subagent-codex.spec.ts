@@ -445,7 +445,6 @@ describe('task admission and package contracts', () => {
         config: {
           providerName: 'codex-auto-review',
           permissionMode: 'approve-for-me',
-          accountBridge: false,
         },
       },
     ])
@@ -646,8 +645,6 @@ describe('task admission and package contracts', () => {
       .toBe('codex-safe')
     expect(() => codex.Config({ providerName: '' })).toThrow()
     expect(codex.Config({}).permissionMode).toBe(DEFAULT_CODEX_PERMISSION_MODE)
-    expect(codex.Config({}).accountBridge).toBe(true)
-    expect(codex.Config({ accountBridge: false }).accountBridge).toBe(false)
     for (const permissionMode of CODEX_PERMISSION_MODES) {
       expect(codex.Config({ permissionMode }).permissionMode).toBe(permissionMode)
     }
@@ -699,6 +696,31 @@ describe('task admission and package contracts', () => {
     child.peer.respond(threadStart, { thread: { id: 'thread-1', ephemeral: true } })
     await starting
     wire.close()
+  })
+
+  it('keeps the native auto-review provider gated to OpenAI Codex parents', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SubagentRuntime)
+    await ctx.plugin(LocalSubprocessRuntime)
+    const spawn = vi.spyOn(ctx.subprocess, 'spawn')
+    await ctx.plugin(codex, {
+      providerName: 'codex-auto-review',
+      permissionMode: 'approve-for-me',
+    })
+
+    await expect(ctx.subagents.start('codex-auto-review', {
+      prompt: [{ type: 'text', text: 'task' }],
+      parent: {
+        id: SessionId('non-codex-parent'),
+        options: { provider: 'deepseek', model: 'deepseek-v4-pro' },
+        session: { header: { cwd: process.cwd() } },
+      } as unknown as Agent,
+      signal: new AbortController().signal,
+    })).rejects.toThrow(
+      'native auto-review is available only while the parent provider is openai-codex',
+    )
+    expect(spawn).not.toHaveBeenCalled()
+    await ctx.fiber.dispose()
   })
 
   it('requires a parent session cwd without suggesting unsupported config', async () => {
