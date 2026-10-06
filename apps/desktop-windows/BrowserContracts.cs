@@ -132,6 +132,8 @@ public sealed record BrowserCommand(
         "phoenix.browser.fill-form",
         "phoenix.browser.click-text",
         "phoenix.browser.login",
+        "phoenix.desktop.windows",
+        "phoenix.desktop.screenshot",
     };
 
     public static bool TryParse(string json, out BrowserCommand command, bool allowAutomation = false)
@@ -164,7 +166,7 @@ public sealed record BrowserCommand(
                 return true;
             }
 
-            if (type == "phoenix.browser.inspect")
+            if (type is "phoenix.browser.inspect" or "phoenix.desktop.windows" or "phoenix.desktop.screenshot")
             {
                 command = new BrowserCommand(type);
                 return true;

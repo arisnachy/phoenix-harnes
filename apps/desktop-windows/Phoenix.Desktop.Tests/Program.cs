@@ -69,6 +69,26 @@ True(
     "runtime pipe admits browser inspection",
     failures);
 Equal("phoenix.browser.inspect", inspect.Type, "inspection command type", failures);
+False(
+    BrowserCommand.TryParse("{\"type\":\"phoenix.desktop.windows\"}", out _),
+    "web bridge cannot enumerate the desktop",
+    failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.desktop.windows\"}",
+        out var desktopWindows,
+        allowAutomation: true),
+    "runtime pipe admits native window enumeration",
+    failures);
+Equal("phoenix.desktop.windows", desktopWindows.Type, "desktop windows command type", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.desktop.screenshot\"}",
+        out var desktopScreenshot,
+        allowAutomation: true),
+    "runtime pipe admits native desktop screenshots",
+    failures);
+Equal("phoenix.desktop.screenshot", desktopScreenshot.Type, "desktop screenshot command type", failures);
 True(
     BrowserCommand.TryParse(
         "{\"type\":\"phoenix.browser.fill-form\",\"origin\":\"https://example.com/form\",\"fields\":[{\"field\":0,\"value\":\"synthetic-value\"}],\"submit\":true}",

@@ -116,10 +116,7 @@ function Remove-LegacyPhoenixShortcut([string]$ShortcutPath) {
     $legacy = $shell.CreateShortcut($ShortcutPath)
     $targetFile = [IO.Path]::GetFileName([string]$legacy.TargetPath)
     $shortcutName = [IO.Path]::GetFileName($ShortcutPath)
-    if (
-      $targetFile -ieq 'Phoenix.exe' -or
-      $shortcutName -ieq 'PHOENIX HARDNESS.lnk'
-    ) {
+    if ($shortcutName -ieq 'PHOENIX HARDNESS.lnk') {
       Remove-Item -LiteralPath $ShortcutPath -Force -ErrorAction Stop
     }
   }
@@ -130,8 +127,8 @@ function Remove-LegacyPhoenixShortcut([string]$ShortcutPath) {
 
 $taskbarDirectory = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
 
-# Remove all known shortcuts created by the old native EXE/managed installer
-# before writing the one canonical browser launcher.
+# Remove only obsolete PHOENIX HARDNESS aliases. The canonical Phoenix.lnk may
+# legitimately point at the installed native Phoenix.exe when Agent Desktop is available.
 $legacyLocations = @(
   (Join-Path $desktopPath 'Phoenix.lnk'),
   (Join-Path $desktopPath 'PHOENIX HARDNESS.lnk'),
@@ -158,14 +155,16 @@ function Set-PhoenixShortcut([string]$ShortcutPath) {
   $shortcut.TargetPath = $targetPath
   $shortcut.Arguments = $arguments
   $shortcut.WorkingDirectory = $workingDirectory
-  $shortcut.Description = 'Phoenix AI — navegador'
+  $shortcut.Description = 'Phoenix AI — escritorio'
   $shortcut.IconLocation = $iconLocation
   $shortcut.WindowStyle = $windowStyle
   $shortcut.Save()
 }
 
-# One canonical shortcut name everywhere. It launches pnpm phoenix through
-# phoenix-desktop-launch.ps1 and never targets Phoenix.exe.
+# One canonical shortcut name everywhere. The launcher prefers the installed
+# native shell (bound to this exact source checkout) so Agent Desktop/Computer
+# runs in the interactive Windows session; it falls back to the browser runtime
+# only when Phoenix.exe is not installed.
 $shortcutPath = Join-Path $desktopPath 'Phoenix.lnk'
 $startMenuShortcutPath = Join-Path $programsPath 'Phoenix.lnk'
 $taskbarShortcutPath = Join-Path $taskbarDirectory 'Phoenix.lnk'

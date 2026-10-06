@@ -31,6 +31,19 @@ describe('PHOENIX Windows desktop shortcut', () => {
     expect(source).toContain('ie4uinit.exe')
   })
 
+  it('keeps the shortcut source-aware while the launcher prefers native Agent Desktop', async () => {
+    const { readFileSync } = await import('node:fs')
+    const shortcut = readFileSync(new URL('./phoenix-desktop-shortcut.ps1', import.meta.url), 'utf8')
+    const launcher = readFileSync(new URL('./phoenix-desktop-launch.ps1', import.meta.url), 'utf8')
+    expect(shortcut).toContain("$targetPath = $powerShellExe")
+    expect(shortcut).toContain('Agent Desktop/Computer')
+    expect(launcher).toContain("Programs\\Phoenix\\Phoenix.exe")
+    expect(launcher).toContain("Test-Path -LiteralPath $installedPhoenixExe")
+    expect(launcher).toContain("$env:PHOENIX_SOURCE_ROOT = $rootPath")
+    expect(launcher).toContain("Start-Process -FilePath $installedPhoenixExe")
+    expect(shortcut).not.toContain("never targets Phoenix.exe")
+  })
+
   it('invokes the setup script without exposing a console window', () => {
     const spawnSync = vi.fn(() => ({
       status: 0,
