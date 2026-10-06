@@ -38,6 +38,27 @@ export interface McpRegistryIcon {
   readonly sizes?: readonly string[]
 }
 
+/** Sanitized input metadata used by Official MCP Registry package arguments and env vars. */
+export interface McpRegistryInput {
+  readonly value?: string
+  readonly default?: string
+  readonly isRequired: boolean
+  readonly isSecret: boolean
+}
+
+/** Sanitized command-line argument from an Official MCP Registry package. */
+export interface McpRegistryArgument extends McpRegistryInput {
+  readonly type: 'positional' | 'named'
+  readonly name?: string
+  readonly valueHint?: string
+  readonly isRepeated: boolean
+}
+
+/** Sanitized environment variable from an Official MCP Registry package. */
+export interface McpRegistryEnvironmentVariable extends McpRegistryInput {
+  readonly name: string
+}
+
 /** Sanitized package locator from one registry-listed MCP server. */
 export interface McpRegistryPackage {
   readonly registryType: string
@@ -45,6 +66,10 @@ export interface McpRegistryPackage {
   readonly transport: McpRegistryTransport
   readonly version?: string
   readonly runtimeHint?: string
+  readonly registryBaseUrl?: string
+  readonly runtimeArguments: readonly McpRegistryArgument[]
+  readonly packageArguments: readonly McpRegistryArgument[]
+  readonly environmentVariables: readonly McpRegistryEnvironmentVariable[]
 }
 
 /**
