@@ -68,6 +68,48 @@ function isPhoenixStdioProxyPath(value: string): boolean {
   return value.replace(/\\/g, '/').toLowerCase().endsWith('/scripts/mcp-stdio-proxy.mjs')
 }
 
+const WINDOWS_NPX_MCP_PACKAGES = new Set([
+  '@modelcontextprotocol/server-filesystem',
+  '@modelcontextprotocol/server-memory',
+  '@brave/brave-search-mcp-server',
+])
+
+function npxPackageName(args: readonly string[]): string | undefined {
+  const packageArg = args[0] === '-y' ? args[1] : undefined
+  if (packageArg === undefined) return undefined
+  return [...WINDOWS_NPX_MCP_PACKAGES].find(
+    packageName => packageArg === packageName || packageArg.startsWith(`${packageName}@`),
+  )
+}
+
+/**
+ * Normalize PHOENIX-curated NPX MCP launchers for Windows.
+ *
+ * Node's shell-free stdio transport cannot directly execute npm's `npx.cmd`.
+ * The official Filesystem and Memory MCP docs therefore require `cmd /c npx`
+ * on Windows. PHOENIX applies that wrapper only to its allow-listed curated
+ * NPX packages so arbitrary registry arguments never gain a command shell.
+ *
+ * @param command - Persisted stdio executable.
+ * @param args - Persisted stdio arguments.
+ * @param platform - Runtime platform, injectable for regression tests.
+ * @returns Safe executable and arguments for the current platform.
+ */
+export function normalizeWindowsNpxMcpLaunch(
+  command: string,
+  args: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): { command: string; args: string[] } {
+  const normalizedArgs = [...args]
+  if (platform !== 'win32' || command.toLowerCase() !== 'npx' || npxPackageName(normalizedArgs) === undefined) {
+    return { command, args: normalizedArgs }
+  }
+  return {
+    command: 'cmd.exe',
+    args: ['/d', '/c', 'npx', ...normalizedArgs],
+  }
+}
+
 /**
  * Repair only a stale absolute PHOENIX proxy argument left by an older install.
  *
@@ -163,13 +205,18 @@ function credentialRequired(ref: string): Error & { status: number } {
  */
 export function createTransport(config: Config, options: TransportOptions = {}): Transport {
   switch (config.transport) {
-    case 'stdio':
+    case 'stdio': {
+      const launch = normalizeWindowsNpxMcpLaunch(
+        config.command,
+        repairPhoenixStdioProxyArgs(config.args),
+      )
       return new PhoenixStdioClientTransport({
-        command: config.command,
-        args: repairPhoenixStdioProxyArgs(config.args),
+        command: launch.command,
+        args: launch.args,
         env: buildChildEnv({ ...config.env, ...options.stdioCredentialEnv }),
         cwd: config.cwd,
       })
+    }
     case 'streamable-http': {
       const headers = { ...config.headers }
       if (config.bearerTokenRef !== undefined) {
