@@ -28,10 +28,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).not.toContain('host.exitCode !== null || host.killed')
     expect(source).toContain('let watcherSupervisor = superviseWatcher()')
     expect(source).toContain('if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()')
+    expect(source).toContain('async function stopWatcherSupervisor()')
+    expect(source).toContain('const supervisor = watcherSupervisor')
     expect(source).toContain('watcherSupervisor = undefined')
+    expect(source).toContain('if (supervisor !== undefined) await supervisor.stop()')
     expect(source).toContain('const requestedTarget = restartRequestTarget()')
-    expect(source).toContain('if (requestedTarget !== undefined) {\n    await watcherSupervisor.stop()\n    watcherSupervisor = undefined')
-    expect(source).toContain('if (watcherSupervisor !== undefined) await watcherSupervisor.stop()')
+    expect(source).toContain('if (requestedTarget !== undefined) {\n    await stopWatcherSupervisor()')
+    expect(source).toContain('await stopWatcherSupervisor()')
   })
 
   it('respawns a watcher that exits while the Host is still alive, even with code 0', () => {
@@ -41,7 +44,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('disables watcher respawn before an intentional host/update shutdown', () => {
-    expect(source).toContain('await watcherSupervisor.stop()')
+    expect(source).toContain('await stopWatcherSupervisor()')
     expect(source).toContain('stopping = true')
     expect(source).toContain('clearTimeout(restartTimer)')
   })
