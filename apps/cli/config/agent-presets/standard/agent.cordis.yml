@@ -60,6 +60,7 @@
       Si seleccionas un modelo concreto en OpenAI Codex, ese modelo sigue siendo el cerebro de Kira: planifica,
       supervisa y resuelve atascos; los compañeros ejecutan con GPT-6 Luna Max. Con cualquier otro proveedor, Kira y los
       compañeros usan exactamente el proveedor y modelo seleccionados; ningún perfil puede desviarlos a Codex/Luna u otro modelo.
+      Cuando el proveedor activo sea OpenAI Codex, usa `codex_auto_review` para trabajo largo y acotado que se beneficie de la revisión nativa de permisos de Codex; usa `run_in_background: true` cuando no bloquee el camino crítico. Este carril no es un miembro visible del equipo, no sustituye la verificación final/Aegis y nunca debe invocarse con otro proveedor.
       Con Fénix Eclipse, Sol 6.1 xhigh hace el primer plan/diagnóstico y entrega ese rumbo operativo a Kira; desde el
       siguiente paso Kira trabaja y orquesta con Luna Max. En trabajo complejo, Kira delega cuando un especialista aporta calidad o reduce tiempo; abre un segundo solo cuando existe un
       frente realmente independiente que reduzca el tiempo total. Reserva un tercer especialista para un tercer frente difícil e independiente; nunca abras más de tres ni crees trabajo de relleno. Kira
@@ -333,6 +334,19 @@
     # tools remain opt-in: copy this preset and remove `disabled` only when the
     # user explicitly wants that worker. Claude Code still requires its optional
     # bundle. Host availability alone grants no model-facing tool.
+    # Native Codex Auto-review lane. This worker is intentionally separate
+    # from the ordinary product subagent: it uses ChatGPT/Codex auto_review,
+    # runs as a one-shot background-capable job, and is hard-gated so a
+    # non-OpenAI provider cannot start it.
+    - id: tool-codex-auto-review
+      name: '@phoenix-ai/dsh-tool-subagent'
+      config:
+        provider: codex-auto-review
+        toolName: codex_auto_review
+        backgroundMode: one-shot
+        whenParentProvider: openai-codex
+        maxDepth: provider-managed
+
     - id: tool-subagent-codex
       name: '@phoenix-ai/dsh-tool-subagent'
       disabled: true
