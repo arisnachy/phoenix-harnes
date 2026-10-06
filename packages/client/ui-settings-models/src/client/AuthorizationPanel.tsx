@@ -958,6 +958,14 @@ export function ConnectorsSettingsSection({ api,
   }, [mcpRegistry, mcpHub.runtime])
 
   useEffect(() => {
+    if (api === undefined && mcpRegistry === undefined) return
+    const timer = window.setInterval(() => {
+      setRefresh(current => current + 1)
+    }, 5_000)
+    return () => { window.clearInterval(timer) }
+  }, [api, mcpRegistry])
+
+  useEffect(() => {
     if (api === undefined) return
     const expectedKeys = mcpHub.managed.flatMap((connector) => {
       const runtime = mcpHub.runtime.find(entry => entry.serverName === connector.serverName)
