@@ -145,14 +145,17 @@ export function createCredentialStateStore(credentials: CredentialProvider, key:
       return volatileState === undefined ? persisted : { ...persisted, ...volatileState }
     },
     async write(state) {
-      const persisted = await readPersisted()
       if (hasUsableMcpOAuthTokens(state)) {
         volatileState = undefined
         await credentials.modifyRecord(key, () => Promise.resolve({ kind: 'grant', payload: state }))
         return
       }
+      // Partial OAuth state (discovery metadata, client registration, verifier)
+      // must never erase a previously usable grant. The provider helpers merge
+      // before writing today, but keeping that invariant inside the store makes
+      // restart persistence robust even if an SDK path writes a partial object.
+      // Explicit reauthorization/disconnect owns token removal through clear().
       volatileState = state
-      if (hasUsableMcpOAuthTokens(persisted)) await credentials.deleteRecord(key)
     },
     async clear() {
       volatileState = undefined
@@ -443,6 +446,11 @@ export class McpOAuthController {
         codeVerifier: _codeVerifier,
         ...reusable
       } = previous
+      // Reauthorization is the one intentional boundary that must hide the
+      // previous grant so the SDK performs a fresh redirect/registration.
+      // Clear explicitly instead of relying on a partial-state write to delete
+      // persisted tokens; failed incidental writes elsewhere must not log users out.
+      await this.store.clear()
       await this.store.write(reusable)
     }
     const state = randomState()

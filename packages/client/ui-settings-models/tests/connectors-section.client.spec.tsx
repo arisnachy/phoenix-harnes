@@ -600,6 +600,136 @@ describe('connectors settings section', () => {
     })
     expect(disconnect.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]!)
   })
+  it('shows Authorize immediately for an installed auth-required MCP even before its auth flow appears', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-notion-pending-auth',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' },
+        }],
+        runtime: [{
+          serverName: 'notion',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const notionCard = (await screen.findByText('Notion')).closest('article')
+    expect(notionCard?.textContent).toContain('Authorization required')
+    expect(Array.from(notionCard?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Authorize')).toBe(true)
+    expect(Array.from(notionCard?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Uninstall')).toBe(true)
+  })
+
+  it('shows Install for an uninstalled curated MCP even when a stale auth grant still exists', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/notion',
+        label: 'MCP notion',
+        methods: [{ id: 'oauth', label: 'Authorize notion' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: 'managed-notion',
+        serverName: 'notion',
+        url: 'https://mcp.notion.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'notion' },
+      },
+    }))
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const notionCard = (await screen.findByText('Notion')).closest('article')
+    expect(notionCard?.textContent).toContain('Official connector available')
+    expect(Array.from(notionCard?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Install')).toBe(true)
+    expect(Array.from(notionCard?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Authorize')).toBe(false)
+  })
+
+  it('keeps a previously authorized MCP connected when its restored runtime is ready', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [{
+        key: 'mcp-client/notion',
+        label: 'MCP notion',
+        methods: [{ id: 'oauth', label: 'Authorize notion' }],
+        inFlight: false,
+        stored: { kind: 'grant' as const },
+        telemetry: { kind: 'account' as const, provider: 'MCP notion', accountType: 'oauth' },
+      }] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-notion-ready',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' },
+        }],
+        runtime: [{
+          serverName: 'notion',
+          transport: 'streamable-http' as const,
+          status: 'ready' as const,
+          toolNames: ['mcp__notion__search'],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const notionCard = (await screen.findByText('Notion')).closest('article')
+    expect(notionCard?.textContent).toContain('Connected')
+    expect(Array.from(notionCard?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Authorize' || button.textContent === 'Reauthorize')).toBe(false)
+    expect(Array.from(notionCard?.querySelectorAll('button') ?? [])
+      .some(button => button.textContent === 'Install')).toBe(false)
+  })
+
+  it('treats an installed MCP with no runtime sample yet as Connecting instead of Broken', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-notion-starting',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' },
+        }],
+        runtime: [],
+      })),
+      install: vi.fn(), search: vi.fn(), remove: vi.fn(),
+    }
+
+    renderHub(api, { mcpRegistry })
+    const notionCard = (await screen.findByText('Notion')).closest('article')
+    expect(notionCard?.textContent).toContain('Connecting')
+    expect(notionCard?.textContent).not.toContain('Broken')
+  })
+
   it('refreshes late MCP authorization flows so installed auth-required connectors remain connectable', async () => {
     const list = vi.fn()
       .mockResolvedValueOnce(ok({ entries: [] }))
