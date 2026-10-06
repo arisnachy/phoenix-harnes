@@ -38,6 +38,10 @@ interface ManagedStreamableHttpMcpConfig {
   headers: Record<string, string>
   oauth: boolean
   bearerTokenRef?: string
+  oauthClientIdRef?: string
+  oauthClientSecretRef?: string
+  oauthCallbackPort?: number
+  oauthTokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
   toolCallTimeoutMs?: number
   startupTimeoutMs?: number
   failOnStartupError?: boolean
@@ -92,6 +96,11 @@ export const LINEAR_MCP_URL = 'https://mcp.linear.app/mcp'
 export const CLOUDFLARE_MCP_URL = 'https://mcp.cloudflare.com/mcp'
 /** Official Slack MCP endpoint. Slack requires a registered client for custom harnesses. */
 export const SLACK_MCP_URL = 'https://mcp.slack.com/mcp'
+/** Phoenix vault references for the Slack app backing the custom MCP client. */
+export const SLACK_MCP_CLIENT_ID_REF = 'SLACK_MCP_CLIENT_ID'
+export const SLACK_MCP_CLIENT_SECRET_REF = 'SLACK_MCP_CLIENT_SECRET'
+/** Stable loopback callback registered in the Phoenix Slack app. */
+export const SLACK_MCP_CALLBACK_PORT = 17844
 /** Vault reference used by the official Brave Search MCP. */
 export const BRAVE_SEARCH_API_KEY_REF = 'BRAVE_API_KEY'
 /** Stable local MCP namespace for the official X API bridge. */
@@ -180,6 +189,16 @@ function canvaMcpConfig(): ManagedStreamableHttpMcpConfig {
   }
 }
 
+function slackMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    ...remoteOauthMcpConfig('slack', SLACK_MCP_URL),
+    oauthClientIdRef: SLACK_MCP_CLIENT_ID_REF,
+    oauthClientSecretRef: SLACK_MCP_CLIENT_SECRET_REF,
+    oauthCallbackPort: SLACK_MCP_CALLBACK_PORT,
+    oauthTokenEndpointAuthMethod: 'client_secret_post',
+  }
+}
+
 function localNpxMcpConfig(
   serverName: string,
   pkg: string,
@@ -241,7 +260,7 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   notion: { label: 'Notion', config: () => remoteOauthMcpConfig('notion', NOTION_MCP_URL) },
   linear: { label: 'Linear', config: () => remoteOauthMcpConfig('linear', LINEAR_MCP_URL) },
   cloudflare: { label: 'Cloudflare', config: () => remoteOauthMcpConfig('cloudflare', CLOUDFLARE_MCP_URL) },
-  slack: { label: 'Slack', config: () => remoteOauthMcpConfig('slack', SLACK_MCP_URL) },
+  slack: { label: 'Slack', config: slackMcpConfig },
   'brave-search': {
     label: 'Brave Search',
     config: () => localNpxMcpConfig(
@@ -368,8 +387,19 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
     return false
   }
 
-  // Registry-managed remotes and Binance remain OAuth-only and may not smuggle a secret ref.
-  if (value.oauth) return value.bearerTokenRef === undefined
+  // Slack is the one curated confidential OAuth client. Its references and
+  // fixed callback are admitted only as one exact Host-owned configuration.
+  if (exactJson(value, slackMcpConfig())) return true
+
+  // Registry-managed remotes, Binance, and dynamic OAuth curated remotes may
+  // not smuggle credential refs or fixed-client settings through persisted JSON.
+  if (value.oauth) {
+    return value.bearerTokenRef === undefined
+      && value.oauthClientIdRef === undefined
+      && value.oauthClientSecretRef === undefined
+      && value.oauthCallbackPort === undefined
+      && value.oauthTokenEndpointAuthMethod === undefined
+  }
 
   // Keep accepting the exact retired Jev form only so older owner overlays can be parsed and removed.
   if (value.serverName !== JEV_MCP_SERVER_NAME
