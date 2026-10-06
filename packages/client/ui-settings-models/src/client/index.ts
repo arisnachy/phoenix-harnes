@@ -85,7 +85,7 @@ type PluginInventoryMcpRegistryRemote = {
       source?: { kind: 'registry'; name: string; version?: string } | { kind: 'curated'; connectorId: string }
     }
   }>>
-  installCuratedMcpConnector(request: { connectorId: 'devpost' | 'canva' }): Promise<PluginInventoryRemoteResult<{
+  installCuratedMcpConnector(request: { connectorId: 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch' }): Promise<PluginInventoryRemoteResult<{
     status: 'installed' | 'already-installed'
     connector: {
       entryId: string
