@@ -21,6 +21,14 @@ interface ConnectorView {
   relevant: true
 }
 
+interface AuthorizationPromptView {
+  promptId: string
+  kind: 'text' | 'secret' | 'select'
+  message: string
+  placeholder?: string
+  options?: Array<{ id: string; label: string; description?: string }>
+}
+
 function actionableConnectors(block: ToolCallViewProps['block']): ConnectorView[] {
   if (!('kind' in block) || block.isError) return []
   try {
@@ -60,6 +68,7 @@ function strings() {
       failed: 'No se pudo conectar',
       cancelled: 'Conexión cancelada',
       missing: 'No hay un flujo de autorización disponible para este conector.',
+      continue: 'Continuar',
     }
     : {
       title: 'Connector required',
@@ -74,6 +83,7 @@ function strings() {
       failed: 'Connection failed',
       cancelled: 'Connection cancelled',
       missing: 'No authorization flow is available for this connector.',
+      continue: 'Continue',
     }
 }
 
@@ -86,12 +96,16 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
   const connectors = useMemo(() => actionableConnectors(block), [block])
   const connector = connectors[0]
   const [flowKey, setFlowKey] = useState<string | undefined>()
+  const [flowMethod, setFlowMethod] = useState<string>('oauth')
   const [stored, setStored] = useState(false)
   const [phase, setPhase] = useState<'idle' | 'pending' | 'authorized' | 'cancelled' | 'failed'>('idle')
   const [error, setError] = useState<string | undefined>()
   const [detail, setDetail] = useState<string | undefined>()
   const [authorizationUrl, setAuthorizationUrl] = useState<string | undefined>()
   const [authorizationCode, setAuthorizationCode] = useState<string | undefined>()
+  const [prompt, setPrompt] = useState<AuthorizationPromptView | undefined>()
+  const [promptAnswer, setPromptAnswer] = useState('')
+  const [attemptId, setAttemptId] = useState<string | undefined>()
   const alive = useRef(true)
 
   useEffect(() => {
@@ -111,6 +125,7 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
       )
       if (entry === undefined) return
       setFlowKey(entry.key)
+      setFlowMethod(entry.methods[0]?.id ?? 'oauth')
       setStored(entry.stored !== undefined)
     })
     return () => { stale = true }
@@ -124,8 +139,11 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
     setDetail(copy.preparing)
     setAuthorizationUrl(undefined)
     setAuthorizationCode(undefined)
+    setPrompt(undefined)
+    setPromptAnswer('')
+    setAttemptId(undefined)
     setPhase('pending')
-    const popup = window.open('', '_blank')
+    const popup = flowMethod === 'oauth' ? window.open('', '_blank') : null
     if (popup !== null) {
       try {
         popup.document.title = `${connector.label} · PHOENIX`
@@ -135,8 +153,9 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
       }
     }
     try {
-      const started = await authorization.begin({ key: flowKey, method: 'oauth' })
+      const started = await authorization.begin({ key: flowKey, method: flowMethod })
       if (!started.result.ok) throw new Error(started.result.error.message)
+      setAttemptId(started.result.value.attemptId)
       let after = 0
       let openedUrl: string | undefined
       while (alive.current) {
@@ -162,6 +181,7 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
           }
         }
         if (codeNotice?.code !== undefined) setAuthorizationCode(codeNotice.code)
+        if (view.prompt !== undefined) setPrompt(view.prompt)
         if (view.status === 'pending') {
           await sleep(350)
           continue
@@ -186,6 +206,22 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
         setError(cause instanceof Error ? cause.message : String(cause))
         setPhase('failed')
       }
+    }
+  }
+
+  const submitPrompt = async (): Promise<void> => {
+    if (attemptId === undefined || prompt === undefined || phase !== 'pending') return
+    try {
+      const answered = await authorization.answer({
+        attemptId,
+        promptId: prompt.promptId,
+        value: promptAnswer,
+      })
+      if (!answered.result.ok) throw new Error(answered.result.error.message)
+      setPrompt(undefined)
+      setPromptAnswer('')
+    } catch (cause) {
+      if (alive.current) setError(cause instanceof Error ? cause.message : String(cause))
     }
   }
 
@@ -218,6 +254,39 @@ function ConnectorListRow({ block, authorization }: ConnectorListRowProps) {
         {authorizationCode === undefined ? null : <span>{`${copy.code}: ${authorizationCode}`}</span>}
         {authorizationUrl === undefined ? null : (
           <a href={authorizationUrl} target="_blank" rel="noreferrer">{copy.openAuth}</a>
+        )}
+        {prompt === undefined ? null : (
+          <div className={css.prompt}>
+            <label>
+              <span>{prompt.message}</span>
+              {prompt.kind === 'select'
+                ? (
+                  <select value={promptAnswer} onChange={(event) => { setPromptAnswer(event.target.value) }}>
+                    <option value="" />
+                    {prompt.options?.map(option => (
+                      <option key={option.id} value={option.id}>{option.label}</option>
+                    ))}
+                  </select>
+                )
+                : (
+                  <input
+                    type={prompt.kind === 'secret' ? 'password' : 'text'}
+                    autoComplete="off"
+                    value={promptAnswer}
+                    placeholder={prompt.placeholder}
+                    onChange={(event) => { setPromptAnswer(event.target.value) }}
+                  />
+                )}
+            </label>
+            <button
+              type="button"
+              className={css.button}
+              disabled={promptAnswer.length === 0}
+              onClick={() => { void submitPrompt() }}
+            >
+              {copy.continue}
+            </button>
+          </div>
         )}
         {error === undefined ? null : <span className={css.error}>{error}</span>}
       </div>
