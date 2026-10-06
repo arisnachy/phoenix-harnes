@@ -110,6 +110,36 @@ export class MailOnboarding {
       return this.enroll(previous, previous.ownerEmail, previous.signupUsername ?? `kira-${randomUUID().slice(0, 8)}`)
     })
   }
+
+  /** Rotate a rejected credential for an already verified mailbox and prove the replacement key before keeping it.
+   * AgentMail sign-up is idempotent by human email, so this recovers the existing organization instead of creating
+   * another one. Unlike OTP recovery, a mailbox Phoenix already marked ready stays ready only after the rotated
+   * credential can read the exact persisted inbox.
+   * @returns The still-ready account after provider access is verified.
+   */
+  restoreCredential(): Promise<MailAccount> {
+    return this.exclusively(async () => {
+      const previous = await this.file.read()
+      if (previous.state !== 'ready' || previous.ownerEmail === undefined || previous.inboxId === undefined) {
+        throw new Error('credential recovery requires an existing verified mailbox')
+      }
+      const username = previous.signupUsername ?? previous.inboxId.slice(0, previous.inboxId.lastIndexOf('@'))
+      const data = mailRecord(await agentMailRequest('/agent/sign-up', undefined, this.options.timeoutMs, this.options.fetch ?? fetch,
+        { human_email: previous.ownerEmail, username, source: 'phoenix-local' }))
+      const key = mailString(data.api_key, 8192)
+      await this.options.saveKey(key)
+      const identity = mailRecord(await agentMailRequest(`/inboxes/${encodeURIComponent(previous.inboxId)}`, key,
+        this.options.timeoutMs, this.options.fetch ?? fetch))
+      if (identity.inbox_id !== previous.inboxId) throw new Error('recovered mail credential does not own the persisted inbox')
+      await this.file.change((current) => {
+        if (current.state !== 'ready' || current.ownerEmail !== previous.ownerEmail || current.inboxId !== previous.inboxId) {
+          throw new Error('mail enrollment changed during credential recovery')
+        }
+        return { ...current, signupUsername: username }
+      })
+      return this.status()
+    })
+  }
   private async enroll(previous: Enrollment, owner: string, username: string): Promise<MailAccount> {
     await this.file.change(current => ({ ...current, state: 'signup-ambiguous', ownerEmail: owner, signupUsername: username }))
     let data: Record<string, unknown>
