@@ -731,16 +731,96 @@ export class ManagedMcpController {
   }
 
   /**
+   * Install one Phoenix-curated MCP from its exact Host-owned specification.
+   * No caller-supplied URL, executable, package, or environment value crosses
+   * this boundary.
+   */
+  async installCuratedMcp(connectorId: CuratedMcpConnectorId): Promise<McpRegistryInstallReceipt> {
+    const spec = CURATED_MCP_SPECS[connectorId]
+    return this.installManagedConfig(
+      spec.config(),
+      spec.label,
+      { kind: 'curated', connectorId },
+    )
+  }
+
+  /**
+   * Restore the default Phoenix MCP pack without blocking one provider on
+   * another. Missing live entries are created in parallel and then committed
+   * to the managed overlay in one atomic write.
+   */
+  async ensureCoreMcpPack(): Promise<{
+    installed: readonly CuratedMcpConnectorId[]
+    alreadyInstalled: readonly CuratedMcpConnectorId[]
+    failed: readonly { connectorId: CuratedMcpConnectorId; message: string }[]
+  }> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    return withFileLock(this.path, async () => {
+      const rows = await readManagedRows(this.path)
+      const alreadyInstalled = CORE_MCP_PACK_IDS.filter((connectorId) => {
+        const config = CURATED_MCP_SPECS[connectorId].config()
+        return rows.some(row => managedIdentity(row.config) === managedIdentity(config))
+      })
+      const missing = CORE_MCP_PACK_IDS.filter(connectorId => !alreadyInstalled.includes(connectorId))
+      const attempted = await Promise.all(missing.map(async (connectorId) => {
+        const spec = CURATED_MCP_SPECS[connectorId]
+        const config = spec.config()
+        try {
+          const id = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
+          const row: ManagedMcpRow = {
+            id,
+            name: MCP_CLIENT_PACKAGE,
+            config,
+            source: { kind: 'curated', connectorId },
+          }
+          return { ok: true as const, connectorId, row }
+        } catch (error) {
+          return {
+            ok: false as const,
+            connectorId,
+            message: error instanceof Error ? error.message : String(error),
+          }
+        }
+      }))
+      const created = attempted.filter((result): result is Extract<typeof result, { ok: true }> => result.ok)
+      if (created.length > 0) {
+        try {
+          await writeManagedRows(this.path, [...rows, ...created.map(result => result.row)])
+        } catch (error) {
+          const rollbackErrors: unknown[] = []
+          for (const result of created) {
+            try {
+              await this.loader.remove(result.row.id)
+            } catch (rollbackError) {
+              rollbackErrors.push(rollbackError)
+            }
+          }
+          if (rollbackErrors.length > 0) {
+            throw new AggregateError(
+              [error, ...rollbackErrors],
+              'failed to persist the Phoenix core MCP pack and fully roll back live activation',
+            )
+          }
+          throw error
+        }
+      }
+      return {
+        installed: created.map(result => result.connectorId),
+        alreadyInstalled,
+        failed: attempted
+          .filter((result): result is Extract<typeof result, { ok: false }> => !result.ok)
+          .map(result => ({ connectorId: result.connectorId, message: result.message })),
+      }
+    }, { waitMs: 30_000 })
+  }
+
+  /**
    * Install the pinned official Devpost Hackathons MCP.
    * The endpoint is Host-owned so browser/model input cannot substitute another URL.
    * @returns Idempotent managed connector installation receipt.
    */
   async installDevpostHackathons(): Promise<McpRegistryInstallReceipt> {
-    return this.installManagedConfig(
-      devpostHackathonsMcpConfig(),
-      'Devpost Hackathons',
-      { kind: 'curated', connectorId: 'devpost' },
-    )
+    return this.installCuratedMcp('devpost')
   }
 
   /**
@@ -753,11 +833,7 @@ export class ManagedMcpController {
 
   /** Install Canva's pinned official remote MCP with user-scoped OAuth. */
   async installCanva(): Promise<McpRegistryInstallReceipt> {
-    return this.installManagedConfig(
-      canvaMcpConfig(),
-      'Canva',
-      { kind: 'curated', connectorId: 'canva' },
-    )
+    return this.installCuratedMcp('canva')
   }
 
   /** Remove only the PHOENIX-managed Canva MCP. */
