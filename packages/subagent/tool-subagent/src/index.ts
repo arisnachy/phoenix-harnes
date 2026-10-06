@@ -122,12 +122,6 @@ export interface Config {
    */
   toolName?: string
   /**
-   * Optional hard gate on the calling agent's active provider. The tool remains
-   * a normal registered capability, but execution fails before provider start
-   * when the parent route does not match this exact provider id.
-   */
-  whenParentProvider?: string
-  /**
    * Expose `run_in_background` (default true). Disabled instances omit the
    * parameter and reject forced background calls.
    */
@@ -187,7 +181,6 @@ export interface Config {
 export const Config: z<Config> = z.object({
   provider: z.string().required(),
   toolName: z.string().default('subagent'),
-  whenParentProvider: z.string(),
   enableRunInBackground: z.boolean().default(true),
   backgroundMode: z.union(['one-shot', 'continuable'] as const).default('one-shot'),
   allowParallel: z.boolean().default(true),
@@ -424,9 +417,6 @@ export function apply(ctx: Context, config: Config): void {
       )
     }
     const wording = providerWording(provider.inheritsParentContext)
-    const providerGateGuidance = config.whenParentProvider === undefined
-      ? ''
-      : ` This capability is available only while the calling agent provider is "${config.whenParentProvider}"; do not call it from any other provider.`
     if (continuable && provider.prepareContinuable === undefined) {
       throw new Error(
         `tool-subagent: provider "${provider.name}" does not support \`backgroundMode: continuable\``,
@@ -434,7 +424,7 @@ export function apply(ctx: Context, config: Config): void {
     }
     disposeTool = ctx.tools.register(defineTool({
       name: toolName,
-      description: wording.description + providerGateGuidance + (backgroundEnabled
+      description: wording.description + (backgroundEnabled
         // The completion notice is the continuation service's own behavior, not
         // a separately installed capability, so this promise holds whenever the
         // continuable background path is reachable at all.
@@ -519,11 +509,6 @@ export function apply(ctx: Context, config: Config): void {
         if (!parent) {
           // Non-agent callers provide no parent for delegation ownership.
           throw new Error('subagent tool requires a calling agent (exec.agent was undefined)')
-        }
-        if (config.whenParentProvider !== undefined && parent.options.provider !== config.whenParentProvider) {
-          throw new Error(
-            `subagent tool "${toolName}" is available only when the active parent provider is "${config.whenParentProvider}"`,
-          )
         }
 
         const maxDepth = typeof config.maxDepth === 'number' ? config.maxDepth : undefined
