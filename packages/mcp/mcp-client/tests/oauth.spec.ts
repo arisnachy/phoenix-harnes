@@ -50,6 +50,36 @@ describe('createMcpOAuthProvider', () => {
     expect(backing.state).toMatchObject({ tokens })
   })
 
+  it('preserves the previous refresh token when a renewal response omits it', async () => {
+    const backing = store({
+      tokens: {
+        access_token: 'old-access',
+        token_type: 'Bearer',
+        refresh_token: 'durable-refresh',
+        expires_in: 3600,
+      },
+    })
+    const provider = createMcpOAuthProvider({
+      serverName: 'notion-notion',
+      redirectUrl: 'http://127.0.0.1:43210/mcp/oauth/notion-notion',
+      store: backing,
+      onAuthorizationUrl: vi.fn(),
+    })
+
+    await provider.saveTokens({
+      access_token: 'new-access',
+      token_type: 'Bearer',
+      expires_in: 3600,
+    })
+
+    expect(await provider.tokens()).toEqual({
+      access_token: 'new-access',
+      token_type: 'Bearer',
+      refresh_token: 'durable-refresh',
+      expires_in: 3600,
+    })
+  })
+
   it('publishes public client metadata without client secrets', () => {
     const provider: OAuthClientProvider = createMcpOAuthProvider({
       serverName: 'notion-notion',
