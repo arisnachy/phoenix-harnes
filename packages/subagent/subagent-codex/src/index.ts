@@ -35,6 +35,7 @@ export const name = 'subagent-codex'
 export const inject = ['subagents', 'subprocess']
 
 const DEFAULT_PROVIDER_NAME = 'codex'
+const AUTO_REVIEW_PROVIDER_NAME = 'codex-auto-review'
 
 /** Deployment-owned permission, environment, and process-release settings. */
 export interface Config {
@@ -47,11 +48,6 @@ export interface Config {
   env?: Record<string, string>
   /** Native non-interactive permission mode fixed for this Provider instance. */
   permissionMode?: CodexPermissionMode
-  /**
-   * Whether this instance owns the shared ChatGPT/Codex authorization surface.
-   * Named execution-only siblings must disable it so one account flow has one owner.
-   */
-  accountBridge?: boolean
   /** Grace in milliseconds for app-server process-tree termination. */
   disposeGraceMs?: number
 }
@@ -61,7 +57,6 @@ export const Config: z<Config> = z.object({
   env: z.dict(z.string()).default({}),
   permissionMode: z.union([...CODEX_PERMISSION_MODES])
     .default(DEFAULT_CODEX_PERMISSION_MODE),
-  accountBridge: z.boolean().default(true),
   disposeGraceMs: z.number().default(DEFAULT_DISPOSE_GRACE_MS),
 })
 
@@ -78,6 +73,11 @@ class CodexProvider implements SubagentProvider {
   ) {}
 
   start(request: ResolvedSubagentStartRequest) {
+    if (this.name === AUTO_REVIEW_PROVIDER_NAME && request.parent.options.provider !== 'openai-codex') {
+      throw new Error(
+        'subagent-codex: native auto-review is available only while the parent provider is openai-codex',
+      )
+    }
     const parentCwd = request.parent.session.header.cwd
     if (parentCwd === undefined) {
       throw new Error(
@@ -127,7 +127,6 @@ export function apply(ctx: Context, config: Config): void {
     providerName: config.providerName ?? DEFAULT_PROVIDER_NAME,
     env: config.env as Record<string, string>,
     permissionMode: config.permissionMode ?? DEFAULT_CODEX_PERMISSION_MODE,
-    accountBridge: config.accountBridge ?? true,
     disposeGraceMs: config.disposeGraceMs as number,
   }
   assertPositiveFinite(
@@ -146,7 +145,7 @@ export function apply(ctx: Context, config: Config): void {
     resolved,
   ))
 
-  if (resolved.accountBridge) {
+  if (resolved.providerName === DEFAULT_PROVIDER_NAME) {
     ctx.inject(['authorization', 'credentials'], (authorized) => {
       registerCodexAccountFlow(authorized, {
         env: resolved.env,
