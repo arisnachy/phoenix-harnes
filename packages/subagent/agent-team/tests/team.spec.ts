@@ -2357,6 +2357,21 @@ describe('visible team conversation', () => {
     await waitNoAgent(ctx, started.member.id)
   })
 
+  it('keeps Aegis silent instead of forcing an assignment reaction', async () => {
+    const { ctx, lead, adapter } = await setup(['hang'], {}, true)
+    const started = await spawn(ctx, lead, 'aegis')
+    await vi.waitFor(() => { expect(adapter.requests.length).toBeGreaterThan(0) })
+    const promptText = adapter.requests[0]?.messages
+      .flatMap(message => message.content.flatMap(block => block.type === 'text' ? [block.text] : []))
+      .join('\n') ?? ''
+    expect(promptText).toContain('Aegis silent review mode')
+    expect(promptText).toContain('Do not acknowledge this assignment with a reaction or status message')
+    expect(promptText).not.toContain('Visible Kira assignment reaction target')
+    expect(promptText).not.toContain('Before substantive work')
+    ctx.agentTeams.interrupt(lead, 'aegis')
+    await waitNoAgent(ctx, started.member.id)
+  })
+
   it('lets every participant react to the real initial Kira assignment', async () => {
     const { ctx, lead, adapter } = await setup(['hang'], {}, true)
     const started = await spawn(ctx, lead, 'zenith')
