@@ -522,7 +522,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   repairing: boolean
   removing: boolean
 }): ReactNode {
-  const connectedByAccount = accountGrantConnectsCatalogEntry(account)
+  const connectedByAccount = (mcpRuntime === undefined || mcpRuntime.status === 'ready')
+    && accountGrantConnectsCatalogEntry(account)
   const installUrl = safeExternalHref(live?.installUrl)
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
   const mcpStatus = mcpRuntime?.status === 'ready'
@@ -561,6 +562,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const authorizationAccount = account !== undefined && account.methods.length > 0
     ? account
     : undefined
+  const reauthorizationRequired = mcpRuntime?.status === 'auth-required'
+    && authorizationAccount?.stored !== undefined
   const openClawRuntimeMissing = definition.id === 'github' && openClaw?.phase === 'missing-runtime'
   const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed')
   const canRepair = brokenManaged && managed.source !== undefined && onRepair !== undefined
@@ -601,7 +604,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : null}
           {authorizationAccount !== undefined && !connectedByAccount && openClaw?.connected !== true && !openClawRuntimeMissing ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || authorizationAccount.inFlight} onClick={() => { onAuthorize(authorizationAccount) }}>
-              {connected ? t('reauthorize') : t('authorize')}
+              {reauthorizationRequired || connected ? t('reauthorize') : t('authorize')}
             </button>
           ) : null}
           {canRepair ? (
@@ -1047,10 +1050,12 @@ export function ConnectorsSettingsSection({ api,
     const openClawRoute = definition.openClawConnectorId === undefined
       ? undefined
       : openClaw.connectors.find(candidate => candidate.id === definition.openClawConnectorId)
+    const accountConnected = (mcpRuntime === undefined || mcpRuntime.status === 'ready')
+      && accountGrantConnectsCatalogEntry(account)
     const connected = openClawRoute?.connected === true
       || live?.installed === true
       || live?.callable === true
-      || accountGrantConnectsCatalogEntry(account)
+      || accountConnected
       || mcpRuntime?.status === 'ready'
       || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
