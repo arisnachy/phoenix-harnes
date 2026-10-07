@@ -92,16 +92,61 @@ describe('AgentMail transport', () => {
   })
 })
 
-it('reports a socket closing exactly once and contains disposal callbacks', async () => {
-  const sockets: EventTarget[] = []
-  class Socket extends EventTarget { constructor(_url: string) { super(); sockets.push(this) } send(_data: string): void {} close(): void { this.dispatchEvent(new Event('close')) } }
+it('waits for AgentMail subscription confirmation and wakes only for inbound mail in Kira inbox', async () => {
+  const sockets: Socket[] = []
+  const messageEvent = (data: unknown): Event => {
+    const event = new Event('message') as Event & { data?: unknown }
+    Object.defineProperty(event, 'data', { value: JSON.stringify(data) })
+    return event
+  }
+  class Socket extends EventTarget {
+    readonly sent: string[] = []
+    constructor(_url: string) {
+      super()
+      sockets.push(this)
+      queueMicrotask(() => { this.dispatchEvent(new Event('open')) })
+    }
+    send(data: string): void {
+      this.sent.push(data)
+      queueMicrotask(() => {
+        this.dispatchEvent(messageEvent({ type: 'subscribed', inbox_ids: ['kira@agentmail.to'] }))
+      })
+    }
+    close(): void { this.dispatchEvent(new Event('close')) }
+  }
   vi.stubGlobal('WebSocket', Socket)
   try {
+    let wakes = 0
     let disconnected = 0
     const transport = new AgentMailTransport(async () => 'secret', 'kira@agentmail.to', 1000)
-    const dispose = await transport.subscribe(() => {}, () => { disconnected++ })
-    sockets[0]?.dispatchEvent(new Event('close'))
-    sockets[0]?.dispatchEvent(new Event('error'))
+    const dispose = await transport.subscribe(() => { wakes++ }, () => { disconnected++ })
+    expect(JSON.parse(sockets[0]!.sent[0]!)).toEqual({
+      type: 'subscribe',
+      inbox_ids: ['kira@agentmail.to'],
+      event_types: ['message.received'],
+    })
+
+    sockets[0]!.dispatchEvent(messageEvent({
+      type: 'message_sent',
+      event_type: 'message.sent',
+      message: { inbox_id: 'kira@agentmail.to' },
+    }))
+    sockets[0]!.dispatchEvent(messageEvent({
+      type: 'message_received',
+      event_type: 'message.received',
+      message: { inbox_id: 'other@agentmail.to' },
+    }))
+    expect(wakes).toBe(0)
+
+    sockets[0]!.dispatchEvent(messageEvent({
+      type: 'message_received',
+      event_type: 'message.received',
+      message: { inbox_id: 'kira@agentmail.to' },
+    }))
+    expect(wakes).toBe(1)
+
+    sockets[0]!.dispatchEvent(new Event('close'))
+    sockets[0]!.dispatchEvent(new Event('error'))
     expect(disconnected).toBe(1)
     dispose()
     expect(disconnected).toBe(1)
@@ -119,6 +164,27 @@ it('rejects identity mismatches and admits only candidates from the authenticate
   expect(await transport.readMessage(id)).toMatchObject({ authenticated: true, from: 'owner@example.com' })
   wrongIdentity = true
   await expect(transport.readMessage(id)).rejects.toThrow('identity')
+})
+
+it('uses HTML mail content as task text when AgentMail has no plain-text part', async () => {
+  const transport = new AgentMailTransport(async () => 'secret', 'kira@agentmail.to', 1000, async url => {
+    const address = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
+    if (address.includes('/messages?')) return Response.json({ messages: [{ message_id: 'html-only' }] })
+    return Response.json({
+      message_id: 'html-only',
+      inbox_id: 'kira@agentmail.to',
+      thread_id: 'thread-html',
+      from: 'owner@example.com',
+      labels: ['received'],
+      html: '<div>Revisa <b>Phoenix</b><br>y ejecuta la tarea.</div>',
+      headers: {},
+    })
+  })
+  await transport.listMessages()
+  await expect(transport.readMessage(MailMessageId('html-only'))).resolves.toMatchObject({
+    authenticated: true,
+    text: 'Revisa Phoenix\ny ejecuta la tarea.',
+  })
 })
 
 it('deletes a stale inbox with the authenticated DELETE endpoint and treats missing as already deleted', async () => {
