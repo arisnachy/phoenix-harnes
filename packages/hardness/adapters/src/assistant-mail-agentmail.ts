@@ -145,17 +145,22 @@ function htmlMailText(value: unknown): string | undefined {
     .replace(/&#39;/giu, "'")
     .replace(/[ \t]+/gu, ' ')
     .replace(/\n[ \t]+/gu, '\n')
+    .replace(/[ \t]+\n/gu, '\n')
     .replace(/\n{3,}/gu, '\n\n')
     .trim()
   return withoutActiveContent.length === 0 ? undefined : withoutActiveContent.slice(0, 64_000)
 }
 
-function inboundEventForInbox(event: Event, inboxId: string): 'subscribed' | 'message.received' | undefined {
+function inboundEventForInbox(event: Event, inboxId: string): 'subscribed' | 'message.received' | 'error' | undefined {
   const raw = (event as Event & { data?: unknown }).data
   if (typeof raw !== 'string') return undefined
   let payload: Record<string, unknown>
   try { payload = mailRecord(JSON.parse(raw) as unknown) } catch { return undefined }
-  if (payload.type === 'subscribed') return 'subscribed'
+  if (payload.type === 'error') return 'error'
+  if (payload.type === 'subscribed') {
+    const ids = payload.inbox_ids ?? payload.inboxIds
+    return Array.isArray(ids) && ids.includes(inboxId) ? 'subscribed' : undefined
+  }
   const eventType = payload.event_type ?? payload.eventType
   const isInbound = payload.type === 'message_received'
     || eventType === 'message.received'
@@ -263,10 +268,16 @@ export class AgentMailTransport implements AssistantMailTransport {
     let settled = false
     let subscribed = false
     let disposed = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const aborted = (): void => {
+      disposed = true
+      settleReady(new Error('mail wake subscription cancelled'))
+      try { socket.close() } catch { /* The socket may already be closing. */ }
+    }
     const settleReady = (error?: Error): void => {
       if (settled) return
       settled = true
-      clearTimeout(timer)
+      if (timer !== undefined) clearTimeout(timer)
       this.signal?.removeEventListener('abort', aborted)
       if (error === undefined) ready.resolve()
       else ready.reject(error)
@@ -280,12 +291,7 @@ export class AgentMailTransport implements AssistantMailTransport {
       subscribed = false
       try { onDisconnected?.() } catch { /* Callback failure cannot escape the provider event loop. */ }
     }
-    const aborted = (): void => {
-      disposed = true
-      settleReady(new Error('mail wake subscription cancelled'))
-      try { socket.close() } catch { /* The socket may already be closing. */ }
-    }
-    const timer = setTimeout(() => {
+    timer = setTimeout(() => {
       settleReady(new Error('mail wake subscription timed out'))
       try { socket.close() } catch { /* The socket may already be closing. */ }
     }, this.timeoutMs)
@@ -307,6 +313,10 @@ export class AgentMailTransport implements AssistantMailTransport {
       if (kind === 'subscribed') {
         subscribed = true
         settleReady()
+        return
+      }
+      if (kind === 'error') {
+        settleReady(new Error('AgentMail rejected the wake subscription'))
         return
       }
       if (kind !== 'message.received' || disposed) return
