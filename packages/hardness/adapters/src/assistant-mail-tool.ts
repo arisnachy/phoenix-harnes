@@ -36,6 +36,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       state: value.state,
       ...(value.inboxId === undefined ? {} : { address: value.inboxId }),
       connection: value.connection,
+      ...(value.ownerEmail === undefined ? {} : { owner_email: value.ownerEmail }),
       needs_verification: true,
       guidance: 'The mailbox already exists. Tell the user the exact address and ask them to finish '
         + 'the six-digit owner verification with action=verify and the code they received, or in Settings. '
@@ -49,6 +50,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       available: true,
       state: value.state,
       connection: value.connection,
+      ...(value.ownerEmail === undefined ? {} : { owner_email: value.ownerEmail }),
       needs_verification: false,
       guidance: 'The provider signup result is ambiguous. Do not retry signup automatically. '
         + 'Use action=recover when the user wants the old mailbox back. If recovery failed or the user explicitly wants to abandon the stale mailbox and create a new one, '
