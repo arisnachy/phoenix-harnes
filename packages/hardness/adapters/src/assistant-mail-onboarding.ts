@@ -219,10 +219,6 @@ export class MailOnboarding {
     }
     const organizationId = mailString(organization.organization_id)
     const current = await this.file.read()
-    if (current.state !== 'ready'
-      && (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0)) {
-      throw new Error('use an API key created in your human-owned AgentMail Console organization')
-    }
 
     let inboxRead = true
     try {
@@ -317,9 +313,6 @@ export class MailOnboarding {
       }
       if (typeof organization.organization_id !== 'string' || organization.organization_id.length === 0) {
         throw new Error('AgentMail returned an invalid organization for this API key')
-      }
-      if (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0) {
-        throw new Error('use an API key created in your human-owned AgentMail Console organization')
       }
 
       if (previous.state === 'ready') {
