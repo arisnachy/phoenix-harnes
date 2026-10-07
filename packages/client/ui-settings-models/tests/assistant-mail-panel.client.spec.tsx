@@ -226,3 +226,45 @@ it('confirms a claimed inbox and leaves the verification-only state', async () =
   expect(calls).toContain('claim-status')
   expect(screen.queryByText('Vincula propietario')).toBeNull()
 })
+
+it('accepts a new Console API key only in the local password field and switches to the new inbox', async () => {
+  const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
+  const client = {
+    call: async (action: string, input?: Record<string, unknown>) => {
+      calls.push({ action, ...(input === undefined ? {} : { input }) })
+      return {
+        account: action === 'console-key'
+          ? {
+              state: 'ready',
+              inboxId: 'kira-new@agentmail.to',
+              ownerEmail: 'owner@example.com',
+              ownerLink: 'attached' as const,
+              contacts: [],
+            }
+          : {
+              state: 'pending-verification',
+              inboxId: 'kira-old@agentmail.to',
+              ownerEmail: 'owner@example.com',
+              ownerLink: 'provider-conflict' as const,
+              contacts: [],
+            },
+        connection: action === 'console-key' ? 'connecting' : 'disconnected',
+        jobs: [],
+      }
+    },
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  const key = await screen.findByLabelText<HTMLInputElement>('Nueva API key de AgentMail')
+  expect(key.type).toBe('password')
+  fireEvent.change(key, { target: { value: 'am_us_console_secret' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Usar esta API key y crear buzón nuevo' }))
+
+  expect(await screen.findByText('kira-new@agentmail.to')).toBeTruthy()
+  expect(calls).toContainEqual({
+    action: 'console-key',
+    input: { apiKey: 'am_us_console_secret' },
+  })
+  expect(key.value).toBe('')
+  expect(document.body.textContent).not.toContain('am_us_console_secret')
+})
