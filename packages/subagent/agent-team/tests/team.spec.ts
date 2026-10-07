@@ -1229,6 +1229,48 @@ describe('Team mailbox and waiting', () => {
     await waitNoAgent(ctx, live.id)
   })
 
+  it.each(['result', 'blocker', 'review', 'question'] as const)('wakes idle Kira for a %s handoff and supplies a named response decision', async (purpose) => {
+    const { ctx, lead, adapter } = await setup(['hang', textResponse('Argo, revisaré la alternativa y te diré cómo seguimos.')])
+    const started = await spawn(ctx, lead, 'argo')
+    const worker = await waitRunning(ctx, started.member.id)
+    const steer = vi.spyOn(lead, 'steer')
+    const sent = await ctx.agentTeams.sendMessage(worker, {
+      target: 'lead', purpose, content: content('No hay fuentes verificables anteriores al corte.'),
+      delivery: 'quiet', signal: SIGNAL,
+    })
+    expect(sent.status).toBe('accepted')
+    await vi.waitFor(() => expect(steer).toHaveBeenCalledTimes(1))
+    const input = steer.mock.calls[0]![0]
+    expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
+      .toContain('Respond to argo by name')
+    await vi.waitFor(() => expect(adapter.requests).toHaveLength(2))
+    await vi.waitFor(() => expect(lead.session.events.some(event => event.type === 'assistant/message'
+      && event.data.message.content.some(block => block.type === 'text'
+        && block.text === 'Argo, revisaré la alternativa y te diré cómo seguimos.'))).toBe(true))
+    await ctx.agentTeams.sendMessage(worker, {
+      target: 'lead', purpose: 'update', content: content('Sigo buscando.'), delivery: 'quiet', signal: SIGNAL,
+    })
+    expect(steer).toHaveBeenCalledTimes(1)
+    ctx.agentTeams.interrupt(lead, 'argo')
+    await waitNoAgent(ctx, worker.id)
+  })
+
+  it('does not wake Kira for a quiet handoff after explicit user cancellation', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    const started = await spawn(ctx, lead, 'argo')
+    const worker = await waitRunning(ctx, started.member.id)
+    lead.session.append('turn/start', { turn: 1 })
+    lead.session.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
+    const steer = vi.spyOn(lead, 'steer')
+    const sent = await ctx.agentTeams.sendMessage(worker, {
+      target: 'lead', purpose: 'blocker', content: content('No hay fuentes.'), delivery: 'quiet', signal: SIGNAL,
+    })
+    expect(sent.status).toBe('accepted')
+    expect(steer).not.toHaveBeenCalled()
+    ctx.agentTeams.interrupt(lead, 'argo')
+    await waitNoAgent(ctx, worker.id)
+  })
+
   it('keeps quiet mail dormant, wakes on follow-up, preserves FIFO, and de-duplicates delivery', async () => {
     const { ctx, lead } = await setup(['hang', textResponse('beta first'), textResponse('beta resumed')])
     const alphaStarted = await spawn(ctx, lead, 'alpha')
