@@ -851,7 +851,7 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
       <p className={styles.intro}>{t('accountConnectionsHint')}</p>
       {entries.map((entry) => {
         const connected = entry.stored !== undefined
-        const busy = entry.inFlight || attempt?.status === 'pending'
+        const busy = entry.inFlight || (attempt?.status === 'pending' && attempt.key === entry.key)
         const methods = entry.methods.filter(method => method.id === 'oauth')
         return (
           <div key={entry.key} className={styles.authorizationActions}>
