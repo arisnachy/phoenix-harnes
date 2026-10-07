@@ -83,7 +83,7 @@ describe('Team Studio design document', () => {
       displayName: 'Constructor',
       enabled: false,
     })
-    expect(partial.members.some(member => member.id === 'not-a-runtime-id')).toBe(false)
+    expect(partial.members.map(member => String(member.id))).not.toContain('not-a-runtime-id')
 
     const many = normalizeTeamDesignDocument({
       version: 1,
