@@ -733,7 +733,7 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, recon
     ? runtime === undefined
       ? t('runtimeMissingStatus')
       : runtime.status === 'ready'
-        ? t('callableStatus')
+        ? runtime.toolNames.length > 0 ? t('callableStatus') : t('registryNoToolsStatus')
         : runtime.status === 'starting'
           ? t('connectingStatus')
           : runtime.status === 'auth-required'
@@ -777,7 +777,7 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, recon
       </div>
       <p className={connectorStyles['connectorDescription']}>{candidate.description}</p>
       <div className={connectorStyles['connectorFooter']}>
-        <span title={status} className={`${connectorStyles['connectorStatus'] ?? ''} ${needsRepair ? connectorStyles['connectorStatusError'] ?? '' : runtime?.status === 'ready' ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
+        <span title={status} className={`${connectorStyles['connectorStatus'] ?? ''} ${needsRepair ? connectorStyles['connectorStatusError'] ?? '' : runtime?.status === 'ready' && runtime.toolNames.length > 0 ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
           {status}{stale ? ` · ${t('registryCachedStatus')}` : ''}
         </span>
         <div className={connectorStyles['connectorActions']}>
