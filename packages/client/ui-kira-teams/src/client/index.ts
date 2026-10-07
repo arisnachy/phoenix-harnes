@@ -3,14 +3,23 @@ import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@phoe
 import { KiraTeamsDock } from './KiraTeamsDock.tsx'
 import type {} from '@phoenix-ai/dsh-api-remotes/client'
 import type { TeamChatReplyRequest } from '@phoenix-ai/dsh-agent-team/chat-types'
+import {
+  TEAM_DESIGN_SETTINGS_NAMESPACE,
+  normalizeTeamDesignDocument,
+  parseTeamDesignDocument,
+  type TeamDesignDocument,
+  type TeamDesignSettingsEnvelope,
+} from '@phoenix-ai/dsh-agent-team/design-types'
 import { TeamReplyDock, type TeamReplyChoice } from './TeamReplyDock.tsx'
 import { TeamAuthor } from './TeamAuthor.tsx'
 import { AssistantReactionAction, TeamMessageActions } from './TeamMessageActions.tsx'
 import { TeamMentionDock } from './TeamMentionDock.tsx'
 import { teamIdentityOf, KiraTeamMessageView } from './TeamChatMessage.tsx'
+import { TeamDesignerSection } from './TeamDesignerSection.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import type {} from '@phoenix-ai/dsh-client-ui-conversation/client'
+import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 import { en, es, NS, zh, type KiraTeamsKey } from './locales.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {
@@ -23,7 +32,7 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 export type { KiraTeamsDockProps, KiraTeamsInjected } from './KiraTeamsDock.tsx'
 
 /** Required services for the KIRA mission-control overlay contribution. */
-export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams']
+export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams', 'settingsScope']
 
 /** Register the KIRA activity strip and rail inside the center-column overlay so agents never consume chat width or cover the sidebar. */
 export function apply(ctx: ClientContext): void {
@@ -33,6 +42,43 @@ export function apply(ctx: ClientContext): void {
     key: 'kira-team-message', locale: NS,
   }, KiraTeamMessageView))
   const sessions = ctx.get('sessions') as unknown as ISessions
+  const teamDesign = ctx.settingsScope.bind<TeamDesignSettingsEnvelope>({
+    namespace: TEAM_DESIGN_SETTINGS_NAMESPACE,
+  })
+  const saveTeamDesign = async (document: TeamDesignDocument): Promise<void> => {
+    await teamDesign.set('document', JSON.stringify(normalizeTeamDesignDocument(document)))
+  }
+  const generateWithKira = async (userPrompt: string): Promise<void> => {
+    const sessionId = sessions.list.getSnapshot().current
+    if (sessionId === undefined) throw new Error('Abre una sesión de Phoenix para diseñar el equipo con Kira.')
+    const scope = sessions.scope(sessionId)
+    if (scope === undefined) throw new Error('La sesión actual todavía no está disponible.')
+    const current = parseTeamDesignDocument(teamDesign.getSnapshot().value?.document)
+    const prompt = [
+      'Rediseña y APLICA mi equipo Phoenix; no te limites a describir una propuesta.',
+      'Usa la herramienta design_team exactamente una vez cuando tengas el diseño final.',
+      'Conserva los 20 ids técnicos de especialistas; esos ids son internos y no deben mostrarse como una limitación al usuario.',
+      'Puedes cambiar libremente nombre visible, rol, sexo/identidad, personalidad, voz y avatar asignado de Kira y de cada especialista.',
+      'Mantén veinte especialistas distintos y útiles, además del líder. No cambies herramientas, permisos ni capacidades técnicas por razones estéticas.',
+      'Si la idea menciona una franquicia o personaje conocido, captura la vibra y los arquetipos con una reinterpretación original en vez de copiar personajes protegidos literalmente.',
+      'Si el usuario pide personas reales, trata la apariencia como referencia estilística y no inventes hechos personales.',
+      `Equipo actual: ${JSON.stringify(current)}`,
+      `Idea del usuario: ${userPrompt}`,
+      'Al terminar, confirma brevemente el nombre del equipo y que los 20 perfiles quedaron aplicados.',
+    ].join('\n')
+    await scope.conversation.send(prompt)
+  }
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'team-studio',
+    order: 25,
+    label: () => 'Equipo',
+    inject: () => ({
+      hooks: { teamDesign },
+      save: saveTeamDesign,
+      generateWithKira,
+    }),
+  }, TeamDesignerSection))
   ctx.slots.inject('conversation.chat.message-author', () => ctx.slots.register({ name: 'conversation.chat.message-author', id: 'kira', locale: NS }, TeamAuthor))
   const selectedReplies = new Map<SessionId, TeamReplyChoice>()
   const pendingRequests = new Map<string, { fingerprint: string; request: TeamChatReplyRequest }>()
