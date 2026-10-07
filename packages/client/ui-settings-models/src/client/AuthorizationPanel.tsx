@@ -921,7 +921,17 @@ export function ConnectorsSettingsSection({ api,
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
-  const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } = useAuthorizationAttempt(api, () => {
+  const {
+    attempt,
+    answer,
+    setAnswer,
+    failure,
+    reserveOAuthPopup,
+    closeOAuthPopup,
+    begin,
+    submitAnswer,
+    cancel,
+  } = useAuthorizationAttempt(api, () => {
     setRefresh(current => current + 1)
     onAuthorized()
   })
@@ -1204,10 +1214,15 @@ export function ConnectorsSettingsSection({ api,
     const reconnect = registry?.reconnect?.bind(registry)
     if (registry === undefined || reconnect === undefined || reconnectingServerName !== undefined) return
     const recoverAuthorization = runtime.status === 'auth-required'
+    // Browser popup policy requires window.open() to happen in the original
+    // click stack. The MCP authorization flow may register only after this
+    // reconnect finishes, so reserve the blank tab now and navigate it later.
+    if (recoverAuthorization) reserveOAuthPopup()
     setCatalogFailure(undefined)
     setReconnectingServerName(runtime.serverName)
     void reconnect({ serverName: runtime.serverName }).then(async (result) => {
       if (!result.accepted) {
+        if (recoverAuthorization) closeOAuthPopup()
         setCatalogFailure(connectorT('reconnectRequiredStatus'))
         return
       }
@@ -1233,8 +1248,12 @@ export function ConnectorsSettingsSection({ api,
           return
         }
       }
-    }).catch((error: unknown) => { setCatalogFailure(String(error)) })
-      .finally(() => { setReconnectingServerName(undefined) })
+      closeOAuthPopup()
+      setCatalogFailure(connectorT('reconnectRequiredStatus'))
+    }).catch((error: unknown) => {
+      if (recoverAuthorization) closeOAuthPopup()
+      setCatalogFailure(String(error))
+    }).finally(() => { setReconnectingServerName(undefined) })
   }
 
   const repairManagedConnector = (connector: ManagedMcpConnectorView): void => {
