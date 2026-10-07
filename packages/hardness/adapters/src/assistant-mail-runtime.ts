@@ -502,6 +502,10 @@ export function installAssistantMail(ctx: Context,
           if (Object.keys(args).length > 0) throw new Error('mail recovery uses only the persisted owner')
           await recoverEnrollment()
         }
+        else if (endpoint === 'claim-status') {
+          if (Object.keys(args).length > 0) throw new Error('mail claim confirmation does not accept parameters')
+          await onboarding.confirmClaim()
+        }
         else if (endpoint === 'owner') {
           if (Object.keys(args).some(key => key !== 'ownerEmail') || args.ownerEmail === undefined) {
             throw new Error('mail owner repair requires only ownerEmail')
