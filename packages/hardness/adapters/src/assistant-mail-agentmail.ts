@@ -269,12 +269,12 @@ export class AgentMailTransport implements AssistantMailTransport {
     let subscribed = false
     let disposed = false
     let timer: ReturnType<typeof setTimeout> | undefined
-    const aborted = (): void => {
+    function aborted(): void {
       disposed = true
       settleReady(new Error('mail wake subscription cancelled'))
       try { socket.close() } catch { /* The socket may already be closing. */ }
     }
-    const settleReady = (error?: Error): void => {
+    function settleReady(error?: Error): void {
       if (settled) return
       settled = true
       if (timer !== undefined) clearTimeout(timer)
