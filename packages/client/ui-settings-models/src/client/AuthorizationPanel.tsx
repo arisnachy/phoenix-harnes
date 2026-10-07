@@ -41,6 +41,7 @@ export interface McpRegistryCandidateView {
   repositoryUrl?: string
   websiteUrl?: string
   remoteUrl?: string
+  remoteSetupRequired?: 'headers' | 'variables'
 }
 
 /** One Host-proxied Official MCP Registry search result safe for the browser. */
@@ -717,16 +718,33 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, recon
   const displayName = candidate.title
   const technicalName = normalize(displayName) === normalize(candidate.name) ? undefined : candidate.name
   const installable = candidate.status === 'active' && candidate.remoteUrl !== undefined
-  const broken = managed !== undefined && (runtime === undefined || runtime.status === 'failed')
+  const needsRepair = managed !== undefined && (runtime === undefined || runtime.status === 'failed')
   const canReconnect = runtime !== undefined
-    && (runtime.status === 'failed' || runtime.status === 'disconnected')
+    && (runtime.status === 'failed' || runtime.status === 'disconnected' || runtime.status === 'auth-required')
     && onReconnect !== undefined
-  const status = broken
-    ? t('brokenStatus')
-    : managed !== undefined
-      ? t('installedStatus')
-      : candidate.status === 'deprecated' || candidate.status === 'deleted'
-        ? t('registryDeprecatedStatus')
+  const setupStatus = candidate.remoteSetupRequired === 'headers'
+    ? t('registryHeadersSetupStatus')
+    : candidate.remoteSetupRequired === 'variables'
+      ? t('registryVariablesSetupStatus')
+      : candidate.packages.length > 0
+        ? t('registryPackageSetupStatus')
+        : t('registryNoCompatibleRemoteStatus')
+  const status = managed !== undefined
+    ? runtime === undefined
+      ? t('runtimeMissingStatus')
+      : runtime.status === 'ready'
+        ? runtime.toolNames.length > 0 ? t('callableStatus') : t('registryNoToolsStatus')
+        : runtime.status === 'starting'
+          ? t('connectingStatus')
+          : runtime.status === 'auth-required'
+            ? t('authorizationRequiredStatus')
+            : runtime.status === 'disconnected'
+              ? t('disconnectedStatus')
+              : t('brokenStatus')
+    : candidate.status === 'deprecated' || candidate.status === 'deleted'
+      ? t('registryDeprecatedStatus')
+      : candidate.status === 'active' && !installable
+        ? setupStatus
         : t('registryListedStatus')
   return (
     <article className={`${connectorStyles['connectorCard'] ?? ''} ${connectorStyles['registryCard'] ?? ''}`.trim()} data-registry-server={candidate.name}>
@@ -759,7 +777,7 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, recon
       </div>
       <p className={connectorStyles['connectorDescription']}>{candidate.description}</p>
       <div className={connectorStyles['connectorFooter']}>
-        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${broken ? connectorStyles['connectorStatusError'] ?? '' : managed !== undefined ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
+        <span title={status} className={`${connectorStyles['connectorStatus'] ?? ''} ${needsRepair ? connectorStyles['connectorStatusError'] ?? '' : runtime?.status === 'ready' && runtime.toolNames.length > 0 ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
           {status}{stale ? ` · ${t('registryCachedStatus')}` : ''}
         </span>
         <div className={connectorStyles['connectorActions']}>
@@ -785,10 +803,10 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, recon
                 if (runtime !== undefined) onReconnect?.(runtime)
               }}
             >
-              {reconnecting ? t('connectingStatus') : t('reconnect')}
+              {reconnecting ? t('connectingStatus') : runtime?.status === 'auth-required' ? t('authorize') : t('reconnect')}
             </button>
           ) : null}
-          {broken && managed.source !== undefined && onRepair !== undefined ? (
+          {needsRepair && managed.source !== undefined && onRepair !== undefined ? (
             <button
               type="button"
               className={hubStyles['compactButton']}

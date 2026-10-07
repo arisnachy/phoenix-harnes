@@ -65,6 +65,8 @@ export interface McpRegistryCandidate {
   readonly repositoryUrl?: string
   readonly websiteUrl?: string
   readonly remoteUrl?: string
+  /** A remote is listed but cannot be installed from a bare URL. */
+  readonly remoteSetupRequired?: 'headers' | 'variables'
 }
 
 /** Browser/model request for an Official MCP Registry name search. */

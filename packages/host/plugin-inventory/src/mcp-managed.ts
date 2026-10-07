@@ -626,6 +626,12 @@ function selectInstallableCandidate(
     throw new Error(`MCP registry candidate ${candidate.name} is not active`)
   }
   if (candidate.remoteUrl === undefined) {
+    if (candidate.remoteSetupRequired === 'headers') {
+      throw new Error('MCP requires provider-specific authorization headers; configure this server manually rather than installing a broken connection')
+    }
+    if (candidate.remoteSetupRequired === 'variables') {
+      throw new Error('MCP requires a tenant-specific URL or variables; configure its endpoint manually before connecting')
+    }
     throw new Error('Only registry-listed Streamable HTTP MCP servers can be installed automatically; review package-based servers manually')
   }
   return candidate
