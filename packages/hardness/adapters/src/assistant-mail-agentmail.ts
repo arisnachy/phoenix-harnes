@@ -7,16 +7,18 @@ import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 export type AgentMailFailureReason =
   | 'verification-required'
   | 'credential-rejected'
+  | 'signup-rejected'
   | 'permission-missing'
   | 'limit-exceeded'
   | 'message-rejected'
 
-function providerFailureReason(status: number, code: string | undefined, fix: string | undefined): AgentMailFailureReason | undefined {
-  if (status === 401) return 'credential-rejected'
+function providerFailureReason(status: number, code: string | undefined, fix: string | undefined,
+  authenticated: boolean): AgentMailFailureReason | undefined {
+  if (status === 401) return authenticated ? 'credential-rejected' : 'signup-rejected'
   if (status !== 403) return undefined
   if ((code === 'missing_permission' || code === 'message_rejected')
     && fix !== undefined && /agent\/verify|verif(?:y|ication)/iu.test(fix)) return 'verification-required'
-  if (code === undefined) return 'credential-rejected'
+  if (code === undefined) return authenticated ? 'credential-rejected' : 'signup-rejected'
   if (code === 'missing_permission') return 'permission-missing'
   if (code === 'limit_exceeded') return 'limit-exceeded'
   if (code === 'message_rejected') return 'message-rejected'
@@ -27,6 +29,7 @@ function providerFailureMessage(status: number, reason: AgentMailFailureReason |
   if (status === 429) return 'mail quota reached; no paid upgrade will be requested'
   if (reason === 'verification-required') return 'AgentMail requires Kira mailbox verification again; recover access and enter the six-digit owner code'
   if (reason === 'credential-rejected') return 'AgentMail rejected the stored credential; Phoenix can recover the existing Kira mailbox automatically'
+  if (reason === 'signup-rejected') return 'AgentMail rejected owner-bound mailbox signup; Phoenix can retry through receive-only agent onboarding'
   if (reason === 'permission-missing') return 'AgentMail credential permissions are insufficient; recover Kira mailbox access to renew the credential'
   if (reason === 'limit-exceeded') return 'AgentMail free mailbox/resource limit reached; remove an old inbox before creating another'
   if (reason === 'message-rejected') return 'AgentMail rejected the message; review the recipient or mailbox verification state'
@@ -45,7 +48,7 @@ export class AgentMailHttpError extends Error {
   }
 }
 
-async function responseError(response: Response): Promise<AgentMailHttpError> {
+async function responseError(response: Response, authenticated: boolean): Promise<AgentMailHttpError> {
   let code: string | undefined
   let fix: string | undefined
   try {
@@ -61,7 +64,7 @@ async function responseError(response: Response): Promise<AgentMailHttpError> {
   } catch {
     // A malformed provider error body must not hide the confirmed HTTP status.
   }
-  return new AgentMailHttpError(response.status, code, providerFailureReason(response.status, code, fix))
+  return new AgentMailHttpError(response.status, code, providerFailureReason(response.status, code, fix, authenticated))
 }
 
 /** Official provider API; errors deliberately exclude provider bodies and secrets.
@@ -87,7 +90,7 @@ export async function agentMailRequest(path: string,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
   })
-  if (!response.ok) throw await responseError(response)
+  if (!response.ok) throw await responseError(response, key !== undefined)
   const text = await response.text()
   if (text.length > 2_000_000) throw new Error('mail provider response exceeds limit')
   try { return JSON.parse(text) as unknown } catch { throw new Error('invalid mail provider JSON response') }
@@ -111,7 +114,7 @@ export async function agentMailDeleteInbox(inboxId: string,
     headers: { Authorization: `Bearer ${mailString(key, 8192)}` },
     signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
   })
-  if (!response.ok && response.status !== 404) throw await responseError(response)
+  if (!response.ok && response.status !== 404) throw await responseError(response, true)
 }
 
 /** AgentMail implementation with outgoing WebSocket notifications and authenticated-only reconciliation. */
