@@ -63,6 +63,7 @@ async function provideSlotFaces(ctx: Context): Promise<void> {
       'conversation.chat.message-author': { kind: 'list', scope: 'session' },
       'conversation.input.dock': { kind: 'list', scope: 'session' },
       'conversation.chat.node': { kind: 'keyed', scope: 'session' },
+      'settings.section': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
 }
@@ -241,7 +242,7 @@ describe('team chat identity', () => {
 
 describe('apply', () => {
   it('declares the services it binds', () => {
-    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams'])
+    expect(inject).toEqual(['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams', 'settingsScope'])
   })
 
   it('registers one shell.overlay entry so KIRA never reserves conversation width', async () => {
