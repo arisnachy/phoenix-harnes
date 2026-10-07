@@ -157,14 +157,14 @@ it('shows owner-link recovery instead of an OTP field when AgentMail refused the
 })
 
 
-it('copies the saved AgentMail signup key and opens the claim page without rendering the secret', async () => {
-  const writeText = vi.fn(async (_value: string) => {})
-  Object.defineProperty(globalThis.navigator, 'clipboard', {
-    configurable: true,
-    value: { writeText },
-  })
+it('asks the Host to copy the saved signup key and opens the claim page without receiving the secret', async () => {
   const open = vi.fn(() => null)
   vi.stubGlobal('open', open)
+  const prepareClaim = vi.fn(async () => ({
+    copied: true as const,
+    inboxId: 'kira@agentmail.to',
+    claimUrl: 'https://console.agentmail.to/claim',
+  }))
   const client = {
     call: async () => ({
       account: {
@@ -177,23 +177,18 @@ it('copies the saved AgentMail signup key and opens the claim page without rende
       connection: 'disconnected',
       jobs: [],
     }),
-    prepareClaim: async () => ({
-      apiKey: 'am_us_super_secret',
-      inboxId: 'kira@agentmail.to',
-      claimUrl: 'https://console.agentmail.to/claim',
-    }),
+    prepareClaim,
   }
 
   render(<AssistantMailPanel client={client} />)
   fireEvent.click(await screen.findByRole('button', { name: 'Copiar clave y abrir AgentMail' }))
 
-  expect(await screen.findByText(/Clave de kira@agentmail\.to copiada/u)).toBeTruthy()
-  expect(writeText).toHaveBeenCalledWith('am_us_super_secret')
+  expect(await screen.findByText(/Clave de kira@agentmail\.to copiada por Phoenix/u)).toBeTruthy()
+  expect(prepareClaim).toHaveBeenCalledTimes(1)
   expect(open).toHaveBeenCalledWith('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer')
-  expect(screen.queryByText('am_us_super_secret')).toBeNull()
+  expect(document.body.textContent).not.toContain('am_us_')
 
   vi.unstubAllGlobals()
-  Object.defineProperty(globalThis.navigator, 'clipboard', { configurable: true, value: undefined })
 })
 
 
