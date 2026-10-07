@@ -75,8 +75,8 @@ export function useAuthorizationAttempt(
   const [failure, setFailure] = useState<string | undefined>()
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
-  const pendingPopupNavigation = useRef<string>()
-  const pendingPopupStatus = useRef<{ message: string; state: 'waiting' | 'error' }>()
+  const pendingPopupNavigation = useRef<string | undefined>(undefined)
+  const pendingPopupStatus = useRef<{ message: string; state: 'waiting' | 'error' } | undefined>(undefined)
 
   const closeReservedPopup = useCallback((): void => {
     const popup = popupRef.current
