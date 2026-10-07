@@ -1,7 +1,7 @@
 /** Durable email enrollment; ambiguous signup is never automatically repeated. */
 import { SessionId } from '@phoenix-ai/dsh-session'
 import { createHash, randomInt, randomUUID } from 'node:crypto'
-import type { MailAccount } from './assistant-mail-types.ts'
+import type { MailAccount, MailConsoleKeyCheck } from './assistant-mail-types.ts'
 import { MailFile, mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 import { AgentMailHttpError, agentMailDeleteInbox, agentMailRequest } from './assistant-mail-agentmail.ts'
 
@@ -192,6 +192,64 @@ export class MailOnboarding {
     })
   }
 
+  /** Validate a human AgentMail Console key without mutating Phoenix state.
+   * This follows AgentMail's documented recovery path: prove organization ownership,
+   * confirm the key can enumerate inboxes, and expose quota before any inbox is created.
+   * @param apiKey Bearer key created in AgentMail Console.
+   * @returns Secret-free validation facts for the Settings UI.
+   */
+  async inspectConsoleKey(apiKey: string): Promise<MailConsoleKeyCheck> {
+    const key = mailString(apiKey, 8192)
+    if (!key.startsWith('am_') || key.length <= 3) {
+      throw new Error('enter a complete AgentMail API key beginning with am_')
+    }
+    let organization: Record<string, unknown>
+    try {
+      organization = mailRecord(await agentMailRequest('/organizations', key, this.options.timeoutMs,
+        this.options.fetch ?? fetch))
+    } catch (error) {
+      if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') {
+        throw new Error('this API key is not organization-scoped or lacks organization access')
+      }
+      if (error instanceof AgentMailHttpError
+        && (error.reason === 'credential-rejected' || error.status === 401 || error.status === 403)) {
+        throw new Error('AgentMail rejected this API key; create a new key in Console and try again')
+      }
+      throw error
+    }
+    const organizationId = mailString(organization.organization_id)
+    if (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0) {
+      throw new Error('use an API key created in your human-owned AgentMail Console organization')
+    }
+
+    let inboxRead = true
+    try {
+      await agentMailRequest('/inboxes?limit=1', key, this.options.timeoutMs, this.options.fetch ?? fetch)
+    } catch (error) {
+      if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') inboxRead = false
+      else throw error
+    }
+
+    const inboxCount = typeof organization.inbox_count === 'number'
+      && Number.isInteger(organization.inbox_count) && organization.inbox_count >= 0
+      ? organization.inbox_count
+      : 0
+    const inboxLimit = typeof organization.inbox_limit === 'number'
+      && Number.isInteger(organization.inbox_limit) && organization.inbox_limit >= 0
+      ? organization.inbox_limit
+      : undefined
+    return {
+      valid: true,
+      organizationId,
+      ...(typeof organization.authentication_type === 'string'
+        ? { authenticationType: organization.authentication_type.slice(0, 128) } : {}),
+      inboxCount,
+      ...(inboxLimit === undefined ? {} : { inboxLimit }),
+      capacityAvailable: inboxLimit === undefined || inboxCount < inboxLimit,
+      inboxRead,
+    }
+  }
+
   /** Replace a failed agent-signup enrollment with an inbox inside a human-owned Console organization.
    * AgentMail explicitly recommends this path when the human already has a Console account and claim cannot
    * create another organization: create a Console API key, give it to the agent, then create a fresh inbox.
@@ -239,7 +297,7 @@ export class MailOnboarding {
             `/inboxes/${encodeURIComponent(`${request.username}@agentmail.to`)}`,
             key, this.options.timeoutMs, this.options.fetch ?? fetch,
           ))
-          return await this.finishConsoleInbox(found, request)
+          return await this.finishConsoleInbox(found, request, key)
         } catch (error) {
           // A confirmed 404 proves the prior create did not land. Any other result stays ambiguous
           // and must not mint a different username.
@@ -263,17 +321,29 @@ export class MailOnboarding {
         if (error instanceof AgentMailHttpError && error.status >= 400 && error.status < 500 && error.status !== 408) throw error
         throw new Error('new Console inbox confirmation is ambiguous; retry with the same API key so Phoenix can reconcile it')
       }
-      return this.finishConsoleInbox(created, request)
+      return this.finishConsoleInbox(created, request, key)
     })
   }
 
   private async finishConsoleInbox(
     result: Record<string, unknown>,
     request: { readonly username: string; readonly clientId: string },
+    key: string,
   ): Promise<MailAccount> {
     const inboxId = mailAddress(mailString(result.inbox_id ?? result.email))
     if (inboxId !== `${request.username}@agentmail.to`) throw new Error('new AgentMail inbox address mismatch')
     if (result.client_id !== undefined && result.client_id !== request.clientId) throw new Error('new AgentMail inbox identity mismatch')
+    try {
+      await agentMailRequest(
+        `/inboxes/${encodeURIComponent(inboxId)}/messages?limit=1&include_spam=false&include_blocked=false&include_unauthenticated=false&labels=received`,
+        key, this.options.timeoutMs, this.options.fetch ?? fetch,
+      )
+    } catch (error) {
+      if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') {
+        throw new Error('this AgentMail API key needs message_read permission before Kira can use the new inbox')
+      }
+      throw error
+    }
     await this.file.change((current) => {
       const {
         challengeHash: _challenge,
