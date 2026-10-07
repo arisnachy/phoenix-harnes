@@ -100,7 +100,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         ? 'AgentMail rechazó la vinculación del propietario. Phoenix conservará el buzón y evitará repetir el alta.'
         : message.includes('has not exposed Console ownership yet')
           ? 'AgentMail todavía no confirma la reclamación. Termina “Claim inbox” en la otra pestaña y vuelve a comprobar; el cambio puede tardar unos minutos.'
-          : message)
+          : message.includes('rejected this API key')
+            ? 'AgentMail rechazó esta API key. Crea una nueva en tu Console y vuelve a intentarlo.'
+            : message.includes('human-owned AgentMail Console organization')
+              ? 'Usa una API key creada dentro de tu cuenta humana de AgentMail Console.'
+              : message.includes('inbox_create permission')
+                ? 'La API key necesita permiso para crear buzones (inbox_create). Crea otra clave con ese permiso habilitado.'
+                : message)
     } finally {
       setBusy(false)
     }
