@@ -70,7 +70,7 @@ export function useAuthorizationAttempt(
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
   const navigatedRef = useRef(false)
-  const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const popupTimeoutRef = useRef<number | undefined>(undefined)
   const oauthAttemptRef = useRef(false)
 
   const closeReservedPopup = useCallback((): void => {
