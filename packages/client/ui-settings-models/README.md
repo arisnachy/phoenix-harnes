@@ -44,3 +44,5 @@ None; this package neither assembles nor sends a provider request.
 - **Only pi-ai routes can be hand-declared** — the custom-provider card writes into `llm-pi-ai`, the one namespace whose profiles describe a whole provider. A `llm-deepseek` route is a composition fact, not something this page can create.
 - **Interrogation covers OpenAI-compatible endpoints** — the adapter reads only that model-list response format, so a gateway speaking another protocol reports that it cannot be asked and its models are entered by hand.
 - **Undeclared live routes render nowhere** — a route registered without a configurable-provider declaration has no settings address; it stays visible in pickers but not on this page's rows.
+
+Authorization continues and preserves the manual consent link when a browser rejects opening a popup by throwing. Account-family matching uses whole normalized tokens rather than arbitrary substrings. A stored grant does not restart sign-in solely because live runtime state is absent; failed/disconnected runtimes reconnect with the existing grant, while an explicit auth-required state still offers reauthorization.

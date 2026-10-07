@@ -1080,7 +1080,7 @@ describe('connectors settings section', () => {
     expect(screen.queryByText('BigQuery')).toBeNull()
   })
 
-  it('marks a stored OAuth grant without live telemetry as reconnect-required', async () => {
+  it('keeps a stored OAuth grant without live telemetry and does not restart sign-in', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
         key: 'mcp-client/example',
@@ -1094,9 +1094,14 @@ describe('connectors settings section', () => {
     } as unknown as IApiClient['authorization']
 
     renderHub(api)
-    expect(await screen.findByText('Reconnect required')).toBeTruthy()
-    expect(screen.queryByText('Connected', { selector: 'span' })).toBeNull()
-    expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy()
+    const card = await waitFor(() => {
+      const value = document.querySelector('[data-authorization-key="mcp-client/example"]')
+      if (value === null) throw new Error('Stored account was not rendered')
+      return value
+    })
+    expect(card.textContent).toContain('Reconnect required')
+    expect(Array.from(card.querySelectorAll('button')).some(button => button.textContent === 'Reconnect')).toBe(false)
+    expect(api.begin).not.toHaveBeenCalled()
   })
 
   it('keeps retired Jev out of both the catalog and Official MCP Registry results', async () => {

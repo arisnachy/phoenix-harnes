@@ -351,8 +351,11 @@ function connectorStatus(
 
 function entryMatchesFamily(entry: Entry, family: string | undefined): boolean {
   if (family === undefined) return false
-  const needle = normalize(family)
-  return [entry.key, entry.label, entry.telemetry?.provider ?? ''].some(value => normalize(value).includes(needle))
+  const needle = normalize(family).split(/[^a-z0-9]+/u).filter(Boolean).join('-')
+  return [entry.key, entry.label, entry.telemetry?.provider ?? ''].some((value) => {
+    const tokens = normalize(value).split(/[^a-z0-9]+/u).filter(Boolean).join('-')
+    return `-${tokens}-`.includes(`-${needle}-`)
+  })
 }
 
 function entryMatchesDefinitionAuthorization(entry: Entry, definition: ConnectorDefinition): boolean {
@@ -503,8 +506,10 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, authorizationProgress, onAuthorize, onConfigure,
-  onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove, pending, installingCurated, reconnecting, repairing, removing }: {
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, authorizationProgress,
+  onAuthorize, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove,
+  pending, installingCurated, reconnecting,
+  repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
   account?: Entry | undefined
@@ -576,9 +581,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     && !connectedByAccount
     && openClaw?.connected !== true
     && !openClawRuntimeMissing
-    && (authorizationAccount.stored === undefined
-      || mcpRuntime?.status === 'auth-required'
-      || mcpRuntime === undefined)
+    && (authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required')
   const canReconnect = mcpRuntime !== undefined
     && (mcpRuntime.status === 'failed'
       || mcpRuntime.status === 'disconnected'
@@ -658,21 +661,23 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               {removing ? t('uninstalling') : t('uninstall')}
             </button>
           ) : null}
-          {managed === undefined && mcpRuntime === undefined && authorizationAccount === undefined && openClaw?.connected !== true && definition.curatedMcp === true && onInstallCurated !== undefined ? (
-            <button
-              className={connectorStyles['connectorPrimaryButton']}
-              type="button"
-              disabled={pending || installingCurated}
-              onClick={onInstallCurated}
-            >
-              {installingCurated ? t('installing') : t('install')}
-            </button>
-          ) : null}
-          {managed === undefined && (authorizationAccount === undefined || openClawRuntimeMissing) && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
-            <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
-              {t('findOfficialConnector')}
-            </button>
-          ) : null}
+          {managed === undefined && mcpRuntime === undefined && authorizationAccount === undefined
+            && openClaw?.connected !== true && definition.curatedMcp === true && onInstallCurated !== undefined ? (
+              <button
+                className={connectorStyles['connectorPrimaryButton']}
+                type="button"
+                disabled={pending || installingCurated}
+                onClick={onInstallCurated}
+              >
+                {installingCurated ? t('installing') : t('install')}
+              </button>
+            ) : null}
+          {managed === undefined && (authorizationAccount === undefined || openClawRuntimeMissing)
+            && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
+              <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
+                {t('findOfficialConnector')}
+              </button>
+            ) : null}
           {managed === undefined && authorizationAccount === undefined && openClaw?.connected !== true && definition.provenance === 'registry-listed' && onFindRegistry !== undefined ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindRegistry}>
               {t('findConnector')}
@@ -1471,25 +1476,26 @@ export function ConnectorsSettingsSection({ api,
                   <div className={connectorStyles['connectorFooter']}>
                     <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
                     <div className={connectorStyles['connectorActions']}>
-                      {preferredMethod === undefined ? null : (
-                        <button
-                          type="button"
-                          className={connectorStyles['connectorPrimaryButton']}
-                          disabled={thisAuthorizationPending || entry.inFlight
+                      {preferredMethod === undefined || (entry.stored !== undefined
+                        && runtime?.status !== 'auth-required' && !runtimeReconnect) ? null : (
+                          <button
+                            type="button"
+                            className={connectorStyles['connectorPrimaryButton']}
+                            disabled={thisAuthorizationPending || entry.inFlight
                             || (runtimeReconnect && reconnectingServerName !== undefined)}
-                          onClick={() => {
-                            if (runtimeReconnect && runtime !== undefined) {
-                              reconnectMcpConnector(runtime)
-                              return
-                            }
-                            begin(entry.key, preferredMethod.id)
-                          }}
-                        >
-                          {runtimeReconnect && reconnectingServerName === runtime?.serverName
-                            ? connectorT('connectingStatus')
-                            : thisAuthorizationPending ? t('signingIn') : actionLabel}
-                        </button>
-                      )}
+                            onClick={() => {
+                              if (runtimeReconnect && runtime !== undefined) {
+                                reconnectMcpConnector(runtime)
+                                return
+                              }
+                              begin(entry.key, preferredMethod.id)
+                            }}
+                          >
+                            {runtimeReconnect && reconnectingServerName === runtime?.serverName
+                              ? connectorT('connectingStatus')
+                              : thisAuthorizationPending ? t('signingIn') : actionLabel}
+                          </button>
+                        )}
                       {entry.stored === undefined || entry.disconnectable !== true ? null : (
                         <button
                           type="button"
@@ -1548,58 +1554,58 @@ export function ConnectorsSettingsSection({ api,
                 && authorizationKey !== undefined
                 && attempt.key === authorizationKey
               return (
-              <CatalogCard
-                key={row.definition.id}
-                definition={row.definition}
-                live={row.live}
-                account={row.account}
-                mcpRuntime={row.mcpRuntime}
-                managed={row.managed}
-                openClaw={row.openClaw}
-                connected={row.connected}
-                t={connectorT}
-                authorizationProgress={attempt?.key === authorizationKey ? (
-                  <AuthorizationAttemptProgress
-                    attempt={attempt}
-                    answer={answer}
-                    setAnswer={setAnswer}
-                    submitAnswer={submitAnswer}
-                    cancel={cancel}
-                    t={t}
-                  />
-                ) : undefined}
-                pending={rowAuthorizationPending || jevBusy}
-                installingCurated={installingCuratedId === row.definition.id}
-                reconnecting={row.mcpRuntime !== undefined && reconnectingServerName === row.mcpRuntime.serverName}
-                repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
-                removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
-                onAuthorize={(entry) => {
-                  const method = entry.methods[0]
-                  if (method !== undefined) begin(entry.key, method.id)
-                }}
-                onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
-                  ? undefined
-                  : () => { installCuratedConnector(row.definition) }}
-                onFindOfficial={mcpRegistry === undefined || row.definition.registryName === undefined
-                  || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
-                  ? undefined
-                  : () => { findOfficialConnector(row.definition) }}
-                onFindRegistry={mcpRegistry === undefined || row.definition.provenance !== 'registry-listed'
-                  ? undefined
-                  : () => {
-                    setCatalogFailure(undefined)
-                    setRegistryFailure(false)
-                    setFilter('available')
-                    setQuery(row.definition.name)
+                <CatalogCard
+                  key={row.definition.id}
+                  definition={row.definition}
+                  live={row.live}
+                  account={row.account}
+                  mcpRuntime={row.mcpRuntime}
+                  managed={row.managed}
+                  openClaw={row.openClaw}
+                  connected={row.connected}
+                  t={connectorT}
+                  authorizationProgress={attempt?.key === authorizationKey ? (
+                    <AuthorizationAttemptProgress
+                      attempt={attempt}
+                      answer={answer}
+                      setAnswer={setAnswer}
+                      submitAnswer={submitAnswer}
+                      cancel={cancel}
+                      t={t}
+                    />
+                  ) : undefined}
+                  pending={rowAuthorizationPending || jevBusy}
+                  installingCurated={installingCuratedId === row.definition.id}
+                  reconnecting={row.mcpRuntime !== undefined && reconnectingServerName === row.mcpRuntime.serverName}
+                  repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
+                  removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
+                  onAuthorize={(entry) => {
+                    const method = entry.methods[0]
+                    if (method !== undefined) begin(entry.key, method.id)
                   }}
-                onReconnect={mcpRegistry?.reconnect === undefined ? undefined : reconnectMcpConnector}
-                onRepair={mcpRegistry?.repair === undefined ? undefined : repairManagedConnector}
-                onRemove={mcpRegistry?.remove === undefined ? undefined : removeManagedConnector}
-                onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
-                  setJevFailure(undefined)
-                  setJevSetupOpen(true)
-                } : undefined}
-              />
+                  onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
+                    ? undefined
+                    : () => { installCuratedConnector(row.definition) }}
+                  onFindOfficial={mcpRegistry === undefined || row.definition.registryName === undefined
+                  || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
+                    ? undefined
+                    : () => { findOfficialConnector(row.definition) }}
+                  onFindRegistry={mcpRegistry === undefined || row.definition.provenance !== 'registry-listed'
+                    ? undefined
+                    : () => {
+                      setCatalogFailure(undefined)
+                      setRegistryFailure(false)
+                      setFilter('available')
+                      setQuery(row.definition.name)
+                    }}
+                  onReconnect={mcpRegistry?.reconnect === undefined ? undefined : reconnectMcpConnector}
+                  onRepair={mcpRegistry?.repair === undefined ? undefined : repairManagedConnector}
+                  onRemove={mcpRegistry?.remove === undefined ? undefined : removeManagedConnector}
+                  onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {
+                    setJevFailure(undefined)
+                    setJevSetupOpen(true)
+                  } : undefined}
+                />
               )
             })}
           </div>

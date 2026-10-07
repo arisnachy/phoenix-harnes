@@ -99,7 +99,10 @@ export function useAuthorizationAttempt(
     } catch {
       popupRef.current = null
     }
-    const popup = window.open(oauthWaitingPageUrl(), '_blank')
+    let popup: Window | null = null
+    try { popup = window.open(oauthWaitingPageUrl(), '_blank') } catch {
+      // Embedded browsers may throw instead of returning null for blocked windows.
+    }
     popupRef.current = popup
     if (popup !== null) return
     setFailure('El navegador bloqueó la ventana de autorización. PHOENIX seguirá preparando el enlace; usa “Abrir página de autorización” cuando aparezca.')
@@ -152,7 +155,10 @@ export function useAuthorizationAttempt(
       }
       popupRef.current = null
     }
-    const fallback = window.open(url, '_blank')
+    let fallback: Window | null = null
+    try { fallback = window.open(url, '_blank') } catch {
+      // Preserve the Host attempt and manual consent link when automatic opening fails.
+    }
     popupRef.current = fallback
     if (fallback === null) {
       setFailure('No pude abrir automáticamente la página del proveedor. Pulsa “Abrir página de autorización” en esta tarjeta para continuar.')

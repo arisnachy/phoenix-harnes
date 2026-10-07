@@ -27,3 +27,5 @@ None; this package never assembles model input.
 - **Point-in-time plugin state only** — the inventory contains no durable plugin failure history or subscription; a missing root Fiber is reported as `null` regardless of why no live root exists.
 - **Updater progress is phase-based** — the updater reports source, dependency, build, smoke, activation, and rollback phases rather than byte-level download percentages.
 - **Restart is intentionally narrow** — Web can request activation only for the updater's exact prepared `ready` target; arbitrary checkout switching and plugin mutation are outside this service.
+
+Registry installation accepts only concrete remote endpoints. URI templates with literal or percent-encoded braces are excluded from automatic installation, allowing a later concrete endpoint in the same server entry to be selected.

@@ -135,6 +135,19 @@ describe('authorization consent window', () => {
     open.mockRestore()
   })
 
+  it('starts authorization and exposes the consent link when opening a window throws', async () => {
+    const open = vi.spyOn(window, 'open').mockImplementation(() => { throw new Error('Window unavailable') })
+    const api = panelApi(consentNotice)
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      expect(api.begin).toHaveBeenCalledWith({ key: KEY, method: 'oauth' })
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: /open/i }).getAttribute('href')).toBe(CONSENT_URL)
+      }, { timeout: 3000 })
+    } finally { open.mockRestore() }
+  })
+
   it('keeps the reserved Phoenix page visible and reports a start failure there', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
@@ -323,7 +336,7 @@ describe('authorization popup isolation and pre-consent prompts', () => {
         )
       }, { timeout: 3000 })
       expect(reserved.close).not.toHaveBeenCalled()
-      const accountCard = document.querySelector(`[data-authorization-key="${KEY}"]`)
+      const accountCard = document.querySelector('[data-connector-id="notion"]')
       expect(accountCard?.textContent).toContain('Google Desktop OAuth client ID')
       expect(screen.getByText('Google Desktop OAuth client ID')).toBeTruthy()
       answered = true
