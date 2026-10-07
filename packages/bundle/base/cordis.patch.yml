@@ -457,6 +457,16 @@
     - id: subagent-codex
       name: '@phoenix-ai/dsh-subagent-codex'
 
+    # Execution-only Codex sibling. Its app-server thread uses the official
+    # on-request + auto_review permission lane and is runtime-gated to an
+    # active OpenAI Codex parent; the default provider above remains the sole
+    # ChatGPT/Codex account owner.
+    - id: subagent-codex-auto-review
+      name: '@phoenix-ai/dsh-subagent-codex'
+      config:
+        providerName: codex-auto-review
+        permissionMode: approve-for-me
+
     - id: subagent-spawn-in-process
       name: '@phoenix-ai/dsh-subagent-spawn-in-process'
       config:
