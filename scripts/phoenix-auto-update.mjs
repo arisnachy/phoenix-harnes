@@ -20,7 +20,7 @@
 import { createHash } from 'node:crypto'
 import { spawn, spawnSync } from 'node:child_process'
 import {
-  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, unlinkSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -48,6 +48,20 @@ const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const REFRESH_REQUEST_FILE = 'phoenix-update-refresh-request.json'
 const MANAGED_MARKER = '.phoenix-managed-install'
 const UPDATE_MODE = normalizeMode(process.env.PHOENIX_UPDATE_MODE ?? 'auto')
+const configuredInactiveRuntimeBackups = Number.parseInt(
+  process.env.PHOENIX_UPDATE_RUNTIME_BACKUPS ?? '',
+  10,
+)
+const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
+  ? Math.max(0, Math.min(2, configuredInactiveRuntimeBackups))
+  : 1
+const configuredRuntimeDirectoryLimit = Number.parseInt(
+  process.env.PHOENIX_UPDATE_RUNTIME_LIMIT ?? '',
+  10,
+)
+const MAX_RUNTIME_DIRECTORIES = Number.isFinite(configuredRuntimeDirectoryLimit)
+  ? Math.max(2, Math.min(6, configuredRuntimeDirectoryLimit))
+  : Math.max(2, MAX_INACTIVE_RUNTIME_BACKUPS + 2)
 
 function normalizeMode(value) {
   const normalized = String(value).trim().toLowerCase()
@@ -416,6 +430,116 @@ function stageDirectory(root) {
   const base = stageBaseDirectory()
   mkdirSync(base, { recursive: true })
   return join(base, `phoenix-stage-${stageIdentity(root)}`)
+}
+
+function runtimePathKey(path) {
+  const normalized = resolve(path)
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
+}
+
+function updaterRuntimeDirectories(root) {
+  const base = stageBaseDirectory()
+  if (!existsSync(base)) return []
+  const identity = stageIdentity(root)
+  const pattern = new RegExp(`^phoenix-runtime-${identity}-[0-9a-f]{12}$`, 'iu')
+  return readdirSync(base, { withFileTypes: true })
+    .filter(entry => entry.isDirectory() && pattern.test(entry.name))
+    .map(entry => join(base, entry.name))
+}
+
+function updaterRuntimeMtimeMs(path) {
+  try {
+    return statSync(path).mtimeMs
+  } catch {
+    return Number.NEGATIVE_INFINITY
+  }
+}
+
+function updaterRegisteredWorktrees(root) {
+  const result = git(root, ['worktree', 'list', '--porcelain'], { allowFailure: true })
+  if (!result.ok) return undefined
+  const paths = new Set()
+  for (const line of result.stdout.split(/\r?\n/u)) {
+    if (!line.startsWith('worktree ')) continue
+    const path = line.slice('worktree '.length).trim()
+    if (path.length > 0) paths.add(runtimePathKey(path))
+  }
+  return paths
+}
+
+function removeOrphanedUpdaterRuntime(path) {
+  try {
+    rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })
+    return !existsSync(path)
+  } catch {
+    return false
+  }
+}
+
+function removeUpdaterRuntime(root, path, registeredWorktrees) {
+  const key = runtimePathKey(path)
+  if (registeredWorktrees !== undefined && !registeredWorktrees.has(key)) {
+    return removeOrphanedUpdaterRuntime(path)
+  }
+
+  const removed = git(root, ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path], {
+    allowFailure: true,
+  })
+  if (removed.ok || !existsSync(path)) return true
+
+  const refreshed = updaterRegisteredWorktrees(root)
+  if (/(?:is )?not a working tree/iu.test(removed.stderr)
+    || (refreshed !== undefined && !refreshed.has(key))) {
+    return removeOrphanedUpdaterRuntime(path)
+  }
+  return false
+}
+
+function cleanupUpdaterRuntimeStorage(root) {
+  const keep = new Set()
+  const active = readActiveRuntime(root)
+  if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
+  const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()
+  if (inheritedRuntimeRoot !== undefined && inheritedRuntimeRoot.length > 0) {
+    keep.add(runtimePathKey(inheritedRuntimeRoot))
+  }
+
+  const registered = updaterRegisteredWorktrees(root)
+  const inactive = updaterRuntimeDirectories(root)
+    .filter(path => !keep.has(runtimePathKey(path)))
+    .sort((left, right) => updaterRuntimeMtimeMs(right) - updaterRuntimeMtimeMs(left))
+
+  let retained = 0
+  let removed = 0
+  for (const candidate of inactive) {
+    if (retained < MAX_INACTIVE_RUNTIME_BACKUPS) {
+      retained += 1
+      continue
+    }
+    if (!removeUpdaterRuntime(root, candidate, registered)) continue
+    removed += 1
+    console.error(`[PHOENIX UPDATE] updater janitor removed obsolete isolated runtime: ${candidate}`)
+  }
+
+  git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })
+  return { removed, remaining: updaterRuntimeDirectories(root).length }
+}
+
+function updaterRuntimeStorageHasCapacity(root, target) {
+  const targetRuntime = join(
+    stageBaseDirectory(),
+    `phoenix-runtime-${stageIdentity(root)}-${target.slice(0, 12)}`,
+  )
+  if (existsSync(targetRuntime)) return true
+
+  const { remaining } = cleanupUpdaterRuntimeStorage(root)
+  if (remaining < MAX_RUNTIME_DIRECTORIES) return true
+
+  console.error(
+    `[PHOENIX UPDATE] runtime storage safety limit reached (${String(remaining)}/${String(MAX_RUNTIME_DIRECTORIES)}); `
+    + 'the current Host will stay online and storage cleanup will be retried before another runtime is created.',
+  )
+  return false
 }
 
 function sameRepositoryWorktree(root, stage) {
@@ -984,6 +1108,7 @@ async function watch(root, parentPid) {
   let pending
   let preparedTarget
   let consecutiveNetworkFailures = 0
+  cleanupUpdaterRuntimeStorage(root)
   recoverStaleStagingIndexLock(root)
   clearRefreshRequest(root)
   writeState(root, {
@@ -1057,6 +1182,19 @@ async function watch(root, parentPid) {
         case 'isolate':
         case 'apply':
         case 'replace': {
+          if (process.env.PHOENIX_UPDATE_SUPERVISED === '1'
+            && !updaterRuntimeStorageHasCapacity(root, inspection.target)) {
+            pending = undefined
+            preparedTarget = undefined
+            clearPrepared(root)
+            writeState(root, {
+              status: 'paused',
+              phase: 'storage',
+              ...updateFacts(inspection),
+              detail: 'Runtime storage is at its safety limit. PHOENIX kept the current Host online and will retry cleanup automatically.',
+            })
+            break
+          }
           pending = inspection
           if (preparedTarget !== inspection.target) {
             if (announcedTarget !== inspection.target) {
