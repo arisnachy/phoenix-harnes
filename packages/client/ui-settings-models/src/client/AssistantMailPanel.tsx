@@ -105,7 +105,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
             : message.includes('human-owned AgentMail Console organization')
               ? 'Usa una API key creada dentro de tu cuenta humana de AgentMail Console.'
               : message.includes('inbox_create permission')
-                ? 'La API key necesita permiso para crear buzones (inbox_create). Crea otra clave con ese permiso habilitado.'
+                ? 'La API key necesita alcance de organización y permiso inbox_create. Crea otra clave de organización con creación de buzones habilitada.'
                 : message)
     } finally {
       setBusy(false)
@@ -203,7 +203,8 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       <p className={styles.help}>
         Si reclamar el buzón falla porque tu correo ya tiene una cuenta de AgentMail, la documentación
         oficial indica crear una API key en tu organización y dejar que Kira cree un buzón nuevo dentro
-        de esa cuenta. El buzón viejo queda fuera y Phoenix deja de usarlo.
+        de esa cuenta. Usa una clave de organización, no una clave limitada a un solo buzón. El buzón viejo
+        queda fuera y Phoenix deja de usarlo.
       </p>
       <label>
         <span className={styles.fieldLabel}>Nueva API key de AgentMail</span>
@@ -224,7 +225,8 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       </button>
       <p className={styles.help}>
         Phoenix valida la clave con AgentMail, exige una organización humana, crea un buzón nuevo,
-        guarda la clave en Credenciales y no la muestra en el chat.
+        guarda la clave en Credenciales y no la muestra en el chat. Si restringes permisos manualmente,
+        incluye inbox_create, inbox_read, message_read y message_send.
       </p>
     </div>
   </details>
