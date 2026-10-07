@@ -97,7 +97,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       const message = error instanceof Error ? error.message : 'No se pudo completar la operación de correo.'
       setFailure(message === 'mail provider request failed (403)'
         ? 'AgentMail rechazó la vinculación del propietario. Phoenix conservará el buzón y evitará repetir el alta.'
-        : message)
+        : message.includes('has not exposed Console ownership yet')
+          ? 'AgentMail todavía no confirma la reclamación. Termina “Claim inbox” en la otra pestaña y vuelve a comprobar; el cambio puede tardar unos minutos.'
+          : message)
     } finally {
       setBusy(false)
     }
