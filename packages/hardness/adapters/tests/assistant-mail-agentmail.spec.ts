@@ -93,7 +93,7 @@ describe('AgentMail transport', () => {
 })
 
 it('waits for AgentMail subscription confirmation and wakes only for inbound mail in Kira inbox', async () => {
-  const sockets: Socket[] = []
+  const sockets: EventTarget[] = []
   const messageEvent = (data: unknown): Event => {
     const event = new Event('message') as Event & { data?: unknown }
     Object.defineProperty(event, 'data', { value: JSON.stringify(data) })
@@ -120,33 +120,34 @@ it('waits for AgentMail subscription confirmation and wakes only for inbound mai
     let disconnected = 0
     const transport = new AgentMailTransport(async () => 'secret', 'kira@agentmail.to', 1000)
     const dispose = await transport.subscribe(() => { wakes++ }, () => { disconnected++ })
-    expect(JSON.parse(sockets[0]!.sent[0]!)).toEqual({
+    const socket = sockets[0] as Socket
+    expect(JSON.parse(socket.sent[0]!)).toEqual({
       type: 'subscribe',
       inbox_ids: ['kira@agentmail.to'],
       event_types: ['message.received'],
     })
 
-    sockets[0]!.dispatchEvent(messageEvent({
+    socket.dispatchEvent(messageEvent({
       type: 'message_sent',
       event_type: 'message.sent',
       message: { inbox_id: 'kira@agentmail.to' },
     }))
-    sockets[0]!.dispatchEvent(messageEvent({
+    socket.dispatchEvent(messageEvent({
       type: 'message_received',
       event_type: 'message.received',
       message: { inbox_id: 'other@agentmail.to' },
     }))
     expect(wakes).toBe(0)
 
-    sockets[0]!.dispatchEvent(messageEvent({
+    socket.dispatchEvent(messageEvent({
       type: 'message_received',
       event_type: 'message.received',
       message: { inbox_id: 'kira@agentmail.to' },
     }))
     expect(wakes).toBe(1)
 
-    sockets[0]!.dispatchEvent(new Event('close'))
-    sockets[0]!.dispatchEvent(new Event('error'))
+    socket.dispatchEvent(new Event('close'))
+    socket.dispatchEvent(new Event('error'))
     expect(disconnected).toBe(1)
     dispose()
     expect(disconnected).toBe(1)
