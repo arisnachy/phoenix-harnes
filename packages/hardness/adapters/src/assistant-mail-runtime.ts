@@ -197,9 +197,10 @@ export function installAssistantMail(ctx: Context,
     status = providerStatus(error)
     if (!recoverVerification || !(error instanceof AgentMailHttpError)) return
     if (error.reason === 'verification-required') {
-      // The organization itself needs OTP verification. Preserve that explicit owner gate.
+      // The provider, not local state, proved that OTP verification is required.
+      // Re-enter verification explicitly; ordinary credential recovery must not demote ready mailboxes.
       try {
-        await onboarding.recover()
+        await onboarding.reverify()
         status = 'verification-required'
       } catch {
         // Keep the actionable status. Manual Recover remains available if provider recovery is refused.
