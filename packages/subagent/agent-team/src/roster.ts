@@ -317,7 +317,7 @@ export class TeamRoster {
         }
         : {
           type: 'text' as const,
-          text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. Before substantive work, acknowledge it once with team_chat_react and one natural contextual Unicode emoji unless a reaction would be socially inappropriate or redundant. Do not add filler prose just to acknowledge it.`,
+          text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. Before substantive work, use your first normal assistant update to address Kira and state the concrete first action you are about to take in your own voice (for example, 'Kira, empiezo por revisar las pistas.'). Then execute the assignment. Do not claim completed work, repeat the assignment or add an acknowledgement-only turn. team_chat_react is optional; never substitute an emoji for the useful work update.`,
         },
     ]
     let started: ContinuableStart
