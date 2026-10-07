@@ -281,8 +281,15 @@ export class MailOnboarding {
       throw new Error('receive-only signup result ambiguous; retry recovery instead of creating another mailbox')
     }
     const { key } = await this.persistPendingSignup(data, owner, username)
-    const attached = mailRecord(await agentMailRequest('/agent/human', key, this.options.timeoutMs,
-      this.options.fetch ?? fetch, { human_email: owner }))
+    let attached: Record<string, unknown>
+    try {
+      attached = mailRecord(await agentMailRequest('/agent/human', key, this.options.timeoutMs,
+        this.options.fetch ?? fetch, { human_email: owner }))
+    } catch {
+      // The mailbox and its unrecoverable one-time key are already durable. Keep the inbox
+      // usable for later owner recovery instead of turning a successful creation into a failed ensure.
+      return this.status()
+    }
     if (mailAddress(mailString(attached.human_email)) !== owner) throw new Error('mail owner attachment returned a different human email')
     return this.status()
   }
