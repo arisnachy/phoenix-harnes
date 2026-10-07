@@ -474,10 +474,58 @@ export function installAssistantMail(ctx: Context,
     rpcDispose = next?.rpc.handle('/phoenix-mail', async (endpoint, input) => {
       try {
         const args = input === undefined ? {} : mailRecord(input)
+        if (endpoint === 'claim') {
+          if (Object.keys(args).length > 0) throw new Error('mail claim does not accept parameters')
+          const account = await onboarding.status()
+          if (account.state !== 'pending-verification' || account.inboxId === undefined) {
+            throw new Error('only an unverified Kira mailbox can be claimed')
+          }
+          const key = await resolveKey()
+          if (key === undefined) {
+            throw new Error('Phoenix no longer has the original AgentMail signup key; this receive-only inbox cannot be claimed with the local credential')
+          }
+          const claimKey = mailString(key, 8192)
+          if (!claimKey.startsWith('am_us_')) {
+            throw new Error('AgentMail Console claiming is only available for US-region agent inboxes')
+          }
+          if (process.platform !== 'win32') {
+            throw new Error('secure AgentMail claim clipboard handoff is currently available only on Windows')
+          }
+          const subprocess = ctx.get('subprocess')
+          if (subprocess === undefined) throw new Error('secure clipboard handoff is unavailable on this host')
+          const systemRoot = process.env.SystemRoot ?? process.env.WINDIR
+          const powershell = systemRoot === undefined
+            ? 'powershell.exe'
+            : join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+          const child = subprocess.spawn({
+            argv: [powershell, '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+              'Set-Clipboard -Value ([Console]::In.ReadToEnd())'],
+            cwd: config.directory,
+            stdio: {
+              stdin: { data: claimKey },
+              stdout: { maxBytes: 1024 },
+              stderr: { maxBytes: 4096 },
+            },
+            graceMs: 1500,
+            signal: AbortSignal.timeout(10_000),
+          })
+          const outcome = await child.done
+          if (outcome.exitCode !== 0) throw new Error('could not copy the saved AgentMail key to the Windows clipboard')
+          // The secret never crosses the browser RPC or appears in ordinary status projection.
+          return { ok: true as const, value: {
+            copied: true,
+            inboxId: account.inboxId,
+            claimUrl: 'https://console.agentmail.to/claim',
+          } }
+        }
         if (endpoint === 'signup') await onboarding.signup(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
         else if (endpoint === 'recover') {
           if (Object.keys(args).length > 0) throw new Error('mail recovery uses only the persisted owner')
           await recoverEnrollment()
+        }
+        else if (endpoint === 'claim-status') {
+          if (Object.keys(args).length > 0) throw new Error('mail claim confirmation does not accept parameters')
+          await onboarding.confirmClaim()
         }
         else if (endpoint === 'owner') {
           if (Object.keys(args).some(key => key !== 'ownerEmail') || args.ownerEmail === undefined) {
@@ -530,7 +578,7 @@ export function installAssistantMail(ctx: Context,
               summary: job.summary,
               error: job.error })) } }
       } catch (error) {
-        await handleProviderFailure(error, endpoint !== 'recover')
+        await handleProviderFailure(error, endpoint !== 'recover' && endpoint !== 'claim' && endpoint !== 'claim-status')
         // Provider bodies and fetch/socket errors never cross this secret-free status projection.
         const message = error instanceof Error && !/fetch|network|socket/iu.test(error.message) ? error.message : 'mail connection failed; check the local setup'
         return { ok: false as const, error: { code: 'internal', message, details: {} } }

@@ -149,6 +149,46 @@ export class MailOnboarding {
     })
   }
 
+  /** Confirm that a receive-only inbox was claimed into a human Console account.
+   * Claiming is a Console action, so Phoenix proves it by reading the organization with the
+   * original signup key and requiring provider authentication metadata before enabling sending.
+   * @returns Ready account once the Console ownership is visible to the API.
+   */
+  confirmClaim(): Promise<MailAccount> {
+    return this.exclusively(async () => {
+      const previous = await this.file.read()
+      const legacyAgentSignup = previous.ownerLink === undefined && previous.challengeHash === undefined
+      if (previous.state !== 'pending-verification' || previous.inboxId === undefined
+        || (!legacyAgentSignup && previous.ownerLink !== 'pending' && previous.ownerLink !== 'provider-conflict')) {
+        throw new Error('mail claim confirmation requires an unverified receive-only inbox')
+      }
+      const key = await this.options.resolveKey?.()
+      if (key === undefined) throw new Error('mail claim confirmation requires the original signup key')
+      let organization: Record<string, unknown>
+      try {
+        organization = mailRecord(await agentMailRequest('/organizations', key, this.options.timeoutMs,
+          this.options.fetch ?? fetch))
+      } catch (error) {
+        if (error instanceof AgentMailHttpError
+          && (error.reason === 'permission-missing' || error.reason === 'verification-required')) {
+          throw new Error('AgentMail has not exposed Console ownership yet; finish Claim inbox and retry in a moment')
+        }
+        throw error
+      }
+      if (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0) {
+        throw new Error('AgentMail has not exposed Console ownership yet; finish Claim inbox and retry in a moment')
+      }
+      await this.file.change(current => {
+        if (current.state !== 'pending-verification' || current.inboxId !== previous.inboxId) {
+          throw new Error('mail enrollment changed during claim confirmation')
+        }
+        const { challengeHash: _challenge, challengeExpires: _expiry, challengeAttempts: _attempts, ...account } = current
+        return { ...account, state: 'ready', ownerLink: 'attached' }
+      })
+      return this.status()
+    })
+  }
+
   /** Correct the human email attached to an unverified mailbox.
    * AgentMail supports replacing the attached human before verification; this is the safe repair for
    * typos such as a wrong domain that would otherwise make OTP delivery impossible.

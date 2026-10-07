@@ -27,11 +27,15 @@ export interface AssistantMailSnapshot {
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
-   * @param action Status, signup, recover, owner, create-inbox, replace, discard, verify, configure or refresh.
+   * @param action Status, signup, recover, claim-status, owner, create-inbox, replace, discard, verify, configure or refresh.
    * @param input Operation properties; secrets are accepted only by connect.
    * @returns Secret-free account and job status.
    */
   call(action: string, input?: Record<string, unknown>): Promise<AssistantMailSnapshot>
+  /** Retrieve the original receive-only signup key for an explicit local claim action.
+   * The Host copies it directly to the local clipboard; the secret never crosses the browser RPC.
+   */
+  prepareClaim?(): Promise<{ readonly copied: true; readonly inboxId: string; readonly claimUrl: string }>
 }
 
 const JOB_LABELS: Readonly<Record<string, string>> = {
@@ -54,6 +58,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const [code, setCode] = useState('')
   const [contacts, setContacts] = useState('')
   const [failure, setFailure] = useState<string>()
+  const [claimNotice, setClaimNotice] = useState<string>()
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -82,6 +87,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const operate = async (action: string, input?: Record<string, unknown>): Promise<void> => {
     setBusy(true)
     setFailure(undefined)
+    setClaimNotice(undefined)
     try {
       const value = await client.call(action, input)
       setSnapshot(value)
@@ -91,7 +97,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       const message = error instanceof Error ? error.message : 'No se pudo completar la operación de correo.'
       setFailure(message === 'mail provider request failed (403)'
         ? 'AgentMail rechazó la vinculación del propietario. Phoenix conservará el buzón y evitará repetir el alta.'
-        : message)
+        : message.includes('has not exposed Console ownership yet')
+          ? 'AgentMail todavía no confirma la reclamación. Termina “Claim inbox” en la otra pestaña y vuelve a comprobar; el cambio puede tardar unos minutos.'
+          : message)
     } finally {
       setBusy(false)
     }
@@ -147,6 +155,30 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     const label = kiraInbox ?? 'el buzón guardado'
     if (!globalThis.confirm(`Phoenix dejará de usar ${label}. Si la credencial aún funciona, también intentará borrarlo de AgentMail. ¿Crear un buzón nuevo desde cero?`)) return
     void operate('replace', requestedOwner.length === 0 ? undefined : { ownerEmail: requestedOwner })
+  }
+  const claimMailbox = (): void => {
+    // Open the provider page during the user gesture so popup blockers do not eat it while
+    // the loopback Host places the credential directly on the Windows clipboard.
+    globalThis.open?.('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer')
+    setBusy(true)
+    setFailure(undefined)
+    setClaimNotice(undefined)
+    void (async () => {
+      try {
+        if (client.prepareClaim === undefined) throw new Error('Esta versión de Phoenix todavía no puede recuperar la clave guardada para reclamar el buzón.')
+        const claim = await client.prepareClaim()
+        setClaimNotice(`Clave de ${claim.inboxId} copiada por Phoenix. Pégala en “Agent API key”, termina “Claim inbox” y vuelve a Phoenix para comprobar.`)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo preparar la reclamación del buzón.'
+        setFailure(message.includes('no longer has the original AgentMail signup key')
+          ? 'Phoenix no conserva la clave original de este buzón. AgentMail no permite recuperarla; usa “La clave se perdió · crear buzón nuevo”.'
+          : message.includes('only available for US-region')
+            ? 'Este buzón no usa una clave am_us_; AgentMail solo permite reclamar por Console los buzones de la región US.'
+            : message)
+      } finally {
+        setBusy(false)
+      }
+    })()
   }
   const recoveryOwnerField = <label>
     <span className={styles.fieldLabel}>Correo propietario que recibirá el código</span>
@@ -260,11 +292,20 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         Reintentar vinculación
       </button>
       <button type="button" className={styles.secondaryButton} disabled={busy}
-        onClick={() => { globalThis.open?.('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer') }}>
-        Abrir AgentMail para resolver el vínculo
+        onClick={claimMailbox}>
+        Copiar clave y abrir AgentMail
+      </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={() => { void operate('claim-status') }}>
+        Ya lo reclamé · comprobar
+      </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={replaceMailbox}>
+        La clave se perdió · crear buzón nuevo
       </button>
       <p className={styles.help}>
-        Phoenix no creará buzones adicionales mientras este vínculo siga pendiente.
+        Phoenix usa la clave original que guardó al crear el buzón; no necesitas haberla recibido por correo.
+        No creará buzones adicionales mientras este vínculo siga pendiente.
       </p>
     </div> : null}
 
@@ -298,6 +339,14 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         disabled={busy || requestedOwner.length === 0}
         onClick={recoverMailbox}>
         {ownerChanged ? 'Corregir correo y reenviar código' : 'Reenviar código / recuperar acceso'}
+      </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={claimMailbox}>
+        No llegó el código · reclamar con la clave guardada
+      </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={() => { void operate('claim-status') }}>
+        Ya lo reclamé · comprobar
       </button>
       <button type="button" className={styles.secondaryButton} disabled={busy}
         onClick={replaceMailbox}>
@@ -395,6 +444,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       </p>
     </div> : null}
 
+    {claimNotice === undefined ? null : <p className={styles.help} role="status">{claimNotice}</p>}
     {failure === undefined ? null : <p className={styles.failure} role="alert">{failure}</p>}
 
     {snapshot?.jobs.length === 0 ? null : <details className={styles.advanced}>

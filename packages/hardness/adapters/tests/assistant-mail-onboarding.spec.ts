@@ -710,3 +710,69 @@ it('keeps one receive-only inbox when AgentMail refuses the owner link', async (
     expect(calls).toBe(4)
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
+
+
+it('marks a receive-only mailbox ready after Console claim ownership becomes visible', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-claim-confirm-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({
+      state: 'pending-verification',
+      inboxId: 'kira@agentmail.to',
+      ownerEmail: 'owner@example.com',
+      ownerLink: 'provider-conflict',
+      signupUsername: 'kira',
+      contacts: [],
+    }))
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      resolveKey: async () => 'am_us_saved',
+      fetch: async (url, init) => {
+        expect(requestAddress(url)).toBe('https://api.agentmail.to/v0/organizations')
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_us_saved')
+        return Response.json({
+          organization_id: 'org_1',
+          authentication_id: 'user_1',
+          authentication_type: 'clerk',
+        })
+      },
+    })
+
+    await expect(account.confirmClaim()).resolves.toMatchObject({
+      state: 'ready',
+      inboxId: 'kira@agentmail.to',
+      ownerEmail: 'owner@example.com',
+      ownerLink: 'attached',
+    })
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('keeps the mailbox pending until AgentMail exposes Console ownership', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-claim-wait-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({
+      state: 'pending-verification',
+      inboxId: 'kira@agentmail.to',
+      ownerEmail: 'owner@example.com',
+      ownerLink: 'provider-conflict',
+      contacts: [],
+    }))
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      resolveKey: async () => 'am_us_saved',
+      fetch: async () => Response.json({ organization_id: 'org_1' }),
+    })
+
+    await expect(account.confirmClaim()).rejects.toThrow('finish Claim inbox')
+    expect(await account.status()).toMatchObject({
+      state: 'pending-verification',
+      ownerLink: 'provider-conflict',
+      inboxId: 'kira@agentmail.to',
+    })
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})

@@ -155,3 +155,74 @@ it('shows owner-link recovery instead of an OTP field when AgentMail refused the
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar vinculación' }))
   expect(calls).toContain('recover')
 })
+
+
+it('asks the Host to copy the saved signup key and opens the claim page without receiving the secret', async () => {
+  const open = vi.fn(() => null)
+  vi.stubGlobal('open', open)
+  const prepareClaim = vi.fn(async () => ({
+    copied: true as const,
+    inboxId: 'kira@agentmail.to',
+    claimUrl: 'https://console.agentmail.to/claim',
+  }))
+  const client = {
+    call: async () => ({
+      account: {
+        state: 'pending-verification',
+        inboxId: 'kira@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        ownerLink: 'provider-conflict' as const,
+        contacts: [],
+      },
+      connection: 'disconnected',
+      jobs: [],
+    }),
+    prepareClaim,
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Copiar clave y abrir AgentMail' }))
+
+  expect(await screen.findByText(/Clave de kira@agentmail\.to copiada por Phoenix/u)).toBeTruthy()
+  expect(prepareClaim).toHaveBeenCalledTimes(1)
+  expect(open).toHaveBeenCalledWith('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer')
+  expect(document.body.textContent).not.toContain('am_us_')
+
+  vi.unstubAllGlobals()
+})
+
+
+it('confirms a claimed inbox and leaves the verification-only state', async () => {
+  const calls: string[] = []
+  const client = {
+    call: async (action: string) => {
+      calls.push(action)
+      return {
+        account: action === 'claim-status'
+          ? {
+              state: 'ready',
+              inboxId: 'kira@agentmail.to',
+              ownerEmail: 'owner@example.com',
+              ownerLink: 'attached' as const,
+              contacts: [],
+            }
+          : {
+              state: 'pending-verification',
+              inboxId: 'kira@agentmail.to',
+              ownerEmail: 'owner@example.com',
+              ownerLink: 'provider-conflict' as const,
+              contacts: [],
+            },
+        connection: action === 'claim-status' ? 'connecting' : 'disconnected',
+        jobs: [],
+      }
+    },
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Ya lo reclamé · comprobar' }))
+
+  expect(await screen.findByText(/Correo verificado/u)).toBeTruthy()
+  expect(calls).toContain('claim-status')
+  expect(screen.queryByText('Vincula propietario')).toBeNull()
+})
