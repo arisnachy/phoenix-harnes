@@ -90,6 +90,8 @@ export interface AssistantMailTransport {
 export interface MailConsoleKeyCheck {
   readonly valid: true
   readonly organizationId: string
+  readonly scopeType: 'organization' | 'pod' | 'inbox'
+  readonly scopeInboxId?: string
   readonly authenticationType?: string
   readonly inboxCount: number
   readonly inboxLimit?: number
