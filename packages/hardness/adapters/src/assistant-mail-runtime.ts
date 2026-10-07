@@ -416,7 +416,9 @@ export function installAssistantMail(ctx: Context,
     status = 'connecting'
     const root = ctx.get('agents')?.roots()[0]
     if (account.sessionId === undefined && root !== undefined) await onboarding.bindSessionIfUnset(root.id)
-    await ownerOutbox.flush()
+
+    // Bring the incoming/realtime channel up before flushing a pending owner send.
+    // A missing message_send permission must not make a readable mailbox look disconnected.
     if (receiver === undefined || transportInbox !== account.inboxId || socketDispose === undefined) {
       socketDispose?.()
       await receiver?.stop()
@@ -437,6 +439,20 @@ export function installAssistantMail(ctx: Context,
     if (status === 'connecting') status = 'connected'
     if (status === 'connected') clearSocketRecovery()
     automaticCredentialRecoveryAttempted = false
+
+    try {
+      await ownerOutbox.flush()
+      if (status === 'connected') providerIssue = undefined
+    } catch (error) {
+      if (error instanceof AgentMailHttpError
+        && ['permission-missing', 'message-rejected', 'limit-exceeded'].includes(error.reason ?? '')) {
+        providerIssue = issueFromError(error)
+        // The incoming socket is healthy; retain connected state and surface the precise send issue separately.
+        status = socketDispose === undefined ? providerStatus(error) : 'connected'
+        return
+      }
+      throw error
+    }
   }
   const pump = (): Promise<void> => {
     if (isDisposed()) return Promise.resolve()
@@ -471,6 +487,7 @@ export function installAssistantMail(ctx: Context,
       ...(account.inboxId === undefined ? {} : { inboxId: account.inboxId }),
       connection: status,
       ...(account.ownerEmail === undefined ? {} : { ownerEmail: account.ownerEmail }),
+      ...(providerIssue === undefined ? {} : { providerIssue }),
     }
   }
   const recoverEnrollment = async (): Promise<AssistantMailIdentity> => {
@@ -499,6 +516,7 @@ export function installAssistantMail(ctx: Context,
       await onboarding.discard()
       await credentials.unset(ref)
       status = 'not-configured'
+      providerIssue = undefined
       automaticCredentialRecoveryAttempted = false
       repumpRequested = false
       return await identity()
