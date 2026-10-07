@@ -96,6 +96,8 @@ export const PHOENIX_CODEX_AUTO_MODEL = 'phoenix-auto'
 export const PHOENIX_CODEX_AUTO_PLANNER_MODEL = 'gpt-6.1-sol'
 /** GPT-6 execution route used by Phoenix Auto. */
 export const PHOENIX_CODEX_AUTO_WORKER_MODEL = 'gpt-6-luna'
+/** Native Codex worker whose permission escalations are reviewed by Codex Auto-review. */
+export const PHOENIX_CODEX_AUTO_REVIEW_TOOL = 'codex_auto_review'
 
 /** Premium Codex tiers that should spend one step planning before Luna executes. */
 const CODEX_PLANNER_MODEL = /^gpt-(\d+(?:\.\d+)?)-(?:sol|astra|terra)(?:$|-)/i
@@ -686,22 +688,35 @@ export function installModelSelection(
     // sessions can otherwise retain creation-time AgentOptions from a previous
     // provider, which makes delegators spawn teammates on the wrong route.
     const scopedAgent = agentCtx.agent
-    if (selected !== undefined && scopedAgent !== undefined && !isPhoenixCodexAutoSelection(selected)) {
+    if (selected !== undefined && scopedAgent !== undefined) {
+      // Provider identity is always safe to synchronize and is also the hard
+      // capability gate used by provider-specific tools such as Codex Auto-review.
       scopedAgent.options.provider = selected.provider
-      scopedAgent.options.model = selected.model
-      if (selected.reasoningEffort === undefined) delete scopedAgent.options.reasoningEffort
-      else scopedAgent.options.reasoningEffort = selected.reasoningEffort
+      // Phoenix Auto is a virtual picker row rather than an executable model.
+      // Its request router resolves Sol/Luna per step, so keep the existing
+      // concrete model/effort while synchronizing only the provider identity.
+      if (!isPhoenixCodexAutoSelection(selected)) {
+        scopedAgent.options.model = selected.model
+        if (selected.reasoningEffort === undefined) delete scopedAgent.options.reasoningEffort
+        else scopedAgent.options.reasoningEffort = selected.reasoningEffort
+      }
     }
     const assembled = await next()
     selection.assembled = selected
-    const hasKiraTeam = assembled.tools.some(tool => tool.name === 'spawn_teammate')
+    // Native Auto-review is a Codex runtime capability, not a generic Phoenix
+    // reviewer. Hide it entirely from DeepSeek, Claude, OpenRouter and local
+    // selections; the provider backend also enforces the same boundary.
+    const providerTools = selected?.provider === 'openai-codex'
+      ? assembled.tools
+      : assembled.tools.filter(tool => tool.name !== PHOENIX_CODEX_AUTO_REVIEW_TOOL)
+    const hasKiraTeam = providerTools.some(tool => tool.name === 'spawn_teammate')
     phoenixAutoTeamAvailable = hasKiraTeam
     // Agent Teams is Phoenix's single visible delegation path. Keeping legacy
     // subagent tools beside it lets provider models bypass Kira identities,
     // shared chat, reactions and lifecycle state unpredictably.
     const tools = hasKiraTeam
-      ? assembled.tools.filter(tool => tool.name !== 'subagent' && tool.name !== 'subagent_fork')
-      : assembled.tools
+      ? providerTools.filter(tool => tool.name !== 'subagent' && tool.name !== 'subagent_fork')
+      : providerTools
     selection.assembledToolCount = tools.length
     if (selected === undefined) return assembled
     return {
