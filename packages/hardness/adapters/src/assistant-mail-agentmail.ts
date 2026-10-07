@@ -290,7 +290,6 @@ export class AgentMailTransport implements AssistantMailTransport {
     let settled = false
     let subscribed = false
     let disposed = false
-    let timer: ReturnType<typeof setTimeout> | undefined
     function aborted(): void {
       disposed = true
       settleReady(new Error('mail wake subscription cancelled'))
@@ -299,7 +298,7 @@ export class AgentMailTransport implements AssistantMailTransport {
     function settleReady(error?: Error): void {
       if (settled) return
       settled = true
-      if (timer !== undefined) clearTimeout(timer)
+      clearTimeout(timer)
       signal?.removeEventListener('abort', aborted)
       if (error === undefined) ready.resolve()
       else ready.reject(error)
@@ -313,7 +312,7 @@ export class AgentMailTransport implements AssistantMailTransport {
       subscribed = false
       try { onDisconnected?.() } catch { /* Callback failure cannot escape the provider event loop. */ }
     }
-    timer = setTimeout(() => {
+    const timer = setTimeout(() => {
       settleReady(new Error('mail wake subscription timed out'))
       try { socket.close() } catch { /* The socket may already be closing. */ }
     }, this.timeoutMs)
