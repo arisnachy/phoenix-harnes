@@ -24,6 +24,17 @@ export interface AssistantMailSnapshot {
   }[]
 }
 
+/** Secret-free result of corroborating a candidate AgentMail Console key. */
+export interface AssistantMailConsoleKeyCheck {
+  readonly valid: true
+  readonly organizationId: string
+  readonly authenticationType?: string
+  readonly inboxCount: number
+  readonly inboxLimit?: number
+  readonly capacityAvailable: boolean
+  readonly inboxRead: boolean
+}
+
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
@@ -32,6 +43,8 @@ export interface AssistantMailClient {
    * @returns Secret-free account and job status.
    */
   call(action: string, input?: Record<string, unknown>): Promise<AssistantMailSnapshot>
+  /** Check a candidate Console key without storing it or changing mail state. */
+  checkConsoleKey?(apiKey: string): Promise<AssistantMailConsoleKeyCheck>
   /** Retrieve the original receive-only signup key for an explicit local claim action.
    * The Host copies it directly to the local clipboard; the secret never crosses the browser RPC.
    */
@@ -59,6 +72,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const [contacts, setContacts] = useState('')
   const [failure, setFailure] = useState<string>()
   const [claimNotice, setClaimNotice] = useState<string>()
+  const [consoleKeyCheck, setConsoleKeyCheck] = useState<AssistantMailConsoleKeyCheck>()
   const consoleKeyRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
 
@@ -189,15 +203,73 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       }
     })()
   }
-  const useConsoleKey = (): void => {
-    const input = consoleKeyRef.current
-    const apiKey = input?.value.trim() ?? ''
+  const candidateConsoleKey = (): string => consoleKeyRef.current?.value.trim() ?? ''
+  const checkConsoleKey = (): void => {
+    const apiKey = candidateConsoleKey()
     if (apiKey.length === 0) {
       setFailure('Pega una API key creada en tu cuenta de AgentMail Console.')
       return
     }
-    if (input !== null) input.value = ''
-    void operate('console-key', { apiKey })
+    if (client.checkConsoleKey === undefined) {
+      setFailure('Esta versión de Phoenix todavía no puede corroborar una API key antes de activarla.')
+      return
+    }
+    setBusy(true)
+    setFailure(undefined)
+    setClaimNotice(undefined)
+    setConsoleKeyCheck(undefined)
+    void (async () => {
+      try {
+        setConsoleKeyCheck(await client.checkConsoleKey?.(apiKey))
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo corroborar la API key.'
+        setFailure(message.includes('not organization-scoped')
+          ? 'La clave no tiene alcance de organización. Crea una API key de organización en AgentMail Console.'
+          : message.includes('rejected this API key')
+            ? 'AgentMail rechazó la API key. Comprueba que esté completa, vigente y no revocada.'
+            : message.includes('human-owned AgentMail Console organization')
+              ? 'La clave no pertenece a una organización humana de AgentMail Console.'
+              : message)
+      } finally {
+        setBusy(false)
+      }
+    })()
+  }
+  const useConsoleKey = (): void => {
+    const input = consoleKeyRef.current
+    const apiKey = candidateConsoleKey()
+    if (apiKey.length === 0 || consoleKeyCheck === undefined) {
+      setFailure('Primero pega la API key y pulsa “Corroborar API key”.')
+      return
+    }
+    if (!consoleKeyCheck.inboxRead || !consoleKeyCheck.capacityAvailable) {
+      setFailure('La comprobación de AgentMail todavía no permite activar Kira con esta clave.')
+      return
+    }
+    setBusy(true)
+    setFailure(undefined)
+    setClaimNotice(undefined)
+    void (async () => {
+      try {
+        const value = await client.call('console-key', { apiKey })
+        setSnapshot(value)
+        if (value.account.ownerEmail !== undefined) setOwner(value.account.ownerEmail)
+        if (input !== null) input.value = ''
+        setConsoleKeyCheck(undefined)
+        setClaimNotice(`API guardada y buzón ${value.account.inboxId ?? 'de Kira'} activado. Phoenix comprobó lectura de mensajes antes de marcarlo listo.`)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo activar la API key.'
+        setFailure(message.includes('inbox_create permission')
+          ? 'La API key necesita alcance de organización y permiso inbox_create.'
+          : message.includes('message_read permission')
+            ? 'El buzón se creó, pero la API key no tiene message_read. Crea o ajusta una clave con inbox_read, inbox_create, message_read y message_send, y vuelve a pegarla.'
+            : message.includes('confirmation is ambiguous')
+              ? 'AgentMail no confirmó la creación. Vuelve a pegar la misma API key: Phoenix reconciliará el mismo buzón sin duplicarlo.'
+              : message)
+      } finally {
+        setBusy(false)
+      }
+    })()
   }
   const consoleKeyFallback = <details className={styles.advanced}>
     <summary>¿Ya tienes cuenta en AgentMail? Usar una API key nueva</summary>
@@ -219,16 +291,47 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           disabled={busy}
           placeholder="am_..."
           aria-label="Nueva API key de AgentMail"
+          onChange={() => {
+            setConsoleKeyCheck(undefined)
+            setFailure(undefined)
+          }}
         />
       </label>
-      <button type="button" className={styles.button} disabled={busy}
-        onClick={useConsoleKey}>
-        Usar esta API key y crear buzón nuevo
-      </button>
+      <div className={styles.actions}>
+        <button type="button" className={styles.secondaryButton} disabled={busy}
+          onClick={checkConsoleKey}>
+          Corroborar API key
+        </button>
+        <button type="button" className={styles.button}
+          disabled={busy || consoleKeyCheck === undefined || !consoleKeyCheck.inboxRead || !consoleKeyCheck.capacityAvailable}
+          onClick={useConsoleKey}>
+          Guardar API y activar Kira
+        </button>
+      </div>
+      {consoleKeyCheck === undefined ? null : <div className={styles.keyCheck} aria-label="Comprobación de API key">
+        <strong>Comprobación de AgentMail</strong>
+        <span>API key <b>✓ válida</b></span>
+        <span>Organización <b>✓ Console humana</b></span>
+        <span>
+          Lectura de buzones <b>{consoleKeyCheck.inboxRead ? '✓ disponible' : '✕ falta inbox_read'}</b>
+        </span>
+        <span>
+          Cupo <b>{consoleKeyCheck.inboxLimit === undefined
+            ? `${consoleKeyCheck.inboxCount} usados · límite no informado`
+            : `${consoleKeyCheck.inboxCount}/${consoleKeyCheck.inboxLimit}`}</b>
+        </span>
+        <span>
+          Nuevo buzón <b>{consoleKeyCheck.capacityAvailable ? '✓ hay capacidad' : '✕ límite alcanzado'}</b>
+        </span>
+        <small>
+          La creación comprueba inbox_create y, antes de marcar Kira como lista, Phoenix comprueba message_read.
+          message_send se valida por AgentMail cuando Kira realiza un envío.
+        </small>
+      </div>}
       <p className={styles.help}>
-        Phoenix valida la clave con AgentMail, exige una organización humana, crea un buzón nuevo,
-        guarda la clave en Credenciales y no la muestra en el chat. Si restringes permisos manualmente,
-        incluye inbox_create, inbox_read, message_read y message_send.
+        La corroboración no guarda ni cambia nada. Solo después de pulsar “Guardar API y activar Kira”
+        Phoenix crea el nuevo buzón y guarda la clave en Credenciales. Para una clave restringida, incluye
+        inbox_create, inbox_read, message_read y message_send.
       </p>
     </div>
   </details>
