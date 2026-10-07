@@ -58,13 +58,67 @@ export function useAuthorizationAttempt(
   const closeReservedPopup = useCallback((): void => {
     const popup = popupRef.current
     popupRef.current = null
-    if (popup !== null && !popup.closed) popup.close()
+    if (popup === null) return
+    try {
+      if (!popup.closed) popup.close()
+    } catch {
+      // Cross-origin isolation may revoke access to a provider window. The
+      // authorization attempt itself remains authoritative.
+    }
+  }, [])
+
+  const prepareReservedPopup = useCallback((popup: Window): void => {
+    try {
+      popup.document.title = 'PHOENIX · Preparando autorización'
+      popup.document.body.innerHTML = [
+        '<main style="font-family:system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:32px;text-align:center">',
+        '<h1 style="font-size:22px;margin:0 0 12px">PHOENIX</h1>',
+        '<p style="font-size:16px;margin:0 0 8px">Preparando autorización…</p>',
+        '<p style="opacity:.7;margin:0">Esta pestaña abrirá el proveedor automáticamente. No la cierres.</p>',
+        '</main>',
+      ].join('')
+    } catch {
+      // A browser may make the reserved context opaque immediately. Navigation
+      // still gets a chance once the provider URL arrives.
+    }
   }, [])
 
   const reserveOAuthPopup = useCallback((): void => {
+    const current = popupRef.current
+    try {
+      if (current !== null && !current.closed) return
+    } catch {
+      popupRef.current = null
+    }
+    const popup = window.open('', '_blank')
+    popupRef.current = popup
+    if (popup !== null) {
+      prepareReservedPopup(popup)
+      return
+    }
+    setFailure('El navegador bloqueó la ventana de autorización. PHOENIX seguirá preparando el enlace; usa “Abrir página de autorización” cuando aparezca.')
+  }, [prepareReservedPopup])
+
+  const navigateOAuthPopup = useCallback((url: string): void => {
     const popup = popupRef.current
-    if (popup !== null && !popup.closed) return
-    popupRef.current = window.open('', '_blank')
+    if (popup !== null) {
+      try {
+        if (!popup.closed) {
+          popup.location.replace(url)
+          return
+        }
+      } catch {
+        // COOP/cross-origin policies can sever the reserved Window handle.
+        // Fall through to a best-effort fresh tab and always keep the manual
+        // consent link rendered in the PHOENIX card.
+      }
+      popupRef.current = null
+    }
+    const fallback = window.open(url, '_blank')
+    popupRef.current = fallback
+    if (fallback === null) {
+      setFailure('No pude abrir automáticamente la página del proveedor. Pulsa “Abrir página de autorización” en esta tarjeta para continuar.')
+    }
   }, [])
 
   useEffect(() => () => { closeReservedPopup() }, [closeReservedPopup])
@@ -89,11 +143,7 @@ export function useAuthorizationAttempt(
         if (view.prompt !== undefined && consent?.url === undefined && attempt.url === undefined) closeReservedPopup()
         if (consent?.url !== undefined && !opened.current.has(consent.url)) {
           opened.current.add(consent.url)
-          if (popupRef.current !== null && !popupRef.current.closed) {
-            popupRef.current.location.replace(consent.url)
-          } else {
-            popupRef.current = window.open(consent.url, '_blank')
-          }
+          navigateOAuthPopup(consent.url)
         }
         const message = latest?.message ?? attempt.message
         const url = consent?.url ?? attempt.url
@@ -123,7 +173,7 @@ export function useAuthorizationAttempt(
       })
     }, 650)
     return () => { stale = true; window.clearTimeout(timer) }
-  }, [api, attempt, onAuthorized, closeReservedPopup])
+  }, [api, attempt, onAuthorized, closeReservedPopup, navigateOAuthPopup])
 
   const begin = (key: string, method = 'oauth'): void => {
     if (api === undefined) return
