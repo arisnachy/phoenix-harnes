@@ -164,6 +164,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const ownerLinkConflict = pendingVerification && snapshot?.account.ownerLink === 'provider-conflict'
   const connection = snapshot?.connection ?? 'disconnected'
   const providerIssue = snapshot?.providerIssue
+  const consoleOwnerConflict = providerIssue?.code === 'already_exists'
   const recoveryRequired = ready && (connection === 'verification-required' || connection === 'recovery-required')
   const providerWarning = recoveryRequired || providerIssue !== undefined
     || (ready && ['quota-reached', 'message-rejected', 'permission-required'].includes(connection))
@@ -324,7 +325,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       || (consoleKeyCheck.inboxCreate === true && consoleKeyCheck.capacityAvailable)
     )
     && (ready || persistedOwner !== undefined || requestedOwner.length > 0)
-  const consoleKeyFallback = <details className={styles.advanced} open={!ready}>
+  const consoleKeyFallback = <details className={styles.advanced} open={!ready || consoleOwnerConflict}>
     <summary>API key de AgentMail · verificar o reemplazar</summary>
     <div className={styles.advancedBody}>
       <p className={styles.help}>
@@ -621,7 +622,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       <p className={styles.help}>
         Creará otra dirección en la misma cuenta, si la cuota disponible lo permite. No borra el buzón anterior.
       </p>
-      <button type="button" className={styles.secondaryButton} disabled={busy}
+      {consoleOwnerConflict ? <p className={styles.help}>
+        Tu correo ya pertenece a AgentMail Console. No repitas «Recuperar acceso»: confirma la API key validada
+        en «API key de AgentMail · verificar o reemplazar» y pulsa «Guardar API y verificar acceso».
+        Phoenix conservará el buzón actual si la clave puede leerlo.
+      </p> : null}
+      <button type="button" className={styles.secondaryButton}
+        disabled={busy || consoleOwnerConflict}
         onClick={() => { void operate('recover') }}>
         Recuperar acceso
       </button>
