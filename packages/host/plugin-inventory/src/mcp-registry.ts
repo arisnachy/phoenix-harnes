@@ -134,7 +134,7 @@ function projectCandidate(value: unknown): McpRegistryCandidate | undefined {
     remoteTransports.push(transport)
     if (remoteUrl === undefined && transport === 'streamable-http') {
       const candidate = safeHttpsUrl(item?.url)
-      if (candidate !== undefined && !candidate.includes('{')) remoteUrl = candidate
+      if (candidate !== undefined && !/[{}]|%7[bd]/iu.test(candidate)) remoteUrl = candidate
     }
   }
   const transports = [...new Set<McpRegistryTransport>([
