@@ -15,6 +15,7 @@ import {
 } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import { gitSafeDirectoryEnvironment, persistGitSafeDirectory } from './phoenix-git-safe-directory.mjs'
 import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
@@ -22,13 +23,18 @@ import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
 
 const root = resolve(process.cwd())
+const supervisorSourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 Object.assign(process.env, gitSafeDirectoryEnvironment(process.env, [root]))
 let runtimeRoot = root
 const hostArgs = process.argv.slice(2)
 const desktopConsoleVisible = ['1', 'true', 'yes']
   .includes((process.env.PHOENIX_DESKTOP_CONSOLE ?? '').trim().toLowerCase())
 const hideRuntimeWindows = !desktopConsoleVisible
-const liveActivator = join(root, 'scripts', 'phoenix-activate-prepared.mjs')
+// The supervisor itself may be loaded from a newer isolated runtime while cwd
+// remains the durable checkout. Keep compatibility helpers on the same code
+// generation as the supervisor so a stale source checkout cannot reintroduce
+// a handoff bug during activation.
+const liveActivator = join(supervisorSourceRoot, 'scripts', 'phoenix-activate-prepared.mjs')
 const STABLE_SOURCE_BRANCH = process.env.PHOENIX_UPDATE_STABLE_BRANCH?.trim() || 'stable'
 const RESTART_REQUEST_FILE = 'phoenix-update-restart-request.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
