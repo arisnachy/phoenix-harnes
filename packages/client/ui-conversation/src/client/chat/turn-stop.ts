@@ -1,7 +1,10 @@
 import type { TurnEndReason } from '@phoenix-ai/dsh-session'
+import type { zh } from '../locales.ts'
+
+type StopNoticeKey = Extract<keyof typeof zh, `message.stop.${string}`>
 
 /** Resolve a factual stop notice without asking a failed model to generate prose. */
-export function turnStopNotice(reason: TurnEndReason, hasClosingText: boolean): string | undefined {
+export function turnStopNotice(reason: TurnEndReason, hasClosingText: boolean): StopNoticeKey | undefined {
   if (reason.kind === 'completed') return hasClosingText ? undefined : 'message.stop.noFinal'
   if (reason.kind === 'aborted') {
     if (reason.reason.kind === 'user') return 'message.stop.user'
