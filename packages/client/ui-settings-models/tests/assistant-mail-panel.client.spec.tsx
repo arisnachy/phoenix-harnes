@@ -236,19 +236,19 @@ it('corroborates a new Console API key before storing it and activating the new 
       return {
         account: action === 'console-key'
           ? {
-              state: 'ready',
-              inboxId: 'kira-new@agentmail.to',
-              ownerEmail: 'owner@example.com',
-              ownerLink: 'attached' as const,
-              contacts: [],
-            }
+            state: 'ready',
+            inboxId: 'kira-new@agentmail.to',
+            ownerEmail: 'owner@example.com',
+            ownerLink: 'attached' as const,
+            contacts: [],
+          }
           : {
-              state: 'pending-verification',
-              inboxId: 'kira-old@agentmail.to',
-              ownerEmail: 'owner@example.com',
-              ownerLink: 'provider-conflict' as const,
-              contacts: [],
-            },
+            state: 'pending-verification',
+            inboxId: 'kira-old@agentmail.to',
+            ownerEmail: 'owner@example.com',
+            ownerLink: 'provider-conflict' as const,
+            contacts: [],
+          },
         connection: action === 'console-key' ? 'connecting' : 'disconnected',
         jobs: [],
       }
@@ -370,12 +370,12 @@ it('supports first-run Console key setup after owner entry and corroboration', a
       return {
         account: action === 'console-key'
           ? {
-              state: 'ready',
-              inboxId: 'kira-first@agentmail.to',
-              ownerEmail: 'owner@example.com',
-              ownerLink: 'attached' as const,
-              contacts: [],
-            }
+            state: 'ready',
+            inboxId: 'kira-first@agentmail.to',
+            ownerEmail: 'owner@example.com',
+            ownerLink: 'attached' as const,
+            contacts: [],
+          }
           : { state: 'not-configured', contacts: [] },
         connection: action === 'console-key' ? 'connecting' : 'disconnected',
         jobs: [],
@@ -451,7 +451,7 @@ it('does not enable AgentMail key replacement when message_send or realtime is m
   fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
 
   expect(await screen.findByText('✕ falta message_send')).toBeTruthy()
-  expect((screen.getByRole('button', { name: 'Guardar API y verificar acceso' }) as HTMLButtonElement).disabled).toBe(true)
+  expect(screen.getByRole('button', { name: 'Guardar API y verificar acceso' }).disabled).toBe(true)
 })
 
 it('shows the sanitized AgentMail provider issue without marking the inbox disconnected', async () => {
