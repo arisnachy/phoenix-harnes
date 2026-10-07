@@ -747,11 +747,15 @@ export function installAssistantMail(ctx: Context,
               summary: job.summary,
               error: job.error })) } }
       } catch (error) {
-        await handleProviderFailure(error,
-          endpoint !== 'recover' && endpoint !== 'claim' && endpoint !== 'claim-status'
-          && endpoint !== 'console-key' && endpoint !== 'console-key-check')
-        // Provider bodies and fetch/socket errors never cross this secret-free status projection.
-        const message = error instanceof Error && !/fetch|network|socket/iu.test(error.message) ? error.message : 'mail connection failed; check the local setup'
+        const candidateOnly = endpoint === 'claim' || endpoint === 'claim-status'
+          || endpoint === 'console-key' || endpoint === 'console-key-check'
+        if (!candidateOnly) {
+          await handleProviderFailure(error, endpoint !== 'recover')
+        }
+        // Candidate-key checks must never poison the currently active mailbox state.
+        // Provider bodies and credentials still never cross this secret-free boundary.
+        const message = error instanceof Error && !/fetch|network|socket/iu.test(error.message)
+          ? error.message : 'mail connection failed; check the local setup'
         return { ok: false as const, error: { code: 'internal', message, details: {} } }
       }
     }, { authority: 'loopback' })
