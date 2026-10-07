@@ -12,7 +12,9 @@ function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailCo
     verify: overrides.verify ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     refresh: overrides.refresh ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     sendToOwner: overrides.sendToOwner ?? (async () => ({ from: 'kira-real@agentmail.to', to: 'owner@example.com', messageId: 'sent' as never, threadId: 'thread' as never })),
-    sendToAuthorized: overrides.sendToAuthorized ?? (async (to: string) => ({ from: 'kira-real@agentmail.to', to, messageId: 'sent' as never, threadId: 'thread' as never })),
+    sendToAuthorized: overrides.sendToAuthorized ?? (async (to: string) => ({
+      from: 'kira-real@agentmail.to', to, messageId: 'sent' as never, threadId: 'thread' as never,
+    })),
     readInbox: overrides.readInbox ?? (async () => ({
       inboxId: 'kira-real@agentmail.to',
       messages: [{ messageId: 'message-1', from: 'owner@example.com', subject: 'Tarea', preview: 'Informe', taskState: 'replied' }],
