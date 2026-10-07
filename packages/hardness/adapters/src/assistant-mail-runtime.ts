@@ -564,8 +564,15 @@ export function installAssistantMail(ctx: Context,
             mailString(args.apiKey, 8192),
             args.ownerEmail === undefined ? undefined : mailString(args.ownerEmail),
           )
-          status = account.state === 'ready' ? 'connecting' : status
-          if (account.state === 'ready') void pump()
+          if (account.state === 'ready') {
+            socketDispose?.()
+            socketDispose = undefined
+            await receiver?.stop()
+            receiver = undefined
+            transportInbox = undefined
+            status = 'connecting'
+            void pump()
+          }
         }
         else if (endpoint === 'owner') {
           if (Object.keys(args).some(key => key !== 'ownerEmail') || args.ownerEmail === undefined) {
