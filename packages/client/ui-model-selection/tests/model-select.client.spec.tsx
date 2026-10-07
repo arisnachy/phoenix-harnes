@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { ModelSelection } from '@phoenix-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
@@ -364,6 +364,42 @@ describe('ModelSelect reasoning effort', () => {
 
     expect(screen.queryByRole('button')).toBeNull()
     expect(load).not.toHaveBeenCalled()
+  })
+})
+
+describe('ModelSelect catalog scrolling', () => {
+  it('returns to the first row when a startup refresh replaces the open catalog', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state())
+    const { container } = render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    fireEvent.click(screen.getByRole('button', { name: /DeepSeek V4 Flash/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+
+    const list = container.querySelector('.scrollable') as HTMLDivElement
+    list.scrollTop = 96
+
+    act(() => {
+      directory.set(state({
+        groups: [{
+          id: 'deepseek-official',
+          name: 'DeepSeek',
+          models: [
+            { id: 'deepseek-v4-pro', name: 'DeepSeek-V4-Pro', reasoning },
+            { id: 'deepseek-v4-flash', name: 'DeepSeek-V4-Flash', reasoning },
+          ],
+        }],
+      }))
+    })
+
+    expect(list.scrollTop).toBe(0)
+    expect(screen.getByRole('menuitemradio', { name: 'DeepSeek V4 Pro' })).toBeTruthy()
   })
 })
 
