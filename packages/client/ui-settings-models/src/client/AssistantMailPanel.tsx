@@ -65,6 +65,17 @@ export interface AssistantMailClient {
   prepareClaim?(): Promise<{ readonly copied: true; readonly inboxId: string; readonly claimUrl: string }>
 }
 
+const READY_STATUS_LABELS: Readonly<Record<string, string>> = {
+  connected: 'Correo verificado · Activo',
+  'connected-polling': 'Correo verificado · Activo por polling',
+  connecting: 'Correo verificado · Conectando',
+  'verification-required': 'AgentMail requiere verificación',
+  'recovery-required': 'AgentMail requiere recuperar acceso',
+  'permission-required': 'AgentMail requiere permisos',
+  'quota-reached': 'Límite gratuito alcanzado',
+  'message-rejected': 'Último envío rechazado',
+}
+
 const JOB_LABELS: Readonly<Record<string, string>> = {
   received: 'Recibido',
   pending: 'Pendiente',
@@ -157,26 +168,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const providerWarning = recoveryRequired || providerIssue !== undefined
     || (ready && ['quota-reached', 'message-rejected', 'permission-required'].includes(connection))
   const statusText = ready
-    ? connection === 'connected'
-      ? 'Correo verificado · Activo'
-      : connection === 'connected-polling'
-        ? 'Correo verificado · Activo por polling'
-        : connection === 'connecting'
-        ? 'Correo verificado · Conectando'
-        : connection === 'verification-required'
-          ? 'AgentMail requiere verificación'
-          : connection === 'recovery-required'
-            ? 'AgentMail requiere recuperar acceso'
-            : connection === 'permission-required'
-              ? 'AgentMail requiere permisos'
-              : connection === 'quota-reached'
-              ? 'Límite gratuito alcanzado'
-              : connection === 'message-rejected'
-                ? 'Último envío rechazado'
-                : 'Correo verificado · Sin conexión'
+    ? READY_STATUS_LABELS[connection] ?? 'Correo verificado · Sin conexión'
     : pendingVerification ? ownerLinkConflict ? 'Vincula propietario' : 'Verifica una vez'
-      : ambiguous ? 'Necesita recuperación'
-        : 'Aún sin correo'
+      : ambiguous ? 'Necesita recuperación' : 'Aún sin correo'
   const statusClass = ready && !providerWarning
     ? `${styles.status} ${styles.statusReady}`
     : pendingVerification || ambiguous || providerWarning
