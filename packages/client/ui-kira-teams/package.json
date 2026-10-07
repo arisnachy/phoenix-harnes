@@ -27,7 +27,8 @@
         "@phoenix-ai/dsh-client-locale",
         "@phoenix-ai/dsh-client-runtime",
         "@phoenix-ai/dsh-client-ui-layout",
-        "@phoenix-ai/dsh-client-ui-primitives"
+        "@phoenix-ai/dsh-client-ui-primitives",
+        "@phoenix-ai/dsh-client-ui-settings"
       ],
       "platform": "web"
     }
@@ -54,7 +55,8 @@
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
     "@phoenix-ai/dsh-agent-team": "workspace:^",
-    "@phoenix-ai/dsh-api-remotes": "workspace:^"
+    "@phoenix-ai/dsh-api-remotes": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-settings": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-subagent": "workspace:^",
@@ -70,7 +72,8 @@
     "react": "^18.2.0",
     "@phoenix-ai/dsh-client-ui-conversation": "workspace:^",
     "@phoenix-ai/dsh-agent-team": "workspace:^",
-    "@phoenix-ai/dsh-api-remotes": "workspace:^"
+    "@phoenix-ai/dsh-api-remotes": "workspace:^",
+    "@phoenix-ai/dsh-client-ui-settings": "workspace:^"
   },
   "files": [
     "lib/index.js",

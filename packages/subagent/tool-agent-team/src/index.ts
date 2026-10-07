@@ -11,8 +11,26 @@ import {
   teamExecutionProof,
   teamExecutionRequirement,
   teamSocialStyle,
+  teamSocialStyleFromProfile,
+  DEFAULT_TEAM_DESIGN_JSON,
+  TEAM_DESIGN_MEMBER_IDS,
+  TEAM_DESIGN_SETTINGS_NAMESPACE,
+  activeTeamDesign,
+  normalizeTeamDesign,
+  normalizeTeamDesignDocument,
+  parseTeamDesignDocument,
 } from '@phoenix-ai/dsh-agent-team'
-import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
+import type {
+  TeamDesign,
+  TeamDesignMemberId,
+  TeamDesignPerson,
+  TeamDesignSettingsEnvelope,
+  TeamMemberView,
+} from '@phoenix-ai/dsh-agent-team'
+import { settingsNamespace } from '@phoenix-ai/dsh-settings'
+import type { SettingsScope } from '@phoenix-ai/dsh-settings'
+
+type TeamDesignScope = Pick<SettingsScope<TeamDesignSettingsEnvelope>, 'get' | 'replace'>
 import { foldRequestHeader } from '@phoenix-ai/dsh-session'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import type { InferValue, ValueSchemaSpec } from '@phoenix-ai/dsh-tools'
@@ -58,6 +76,47 @@ export const Config: z<Config> = z.object({
     reasoningEffort: z.string(),
   })).default({}),
 })
+
+
+const TEAM_DESIGN_SCHEMA: z<TeamDesignSettingsEnvelope> = z.object({
+  document: z.string().default(DEFAULT_TEAM_DESIGN_JSON),
+})
+
+function designKey(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').trim().toLocaleLowerCase()
+}
+
+function designPersonOf(
+  scope: TeamDesignScope,
+  runtimeName: string,
+  role: 'lead' | 'teammate',
+): TeamDesignPerson | undefined {
+  const team = activeTeamDesign(parseTeamDesignDocument(scope.get().document))
+  if (role === 'lead') return team.lead
+  const key = designKey(runtimeName)
+  const alias = key === 'la-forja' || key === 'forja' || key === 'forge'
+    ? 'atlas'
+    : key === 'aegis'
+      ? 'zenith'
+      : key
+  if (!(TEAM_DESIGN_MEMBER_IDS as readonly string[]).includes(alias)) return undefined
+  return team.members.find(member => member.id === alias as TeamDesignMemberId)
+}
+
+function designedSocialStyle(
+  scope: TeamDesignScope,
+  runtimeName: string,
+  role: 'lead' | 'teammate',
+): string {
+  const profile = designPersonOf(scope, runtimeName, role)
+  return profile === undefined
+    ? teamSocialStyle(runtimeName, role)
+    : teamSocialStyleFromProfile(profile, role)
+}
+
+function activeDesignOf(scope: TeamDesignScope): TeamDesign {
+  return activeTeamDesign(parseTeamDesignDocument(scope.get().document))
+}
 
 /** Model-facing collaboration guidance shared by Lead and teammates. */
 const POLICY = `Agent Teams is real shared work, not role-play. Kira may delegate bounded independent work when it materially improves quality or latency. Use the adaptive teammate ladder: one teammate is normal for substantive delegated work, a second is justified only for a genuinely independent difficult front, and a third is reserved for exceptional complexity or three truly independent fronts; never exceed three. Reuse existing teammates before creating another. Fénix Eclipse is explicitly authorized to use this Team path when independent specialist work materially improves quality or latency; in that mode prefer spawn_teammate over legacy subagent delegation. Never spawn a teammate only to make the interface look busy. Routine low-risk requests, including one generated image, are completed directly by Kira with proportional checks; do not create an independent review merely to close them. Reserve independent review for explicit requests, material complexity or risk. Aegis is Phoenix's reserved silent reviewer identity: use the explicit teammate name aegis only for independent review, verification, or risk checks, never for ordinary execution. Keep Aegis quiet by default; it should send a Team message only for a real blocker, a required user decision, or material verification evidence, using purpose review, blocker, or result rather than status chatter. Before delegating, compare expected quality gain and time saved against added model consumption; choose a small independent scope with a concrete receipt or reviewed artifact. Reuse an existing worker, stop a redundant worker when its outcome is no longer needed, and escalate a real blocker instead of funding repeated attempts. For ordinary delegation, omit the teammate name and let the runtime choose one unused KIRA codename from the actual responsibility (vortice, aurora, atlas, nova, lumen, helix, prisma, orion, vega, eclipse, argo, solaria, nexo, astra, lyra, zenith, cobalto, quasar, senda, orbita), so engineering, research, QA, design, security, data, integration, automation and other work naturally reach different specialists. Specify a name only when the user explicitly addresses a specialist or continuity with an existing identity matters. Never use La Forja/Atlas as a universal default.
@@ -175,6 +234,17 @@ const WAIT_VALUE_SCHEMA = {
         message: { type: 'string', required: true },
       },
     },
+  },
+} as const
+
+const DESIGN_TEAM_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    teamId: { type: 'string', required: true },
+    teamName: { type: 'string', required: true },
+    leadName: { type: 'string', required: true },
+    members: { type: 'integer', required: true },
   },
 } as const
 
@@ -303,7 +373,12 @@ function requireExecutionProof(
 }
 
 /** Register the complete Team tool set in one exact Agent scope. */
-function install(agent: Agent, ctx: Context, config: Required<Config>): () => void {
+function install(
+  agent: Agent,
+  ctx: Context,
+  config: Required<Config>,
+  designScope: TeamDesignScope,
+): () => void {
   const scoped = agent.ctx
   const disposers: Array<() => unknown> = []
   const register = (disposer: () => unknown): void => { disposers.push(disposer) }
@@ -313,10 +388,59 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       order: 60,
       text: () => {
         const membership = ctx.agentTeams.membership(agent)
-        const socialStyle = teamSocialStyle(membership.name, membership.role)
-        return `${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}`
+        const profile = designPersonOf(designScope, membership.name, membership.role)
+        const socialStyle = designedSocialStyle(designScope, membership.name, membership.role)
+        const visibleName = profile?.displayName ?? membership.name
+        return `${POLICY}\n\nYour Team role is ${membership.role}; your visible Team name is ${visibleName}; your stable runtime handle is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}`
       },
     }))
+
+    register(scoped.tools.register(defineTool({
+      name: 'design_team',
+      description: 'Apply the user-requested Team Studio redesign to the active Phoenix team while preserving stable runtime ids. Lead only. Use for team/name/personality/voice/gender/avatar/theme changes requested from Team Studio.',
+      parameters: {
+        design_json: {
+          type: 'string',
+          required: true,
+          description: 'JSON object for the active design. Include name, themePrompt, motion, lead, and members. lead/member visible fields are displayName, role, gender, personality, voice, avatar, enabled. Keep the twenty stable member ids.',
+        },
+      },
+      output: jsonOutput(DESIGN_TEAM_VALUE_SCHEMA),
+      async execute(args, exec) {
+        const caller = callingAgent(exec.agent, 'design_team')
+        const membership = ctx.agentTeams.membership(caller)
+        if (membership.role !== 'lead') {
+          throw new TeamError('only the Team Lead may redesign the Team', 'TEAM_NOT_AUTHORIZED')
+        }
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(args.design_json)
+        } catch {
+          throw new Error('design_json must be valid JSON')
+        }
+        const document = parseTeamDesignDocument(designScope.get().document)
+        const current = activeTeamDesign(document)
+        const normalized = normalizeTeamDesign(
+          typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)
+            ? { ...(parsed as Record<string, unknown>), id: current.id }
+            : parsed,
+          current,
+        )
+        const nextDocument = normalizeTeamDesignDocument({
+          ...document,
+          activeTeamId: current.id,
+          teams: document.teams.map(team => team.id === current.id ? normalized : team),
+        })
+        await designScope.replace({ document: JSON.stringify(nextDocument) })
+        const active = activeTeamDesign(nextDocument)
+        return {
+          teamId: active.id,
+          teamName: active.name,
+          leadName: active.lead.displayName,
+          members: active.members.length,
+        }
+      },
+    })))
 
     register(scoped.tools.register(defineTool({
       name: 'spawn_teammate',
@@ -382,7 +506,17 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const occupiedNames = ctx.agentTeams.listMembers(agent)
           .filter(member => member.role === 'teammate')
           .map(member => member.name)
-        const memberName = args.name ?? selectTeamPersonaName(args.description, occupiedNames)
+        const disabledNames = activeDesignOf(designScope).members
+          .filter(persona => !persona.enabled)
+          .map(persona => persona.id)
+        const memberName = args.name ?? selectTeamPersonaName(args.description, [...occupiedNames, ...disabledNames])
+        const designedPersona = designPersonOf(designScope, memberName, 'teammate')
+        if (designedPersona !== undefined && !designedPersona.enabled) {
+          throw new TeamError(
+            `Team Studio persona "${designedPersona.displayName}" is disabled for the active team`,
+            'TEAM_NOT_AUTHORIZED',
+          )
+        }
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: memberName,
           description: args.description,
@@ -639,6 +773,29 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
 
 /** Install Team tools in every live or subsequently published Team member scope. */
 export function apply(ctx: Context, config: Config = {}): void {
+  // Settings is optional in some reduced Team compositions (e.g. tool catalog).
+  // Core collaboration must still boot when the settings provider is absent.
+  let registeredScope: SettingsScope<TeamDesignSettingsEnvelope> | undefined
+  const designScope: TeamDesignScope = {
+    get: () => registeredScope?.get() ?? { document: DEFAULT_TEAM_DESIGN_JSON },
+    replace: async (section) => {
+      if (registeredScope === undefined) {
+        throw new Error('Team Studio requires the Phoenix Settings service before saving a design')
+      }
+      await registeredScope.replace(section)
+    },
+  }
+  ctx.inject(['settings'], (sctx) => {
+    const scope = sctx.settings.register(
+      settingsNamespace(TEAM_DESIGN_SETTINGS_NAMESPACE),
+      TEAM_DESIGN_SCHEMA,
+      { base: { document: DEFAULT_TEAM_DESIGN_JSON } },
+    )
+    registeredScope = scope
+    sctx.effect(() => () => {
+      if (registeredScope === scope) registeredScope = undefined
+    }, 'tool-team: design settings scope')
+  })
   const resolved: Required<Config> = {
     freshProvider: config.freshProvider ?? 'spawn',
     forkProvider: config.forkProvider ?? 'fork',
@@ -656,7 +813,7 @@ export function apply(ctx: Context, config: Config = {}): void {
     if (membership === undefined && (agent.session.header.origin !== 'subagent' || parentId === undefined || ctx.agents.get(parentId) === undefined)) return
     const chat = installChatTools(agent, ctx)
     try {
-      const team = membership === undefined ? undefined : install(agent, ctx, resolved)
+      const team = membership === undefined ? undefined : install(agent, ctx, resolved, designScope)
       installed.set(agent, () => { team?.(); chat() })
     } catch (error) { chat(); throw error }
   }

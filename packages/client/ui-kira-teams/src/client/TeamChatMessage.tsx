@@ -1,6 +1,12 @@
 import { memo } from 'react'
 import { MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
-import type { PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
+import type { SettingsScope } from '@phoenix-ai/dsh-client-runtime/client'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
+import {
+  activeTeamDesign,
+  parseTeamDesignDocument,
+  type TeamDesignSettingsEnvelope,
+} from '@phoenix-ai/dsh-agent-team/design-types'
 import {
   KIRA_ROSTER, kiraTeamSpecialistOf,
 } from './KiraTeamsDock.tsx'
@@ -123,25 +129,43 @@ function textOf(content: readonly unknown[]): string {
 }
 
 /** Render one actual Agent Teams peer message inside Phoenix's existing chat column. */
-type KiraTeamMessageViewProps = PropsRuntime<'conversation.chat.node', 'kira-team-message'> & Partial<PropsLocale<typeof NS>>
+interface TeamMessageDesignInjected {
+  hooks: { teamDesign: SettingsScope<TeamDesignSettingsEnvelope> }
+}
+
+type KiraTeamMessageViewProps = PropsRuntime<'conversation.chat.node', 'kira-team-message'>
+  & Partial<PropsLocale<typeof NS>> & InjectFace<TeamMessageDesignInjected>
 
 export const KiraTeamMessageView = memo(function KiraTeamMessageView({
-  node, t, useProjection, messageActions,
+  node, t, useProjection, messageActions, useTeamDesign,
 }: KiraTeamMessageViewProps) {
   const data: KiraTeamMessageChatData = node.data
   const participants = useProjection('teamChatParticipants') ?? {}
+  const designSnapshot = useTeamDesign(value => value)
+  const design = activeTeamDesign(parseTeamDesignDocument(designSnapshot.value?.document))
   const identityFor = (name: string, id: string): TeamIdentity => {
     const base = teamIdentityOf(name, id)
     const participant = participants[id]
-    return participant === undefined ? base : {
-      ...base, name: participant.name,
+    const runtime = participant === undefined ? base : {
+      ...base,
+      name: participant.name,
       kind: KIRA_ROSTER.find(persona => persona.kind === participant.avatar)?.kind ?? base.kind,
+    }
+    const designed = design.members.find(member => member.id === runtime.kind)
+    return designed === undefined ? runtime : {
+      name: designed.displayName,
+      role: designed.role,
+      kind: designed.avatar,
     }
   }
   const identity = identityFor(data.senderName, data.senderId)
   const avatar = KIRA_ROSTER.find(persona => persona.kind === data.avatar)?.kind ?? identity.kind
-  const sender = data.senderKind === 'user' ? { name: t?.('chat.user') ?? 'User', role: '', kind: 'aurora' as const } : { ...identity, name: data.senderKind === 'kira' ? 'Kira'
-    : participants[data.senderId]?.name ?? (data.missionId === undefined ? identity.name : data.senderName), kind: avatar }
+  const designedAvatar = design.members.find(member => member.id === avatar)?.avatar
+  const sender = data.senderKind === 'user'
+    ? { name: t?.('chat.user') ?? 'User', role: '', kind: 'aurora' as const }
+    : data.senderKind === 'kira'
+      ? { name: design.lead.displayName, role: design.lead.role, kind: design.lead.avatar }
+      : { ...identity, kind: designedAvatar ?? identity.kind }
   const target = data.targetName === undefined
     ? undefined
     : identityFor(data.targetName, data.targetId)
@@ -170,8 +194,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
       <div className={css.column}>
         <div className={css.meta}>
           <strong>{sender.name}</strong>
-          <span>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
-            : t?.((data.role ?? participants[data.senderId]?.role) as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
+          <span>{sender.role}</span>
           {data.purpose !== undefined && data.purpose !== 'update' && (
             <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
           )}

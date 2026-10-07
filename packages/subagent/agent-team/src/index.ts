@@ -47,8 +47,30 @@ export {
   selectTeamPersonaName,
   teamPersonaGender,
   teamSocialStyle,
+  teamSocialStyleFromProfile,
 } from './personas.ts'
 export type { TeamPersonaGender, TeamPersonaKind, TeamSkill } from './personas.ts'
+export {
+  DEFAULT_TEAM_DESIGN,
+  DEFAULT_TEAM_DESIGN_DOCUMENT,
+  DEFAULT_TEAM_DESIGN_JSON,
+  TEAM_DESIGN_MEMBER_IDS,
+  TEAM_DESIGN_SETTINGS_NAMESPACE,
+  activeTeamDesign,
+  normalizeTeamDesign,
+  normalizeTeamDesignDocument,
+  parseTeamDesignDocument,
+} from './design-types.ts'
+export type {
+  TeamDesign,
+  TeamDesignAvatarId,
+  TeamDesignDocument,
+  TeamDesignGender,
+  TeamDesignMemberId,
+  TeamDesignMotion,
+  TeamDesignPerson,
+  TeamDesignSettingsEnvelope,
+} from './design-types.ts'
 
 declare module '@phoenix-ai/cordis' {
   interface Context {

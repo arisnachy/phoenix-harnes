@@ -32,6 +32,10 @@
     "./chat-types": {
       "types": "./lib/types/chat-types.d.ts",
       "default": "./lib/types/chat-types.js"
+    },
+    "./design-types": {
+      "types": "./lib/types/design-types.d.ts",
+      "default": "./lib/types/design-types.js"
     }
   },
   "files": [
