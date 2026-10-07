@@ -497,10 +497,20 @@ export class McpOAuthController {
       message: `Preparando autorización de ${this.serverName}…`,
     })
     try {
-      const first = await auth(provider, { serverUrl: this.serverUrl })
+      // Bound discovery, registration and token HTTP calls; user consent itself
+      // remains pending until its callback or explicit cancellation.
+      const fetchFn: typeof globalThis.fetch = (input, init) => globalThis.fetch(input, {
+        ...init,
+        signal: AbortSignal.any([
+          session.signal,
+          AbortSignal.timeout(30_000),
+          ...(init?.signal == null ? [] : [init.signal]),
+        ]),
+      })
+      const first = await auth(provider, { serverUrl: this.serverUrl, fetchFn })
       if (first !== 'REDIRECT') return
       const code = await attempt.code
-      const final = await auth(provider, { serverUrl: this.serverUrl, authorizationCode: code })
+      const final = await auth(provider, { serverUrl: this.serverUrl, authorizationCode: code, fetchFn })
       if (final !== 'AUTHORIZED') throw new Error(`MCP OAuth did not authorize ${this.serverName}`)
     } catch (error) {
       if (!this.closed || !isExpectedMcpOAuthClose(error)) throw error

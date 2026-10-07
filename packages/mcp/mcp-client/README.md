@@ -118,6 +118,8 @@ Arguments, mapped text, and durable image references are retained until compacti
 
 Append-only; newly visible content follows the reusable request prefix and does not invalidate existing KV-cache entries.
 
+Interactive OAuth discovery, registration and token HTTP requests have a 30-second request deadline and honor authorization cancellation. Waiting for the user to consent is not subject to that HTTP deadline.
+
 ## Known Limitations and Deferred Work
 
 - **Tools are the only bridged MCP capability** — Resources and Prompts have no harness consumer and are deferred.

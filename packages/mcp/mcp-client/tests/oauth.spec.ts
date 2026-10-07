@@ -300,6 +300,41 @@ describe('createMcpOAuthProvider', () => {
     expect(isExpectedMcpOAuthClose(new Error('MCP OAuth state did not match'))).toBe(false)
   })
 
+  it('bounds discovery requests and propagates authorization cancellation to the HTTP request', async () => {
+    const credentials = {
+      readRecord: vi.fn(async () => undefined),
+      modifyRecord: vi.fn(),
+      deleteRecord: vi.fn(),
+    } as unknown as CredentialProvider
+    const controller = new McpOAuthController(credentials, 'notion', 'https://mcp.notion.com')
+    await controller.ready
+    const cancellation = new AbortController()
+    const deadline = new AbortController()
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(deadline.signal)
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, options) => {
+      expect(options?.signal?.aborted).toBe(false)
+      cancellation.abort(new Error('authorization cancelled'))
+      expect(options?.signal?.aborted).toBe(true)
+      throw options?.signal?.reason
+    })
+    vi.mocked(auth).mockImplementationOnce(async (_provider, options) => {
+      if (options.fetchFn === undefined) throw new Error('unbounded discovery')
+      await options.fetchFn('https://mcp.notion.com/.well-known/oauth-authorization-server')
+      return 'AUTHORIZED'
+    })
+    try {
+      await expect(controller.authorize({
+        method: 'oauth', signal: cancellation.signal, notify: vi.fn(), prompt: vi.fn(),
+      })).rejects.toThrow('authorization cancelled')
+      expect(timeout).toHaveBeenCalledWith(30_000)
+      expect(fetch).toHaveBeenCalledTimes(1)
+    } finally {
+      fetch.mockRestore()
+      timeout.mockRestore()
+      await controller.close()
+    }
+  })
+
   it('does not leak a callback rejection when OAuth fails before redirect', async () => {
     vi.mocked(auth).mockRejectedValueOnce(new Error('discovery failed'))
     const credentials = {
