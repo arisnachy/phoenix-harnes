@@ -800,7 +800,7 @@ it('corroborates a human Console API key without storing it or creating an inbox
             inbox_limit: 3,
           })
         }
-        expect(address).toBe('https://api.agentmail.to/v0/inboxes?limit=100')
+        expect(address).toBe('https://api.agentmail.to/v0/inboxes')
         return Response.json({ count: 1, inboxes: [], limit: 1 })
       },
     })
@@ -817,7 +817,7 @@ it('corroborates a human Console API key without storing it or creating an inbox
     expect(saved).toBe('')
     expect(requests).toEqual([
       'https://api.agentmail.to/v0/organizations',
-      'https://api.agentmail.to/v0/inboxes?limit=100',
+      'https://api.agentmail.to/v0/inboxes',
     ])
     expect((await account.status()).state).toBe('not-configured')
   } finally { await rm(directory, { recursive: true, force: true }) }
@@ -882,7 +882,7 @@ it('corroborates a replacement key against Kira current inbox and message access
             inbox_limit: 3,
           })
         }
-        if (address.endsWith('/inboxes?limit=100')) return Response.json({ count: 1, inboxes: [], limit: 1 })
+        if (address.endsWith('/inboxes')) return Response.json({ count: 1, inboxes: [], limit: 1 })
         if (address.endsWith('/inboxes/kira-current%40agentmail.to')) {
           return Response.json({ inbox_id: 'kira-current@agentmail.to' })
         }
@@ -937,7 +937,7 @@ it('migrates a ready stale agent-signup inbox to an existing Console Kira inbox 
         if (address.endsWith('/inboxes/old-agent-org%40agentmail.to')) {
           return Response.json({ code: 'not_found', message: 'Not found' }, { status: 404 })
         }
-        if (address === 'https://api.agentmail.to/v0/inboxes?limit=100') {
+        if (address === 'https://api.agentmail.to/v0/inboxes') {
           return Response.json({
             count: 1,
             limit: 100,
@@ -1039,7 +1039,7 @@ it('creates the first Kira inbox from a corroborated Console key and explicit Ph
             inbox_limit: 3,
           })
         }
-        if (address === 'https://api.agentmail.to/v0/inboxes?limit=100') {
+        if (address === 'https://api.agentmail.to/v0/inboxes') {
           return Response.json({ count: 0, inboxes: [], limit: 100 })
         }
         if (address === 'https://api.agentmail.to/v0/inboxes') {
@@ -1107,7 +1107,7 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
             inbox_limit: 3,
           })
         }
-        if (address === 'https://api.agentmail.to/v0/inboxes?limit=100') {
+        if (address === 'https://api.agentmail.to/v0/inboxes') {
           expect(auth).toBe('Bearer am_us_console_key')
           return Response.json({ count: 0, inboxes: [], limit: 100 })
         }
@@ -1146,7 +1146,7 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
     expect(result.inboxId).not.toBe('old-signup@agentmail.to')
     expect(saved).toBe('am_us_console_key')
     expect(requests).toHaveLength(5)
-    expect(requests[1]?.url).toContain('/inboxes?limit=100')
+    expect(requests[1]?.url).toContain('/inboxes')
     expect(requests[3]?.url).toContain('/inboxes/')
     expect(requests[4]?.url).toContain('/messages?')
   } finally { await rm(directory, { recursive: true, force: true }) }
@@ -1169,7 +1169,7 @@ it('does not require optional organization authentication metadata during a key 
             inbox_limit: 3,
           })
         }
-        expect(address).toBe('https://api.agentmail.to/v0/inboxes?limit=100')
+        expect(address).toBe('https://api.agentmail.to/v0/inboxes')
         return Response.json({ count: 1, inboxes: [], limit: 1 })
       },
     })
@@ -1215,7 +1215,7 @@ it('reconciles an ambiguous Console-key inbox create without minting a duplicate
             authentication_type: 'clerk',
           })
         }
-        if (address === 'https://api.agentmail.to/v0/inboxes?limit=100') {
+        if (address === 'https://api.agentmail.to/v0/inboxes') {
           return Response.json({ count: 0, inboxes: [], limit: 100 })
         }
         if (address === 'https://api.agentmail.to/v0/inboxes') {
