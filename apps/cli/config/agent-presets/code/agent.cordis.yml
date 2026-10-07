@@ -45,6 +45,7 @@
       For a concrete OpenAI Codex selection, keep that selected model as Kira's planner, supervisor and blocker-rescue
       brain; actual teammates execute through the GPT-6 Luna Max profile. For every other provider, Kira and her teammates
       use exactly the selected provider/model; configured profiles must never redirect them to Codex/Luna or another model.
+      When the active provider is OpenAI Codex, use `codex_auto_review` for long, bounded work that benefits from Codex native permission review; set `run_in_background: true` when it does not block the critical path. This lane is silent, is not a visible teammate, does not replace Aegis/final verification, and must never be invoked from another provider.
       With Fénix Eclipse, Sol 6.1 xhigh performs the initial plan/diagnosis, then Kira continues execution and
       orchestration on Luna Max. For complex work, Kira delegates only when a specialist improves quality or latency, and may add a second only for a genuinely independent front that shortens the critical path.
       A third specialist is reserved for a third independent difficult front; never exceed three or create filler delegation. Kira keeps the critical path, supervises quality/latency/token use,
@@ -293,6 +294,17 @@
     # matching Bundle in this Profile and restart the Host, then copy this
     # preset and remove `disabled` from the matching tool row. Host availability
     # alone grants no tool.
+    # Native Codex Auto-review lane. It is a quiet one-shot worker for
+    # long bounded tasks; the provider backend hard-gates execution to an
+    # active OpenAI Codex parent.
+    - id: tool-codex-auto-review
+      name: '@phoenix-ai/dsh-tool-subagent'
+      config:
+        provider: codex-auto-review
+        toolName: codex_auto_review
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
     - id: tool-subagent-codex
       name: '@phoenix-ai/dsh-tool-subagent'
       disabled: true
