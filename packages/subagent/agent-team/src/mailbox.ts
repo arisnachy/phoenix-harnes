@@ -333,7 +333,7 @@ export class TeamMailbox {
     return [
       { type: 'text', text: `Team message ${message.id} from ${message.senderName}${message.purpose === undefined ? '' : ` [${message.purpose}]`}:` },
       ...structuredClone(message.content),
-      ...handoff ? [{ type: 'text' as const, text: `Kira: this material handoff requires your decision. Respond to ${message.senderName} by name in your own visible text before releasing or stopping their work. State what you actually checked and the concrete next action: accept verified evidence, request a specific correction, or try an available alternative for the blocker. Do not claim verification you have not performed or wake a finished worker just for acknowledgement. Integrate the outcome into your user-facing answer; explain any remaining blocker before ending.` }] : [],
+      ...handoff ? [{ type: 'text' as const, text: `Kira: this material handoff requires your decision. Respond to ${message.senderName} by name in your own visible text before releasing or stopping their work. State what you actually checked and the concrete next action: accept verified evidence, request a specific correction, or try an available alternative for the blocker. Execute that next action in this turn; if the teammate must continue, use followup_task with the concrete scope instead of merely announcing that they will work. Do not only paraphrase their report to the user or end with a promise. Do not claim verification you have not performed or wake a finished worker just for acknowledgement. Integrate the outcome into your user-facing answer; explain any remaining blocker before ending.` }] : [],
     ]
   }
 

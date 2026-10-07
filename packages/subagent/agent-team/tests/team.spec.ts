@@ -1243,6 +1243,8 @@ describe('Team mailbox and waiting', () => {
     const input = steer.mock.calls[0]![0]
     expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
       .toContain('Respond to argo by name')
+    expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
+      .toContain('Execute that next action in this turn')
     await vi.waitFor(() => expect(adapter.requests).toHaveLength(2))
     await vi.waitFor(() => expect(lead.session.events.some(event => event.type === 'assistant/message'
       && event.data.message.content.some(block => block.type === 'text'
@@ -2431,6 +2433,8 @@ describe('visible team conversation', () => {
     expect(promptText).toContain(`Visible Kira assignment reaction target: team-member:${started.member.id}`)
     expect(promptText).toContain('team_chat_react')
     expect(promptText).toContain('Before substantive work')
+    expect(promptText).toContain('Do not end after announcing your plan')
+    expect(promptText).toContain('send_message to lead with purpose result or blocker')
     ctx.agentTeams.interrupt(lead, 'zenith')
     await waitNoAgent(ctx, started.member.id)
   })

@@ -320,7 +320,7 @@ export class TeamRoster {
         }
         : {
           type: 'text' as const,
-          text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. Before substantive work, publish your own brief first-action update through send_message with target lead and purpose update, addressing Kira in your own voice (for example, 'Kira, buscaré las fuentes y comprobaré su fecha.'). This is your own update, not text for Kira to paraphrase. Then execute the assignment in the same turn. Do not claim completed work, repeat the assignment or add an acknowledgement-only turn. team_chat_react is optional; never substitute an emoji for the useful work update.`,
+          text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. Before substantive work, publish your own brief first-action update through send_message with target lead and purpose update, addressing Kira in your own voice (for example, 'Kira, buscaré las fuentes y comprobaré su fecha.'). This is your own update, not text for Kira to paraphrase. Then execute the assignment in the same turn. Do not end after announcing your plan: perform the next real action, share only material findings or blockers, and finish with send_message to lead with purpose result or blocker, stating evidence and what remains. Do not claim completed work, repeat the assignment or add an acknowledgement-only turn. team_chat_react is optional; never substitute an emoji for the useful work update.`,
         },
     ]
     let started: ContinuableStart
