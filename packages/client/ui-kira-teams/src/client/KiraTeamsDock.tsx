@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { ILayout } from '@phoenix-ai/dsh-client-ui-layout/client'
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import type {
-  SessionId, SessionListState, SessionSummary, SubagentAddress, type SettingsScope,
+  SessionId, SessionListState, SessionSummary, SubagentAddress, SettingsScope,
 } from '@phoenix-ai/dsh-client-runtime/client'
 import {
   activeTeamDesign,
