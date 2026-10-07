@@ -226,9 +226,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         setConsoleKeyCheck(await checker(apiKey))
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo corroborar la API key.'
-        setFailure(message.includes('not organization-scoped')
-          ? 'La clave no tiene alcance de organización. Crea una API key de organización en AgentMail Console.'
-          : message.includes('rejected this API key')
+        setFailure(message.includes('requires an organization-scoped')
+          ? 'Para crear un buzón nuevo, AgentMail exige una API key con alcance de organización.'
+          : message.includes('belongs to a different inbox')
+            ? 'La API key está limitada a otro buzón. Usa una clave de organización o una clave del buzón actual de Kira.'
+            : message.includes('not organization-scoped')
+              ? 'La clave no tiene alcance de organización. Crea una API key de organización en AgentMail Console.'
+              : message.includes('rejected this API key')
             ? 'AgentMail rechazó la API key. Comprueba que esté completa, vigente y no revocada.'
             : message.includes('human-owned AgentMail Console organization')
               ? 'La clave no pertenece a una organización humana de AgentMail Console.'
@@ -338,7 +342,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       {consoleKeyCheck === undefined ? null : <div className={styles.keyCheck} aria-label="Comprobación de API key">
         <strong>Comprobación de AgentMail</strong>
         <span>API key <b>✓ válida</b></span>
-        <span>Organización <b>✓ Console humana</b></span>
+        <span>Identidad AgentMail <b>✓ autenticada</b></span>
         <span>
           Lectura de buzones <b>{consoleKeyCheck.inboxRead ? '✓ disponible' : '✕ falta inbox_read'}</b>
         </span>
