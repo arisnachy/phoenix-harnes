@@ -238,6 +238,36 @@ export class MailOnboarding {
       && Number.isInteger(organization.inbox_limit) && organization.inbox_limit >= 0
       ? organization.inbox_limit
       : undefined
+    const current = await this.file.read()
+    let currentInboxAccess: boolean | undefined
+    let messageRead: boolean | undefined
+    if (current.state === 'ready' && current.inboxId !== undefined) {
+      try {
+        const identity = mailRecord(await agentMailRequest(
+          `/inboxes/${encodeURIComponent(current.inboxId)}`,
+          key, this.options.timeoutMs, this.options.fetch ?? fetch,
+        ))
+        currentInboxAccess = identity.inbox_id === current.inboxId
+      } catch (error) {
+        if (error instanceof AgentMailHttpError && (error.status === 404 || error.reason === 'permission-missing')) {
+          currentInboxAccess = false
+        } else throw error
+      }
+      if (currentInboxAccess) {
+        try {
+          await agentMailRequest(
+            `/inboxes/${encodeURIComponent(current.inboxId)}/messages?limit=1&include_spam=false&include_blocked=false&include_unauthenticated=false&labels=received`,
+            key, this.options.timeoutMs, this.options.fetch ?? fetch,
+          )
+          messageRead = true
+        } catch (error) {
+          if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') messageRead = false
+          else throw error
+        }
+      } else {
+        messageRead = false
+      }
+    }
     return {
       valid: true,
       organizationId,
@@ -247,6 +277,8 @@ export class MailOnboarding {
       ...(inboxLimit === undefined ? {} : { inboxLimit }),
       capacityAvailable: inboxLimit === undefined || inboxCount < inboxLimit,
       inboxRead,
+      ...(currentInboxAccess === undefined ? {} : { currentInboxAccess }),
+      ...(messageRead === undefined ? {} : { messageRead }),
     }
   }
 
@@ -263,7 +295,6 @@ export class MailOnboarding {
       const key = mailString(apiKey, 8192)
       if (!key.startsWith('am_') || key.length <= 3) throw new Error('enter a complete AgentMail API key beginning with am_')
       const previous = await this.file.read()
-      if (previous.state === 'ready') throw new Error('the Kira mailbox is already active; replace it explicitly before changing credentials')
       let organization: Record<string, unknown>
       try {
         organization = mailRecord(await agentMailRequest('/organizations', key, this.options.timeoutMs,
@@ -280,6 +311,13 @@ export class MailOnboarding {
       }
       if (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0) {
         throw new Error('use an API key created in your human-owned AgentMail Console organization')
+      }
+
+      if (previous.state === 'ready') {
+        if (previous.inboxId === undefined) throw new Error('ready Kira mailbox is missing its inbox identity')
+        await this.verifyConsoleInboxAccess(previous.inboxId, key)
+        await this.options.saveKey(key)
+        return this.status()
       }
 
       // Once the user explicitly chooses Console-key recovery, make that credential durable before
@@ -325,6 +363,32 @@ export class MailOnboarding {
     })
   }
 
+  private async verifyConsoleInboxAccess(inboxId: string, key: string): Promise<void> {
+    try {
+      const identity = mailRecord(await agentMailRequest(
+        `/inboxes/${encodeURIComponent(inboxId)}`,
+        key, this.options.timeoutMs, this.options.fetch ?? fetch,
+      ))
+      if (identity.inbox_id !== inboxId) throw new Error('AgentMail API key returned a different inbox identity')
+    } catch (error) {
+      if (error instanceof AgentMailHttpError && (error.status === 404 || error.reason === 'permission-missing')) {
+        throw new Error('this AgentMail API key cannot read the current Kira inbox; use a key with inbox_read and access to that inbox')
+      }
+      throw error
+    }
+    try {
+      await agentMailRequest(
+        `/inboxes/${encodeURIComponent(inboxId)}/messages?limit=1&include_spam=false&include_blocked=false&include_unauthenticated=false&labels=received`,
+        key, this.options.timeoutMs, this.options.fetch ?? fetch,
+      )
+    } catch (error) {
+      if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') {
+        throw new Error('this AgentMail API key needs message_read permission before Kira can use the inbox')
+      }
+      throw error
+    }
+  }
+
   private async finishConsoleInbox(
     result: Record<string, unknown>,
     request: { readonly username: string; readonly clientId: string },
@@ -333,17 +397,7 @@ export class MailOnboarding {
     const inboxId = mailAddress(mailString(result.inbox_id ?? result.email))
     if (inboxId !== `${request.username}@agentmail.to`) throw new Error('new AgentMail inbox address mismatch')
     if (result.client_id !== undefined && result.client_id !== request.clientId) throw new Error('new AgentMail inbox identity mismatch')
-    try {
-      await agentMailRequest(
-        `/inboxes/${encodeURIComponent(inboxId)}/messages?limit=1&include_spam=false&include_blocked=false&include_unauthenticated=false&labels=received`,
-        key, this.options.timeoutMs, this.options.fetch ?? fetch,
-      )
-    } catch (error) {
-      if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') {
-        throw new Error('this AgentMail API key needs message_read permission before Kira can use the new inbox')
-      }
-      throw error
-    }
+    await this.verifyConsoleInboxAccess(inboxId, key)
     await this.file.change((current) => {
       const {
         challengeHash: _challenge,
