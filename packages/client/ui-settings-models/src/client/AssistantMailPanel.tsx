@@ -296,6 +296,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           ? 'Pega una API key nueva para rotar la credencial de Kira sin cambiar su dirección. Phoenix la corrobora contra la organización, el buzón actual y la lectura de mensajes antes de guardarla.'
           : 'Si reclamar el buzón falla porque tu correo ya tiene una cuenta de AgentMail, crea una API key en tu organización. Phoenix la corrobora antes de crear el nuevo buzón de Kira.'}
       </p>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={() => { globalThis.open?.('https://console.agentmail.to', '_blank', 'noopener,noreferrer') }}>
+        Abrir AgentMail Console · Settings → API Keys
+      </button>
       <label>
         <span className={styles.fieldLabel}>Nueva API key de AgentMail</span>
         <input
