@@ -12,6 +12,7 @@ import {
   teamExecutionRequirement,
   teamSocialStyle,
   teamSocialStyleFromProfile,
+  DEFAULT_TEAM_DESIGN,
   DEFAULT_TEAM_DESIGN_JSON,
   TEAM_DESIGN_MEMBER_IDS,
   TEAM_DESIGN_SETTINGS_NAMESPACE,
@@ -109,7 +110,16 @@ function designedSocialStyle(
   role: 'lead' | 'teammate',
 ): string {
   const profile = designPersonOf(scope, runtimeName, role)
-  return profile === undefined
+  const baseline = role === 'lead'
+    ? DEFAULT_TEAM_DESIGN.lead
+    : DEFAULT_TEAM_DESIGN.members.find(member => member.id === designKey(runtimeName))
+  const unchanged = profile !== undefined && baseline !== undefined
+    && profile.displayName === baseline.displayName
+    && profile.gender === baseline.gender
+    && profile.personality === baseline.personality
+    && profile.voice === baseline.voice
+  // The unmodified factory team retains its established social style and prompt footprint.
+  return profile === undefined || unchanged
     ? teamSocialStyle(runtimeName, role)
     : teamSocialStyleFromProfile(profile, role)
 }
