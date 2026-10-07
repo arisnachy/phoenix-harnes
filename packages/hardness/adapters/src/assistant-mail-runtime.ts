@@ -621,29 +621,29 @@ export function installAssistantMail(ctx: Context,
             throw new Error('AgentMail Console key check requires only apiKey')
           }
           const candidate = mailString(args.apiKey, 8192)
-          let auth: Record<string, unknown>
+          const account = await onboarding.status()
+          let access: CandidateKeyAccess
           try {
-            auth = mailRecord(await agentMailRequest('/auth/me', candidate, config.timeoutMs, fetch))
+            access = await inspectCandidateKeyAccess(candidate, account)
           } catch (error) {
             if (error instanceof AgentMailHttpError
-              && (error.reason === 'credential-rejected' || error.status === 401 || error.status === 403)) {
+              && (error.reason === 'credential-rejected' || error.status === 401)) {
               throw new Error('AgentMail rejected this API key; create a new key in Console and try again')
             }
             throw error
           }
-          const scopeType = mailString(auth.scope_type)
-          if (!['organization', 'pod', 'inbox'].includes(scopeType)) {
-            throw new Error('AgentMail returned an invalid API key scope')
-          }
-          const account = await onboarding.status()
-          if (account.state !== 'ready' && scopeType !== 'organization') {
-            throw new Error('a new Kira inbox requires an organization-scoped AgentMail API key')
-          }
-          if (account.state === 'ready' && scopeType === 'inbox'
-            && (account.inboxId === undefined || auth.inbox_id !== account.inboxId)) {
-            throw new Error('this inbox-scoped AgentMail API key belongs to a different inbox')
-          }
-          return { ok: true as const, value: await onboarding.inspectConsoleKey(candidate) }
+          const checked = await onboarding.inspectConsoleKey(candidate)
+          const realtime = account.state === 'ready' && account.inboxId !== undefined
+            && checked.currentInboxAccess === true && checked.messageRead === true
+            ? await probeCandidateRealtime(candidate, account.inboxId)
+            : undefined
+          return { ok: true as const, value: {
+            ...checked,
+            scopeType: access.scopeType,
+            inboxCreate: access.inboxCreate,
+            messageSend: access.messageSend,
+            ...(realtime === undefined ? {} : { realtime }),
+          } }
         }
         if (endpoint === 'signup') await onboarding.signup(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
         else if (endpoint === 'recover') {
@@ -659,28 +659,23 @@ export function installAssistantMail(ctx: Context,
             throw new Error('AgentMail Console recovery requires apiKey and optionally ownerEmail')
           }
           const candidate = mailString(args.apiKey, 8192)
-          let auth: Record<string, unknown>
-          try {
-            auth = mailRecord(await agentMailRequest('/auth/me', candidate, config.timeoutMs, fetch))
-          } catch (error) {
-            if (error instanceof AgentMailHttpError
-              && (error.reason === 'credential-rejected' || error.status === 401 || error.status === 403)) {
-              throw new Error('AgentMail rejected this API key; create a new key in Console and try again')
-            }
-            throw error
-          }
-          const scopeType = mailString(auth.scope_type)
-          if (!['organization', 'pod', 'inbox'].includes(scopeType)) {
-            throw new Error('AgentMail returned an invalid API key scope')
-          }
           const before = await onboarding.status()
-          if (before.state !== 'ready' && scopeType !== 'organization') {
-            throw new Error('a new Kira inbox requires an organization-scoped AgentMail API key')
+          const access = await inspectCandidateKeyAccess(candidate, before)
+          const checked = await onboarding.inspectConsoleKey(candidate)
+          if (!access.messageSend) throw new Error('AgentMail API key needs message_send permission before Phoenix can save it')
+          if (before.state === 'ready') {
+            if (before.inboxId === undefined || checked.currentInboxAccess !== true || checked.messageRead !== true) {
+              throw new Error('AgentMail API key cannot read the current Kira inbox and messages')
+            }
+            if (!await probeCandidateRealtime(candidate, before.inboxId)) {
+              throw new Error('AgentMail API key passed REST checks but could not establish the realtime mailbox channel')
+            }
+          } else {
+            if (!access.inboxCreate) throw new Error('AgentMail API key needs organization scope and inbox_create permission')
+            if (!checked.inboxRead) throw new Error('AgentMail API key needs inbox_read permission')
+            if (!checked.capacityAvailable) throw new Error('AgentMail inbox limit reached; remove an old inbox before creating Kira mailbox')
           }
-          if (before.state === 'ready' && scopeType === 'inbox'
-            && (before.inboxId === undefined || auth.inbox_id !== before.inboxId)) {
-            throw new Error('this inbox-scoped AgentMail API key belongs to a different inbox')
-          }
+
           const account = await onboarding.adoptConsoleKey(
             candidate,
             args.ownerEmail === undefined ? undefined : mailString(args.ownerEmail),
@@ -691,8 +686,12 @@ export function installAssistantMail(ctx: Context,
             await receiver?.stop()
             receiver = undefined
             transportInbox = undefined
+            providerIssue = undefined
             status = 'connecting'
-            void pump()
+            await pump()
+            if (status !== 'connected') {
+              throw new Error('AgentMail API key was saved but the realtime mailbox channel did not reconnect')
+            }
           }
         }
         else if (endpoint === 'owner') {
