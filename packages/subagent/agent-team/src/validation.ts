@@ -35,7 +35,12 @@ export function writeScope(value: string): string {
   return normalized
 }
 
-/** Bound public transcript text without splitting a Unicode scalar. */
+/**
+ * Bound public transcript text without splitting a Unicode scalar.
+ * @param text - original public transcript text.
+ * @param maxBytes - maximum UTF-8 byte length.
+ * @returns bounded text preserving complete Unicode scalars.
+ */
 export function boundedTranscriptText(text: string, maxBytes: number): string {
   if (Buffer.byteLength(text) <= maxBytes) return text
   let used = 0
