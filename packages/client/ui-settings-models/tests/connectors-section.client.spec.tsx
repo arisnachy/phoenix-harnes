@@ -775,7 +775,7 @@ describe('connectors settings section', () => {
       // This must happen synchronously in the click stack, before the MCP
       // reconnect promise resolves and before its authorization flow exists.
       expect(open).toHaveBeenCalledTimes(1)
-      expect(open).toHaveBeenCalledWith('', '_blank')
+      expect(open).toHaveBeenCalledWith(new URL('/oauth-waiting.html', window.location.href).href, '_blank')
       expect(open.mock.invocationCallOrder[0]).toBeLessThan(reconnect.mock.invocationCallOrder[0]!)
 
       await waitFor(() => {
