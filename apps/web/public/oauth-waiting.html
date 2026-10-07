@@ -63,6 +63,17 @@
           if (data.state === 'error' && spinner) spinner.hidden = true
         }
       })
+
+      // Tell the opener only after the message listener is active. This removes
+      // the timing race where the consent URL arrived before this page loaded.
+      try {
+        if (window.opener !== null) {
+          window.opener.postMessage({ type: 'phoenix/oauth-ready' }, allowedOrigin)
+        }
+      } catch {
+        // If the opener was severed by browser isolation, the manual link in
+        // PHOENIX remains available and no provider URL is exposed here.
+      }
     })()
   </script>
 </body>
