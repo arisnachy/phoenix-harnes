@@ -1,8 +1,10 @@
 import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { installAssistantMail } from '../src/assistant-mail-runtime.ts'
+import type { AssistantMailControl } from '../src/assistant-mail-runtime.ts'
 import { JsonProactivityStore, ProactivityEngine } from '../src/proactivity-engine.ts'
 import type { MailOutgoingOwnership } from '../src/assistant-mail-types.ts'
 import { mailRecord } from '../src/assistant-mail-store.ts'
@@ -26,6 +28,50 @@ async function firstOutgoing(directory: string): Promise<Record<string, unknown>
   if (!Array.isArray(rows) || rows.length === 0) throw new Error('expected a persisted outgoing message')
   return mailRecord(rows[0])
 }
+it('explicit ensure resumes owner attachment for a pending mailbox', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-explicit-ensure-'))
+  await writeFile(join(directory, 'account.json'), JSON.stringify({
+    state: 'pending-verification',
+    inboxId: 'kira@agentmail.to',
+    ownerEmail: 'owner@example.com',
+    contacts: [],
+  }))
+  const ctx = new Context()
+  let credential = 'am_pending'
+  ctx.reflect.provide('credentials', {
+    resolve: async () => ({ value: credential }),
+    set: async (_ref: unknown, value: string) => { credential = value },
+    unset: async () => { credential = '' },
+  })
+  const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+    expect(url).toBe('https://api.agentmail.to/v0/agent/human')
+    expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_pending')
+    return Response.json({ human_email: 'owner@example.com', instructions: 'Enter the OTP.' })
+  })
+  vi.stubGlobal('fetch', fetch)
+  const runtime = installAssistantMail(ctx, {
+    directory,
+    authorizeOutgoing: async () => true,
+    credentialRef: 'MAIL_KEY',
+    pollMs: 60_000,
+    timeoutMs: 1000,
+    workTimeoutMs: 1000,
+  }, { pollMs: 60_000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000 })
+  try {
+    const service = ctx.get('assistantMail') as AssistantMailControl | undefined
+    expect(service).toBeDefined()
+    await expect(service!.ensure('owner@example.com')).resolves.toMatchObject({
+      state: 'pending-verification',
+      inboxId: 'kira@agentmail.to',
+    })
+    expect(fetch).toHaveBeenCalledOnce()
+  } finally {
+    await runtime.dispose()
+    vi.unstubAllGlobals()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
 describe('owned durable outgoing mail', () => {
   it('commits payload and first attempt before provider IO and deduplicates confirmed sends after restart', async () => {
     const { runtime, directory } = await fixture()
