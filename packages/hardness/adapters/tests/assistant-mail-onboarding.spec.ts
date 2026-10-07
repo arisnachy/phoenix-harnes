@@ -57,6 +57,106 @@ describe('mail onboarding', () => {
     } finally { await rm(directory, { recursive: true, force: true }) }
   })
 
+  it('resends pending verification through agent human without rotating a valid key', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-resend-owner-'))
+    try {
+      const path = join(directory, 'account.json')
+      await writeFile(path, JSON.stringify({
+        state: 'pending-verification',
+        inboxId: 'kira-existing@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        contacts: [],
+        signupUsername: 'kira-original',
+      }))
+      const saveKey = vi.fn()
+      const requests: string[] = []
+      const account = new MailOnboarding({
+        path,
+        timeoutMs: 1000,
+        saveKey,
+        resolveKey: async () => 'am_valid',
+        fetch: async (url, init) => {
+          requests.push(requestAddress(url))
+          expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_valid')
+          expect(requestBody(init)).toEqual({ human_email: 'owner@example.com' })
+          return Response.json({ human_email: 'owner@example.com', instructions: 'Enter the OTP.' })
+        },
+      })
+
+      await expect(account.recover()).resolves.toMatchObject({
+        state: 'pending-verification',
+        inboxId: 'kira-existing@agentmail.to',
+        ownerEmail: 'owner@example.com',
+      })
+      expect(requests).toEqual(['https://api.agentmail.to/v0/agent/human'])
+      expect(saveKey).not.toHaveBeenCalled()
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+
+  it('repairs a mistyped pending owner through agent human and keeps the same inbox', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-owner-repair-'))
+    try {
+      const path = join(directory, 'account.json')
+      await writeFile(path, JSON.stringify({
+        state: 'pending-verification',
+        inboxId: 'kira-existing@agentmail.to',
+        ownerEmail: 'owner@gmail.comy',
+        contacts: ['trusted@example.com'],
+      }))
+      const account = new MailOnboarding({
+        path,
+        timeoutMs: 1000,
+        saveKey: async () => {},
+        resolveKey: async () => 'am_valid',
+        fetch: async (url, init) => {
+          expect(requestAddress(url)).toBe('https://api.agentmail.to/v0/agent/human')
+          expect(requestBody(init)).toEqual({ human_email: 'owner@gmail.com' })
+          return Response.json({ human_email: 'owner@gmail.com', instructions: 'Enter the OTP.' })
+        },
+      })
+
+      await expect(account.changeOwner('owner@gmail.com')).resolves.toMatchObject({
+        state: 'pending-verification',
+        inboxId: 'kira-existing@agentmail.to',
+        ownerEmail: 'owner@gmail.com',
+        contacts: ['trusted@example.com'],
+      })
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+
+  it('starts a corrected owner enrollment when an ambiguous signup has no recoverable key', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-owner-restart-'))
+    try {
+      const path = join(directory, 'account.json')
+      await writeFile(path, JSON.stringify({
+        state: 'signup-ambiguous',
+        ownerEmail: 'owner@gmail.comy',
+        contacts: ['trusted@example.com'],
+        sessionId: 'workspace-1',
+      }))
+      let saved = ''
+      const account = new MailOnboarding({
+        path,
+        timeoutMs: 1000,
+        saveKey: async (value) => { saved = value },
+        resolveKey: async () => undefined,
+        fetch: async (_url, init) => {
+          expect(requestBody(init)).toMatchObject({ human_email: 'owner@gmail.com' })
+          return Response.json({ api_key: 'am_corrected', inbox_id: 'fresh@agentmail.to' })
+        },
+      })
+
+      await expect(account.changeOwner('owner@gmail.com')).resolves.toMatchObject({
+        state: 'pending-verification',
+        inboxId: 'fresh@agentmail.to',
+        ownerEmail: 'owner@gmail.com',
+        contacts: ['trusted@example.com'],
+        sessionId: 'workspace-1',
+      })
+      expect(saved).toBe('am_corrected')
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+
   it('rotates a rejected key for an already verified mailbox and proves the exact inbox before keeping ready state', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-restore-key-'))
     try {
