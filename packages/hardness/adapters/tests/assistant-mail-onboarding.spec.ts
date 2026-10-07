@@ -664,3 +664,49 @@ it('clears an unrecoverable local enrollment even when its credential is already
     expect(fetch).not.toHaveBeenCalled()
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
+
+it('keeps one receive-only inbox when AgentMail refuses the owner link', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-owner-link-conflict-'))
+  try {
+    const path = join(directory, 'account.json')
+    let saved = ''
+    let calls = 0
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async (value) => { saved = value },
+      resolveKey: async () => saved || undefined,
+      fetch: async (url, init) => {
+        calls++
+        const address = requestAddress(url)
+        if (calls === 1) {
+          expect(address).toBe('https://api.agentmail.to/v0/agent/sign-up')
+          expect(requestBody(init)).toMatchObject({ human_email: 'owner@example.com' })
+          return Response.json({ message: 'Forbidden' }, { status: 403 })
+        }
+        if (calls === 2) {
+          expect(address).toBe('https://api.agentmail.to/v0/agent/sign-up')
+          expect(requestBody(init)).toEqual({ username: 'kira-local' })
+          return Response.json({ api_key: 'am_receive_only', inbox_id: 'kira-local@agentmail.to' })
+        }
+        expect(address).toBe('https://api.agentmail.to/v0/agent/human')
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_receive_only')
+        return Response.json({ code: 'human_account_conflict' }, { status: 409 })
+      },
+    })
+
+    await expect(account.signup('owner@example.com', 'kira-local')).resolves.toMatchObject({
+      state: 'pending-verification',
+      ownerEmail: 'owner@example.com',
+      ownerLink: 'provider-conflict',
+      inboxId: 'kira-local@agentmail.to',
+    })
+    await expect(account.recover()).resolves.toMatchObject({
+      state: 'pending-verification',
+      ownerLink: 'provider-conflict',
+      inboxId: 'kira-local@agentmail.to',
+    })
+    expect(saved).toBe('am_receive_only')
+    expect(calls).toBe(4)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
