@@ -518,6 +518,12 @@ export function installAssistantMail(ctx: Context,
             claimUrl: 'https://console.agentmail.to/claim',
           } }
         }
+        if (endpoint === 'console-key-check') {
+          if (Object.keys(args).some(key => key !== 'apiKey') || args.apiKey === undefined) {
+            throw new Error('AgentMail Console key check requires only apiKey')
+          }
+          return { ok: true as const, value: await onboarding.inspectConsoleKey(mailString(args.apiKey, 8192)) }
+        }
         if (endpoint === 'signup') await onboarding.signup(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
         else if (endpoint === 'recover') {
           if (Object.keys(args).length > 0) throw new Error('mail recovery uses only the persisted owner')
@@ -587,7 +593,8 @@ export function installAssistantMail(ctx: Context,
               error: job.error })) } }
       } catch (error) {
         await handleProviderFailure(error,
-          endpoint !== 'recover' && endpoint !== 'claim' && endpoint !== 'claim-status' && endpoint !== 'console-key')
+          endpoint !== 'recover' && endpoint !== 'claim' && endpoint !== 'claim-status'
+          && endpoint !== 'console-key' && endpoint !== 'console-key-check')
         // Provider bodies and fetch/socket errors never cross this secret-free status projection.
         const message = error instanceof Error && !/fetch|network|socket/iu.test(error.message) ? error.message : 'mail connection failed; check the local setup'
         return { ok: false as const, error: { code: 'internal', message, details: {} } }
