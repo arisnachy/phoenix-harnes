@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { loadLayeredEnv } from '@phoenix-ai/dsh-app-boot'
 import { dshHomePath } from '@phoenix-ai/dsh-home-paths'
 import { parseDshArgs } from './args.ts'
-import { preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'
+import { phoenixSupervisorSourceRoot, preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'
 
 // Both the source tree (apps/cli/src) and the bundled bin (apps/cli/lib) sit
 // one directory under apps/cli, so the checked-in manifest resolves with the
@@ -49,11 +49,11 @@ if (
   && !directWebHasUnsafeWildcardHost
   && process.env.PHOENIX_UPDATE_SUPERVISED !== '1'
 ) {
-  const supervisor = resolve(
+  const durableSupervisor = resolve(
     fileURLToPath(new URL('../../../scripts/phoenix-windows-supervisor.mjs', import.meta.url)),
   )
-  if (existsSync(supervisor)) {
-    const runtimeSourceRoot = resolve(supervisor, '..', '..')
+  if (existsSync(durableSupervisor)) {
+    const runtimeSourceRoot = resolve(durableSupervisor, '..', '..')
     try {
       preparePhoenixWebRuntime(runtimeSourceRoot)
     } catch (error) {
@@ -61,9 +61,13 @@ if (
       process.exit(1)
     }
 
+    const supervisorSourceRoot = phoenixSupervisorSourceRoot(runtimeSourceRoot)
+    const supervisor = resolve(supervisorSourceRoot, 'scripts', 'phoenix-windows-supervisor.mjs')
     const forwardedArgs = rawArgs.slice(1)
     if (forwardedArgs[0] === '--') forwardedArgs.shift()
     const result = spawnSync(process.execPath, [supervisor, ...forwardedArgs], {
+      // Supervisor code may come from a newer verified isolated runtime, but its
+      // working directory stays on the durable checkout that owns Git/control state.
       cwd: runtimeSourceRoot,
       env: process.env,
       stdio: 'inherit',
