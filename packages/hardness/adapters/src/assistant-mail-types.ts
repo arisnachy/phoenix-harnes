@@ -95,6 +95,9 @@ export interface MailConsoleKeyCheck {
   readonly inboxLimit?: number
   readonly capacityAvailable: boolean
   readonly inboxRead: boolean
+  /** Present when Kira already has a ready inbox and the candidate key was checked against it. */
+  readonly currentInboxAccess?: boolean
+  readonly messageRead?: boolean
 }
 
 /** Local enrollment state, containing no secret values. */
