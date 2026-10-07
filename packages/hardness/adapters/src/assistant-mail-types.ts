@@ -86,6 +86,17 @@ export interface AssistantMailTransport {
    */
   subscribe(onMessage: () => void, onDisconnected?: () => void): Promise<() => void>
 }
+/** Non-secret result of checking a human AgentMail Console API key before adoption. */
+export interface MailConsoleKeyCheck {
+  readonly valid: true
+  readonly organizationId: string
+  readonly authenticationType?: string
+  readonly inboxCount: number
+  readonly inboxLimit?: number
+  readonly capacityAvailable: boolean
+  readonly inboxRead: boolean
+}
+
 /** Local enrollment state, containing no secret values. */
 export interface MailAccount {
   readonly state: 'not-configured' | 'signup-ambiguous' | 'pending-verification' | 'ready'
