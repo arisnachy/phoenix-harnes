@@ -896,7 +896,7 @@ export class ManagedMcpController {
    * to the managed overlay in one atomic write.
    * @returns Installed, already-present, and failed curated connector ids.
    */
-  async ensureCoreMcpPack(): Promise<{
+  async ensureCoreMcpPack(options: { installMissing?: boolean } = {}): Promise<{
     installed: readonly CuratedMcpConnectorId[]
     alreadyInstalled: readonly CuratedMcpConnectorId[]
     failed: readonly { connectorId: CuratedMcpConnectorId; message: string }[]
@@ -909,7 +909,12 @@ export class ManagedMcpController {
         const config = CURATED_MCP_SPECS[connectorId].config()
         return rows.some(row => managedIdentity(row.config) === managedIdentity(config))
       })
-      const missing = CORE_MCP_PACK_IDS.filter(connectorId => !alreadyInstalled.includes(connectorId))
+      // Boot restores only explicitly installed MCPs. Creating twelve optional
+      // connectors on every cold start made fresh accounts look broken before
+      // they had credentials, local dependencies, or an OAuth session.
+      const missing = options.installMissing === false
+        ? []
+        : CORE_MCP_PACK_IDS.filter(connectorId => !alreadyInstalled.includes(connectorId))
       const attempted = await Promise.all(missing.map(async (connectorId) => {
         const spec = CURATED_MCP_SPECS[connectorId]
         const config = spec.config()
