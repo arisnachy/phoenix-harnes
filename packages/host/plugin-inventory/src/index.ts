@@ -134,7 +134,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
     }, 'managed Jev retirement')
     void ctx.effect(() => {
       let active = true
-      void this.managedMcp.ensureCoreMcpPack().then((result) => {
+      void this.managedMcp.ensureCoreMcpPack({ installMissing: false }).then((result) => {
         if (!active) return
         if (result.failed.length > 0) {
           ctx.logger.warn(
@@ -147,7 +147,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
         ctx.logger.warn(error)
       })
       return () => { active = false }
-    }, 'core MCP pack restore')
+    }, 'existing MCP dependency recovery')
     void ctx.effect(async () => {
       try {
         await this.chatGptWeb.restore()

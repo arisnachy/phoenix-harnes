@@ -1294,6 +1294,7 @@ describe('connectors settings section', () => {
         }],
       })),
       reconnect,
+      install: vi.fn(),
       search: vi.fn(async () => ({
         source: 'official-mcp-registry' as const,
         query: 'registry-auth-fixture',

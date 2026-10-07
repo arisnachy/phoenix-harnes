@@ -704,8 +704,18 @@ export class ManagedMcpController {
     return withFileLock(this.path, async () => {
       const migration = await this.ensureManagedDependencies(await readManagedRows(this.path))
       const rows = migration.rows
-      const existing = rows.find(row => managedIdentity(row.config) === managedIdentity(config))
+      // The registry can publish a new remote URL for an existing MCP. A
+      // second row with the same serverName would conflict at tool registration
+      // and appear 'broken' despite the old account still being configured.
+      const existing = rows.find(row => managedIdentity(row.config) === managedIdentity(config)
+        || row.config.serverName === config.serverName
+        || (source?.kind === 'registry' && row.source?.kind === 'registry' && row.source.name === source.name))
       if (existing !== undefined) {
+        const sameSource = source?.kind === 'registry' && existing.source?.kind === 'registry'
+          && existing.source.name === source.name
+        if (managedIdentity(existing.config) !== managedIdentity(config) && !sameSource) {
+          throw new Error(`MCP namespace "${config.serverName}" is already used by another connector. Remove or repair the existing entry first.`)
+        }
         const failure = migration.failed.find(item => item.row.id === existing.id)
         if (failure !== undefined) {
           throw new Error(`failed to repair managed MCP dependencies for "${existing.id}": ${failure.message}`)
@@ -797,6 +807,21 @@ export class ManagedMcpController {
   }
 
   /**
+   * Recreate the persisted row when a repair fails after unload. The existing
+   * credentials are intentionally left untouched, and the original stable row
+   * remains available to the next Host start even if live restoration fails.
+   */
+  private async restoreRemovedManagedRow(row: ManagedMcpRow): Promise<void> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    await withFileLock(this.path, async () => {
+      const rows = await readManagedRows(this.path)
+      if (rows.some(existing => existing.id === row.id
+        || managedIdentity(existing.config) === managedIdentity(row.config))) return
+      await writeManagedRows(this.path, [...rows, row])
+    }, { waitMs: 15_000 })
+  }
+
+  /**
    * Repair a managed registry connector from its persisted trusted source.
    * Legacy rows without source metadata stay removable but are not guessed.
    * @param request - Exact managed entry id to repair.
@@ -818,18 +843,21 @@ export class ManagedMcpController {
       const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
       if (!removed.removed) throw new Error(`managed MCP entry "${entryId}" disappeared during repair`)
       if (!removed.liveUnloaded) {
-        throw new Error(
-          `managed MCP entry "${entryId}" was removed from persistence but its live runtime could not be unloaded; restart Phoenix before retrying repair`,
-        )
+        await this.restoreRemovedManagedRow(row)
+        throw new Error(`managed MCP entry "${entryId}" could not be unloaded; its previous configuration was preserved`)
       }
-      return this.installCuratedMcp(connectorId)
+      try {
+        return await this.installCuratedMcp(connectorId)
+      } catch (error) {
+        await this.restoreRemovedManagedRow(row)
+        throw new Error(`MCP repair failed; the previous configuration was preserved for the next Phoenix start: ${String(error)}`, { cause: error })
+      }
     }
 
     const snapshot = await this.registrySearch({ query: row.source.name, limit: 20 })
-    const candidate = selectInstallableCandidate(snapshot, {
-      name: row.source.name,
-      ...(row.source.version === undefined ? {} : { version: row.source.version }),
-    })
+    // Repair follows the latest active registry version. Keeping the originally
+    // installed version pinned makes repair fail whenever the publisher updates.
+    const candidate = selectInstallableCandidate(snapshot, { name: row.source.name })
     if (isRetiredJevCandidate(candidate)) {
       throw new Error('Jev integration is retired and cannot be repaired through the Official MCP Registry')
     }
@@ -839,22 +867,26 @@ export class ManagedMcpController {
     const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
     if (!removed.removed) throw new Error(`managed MCP entry "${entryId}" disappeared during repair`)
     if (!removed.liveUnloaded) {
-      throw new Error(
-        `managed MCP entry "${entryId}" was removed from persistence but its live runtime could not be unloaded; restart Phoenix before retrying repair`,
-      )
+      await this.restoreRemovedManagedRow(row)
+      throw new Error(`managed MCP entry "${entryId}" could not be unloaded; its previous configuration was preserved`)
     }
 
-    return this.installManagedConfig({
-      transport: 'streamable-http',
-      serverName: serverNameFor(candidate),
-      url: remoteUrl,
-      headers: {},
-      oauth: true,
-    }, candidate.name, {
-      kind: 'registry',
-      name: candidate.name,
-      version: candidate.version,
-    })
+    try {
+      return await this.installManagedConfig({
+        transport: 'streamable-http',
+        serverName: serverNameFor(candidate),
+        url: remoteUrl,
+        headers: {},
+        oauth: true,
+      }, candidate.name, {
+        kind: 'registry',
+        name: candidate.name,
+        version: candidate.version,
+      })
+    } catch (error) {
+      await this.restoreRemovedManagedRow(row)
+      throw new Error(`MCP repair failed; the previous configuration was preserved for the next Phoenix start: ${String(error)}`, { cause: error })
+    }
   }
 
   /**
@@ -893,10 +925,13 @@ export class ManagedMcpController {
   /**
    * Restore the default Phoenix MCP pack without blocking one provider on
    * another. Missing live entries are created in parallel and then committed
-   * to the managed overlay in one atomic write.
+   * to the managed overlay in one atomic write. At Host boot use
+   * installMissing: false to preserve configured connectors without silently
+   * activating optional remote services that still need provider setup.
+   * @param options - Whether to install missing curated MCPs or migrate existing rows only.
    * @returns Installed, already-present, and failed curated connector ids.
    */
-  async ensureCoreMcpPack(): Promise<{
+  async ensureCoreMcpPack(options: { installMissing?: boolean } = {}): Promise<{
     installed: readonly CuratedMcpConnectorId[]
     alreadyInstalled: readonly CuratedMcpConnectorId[]
     failed: readonly { connectorId: CuratedMcpConnectorId; message: string }[]
@@ -907,9 +942,15 @@ export class ManagedMcpController {
       const rows = migration.rows
       const alreadyInstalled = CORE_MCP_PACK_IDS.filter((connectorId) => {
         const config = CURATED_MCP_SPECS[connectorId].config()
-        return rows.some(row => managedIdentity(row.config) === managedIdentity(config))
+        return rows.some(row => managedIdentity(row.config) === managedIdentity(config)
+          || row.config.serverName === config.serverName)
       })
-      const missing = CORE_MCP_PACK_IDS.filter(connectorId => !alreadyInstalled.includes(connectorId))
+      // Boot restores only explicitly installed MCPs. Creating twelve optional
+      // connectors on every cold start made fresh accounts look broken before
+      // they had credentials, local dependencies, or an OAuth session.
+      const missing = options.installMissing === false
+        ? []
+        : CORE_MCP_PACK_IDS.filter(connectorId => !alreadyInstalled.includes(connectorId))
       const attempted = await Promise.all(missing.map(async (connectorId) => {
         const spec = CURATED_MCP_SPECS[connectorId]
         const config = spec.config()

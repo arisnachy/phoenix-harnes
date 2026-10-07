@@ -540,7 +540,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const installUrl = safeExternalHref(live?.installUrl)
   const liveStatus = live === undefined ? undefined : connectorStatus(live, t)
   const mcpStatus = mcpRuntime?.status === 'ready'
-    ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+    ? mcpRuntime.toolNames.length > 0
+      ? { text: t('callableStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
+      : { text: t('registryNoToolsStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' }
     : mcpRuntime?.status === 'starting'
       ? { text: t('connectingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
       : mcpRuntime?.status === 'auth-required'
@@ -550,7 +552,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           : mcpRuntime?.status === 'disconnected'
             ? { text: t('disconnectedStatus'), className: connectorStyles['connectorStatusDisabled'] ?? '' }
             : managed !== undefined
-              ? { text: t('brokenStatus'), className: connectorStyles['connectorStatusError'] ?? '' }
+              ? { text: t('runtimeMissingStatus'), className: connectorStyles['connectorStatusInfo'] ?? '' }
               : undefined
   const openClawStatus = openClaw?.connected === true
     ? { text: t('openClawConnectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
