@@ -33,9 +33,9 @@ export interface AssistantMailClient {
    */
   call(action: string, input?: Record<string, unknown>): Promise<AssistantMailSnapshot>
   /** Retrieve the original receive-only signup key for an explicit local claim action.
-   * The caller must copy it immediately and must not retain it in UI state.
+   * The Host copies it directly to the local clipboard; the secret never crosses the browser RPC.
    */
-  prepareClaim?(): Promise<{ readonly apiKey: string; readonly inboxId: string; readonly claimUrl: string }>
+  prepareClaim?(): Promise<{ readonly copied: true; readonly inboxId: string; readonly claimUrl: string }>
 }
 
 const JOB_LABELS: Readonly<Record<string, string>> = {
@@ -158,7 +158,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   }
   const claimMailbox = (): void => {
     // Open the provider page during the user gesture so popup blockers do not eat it while
-    // the loopback Host resolves the credential. The secret itself never enters React state.
+    // the loopback Host places the credential directly on the Windows clipboard.
     globalThis.open?.('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer')
     setBusy(true)
     setFailure(undefined)
@@ -167,10 +167,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       try {
         if (client.prepareClaim === undefined) throw new Error('Esta versión de Phoenix todavía no puede recuperar la clave guardada para reclamar el buzón.')
         const claim = await client.prepareClaim()
-        const clipboard = globalThis.navigator.clipboard
-        if (clipboard?.writeText === undefined) throw new Error('El navegador no permite copiar la clave de AgentMail al portapapeles.')
-        await clipboard.writeText(claim.apiKey)
-        setClaimNotice(`Clave de ${claim.inboxId} copiada. Pégala en “Agent API key”, termina “Claim inbox” y vuelve a Phoenix para comprobar.`)
+        setClaimNotice(`Clave de ${claim.inboxId} copiada por Phoenix. Pégala en “Agent API key”, termina “Claim inbox” y vuelve a Phoenix para comprobar.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo preparar la reclamación del buzón.'
         setFailure(message.includes('no longer has the original AgentMail signup key')
