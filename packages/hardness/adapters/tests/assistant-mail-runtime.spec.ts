@@ -483,6 +483,7 @@ it('exposes authenticated received mail and sends only to contacts allowed by Ki
     const inbox = await service.readInbox(10)
     expect(inbox.messages).toHaveLength(1)
     expect(inbox.messages[0]).toMatchObject({ messageId: 'owner-message', from: 'owner@example.com', subject: 'Revisa el informe' })
+    expect(inbox.messages[0]).not.toHaveProperty('taskState')
     await expect(service.readInbox(1, 'stranger-message')).rejects.toThrow('not found')
     expect((await service.readInbox(1, 'owner-message')).messages[0]?.text).toBe('Comprueba los datos')
     await expect(service.sendToAuthorized('stranger@example.com', 'Prueba', 'Hola', 'chat-denied'))
