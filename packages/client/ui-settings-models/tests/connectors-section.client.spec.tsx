@@ -776,7 +776,7 @@ describe('connectors settings section', () => {
       // reconnect promise resolves and before its authorization flow exists.
       expect(open).toHaveBeenCalledTimes(1)
       const waitingUrl = new URL('/oauth-waiting.html', window.location.href)
-      waitingUrl.searchParams.set('v', '20261006-2')
+      waitingUrl.searchParams.set('v', '20261007-1')
       expect(open).toHaveBeenCalledWith(waitingUrl.href, '_blank')
       expect(open.mock.invocationCallOrder[0]).toBeLessThan(reconnect.mock.invocationCallOrder[0]!)
 

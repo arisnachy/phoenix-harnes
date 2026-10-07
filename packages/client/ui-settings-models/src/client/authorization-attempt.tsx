@@ -10,7 +10,7 @@ function oauthWaitingPageUrl(): string {
   const url = new URL('/oauth-waiting.html', window.location.href)
   // Cache-bust the tiny bridge page: an older cached copy has no navigation
   // listener and would strand the user on "Preparando autorización…".
-  url.searchParams.set('v', '20261006-2')
+  url.searchParams.set('v', '20261007-1')
   return url.href
 }
 
@@ -75,10 +75,14 @@ export function useAuthorizationAttempt(
   const [failure, setFailure] = useState<string | undefined>()
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
+  const pendingPopupNavigation = useRef<string | undefined>(undefined)
+  const pendingPopupStatus = useRef<{ message: string; state: 'waiting' | 'error' } | undefined>(undefined)
 
   const closeReservedPopup = useCallback((): void => {
     const popup = popupRef.current
     popupRef.current = null
+    pendingPopupNavigation.current = undefined
+    pendingPopupStatus.current = undefined
     if (popup === null) return
     try {
       if (!popup.closed) popup.close()
@@ -102,6 +106,7 @@ export function useAuthorizationAttempt(
   }, [])
 
   const showOAuthPopupStatus = useCallback((message: string, state: 'waiting' | 'error' = 'waiting'): void => {
+    pendingPopupStatus.current = { message, state }
     const popup = popupRef.current
     if (popup === null) return
     try {
@@ -113,6 +118,7 @@ export function useAuthorizationAttempt(
   }, [])
 
   const navigateOAuthPopup = useCallback((url: string): void => {
+    pendingPopupNavigation.current = url
     const popup = popupRef.current
     if (popup !== null) {
       try {
@@ -151,6 +157,32 @@ export function useAuthorizationAttempt(
     if (fallback === null) {
       setFailure('No pude abrir automáticamente la página del proveedor. Pulsa “Abrir página de autorización” en esta tarjeta para continuar.')
     }
+  }, [])
+
+  useEffect(() => {
+    const handleWaitingReady = (event: MessageEvent<unknown>): void => {
+      if (event.origin !== window.location.origin) return
+      const popup = popupRef.current
+      if (popup === null || event.source !== popup) return
+      const data = event.data
+      if (data === null || typeof data !== 'object'
+        || !('type' in data) || data.type !== 'phoenix/oauth-ready') return
+
+      const status = pendingPopupStatus.current
+      if (status !== undefined) {
+        postOAuthWaitingMessage(popup, {
+          type: 'phoenix/oauth-status',
+          message: status.message,
+          state: status.state,
+        })
+      }
+      const url = pendingPopupNavigation.current
+      if (url !== undefined) {
+        postOAuthWaitingMessage(popup, { type: 'phoenix/oauth-navigate', url })
+      }
+    }
+    window.addEventListener('message', handleWaitingReady)
+    return () => { window.removeEventListener('message', handleWaitingReady) }
   }, [])
 
   useEffect(() => () => { closeReservedPopup() }, [closeReservedPopup])
@@ -216,6 +248,8 @@ export function useAuthorizationAttempt(
     setFailure(undefined)
     setAttempt(undefined)
     opened.current.clear()
+    pendingPopupNavigation.current = undefined
+    pendingPopupStatus.current = undefined
     // OAuth needs a real same-origin PHOENIX page opened synchronously inside
     // the click gesture so popup blockers allow the later provider navigation.
     // Never reserve about:blank: the user should always see a real PHOENIX URL
