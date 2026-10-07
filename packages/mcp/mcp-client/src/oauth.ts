@@ -477,6 +477,9 @@ export class McpOAuthController {
         ? {}
         : { tokenEndpointAuthMethod: this.tokenEndpointAuthMethod }),
     })
+    session.notify({
+      message: `Preparando autorización de ${this.serverName}…`,
+    })
     try {
       const first = await auth(provider, { serverUrl: this.serverUrl })
       if (first !== 'REDIRECT') return
