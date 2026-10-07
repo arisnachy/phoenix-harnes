@@ -534,10 +534,13 @@ export function installAssistantMail(ctx: Context,
           await onboarding.confirmClaim()
         }
         else if (endpoint === 'console-key') {
-          if (Object.keys(args).some(key => key !== 'apiKey') || args.apiKey === undefined) {
-            throw new Error('AgentMail Console recovery requires only apiKey')
+          if (Object.keys(args).some(key => key !== 'apiKey' && key !== 'ownerEmail') || args.apiKey === undefined) {
+            throw new Error('AgentMail Console recovery requires apiKey and optionally ownerEmail')
           }
-          const account = await onboarding.adoptConsoleKey(mailString(args.apiKey, 8192))
+          const account = await onboarding.adoptConsoleKey(
+            mailString(args.apiKey, 8192),
+            args.ownerEmail === undefined ? undefined : mailString(args.ownerEmail),
+          )
           status = account.state === 'ready' ? 'connecting' : status
           if (account.state === 'ready') void pump()
         }
