@@ -293,7 +293,7 @@ it('retains a real AgentMail inbound wake arriving during an active inbox check 
     await vi.waitFor(() => { expect(sockets).toHaveLength(1); expect(calls).toBe(1) })
     ;(sockets[0] as Socket).receive()
     await vi.waitFor(() => { expect(calls).toBe(2) })
-    sockets[0]!.receive()
+    ;(sockets[0] as Socket).receive()
     release()
     await vi.waitFor(() => { expect(calls).toBe(3) })
   } finally { release?.(); await runtime.dispose(); vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }) }
