@@ -49,4 +49,4 @@ Authorization polling survives panel refreshes and uses the latest completion ca
 
 Authorization continues and preserves the manual consent link when a browser rejects opening a popup by throwing. Account-family matching uses whole normalized tokens rather than arbitrary substrings. A stored grant does not restart sign-in solely because live runtime state is absent; failed/disconnected runtimes reconnect with the existing grant, while an explicit auth-required state still offers reauthorization.
 
-Notion prepares OAuth in its connector card and opens only the provider consent URL. If the browser blocks that deferred window, the card retains a direct authorization link; it does not open the PHOENIX waiting page.
+Notion, including registry installations with generated server names, prepares OAuth in its connector card and opens only the provider consent URL. If the browser blocks that deferred window, the card retains a direct authorization link; it does not open the PHOENIX waiting page.
