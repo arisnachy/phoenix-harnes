@@ -92,6 +92,21 @@ describe('web e2e: settings modal and General preferences', () => {
     // Golden of the freshly opened dialog (default zh, General active).
     const snapshot = await captureStableAria(page, '[role="dialog"]', scaffold.workspaceCwd)
     await compareOrRefreshGolden(DIALOG_EXPECTED, snapshot, MODE)
+    // Team Studio is a normal settings section: it must stay inside the existing
+    // dialog geometry instead of resizing the shell or creating page overflow.
+    await dialog.getByRole('button', { name: '团队', exact: true }).click()
+    const studio = dialog.locator('[data-team-studio]')
+    await studio.waitFor({ timeout: 10_000 })
+    expect(await dialog.getByRole('button', { name: '团队', exact: true }).getAttribute('aria-current')).toBe('true')
+    const geometry = await studio.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      viewportClientWidth: document.documentElement.clientWidth,
+      viewportScrollWidth: document.documentElement.scrollWidth,
+    }))
+    expect(geometry.clientWidth).toBeGreaterThan(0)
+    expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1)
+    expect(geometry.viewportScrollWidth).toBeLessThanOrEqual(geometry.viewportClientWidth + 1)
     // Section switch: aria-current moves (the Models page itself has its own scenario file).
     await dialog.getByRole('button', { name: '模型' }).click()
     await expect.poll(() => dialog.getByRole('button', { name: '模型' }).getAttribute('aria-current'), { timeout: 5_000 }).toBe('true')
