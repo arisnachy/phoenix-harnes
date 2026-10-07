@@ -158,7 +158,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const statusText = ready
     ? connection === 'connected'
       ? 'Correo verificado · Activo'
-      : connection === 'connecting'
+      : connection === 'connected-polling'
+        ? 'Correo verificado · Activo por polling'
+        : connection === 'connecting'
         ? 'Correo verificado · Conectando'
         : connection === 'verification-required'
           ? 'AgentMail requiere verificación'
@@ -270,14 +272,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       ? consoleKeyCheck.currentInboxAccess === true
         && consoleKeyCheck.messageRead === true
         && consoleKeyCheck.messageSend === true
-        && consoleKeyCheck.realtime === true
       : consoleKeyCheck.inboxRead
         && consoleKeyCheck.inboxCreate === true
         && consoleKeyCheck.messageSend === true
         && consoleKeyCheck.capacityAvailable
     if (!readyKeyUsable) {
       setFailure(ready
-        ? 'La nueva API key debe poder leer el buzón, leer/enviar mensajes y abrir el canal en tiempo real.'
+        ? 'La nueva API key debe poder leer el buzón y leer/enviar mensajes. El tiempo real es opcional porque Phoenix puede usar polling.'
         : 'La API key debe tener alcance de organización, inbox_create, inbox_read y message_send antes de activar Kira.')
       return
     }
@@ -296,7 +297,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         if (input !== null) input.value = ''
         setConsoleKeyCheck(undefined)
         setClaimNotice(ready
-          ? `API actualizada. Phoenix corroboró acceso al buzón ${value.account.inboxId ?? 'de Kira'} y lectura de mensajes.`
+          ? value.connection === 'connected-polling'
+            ? `API actualizada. El buzón ${value.account.inboxId ?? 'de Kira'} está operativo por REST/polling; Phoenix seguirá intentando activar el tiempo real.`
+            : `API actualizada. Phoenix corroboró acceso al buzón ${value.account.inboxId ?? 'de Kira'} y lectura de mensajes.`
           : `API guardada y buzón ${value.account.inboxId ?? 'de Kira'} activado. Phoenix comprobó lectura de mensajes antes de marcarlo listo.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo activar la API key.'
@@ -308,8 +311,8 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
               ? 'La API key no tiene message_read. Crea o ajusta una clave con inbox_read, message_read y message_send; si vas a crear otro buzón, añade inbox_create.'
               : message.includes('cannot read the current Kira inbox')
                 ? 'La API key es válida, pero no puede acceder al buzón actual de Kira. Usa una clave con inbox_read y alcance sobre ese buzón.'
-                : message.includes('realtime mailbox channel')
-                  ? 'La API key pasó las pruebas REST, pero AgentMail no confirmó el canal en tiempo real. Phoenix no la guardará como operativa.'
+                : message.includes('mailbox access could not be restored')
+                  ? 'La API key se guardó, pero Phoenix no pudo restaurar acceso al buzón ni por tiempo real ni por polling.'
                   : message.includes('confirmation is ambiguous')
                     ? 'AgentMail no confirmó la creación. Vuelve a pegar la misma API key: Phoenix reconciliará el mismo buzón sin duplicarlo.'
                     : message)
@@ -324,7 +327,6 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     && (ready
       ? consoleKeyCheck.currentInboxAccess === true
         && consoleKeyCheck.messageRead === true
-        && consoleKeyCheck.realtime === true
       : consoleKeyCheck.inboxCreate === true && consoleKeyCheck.capacityAvailable)
     && (ready || persistedOwner !== undefined || requestedOwner.length > 0)
   const consoleKeyFallback = <details className={styles.advanced} open={!ready}>
@@ -398,7 +400,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
             Lectura de mensajes <b>{consoleKeyCheck.messageRead ? '✓ disponible' : '✕ falta message_read'}</b>
           </span>
           <span>
-            Canal en tiempo real <b>{consoleKeyCheck.realtime ? '✓ conectado' : '✕ no confirmado'}</b>
+            Canal en tiempo real <b>{consoleKeyCheck.realtime ? '✓ conectado' : '⚠ no disponible · usará polling'}</b>
           </span>
         </> : <>
           <span>
@@ -410,7 +412,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         </>}
         <small>
           {ready
-            ? 'Phoenix solo guarda la clave después de comprobar inbox_read, message_read, message_send y una suscripción WebSocket real al buzón actual.'
+            ? 'Phoenix guarda la clave si REST confirma inbox_read, message_read y message_send. El WebSocket acelera la recepción; si falla, Phoenix usa polling y sigue reintentándolo.'
             : 'Antes de crear el buzón Phoenix exige alcance de organización, inbox_create, inbox_read y message_send; luego comprueba message_read.'}
         </small>
       </div>}

@@ -377,3 +377,52 @@ it('keeps the inbound AgentMail channel connected when message_send is missing a
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+
+it('keeps a REST-valid AgentMail inbox active by polling when realtime cannot connect', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-polling-fallback-'))
+  await writeFile(join(directory, 'account.json'), JSON.stringify({
+    state: 'ready',
+    inboxId: 'kira@agentmail.to',
+    ownerEmail: 'owner@example.com',
+    contacts: [],
+  }))
+  const ctx = new Context()
+  ctx.reflect.provide('credentials', {
+    resolve: async () => ({ value: 'am_rest_valid' }),
+    set: async () => {},
+    unset: async () => {},
+  })
+  class FailedSocket extends EventTarget {
+    constructor(_url: string) {
+      super()
+      void Promise.resolve().then(() => { this.dispatchEvent(new Event('error')) })
+    }
+    send(_data: string): void {}
+    close(): void {}
+  }
+  vi.stubGlobal('WebSocket', FailedSocket)
+  vi.stubGlobal('fetch', async (url: string) => {
+    if (url.includes('/messages?')) return Response.json({ messages: [], count: 0 })
+    return Response.json({ inbox_id: 'kira@agentmail.to' })
+  })
+  const runtime = installAssistantMail(ctx, {
+    directory,
+    authorizeOutgoing: async () => true,
+    credentialRef: 'MAIL_KEY',
+    pollMs: 60_000,
+    timeoutMs: 1000,
+    workTimeoutMs: 1000,
+  }, { pollMs: 60_000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000 })
+  try {
+    const service = ctx.get('assistantMail') as AssistantMailControl | undefined
+    expect(service).toBeDefined()
+    await vi.waitFor(async () => {
+      expect((await service!.status()).connection).toBe('connected-polling')
+    })
+  } finally {
+    await runtime.dispose()
+    vi.unstubAllGlobals()
+    await rm(directory, { recursive: true, force: true })
+  }
+})

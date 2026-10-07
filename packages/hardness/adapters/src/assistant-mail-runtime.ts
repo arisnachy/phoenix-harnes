@@ -209,9 +209,10 @@ export function installAssistantMail(ctx: Context,
     if (error instanceof AgentMailHttpError) {
       if (error.reason === 'verification-required') return 'verification-required'
       if (error.reason === 'credential-rejected') return 'recovery-required'
-      if (error.reason === 'permission-missing') return socketDispose === undefined ? 'permission-required' : status
-      if (error.reason === 'limit-exceeded' || error.status === 429) return socketDispose === undefined ? 'quota-reached' : status
-      if (error.reason === 'message-rejected') return socketDispose === undefined ? 'message-rejected' : status
+      const inboundHealthy = status === 'connected' || status === 'connected-polling'
+      if (error.reason === 'permission-missing') return inboundHealthy ? status : 'permission-required'
+      if (error.reason === 'limit-exceeded' || error.status === 429) return inboundHealthy ? status : 'quota-reached'
+      if (error.reason === 'message-rejected') return inboundHealthy ? status : 'message-rejected'
     }
     return error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
   }
@@ -325,6 +326,7 @@ export function installAssistantMail(ctx: Context,
   let pumping: Promise<void> | undefined
   let repumpRequested = false
   let socketRecoveryTimer: ReturnType<typeof setTimeout> | undefined
+  let socketRecoveryAttempt = 0
   const hasQueuedWake = (): boolean => repumpRequested
   const clearSocketRecovery = (): void => {
     if (socketRecoveryTimer === undefined) return
@@ -333,10 +335,12 @@ export function installAssistantMail(ctx: Context,
   }
   function scheduleSocketRecovery(): void {
     if (disposed || socketRecoveryTimer !== undefined) return
+    const delay = Math.min(config.pollMs, 5_000 * (2 ** Math.min(socketRecoveryAttempt, 6)))
+    socketRecoveryAttempt++
     socketRecoveryTimer = setTimeout(() => {
       socketRecoveryTimer = undefined
       if (!disposed) void pump()
-    }, Math.min(config.pollMs, 5_000))
+    }, delay)
   }
   const outbox = new MailOutbox(join(config.directory, 'outbox.json'), async (reply) => {
     assertActive()
@@ -427,29 +431,39 @@ export function installAssistantMail(ctx: Context,
       transportInbox = account.inboxId
       await receiver.reconcile()
       if (isDisposed()) return
-      socketDispose = await transport.subscribe(() => { void pump() }, () => {
-        if (isDisposed()) return
-        socketDispose?.(); socketDispose = undefined
-        status = 'disconnected'
+      try {
+        socketDispose = await transport.subscribe(() => { void pump() }, () => {
+          if (isDisposed()) return
+          socketDispose?.(); socketDispose = undefined
+          status = 'connected-polling'
+          scheduleSocketRecovery()
+        })
+        status = 'connected'
+        socketRecoveryAttempt = 0
+        clearSocketRecovery()
+      } catch {
+        // REST reconciliation already proved that the mailbox and credential work.
+        // Realtime is an acceleration path, not a reason to disable a valid mailbox.
+        socketDispose = undefined
+        status = 'connected-polling'
         scheduleSocketRecovery()
-      })
+      }
     } else {
       await receiver.reconcile()
+      if (status === 'connecting') status = 'connected'
     }
-    if (status === 'connecting') status = 'connected'
-    if (status === 'connected') clearSocketRecovery()
     automaticCredentialRecoveryAttempted = false
 
     try {
       await ownerOutbox.flush()
       const ownerPending = (await ownerOutbox.list()).some(row => row.state === 'pending')
-      if (status === 'connected' && !ownerPending) providerIssue = undefined
+      if ((status === 'connected' || status === 'connected-polling') && !ownerPending) providerIssue = undefined
     } catch (error) {
       if (error instanceof AgentMailHttpError
         && ['permission-missing', 'message-rejected', 'limit-exceeded'].includes(error.reason ?? '')) {
         providerIssue = issueFromError(error)
-        // The incoming socket is healthy; retain connected state and surface the precise send issue separately.
-        status = 'connected'
+        // Keep whichever healthy inbound mode is active while surfacing the outbound issue separately.
+        if (status !== 'connected-polling') status = 'connected'
         return
       }
       throw error
@@ -518,6 +532,7 @@ export function installAssistantMail(ctx: Context,
       await credentials.unset(ref)
       status = 'not-configured'
       providerIssue = undefined
+      socketRecoveryAttempt = 0
       automaticCredentialRecoveryAttempted = false
       repumpRequested = false
       return await identity()
@@ -668,9 +683,6 @@ export function installAssistantMail(ctx: Context,
             if (before.inboxId === undefined || checked.currentInboxAccess !== true || checked.messageRead !== true) {
               throw new Error('AgentMail API key cannot read the current Kira inbox and messages')
             }
-            if (!await probeCandidateRealtime(candidate, before.inboxId)) {
-              throw new Error('AgentMail API key passed REST checks but could not establish the realtime mailbox channel')
-            }
           } else {
             if (!access.inboxCreate) throw new Error('AgentMail API key needs organization scope and inbox_create permission')
             if (!checked.inboxRead) throw new Error('AgentMail API key needs inbox_read permission')
@@ -690,8 +702,8 @@ export function installAssistantMail(ctx: Context,
             providerIssue = undefined
             status = 'connecting'
             await pump()
-            if (status !== 'connected') {
-              throw new Error('AgentMail API key was saved but the realtime mailbox channel did not reconnect')
+            if (status !== 'connected' && status !== 'connected-polling') {
+              throw new Error('AgentMail API key was saved but mailbox access could not be restored')
             }
           }
         }
