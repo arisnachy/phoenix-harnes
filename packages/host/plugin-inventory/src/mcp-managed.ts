@@ -915,7 +915,10 @@ export class ManagedMcpController {
   /**
    * Restore the default Phoenix MCP pack without blocking one provider on
    * another. Missing live entries are created in parallel and then committed
-   * to the managed overlay in one atomic write.
+   * to the managed overlay in one atomic write. At Host boot use
+   * installMissing: false to preserve configured connectors without silently
+   * activating optional remote services that still need provider setup.
+   * @param options - Whether to install missing curated MCPs or migrate existing rows only.
    * @returns Installed, already-present, and failed curated connector ids.
    */
   async ensureCoreMcpPack(options: { installMissing?: boolean } = {}): Promise<{
