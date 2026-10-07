@@ -37,14 +37,16 @@ export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 
 /** Register the KIRA activity strip and rail inside the center-column overlay so agents never consume chat width or cover the sidebar. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-kira-teams: dictionaries')
-  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
-    name: 'conversation.chat.node',
-    key: 'kira-team-message', locale: NS,
-  }, KiraTeamMessageView))
   const sessions = ctx.get('sessions') as unknown as ISessions
   const teamDesign = ctx.settingsScope.bind<TeamDesignSettingsEnvelope>({
     namespace: TEAM_DESIGN_SETTINGS_NAMESPACE,
   })
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+    name: 'conversation.chat.node',
+    key: 'kira-team-message',
+    locale: NS,
+    inject: () => ({ hooks: { teamDesign } }),
+  }, KiraTeamMessageView))
   const saveTeamDesign = async (document: TeamDesignDocument): Promise<void> => {
     await teamDesign.set('document', JSON.stringify(normalizeTeamDesignDocument(document)))
   }
@@ -79,7 +81,12 @@ export function apply(ctx: ClientContext): void {
       generateWithKira,
     }),
   }, TeamDesignerSection))
-  ctx.slots.inject('conversation.chat.message-author', () => ctx.slots.register({ name: 'conversation.chat.message-author', id: 'kira', locale: NS }, TeamAuthor))
+  ctx.slots.inject('conversation.chat.message-author', () => ctx.slots.register({
+    name: 'conversation.chat.message-author',
+    id: 'kira',
+    locale: NS,
+    inject: () => ({ hooks: { teamDesign } }),
+  }, TeamAuthor))
   const selectedReplies = new Map<SessionId, TeamReplyChoice>()
   const pendingRequests = new Map<string, { fingerprint: string; request: TeamChatReplyRequest }>()
   const replyListeners = new Map<SessionId, Set<() => void>>()
@@ -142,12 +149,27 @@ export function apply(ctx: ClientContext): void {
         const names = [...request.text.matchAll(/@(?:"([^"]{1,128})"|([\p{L}\p{N}_-]+))/gu)]
           .map(match => (match[1] ?? match[2])?.toLowerCase())
         const participants = new Map<string, string>()
+        const activeDesign = (() => {
+          const document = parseTeamDesignDocument(teamDesign.getSnapshot().value?.document)
+          return document.teams.find(team => team.id === document.activeTeamId) ?? document.teams[0]
+        })()
+        const customName = (name: string, id: string): string | undefined => {
+          if (activeDesign === undefined) return undefined
+          const identity = teamIdentityOf(name, id)
+          if (identity.kind === 'kira') return activeDesign.lead.displayName
+          return activeDesign.members.find(member => member.id === identity.kind)?.displayName
+        }
         for (const person of read.value.participants) {
           participants.set(person.name.toLowerCase(), person.id)
           participants.set(teamIdentityOf(person.name, person.id).name.toLowerCase(), person.id)
+          const alias = customName(person.name, person.id)
+          if (alias !== undefined) participants.set(alias.toLowerCase(), person.id)
         }
         for (const message of read.value.messages) {
-          if (message.senderKind === 'agent') participants.set(teamIdentityOf(message.senderName, message.senderId).name.toLowerCase(), message.senderId)
+          if (message.senderKind !== 'agent') continue
+          participants.set(teamIdentityOf(message.senderName, message.senderId).name.toLowerCase(), message.senderId)
+          const alias = customName(message.senderName, message.senderId)
+          if (alias !== undefined) participants.set(alias.toLowerCase(), message.senderId)
         }
         const targets = [...new Set(names.flatMap((name) => {
           const id = name === undefined ? undefined : participants.get(name)
@@ -201,7 +223,7 @@ export function apply(ctx: ClientContext): void {
     return () => { stop(); backfilled.clear(); loading.clear() }
   }, 'ui-kira-teams: existing conversation')
   const dockActions = () => ({
-    hooks: { list: sessions.list },
+    hooks: { list: sessions.list, teamDesign },
     layout: ctx.layout,
     openChild(address: SubagentAddress) {
       const rows = document.querySelectorAll<HTMLElement>('[data-team-sender-id]')
