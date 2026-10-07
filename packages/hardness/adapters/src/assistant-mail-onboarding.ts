@@ -290,11 +290,19 @@ export class MailOnboarding {
    * @param apiKey Bearer key created by the human in AgentMail Console.
    * @returns Ready account backed by the newly created inbox.
    */
-  adoptConsoleKey(apiKey: string): Promise<MailAccount> {
+  adoptConsoleKey(apiKey: string, ownerEmail?: string): Promise<MailAccount> {
     return this.exclusively(async () => {
       const key = mailString(apiKey, 8192)
       if (!key.startsWith('am_') || key.length <= 3) throw new Error('enter a complete AgentMail API key beginning with am_')
       const previous = await this.file.read()
+      const explicitOwner = ownerEmail === undefined ? undefined : mailAddress(ownerEmail)
+      if (previous.ownerEmail !== undefined && explicitOwner !== undefined && explicitOwner !== previous.ownerEmail) {
+        throw new Error('Console API key adoption cannot silently change the persisted Kira owner')
+      }
+      const owner = previous.ownerEmail ?? explicitOwner
+      if (previous.state !== 'ready' && owner === undefined) {
+        throw new Error('owner email required before creating Kira inbox from a Console API key')
+      }
       let organization: Record<string, unknown>
       try {
         organization = mailRecord(await agentMailRequest('/organizations', key, this.options.timeoutMs,
@@ -328,7 +336,11 @@ export class MailOnboarding {
         clientId: randomUUID(),
       }
       if (previous.newInboxRequest === undefined) {
-        await this.file.change(current => ({ ...current, newInboxRequest: request }))
+        await this.file.change(current => ({
+          ...current,
+          ...(current.ownerEmail === undefined && owner !== undefined ? { ownerEmail: owner } : {}),
+          newInboxRequest: request,
+        }))
       } else {
         try {
           const found = mailRecord(await agentMailRequest(
