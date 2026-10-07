@@ -189,6 +189,40 @@
   color: var(--dsw-alias-state-danger-primary, #c62828);
 }
 
+.keyCheck {
+  display: grid;
+  gap: 6px;
+  padding: 11px 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-base);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.keyCheck strong {
+  color: var(--dsw-alias-label-primary);
+  font-size: 11px;
+}
+
+.keyCheck span {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.keyCheck b {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+
+.keyCheck small {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 10px;
+  line-height: 15px;
+}
+
 .jobs {
   display: flex;
   flex-direction: column;

@@ -227,8 +227,9 @@ it('confirms a claimed inbox and leaves the verification-only state', async () =
   expect(screen.queryByText('Vincula propietario')).toBeNull()
 })
 
-it('accepts a new Console API key only in the local password field and switches to the new inbox', async () => {
+it('corroborates a new Console API key before storing it and activating the new inbox', async () => {
   const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
+  const checks: string[] = []
   const client = {
     call: async (action: string, input?: Record<string, unknown>) => {
       calls.push({ action, ...(input === undefined ? {} : { input }) })
@@ -252,13 +253,37 @@ it('accepts a new Console API key only in the local password field and switches 
         jobs: [],
       }
     },
+    checkConsoleKey: async (apiKey: string) => {
+      checks.push(apiKey)
+      return {
+        valid: true as const,
+        organizationId: 'org_human',
+        authenticationType: 'clerk',
+        inboxCount: 1,
+        inboxLimit: 3,
+        capacityAvailable: true,
+        inboxRead: true,
+      }
+    },
   }
 
   render(<AssistantMailPanel client={client} />)
   const key = await screen.findByLabelText<HTMLInputElement>('Nueva API key de AgentMail')
   expect(key.type).toBe('password')
+  const activate = screen.getByRole('button', { name: 'Guardar API y activar Kira' })
+  expect((activate as HTMLButtonElement).disabled).toBe(true)
+
   fireEvent.change(key, { target: { value: 'am_us_console_secret' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Usar esta API key y crear buzón nuevo' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
+
+  expect(await screen.findByText('Comprobación de AgentMail')).toBeTruthy()
+  expect(screen.getByText('✓ válida')).toBeTruthy()
+  expect(screen.getByText('1/3')).toBeTruthy()
+  expect(checks).toEqual(['am_us_console_secret'])
+  expect((activate as HTMLButtonElement).disabled).toBe(false)
+  expect(calls.some(call => call.action === 'console-key')).toBe(false)
+
+  fireEvent.click(activate)
 
   expect(await screen.findByText('kira-new@agentmail.to')).toBeTruthy()
   expect(calls).toContainEqual({
@@ -267,4 +292,115 @@ it('accepts a new Console API key only in the local password field and switches 
   })
   expect(key.value).toBe('')
   expect(document.body.textContent).not.toContain('am_us_console_secret')
+})
+
+
+it('corroborates and rotates the API key of an already active Kira inbox without changing its address', async () => {
+  const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
+  const checks: string[] = []
+  const client = {
+    call: async (action: string, input?: Record<string, unknown>) => {
+      calls.push({ action, ...(input === undefined ? {} : { input }) })
+      return {
+        account: {
+          state: 'ready',
+          inboxId: 'kira-current@agentmail.to',
+          ownerEmail: 'owner@example.com',
+          ownerLink: 'attached' as const,
+          contacts: [],
+        },
+        connection: action === 'console-key' ? 'connecting' : 'connected',
+        jobs: [],
+      }
+    },
+    checkConsoleKey: async (apiKey: string) => {
+      checks.push(apiKey)
+      return {
+        valid: true as const,
+        organizationId: 'org_human',
+        authenticationType: 'clerk',
+        inboxCount: 3,
+        inboxLimit: 3,
+        capacityAvailable: false,
+        inboxRead: true,
+        currentInboxAccess: true,
+        messageRead: true,
+      }
+    },
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  expect(await screen.findByText('kira-current@agentmail.to')).toBeTruthy()
+  fireEvent.click(screen.getByText('API key de AgentMail · verificar o reemplazar'))
+  const key = screen.getByLabelText<HTMLInputElement>('Nueva API key de AgentMail')
+  fireEvent.change(key, { target: { value: 'am_us_rotated_secret' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
+
+  expect(await screen.findByText('✓ accesible')).toBeTruthy()
+  expect(screen.getAllByText('✓ disponible')).toHaveLength(2)
+  const save = screen.getByRole('button', { name: 'Guardar API y verificar acceso' })
+  expect((save as HTMLButtonElement).disabled).toBe(false)
+
+  fireEvent.click(save)
+
+  expect(await screen.findByText(/API actualizada/u)).toBeTruthy()
+  expect(checks).toEqual(['am_us_rotated_secret'])
+  expect(calls).toContainEqual({
+    action: 'console-key',
+    input: { apiKey: 'am_us_rotated_secret' },
+  })
+  expect(screen.getByText('kira-current@agentmail.to')).toBeTruthy()
+  expect(document.body.textContent).not.toContain('am_us_rotated_secret')
+})
+
+
+it('supports first-run Console key setup after owner entry and corroboration', async () => {
+  const candidate = ['am', 'first', 'run'].join('_')
+  const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
+  const client = {
+    call: async (action: string, input?: Record<string, unknown>) => {
+      calls.push({ action, ...(input === undefined ? {} : { input }) })
+      return {
+        account: action === 'console-key'
+          ? {
+              state: 'ready',
+              inboxId: 'kira-first@agentmail.to',
+              ownerEmail: 'owner@example.com',
+              ownerLink: 'attached' as const,
+              contacts: [],
+            }
+          : { state: 'not-configured', contacts: [] },
+        connection: action === 'console-key' ? 'connecting' : 'disconnected',
+        jobs: [],
+      }
+    },
+    checkConsoleKey: async () => ({
+      valid: true as const,
+      organizationId: 'org_human',
+      inboxCount: 0,
+      inboxLimit: 3,
+      capacityAvailable: true,
+      inboxRead: true,
+    }),
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  const key = await screen.findByLabelText<HTMLInputElement>('Nueva API key de AgentMail')
+  fireEvent.change(key, { target: { value: candidate } })
+  fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
+
+  expect(await screen.findByText('✕ escríbelo arriba')).toBeTruthy()
+  const activate = screen.getByRole('button', { name: 'Guardar API y activar Kira' })
+  expect((activate as HTMLButtonElement).disabled).toBe(true)
+
+  fireEvent.change(screen.getByPlaceholderText('tu@correo.com'), { target: { value: 'owner@example.com' } })
+  expect((activate as HTMLButtonElement).disabled).toBe(false)
+  fireEvent.click(activate)
+
+  expect(await screen.findByText('kira-first@agentmail.to')).toBeTruthy()
+  expect(calls).toContainEqual({
+    action: 'console-key',
+    input: { apiKey: candidate, ownerEmail: 'owner@example.com' },
+  })
+  expect(document.body.textContent).not.toContain(candidate)
 })

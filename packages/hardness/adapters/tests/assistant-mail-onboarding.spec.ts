@@ -777,6 +777,234 @@ it('keeps the mailbox pending until AgentMail exposes Console ownership', async 
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
+it('corroborates a human Console API key without storing it or creating an inbox', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-check-'))
+  try {
+    let saved = ''
+    const requests: string[] = []
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async (value) => { saved = value },
+      fetch: async (url, init) => {
+        const address = requestAddress(url)
+        requests.push(address)
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_us_console_key')
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_human',
+            authentication_id: 'user_human',
+            authentication_type: 'clerk',
+            inbox_count: 1,
+            inbox_limit: 3,
+          })
+        }
+        expect(address).toBe('https://api.agentmail.to/v0/inboxes?limit=1')
+        return Response.json({ count: 1, inboxes: [], limit: 1 })
+      },
+    })
+
+    await expect(account.inspectConsoleKey('am_us_console_key')).resolves.toEqual({
+      valid: true,
+      organizationId: 'org_human',
+      authenticationType: 'clerk',
+      inboxCount: 1,
+      inboxLimit: 3,
+      capacityAvailable: true,
+      inboxRead: true,
+    })
+    expect(saved).toBe('')
+    expect(requests).toEqual([
+      'https://api.agentmail.to/v0/organizations',
+      'https://api.agentmail.to/v0/inboxes?limit=1',
+    ])
+    expect((await account.status()).state).toBe('not-configured')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('reports an otherwise valid Console key that lacks inbox_read without mutating state', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-check-read-'))
+  try {
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async (url) => {
+        const address = requestAddress(url)
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_human',
+            authentication_id: 'user_human',
+            inbox_count: 2,
+            inbox_limit: 3,
+          })
+        }
+        return Response.json({
+          code: 'missing_permission',
+          fix: "This API key does not have the 'inbox_read' permission.",
+        }, { status: 403 })
+      },
+    })
+
+    await expect(account.inspectConsoleKey('am_us_restricted')).resolves.toMatchObject({
+      valid: true,
+      inboxRead: false,
+      capacityAvailable: true,
+    })
+    expect((await account.status()).state).toBe('not-configured')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('corroborates a replacement key against Kira current inbox and message access', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-check-ready-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({
+      state: 'ready',
+      inboxId: 'kira-current@agentmail.to',
+      ownerEmail: 'owner@example.com',
+      contacts: [],
+    }))
+    const requests: string[] = []
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async (url) => {
+        const address = requestAddress(url)
+        requests.push(address)
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_human',
+            authentication_id: 'user_human',
+            inbox_count: 3,
+            inbox_limit: 3,
+          })
+        }
+        if (address.endsWith('/inboxes?limit=1')) return Response.json({ count: 1, inboxes: [], limit: 1 })
+        if (address.endsWith('/inboxes/kira-current%40agentmail.to')) {
+          return Response.json({ inbox_id: 'kira-current@agentmail.to' })
+        }
+        if (address.includes('/inboxes/kira-current%40agentmail.to/messages?')) {
+          return Response.json({ messages: [] })
+        }
+        throw new Error(`unexpected request: ${address}`)
+      },
+    })
+
+    await expect(account.inspectConsoleKey('am_us_replacement')).resolves.toMatchObject({
+      valid: true,
+      inboxCount: 3,
+      inboxLimit: 3,
+      capacityAvailable: false,
+      inboxRead: true,
+      currentInboxAccess: true,
+      messageRead: true,
+    })
+    expect(requests).toHaveLength(4)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('rotates a ready Kira mailbox to a corroborated Console key without changing its inbox', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-rotate-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({
+      state: 'ready',
+      inboxId: 'kira-current@agentmail.to',
+      ownerEmail: 'owner@example.com',
+      contacts: ['trusted@example.com'],
+    }))
+    let saved = ''
+    const requests: string[] = []
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async (value) => { saved = value },
+      fetch: async (url) => {
+        const address = requestAddress(url)
+        requests.push(address)
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_human',
+            authentication_id: 'user_human',
+            inbox_count: 3,
+            inbox_limit: 3,
+          })
+        }
+        if (address.endsWith('/inboxes/kira-current%40agentmail.to')) {
+          return Response.json({ inbox_id: 'kira-current@agentmail.to' })
+        }
+        if (address.includes('/inboxes/kira-current%40agentmail.to/messages?')) {
+          return Response.json({ messages: [] })
+        }
+        throw new Error(`unexpected request: ${address}`)
+      },
+    })
+
+    await expect(account.adoptConsoleKey('am_us_replacement')).resolves.toMatchObject({
+      state: 'ready',
+      inboxId: 'kira-current@agentmail.to',
+      ownerEmail: 'owner@example.com',
+      contacts: ['trusted@example.com'],
+    })
+    expect(saved).toBe('am_us_replacement')
+    expect(requests).toEqual([
+      'https://api.agentmail.to/v0/organizations',
+      'https://api.agentmail.to/v0/inboxes/kira-current%40agentmail.to',
+      expect.stringContaining('/inboxes/kira-current%40agentmail.to/messages?'),
+    ])
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('creates the first Kira inbox from a corroborated Console key and explicit Phoenix owner', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-first-run-'))
+  try {
+    let saved = ''
+    let createdInbox = ''
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async (value) => { saved = value },
+      fetch: async (url, init) => {
+        const address = requestAddress(url)
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_human',
+            authentication_id: 'user_human',
+            authentication_type: 'clerk',
+            inbox_count: 0,
+            inbox_limit: 3,
+          })
+        }
+        if (address === 'https://api.agentmail.to/v0/inboxes') {
+          const body = requestBody(init) as Record<string, unknown>
+          createdInbox = `${String(body.username)}@agentmail.to`
+          return Response.json({
+            inbox_id: createdInbox,
+            email: createdInbox,
+            client_id: body.client_id,
+          })
+        }
+        if (createdInbox.length > 0
+          && address === `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(createdInbox)}`) {
+          return Response.json({ inbox_id: createdInbox })
+        }
+        if (address.includes('/messages?')) return Response.json({ messages: [] })
+        throw new Error(`unexpected request: ${address}`)
+      },
+    })
+
+    await expect(account.adoptConsoleKey('am_us_console_key', 'owner@example.com')).resolves.toMatchObject({
+      state: 'ready',
+      inboxId: createdInbox,
+      ownerEmail: 'owner@example.com',
+      ownerLink: 'attached',
+    })
+    expect(saved).toBe('am_us_console_key')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
 it('adopts a human Console API key by creating a fresh inbox in that organization', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-'))
   try {
@@ -790,6 +1018,7 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
       sessionId: 'workspace-1',
     }))
     let saved = ''
+    let createdInbox = ''
     const requests: Array<{ url: string; auth: string | null; body?: unknown }> = []
     const account = new MailOnboarding({
       path,
@@ -814,6 +1043,14 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
             inbox_limit: 3,
           })
         }
+        if (address.includes('/messages?')) {
+          expect(auth).toBe('Bearer am_us_console_key')
+          return Response.json({ messages: [] })
+        }
+        if (createdInbox.length > 0 && address === `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(createdInbox)}`) {
+          expect(auth).toBe('Bearer am_us_console_key')
+          return Response.json({ inbox_id: createdInbox })
+        }
         expect(address).toBe('https://api.agentmail.to/v0/inboxes')
         expect(auth).toBe('Bearer am_us_console_key')
         const body = requestBody(init) as Record<string, unknown>
@@ -821,9 +1058,10 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
         expect(body.display_name).toBe('Kira')
         expect(typeof body.username).toBe('string')
         expect(typeof body.client_id).toBe('string')
+        createdInbox = `${String(body.username)}@agentmail.to`
         return Response.json({
-          inbox_id: `${String(body.username)}@agentmail.to`,
-          email: `${String(body.username)}@agentmail.to`,
+          inbox_id: createdInbox,
+          email: createdInbox,
           client_id: body.client_id,
         })
       },
@@ -840,25 +1078,41 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
     expect(result.inboxId).toMatch(/^kira-[a-f0-9]{8}@agentmail\.to$/u)
     expect(result.inboxId).not.toBe('old-signup@agentmail.to')
     expect(saved).toBe('am_us_console_key')
-    expect(requests).toHaveLength(2)
+    expect(requests).toHaveLength(4)
+    expect(requests[2]?.url).toContain('/inboxes/')
+    expect(requests[3]?.url).toContain('/messages?')
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
-it('refuses an API key that is not attached to a human Console organization', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-agent-org-'))
+it('does not require optional organization authentication metadata during a key check', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-optional-auth-'))
   try {
     let saved = ''
     const account = new MailOnboarding({
       path: join(directory, 'account.json'),
       timeoutMs: 1000,
       saveKey: async (value) => { saved = value },
-      fetch: async () => Response.json({
-        organization_id: 'org_agent_only',
-        inbox_count: 1,
-      }),
+      fetch: async (url) => {
+        const address = requestAddress(url)
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_console',
+            inbox_count: 1,
+            inbox_limit: 3,
+          })
+        }
+        expect(address).toBe('https://api.agentmail.to/v0/inboxes?limit=1')
+        return Response.json({ count: 1, inboxes: [], limit: 1 })
+      },
     })
 
-    await expect(account.adoptConsoleKey('am_us_agent_only')).rejects.toThrow('human-owned AgentMail Console')
+    await expect(account.inspectConsoleKey('am_us_console_optional_auth')).resolves.toMatchObject({
+      valid: true,
+      organizationId: 'org_console',
+      inboxCount: 1,
+      inboxLimit: 3,
+      inboxRead: true,
+    })
     expect(saved).toBe('')
     expect((await account.status()).state).toBe('not-configured')
   } finally { await rm(directory, { recursive: true, force: true }) }
@@ -901,6 +1155,7 @@ it('reconciles an ambiguous Console-key inbox create without minting a duplicate
           createdClientId = String(body.client_id)
           throw new Error('confirmation lost')
         }
+        if (address.includes('/messages?')) return Response.json({ messages: [] })
         expect(address).toBe(`https://api.agentmail.to/v0/inboxes/${createdUsername}%40agentmail.to`)
         return Response.json({
           inbox_id: `${createdUsername}@agentmail.to`,

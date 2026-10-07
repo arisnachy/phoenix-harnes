@@ -9,7 +9,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
-import { AgentMailHttpError, AgentMailTransport } from './assistant-mail-agentmail.ts'
+import { AgentMailHttpError, AgentMailTransport, agentMailRequest } from './assistant-mail-agentmail.ts'
 import { MailOnboarding } from './assistant-mail-onboarding.ts'
 import { MailJournal } from './assistant-mail-journal.ts'
 import { MailOutbox } from './assistant-mail-outbox.ts'
@@ -518,6 +518,35 @@ export function installAssistantMail(ctx: Context,
             claimUrl: 'https://console.agentmail.to/claim',
           } }
         }
+        if (endpoint === 'console-key-check') {
+          if (Object.keys(args).some(key => key !== 'apiKey') || args.apiKey === undefined) {
+            throw new Error('AgentMail Console key check requires only apiKey')
+          }
+          const candidate = mailString(args.apiKey, 8192)
+          let auth: Record<string, unknown>
+          try {
+            auth = mailRecord(await agentMailRequest('/auth/me', candidate, config.timeoutMs, fetch))
+          } catch (error) {
+            if (error instanceof AgentMailHttpError
+              && (error.reason === 'credential-rejected' || error.status === 401 || error.status === 403)) {
+              throw new Error('AgentMail rejected this API key; create a new key in Console and try again')
+            }
+            throw error
+          }
+          const scopeType = mailString(auth.scope_type)
+          if (!['organization', 'pod', 'inbox'].includes(scopeType)) {
+            throw new Error('AgentMail returned an invalid API key scope')
+          }
+          const account = await onboarding.status()
+          if (account.state !== 'ready' && scopeType !== 'organization') {
+            throw new Error('a new Kira inbox requires an organization-scoped AgentMail API key')
+          }
+          if (account.state === 'ready' && scopeType === 'inbox'
+            && (account.inboxId === undefined || auth.inbox_id !== account.inboxId)) {
+            throw new Error('this inbox-scoped AgentMail API key belongs to a different inbox')
+          }
+          return { ok: true as const, value: await onboarding.inspectConsoleKey(candidate) }
+        }
         if (endpoint === 'signup') await onboarding.signup(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
         else if (endpoint === 'recover') {
           if (Object.keys(args).length > 0) throw new Error('mail recovery uses only the persisted owner')
@@ -528,12 +557,45 @@ export function installAssistantMail(ctx: Context,
           await onboarding.confirmClaim()
         }
         else if (endpoint === 'console-key') {
-          if (Object.keys(args).some(key => key !== 'apiKey') || args.apiKey === undefined) {
-            throw new Error('AgentMail Console recovery requires only apiKey')
+          if (Object.keys(args).some(key => key !== 'apiKey' && key !== 'ownerEmail') || args.apiKey === undefined) {
+            throw new Error('AgentMail Console recovery requires apiKey and optionally ownerEmail')
           }
-          const account = await onboarding.adoptConsoleKey(mailString(args.apiKey, 8192))
-          status = account.state === 'ready' ? 'connecting' : status
-          if (account.state === 'ready') void pump()
+          const candidate = mailString(args.apiKey, 8192)
+          let auth: Record<string, unknown>
+          try {
+            auth = mailRecord(await agentMailRequest('/auth/me', candidate, config.timeoutMs, fetch))
+          } catch (error) {
+            if (error instanceof AgentMailHttpError
+              && (error.reason === 'credential-rejected' || error.status === 401 || error.status === 403)) {
+              throw new Error('AgentMail rejected this API key; create a new key in Console and try again')
+            }
+            throw error
+          }
+          const scopeType = mailString(auth.scope_type)
+          if (!['organization', 'pod', 'inbox'].includes(scopeType)) {
+            throw new Error('AgentMail returned an invalid API key scope')
+          }
+          const before = await onboarding.status()
+          if (before.state !== 'ready' && scopeType !== 'organization') {
+            throw new Error('a new Kira inbox requires an organization-scoped AgentMail API key')
+          }
+          if (before.state === 'ready' && scopeType === 'inbox'
+            && (before.inboxId === undefined || auth.inbox_id !== before.inboxId)) {
+            throw new Error('this inbox-scoped AgentMail API key belongs to a different inbox')
+          }
+          const account = await onboarding.adoptConsoleKey(
+            candidate,
+            args.ownerEmail === undefined ? undefined : mailString(args.ownerEmail),
+          )
+          if (account.state === 'ready') {
+            socketDispose?.()
+            socketDispose = undefined
+            await receiver?.stop()
+            receiver = undefined
+            transportInbox = undefined
+            status = 'connecting'
+            void pump()
+          }
         }
         else if (endpoint === 'owner') {
           if (Object.keys(args).some(key => key !== 'ownerEmail') || args.ownerEmail === undefined) {
@@ -587,7 +649,8 @@ export function installAssistantMail(ctx: Context,
               error: job.error })) } }
       } catch (error) {
         await handleProviderFailure(error,
-          endpoint !== 'recover' && endpoint !== 'claim' && endpoint !== 'claim-status' && endpoint !== 'console-key')
+          endpoint !== 'recover' && endpoint !== 'claim' && endpoint !== 'claim-status'
+          && endpoint !== 'console-key' && endpoint !== 'console-key-check')
         // Provider bodies and fetch/socket errors never cross this secret-free status projection.
         const message = error instanceof Error && !/fetch|network|socket/iu.test(error.message) ? error.message : 'mail connection failed; check the local setup'
         return { ok: false as const, error: { code: 'internal', message, details: {} } }
