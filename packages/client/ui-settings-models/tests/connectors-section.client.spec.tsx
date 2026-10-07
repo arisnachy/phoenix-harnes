@@ -711,6 +711,87 @@ describe('connectors settings section', () => {
     })
   })
 
+  it('reserves the OAuth tab in the original click before a late MCP flow begins', async () => {
+    const consentUrl = 'https://www.notion.so/oauth/authorize?client_id=phoenix-test'
+    const popup = {
+      closed: false,
+      close: vi.fn(),
+      location: { replace: vi.fn() },
+    }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    const entry = {
+      key: 'mcp-client/notion',
+      label: 'MCP notion',
+      methods: [{ id: 'oauth', label: 'Authorize notion' }],
+      inFlight: false,
+    }
+    const list = vi.fn(() => Promise.resolve(ok({
+      entries: reconnect.mock.calls.length === 0 ? [] : [entry],
+    })))
+    const begin = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546117',
+      status: 'pending' as const,
+    })))
+    const status = vi.fn(() => Promise.resolve(ok({
+      attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546117',
+      status: 'pending' as const,
+      nextSeq: 1,
+      notices: [{ seq: 1, notice: { message: 'Continue with Notion', url: consentUrl } }],
+    })))
+    const api = {
+      list, begin, status, answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const authRequired = {
+      managed: [{
+        entryId: 'managed-notion',
+        serverName: 'notion',
+        url: 'https://mcp.notion.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'notion' },
+      }],
+      runtime: [{
+        serverName: 'notion',
+        transport: 'streamable-http' as const,
+        status: 'auth-required' as const,
+        reasonCode: 'authorization-required' as const,
+        toolNames: [],
+      }],
+    }
+    const mcpRegistry = {
+      state: vi.fn(async () => authRequired),
+      reconnect,
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+
+    try {
+      renderHub(api, { mcpRegistry })
+      const card = (await screen.findByText('Notion')).closest('article')
+      const authorize = Array.from(card?.querySelectorAll('button') ?? [])
+        .find(button => button.textContent === 'Authorize')
+      expect(authorize).toBeTruthy()
+
+      fireEvent.click(authorize!)
+
+      // This must happen synchronously in the click stack, before the MCP
+      // reconnect promise resolves and before its authorization flow exists.
+      expect(open).toHaveBeenCalledTimes(1)
+      expect(open).toHaveBeenCalledWith('', '_blank')
+      expect(open.mock.invocationCallOrder[0]).toBeLessThan(reconnect.mock.invocationCallOrder[0]!)
+
+      await waitFor(() => {
+        expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+      })
+      await waitFor(() => {
+        expect(popup.location.replace).toHaveBeenCalledWith(consentUrl)
+      }, { timeout: 2_000 })
+
+      const manual = screen.getByRole('link', { name: 'Open authorization page' }) as HTMLAnchorElement
+      expect(manual.href).toBe(consentUrl)
+    } finally {
+      open.mockRestore()
+    }
+  })
+
   it('disconnects an installed MCP account before removing the managed connector', async () => {
     const disconnect = vi.fn(() => Promise.resolve(ok({})))
     const remove = vi.fn(async () => ({ removed: true, liveUnloaded: true }))
