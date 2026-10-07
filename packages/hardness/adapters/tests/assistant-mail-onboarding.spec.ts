@@ -589,12 +589,12 @@ it('serializes connection and recovery while a provider request is in flight', a
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
-it('retries a confirmed absent inbox with the same address and client identity', async () => {
+it('retries a confirmed absent inbox with the same address without duplicating it', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-inbox-absent-'))
   try {
     const path = join(directory, 'account.json')
     await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
-    const requests: Array<{ username: string; client_id: string }> = []
+    const requests: Array<{ username: string; client_id?: string }> = []
     const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => 'test-secret', fetch: async (_url, init) => {
       if (init?.method !== 'POST') return Response.json({}, { status: 404 })
       const request = requestBody(init) as { username: string; client_id?: string }
@@ -605,6 +605,7 @@ it('retries a confirmed absent inbox with the same address and client identity',
     await expect(account.createInbox()).rejects.toThrow('ambiguous')
     expect((await account.createInbox()).inboxId).toBe(`${requests[0]!.username}@agentmail.to`)
     expect(requests).toHaveLength(2)
+    expect(requests[0]?.client_id).toBeUndefined()
     expect(requests[1]).toEqual(requests[0])
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
