@@ -96,6 +96,8 @@ export interface MailConsoleKeyCheck {
   readonly inboxLimit?: number
   readonly capacityAvailable: boolean
   readonly inboxRead: boolean
+  /** Existing Kira-like inbox already visible to this Console key, reusable without spending quota. */
+  readonly reusableInboxId?: string
   readonly inboxCreate?: boolean
   readonly messageSend?: boolean
   /** Present when Kira already has a ready inbox and the candidate key was checked against it. */
