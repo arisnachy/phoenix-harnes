@@ -670,7 +670,7 @@ describe('ManagedMcpController', () => {
     const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
     const installed = await controller.install({ name: 'io.example/calendar', version: '1.0.0' })
 
-    values = [candidate({ remoteUrl: 'https://mcp.example.com/calendar-v2' })]
+    values = [candidate({ version: '2.0.0', remoteUrl: 'https://mcp.example.com/calendar-v2' })]
     const repaired = await controller.repair({ entryId: installed.connector.entryId })
 
     expect(live.remove).toHaveBeenCalledWith('old-entry')
@@ -679,10 +679,38 @@ describe('ManagedMcpController', () => {
       connector: {
         entryId: 'repaired-entry',
         url: 'https://mcp.example.com/calendar-v2',
-        source: { kind: 'registry', name: 'io.example/calendar', version: '1.0.0' },
+        source: { kind: 'registry', name: 'io.example/calendar', version: '2.0.0' },
       },
     })
     expect(search).toHaveBeenLastCalledWith({ query: 'io.example/calendar', limit: 20 })
+  })
+
+  it('preserves the previous registry config when a replacement MCP cannot start', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('old-entry').mockRejectedValueOnce(new Error('remote unavailable'))
+    const controller = new ManagedMcpController(live, {
+      patchPath,
+      registrySearch: registry([candidate()]),
+    })
+    await controller.install({ name: 'io.example/calendar', version: '1.0.0' })
+    await expect(controller.repair({ entryId: 'old-entry' }))
+      .rejects.toThrow('previous configuration was preserved')
+    await expect(controller.snapshot()).resolves.toEqual([
+      expect.objectContaining({ entryId: 'old-entry', url: 'https://mcp.example.com/calendar' }),
+    ])
+  })
+
+  it('migrates existing core connectors at startup without auto-installing missing services', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    const boot = await controller.ensureCoreMcpPack({ installMissing: false })
+    expect(boot.installed).toEqual([])
+    expect(boot.alreadyInstalled).toEqual([])
+    expect(boot.failed).toEqual([])
+    expect(live.create).not.toHaveBeenCalled()
+    await expect(controller.snapshot()).resolves.toEqual([])
   })
 
   it('does not invent a repair source for legacy managed rows', async () => {
