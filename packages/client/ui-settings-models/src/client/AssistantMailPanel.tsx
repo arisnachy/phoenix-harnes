@@ -1,5 +1,5 @@
 /** Local email enrollment and secret-free job status in the existing Integrations page. */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import styles from './AssistantMailPanel.module.css'
 
@@ -27,7 +27,7 @@ export interface AssistantMailSnapshot {
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
-   * @param action Status, signup, recover, claim-status, owner, create-inbox, replace, discard, verify, configure or refresh.
+   * @param action Status, signup, recover, claim-status, console-key, owner, create-inbox, replace, discard, verify, configure or refresh.
    * @param input Operation properties; secrets are accepted only by connect.
    * @returns Secret-free account and job status.
    */
@@ -59,6 +59,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const [contacts, setContacts] = useState('')
   const [failure, setFailure] = useState<string>()
   const [claimNotice, setClaimNotice] = useState<string>()
+  const consoleKeyRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -180,6 +181,47 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       }
     })()
   }
+  const useConsoleKey = (): void => {
+    const input = consoleKeyRef.current
+    const apiKey = input?.value.trim() ?? ''
+    if (apiKey.length === 0) {
+      setFailure('Pega una API key creada en tu cuenta de AgentMail Console.')
+      return
+    }
+    if (input !== null) input.value = ''
+    void operate('console-key', { apiKey })
+  }
+  const consoleKeyFallback = <details className={styles.advanced}>
+    <summary>¿Ya tienes cuenta en AgentMail? Usar una API key nueva</summary>
+    <div className={styles.advancedBody}>
+      <p className={styles.help}>
+        Si reclamar el buzón falla porque tu correo ya tiene una cuenta de AgentMail, la documentación
+        oficial indica crear una API key en tu organización y dejar que Kira cree un buzón nuevo dentro
+        de esa cuenta. El buzón viejo queda fuera y Phoenix deja de usarlo.
+      </p>
+      <label>
+        <span className={styles.fieldLabel}>Nueva API key de AgentMail</span>
+        <input
+          ref={consoleKeyRef}
+          className={styles.field}
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          disabled={busy}
+          placeholder="am_..."
+          aria-label="Nueva API key de AgentMail"
+        />
+      </label>
+      <button type="button" className={styles.button} disabled={busy}
+        onClick={useConsoleKey}>
+        Usar esta API key y crear buzón nuevo
+      </button>
+      <p className={styles.help}>
+        Phoenix valida la clave con AgentMail, exige una organización humana, crea un buzón nuevo,
+        guarda la clave en Credenciales y no la muestra en el chat.
+      </p>
+    </div>
+  </details>
   const recoveryOwnerField = <label>
     <span className={styles.fieldLabel}>Correo propietario que recibirá el código</span>
     <input
@@ -307,6 +349,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         Phoenix usa la clave original que guardó al crear el buzón; no necesitas haberla recibido por correo.
         No creará buzones adicionales mientras este vínculo siga pendiente.
       </p>
+      {consoleKeyFallback}
     </div> : null}
 
     {pendingVerification && !ownerLinkConflict ? <div className={styles.setup}>
@@ -352,6 +395,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         onClick={replaceMailbox}>
         Eliminar buzón viejo y empezar de nuevo
       </button>
+      {consoleKeyFallback}
     </div> : null}
 
     {ready ? <>
@@ -442,6 +486,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         Phoenix intentará borrar el buzón anterior si conserva acceso. Si la credencial ya no sirve,
         olvidará ese buzón localmente para que no bloquee una configuración nueva.
       </p>
+      {consoleKeyFallback}
     </div> : null}
 
     {claimNotice === undefined ? null : <p className={styles.help} role="status">{claimNotice}</p>}
