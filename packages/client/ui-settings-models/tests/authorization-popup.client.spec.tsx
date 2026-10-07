@@ -34,12 +34,6 @@ function reservedWindow(): ReservedWindow {
 const KEY = 'mcp-client/linear-linear'
 const LABEL = 'MCP linear-linear'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
-const WAITING_URL = (() => {
-  const url = new URL('/oauth-waiting.html', window.location.href)
-  url.searchParams.set('v', '20261007-1')
-  return url.href
-})()
-
 function panelApi(statusResult: () => Promise<RpcResponse<unknown>>) {
   return {
     list: vi.fn(() => Promise.resolve(ok({
@@ -153,7 +147,7 @@ describe('authorization consent window', () => {
     await clickAuthorize()
 
     // Same tick as the gesture: this is what the popup blocker checks.
-    expect(open).toHaveBeenCalledWith(WAITING_URL, '_blank')
+    expect(open).toHaveBeenCalledWith('about:blank', '_blank')
     expect(begin).toHaveBeenCalledWith({ key: KEY, method: 'oauth' })
     open.mockRestore()
   })
@@ -171,24 +165,20 @@ describe('authorization consent window', () => {
     } finally { open.mockRestore() }
   })
 
-  it('keeps the reserved Phoenix page visible and reports a start failure there', async () => {
+  it('closes a reserved popup and reports start failure in Phoenix', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     const api = panelApi(pendingForever)
     api.begin = vi.fn(() => Promise.reject(new Error('connector unavailable')))
-
-    renderPanel(api)
-    await clickAuthorize()
-
-    await waitFor(() => {
-      expect(reserved.postMessage).toHaveBeenCalledWith(
-        { type: 'phoenix/oauth-status', message: 'Error: connector unavailable', state: 'error' },
-        window.location.origin,
-      )
-    })
-    expect(reserved.close).not.toHaveBeenCalled()
-    expect(screen.getByText('Error: connector unavailable')).toBeTruthy()
-    open.mockRestore()
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => {
+        expect(reserved.close).toHaveBeenCalled()
+      })
+      expect(screen.getByText('Error: connector unavailable')).toBeTruthy()
+      expect(reserved.postMessage).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
   })
 
   it('navigates the reserved window once the backend publishes the consent URL', async () => {
@@ -252,55 +242,22 @@ describe('authorization consent window', () => {
     open.mockRestore()
   })
 
-  it('uses the waiting-page message bridge when direct cross-origin navigation is refused', async () => {
+  it('offers the provider link when the reserved popup refuses navigation', async () => {
     const reserved = reservedWindow()
     reserved.location.replace.mockImplementation(() => { throw new DOMException('navigation blocked', 'SecurityError') })
-    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
-    const api = panelApi(consentNotice)
-
-    renderPanel(api)
-    await clickAuthorize()
-
-    await waitFor(() => {
-      expect(reserved.postMessage).toHaveBeenCalledWith(
-        { type: 'phoenix/oauth-navigate', url: CONSENT_URL },
-        window.location.origin,
-      )
-    }, { timeout: 5000 })
-    expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL)
-    expect(open).toHaveBeenCalledTimes(1)
-    open.mockRestore()
-  })
-
-  it('replays the consent URL when the waiting page announces that its listener is ready', async () => {
-    const reserved = reservedWindow()
-    reserved.location.replace.mockImplementation(() => { throw new DOMException('navigation blocked', 'SecurityError') })
-    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
-    const api = panelApi(consentNotice)
-
-    renderPanel(api)
-    await clickAuthorize()
-
-    await waitFor(() => {
-      expect(reserved.postMessage).toHaveBeenCalledWith(
-        { type: 'phoenix/oauth-navigate', url: CONSENT_URL },
-        window.location.origin,
-      )
-    }, { timeout: 5000 })
-
-    reserved.postMessage.mockClear()
-    window.dispatchEvent(new MessageEvent('message', {
-      origin: window.location.origin,
-      source: reserved as unknown as MessageEventSource,
-      data: { type: 'phoenix/oauth-ready' },
-    }))
-
-    expect(reserved.postMessage).toHaveBeenCalledWith(
-      { type: 'phoenix/oauth-navigate', url: CONSENT_URL },
-      window.location.origin,
-    )
-    expect(open).toHaveBeenCalledTimes(1)
-    open.mockRestore()
+    const open = vi.spyOn(window, 'open')
+      .mockReturnValueOnce(reserved as unknown as Window)
+      .mockReturnValueOnce(null)
+    try {
+      renderPanel(panelApi(consentNotice))
+      await clickAuthorize()
+      await waitFor(() => {
+        expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL)
+      })
+      expect(await screen.findByRole('link', { name: /open/i })).toHaveProperty('href', CONSENT_URL)
+      expect(open).toHaveBeenLastCalledWith(CONSENT_URL, '_blank')
+      expect(reserved.postMessage).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
   })
 
   it('keeps a manual consent link when every popup attempt is blocked', async () => {
@@ -312,7 +269,7 @@ describe('authorization consent window', () => {
 
     const link = await screen.findByRole('link', { name: /open/i })
     expect(link.getAttribute('href')).toBe(CONSENT_URL)
-    expect(screen.getByText(/bloqueó la ventana de autorización|No pude abrir automáticamente/)).toBeTruthy()
+    expect(screen.getByText(/bloqueó la pestaña OAuth|No se abrió automáticamente/)).toBeTruthy()
     open.mockRestore()
   })
 })
@@ -336,36 +293,29 @@ describe('authorization popup isolation and pre-consent prompts', () => {
     } finally { open.mockRestore() }
   })
 
-  it('keeps the reservation alive through a prerequisite prompt and later reuses it for consent', async () => {
+  it('closes the placeholder for prerequisite prompts, then reserves a new tab on submit', async () => {
     const reserved = reservedWindow()
-    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    const reopened = reservedWindow()
+    const open = vi.spyOn(window, 'open')
+      .mockReturnValueOnce(reserved as unknown as Window)
+      .mockReturnValueOnce(reopened as unknown as Window)
     let answered = false
     const api = panelApi(async () => answered ? ok({ attemptId: 'attempt-1', status: 'pending', nextSeq: 2,
-      notices: [{ notice: { message: 'Approve in the tab', url: CONSENT_URL } }, { notice: { message: 'Waiting for consent' } }] }) : ok({
+      notices: [{ notice: { message: 'Approve in the tab', url: CONSENT_URL } }] }) : ok({
       attemptId: 'attempt-1', status: 'pending', nextSeq: 1, notices: [],
       prompt: { promptId: 'client-id', kind: 'text', message: 'Google Desktop OAuth client ID' },
     }))
+    api.answer = vi.fn(async () => { answered = true; return ok({}) })
     try {
       renderPanel(api)
       await clickAuthorize()
-      await waitFor(() => {
-        expect(reserved.postMessage).toHaveBeenCalledWith(
-          {
-            type: 'phoenix/oauth-status',
-            message: 'Completa el dato solicitado en PHOENIX. Esta pestaña continuará automáticamente.',
-            state: 'waiting',
-          },
-          window.location.origin,
-        )
-      }, { timeout: 3000 })
-      expect(reserved.close).not.toHaveBeenCalled()
-      const accountCard = document.querySelector('[data-connector-id="linear"]')
-      expect(accountCard?.textContent).toContain('Google Desktop OAuth client ID')
+      await waitFor(() => { expect(reserved.close).toHaveBeenCalled() }, { timeout: 3000 })
       expect(screen.getByText('Google Desktop OAuth client ID')).toBeTruthy()
-      answered = true
-      await waitFor(() => { expect(screen.getByRole('link', { name: /open/i }).getAttribute('href')).toBe(CONSENT_URL) }, { timeout: 3000 })
-      await waitFor(() => { expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL) }, { timeout: 3000 })
-      expect(open).toHaveBeenCalledTimes(1)
+      fireEvent.click(screen.getByRole('button', { name: en.continueAuthorization }))
+      await waitFor(() => { expect(api.answer).toHaveBeenCalled() })
+      expect(open).toHaveBeenCalledTimes(2)
+      expect(open).toHaveBeenLastCalledWith('about:blank', '_blank')
+      await waitFor(() => { expect(reopened.location.replace).toHaveBeenCalledWith(CONSENT_URL) }, { timeout: 4000 })
     } finally { open.mockRestore() }
   })
 })
@@ -400,10 +350,14 @@ it.each([
   try {
     renderPanel(api)
     await clickAuthorize()
-    expect(open).not.toHaveBeenCalled()
+    expect(open).toHaveBeenCalledWith('about:blank', '_blank')
     expect(api.begin).toHaveBeenCalledWith({ key, method: 'oauth' })
-    await waitFor(() => { expect(open).toHaveBeenCalledWith(CONSENT_URL, '_blank') }, { timeout: 3000 })
-    expect(open).toHaveBeenCalledTimes(1)
+    if (allowed) {
+      expect(open).toHaveBeenCalledTimes(1)
+    } else {
+      await waitFor(() => { expect(open).toHaveBeenCalledWith(CONSENT_URL, '_blank') }, { timeout: 3000 })
+      expect(open).toHaveBeenCalledTimes(2)
+    }
     expect(screen.getByRole('link', { name: /open/i }).getAttribute('href')).toBe(CONSENT_URL)
   } finally { open.mockRestore() }
 })
