@@ -37,6 +37,8 @@ None, as the section renders a browser configuration UI; nothing here reaches a 
 
 None; this package neither assembles nor sends a provider request.
 
+Authorization polling survives panel refreshes and uses the latest completion callback. Provider preparation notices are also displayed in the reserved tab.
+
 ## Known Limitations and Deferred Work
 
 - **Only the API key and curated fold fields are editable on the card** — the hand-written editor traded schema-generic field coverage for the mockup layout ([Agent Note](../../../.agents/notes/implemented/architecture/2026-07-30-web-config-plane.md)). Both families expose `baseURL` and model `id`/`name`/`contextWindow`/`maxTokens`; a hand-declared pi-ai route also exposes `displayName` and `api`. Retry policy, timeouts, DeepSeek model descriptions, and other advanced fields remain in `settings.yaml`; existing model fields the editor does not show are preserved. A profile schema without the conventional fields renders the hint alone, and the two curated layouts key on the `llm-deepseek`/`llm-pi-ai` namespaces by name.

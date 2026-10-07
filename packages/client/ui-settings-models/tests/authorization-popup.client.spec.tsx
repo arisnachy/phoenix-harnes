@@ -5,7 +5,7 @@
  * sign-in could never complete; these cases pin the reservation, the later
  * navigation of the reserved window, and the fallback when the user closed it.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { IApiClient, RpcResponse } from '@phoenix-ai/dsh-api-remotes/client'
 import { AuthorizationPanel, ConnectorsSettingsSection } from '../src/client/AuthorizationPanel.tsx'
@@ -120,6 +120,29 @@ describe('Models authorization panel', () => {
 })
 
 describe('authorization consent window', () => {
+  it('keeps the outstanding status response across connector panel refreshes', async () => {
+    const reserved = reservedWindow()
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    let resolveStatus!: (value: RpcResponse<unknown>) => void
+    const api = panelApi(() => new Promise((resolve) => { resolveStatus = resolve }))
+    try {
+      const panel = renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => { expect(api.status).toHaveBeenCalledTimes(1) }, { timeout: 2000 })
+      panel.rerender(
+        <ConnectorsSettingsSection
+          api={api as unknown as IApiClient['authorization']}
+          t={key => en[key]}
+          connectorT={key => connectorEn[key]}
+          onAuthorized={vi.fn()}
+        />,
+      )
+      await act(async () => { resolveStatus(await consentNotice()) })
+      expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL)
+      expect(screen.getByRole('link', { name: /open/i }).getAttribute('href')).toBe(CONSENT_URL)
+    } finally { open.mockRestore() }
+  })
+
   it('reserves the window synchronously, inside the click gesture', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)

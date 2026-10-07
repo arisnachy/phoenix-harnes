@@ -71,6 +71,8 @@ export function useAuthorizationAttempt(
   cancel: () => void
 } {
   const [attempt, setAttempt] = useState<AuthorizationAttempt | undefined>()
+  const onAuthorizedRef = useRef(onAuthorized)
+  useEffect(() => { onAuthorizedRef.current = onAuthorized }, [onAuthorized])
   const [answer, setAnswer] = useState('')
   const [failure, setFailure] = useState<string | undefined>()
   const opened = useRef(new Set<string>())
@@ -210,6 +212,9 @@ export function useAuthorizationAttempt(
         const view = response.result.value
         const latest = view.notices.at(-1)?.notice
         const consent = view.notices.findLast(item => item.notice.url !== undefined)?.notice
+        if (latest?.message !== undefined && consent?.url === undefined && attempt.url === undefined) {
+          showOAuthPopupStatus(latest.message)
+        }
         if (view.prompt !== undefined && consent?.url === undefined && attempt.url === undefined) {
           showOAuthPopupStatus('Completa el dato solicitado en PHOENIX. Esta pestaña continuará automáticamente.')
         }
@@ -233,7 +238,7 @@ export function useAuthorizationAttempt(
         })
         if (view.status === 'authorized') {
           closeReservedPopup()
-          onAuthorized()
+          onAuthorizedRef.current()
         } else if (view.status === 'cancelled') {
           closeReservedPopup()
         } else if (view.status === 'failed') {
@@ -247,7 +252,7 @@ export function useAuthorizationAttempt(
       })
     }, 650)
     return () => { stale = true; window.clearTimeout(timer) }
-  }, [api, attempt, onAuthorized, closeReservedPopup, navigateOAuthPopup, showOAuthPopupStatus])
+  }, [api, attempt, closeReservedPopup, navigateOAuthPopup, showOAuthPopupStatus])
 
   const begin = (key: string, method = 'oauth'): void => {
     if (api === undefined) return
