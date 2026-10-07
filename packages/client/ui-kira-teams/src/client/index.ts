@@ -37,6 +37,7 @@ export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 
 /** Register the KIRA activity strip and rail inside the center-column overlay so agents never consume chat width or cover the sidebar. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-kira-teams: dictionaries')
+  const t = ctx.locale.bind(NS)
   const sessions = ctx.get('sessions') as unknown as ISessions
   const teamDesign = ctx.settingsScope.bind<TeamDesignSettingsEnvelope>({
     namespace: TEAM_DESIGN_SETTINGS_NAMESPACE,
@@ -74,7 +75,7 @@ export function apply(ctx: ClientContext): void {
     name: 'settings.section',
     id: 'team-studio',
     order: 25,
-    label: () => 'Equipo',
+    label: () => t('studio.nav'),
     inject: () => ({
       hooks: { teamDesign },
       save: saveTeamDesign,
