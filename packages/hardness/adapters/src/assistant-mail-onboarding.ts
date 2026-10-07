@@ -189,6 +189,69 @@ export class MailOnboarding {
     })
   }
 
+  /** Replace a failed agent-signup enrollment with an inbox inside a human-owned Console organization.
+   * AgentMail explicitly recommends this path when the human already has a Console account and claim cannot
+   * create another organization: create a Console API key, give it to the agent, then create a fresh inbox.
+   * The old sign-up inbox remains at AgentMail and Phoenix stops using it.
+   * @param apiKey Bearer key created by the human in AgentMail Console.
+   * @returns Ready account backed by the newly created inbox.
+   */
+  adoptConsoleKey(apiKey: string): Promise<MailAccount> {
+    return this.exclusively(async () => {
+      const key = mailString(apiKey, 8192)
+      if (!/^am_[A-Za-z0-9_-]+$/u.test(key)) throw new Error('enter a complete AgentMail API key beginning with am_')
+      const previous = await this.file.read()
+      if (previous.state === 'ready') throw new Error('the Kira mailbox is already active; replace it explicitly before changing credentials')
+      let organization: Record<string, unknown>
+      try {
+        organization = mailRecord(await agentMailRequest('/organizations', key, this.options.timeoutMs,
+          this.options.fetch ?? fetch))
+      } catch (error) {
+        if (error instanceof AgentMailHttpError
+          && (error.reason === 'credential-rejected' || error.status === 401)) {
+          throw new Error('AgentMail rejected this API key; create a new key in Console and try again')
+        }
+        throw error
+      }
+      if (typeof organization.organization_id !== 'string' || organization.organization_id.length === 0) {
+        throw new Error('AgentMail returned an invalid organization for this API key')
+      }
+      if (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0) {
+        throw new Error('use an API key created in your human-owned AgentMail Console organization')
+      }
+      const username = `kira-${randomUUID().slice(0, 8)}`
+      const clientId = randomUUID()
+      let created: Record<string, unknown>
+      try {
+        created = mailRecord(await agentMailRequest('/inboxes', key, this.options.timeoutMs,
+          this.options.fetch ?? fetch, {
+            username,
+            domain: 'agentmail.to',
+            display_name: 'Kira',
+            client_id: clientId,
+          }))
+      } catch (error) {
+        if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') {
+          throw new Error('this AgentMail API key needs the inbox_create permission; create a key with inbox creation enabled')
+        }
+        throw error
+      }
+      const inboxId = mailAddress(mailString(created.inbox_id ?? created.email))
+      if (created.client_id !== undefined && created.client_id !== clientId) throw new Error('new AgentMail inbox identity mismatch')
+      await this.options.saveKey(key)
+      await this.file.change((current) => ({
+        state: 'ready',
+        ...(current.ownerEmail === undefined ? {} : { ownerEmail: current.ownerEmail }),
+        ownerLink: 'attached',
+        inboxId,
+        ...(current.sessionId === undefined ? {} : { sessionId: current.sessionId }),
+        contacts: current.contacts,
+        signupUsername: username,
+      }))
+      return this.status()
+    })
+  }
+
   /** Correct the human email attached to an unverified mailbox.
    * AgentMail supports replacing the attached human before verification; this is the safe repair for
    * typos such as a wrong domain that would otherwise make OTP delivery impossible.
