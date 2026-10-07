@@ -451,7 +451,7 @@ it('does not enable AgentMail key replacement when message_send or realtime is m
   fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
 
   expect(await screen.findByText('✕ falta message_send')).toBeTruthy()
-  expect(screen.getByRole('button', { name: 'Guardar API y verificar acceso' }).disabled).toBe(true)
+  expect(screen.getByRole('button', { name: 'Guardar API y verificar acceso' }).getAttribute('disabled')).not.toBeNull()
 })
 
 it('shows the sanitized AgentMail provider issue without marking the inbox disconnected', async () => {
