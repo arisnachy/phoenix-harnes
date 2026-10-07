@@ -203,6 +203,39 @@ describe('authorization consent window', () => {
     expect(reserved.location.replace).not.toHaveBeenCalled()
     open.mockRestore()
   })
+
+  it('falls back when the reserved window refuses cross-origin navigation', async () => {
+    const reserved = reservedWindow()
+    reserved.location.replace.mockImplementation(() => { throw new DOMException('navigation blocked', 'SecurityError') })
+    const fallback = reservedWindow()
+    const open = vi.spyOn(window, 'open')
+      .mockReturnValueOnce(reserved as unknown as Window)
+      .mockReturnValueOnce(fallback as unknown as Window)
+    const api = panelApi(consentNotice)
+
+    renderPanel(api)
+    await clickAuthorize()
+
+    await waitFor(
+      () => { expect(open).toHaveBeenLastCalledWith(CONSENT_URL, '_blank') },
+      { timeout: 5000 },
+    )
+    expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL)
+    open.mockRestore()
+  })
+
+  it('keeps a manual consent link when every popup attempt is blocked', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const api = panelApi(consentNotice)
+
+    renderPanel(api)
+    await clickAuthorize()
+
+    const link = await screen.findByRole('link', { name: /open/i })
+    expect(link.getAttribute('href')).toBe(CONSENT_URL)
+    expect(screen.getByText(/bloqueó la ventana de autorización|No pude abrir automáticamente/)).toBeTruthy()
+    open.mockRestore()
+  })
 })
 
 
