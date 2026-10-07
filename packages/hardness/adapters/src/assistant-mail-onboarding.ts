@@ -115,6 +115,9 @@ export class MailOnboarding {
         throw new Error('mail recovery requires an existing owner enrollment')
       }
       if (previous.state === 'ready') return this.restoreCredentialFrom(previous)
+      if (previous.newInboxRequest !== undefined) {
+        throw new Error('Console-key inbox creation is pending; retry with the same API key so Phoenix can reconcile it')
+      }
       if (previous.state === 'pending-verification') {
         const key = await this.options.resolveKey?.()
         if (key !== undefined) {
