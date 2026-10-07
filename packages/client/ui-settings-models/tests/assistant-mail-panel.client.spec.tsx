@@ -263,6 +263,9 @@ it('corroborates a new Console API key before storing it and activating the new 
         inboxLimit: 3,
         capacityAvailable: true,
         inboxRead: true,
+        scopeType: 'organization' as const,
+        inboxCreate: true,
+        messageSend: true,
       }
     },
   }
@@ -323,8 +326,12 @@ it('corroborates and rotates the API key of an already active Kira inbox without
         inboxLimit: 3,
         capacityAvailable: false,
         inboxRead: true,
+        scopeType: 'organization' as const,
+        inboxCreate: true,
+        messageSend: true,
         currentInboxAccess: true,
         messageRead: true,
+        realtime: true,
       }
     },
   }
@@ -381,6 +388,9 @@ it('supports first-run Console key setup after owner entry and corroboration', a
       inboxLimit: 3,
       capacityAvailable: true,
       inboxRead: true,
+      scopeType: 'organization' as const,
+      inboxCreate: true,
+      messageSend: true,
     }),
   }
 
