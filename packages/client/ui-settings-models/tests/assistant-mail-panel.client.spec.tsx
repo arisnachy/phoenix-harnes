@@ -352,3 +352,55 @@ it('corroborates and rotates the API key of an already active Kira inbox without
   expect(screen.getByText('kira-current@agentmail.to')).toBeTruthy()
   expect(document.body.textContent).not.toContain('am_us_rotated_secret')
 })
+
+
+it('supports first-run Console key setup after owner entry and corroboration', async () => {
+  const candidate = ['am', 'first', 'run'].join('_')
+  const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
+  const client = {
+    call: async (action: string, input?: Record<string, unknown>) => {
+      calls.push({ action, ...(input === undefined ? {} : { input }) })
+      return {
+        account: action === 'console-key'
+          ? {
+              state: 'ready',
+              inboxId: 'kira-first@agentmail.to',
+              ownerEmail: 'owner@example.com',
+              ownerLink: 'attached' as const,
+              contacts: [],
+            }
+          : { state: 'not-configured', contacts: [] },
+        connection: action === 'console-key' ? 'connecting' : 'disconnected',
+        jobs: [],
+      }
+    },
+    checkConsoleKey: async () => ({
+      valid: true as const,
+      organizationId: 'org_human',
+      inboxCount: 0,
+      inboxLimit: 3,
+      capacityAvailable: true,
+      inboxRead: true,
+    }),
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  const key = await screen.findByLabelText<HTMLInputElement>('Nueva API key de AgentMail')
+  fireEvent.change(key, { target: { value: candidate } })
+  fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
+
+  expect(await screen.findByText('✕ escríbelo arriba')).toBeTruthy()
+  const activate = screen.getByRole('button', { name: 'Guardar API y activar Kira' })
+  expect((activate as HTMLButtonElement).disabled).toBe(true)
+
+  fireEvent.change(screen.getByPlaceholderText('tu@correo.com'), { target: { value: 'owner@example.com' } })
+  expect((activate as HTMLButtonElement).disabled).toBe(false)
+  fireEvent.click(activate)
+
+  expect(await screen.findByText('kira-first@agentmail.to')).toBeTruthy()
+  expect(calls).toContainEqual({
+    action: 'console-key',
+    input: { apiKey: candidate, ownerEmail: 'owner@example.com' },
+  })
+  expect(document.body.textContent).not.toContain(candidate)
+})
