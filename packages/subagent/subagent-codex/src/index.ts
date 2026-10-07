@@ -35,6 +35,7 @@ export const name = 'subagent-codex'
 export const inject = ['subagents', 'subprocess']
 
 const DEFAULT_PROVIDER_NAME = 'codex'
+const AUTO_REVIEW_PROVIDER_NAME = 'codex-auto-review'
 
 /** Deployment-owned permission, environment, and process-release settings. */
 export interface Config {
@@ -72,6 +73,11 @@ class CodexProvider implements SubagentProvider {
   ) {}
 
   start(request: ResolvedSubagentStartRequest) {
+    if (this.name === AUTO_REVIEW_PROVIDER_NAME && request.parent.options.provider !== 'openai-codex') {
+      throw new Error(
+        'subagent-codex: native auto-review is available only while the parent provider is openai-codex',
+      )
+    }
     const parentCwd = request.parent.session.header.cwd
     if (parentCwd === undefined) {
       throw new Error(
@@ -139,10 +145,12 @@ export function apply(ctx: Context, config: Config): void {
     resolved,
   ))
 
-  ctx.inject(['authorization', 'credentials'], (authorized) => {
-    registerCodexAccountFlow(authorized, {
-      env: resolved.env,
-      disposeGraceMs: resolved.disposeGraceMs,
+  if (resolved.providerName === DEFAULT_PROVIDER_NAME) {
+    ctx.inject(['authorization', 'credentials'], (authorized) => {
+      registerCodexAccountFlow(authorized, {
+        env: resolved.env,
+        disposeGraceMs: resolved.disposeGraceMs,
+      })
     })
-  })
+  }
 }

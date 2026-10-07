@@ -134,6 +134,8 @@ flowchart LR
   cfg --> plugin_dsh_base_subagent
   plugin_dsh_base_subagent_codex["subagent-codex<br/>@phoenix-ai/dsh-subagent-codex"]
   cfg --> plugin_dsh_base_subagent_codex
+  plugin_dsh_base_subagent_codex_auto_review["subagent-codex-auto-review<br/>@phoenix-ai/dsh-subagent-codex"]
+  cfg --> plugin_dsh_base_subagent_codex_auto_review
   plugin_dsh_base_subagent_spawn_in_process["subagent-spawn-in-process<br/>@phoenix-ai/dsh-subagent-spawn-in-process"]
   cfg --> plugin_dsh_base_subagent_spawn_in_process
   plugin_dsh_base_subagent_fork_in_process["subagent-fork-in-process<br/>@phoenix-ai/dsh-subagent-fork-in-process"]
@@ -283,6 +285,7 @@ flowchart LR
 | `command-compact` | `@phoenix-ai/dsh-command-compact` |
 | `subagent` | `@phoenix-ai/dsh-subagent` |
 | `subagent-codex` | `@phoenix-ai/dsh-subagent-codex` |
+| `subagent-codex-auto-review` | `@phoenix-ai/dsh-subagent-codex` |
 | `subagent-spawn-in-process` | `@phoenix-ai/dsh-subagent-spawn-in-process` |
 | `subagent-fork-in-process` | `@phoenix-ai/dsh-subagent-fork-in-process` |
 | `agent-team` | `@phoenix-ai/dsh-agent-team` |
