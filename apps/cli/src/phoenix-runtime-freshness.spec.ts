@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import {
   clientArtifactsAreFresh,
   missingHostRuntimeArtifacts,
+  phoenixSupervisorSourceRoot,
   preparePhoenixWebRuntime,
   sourceCheckoutSupersedesRuntime,
 } from './phoenix-runtime-freshness.ts'
@@ -29,9 +30,11 @@ function repository(): string {
   writeFileSync(join(root, '.gitignore'), '.dsh-build/\napps/web/dist/\n', 'utf8')
   writeFileSync(join(root, 'state.txt'), 'one\n', 'utf8')
   mkdirSync(join(root, 'apps', 'cli', 'lib'), { recursive: true })
+  mkdirSync(join(root, 'scripts'), { recursive: true })
   writeFileSync(join(root, 'apps', 'cli', 'package.json'), JSON.stringify({ name: '@phoenix-ai/dsh' }), 'utf8')
   writeFileSync(join(root, 'apps', 'cli', 'lib', 'bin.js'), '', 'utf8')
-  git(root, ['add', '.gitignore', 'state.txt', 'apps/cli/package.json', 'apps/cli/lib/bin.js'])
+  writeFileSync(join(root, 'scripts', 'phoenix-windows-supervisor.mjs'), '// supervisor\n', 'utf8')
+  git(root, ['add', '.gitignore', 'state.txt', 'apps/cli/package.json', 'apps/cli/lib/bin.js', 'scripts/phoenix-windows-supervisor.mjs'])
   git(root, ['commit', '-m', 'initial'])
   return root
 }
@@ -121,6 +124,39 @@ describe('PHOENIX runtime freshness', () => {
     mkdirSync(join(google, 'lib'), { recursive: true })
     writeFileSync(join(google, 'lib', 'index.js'), '', 'utf8')
     expect(missingHostRuntimeArtifacts(root)).toEqual([])
+  })
+
+  it('loads Windows supervisor code from the verified active runtime when the durable checkout is protected', () => {
+    const root = repository()
+    const target = git(root, ['rev-parse', 'HEAD'])
+    const holder = mkdtempSync(join(tmpdir(), 'phoenix-active-supervisor-'))
+    roots.push(holder)
+    const runtime = join(holder, 'runtime')
+    git(root, ['worktree', 'add', '--detach', runtime, target])
+
+    const gitDir = git(root, ['rev-parse', '--git-dir'])
+    writeFileSync(resolve(root, gitDir, 'phoenix-active-runtime.json'), JSON.stringify({
+      schema: 1,
+      target,
+      path: runtime,
+    }), 'utf8')
+
+    writeFileSync(join(root, 'protected-local-work.txt'), 'do not touch\n', 'utf8')
+
+    expect(phoenixSupervisorSourceRoot(root)).toBe(resolve(runtime))
+  })
+
+  it('falls back to durable supervisor code when the active runtime marker is not verifiable', () => {
+    const root = repository()
+    const target = git(root, ['rev-parse', 'HEAD'])
+    const gitDir = git(root, ['rev-parse', '--git-dir'])
+    writeFileSync(resolve(root, gitDir, 'phoenix-active-runtime.json'), JSON.stringify({
+      schema: 1,
+      target,
+      path: join(root, 'missing-runtime'),
+    }), 'utf8')
+
+    expect(phoenixSupervisorSourceRoot(root)).toBe(resolve(root))
   })
 
   it('retires the stale isolated runtime marker before launch when the clean source is newer', () => {
