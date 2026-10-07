@@ -8,6 +8,7 @@
     "rewriteRelativeImportExtensions": false
   },
   "include": [
+    "apps/web/tests/connector-oauth.e2e.ts",
     "apps/web/tests/kira-team-chat.e2e.ts",
     "apps/web/tests/phoenix-assistant-email.snapshot.ts",
     "apps/web/tests/game-development.snapshot.ts",
