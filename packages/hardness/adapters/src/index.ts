@@ -2,7 +2,7 @@ import { dirname } from 'node:path'
 import { mailAddress } from './assistant-mail-store.ts'
 import { installAssistantMail } from './assistant-mail-runtime.ts'
 import type { AssistantMailControl } from './assistant-mail-runtime.ts'
-import { createAssistantMailIdentityTool, createAssistantMailSendTool } from './assistant-mail-tool.ts'
+import { createAssistantMailIdentityTool, createAssistantMailSendTool, createAssistantMailInboxTool } from './assistant-mail-tool.ts'
 import { installAssistantMailProtocol } from './assistant-mail-protocol.ts'
 import { AttentionStore } from './proactivity-attention-store.ts'
 import { homedir } from 'node:os'
@@ -404,6 +404,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       const resolveMailbox = () => (ctx.get as unknown as (name: string) => unknown)('assistantMail') as AssistantMailControl | undefined
       disposers.push(ctx.tools.register(createAssistantMailIdentityTool(resolveMailbox)))
       disposers.push(ctx.tools.register(createAssistantMailSendTool(resolveMailbox)))
+      disposers.push(ctx.tools.register(createAssistantMailInboxTool(resolveMailbox)))
       for (const tool of createProactivityTools(proactivity.engine, {
         resolveDefaultEmailRecipient: () => connectedGoogleEmail(authorization),
       })) {
