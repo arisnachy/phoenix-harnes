@@ -27,7 +27,7 @@ export interface AssistantMailSnapshot {
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
-   * @param action Status, signup, recover, owner, create-inbox, replace, discard, verify, configure or refresh.
+   * @param action Status, signup, recover, claim-status, owner, create-inbox, replace, discard, verify, configure or refresh.
    * @param input Operation properties; secrets are accepted only by connect.
    * @returns Secret-free account and job status.
    */
@@ -87,6 +87,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const operate = async (action: string, input?: Record<string, unknown>): Promise<void> => {
     setBusy(true)
     setFailure(undefined)
+    setClaimNotice(undefined)
     try {
       const value = await client.call(action, input)
       setSnapshot(value)
@@ -170,7 +171,11 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         setClaimNotice(`Clave de ${claim.inboxId} copiada. Pégala en “Agent API key” y pulsa Continue.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo preparar la reclamación del buzón.'
-        setFailure(message)
+        setFailure(message.includes('no longer has the original AgentMail signup key')
+          ? 'Phoenix no conserva la clave original de este buzón. AgentMail no permite recuperarla; usa “La clave se perdió · crear buzón nuevo”.'
+          : message.includes('only available for US-region')
+            ? 'Este buzón no usa una clave am_us_; AgentMail solo permite reclamar por Console los buzones de la región US.'
+            : message)
       } finally {
         setBusy(false)
       }
@@ -290,6 +295,14 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       <button type="button" className={styles.secondaryButton} disabled={busy}
         onClick={claimMailbox}>
         Copiar clave y abrir AgentMail
+      </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={() => { void operate('claim-status') }}>
+        Ya lo reclamé · comprobar
+      </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={replaceMailbox}>
+        La clave se perdió · crear buzón nuevo
       </button>
       {claimNotice === undefined ? null : <p className={styles.help} role="status">{claimNotice}</p>}
       <p className={styles.help}>
