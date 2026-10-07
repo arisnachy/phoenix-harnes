@@ -15,6 +15,13 @@ import type {
 } from './types.ts'
 
 const MCP_CLIENT_PACKAGE = '@phoenix-ai/dsh-mcp-client'
+/**
+ * Services every PHOENIX-managed MCP must wait for before activation.
+ * Row order has no load semantics in Cordis; these explicit dependencies keep
+ * persisted connectors from snapshotting missing auth/credential services on
+ * a clean Host start.
+ */
+export const MANAGED_MCP_INJECT = ['tools', 'credentials', 'authorization', 'mcpConnectors'] as const
 const SERVER_NAME_MAX = 32
 const JEV_TOOL_TIMEOUT_MS = 30_000
 const JEV_STARTUP_TIMEOUT_MS = 5_000
@@ -126,6 +133,8 @@ export const X_CLIENT_SECRET_REF = 'X_CLIENT_SECRET'
 interface ManagedMcpRow {
   id: string
   name: typeof MCP_CLIENT_PACKAGE
+  /** Loader-level dependencies. Legacy managed rows may omit this until migrated. */
+  inject?: string[]
   config: ManagedMcpConfig
   source?: ManagedMcpSource
 }
@@ -136,7 +145,13 @@ interface ManagedMcpPatch {
 
 /** Minimal Loader mutation seam needed for immediate MCP activation and rollback. */
 export interface ManagedMcpLoader {
-  create(options: { name: string; config: ManagedMcpConfig }): Promise<string>
+  create(options: { name: string; inject?: readonly string[]; config: ManagedMcpConfig }): Promise<string>
+  /**
+   * Live Loader update used to migrate legacy managed rows in-place. The
+   * production Loader supports it; alternate embeddings may omit it and will
+   * still persist the corrected dependency list for the next Host start.
+   */
+  update?(id: string, options: { inject: readonly string[] }): Promise<void>
   remove(id: string): Promise<void>
 }
 
@@ -451,6 +466,29 @@ function validConfig(value: unknown): value is ManagedMcpConfig {
   return value.transport === 'streamable-http' && validHttpConfig(value)
 }
 
+function validManagedInject(value: unknown): value is string[] | undefined {
+  if (value === undefined) return true
+  return Array.isArray(value)
+    && value.length === MANAGED_MCP_INJECT.length
+    && value.every((entry, index) => entry === MANAGED_MCP_INJECT[index])
+}
+
+function hasManagedInject(row: ManagedMcpRow): boolean {
+  return validManagedInject(row.inject) && row.inject !== undefined
+}
+
+function managedLoaderOptions(config: ManagedMcpConfig): {
+  name: typeof MCP_CLIENT_PACKAGE
+  inject: string[]
+  config: ManagedMcpConfig
+} {
+  return {
+    name: MCP_CLIENT_PACKAGE,
+    inject: [...MANAGED_MCP_INJECT],
+    config,
+  }
+}
+
 function validManagedSource(value: unknown): value is ManagedMcpSource {
   if (!isRecord(value)) return false
   if (value.kind === 'registry') {
@@ -476,12 +514,16 @@ function parseManagedRows(raw: string): ManagedMcpRow[] {
     if (!isRecord(value) || typeof value.id !== 'string' || value.name !== MCP_CLIENT_PACKAGE || !validConfig(value.config)) {
       throw new Error(`managed MCP patch row ${index} is invalid`)
     }
+    if (!validManagedInject(value.inject)) {
+      throw new Error(`managed MCP patch row ${index} has an invalid inject dependency list`)
+    }
     if (value.source !== undefined && !validManagedSource(value.source)) {
       throw new Error(`managed MCP patch row ${index} has an invalid source`)
     }
     return {
       id: value.id,
       name: MCP_CLIENT_PACKAGE,
+      ...(value.inject === undefined ? {} : { inject: [...value.inject] }),
       config: value.config,
       ...(value.source === undefined ? {} : { source: value.source }),
     }
@@ -610,6 +652,43 @@ export class ManagedMcpController {
     this.registrySearch = options.registrySearch ?? searchOfficialMcpRegistry
   }
 
+  /**
+   * Upgrade legacy persisted MCP rows that predate explicit loader dependencies.
+   * Updating `inject` causes the Loader to restart a live row and then hold it
+   * pending until credentials, authorization, tools, and lifecycle registry are
+   * all available. Successful upgrades are persisted atomically so later starts
+   * never repeat the startup race.
+   */
+  private async ensureManagedDependencies(rows: readonly ManagedMcpRow[]): Promise<{
+    rows: ManagedMcpRow[]
+    failed: Array<{ row: ManagedMcpRow; message: string }>
+  }> {
+    let changed = false
+    const failed: Array<{ row: ManagedMcpRow; message: string }> = []
+    const upgraded: ManagedMcpRow[] = []
+
+    for (const row of rows) {
+      if (hasManagedInject(row)) {
+        upgraded.push(row)
+        continue
+      }
+      try {
+        await this.loader.update?.(row.id, { inject: [...MANAGED_MCP_INJECT] })
+        upgraded.push({ ...row, inject: [...MANAGED_MCP_INJECT] })
+        changed = true
+      } catch (error) {
+        upgraded.push(row)
+        failed.push({
+          row,
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
+
+    if (changed) await writeManagedRows(this.path, upgraded)
+    return { rows: upgraded, failed }
+  }
+
   private async installManagedConfig(
     config: ManagedMcpConfig,
     label: string,
@@ -617,15 +696,21 @@ export class ManagedMcpController {
   ): Promise<McpRegistryInstallReceipt> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
-      const rows = await readManagedRows(this.path)
+      const migration = await this.ensureManagedDependencies(await readManagedRows(this.path))
+      const rows = migration.rows
       const existing = rows.find(row => managedIdentity(row.config) === managedIdentity(config))
       if (existing !== undefined) {
+        const failure = migration.failed.find(item => item.row.id === existing.id)
+        if (failure !== undefined) {
+          throw new Error(`failed to repair managed MCP dependencies for "${existing.id}": ${failure.message}`)
+        }
         return { status: 'already-installed', connector: connectorOf(existing) }
       }
-      const entryId = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
+      const entryId = await this.loader.create(managedLoaderOptions(config))
       const row: ManagedMcpRow = {
         id: entryId,
         name: MCP_CLIENT_PACKAGE,
+        inject: [...MANAGED_MCP_INJECT],
         config,
         ...(source === undefined ? {} : { source }),
       }
@@ -812,7 +897,8 @@ export class ManagedMcpController {
   }> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
     return withFileLock(this.path, async () => {
-      const rows = await readManagedRows(this.path)
+      const migration = await this.ensureManagedDependencies(await readManagedRows(this.path))
+      const rows = migration.rows
       const alreadyInstalled = CORE_MCP_PACK_IDS.filter((connectorId) => {
         const config = CURATED_MCP_SPECS[connectorId].config()
         return rows.some(row => managedIdentity(row.config) === managedIdentity(config))
@@ -822,10 +908,11 @@ export class ManagedMcpController {
         const spec = CURATED_MCP_SPECS[connectorId]
         const config = spec.config()
         try {
-          const id = await this.loader.create({ name: MCP_CLIENT_PACKAGE, config })
+          const id = await this.loader.create(managedLoaderOptions(config))
           const row: ManagedMcpRow = {
             id,
             name: MCP_CLIENT_PACKAGE,
+            inject: [...MANAGED_MCP_INJECT],
             config,
             source: { kind: 'curated', connectorId },
           }
@@ -860,12 +947,23 @@ export class ManagedMcpController {
           throw error
         }
       }
+      const migrationFailures = migration.failed.flatMap(({ row, message }) => {
+        const connectorId = row.source?.kind === 'curated' && isCuratedMcpConnectorId(row.source.connectorId)
+          ? row.source.connectorId
+          : undefined
+        return connectorId !== undefined && CORE_MCP_PACK_IDS.includes(connectorId)
+          ? [{ connectorId, message: `dependency migration failed: ${message}` }]
+          : []
+      })
       return {
         installed: created.map(result => result.connectorId),
         alreadyInstalled,
-        failed: attempted
-          .filter((result): result is Extract<typeof result, { ok: false }> => !result.ok)
-          .map(result => ({ connectorId: result.connectorId, message: result.message })),
+        failed: [
+          ...migrationFailures,
+          ...attempted
+            .filter((result): result is Extract<typeof result, { ok: false }> => !result.ok)
+            .map(result => ({ connectorId: result.connectorId, message: result.message })),
+        ],
       }
     }, { waitMs: 30_000 })
   }
