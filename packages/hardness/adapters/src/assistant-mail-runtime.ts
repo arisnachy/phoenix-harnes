@@ -444,7 +444,9 @@ export function installAssistantMail(ctx: Context,
         ...(jobStates.has(id) ? { taskState: jobStates.get(id) } : {}),
       })
     }
-    if (messageId !== undefined && messages.length === 0) throw new Error('Mail message not found among recent authorized received messages')
+    if (messageId !== undefined && messages.length === 0) {
+      throw new Error('Mail message not found among recent authorized received messages')
+    }
     return { inboxId: account.inboxId, messages }
   })
   const listMailJobs: AssistantMailControl['listMailJobs'] = async () => {
