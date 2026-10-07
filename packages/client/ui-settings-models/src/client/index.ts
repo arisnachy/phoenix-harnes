@@ -301,14 +301,13 @@ export function apply(ctx: ClientContext): void {
       if (!result.ok) throw new Error(result.error.message)
       const value: unknown = result.value
       if (!assistantMailRecord(value)
-        || typeof value.apiKey !== 'string'
+        || value.copied !== true
         || typeof value.inboxId !== 'string'
         || typeof value.claimUrl !== 'string'
-        || !value.apiKey.startsWith('am_us_')
         || value.claimUrl !== 'https://console.agentmail.to/claim') {
         throw new Error('Invalid local mailbox claim response')
       }
-      return { apiKey: value.apiKey, inboxId: value.inboxId, claimUrl: value.claimUrl }
+      return { copied: true as const, inboxId: value.inboxId, claimUrl: value.claimUrl }
     },
   }
   const connectorsInjected = (): ConnectorsSettingsSectionProps => ({
