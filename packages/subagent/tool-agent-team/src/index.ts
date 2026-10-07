@@ -429,7 +429,17 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const occupiedNames = ctx.agentTeams.listMembers(agent)
           .filter(member => member.role === 'teammate')
           .map(member => member.name)
-        const memberName = args.name ?? selectTeamPersonaName(args.description, occupiedNames)
+        const disabledNames = ctx.agentTeams.activeTeamDesign().members
+          .filter(persona => !persona.enabled)
+          .map(persona => persona.id)
+        const memberName = args.name ?? selectTeamPersonaName(args.description, [...occupiedNames, ...disabledNames])
+        const designedPersona = ctx.agentTeams.teamDesignPerson(memberName, 'teammate')
+        if (designedPersona !== undefined && !designedPersona.enabled) {
+          throw new TeamError(
+            `Team Studio persona "${designedPersona.displayName}" is disabled for the active team`,
+            'TEAM_NOT_AUTHORIZED',
+          )
+        }
         return await ctx.agentTeams.spawnTeammate(agent, {
           name: memberName,
           description: args.description,
