@@ -17,26 +17,24 @@ type MailIdentityResult = {
 }
 
 function project(value: AssistantMailIdentity): MailIdentityResult {
+  const identity = {
+    kind: 'kira_mail_identity' as const,
+    available: true,
+    state: value.state,
+    ...(value.inboxId === undefined ? {} : { address: value.inboxId }),
+    connection: value.connection,
+    ...(value.ownerEmail === undefined ? {} : { owner_email: value.ownerEmail }),
+  }
   if (value.state === 'ready') {
     return {
-      kind: 'kira_mail_identity',
-      available: true,
-      state: value.state,
-      ...(value.inboxId === undefined ? {} : { address: value.inboxId }),
-      connection: value.connection,
-      ...(value.ownerEmail === undefined ? {} : { owner_email: value.ownerEmail }),
+      ...identity,
       needs_verification: false,
       guidance: 'Use phoenix_mail_send to send an explicitly requested message to the verified owner. Use action=refresh to reconcile incoming tasks. Tell the user Kira\'s exact mailbox address. This is Kira\'s own AgentMail inbox, not Gmail.',
     }
   }
   if (value.state === 'pending-verification') {
     return {
-      kind: 'kira_mail_identity',
-      available: true,
-      state: value.state,
-      ...(value.inboxId === undefined ? {} : { address: value.inboxId }),
-      connection: value.connection,
-      ...(value.ownerEmail === undefined ? {} : { owner_email: value.ownerEmail }),
+      ...identity,
       needs_verification: true,
       guidance: 'The mailbox already exists. Tell the user the exact address and ask them to finish '
         + 'the six-digit owner verification with action=verify and the code they received, or in Settings. '
@@ -46,11 +44,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
   }
   if (value.state === 'signup-ambiguous') {
     return {
-      kind: 'kira_mail_identity',
-      available: true,
-      state: value.state,
-      connection: value.connection,
-      ...(value.ownerEmail === undefined ? {} : { owner_email: value.ownerEmail }),
+      ...identity,
       needs_verification: false,
       guidance: 'The provider signup result is ambiguous. Do not retry signup automatically. '
         + 'Use action=recover when the user wants the old mailbox back. If recovery failed or the user explicitly wants to abandon the stale mailbox and create a new one, '
@@ -58,10 +52,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
     }
   }
   return {
-    kind: 'kira_mail_identity',
-    available: true,
-    state: value.state,
-    connection: value.connection,
+    ...identity,
     needs_verification: false,
     guidance: 'Kira does not have a mailbox yet. Use action=ensure. AgentMail signup does not require '
       + 'a pre-existing API key; Phoenix receives the new key from signup and stores it securely. '
