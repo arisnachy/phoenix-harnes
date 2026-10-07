@@ -43,6 +43,8 @@ export function useAuthorizationAttempt(
   answer: string
   setAnswer: (value: string) => void
   failure: string | undefined
+  reserveOAuthPopup: () => void
+  closeOAuthPopup: () => void
   begin: (key: string, method?: string) => void
   submitAnswer: () => void
   cancel: () => void
@@ -57,6 +59,12 @@ export function useAuthorizationAttempt(
     const popup = popupRef.current
     popupRef.current = null
     if (popup !== null && !popup.closed) popup.close()
+  }, [])
+
+  const reserveOAuthPopup = useCallback((): void => {
+    const popup = popupRef.current
+    if (popup !== null && !popup.closed) return
+    popupRef.current = window.open('', '_blank')
   }, [])
 
   useEffect(() => {
@@ -124,7 +132,7 @@ export function useAuthorizationAttempt(
     // popup blockers allow the later consent navigation. Other methods never
     // reserve a tab. Any failed/cancelled attempt closes an unused reservation
     // immediately so broken connectors cannot strand a blank window.
-    if (method === 'oauth') popupRef.current = window.open('', '_blank')
+    if (method === 'oauth') reserveOAuthPopup()
     else closeReservedPopup()
     void api.begin({ key, method }).then((response) => {
       if (!response.result.ok) {
@@ -180,7 +188,17 @@ export function useAuthorizationAttempt(
     }, (error: unknown) => { setFailure(String(error)) })
   }
 
-  return { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel }
+  return {
+    attempt,
+    answer,
+    setAnswer,
+    failure,
+    reserveOAuthPopup,
+    closeOAuthPopup: closeReservedPopup,
+    begin,
+    submitAnswer,
+    cancel,
+  }
 }
 
 /**
