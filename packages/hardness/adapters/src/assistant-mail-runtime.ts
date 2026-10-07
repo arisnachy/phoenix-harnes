@@ -523,7 +523,16 @@ export function installAssistantMail(ctx: Context,
             throw new Error('AgentMail Console key check requires only apiKey')
           }
           const candidate = mailString(args.apiKey, 8192)
-          const auth = mailRecord(await agentMailRequest('/auth/me', candidate, config.timeoutMs, fetch))
+          let auth: Record<string, unknown>
+          try {
+            auth = mailRecord(await agentMailRequest('/auth/me', candidate, config.timeoutMs, fetch))
+          } catch (error) {
+            if (error instanceof AgentMailHttpError
+              && (error.reason === 'credential-rejected' || error.status === 401 || error.status === 403)) {
+              throw new Error('AgentMail rejected this API key; create a new key in Console and try again')
+            }
+            throw error
+          }
           const scopeType = mailString(auth.scope_type)
           if (!['organization', 'pod', 'inbox'].includes(scopeType)) {
             throw new Error('AgentMail returned an invalid API key scope')
