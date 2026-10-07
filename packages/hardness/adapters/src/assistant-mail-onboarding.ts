@@ -192,7 +192,8 @@ export class MailOnboarding {
   /** Replace a failed agent-signup enrollment with an inbox inside a human-owned Console organization.
    * AgentMail explicitly recommends this path when the human already has a Console account and claim cannot
    * create another organization: create a Console API key, give it to the agent, then create a fresh inbox.
-   * The old sign-up inbox remains at AgentMail and Phoenix stops using it.
+   * The old sign-up inbox remains at AgentMail and Phoenix stops using it. A persisted client id makes an
+   * uncertain create result reconcilable instead of producing duplicate inboxes on retry.
    * @param apiKey Bearer key created by the human in AgentMail Console.
    * @returns Ready account backed by the newly created inbox.
    */
@@ -219,37 +220,74 @@ export class MailOnboarding {
       if (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0) {
         throw new Error('use an API key created in your human-owned AgentMail Console organization')
       }
-      const username = `kira-${randomUUID().slice(0, 8)}`
-      const clientId = randomUUID()
+
+      // Once the user explicitly chooses Console-key recovery, make that credential durable before
+      // creating the inbox. The old agent-signup inbox is intentionally abandoned per AgentMail docs.
+      await this.options.saveKey(key)
+      const request = previous.newInboxRequest ?? {
+        username: `kira-${randomUUID().slice(0, 8)}`,
+        clientId: randomUUID(),
+      }
+      if (previous.newInboxRequest === undefined) {
+        await this.file.change(current => ({ ...current, newInboxRequest: request }))
+      } else {
+        try {
+          const found = mailRecord(await agentMailRequest(
+            `/inboxes/${encodeURIComponent(`${request.username}@agentmail.to`)}`,
+            key, this.options.timeoutMs, this.options.fetch ?? fetch,
+          ))
+          return await this.finishConsoleInbox(found, request)
+        } catch (error) {
+          // A confirmed 404 proves the prior create did not land. Any other result stays ambiguous
+          // and must not mint a different username.
+          if (!(error instanceof AgentMailHttpError) || error.status !== 404) throw error
+        }
+      }
+
       let created: Record<string, unknown>
       try {
         created = mailRecord(await agentMailRequest('/inboxes', key, this.options.timeoutMs,
           this.options.fetch ?? fetch, {
-            username,
+            username: request.username,
             domain: 'agentmail.to',
             display_name: 'Kira',
-            client_id: clientId,
+            client_id: request.clientId,
           }))
       } catch (error) {
         if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') {
-          throw new Error('this AgentMail API key needs the inbox_create permission; create a key with inbox creation enabled')
+          throw new Error('this AgentMail API key needs the inbox_create permission; use an organization-scoped key with inbox creation enabled')
         }
-        throw error
+        if (error instanceof AgentMailHttpError && error.status >= 400 && error.status < 500 && error.status !== 408) throw error
+        throw new Error('new Console inbox confirmation is ambiguous; retry with the same API key so Phoenix can reconcile it')
       }
-      const inboxId = mailAddress(mailString(created.inbox_id ?? created.email))
-      if (created.client_id !== undefined && created.client_id !== clientId) throw new Error('new AgentMail inbox identity mismatch')
-      await this.options.saveKey(key)
-      await this.file.change((current) => ({
+      return this.finishConsoleInbox(created, request)
+    })
+  }
+
+  private async finishConsoleInbox(
+    result: Record<string, unknown>,
+    request: { readonly username: string; readonly clientId: string },
+  ): Promise<MailAccount> {
+    const inboxId = mailAddress(mailString(result.inbox_id ?? result.email))
+    if (inboxId !== `${request.username}@agentmail.to`) throw new Error('new AgentMail inbox address mismatch')
+    if (result.client_id !== undefined && result.client_id !== request.clientId) throw new Error('new AgentMail inbox identity mismatch')
+    await this.file.change((current) => {
+      const {
+        challengeHash: _challenge,
+        challengeExpires: _expiry,
+        challengeAttempts: _attempts,
+        newInboxRequest: _request,
+        ...retained
+      } = current
+      return {
+        ...retained,
         state: 'ready',
-        ...(current.ownerEmail === undefined ? {} : { ownerEmail: current.ownerEmail }),
         ownerLink: 'attached',
         inboxId,
-        ...(current.sessionId === undefined ? {} : { sessionId: current.sessionId }),
-        contacts: current.contacts,
-        signupUsername: username,
-      }))
-      return this.status()
+        signupUsername: request.username,
+      }
     })
+    return this.status()
   }
 
   /** Correct the human email attached to an unverified mailbox.
