@@ -414,3 +414,70 @@ it('supports first-run Console key setup after owner entry and corroboration', a
   })
   expect(document.body.textContent).not.toContain(candidate)
 })
+
+
+it('does not enable AgentMail key replacement when message_send or realtime is missing', async () => {
+  const client = {
+    call: async () => ({
+      account: {
+        state: 'ready',
+        inboxId: 'kira@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        ownerLink: 'attached' as const,
+        contacts: [],
+      },
+      connection: 'connected',
+      jobs: [],
+    }),
+    checkConsoleKey: async () => ({
+      valid: true as const,
+      organizationId: 'org_human',
+      inboxCount: 2,
+      inboxLimit: 3,
+      capacityAvailable: true,
+      inboxRead: true,
+      scopeType: 'organization' as const,
+      inboxCreate: true,
+      messageSend: false,
+      currentInboxAccess: true,
+      messageRead: true,
+      realtime: true,
+    }),
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  fireEvent.click(await screen.findByText('API key de AgentMail · verificar o reemplazar'))
+  fireEvent.change(screen.getByLabelText('Nueva API key de AgentMail'), { target: { value: 'am_restricted' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
+
+  expect(await screen.findByText('✕ falta message_send')).toBeTruthy()
+  expect((screen.getByRole('button', { name: 'Guardar API y verificar acceso' }) as HTMLButtonElement).disabled).toBe(true)
+})
+
+it('shows the sanitized AgentMail provider issue without marking the inbox disconnected', async () => {
+  const client = {
+    call: async () => ({
+      account: {
+        state: 'ready',
+        inboxId: 'kira@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        ownerLink: 'attached' as const,
+        contacts: [],
+      },
+      connection: 'connected',
+      providerIssue: {
+        status: 403,
+        code: 'missing_permission',
+        reason: 'permission-missing',
+        permission: 'message_send',
+        fix: "This API key does not have the 'message_send' permission.",
+      },
+      jobs: [],
+    }),
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  expect(await screen.findByText('Correo verificado · Activo')).toBeTruthy()
+  expect(screen.getByText(/AgentMail 403 · missing_permission · falta message_send/u)).toBeTruthy()
+  expect(screen.getByText(/does not have the 'message_send' permission/u)).toBeTruthy()
+})
