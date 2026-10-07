@@ -400,6 +400,65 @@ it('keeps the receive-only inbox and key when human attachment fails after fallb
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
+it('does not bypass an explicit AgentMail quota 403 with another signup', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-signup-quota-'))
+  try {
+    let calls = 0
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async () => {
+        calls++
+        return Response.json({ code: 'limit_exceeded', message: 'Forbidden', fix: 'Delete an old inbox.' }, { status: 403 })
+      },
+    })
+    await expect(account.signup('owner@example.com', 'kira-local')).rejects.toThrow('limit')
+    expect(calls).toBe(1)
+    expect((await account.status()).state).toBe('not-configured')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('restores the previous state when the receive-only fallback gets a confirmed rejection', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-fallback-rejected-'))
+  try {
+    let calls = 0
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async () => {
+        calls++
+        if (calls === 1) return Response.json({ message: 'Forbidden' }, { status: 403 })
+        return Response.json({ error: 'invalid username' }, { status: 400 })
+      },
+    })
+    await expect(account.signup('owner@example.com', 'kira-local')).rejects.toThrow('400')
+    expect(calls).toBe(2)
+    expect((await account.status()).state).toBe('not-configured')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('keeps fallback signup ambiguous when the receive-only response is lost', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-fallback-ambiguous-'))
+  try {
+    let calls = 0
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async () => {
+        calls++
+        if (calls === 1) return Response.json({ message: 'Forbidden' }, { status: 403 })
+        throw new Error('lost receive-only signup response')
+      },
+    })
+    await expect(account.signup('owner@example.com', 'kira-local')).rejects.toThrow('receive-only')
+    expect(calls).toBe(2)
+    expect((await account.status()).state).toBe('signup-ambiguous')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
 it('keeps a confirmed signup rejection retryable instead of labelling it a lost confirmation', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-rejected-'))
   try {
