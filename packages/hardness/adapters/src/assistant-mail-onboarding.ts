@@ -149,14 +149,20 @@ export class MailOnboarding {
       }
       const key = await this.options.resolveKey?.()
       if (previous.state === 'pending-verification' && key !== undefined) {
-        const attached = mailRecord(await agentMailRequest('/agent/human', key, this.options.timeoutMs,
-          this.options.fetch ?? fetch, { human_email: owner }))
-        if (mailAddress(mailString(attached.human_email)) !== owner) throw new Error('mail owner update was not confirmed')
-        await this.file.change((current) => {
-          if (current.state !== 'pending-verification') throw new Error('mail enrollment changed during owner repair')
-          return { ...current, ownerEmail: owner }
-        })
-        return this.status()
+        try {
+          const attached = mailRecord(await agentMailRequest('/agent/human', key, this.options.timeoutMs,
+            this.options.fetch ?? fetch, { human_email: owner }))
+          if (mailAddress(mailString(attached.human_email)) !== owner) throw new Error('mail owner update was not confirmed')
+          await this.file.change((current) => {
+            if (current.state !== 'pending-verification') throw new Error('mail enrollment changed during owner repair')
+            return { ...current, ownerEmail: owner }
+          })
+          return this.status()
+        } catch (error) {
+          if (!(error instanceof AgentMailHttpError) || error.reason !== 'credential-rejected') throw error
+          // A bare/expired-key 403 cannot repair the old organization. The owner explicitly
+          // changed the address, so start a fresh owner-bound enrollment instead of looping.
+        }
       }
       const reset: Enrollment = {
         state: 'not-configured',
@@ -191,15 +197,25 @@ export class MailOnboarding {
     const data = mailRecord(await agentMailRequest('/agent/sign-up', undefined, this.options.timeoutMs, this.options.fetch ?? fetch,
       { human_email: previous.ownerEmail, username, source: 'phoenix-local' }))
     const key = mailString(data.api_key, 8192)
+    const signupInbox = mailAddress(mailString(data.inbox_id))
     await this.options.saveKey(key)
-    const identity = mailRecord(await agentMailRequest(`/inboxes/${encodeURIComponent(previous.inboxId)}`, key,
-      this.options.timeoutMs, this.options.fetch ?? fetch))
-    if (identity.inbox_id !== previous.inboxId) throw new Error('recovered mail credential does not own the persisted inbox')
+    let recoveredInbox = previous.inboxId
+    try {
+      const identity = mailRecord(await agentMailRequest(`/inboxes/${encodeURIComponent(previous.inboxId)}`, key,
+        this.options.timeoutMs, this.options.fetch ?? fetch))
+      if (identity.inbox_id !== previous.inboxId) throw new Error('recovered mail credential does not own the persisted inbox')
+    } catch (error) {
+      if (!(error instanceof AgentMailHttpError) || error.status !== 404 || signupInbox === previous.inboxId) throw error
+      const replacement = mailRecord(await agentMailRequest(`/inboxes/${encodeURIComponent(signupInbox)}`, key,
+        this.options.timeoutMs, this.options.fetch ?? fetch))
+      if (replacement.inbox_id !== signupInbox) throw new Error('recovered mail credential returned an invalid inbox')
+      recoveredInbox = signupInbox
+    }
     await this.file.change((current) => {
       if (current.state !== 'ready' || current.ownerEmail !== previous.ownerEmail || current.inboxId !== previous.inboxId) {
         throw new Error('mail enrollment changed during credential recovery')
       }
-      return { ...current, signupUsername: username }
+      return { ...current, inboxId: recoveredInbox, signupUsername: username }
     })
     return this.status()
   }
