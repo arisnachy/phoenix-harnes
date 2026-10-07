@@ -41,6 +41,7 @@ export interface McpRegistryCandidateView {
   repositoryUrl?: string
   websiteUrl?: string
   remoteUrl?: string
+  remoteSetupRequired?: 'headers' | 'variables'
 }
 
 /** One Host-proxied Official MCP Registry search result safe for the browser. */
