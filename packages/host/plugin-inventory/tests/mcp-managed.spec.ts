@@ -115,6 +115,26 @@ describe('ManagedMcpController', () => {
     expect(live.create).toHaveBeenCalledTimes(1)
   })
 
+  it('does not duplicate an installed MCP namespace when the registry upgrades its remote URL', async () => {
+    const patchPath = tempPatch()
+    let newest = candidate()
+    const search = vi.fn(async ({ query }: { query: string }): Promise<McpRegistrySearchSnapshot> => ({
+      source: 'official-mcp-registry',
+      query,
+      fetchedAt: '2026-10-07T12:00:00.000Z',
+      stale: false,
+      candidates: [newest],
+    }))
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: search })
+    const installed = await controller.install({ name: newest.name, version: newest.version })
+    newest = candidate({ version: '2.0.0', remoteUrl: 'https://mcp.example.com/calendar-v2' })
+    await expect(controller.install({ name: newest.name, version: newest.version }))
+      .resolves.toMatchObject({ status: 'already-installed', connector: { entryId: installed.connector.entryId } })
+    expect(live.create).toHaveBeenCalledTimes(1)
+    await expect(controller.snapshot()).resolves.toHaveLength(1)
+  })
+
   it('installs, persists, and repairs the pinned official Devpost Hackathons MCP', async () => {
     const patchPath = tempPatch()
     const live = loader()
