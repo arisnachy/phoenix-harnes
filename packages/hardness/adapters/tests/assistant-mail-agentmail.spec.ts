@@ -103,6 +103,21 @@ describe('AgentMail transport', () => {
     expect(error).toMatchObject({ status: 401, code: 'unknown_api_key', reason: 'credential-rejected' })
   })
 
+  it('surfaces the offending AgentMail validation field without leaking provider payloads', async () => {
+    const error = await agentMailRequest('/inboxes', 'private-key', 1000, async () =>
+      Response.json({
+        code: 'validation_error',
+        message: 'One or more request fields are invalid.',
+        errors: [{ path: 'client_id', message: 'Value is not a valid client identifier' }],
+      }, { status: 400 }), { username: 'kira-test' }).catch((value: unknown) => value)
+    expect(error).toMatchObject({
+      status: 400,
+      code: 'validation_error',
+      validation: 'client_id: Value is not a valid client identifier',
+    })
+    expect((error as Error).message).toContain('client_id')
+  })
+
   it('classifies free-plan resource exhaustion instead of returning an opaque 403', async () => {
     const error = await agentMailRequest('/inboxes', 'private-key', 1000, async () =>
       Response.json({ code: 'limit_exceeded', message: 'Forbidden', fix: 'Delete an old inbox.' }, { status: 403 }))
