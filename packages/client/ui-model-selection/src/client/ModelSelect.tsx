@@ -18,7 +18,7 @@
  * card; the in-menu strip with Retry remains the catalog-load surface.
  */
 import {
-  useEffect, useId, useMemo, useRef, useState, useSyncExternalStore,
+  useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore,
   type KeyboardEvent, type FocusEvent,
 } from 'react'
 import clsx from 'clsx'
@@ -97,6 +97,7 @@ export function ModelSelect(
   const toastSeq = useRef(0)
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
+  const groupsRef = useRef<HTMLDivElement | null>(null)
   const itemRefs = useRef<(HTMLElement | null)[]>([])
   const id = useId()
 
@@ -162,6 +163,15 @@ export function ModelSelect(
     if (open && pane === 'effort') return
     setEffortDraftKey(null)
   }, [open, pane])
+
+  // Codex can replace the startup catalog immediately after the model pane opens.
+  // Chrome scroll anchoring may otherwise preserve a lower row and hide models
+  // prepended by that refresh. Every fresh catalog starts at its first row.
+  useLayoutEffect(() => {
+    if (!open || pane !== 'model') return
+    const groups = groupsRef.current
+    if (groups !== null) groups.scrollTop = 0
+  }, [open, pane, state.groups])
 
   if (!available) return null
 
@@ -369,7 +379,7 @@ export function ModelSelect(
                   <button type="button" className={css.retry} onClick={reload}>{t('retry')}</button>
                 </div>
               ))}
-              <div className={clsx(css.groups, 'scrollable')}>
+              <div ref={groupsRef} className={clsx(css.groups, 'scrollable')}>
                 {state.groups.map((group) => {
                   const headingId = `${id}-${group.id}`
                   const expanded = groupExpanded(group.id)
