@@ -155,3 +155,43 @@ it('shows owner-link recovery instead of an OTP field when AgentMail refused the
   fireEvent.click(screen.getByRole('button', { name: 'Reintentar vinculación' }))
   expect(calls).toContain('recover')
 })
+
+
+it('copies the saved AgentMail signup key and opens the claim page without rendering the secret', async () => {
+  const writeText = vi.fn(async (_value: string) => {})
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText },
+  })
+  const open = vi.fn(() => null)
+  vi.stubGlobal('open', open)
+  const client = {
+    call: async () => ({
+      account: {
+        state: 'pending-verification',
+        inboxId: 'kira@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        ownerLink: 'provider-conflict' as const,
+        contacts: [],
+      },
+      connection: 'disconnected',
+      jobs: [],
+    }),
+    prepareClaim: async () => ({
+      apiKey: 'am_us_super_secret',
+      inboxId: 'kira@agentmail.to',
+      claimUrl: 'https://console.agentmail.to/claim',
+    }),
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Copiar clave y abrir AgentMail' }))
+
+  expect(await screen.findByText(/Clave de kira@agentmail\.to copiada/u)).toBeTruthy()
+  expect(writeText).toHaveBeenCalledWith('am_us_super_secret')
+  expect(open).toHaveBeenCalledWith('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer')
+  expect(screen.queryByText('am_us_super_secret')).toBeNull()
+
+  vi.unstubAllGlobals()
+  Object.defineProperty(globalThis.navigator, 'clipboard', { configurable: true, value: undefined })
+})
