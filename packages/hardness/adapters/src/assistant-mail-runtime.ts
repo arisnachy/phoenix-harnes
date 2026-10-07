@@ -557,7 +557,7 @@ export function installAssistantMail(ctx: Context,
               summary: job.summary,
               error: job.error })) } }
       } catch (error) {
-        await handleProviderFailure(error, endpoint !== 'recover')
+        await handleProviderFailure(error, endpoint !== 'recover' && endpoint !== 'claim' && endpoint !== 'claim-status')
         // Provider bodies and fetch/socket errors never cross this secret-free status projection.
         const message = error instanceof Error && !/fetch|network|socket/iu.test(error.message) ? error.message : 'mail connection failed; check the local setup'
         return { ok: false as const, error: { code: 'internal', message, details: {} } }
