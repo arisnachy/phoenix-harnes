@@ -73,6 +73,13 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(updateWatchSource).toContain('env: safeEnv')
   })
 
+  it('uses the same code generation for the supervisor and its fallback activator', () => {
+    expect(source).toContain("import { fileURLToPath } from 'node:url'")
+    expect(source).toContain("const supervisorSourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')")
+    expect(source).toContain("const liveActivator = join(supervisorSourceRoot, 'scripts', 'phoenix-activate-prepared.mjs')")
+    expect(cliSource).toContain('phoenixSupervisorSourceRoot(runtimeSourceRoot)')
+  })
+
   it('uses only an exact clean verified staged activator for prepared self-updates', () => {
     expect(source).toContain('function preparedActivator()')
     expect(source).toContain("const stagedActivator = join(stage, 'scripts', 'phoenix-activate-prepared.mjs')")
@@ -123,9 +130,11 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('reconciles stale runtime and client artifacts before the Windows supervisor starts', () => {
-    expect(cliSource).toContain("import { preparePhoenixWebRuntime } from './phoenix-runtime-freshness.ts'")
+    expect(cliSource).toContain("phoenixSupervisorSourceRoot, preparePhoenixWebRuntime")
     expect(cliSource).toContain('preparePhoenixWebRuntime(runtimeSourceRoot)')
-    expect(cliSource).toContain("const runtimeSourceRoot = resolve(supervisor, '..', '..')")
+    expect(cliSource).toContain("const runtimeSourceRoot = resolve(durableSupervisor, '..', '..')")
+    expect(cliSource).toContain('const supervisorSourceRoot = phoenixSupervisorSourceRoot(runtimeSourceRoot)')
+    expect(cliSource).toContain("const supervisor = resolve(supervisorSourceRoot, 'scripts', 'phoenix-windows-supervisor.mjs')")
   })
 
   it('consumes duplicate activation requests when the requested SHA is already active', () => {
@@ -227,7 +236,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain("state?.status !== 'preparing'")
     expect(source).toContain('Host exited while a stable update is still preparing')
     expect(source).toContain('crashPreparedUpdate = await waitForPreparedUpdateAfterHostCrash()')
-    expect(source).toContain('await watcherSupervisor.stop()')
+    expect(source).toContain('await stopWatcherSupervisor()')
     expect(source).toContain('activatePreparedRuntime(crashPreparedUpdate.target)')
     expect(source).toContain('without waiting for a Host-side restart bridge')
     expect(source).toContain('relaunching PHOENIX from the verified runtime')
