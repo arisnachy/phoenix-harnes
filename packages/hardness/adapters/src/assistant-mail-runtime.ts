@@ -506,6 +506,9 @@ export function installAssistantMail(ctx: Context,
     }
   }
   const recoverEnrollment = async (): Promise<AssistantMailIdentity> => {
+    if (providerIssue?.code === 'already_exists') {
+      throw new Error('AgentMail Console account already exists. Use the verified Console API key in Settings to activate the current Kira inbox without agent signup.')
+    }
     const account = await onboarding.recover()
     status = account.state === 'ready' ? 'connecting' : 'verification-required'
     if (account.state === 'ready') void pump()
