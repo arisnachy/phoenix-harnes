@@ -352,7 +352,7 @@ export class MailOnboarding {
           await this.verifyConsoleInboxAccess(previous.inboxId, key)
           await this.options.saveKey(key)
           await this.file.change(current => ({ ...current, credentialMode: 'console-api-key', ownerLink: 'attached' }))
-          return this.status()
+          return await this.status()
         } catch (error) {
           if (!(error instanceof Error) || !error.message.includes('cannot read the current Kira inbox')) throw error
           // Continue into Console migration; never call /agent/sign-up or /agent/human.
@@ -419,7 +419,7 @@ export class MailOnboarding {
     if (!Array.isArray(listing.inboxes)) throw new Error('AgentMail returned an invalid inbox listing')
     const rows = listing.inboxes.map(value => mailRecord(value))
     if (preferredInboxId !== undefined) {
-      const exact = rows.find((row) => row.inbox_id === preferredInboxId || row.email === preferredInboxId)
+      const exact = rows.find(row => row.inbox_id === preferredInboxId || row.email === preferredInboxId)
       if (exact !== undefined) return exact
     }
     return rows.find((row) => {
