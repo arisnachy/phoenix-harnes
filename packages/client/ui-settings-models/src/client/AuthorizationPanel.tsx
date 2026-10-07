@@ -503,7 +503,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, onAuthorize, onConfigure,
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, authorizationProgress, onAuthorize, onConfigure,
   onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove, pending, installingCurated, reconnecting, repairing, removing }: {
   definition: ConnectorDefinition
   live?: ConnectorTelemetry | undefined
@@ -513,6 +513,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   openClaw?: OpenClawConnectorView | undefined
   connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
+  authorizationProgress?: ReactNode
   onAuthorize: (entry: Entry) => void
   onConfigure?: (() => void) | undefined
   onInstallCurated?: (() => void) | undefined
@@ -679,6 +680,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : null}
         </div>
       </div>
+      {authorizationProgress}
     </article>
   )
 }
@@ -1542,6 +1544,21 @@ export function ConnectorsSettingsSection({ api,
                 openClaw={row.openClaw}
                 connected={row.connected}
                 t={connectorT}
+                authorizationProgress={attempt?.key === (
+                  row.account?.key
+                    ?? (row.managed === undefined
+                      ? undefined
+                      : `mcp-client/${row.managed.serverName.toLowerCase().replaceAll('_', '-')}`)
+                ) ? (
+                  <AuthorizationAttemptProgress
+                    attempt={attempt}
+                    answer={answer}
+                    setAnswer={setAnswer}
+                    submitAnswer={submitAnswer}
+                    cancel={cancel}
+                    t={t}
+                  />
+                ) : undefined}
                 pending={attempt?.status === 'pending' || jevBusy}
                 installingCurated={installingCuratedId === row.definition.id}
                 reconnecting={row.mcpRuntime !== undefined && reconnectingServerName === row.mcpRuntime.serverName}
