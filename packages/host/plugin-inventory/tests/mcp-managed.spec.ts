@@ -762,6 +762,23 @@ describe('ManagedMcpController', () => {
     expect(live.create).not.toHaveBeenCalled()
   })
 
+  it('refuses to persist registry entries requiring unsupported headers or tenant variables', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const protectedServer = candidate({ remoteUrl: undefined, remoteSetupRequired: 'headers' })
+    const templatedServer = candidate({ remoteUrl: undefined, remoteSetupRequired: 'variables' })
+    const headers = new ManagedMcpController(live, {
+      patchPath, registrySearch: registry([protectedServer]),
+    })
+    await expect(headers.install({ name: protectedServer.name })).rejects.toThrow('provider-specific authorization headers')
+    const variables = new ManagedMcpController(live, {
+      patchPath, registrySearch: registry([templatedServer]),
+    })
+    await expect(variables.install({ name: templatedServer.name })).rejects.toThrow('tenant-specific URL')
+    expect(live.create).not.toHaveBeenCalled()
+    await expect(headers.snapshot()).resolves.toEqual([])
+  })
+
   it('uses a bounded readable server name even when the registry tail is unusable or very long', async () => {
     const firstPath = tempPatch()
     const first = new ManagedMcpController(loader(), {
