@@ -106,7 +106,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
               ? 'Usa una API key creada dentro de tu cuenta humana de AgentMail Console.'
               : message.includes('inbox_create permission')
                 ? 'La API key necesita alcance de organización y permiso inbox_create. Crea otra clave de organización con creación de buzones habilitada.'
-                : message)
+                : message.includes('Console-key inbox creation is pending')
+                  ? 'La creación del buzón con la nueva API key quedó pendiente de confirmación. Vuelve a pegar la misma clave para que Phoenix la reconcilie sin crear otro buzón.'
+                  : message)
     } finally {
       setBusy(false)
     }
