@@ -370,7 +370,7 @@ it('falls back from owner-bound signup 403 to receive-only signup and attaches t
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
-it('keeps the receive-only inbox and key when human attachment fails after fallback signup', async () => {
+it('returns the receive-only inbox when human attachment is temporarily rejected', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-signup-403-attach-fails-'))
   try {
     const path = join(directory, 'account.json')
@@ -390,13 +390,13 @@ it('keeps the receive-only inbox and key when human attachment fails after fallb
       },
     })
 
-    await expect(account.signup('owner@example.com', 'kira-fallback')).rejects.toThrow('permissions')
-    expect(saved).toBe('am_receive_only')
-    await expect(account.status()).resolves.toMatchObject({
+    await expect(account.signup('owner@example.com', 'kira-fallback')).resolves.toMatchObject({
       state: 'pending-verification',
       ownerEmail: 'owner@example.com',
       inboxId: 'kira-fallback@agentmail.to',
     })
+    expect(saved).toBe('am_receive_only')
+    expect(calls).toBe(3)
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
