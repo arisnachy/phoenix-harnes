@@ -323,10 +323,10 @@ it('keeps the inbound AgentMail channel connected when message_send is missing a
   class Socket extends EventTarget {
     constructor(_url: string) {
       super()
-      queueMicrotask(() => { this.dispatchEvent(new Event('open')) })
+      void Promise.resolve().then(() => { this.dispatchEvent(new Event('open')) })
     }
     send(_data: string): void {
-      queueMicrotask(() => {
+      void Promise.resolve().then(() => {
         this.dispatchEvent(messageEvent({ type: 'subscribed', inbox_ids: ['kira@agentmail.to'] }))
       })
     }
