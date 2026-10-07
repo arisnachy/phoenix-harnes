@@ -293,3 +293,61 @@ it('corroborates a new Console API key before storing it and activating the new 
   expect(key.value).toBe('')
   expect(document.body.textContent).not.toContain('am_us_console_secret')
 })
+
+
+it('corroborates and rotates the API key of an already active Kira inbox without changing its address', async () => {
+  const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
+  const checks: string[] = []
+  const client = {
+    call: async (action: string, input?: Record<string, unknown>) => {
+      calls.push({ action, ...(input === undefined ? {} : { input }) })
+      return {
+        account: {
+          state: 'ready',
+          inboxId: 'kira-current@agentmail.to',
+          ownerEmail: 'owner@example.com',
+          ownerLink: 'attached' as const,
+          contacts: [],
+        },
+        connection: action === 'console-key' ? 'connecting' : 'connected',
+        jobs: [],
+      }
+    },
+    checkConsoleKey: async (apiKey: string) => {
+      checks.push(apiKey)
+      return {
+        valid: true as const,
+        organizationId: 'org_human',
+        authenticationType: 'clerk',
+        inboxCount: 3,
+        inboxLimit: 3,
+        capacityAvailable: false,
+        inboxRead: true,
+        currentInboxAccess: true,
+        messageRead: true,
+      }
+    },
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  expect(await screen.findByText('kira-current@agentmail.to')).toBeTruthy()
+  const key = screen.getByLabelText<HTMLInputElement>('Nueva API key de AgentMail')
+  fireEvent.change(key, { target: { value: 'am_us_rotated_secret' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
+
+  expect(await screen.findByText('✓ accesible')).toBeTruthy()
+  expect(screen.getByText('✓ disponible')).toBeTruthy()
+  const save = screen.getByRole('button', { name: 'Guardar API y verificar acceso' })
+  expect((save as HTMLButtonElement).disabled).toBe(false)
+
+  fireEvent.click(save)
+
+  expect(await screen.findByText(/API actualizada/u)).toBeTruthy()
+  expect(checks).toEqual(['am_us_rotated_secret'])
+  expect(calls).toContainEqual({
+    action: 'console-key',
+    input: { apiKey: 'am_us_rotated_secret' },
+  })
+  expect(screen.getByText('kira-current@agentmail.to')).toBeTruthy()
+  expect(document.body.textContent).not.toContain('am_us_rotated_secret')
+})
