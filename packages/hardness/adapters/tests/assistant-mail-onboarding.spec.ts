@@ -460,17 +460,22 @@ it('retries a confirmed absent inbox with the same address and client identity',
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
-it('recovers missing access to a previously verified mailbox through its persisted owner', async () => {
+it('recovers missing access to a previously verified mailbox without demoting verified state', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-ready-recover-'))
   try {
     const path = join(directory, 'account.json')
     await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
     let key = ''
-    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async (value) => { key = value }, fetch: async (_url, init) => {
-      expect(requestBody(init)).toMatchObject({ human_email: 'owner@example.com' })
-      return Response.json({ api_key: 'rotated-test-secret', inbox_id: 'original@agentmail.to' })
+    const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async (value) => { key = value }, fetch: async (url, init) => {
+      const address = requestAddress(url)
+      if (address.endsWith('/agent/sign-up')) {
+        expect(requestBody(init)).toMatchObject({ human_email: 'owner@example.com' })
+        return Response.json({ api_key: 'rotated-test-secret', inbox_id: 'original@agentmail.to' })
+      }
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer rotated-test-secret')
+      return Response.json({ inbox_id: 'original@agentmail.to' })
     } })
-    expect(await account.recover()).toMatchObject({ state: 'pending-verification', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com' })
+    expect(await account.recover()).toMatchObject({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com' })
     expect(key).toBe('rotated-test-secret')
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
