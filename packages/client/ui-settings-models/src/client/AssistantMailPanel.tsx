@@ -32,6 +32,10 @@ export interface AssistantMailClient {
    * @returns Secret-free account and job status.
    */
   call(action: string, input?: Record<string, unknown>): Promise<AssistantMailSnapshot>
+  /** Retrieve the original receive-only signup key for an explicit local claim action.
+   * The caller must copy it immediately and must not retain it in UI state.
+   */
+  prepareClaim(): Promise<{ readonly apiKey: string; readonly inboxId: string; readonly claimUrl: string }>
 }
 
 const JOB_LABELS: Readonly<Record<string, string>> = {
@@ -54,6 +58,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const [code, setCode] = useState('')
   const [contacts, setContacts] = useState('')
   const [failure, setFailure] = useState<string>()
+  const [claimNotice, setClaimNotice] = useState<string>()
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -147,6 +152,31 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     const label = kiraInbox ?? 'el buzón guardado'
     if (!globalThis.confirm(`Phoenix dejará de usar ${label}. Si la credencial aún funciona, también intentará borrarlo de AgentMail. ¿Crear un buzón nuevo desde cero?`)) return
     void operate('replace', requestedOwner.length === 0 ? undefined : { ownerEmail: requestedOwner })
+  }
+  const claimMailbox = (): void => {
+    // Open the provider page during the user gesture so popup blockers do not eat it while
+    // the loopback Host resolves the credential. The secret itself never enters React state.
+    const claimWindow = globalThis.open?.('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer')
+    setBusy(true)
+    setFailure(undefined)
+    setClaimNotice(undefined)
+    void (async () => {
+      try {
+        const claim = await client.prepareClaim()
+        const clipboard = globalThis.navigator.clipboard
+        if (clipboard?.writeText === undefined) throw new Error('El navegador no permite copiar la clave de AgentMail al portapapeles.')
+        await clipboard.writeText(claim.apiKey)
+        if (claimWindow !== undefined && claimWindow !== null && claimWindow.location.href !== claim.claimUrl) {
+          claimWindow.location.href = claim.claimUrl
+        }
+        setClaimNotice(`Clave de ${claim.inboxId} copiada. Pégala en “Agent API key” y pulsa Continue.`)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'No se pudo preparar la reclamación del buzón.'
+        setFailure(message)
+      } finally {
+        setBusy(false)
+      }
+    })()
   }
   const recoveryOwnerField = <label>
     <span className={styles.fieldLabel}>Correo propietario que recibirá el código</span>
@@ -260,11 +290,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         Reintentar vinculación
       </button>
       <button type="button" className={styles.secondaryButton} disabled={busy}
-        onClick={() => { globalThis.open?.('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer') }}>
-        Abrir AgentMail para resolver el vínculo
+        onClick={claimMailbox}>
+        Copiar clave y abrir AgentMail
       </button>
+      {claimNotice === undefined ? null : <p className={styles.help} role="status">{claimNotice}</p>}
       <p className={styles.help}>
-        Phoenix no creará buzones adicionales mientras este vínculo siga pendiente.
+        Phoenix usa la clave original que guardó al crear el buzón; no necesitas haberla recibido por correo.
+        No creará buzones adicionales mientras este vínculo siga pendiente.
       </p>
     </div> : null}
 
