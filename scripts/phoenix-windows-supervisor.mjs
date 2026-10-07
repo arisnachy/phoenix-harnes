@@ -75,6 +75,27 @@ const configuredInactiveRuntimeBackups = Number.parseInt(
 const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
   ? Math.max(0, Math.min(2, configuredInactiveRuntimeBackups))
   : 1
+// Absolute circuit breaker: even if Windows temporarily locks stale worktrees,
+ // PHOENIX must never keep allocating full runtime copies until the drive fills.
+ // Default capacity is active + candidate + configured rollback cushion.
+const configuredRuntimeDirectoryLimit = Number.parseInt(
+  process.env.PHOENIX_UPDATE_RUNTIME_LIMIT ?? '',
+  10,
+)
+const MAX_RUNTIME_DIRECTORIES = Number.isFinite(configuredRuntimeDirectoryLimit)
+  ? Math.max(2, Math.min(6, configuredRuntimeDirectoryLimit))
+  : Math.max(2, MAX_INACTIVE_RUNTIME_BACKUPS + 2)
+const DEFAULT_STORAGE_SWEEP_MS = 5 * 60 * 1000
+const configuredStorageSweepMs = Number.parseInt(
+  process.env.PHOENIX_UPDATE_STORAGE_SWEEP_MS ?? '',
+  10,
+)
+const STORAGE_SWEEP_MS = Math.max(
+  60_000,
+  Number.isFinite(configuredStorageSweepMs) && configuredStorageSweepMs > 0
+    ? configuredStorageSweepMs
+    : DEFAULT_STORAGE_SWEEP_MS,
+)
 const STAGE_STORAGE_RETENTION_MS = Math.max(
   60 * 60 * 1000,
   Math.min(UPDATE_STORAGE_RETENTION_MS, 6 * 60 * 60 * 1000),
@@ -623,6 +644,22 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
   }
 }
 
+function assertRuntimeStorageCapacity(nextRuntime) {
+  if (existsSync(nextRuntime)) return
+
+  // Reclaim everything safe before allocating another full dependency/build
+  // tree. If stale Windows handles still prevent enough cleanup, fail closed:
+  // keep the current healthy Host and retry later instead of consuming disk.
+  cleanupObsoleteRuntimes([runtimeRoot])
+  const runtimeCount = runtimeDirectoriesForCleanup().length
+  if (runtimeCount < MAX_RUNTIME_DIRECTORIES) return
+
+  throw new Error(
+    `runtime storage safety limit reached (${String(runtimeCount)}/${String(MAX_RUNTIME_DIRECTORIES)} managed runtime directories); `
+    + `refusing to create another runtime at ${nextRuntime}. PHOENIX will keep the current Host alive and retry cleanup automatically.`,
+  )
+}
+
 function runChecked(cwd, bin, args, label) {
   const result = spawnSync(bin, args, {
     cwd,
@@ -872,6 +909,7 @@ function activatePreparedRuntime(target) {
 
   if (!runtimeIsHealthy(runtime, target)) {
     if (!existsSync(runtime)) {
+      assertRuntimeStorageCapacity(runtime)
       runChecked(root, 'git', ['worktree', 'add', '--detach', '--force', runtime, target], 'create isolated runtime worktree')
     }
     runChecked(runtime, 'git', ['reset', '--hard', target], 'reset isolated runtime')
@@ -1314,6 +1352,7 @@ function activatePrepared() {
 }
 
 async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) {
+  let nextStorageSweepAt = Date.now() + STORAGE_SWEEP_MS
   while (true) {
     const event = await Promise.race([
       hostExitPromise.then(exit => ({ kind: 'exit', exit })),
@@ -1321,6 +1360,11 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
     ])
     if (event.kind === 'exit') return { ...event, lastObservedFingerprint }
     if (shutdownRequested) continue
+
+    if (Date.now() >= nextStorageSweepAt) {
+      cleanupObsoleteRuntimes()
+      nextStorageSweepAt = Date.now() + STORAGE_SWEEP_MS
+    }
 
     const currentFingerprint = configurationFingerprint(captureBootCriticalConfiguration())
     if (currentFingerprint !== lastObservedFingerprint) {
