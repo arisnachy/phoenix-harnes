@@ -174,6 +174,22 @@ export class MailOnboarding {
     })
   }
 
+  /** Re-enter provider OTP verification when AgentMail explicitly reports that the organization is unverified.
+   * This differs from credential recovery: a locally ready mailbox is deliberately demoted only when the
+   * provider proves verification is required.
+   * @returns Existing provider inbox pending owner OTP verification.
+   */
+  reverify(): Promise<MailAccount> {
+    return this.exclusively(async () => {
+      const previous = await this.file.read()
+      if (!['pending-verification', 'ready'].includes(previous.state) || previous.ownerEmail === undefined) {
+        throw new Error('mail reverification requires an existing owner enrollment')
+      }
+      return this.enroll(previous, previous.ownerEmail,
+        previous.signupUsername ?? previous.inboxId?.slice(0, previous.inboxId.lastIndexOf('@')) ?? `kira-${randomUUID().slice(0, 8)}`)
+    })
+  }
+
   /** Rotate a rejected credential for an already verified mailbox and prove the replacement key before keeping it.
    * AgentMail sign-up is idempotent by human email, so this recovers the existing organization instead of creating
    * another one. Unlike OTP recovery, a mailbox Phoenix already marked ready stays ready only after the rotated
