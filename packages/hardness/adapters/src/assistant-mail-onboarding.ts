@@ -286,6 +286,7 @@ export class MailOnboarding {
    * The old sign-up inbox remains at AgentMail and Phoenix stops using it. A persisted client id makes an
    * uncertain create result reconcilable instead of producing duplicate inboxes on retry.
    * @param apiKey Bearer key created by the human in AgentMail Console.
+   * @param ownerEmail Optional persisted human owner when no owner has been saved yet.
    * @returns Ready account backed by the newly created inbox.
    */
   adoptConsoleKey(apiKey: string, ownerEmail?: string): Promise<MailAccount> {
