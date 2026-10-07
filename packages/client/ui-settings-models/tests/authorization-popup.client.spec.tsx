@@ -36,7 +36,7 @@ const LABEL = 'MCP notion-notion'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
 const WAITING_URL = (() => {
   const url = new URL('/oauth-waiting.html', window.location.href)
-  url.searchParams.set('v', '20261006-2')
+  url.searchParams.set('v', '20261007-1')
   return url.href
 })()
 
@@ -232,6 +232,37 @@ describe('authorization consent window', () => {
       )
     }, { timeout: 5000 })
     expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL)
+    expect(open).toHaveBeenCalledTimes(1)
+    open.mockRestore()
+  })
+
+  it('replays the consent URL when the waiting page announces that its listener is ready', async () => {
+    const reserved = reservedWindow()
+    reserved.location.replace.mockImplementation(() => { throw new DOMException('navigation blocked', 'SecurityError') })
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    const api = panelApi(consentNotice)
+
+    renderPanel(api)
+    await clickAuthorize()
+
+    await waitFor(() => {
+      expect(reserved.postMessage).toHaveBeenCalledWith(
+        { type: 'phoenix/oauth-navigate', url: CONSENT_URL },
+        window.location.origin,
+      )
+    }, { timeout: 5000 })
+
+    reserved.postMessage.mockClear()
+    window.dispatchEvent(new MessageEvent('message', {
+      origin: window.location.origin,
+      source: reserved as unknown as MessageEventSource,
+      data: { type: 'phoenix/oauth-ready' },
+    }))
+
+    expect(reserved.postMessage).toHaveBeenCalledWith(
+      { type: 'phoenix/oauth-navigate', url: CONSENT_URL },
+      window.location.origin,
+    )
     expect(open).toHaveBeenCalledTimes(1)
     open.mockRestore()
   })
