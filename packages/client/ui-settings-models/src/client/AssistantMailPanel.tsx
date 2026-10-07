@@ -151,8 +151,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const ownerChanged = requestedOwner.length > 0 && requestedOwner.toLowerCase() !== persistedOwner
   const ownerLinkConflict = pendingVerification && snapshot?.account.ownerLink === 'provider-conflict'
   const connection = snapshot?.connection ?? 'disconnected'
+  const providerIssue = snapshot?.providerIssue
   const recoveryRequired = ready && (connection === 'verification-required' || connection === 'recovery-required')
-  const providerWarning = recoveryRequired || (ready && ['quota-reached', 'message-rejected'].includes(connection))
+  const providerWarning = recoveryRequired || providerIssue !== undefined
+    || (ready && ['quota-reached', 'message-rejected', 'permission-required'].includes(connection))
   const statusText = ready
     ? connection === 'connected'
       ? 'Correo verificado · Activo'
@@ -162,7 +164,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           ? 'AgentMail requiere verificación'
           : connection === 'recovery-required'
             ? 'AgentMail requiere recuperar acceso'
-            : connection === 'quota-reached'
+            : connection === 'permission-required'
+              ? 'AgentMail requiere permisos'
+              : connection === 'quota-reached'
               ? 'Límite gratuito alcanzado'
               : connection === 'message-rejected'
                 ? 'Último envío rechazado'
