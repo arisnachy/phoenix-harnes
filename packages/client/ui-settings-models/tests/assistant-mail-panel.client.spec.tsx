@@ -336,7 +336,7 @@ it('corroborates and rotates the API key of an already active Kira inbox without
   fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
 
   expect(await screen.findByText('✓ accesible')).toBeTruthy()
-  expect(screen.getByText('✓ disponible')).toBeTruthy()
+  expect(screen.getAllByText('✓ disponible')).toHaveLength(2)
   const save = screen.getByRole('button', { name: 'Guardar API y verificar acceso' })
   expect((save as HTMLButtonElement).disabled).toBe(false)
 
