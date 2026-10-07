@@ -16,6 +16,10 @@ Settings exposes the persisted owner address during pending or ambiguous recover
 
 Credential recovery proves the persisted inbox. If that inbox is gone but AgentMail's idempotent sign-up returns another inbox owned by the rotated key, Phoenix proves and adopts that returned inbox instead of remaining stuck on the stale local id.
 
+## Alternatives considered
+
+Always repeating `/agent/sign-up` for recovery was rejected because it rotates credentials even when the unverified organization still has a valid key and AgentMail provides `/agent/human` specifically for owner attachment and OTP resend. Silently replacing every mailbox after a `403` was rejected because verification, permission, quota, and credential failures have different meanings and destructive replacement can orphan a still-valid remote inbox. Keeping the owner email immutable in Settings was rejected because a simple typo can make verification impossible without any API-key problem.
+
 ## Consequences
 
 A normal expired-key or bare-`403` failure no longer requires a pasted API key. OTP resends avoid needless key churn, owner typos can be repaired in place when possible, and stale local inbox ids can heal automatically. Provider verification and quota gates remain explicit; Phoenix still does not bypass AgentMail verification or request a paid upgrade.
