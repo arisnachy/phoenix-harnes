@@ -5,6 +5,7 @@ import { MessageIconActions } from './MessageIconActions.tsx'
 import { assistantText } from './turn-assistant.ts'
 import { speakVoiceAssistantResponse } from '../voice.ts'
 import css from './TurnTailNodeView.module.css'
+import { turnStopNotice } from './turn-stop.ts'
 
 type TurnTailNodeViewProps = ChatNodeViewProps<'turn-tail'>
   & PropsRenderSlots<'conversation.chat.turnTail' | 'conversation.chat.assistant-actions'>
@@ -27,8 +28,11 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   }, [closing, node.key, responseText])
   if (turn === undefined) return null
   const owner: TurnTailOwnerProps = { turn, seq: closing?.finalNode.seq ?? data.seq, openFile }
-  const tail = renderSlotChain('conversation.chat.turnTail', owner)
-  if (closing === null) return tail === null ? null : <div className={css.root}>{tail}</div>
+  const key = turnStopNotice(data.reason, closing !== null)
+  const notice = key === undefined ? null : <p role="status" data-turn-stop={data.turn}>{t(key)}</p>
+  const featureTail = renderSlotChain('conversation.chat.turnTail', owner)
+  const tail = <>{notice}{featureTail}</>
+  if (closing === null) return notice === null && featureTail === null ? null : <div className={css.root}>{tail}</div>
   const runMs = turn.start === undefined || turn.end === undefined
     ? undefined
     : Math.max(0, turn.end.time - turn.start.time)

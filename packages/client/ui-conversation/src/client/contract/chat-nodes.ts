@@ -1,3 +1,4 @@
+import type { TurnEndReason } from '@phoenix-ai/dsh-session'
 import type {
   AssistantBlock, AssistantMessageNode, AssistantProvenanceView, ChatConversationViewNode, CommandNode,
   CompactionSummaryNode, ModelRetryNode, RunningToolCall, ToolCallBlock,
@@ -85,6 +86,8 @@ export interface RetryChatData {
 
 /** Turn-local footer row that owns actions and optional feature contributions. */
 export interface TurnTailChatData {
+  /** Durable terminal cause; a turn ending is not proof of mission completion. */
+  readonly reason: TurnEndReason
   readonly turn: number
   readonly seq: number
   readonly time: number

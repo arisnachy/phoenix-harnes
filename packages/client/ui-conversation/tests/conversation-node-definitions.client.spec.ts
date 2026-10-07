@@ -488,6 +488,22 @@ describe('built-in conversation node Definitions', () => {
     ])
   })
 
+  it.each([
+    { kind: 'aborted', reason: { kind: 'user' } },
+    { kind: 'aborted', reason: { kind: 'disposed' } },
+    { kind: 'interrupted' },
+    { kind: 'blocked' },
+  ] as const)('preserves the exact terminal cause without requiring assistant text: %j', (reason) => {
+    const value = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'turn/end', { turn: 1, reason }),
+    ])
+    const tail = node(snapshot(value), 'turn-tail')?.data as TurnTailChatData
+    expect(tail).toBeDefined()
+    expect(tail.closing).toBeNull()
+    expect(tail.reason).toEqual(reason)
+  })
+
   it('keeps branching unavailable when a tool result follows the closing Assistant', () => {
     const value = assembler([
       at(1, 'turn/start', { turn: 1 }),
