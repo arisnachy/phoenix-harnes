@@ -38,6 +38,7 @@ function project(value: AssistantMailIdentity): MailIdentityResult {
       needs_verification: true,
       guidance: 'The mailbox already exists. Tell the user the exact address and ask them to finish '
         + 'the six-digit owner verification with action=verify and the code they received, or in Settings. '
+        + 'If no code arrived, action=recover safely attaches/resends the owner OTP without creating another inbox. '
         + 'If the saved owner email is wrong, use action=owner with owner_email to repair it and resend verification. '
         + 'If the user explicitly says this mailbox is stale/broken and wants a new one, action=replace removes/abandons it and starts a fresh enrollment.',
     }

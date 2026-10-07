@@ -330,6 +330,155 @@ it('preserves contact revocation and explicit workspace selection during automat
 })
 
 
+it('falls back from owner-bound signup 403 to receive-only signup and attaches the human', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-signup-403-fallback-'))
+  try {
+    const path = join(directory, 'account.json')
+    let saved = ''
+    const requests: Array<{ url: string; body: unknown; auth: string | null }> = []
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async (value) => { saved = value },
+      resolveKey: async () => saved || undefined,
+      fetch: async (url, init) => {
+        const address = requestAddress(url)
+        const body = requestBody(init)
+        requests.push({ url: address, body, auth: new Headers(init?.headers).get('Authorization') })
+        if (requests.length === 1) {
+          expect(body).toMatchObject({ human_email: 'owner@example.com', username: 'kira-local' })
+          return Response.json({ message: 'Forbidden' }, { status: 403 })
+        }
+        if (requests.length === 2) {
+          expect(body).toEqual({ username: 'kira-local' })
+          return Response.json({ api_key: 'am_receive_only', inbox_id: 'kira-local@agentmail.to' })
+        }
+        expect(address).toBe('https://api.agentmail.to/v0/agent/human')
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_receive_only')
+        expect(body).toEqual({ human_email: 'owner@example.com' })
+        return Response.json({ human_email: 'owner@example.com', instructions: 'Enter the OTP.' })
+      },
+    })
+
+    await expect(account.signup('owner@example.com', 'kira-local')).resolves.toMatchObject({
+      state: 'pending-verification',
+      ownerEmail: 'owner@example.com',
+      inboxId: 'kira-local@agentmail.to',
+    })
+    expect(saved).toBe('am_receive_only')
+    expect(requests).toHaveLength(3)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('returns the receive-only inbox when human attachment is temporarily rejected', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-signup-403-attach-fails-'))
+  try {
+    const path = join(directory, 'account.json')
+    let saved = ''
+    let calls = 0
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async (value) => { saved = value },
+      resolveKey: async () => saved || undefined,
+      fetch: async (_url, init) => {
+        calls++
+        if (calls === 1) return Response.json({ code: 'forbidden', message: 'Forbidden' }, { status: 403 })
+        if (calls === 2) return Response.json({ api_key: 'am_receive_only', inbox_id: 'kira-fallback@agentmail.to' })
+        expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_receive_only')
+        return Response.json({ code: 'missing_permission', message: 'Forbidden' }, { status: 403 })
+      },
+    })
+
+    await expect(account.signup('owner@example.com', 'kira-fallback')).resolves.toMatchObject({
+      state: 'pending-verification',
+      ownerEmail: 'owner@example.com',
+      inboxId: 'kira-fallback@agentmail.to',
+    })
+    expect(saved).toBe('am_receive_only')
+    expect(calls).toBe(3)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('rejects a mismatched human identity after the receive-only fallback', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-fallback-owner-mismatch-'))
+  try {
+    let calls = 0
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async () => {
+        calls++
+        if (calls === 1) return Response.json({ message: 'Forbidden' }, { status: 403 })
+        if (calls === 2) return Response.json({ api_key: 'am_receive_only', inbox_id: 'kira-local@agentmail.to' })
+        return Response.json({ human_email: 'someone-else@example.com', instructions: 'Enter the OTP.' })
+      },
+    })
+    await expect(account.signup('owner@example.com', 'kira-local')).rejects.toThrow('different human')
+    expect((await account.status()).inboxId).toBe('kira-local@agentmail.to')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('does not bypass an explicit AgentMail quota 403 with another signup', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-signup-quota-'))
+  try {
+    let calls = 0
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async () => {
+        calls++
+        return Response.json({ code: 'limit_exceeded', message: 'Forbidden', fix: 'Delete an old inbox.' }, { status: 403 })
+      },
+    })
+    await expect(account.signup('owner@example.com', 'kira-local')).rejects.toThrow('limit')
+    expect(calls).toBe(1)
+    expect((await account.status()).state).toBe('not-configured')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('restores the previous state when the receive-only fallback gets a confirmed rejection', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-fallback-rejected-'))
+  try {
+    let calls = 0
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async () => {
+        calls++
+        if (calls === 1) return Response.json({ message: 'Forbidden' }, { status: 403 })
+        return Response.json({ error: 'invalid username' }, { status: 400 })
+      },
+    })
+    await expect(account.signup('owner@example.com', 'kira-local')).rejects.toThrow('400')
+    expect(calls).toBe(2)
+    expect((await account.status()).state).toBe('not-configured')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('keeps fallback signup ambiguous when the receive-only response is lost', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-fallback-ambiguous-'))
+  try {
+    let calls = 0
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async () => {
+        calls++
+        if (calls === 1) return Response.json({ message: 'Forbidden' }, { status: 403 })
+        throw new Error('lost receive-only signup response')
+      },
+    })
+    await expect(account.signup('owner@example.com', 'kira-local')).rejects.toThrow('receive-only')
+    expect(calls).toBe(2)
+    expect((await account.status()).state).toBe('signup-ambiguous')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
 it('keeps a confirmed signup rejection retryable instead of labelling it a lost confirmation', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-rejected-'))
   try {

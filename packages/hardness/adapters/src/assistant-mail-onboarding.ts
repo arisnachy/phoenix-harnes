@@ -240,22 +240,76 @@ export class MailOnboarding {
   private async enroll(previous: Enrollment, owner: string, username: string): Promise<MailAccount> {
     await this.file.change(current => ({ ...current, state: 'signup-ambiguous', ownerEmail: owner, signupUsername: username }))
     let data: Record<string, unknown>
-    try { data = mailRecord(await agentMailRequest('/agent/sign-up', undefined, this.options.timeoutMs, this.options.fetch ?? fetch,
-      { human_email: owner, username, source: 'phoenix-local' })) } catch (error) {
+    try {
+      data = mailRecord(await agentMailRequest('/agent/sign-up', undefined, this.options.timeoutMs,
+        this.options.fetch ?? fetch, { human_email: owner, username, source: 'phoenix-local' }))
+    } catch (error) {
+      const ownerSignupRejected = error instanceof AgentMailHttpError
+        && error.status === 403
+        && error.reason !== 'limit-exceeded'
+      if (ownerSignupRejected) {
+        return await this.enrollReceiveOnly(previous, owner, username)
+      }
       if (error instanceof AgentMailHttpError && error.status >= 400 && error.status < 500 && error.status !== 408) {
         await this.file.change(current => ({ ...current, state: previous.state }))
         throw error
       }
       throw new Error('signup result ambiguous; use owner-bound recovery to continue')
     }
+    await this.persistPendingSignup(data, owner, username)
+    return this.status()
+  }
+
+  /** Fall back to AgentMail's receive-only onboarding when its gateway rejects owner-bound signup.
+   * The returned key is persisted before attaching the human because AgentMail cannot recover a key
+   * from an email-less signup. A later attach failure therefore leaves a recoverable local mailbox.
+   * @param previous Enrollment state before the attempted signup.
+   * @param owner Human email that should receive the verification OTP.
+   * @param username Requested inbox username.
+   * @returns Pending verification after the human is attached.
+   */
+  private async enrollReceiveOnly(previous: Enrollment, owner: string, username: string): Promise<MailAccount> {
+    let data: Record<string, unknown>
+    try {
+      data = mailRecord(await agentMailRequest('/agent/sign-up', undefined, this.options.timeoutMs,
+        this.options.fetch ?? fetch, { username }))
+    } catch (error) {
+      if (error instanceof AgentMailHttpError && error.status >= 400 && error.status < 500 && error.status !== 408) {
+        await this.file.change(current => ({ ...current, state: previous.state }))
+        throw error
+      }
+      throw new Error('receive-only signup result ambiguous; retry recovery instead of creating another mailbox')
+    }
+    const { key } = await this.persistPendingSignup(data, owner, username)
+    let attached: Record<string, unknown>
+    try {
+      attached = mailRecord(await agentMailRequest('/agent/human', key, this.options.timeoutMs,
+        this.options.fetch ?? fetch, { human_email: owner }))
+    } catch {
+      // The mailbox and its unrecoverable one-time key are already durable. Keep the inbox
+      // usable for later owner recovery instead of turning a successful creation into a failed ensure.
+      return this.status()
+    }
+    if (mailAddress(mailString(attached.human_email)) !== owner) throw new Error('mail owner attachment returned a different human email')
+    return this.status()
+  }
+
+  /** Persist a provider-created inbox and its one-time key before any later onboarding request.
+   * @param data Provider sign-up response.
+   * @param owner Intended human owner.
+   * @param username Requested local-part used for recovery diagnostics.
+   * @returns Persisted key and inbox identity.
+   */
+  private async persistPendingSignup(data: Record<string, unknown>, owner: string, username: string):
+    Promise<{ readonly key: string; readonly inboxId: string }> {
     const key = mailString(data.api_key, 8192)
     const inboxId = mailAddress(mailString(data.inbox_id))
     await this.options.saveKey(key)
     await this.file.change((current) => {
       const { challengeHash: _challenge, challengeExpires: _expiry, challengeAttempts: _attempts, ...account } = current
-      return { ...account, state: 'pending-verification', inboxId }
+      return { ...account, state: 'pending-verification', ownerEmail: owner, signupUsername: username, inboxId }
     })
-    return this.status()
+    return { key, inboxId }
   }
   /** Create a separate included-domain inbox after owner verification; uncertain creation is reconciled, never blindly repeated.
    * @returns Account using the confirmed new inbox while preserving owner, contacts and workspace.
