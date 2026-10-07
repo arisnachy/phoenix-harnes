@@ -538,7 +538,7 @@ it('reconciles an uncertain inbox creation after restart without repeating POST'
   try {
     const path = join(directory, 'account.json')
     await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
-    let request: { username: string; client_id: string } | undefined
+    let request: { username: string; client_id?: string } | undefined
     const options = { path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => 'test-secret', fetch: async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
       if (init?.method === 'POST') {
         expect(request).toBeUndefined()
@@ -546,7 +546,7 @@ it('reconciles an uncertain inbox creation after restart without repeating POST'
         throw new Error('provider created inbox but response was lost')
       }
       expect(requestAddress(url)).toContain(`${request!.username}%40agentmail.to`)
-      return Response.json({ inbox_id: `${request!.username}@agentmail.to`, client_id: request!.client_id })
+      return Response.json({ inbox_id: `${request!.username}@agentmail.to` })
     } }
     const account = new MailOnboarding(options)
     await expect(account.createInbox()).rejects.toThrow('ambiguous')
