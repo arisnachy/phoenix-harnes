@@ -307,6 +307,8 @@ export function apply(ctx: ClientContext): void {
         || (value.inboxLimit !== undefined && typeof value.inboxLimit !== 'number')
         || typeof value.capacityAvailable !== 'boolean'
         || typeof value.inboxRead !== 'boolean'
+        || (value.currentInboxAccess !== undefined && typeof value.currentInboxAccess !== 'boolean')
+        || (value.messageRead !== undefined && typeof value.messageRead !== 'boolean')
         || (value.authenticationType !== undefined && typeof value.authenticationType !== 'string')) {
         throw new Error('Invalid AgentMail API key check response')
       }
@@ -318,6 +320,8 @@ export function apply(ctx: ClientContext): void {
         ...(value.inboxLimit === undefined ? {} : { inboxLimit: value.inboxLimit }),
         capacityAvailable: value.capacityAvailable,
         inboxRead: value.inboxRead,
+        ...(value.currentInboxAccess === undefined ? {} : { currentInboxAccess: value.currentInboxAccess }),
+        ...(value.messageRead === undefined ? {} : { messageRead: value.messageRead }),
       }
     },
     prepareClaim: async () => {
