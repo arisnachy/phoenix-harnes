@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createAssistantMailIdentityTool, createAssistantMailSendTool } from '../src/assistant-mail-tool.ts'
+import { createAssistantMailIdentityTool, createAssistantMailSendTool, createAssistantMailInboxTool } from '../src/assistant-mail-tool.ts'
 import type { AssistantMailControl } from '../src/assistant-mail-runtime.ts'
 
 function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailControl {
@@ -12,6 +12,14 @@ function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailCo
     verify: overrides.verify ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     refresh: overrides.refresh ?? (async () => ({ state: 'ready', inboxId: 'kira-real@agentmail.to', connection: 'connected' })),
     sendToOwner: overrides.sendToOwner ?? (async () => ({ from: 'kira-real@agentmail.to', to: 'owner@example.com', messageId: 'sent' as never, threadId: 'thread' as never })),
+    sendToAuthorized: overrides.sendToAuthorized ?? (async (to: string) => ({
+      from: 'kira-real@agentmail.to', to, messageId: 'sent' as never, threadId: 'thread' as never,
+    })),
+    readInbox: overrides.readInbox ?? (async () => ({
+      inboxId: 'kira-real@agentmail.to',
+      messages: [{ messageId: 'message-1', from: 'owner@example.com', subject: 'Tarea', preview: 'Informe', taskState: 'replied' }],
+    })),
+    listMailJobs: overrides.listMailJobs ?? (async () => [{ id: 'job-1', from: 'owner@example.com', subject: 'Tarea', state: 'replied' }]),
     status: overrides.status ?? (async () => ({
       state: 'ready',
       inboxId: 'kira-real@agentmail.to',
@@ -166,4 +174,38 @@ it('replaces a stale mailbox in one model action while forwarding an optional ow
     needs_verification: true,
   })
   expect(replace).toHaveBeenCalledWith('owner@example.com')
+})
+
+it('sends to a previously authorized contact with the same stable chat call identity', async () => {
+  const sendToAuthorized = vi.fn(async (to: string) => ({
+    from: 'kira-real@agentmail.to', to, messageId: 'confirmed' as never, threadId: 'thread' as never,
+  }))
+  const tool = createAssistantMailSendTool(() => control({ sendToAuthorized }))
+  const result = await tool.execute({ subject: 'Informe', text: 'Listo', to: 'trusted@example.com' },
+    { agent: { id: 'lead' }, callId: 'authorized-mail' } as never)
+  expect(sendToAuthorized).toHaveBeenCalledWith('trusted@example.com', 'Informe', 'Listo',
+    'phoenix-chat-mail-lead-authorized-mail')
+  expect(result).toMatchObject({ state: 'sent', to: 'trusted@example.com', messageId: 'confirmed' })
+})
+
+it('exposes received messages and real task state through the inbox tool', async () => {
+  const readInbox = vi.fn(async () => ({
+    inboxId: 'kira-real@agentmail.to',
+    messages: [{ messageId: 'message-1', from: 'owner@example.com', subject: 'Tarea', preview: 'Informe', text: 'Informe' }],
+  }))
+  const tool = createAssistantMailInboxTool(() => control({ readInbox }))
+  const listed = await tool.execute({ action: 'list', limit: 5 }, {} as never)
+  expect(listed).toMatchObject({ kind: 'kira_mail_messages', inboxId: 'kira-real@agentmail.to' })
+  expect(readInbox).toHaveBeenCalledWith(5)
+  await tool.execute({ action: 'read', message_id: 'message-1' }, {} as never)
+  expect(readInbox).toHaveBeenCalledWith(1, 'message-1')
+  const jobs = await tool.execute({ action: 'jobs' }, {} as never)
+  expect(jobs).toMatchObject({ kind: 'kira_mail_jobs', jobs: [{ state: 'replied' }] })
+})
+
+it('does not fake inbox contents when the Kira mailbox host is missing', async () => {
+  const tool = createAssistantMailInboxTool(() => undefined)
+  await expect(tool.execute({ action: 'list' }, {} as never)).rejects.toThrow('unavailable')
+  await expect(createAssistantMailInboxTool(() => control()).execute({ action: 'read' }, {} as never))
+    .rejects.toThrow('message_id')
 })

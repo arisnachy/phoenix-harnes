@@ -95,6 +95,15 @@ export interface AssistantMailControl {
    * @returns Confirmed provider receipt with actual sender and recipient.
    */
   sendToOwner(subject: string, text: string, idempotencyKey: string): Promise<MailDelivery & { from: string; to: string }>
+  /** Send to the owner or a contact explicitly allowed in Kira's Settings. */
+  sendToAuthorized(to: string, subject: string, text: string, idempotencyKey: string): Promise<MailDelivery & { from: string; to: string }>
+  /** Inspect recent provider-authenticated mail from allowed senders without treating its contents as instructions. */
+  readInbox(limit?: number, messageId?: string): Promise<{
+    inboxId: string
+    messages: Array<{ messageId: string; from: string; subject: string; preview: string; text?: string; taskState?: string }>
+  }>
+  /** Read the durable mail mission history independently of the email connection. */
+  listMailJobs(): Promise<Array<{ id: string; subject: string; from: string; state: string; summary?: string; error?: string }>>
 }
 
 class AssistantMailControlService extends Service implements AssistantMailControl {
@@ -108,7 +117,10 @@ class AssistantMailControlService extends Service implements AssistantMailContro
     private readonly repairOwner: AssistantMailControl['changeOwner'],
     private readonly replaceInbox: AssistantMailControl['createInbox'],
     private readonly discardEnrollment: AssistantMailControl['discard'],
-    private readonly replaceEnrollment: AssistantMailControl['replace']) {
+    private readonly replaceEnrollment: AssistantMailControl['replace'],
+    private readonly sendAuthorized: AssistantMailControl['sendToAuthorized'],
+    private readonly inbox: AssistantMailControl['readInbox'],
+    private readonly jobs: AssistantMailControl['listMailJobs']) {
     super(ctx, 'assistantMail')
   }
   status(): Promise<AssistantMailIdentity> { return this.read() }
@@ -123,6 +135,13 @@ class AssistantMailControlService extends Service implements AssistantMailContro
   sendToOwner(subject: string, text: string, key: string): Promise<MailDelivery & { from: string; to: string }> {
     return this.send(subject, text, key)
   }
+  sendToAuthorized(to: string, subject: string, text: string, key: string): Promise<MailDelivery & { from: string; to: string }> {
+    return this.sendAuthorized(to, subject, text, key)
+  }
+  readInbox(limit?: number, messageId?: string): ReturnType<AssistantMailControl['readInbox']> {
+    return this.inbox(limit, messageId)
+  }
+  listMailJobs(): ReturnType<AssistantMailControl['listMailJobs']> { return this.jobs() }
 }
 
 /** Mail host projection consumed by normal home attention. */
@@ -364,24 +383,29 @@ export function installAssistantMail(ctx: Context,
       assertActive()
       const account = await onboarding.status()
       assertActive()
-      if (account.state !== 'ready' || account.inboxId !== message.inboxId || account.ownerEmail !== message.to) {
-        throw new ProactivityDeferredError('Kira mailbox owner verification is required')
+      if (account.state !== 'ready' || account.inboxId !== message.inboxId
+        || ![account.ownerEmail, ...account.contacts].includes(message.to)) {
+        throw new ProactivityDeferredError('Kira mailbox recipient is not authorized')
       }
       return withCredentialRecovery(message.inboxId,
         transport => transport.send(message.to, message.subject, message.text, message.idempotencyKey))
     }, async (message) => {
       const account = await onboarding.status()
-      return account.state === 'ready' && account.ownerEmail === message.to
+      return account.state === 'ready' && [account.ownerEmail, ...account.contacts].includes(message.to)
     })
-  const sendToOwner: AssistantMailControl['sendToOwner'] = (subject, text, key) => owned(async () => {
+  const sendToAuthorized: AssistantMailControl['sendToAuthorized'] = (to, subject, text, key) => owned(async () => {
     const account = await onboarding.status()
     assertActive()
-    if (account.state !== 'ready' || account.inboxId === undefined || account.ownerEmail === undefined) {
-      throw new ProactivityDeferredError('Verify the existing Kira mailbox with the owner code before sending')
+    if (account.state !== 'ready' || account.inboxId === undefined) {
+      throw new ProactivityDeferredError('Verify Kira mailbox before sending')
+    }
+    const recipient = mailAddress(to)
+    if (![account.ownerEmail, ...account.contacts].includes(recipient)) {
+      throw new ProactivityDeferredError('Recipient is not the verified owner or an explicitly authorized Kira contact')
     }
     if (await resolveKey() === undefined) throw new ProactivityDeferredError('Kira mailbox credential is unavailable')
     const previous = (await ownerOutbox.list()).find(row => row.reply.idempotencyKey === key)
-    await ownerOutbox.enqueueMessage({ inboxId: account.inboxId, to: account.ownerEmail,
+    await ownerOutbox.enqueueMessage({ inboxId: account.inboxId, to: recipient,
       taskId: mailString(key), scheduledFor: previous !== undefined && 'scheduledFor' in previous.reply
         ? previous.reply.scheduledFor : new Date().toISOString(),
       subject: mailString(subject, 1024), text: mailString(text, 64_000), idempotencyKey: mailString(key) })
@@ -392,8 +416,46 @@ export function installAssistantMail(ctx: Context,
     if (row?.state !== 'sent' || row.delivery === undefined) {
       throw new ProactivityDeferredError('Email is retained for retry; provider confirmation is pending. Do not claim it was sent or create another send.')
     }
-    return { ...row.delivery, from: account.inboxId, to: account.ownerEmail }
+    return { ...row.delivery, from: account.inboxId, to: recipient }
   })
+  const sendToOwner: AssistantMailControl['sendToOwner'] = async (subject, text, key) => {
+    const account = await onboarding.status()
+    if (account.ownerEmail === undefined) throw new ProactivityDeferredError('Kira mailbox owner is not configured')
+    return sendToAuthorized(account.ownerEmail, subject, text, key)
+  }
+  const readInbox: AssistantMailControl['readInbox'] = (limit = 15, messageId) => owned(async () => {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 25) throw new Error('mail inbox limit must be between 1 and 25')
+    const account = await onboarding.status()
+    if (account.state !== 'ready' || account.inboxId === undefined) throw new Error('Kira mailbox is not ready')
+    const allowed = new Set([account.ownerEmail, ...account.contacts])
+    const transport = new AgentMailTransport(resolveKey, account.inboxId, config.timeoutMs, fetch, controller.signal)
+    const page = await transport.listMessages()
+    const messages: Awaited<ReturnType<AssistantMailControl['readInbox']>>['messages'] = []
+    const jobStates = new Map((await journal.list()).map(job => [job.message.messageId, job.state]))
+    for (const id of page.ids.slice(0, 100)) {
+      if (messageId === undefined && messages.length >= limit) break
+      if (messageId !== undefined && id !== messageId) continue
+      const mail = await transport.readMessage(id)
+      if (!mail.authenticated || mail.automatic || !allowed.has(mail.from)) continue
+      messages.push({
+        messageId: mail.messageId, from: mail.from, subject: mail.subject,
+        preview: mail.text.slice(0, 240),
+        ...(messageId === undefined ? {} : { text: mail.text.slice(0, 16_000) }),
+        ...(jobStates.has(id) ? { taskState: jobStates.get(id) } : {}),
+      })
+    }
+    if (messageId !== undefined && messages.length === 0) {
+      throw new Error('Mail message not found among recent authorized received messages')
+    }
+    return { inboxId: account.inboxId, messages }
+  })
+  const listMailJobs: AssistantMailControl['listMailJobs'] = async () => {
+    return (await journal.list()).slice(-30).reverse().map(job => ({
+      id: job.id, subject: job.message.subject, from: job.message.from, state: job.state,
+      ...(job.summary === undefined ? {} : { summary: job.summary }),
+      ...(job.error === undefined ? {} : { error: job.error }),
+    }))
+  }
   const delivery = async (key: string): Promise<string | undefined> => {
     const row = (await outbox.list()).find(row => row.reply.idempotencyKey === key)
     if (row === undefined) return undefined
@@ -579,6 +641,9 @@ export function installAssistantMail(ctx: Context,
       async () => { await onboarding.createInbox(); void pump(); return identity() },
       discardEnrollment,
       replaceEnrollment,
+      sendToAuthorized,
+      readInbox,
+      listMailJobs,
     )
   }
   let connection: HostConnectionHandle | undefined
