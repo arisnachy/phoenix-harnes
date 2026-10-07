@@ -325,6 +325,7 @@ export function installAssistantMail(ctx: Context,
   let pumping: Promise<void> | undefined
   let repumpRequested = false
   let socketRecoveryTimer: ReturnType<typeof setTimeout> | undefined
+  let socketRecoveryAttempt = 0
   const hasQueuedWake = (): boolean => repumpRequested
   const clearSocketRecovery = (): void => {
     if (socketRecoveryTimer === undefined) return
@@ -333,10 +334,12 @@ export function installAssistantMail(ctx: Context,
   }
   function scheduleSocketRecovery(): void {
     if (disposed || socketRecoveryTimer !== undefined) return
+    const delay = Math.min(config.pollMs, 5_000 * (2 ** Math.min(socketRecoveryAttempt, 6)))
+    socketRecoveryAttempt++
     socketRecoveryTimer = setTimeout(() => {
       socketRecoveryTimer = undefined
       if (!disposed) void pump()
-    }, Math.min(config.pollMs, 5_000))
+    }, delay)
   }
   const outbox = new MailOutbox(join(config.directory, 'outbox.json'), async (reply) => {
     assertActive()
@@ -435,6 +438,7 @@ export function installAssistantMail(ctx: Context,
           scheduleSocketRecovery()
         })
         status = 'connected'
+        socketRecoveryAttempt = 0
         clearSocketRecovery()
       } catch {
         // REST reconciliation already proved that the mailbox and credential work.
@@ -527,6 +531,7 @@ export function installAssistantMail(ctx: Context,
       await credentials.unset(ref)
       status = 'not-configured'
       providerIssue = undefined
+      socketRecoveryAttempt = 0
       automaticCredentialRecoveryAttempted = false
       repumpRequested = false
       return await identity()
