@@ -38,7 +38,8 @@ function permissionFromFix(fix: string | undefined): string | undefined {
 }
 
 function providerFailureMessage(status: number, reason: AgentMailFailureReason | undefined,
-  permission?: string): string {
+  permission?: string, validation?: string): string {
+  if (status === 400 && validation !== undefined) return `AgentMail rejected request field: ${validation}`
   if (status === 429) return 'mail quota reached; no paid upgrade will be requested'
   if (reason === 'verification-required') return 'AgentMail requires Kira mailbox verification again; recover access and enter the six-digit owner code'
   if (reason === 'credential-rejected') return 'AgentMail rejected the stored credential; Phoenix can recover the existing Kira mailbox automatically'
@@ -62,14 +63,16 @@ export class AgentMailHttpError extends Error {
     readonly reason?: AgentMailFailureReason,
     readonly fix?: string,
     readonly permission?: string,
+    readonly validation?: string,
   ) {
-    super(providerFailureMessage(status, reason, permission))
+    super(providerFailureMessage(status, reason, permission, validation))
   }
 }
 
 async function responseError(response: Response, authenticated: boolean): Promise<AgentMailHttpError> {
   let code: string | undefined
   let fix: string | undefined
+  let validation: string | undefined
   try {
     const text = await response.text()
     if (text.length <= 65_536) {
@@ -78,6 +81,20 @@ async function responseError(response: Response, authenticated: boolean): Promis
         const record = data as Record<string, unknown>
         if (typeof record.code === 'string' && /^[a-z0-9_]{1,64}$/u.test(record.code)) code = record.code
         if (typeof record.fix === 'string') fix = record.fix.slice(0, 4096)
+        if (record.code === 'validation_error' && Array.isArray(record.errors)) {
+          const issues = record.errors.flatMap((item) => {
+            if (item === null || typeof item !== 'object' || Array.isArray(item)) return []
+            const issue = item as Record<string, unknown>
+            const path = typeof issue.path === 'string'
+              ? issue.path.replace(/[^a-zA-Z0-9_.\[\]-]/gu, '').slice(0, 160)
+              : 'request'
+            const message = typeof issue.message === 'string'
+              ? issue.message.replace(/\s+/gu, ' ').trim().slice(0, 320)
+              : 'invalid value'
+            return [`${path}: ${message}`]
+          }).slice(0, 3)
+          if (issues.length > 0) validation = issues.join('; ')
+        }
       }
     }
   } catch {
@@ -85,7 +102,7 @@ async function responseError(response: Response, authenticated: boolean): Promis
   }
   const safeFix = safeProviderFix(fix)
   const reason = providerFailureReason(response.status, code, safeFix, authenticated)
-  return new AgentMailHttpError(response.status, code, reason, safeFix, permissionFromFix(safeFix))
+  return new AgentMailHttpError(response.status, code, reason, safeFix, permissionFromFix(safeFix), validation)
 }
 
 /** Official provider API; errors deliberately exclude provider bodies and secrets.

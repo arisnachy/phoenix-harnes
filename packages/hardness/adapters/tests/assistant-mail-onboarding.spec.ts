@@ -521,9 +521,9 @@ it('creates a separate inbox while retaining the verified owner, contacts and wo
     const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => 'test-secret', fetch: async (url, init) => {
       expect(requestAddress(url)).toBe('https://api.agentmail.to/v0/inboxes')
       expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer test-secret')
-      const request = requestBody(init) as { username: string; client_id: string }
+      const request = requestBody(init) as { username: string; client_id?: string }
       calls++
-      return Response.json({ inbox_id: `${request.username}@agentmail.to`, client_id: request.client_id })
+      return Response.json({ inbox_id: `${request.username}@agentmail.to` })
     } })
     const result = await account.createInbox()
     expect(result).toMatchObject({ state: 'ready', ownerEmail: 'owner@example.com', contacts: ['contact@example.com'], sessionId: 'original-workspace' })
@@ -538,7 +538,7 @@ it('reconciles an uncertain inbox creation after restart without repeating POST'
   try {
     const path = join(directory, 'account.json')
     await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
-    let request: { username: string; client_id: string } | undefined
+    let request: { username: string; client_id?: string } | undefined
     const options = { path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => 'test-secret', fetch: async (url: Parameters<typeof fetch>[0], init?: RequestInit) => {
       if (init?.method === 'POST') {
         expect(request).toBeUndefined()
@@ -546,7 +546,7 @@ it('reconciles an uncertain inbox creation after restart without repeating POST'
         throw new Error('provider created inbox but response was lost')
       }
       expect(requestAddress(url)).toContain(`${request!.username}%40agentmail.to`)
-      return Response.json({ inbox_id: `${request!.username}@agentmail.to`, client_id: request!.client_id })
+      return Response.json({ inbox_id: `${request!.username}@agentmail.to` })
     } }
     const account = new MailOnboarding(options)
     await expect(account.createInbox()).rejects.toThrow('ambiguous')
@@ -589,22 +589,23 @@ it('serializes connection and recovery while a provider request is in flight', a
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
-it('retries a confirmed absent inbox with the same address and client identity', async () => {
+it('retries a confirmed absent inbox with the same address without duplicating it', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-inbox-absent-'))
   try {
     const path = join(directory, 'account.json')
     await writeFile(path, JSON.stringify({ state: 'ready', inboxId: 'original@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }))
-    const requests: Array<{ username: string; client_id: string }> = []
+    const requests: Array<{ username: string; client_id?: string }> = []
     const account = new MailOnboarding({ path, timeoutMs: 1000, saveKey: async () => {}, resolveKey: async () => 'test-secret', fetch: async (_url, init) => {
       if (init?.method !== 'POST') return Response.json({}, { status: 404 })
-      const request = requestBody(init) as { username: string; client_id: string }
+      const request = requestBody(init) as { username: string; client_id?: string }
       requests.push(request)
       if (requests.length === 1) throw new Error('request did not reach provider')
-      return Response.json({ inbox_id: `${request.username}@agentmail.to`, client_id: request.client_id })
+      return Response.json({ inbox_id: `${request.username}@agentmail.to` })
     } })
     await expect(account.createInbox()).rejects.toThrow('ambiguous')
     expect((await account.createInbox()).inboxId).toBe(`${requests[0]!.username}@agentmail.to`)
     expect(requests).toHaveLength(2)
+    expect(requests[0]?.client_id).toBeUndefined()
     expect(requests[1]).toEqual(requests[0])
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
@@ -799,7 +800,7 @@ it('corroborates a human Console API key without storing it or creating an inbox
             inbox_limit: 3,
           })
         }
-        expect(address).toBe('https://api.agentmail.to/v0/inboxes?limit=1')
+        expect(address).toBe('https://api.agentmail.to/v0/inboxes')
         return Response.json({ count: 1, inboxes: [], limit: 1 })
       },
     })
@@ -816,7 +817,7 @@ it('corroborates a human Console API key without storing it or creating an inbox
     expect(saved).toBe('')
     expect(requests).toEqual([
       'https://api.agentmail.to/v0/organizations',
-      'https://api.agentmail.to/v0/inboxes?limit=1',
+      'https://api.agentmail.to/v0/inboxes',
     ])
     expect((await account.status()).state).toBe('not-configured')
   } finally { await rm(directory, { recursive: true, force: true }) }
@@ -881,7 +882,7 @@ it('corroborates a replacement key against Kira current inbox and message access
             inbox_limit: 3,
           })
         }
-        if (address.endsWith('/inboxes?limit=1')) return Response.json({ count: 1, inboxes: [], limit: 1 })
+        if (address.endsWith('/inboxes')) return Response.json({ count: 1, inboxes: [], limit: 1 })
         if (address.endsWith('/inboxes/kira-current%40agentmail.to')) {
           return Response.json({ inbox_id: 'kira-current@agentmail.to' })
         }
@@ -902,6 +903,67 @@ it('corroborates a replacement key against Kira current inbox and message access
       messageRead: true,
     })
     expect(requests).toHaveLength(4)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
+it('migrates a ready stale agent-signup inbox to an existing Console Kira inbox without agent signup', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-migrate-ready-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({
+      state: 'ready',
+      inboxId: 'old-agent-org@agentmail.to',
+      ownerEmail: 'owner@example.com',
+      contacts: ['trusted@example.com'],
+    }))
+    let saved = ''
+    const requests: string[] = []
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async (value) => { saved = value },
+      resolveKey: async () => saved || undefined,
+      fetch: async (url) => {
+        const address = requestAddress(url)
+        requests.push(address)
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_console',
+            authentication_id: 'user_console',
+            inbox_count: 1,
+            inbox_limit: 3,
+          })
+        }
+        if (address.endsWith('/inboxes/old-agent-org%40agentmail.to')) {
+          return Response.json({ code: 'not_found', message: 'Not found' }, { status: 404 })
+        }
+        if (address === 'https://api.agentmail.to/v0/inboxes') {
+          return Response.json({
+            count: 1,
+            limit: 100,
+            inboxes: [{ inbox_id: 'kira-console@agentmail.to', email: 'kira-console@agentmail.to', display_name: 'Kira' }],
+          })
+        }
+        if (address.endsWith('/inboxes/kira-console%40agentmail.to')) {
+          return Response.json({ inbox_id: 'kira-console@agentmail.to' })
+        }
+        if (address.includes('/inboxes/kira-console%40agentmail.to/messages?')) {
+          return Response.json({ messages: [] })
+        }
+        throw new Error(`unexpected request: ${address}`)
+      },
+    })
+
+    await expect(account.adoptConsoleKey('am_console_key')).resolves.toMatchObject({
+      state: 'ready',
+      inboxId: 'kira-console@agentmail.to',
+      ownerEmail: 'owner@example.com',
+      contacts: ['trusted@example.com'],
+    })
+    expect(saved).toBe('am_console_key')
+    expect(requests.some(value => value.includes('/agent/sign-up'))).toBe(false)
+    expect(requests.some(value => value.includes('/agent/human'))).toBe(false)
+    expect(requests.some(value => value === 'https://api.agentmail.to/v0/inboxes')).toBe(false)
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
@@ -977,13 +1039,15 @@ it('creates the first Kira inbox from a corroborated Console key and explicit Ph
             inbox_limit: 3,
           })
         }
+        if (address === 'https://api.agentmail.to/v0/inboxes' && init?.method !== 'POST') {
+          return Response.json({ count: 0, inboxes: [], limit: 100 })
+        }
         if (address === 'https://api.agentmail.to/v0/inboxes') {
           const body = requestBody(init) as Record<string, unknown>
           createdInbox = `${String(body.username)}@agentmail.to`
           return Response.json({
             inbox_id: createdInbox,
             email: createdInbox,
-            client_id: body.client_id,
           })
         }
         if (createdInbox.length > 0
@@ -1043,6 +1107,10 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
             inbox_limit: 3,
           })
         }
+        if (address === 'https://api.agentmail.to/v0/inboxes' && init?.method !== 'POST') {
+          expect(auth).toBe('Bearer am_us_console_key')
+          return Response.json({ count: 0, inboxes: [], limit: 100 })
+        }
         if (address.includes('/messages?')) {
           expect(auth).toBe('Bearer am_us_console_key')
           return Response.json({ messages: [] })
@@ -1057,12 +1125,11 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
         expect(body.domain).toBe('agentmail.to')
         expect(body.display_name).toBe('Kira')
         expect(typeof body.username).toBe('string')
-        expect(typeof body.client_id).toBe('string')
+        expect(body.client_id).toBeUndefined()
         createdInbox = `${String(body.username)}@agentmail.to`
         return Response.json({
           inbox_id: createdInbox,
           email: createdInbox,
-          client_id: body.client_id,
         })
       },
     })
@@ -1078,9 +1145,10 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
     expect(result.inboxId).toMatch(/^kira-[a-f0-9]{8}@agentmail\.to$/u)
     expect(result.inboxId).not.toBe('old-signup@agentmail.to')
     expect(saved).toBe('am_us_console_key')
-    expect(requests).toHaveLength(4)
-    expect(requests[2]?.url).toContain('/inboxes/')
-    expect(requests[3]?.url).toContain('/messages?')
+    expect(requests).toHaveLength(5)
+    expect(requests[1]?.url).toContain('/inboxes')
+    expect(requests[3]?.url).toContain('/inboxes/')
+    expect(requests[4]?.url).toContain('/messages?')
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
@@ -1101,7 +1169,7 @@ it('does not require optional organization authentication metadata during a key 
             inbox_limit: 3,
           })
         }
-        expect(address).toBe('https://api.agentmail.to/v0/inboxes?limit=1')
+        expect(address).toBe('https://api.agentmail.to/v0/inboxes')
         return Response.json({ count: 1, inboxes: [], limit: 1 })
       },
     })
@@ -1132,7 +1200,6 @@ it('reconciles an ambiguous Console-key inbox create without minting a duplicate
     }))
     let saved = ''
     let createdUsername = ''
-    let createdClientId = ''
     let creates = 0
     const account = new MailOnboarding({
       path,
@@ -1148,11 +1215,14 @@ it('reconciles an ambiguous Console-key inbox create without minting a duplicate
             authentication_type: 'clerk',
           })
         }
+        if (address === 'https://api.agentmail.to/v0/inboxes' && init?.method !== 'POST') {
+          return Response.json({ count: 0, inboxes: [], limit: 100 })
+        }
         if (address === 'https://api.agentmail.to/v0/inboxes') {
           creates++
           const body = requestBody(init) as Record<string, unknown>
           createdUsername = String(body.username)
-          createdClientId = String(body.client_id)
+          expect(body.client_id).toBeUndefined()
           throw new Error('confirmation lost')
         }
         if (address.includes('/messages?')) return Response.json({ messages: [] })
@@ -1160,7 +1230,6 @@ it('reconciles an ambiguous Console-key inbox create without minting a duplicate
         return Response.json({
           inbox_id: `${createdUsername}@agentmail.to`,
           email: `${createdUsername}@agentmail.to`,
-          client_id: createdClientId,
         })
       },
     })

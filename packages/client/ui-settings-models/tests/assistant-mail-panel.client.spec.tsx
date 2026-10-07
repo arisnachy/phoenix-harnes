@@ -298,6 +298,65 @@ it('corroborates a new Console API key before storing it and activating the new 
 })
 
 
+it('allows a valid Console key to migrate a ready stale AgentMail inbox', async () => {
+  const candidate = ['am', 'console', 'migration'].join('_')
+  const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
+  const client = {
+    call: async (action: string, input?: Record<string, unknown>) => {
+      calls.push({ action, ...(input === undefined ? {} : { input }) })
+      return {
+        account: action === 'console-key'
+          ? {
+            state: 'ready',
+            inboxId: 'kira-console@agentmail.to',
+            ownerEmail: 'owner@example.com',
+            ownerLink: 'attached' as const,
+            contacts: [],
+          }
+          : {
+            state: 'ready',
+            inboxId: 'old-agent-org@agentmail.to',
+            ownerEmail: 'owner@example.com',
+            ownerLink: 'attached' as const,
+            contacts: [],
+          },
+        connection: action === 'console-key' ? 'connected-polling' : 'recovery-required',
+        jobs: [],
+      }
+    },
+    checkConsoleKey: async () => ({
+      valid: true as const,
+      organizationId: 'org_console',
+      inboxCount: 1,
+      inboxLimit: 3,
+      capacityAvailable: true,
+      inboxRead: true,
+      reusableInboxId: 'kira-console@agentmail.to',
+      scopeType: 'organization' as const,
+      inboxCreate: true,
+      messageSend: true,
+      currentInboxAccess: false,
+      messageRead: false,
+    }),
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  fireEvent.click(await screen.findByText('API key de AgentMail · verificar o reemplazar'))
+  fireEvent.change(screen.getByLabelText('Nueva API key de AgentMail'), { target: { value: candidate } })
+  fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
+
+  expect(await screen.findByText('⚠ antiguo/no accesible')).toBeTruthy()
+  expect(screen.getByText(/reutilizará kira-console@agentmail.to/u)).toBeTruthy()
+  const save = screen.getByRole('button', { name: 'Guardar API y verificar acceso' })
+  expect(save.getAttribute('disabled')).toBeNull()
+
+  fireEvent.click(save)
+
+  expect(await screen.findByText('kira-console@agentmail.to')).toBeTruthy()
+  expect(calls).toContainEqual({ action: 'console-key', input: { apiKey: candidate } })
+  expect(document.body.textContent).not.toContain(candidate)
+})
+
 it('corroborates and rotates the API key of an already active Kira inbox without changing its address', async () => {
   const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
   const checks: string[] = []

@@ -40,6 +40,7 @@ export interface AssistantMailConsoleKeyCheck {
   readonly inboxLimit?: number
   readonly capacityAvailable: boolean
   readonly inboxRead: boolean
+  readonly reusableInboxId?: string
   readonly scopeType?: 'organization' | 'pod' | 'inbox'
   readonly inboxCreate?: boolean
   readonly messageSend?: boolean
@@ -62,6 +63,17 @@ export interface AssistantMailClient {
    * The Host copies it directly to the local clipboard; the secret never crosses the browser RPC.
    */
   prepareClaim?(): Promise<{ readonly copied: true; readonly inboxId: string; readonly claimUrl: string }>
+}
+
+const READY_STATUS_LABELS: Readonly<Record<string, string>> = {
+  connected: 'Correo verificado · Activo',
+  'connected-polling': 'Correo verificado · Activo por polling',
+  connecting: 'Correo verificado · Conectando',
+  'verification-required': 'AgentMail requiere verificación',
+  'recovery-required': 'AgentMail requiere recuperar acceso',
+  'permission-required': 'AgentMail requiere permisos',
+  'quota-reached': 'Límite gratuito alcanzado',
+  'message-rejected': 'Último envío rechazado',
 }
 
 const JOB_LABELS: Readonly<Record<string, string>> = {
@@ -152,30 +164,14 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const ownerLinkConflict = pendingVerification && snapshot?.account.ownerLink === 'provider-conflict'
   const connection = snapshot?.connection ?? 'disconnected'
   const providerIssue = snapshot?.providerIssue
+  const consoleOwnerConflict = providerIssue?.code === 'already_exists'
   const recoveryRequired = ready && (connection === 'verification-required' || connection === 'recovery-required')
   const providerWarning = recoveryRequired || providerIssue !== undefined
     || (ready && ['quota-reached', 'message-rejected', 'permission-required'].includes(connection))
   const statusText = ready
-    ? connection === 'connected'
-      ? 'Correo verificado · Activo'
-      : connection === 'connected-polling'
-        ? 'Correo verificado · Activo por polling'
-        : connection === 'connecting'
-        ? 'Correo verificado · Conectando'
-        : connection === 'verification-required'
-          ? 'AgentMail requiere verificación'
-          : connection === 'recovery-required'
-            ? 'AgentMail requiere recuperar acceso'
-            : connection === 'permission-required'
-              ? 'AgentMail requiere permisos'
-              : connection === 'quota-reached'
-              ? 'Límite gratuito alcanzado'
-              : connection === 'message-rejected'
-                ? 'Último envío rechazado'
-                : 'Correo verificado · Sin conexión'
+    ? READY_STATUS_LABELS[connection] ?? 'Correo verificado · Sin conexión'
     : pendingVerification ? ownerLinkConflict ? 'Vincula propietario' : 'Verifica una vez'
-      : ambiguous ? 'Necesita recuperación'
-        : 'Aún sin correo'
+      : ambiguous ? 'Necesita recuperación' : 'Aún sin correo'
   const statusClass = ready && !providerWarning
     ? `${styles.status} ${styles.statusReady}`
     : pendingVerification || ambiguous || providerWarning
@@ -268,18 +264,17 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       setFailure('Primero pega la API key y pulsa “Corroborar API key”.')
       return
     }
-    const readyKeyUsable = ready
-      ? consoleKeyCheck.currentInboxAccess === true
-        && consoleKeyCheck.messageRead === true
-        && consoleKeyCheck.messageSend === true
-      : consoleKeyCheck.inboxRead
-        && consoleKeyCheck.inboxCreate === true
-        && consoleKeyCheck.messageSend === true
-        && consoleKeyCheck.capacityAvailable
+    const canKeepCurrentInbox = consoleKeyCheck.currentInboxAccess === true
+      && consoleKeyCheck.messageRead === true
+    const canMigrateInbox = consoleKeyCheck.reusableInboxId !== undefined
+      || (consoleKeyCheck.inboxCreate === true && consoleKeyCheck.capacityAvailable)
+    const readyKeyUsable = consoleKeyCheck.inboxRead
+      && consoleKeyCheck.messageSend === true
+      && (canKeepCurrentInbox || canMigrateInbox)
     if (!readyKeyUsable) {
       setFailure(ready
-        ? 'La nueva API key debe poder leer el buzón y leer/enviar mensajes. El tiempo real es opcional porque Phoenix puede usar polling.'
-        : 'La API key debe tener alcance de organización, inbox_create, inbox_read y message_send antes de activar Kira.')
+        ? 'La API key debe leer buzones y enviar mensajes; además debe acceder al inbox actual o permitir reutilizar/crear un inbox de Kira en tu cuenta Console.'
+        : 'La API key debe leer buzones y enviar mensajes, y debe permitir reutilizar o crear el inbox de Kira.')
       return
     }
     setBusy(true)
@@ -324,17 +319,18 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const consoleKeyReady = consoleKeyCheck !== undefined
     && consoleKeyCheck.inboxRead
     && consoleKeyCheck.messageSend === true
-    && (ready
-      ? consoleKeyCheck.currentInboxAccess === true
-        && consoleKeyCheck.messageRead === true
-      : consoleKeyCheck.inboxCreate === true && consoleKeyCheck.capacityAvailable)
+    && (
+      (consoleKeyCheck.currentInboxAccess === true && consoleKeyCheck.messageRead === true)
+      || consoleKeyCheck.reusableInboxId !== undefined
+      || (consoleKeyCheck.inboxCreate === true && consoleKeyCheck.capacityAvailable)
+    )
     && (ready || persistedOwner !== undefined || requestedOwner.length > 0)
-  const consoleKeyFallback = <details className={styles.advanced} open={!ready}>
+  const consoleKeyFallback = <details className={styles.advanced} open={!ready || consoleOwnerConflict}>
     <summary>API key de AgentMail · verificar o reemplazar</summary>
     <div className={styles.advancedBody}>
       <p className={styles.help}>
         {ready
-          ? 'Pega una API key nueva para rotar la credencial de Kira sin cambiar su dirección. Phoenix la corrobora contra la organización, el buzón actual y la lectura de mensajes antes de guardarla.'
+          ? 'Pega tu API key de AgentMail Console. Si el buzón viejo pertenece al alta automática y no es visible con esta clave, Phoenix migrará Kira a un inbox de tu cuenta Console sin volver a intentar agent signup.'
           : state === 'not-configured' || state === undefined
             ? 'Si ya tienes AgentMail, puedes usar una API key de tu organización en vez del alta automática. Escribe arriba tu correo propietario y Phoenix corroborará la clave antes de crear el buzón.'
             : 'Si reclamar el buzón falla porque tu correo ya tiene una cuenta de AgentMail, crea una API key en tu organización. Phoenix la corrobora antes de crear el nuevo buzón de Kira.'}
@@ -394,8 +390,15 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         </span> : null}
         {ready ? <>
           <span>
-            Buzón actual <b>{consoleKeyCheck.currentInboxAccess ? '✓ accesible' : '✕ sin acceso'}</b>
+            Buzón actual <b>{consoleKeyCheck.currentInboxAccess ? '✓ accesible' : '⚠ antiguo/no accesible'}</b>
           </span>
+          {consoleKeyCheck.currentInboxAccess ? null : <span>
+            Migración <b>{consoleKeyCheck.reusableInboxId !== undefined
+              ? `✓ reutilizará ${consoleKeyCheck.reusableInboxId}`
+              : consoleKeyCheck.inboxCreate && consoleKeyCheck.capacityAvailable
+                ? '✓ creará inbox Kira en Console'
+                : '✕ sin inbox reutilizable ni cupo'}</b>
+          </span>}
           <span>
             Lectura de mensajes <b>{consoleKeyCheck.messageRead ? '✓ disponible' : '✕ falta message_read'}</b>
           </span>
@@ -412,14 +415,14 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         </>}
         <small>
           {ready
-            ? 'Phoenix guarda la clave si REST confirma inbox_read, message_read y message_send. El WebSocket acelera la recepción; si falla, Phoenix usa polling y sigue reintentándolo.'
-            : 'Antes de crear el buzón Phoenix exige alcance de organización, inbox_create, inbox_read y message_send; luego comprueba message_read.'}
+            ? 'Phoenix conserva el inbox actual si la clave lo puede leer. Si pertenece a la organización antigua, reutiliza o crea un inbox de Kira dentro de tu cuenta Console; no vuelve a usar agent signup.'
+            : 'Phoenix reutiliza un inbox de Kira existente cuando puede; solo crea uno nuevo si hace falta y hay cupo.'}
         </small>
       </div>}
       <p className={styles.help}>
         La corroboración no guarda ni cambia nada. {ready
-          ? 'Solo al confirmar Phoenix sustituye la credencial guardada, manteniendo el mismo buzón.'
-          : 'Solo al confirmar Phoenix crea el nuevo buzón y guarda la clave en Credenciales.'}
+          ? 'Solo al confirmar Phoenix guarda la credencial y, si el inbox antiguo no pertenece a esta cuenta Console, migra Kira a un inbox compatible.'
+          : 'Solo al confirmar Phoenix reutiliza o crea el inbox de Kira y guarda la clave en Credenciales.'}
         {' '}Para una clave restringida usa api_key_read, inbox_read, message_read y message_send; añade inbox_create cuando Phoenix deba crear el buzón.
       </p>
     </div>
@@ -619,7 +622,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       <p className={styles.help}>
         Creará otra dirección en la misma cuenta, si la cuota disponible lo permite. No borra el buzón anterior.
       </p>
-      <button type="button" className={styles.secondaryButton} disabled={busy}
+      {consoleOwnerConflict ? <p className={styles.help}>
+        Tu correo ya pertenece a AgentMail Console. No repitas «Recuperar acceso»: confirma la API key validada
+        en «API key de AgentMail · verificar o reemplazar» y pulsa «Guardar API y verificar acceso».
+        Phoenix conservará el buzón actual si la clave puede leerlo.
+      </p> : null}
+      <button type="button" className={styles.secondaryButton}
+        disabled={busy || consoleOwnerConflict}
         onClick={() => { void operate('recover') }}>
         Recuperar acceso
       </button>

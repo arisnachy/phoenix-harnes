@@ -310,6 +310,7 @@ export function apply(ctx: ClientContext): void {
         || (value.inboxLimit !== undefined && typeof value.inboxLimit !== 'number')
         || typeof value.capacityAvailable !== 'boolean'
         || typeof value.inboxRead !== 'boolean'
+        || (value.reusableInboxId !== undefined && typeof value.reusableInboxId !== 'string')
         || (value.scopeType !== undefined && !['organization', 'pod', 'inbox'].includes(String(value.scopeType)))
         || (value.inboxCreate !== undefined && typeof value.inboxCreate !== 'boolean')
         || (value.messageSend !== undefined && typeof value.messageSend !== 'boolean')
@@ -327,6 +328,7 @@ export function apply(ctx: ClientContext): void {
         ...(value.inboxLimit === undefined ? {} : { inboxLimit: value.inboxLimit }),
         capacityAvailable: value.capacityAvailable,
         inboxRead: value.inboxRead,
+        ...(value.reusableInboxId === undefined ? {} : { reusableInboxId: value.reusableInboxId }),
         ...(value.scopeType === undefined ? {} : { scopeType: value.scopeType as 'organization' | 'pod' | 'inbox' }),
         ...(value.inboxCreate === undefined ? {} : { inboxCreate: value.inboxCreate }),
         ...(value.messageSend === undefined ? {} : { messageSend: value.messageSend }),

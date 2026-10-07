@@ -506,6 +506,9 @@ export function installAssistantMail(ctx: Context,
     }
   }
   const recoverEnrollment = async (): Promise<AssistantMailIdentity> => {
+    if (providerIssue?.code === 'already_exists') {
+      throw new Error('AgentMail Console account already exists. Use the verified Console API key in Settings to activate the current Kira inbox without agent signup.')
+    }
     const account = await onboarding.recover()
     status = account.state === 'ready' ? 'connecting' : 'verification-required'
     if (account.state === 'ready') void pump()
@@ -679,14 +682,19 @@ export function installAssistantMail(ctx: Context,
           const access = await inspectCandidateKeyAccess(candidate, before)
           const checked = await onboarding.inspectConsoleKey(candidate)
           if (!access.messageSend) throw new Error('AgentMail API key needs message_send permission before Phoenix can save it')
-          if (before.state === 'ready') {
-            if (before.inboxId === undefined || checked.currentInboxAccess !== true || checked.messageRead !== true) {
-              throw new Error('AgentMail API key cannot read the current Kira inbox and messages')
+          if (!checked.inboxRead) throw new Error('AgentMail API key needs inbox_read permission')
+          if (before.state === 'ready' && checked.currentInboxAccess === true) {
+            if (checked.messageRead !== true) {
+              throw new Error('AgentMail API key needs message_read permission before Phoenix can save it')
             }
           } else {
-            if (!access.inboxCreate) throw new Error('AgentMail API key needs organization scope and inbox_create permission')
-            if (!checked.inboxRead) throw new Error('AgentMail API key needs inbox_read permission')
-            if (!checked.capacityAvailable) throw new Error('AgentMail inbox limit reached; remove an old inbox before creating Kira mailbox')
+            const canReuseConsoleInbox = checked.reusableInboxId !== undefined
+            if (!canReuseConsoleInbox && !access.inboxCreate) {
+              throw new Error('AgentMail API key needs organization scope and inbox_create permission to migrate Kira into the Console account')
+            }
+            if (!canReuseConsoleInbox && !checked.capacityAvailable) {
+              throw new Error('AgentMail inbox limit reached and no reusable Kira inbox was found in this Console account')
+            }
           }
 
           const account = await onboarding.adoptConsoleKey(
