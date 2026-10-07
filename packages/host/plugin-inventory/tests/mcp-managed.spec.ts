@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   ManagedMcpController,
+  MANAGED_MCP_INJECT,
   managedMcpPatchPath,
   type ManagedMcpLoader,
   type ManagedMcpRegistrySearch,
@@ -49,14 +50,18 @@ function registry(values: readonly McpRegistryCandidate[]): ManagedMcpRegistrySe
   }))
 }
 
-function loader(options: { createError?: Error; removeError?: Error } = {}): ManagedMcpLoader & {
+function loader(options: { createError?: Error; updateError?: Error; removeError?: Error } = {}): ManagedMcpLoader & {
   create: ReturnType<typeof vi.fn>
+  update: ReturnType<typeof vi.fn>
   remove: ReturnType<typeof vi.fn>
 } {
   return {
     create: vi.fn(async () => {
       if (options.createError !== undefined) throw options.createError
       return 'live-entry-id'
+    }),
+    update: vi.fn(async () => {
+      if (options.updateError !== undefined) throw options.updateError
     }),
     remove: vi.fn(async () => {
       if (options.removeError !== undefined) throw options.removeError
@@ -85,6 +90,7 @@ describe('ManagedMcpController', () => {
     expect(search).toHaveBeenCalledWith({ query: 'io.example/calendar', limit: 20 })
     expect(live.create).toHaveBeenCalledWith({
       name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
       config: {
         transport: 'streamable-http',
         serverName: installed.connector.serverName,
@@ -130,6 +136,7 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenCalledWith({
       name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
       config: {
         transport: 'streamable-http',
         serverName: 'devpost',
@@ -187,6 +194,7 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenCalledWith({
       name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
       config: {
         transport: 'streamable-http',
         serverName: 'canva',
@@ -234,6 +242,9 @@ describe('ManagedMcpController', () => {
         created.push(options)
         return Promise.resolve(`entry-${options.config.serverName}`)
       },
+      update() {
+        return Promise.resolve()
+      },
       remove() {
         return Promise.resolve()
       },
@@ -248,6 +259,8 @@ describe('ManagedMcpController', () => {
     ]))
     expect(restored.installed).not.toContain('devpost')
 
+    expect(created.every(options =>
+      JSON.stringify(options.inject) === JSON.stringify(MANAGED_MCP_INJECT))).toBe(true)
     const configs = new Map(created.map(({ config }) => [config.serverName, config]))
     expect(configs.get('supabase')).toMatchObject({
       transport: 'streamable-http',
@@ -321,6 +334,49 @@ describe('ManagedMcpController', () => {
     expect(created).toHaveLength(restored.installed.length)
   })
 
+  it('migrates a legacy installed OAuth MCP to wait for authorization services', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{
+      insert: [{
+        id: 'legacy-notion',
+        name: '@phoenix-ai/dsh-mcp-client',
+        config: {
+          transport: 'streamable-http',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          headers: {},
+          oauth: true,
+          toolCallTimeoutMs: 60_000,
+          startupTimeoutMs: 5_000,
+          failOnStartupError: false,
+        },
+        source: { kind: 'curated', connectorId: 'notion' },
+      }],
+    }]))
+
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+
+    await expect(controller.installCuratedMcp('notion')).resolves.toMatchObject({
+      status: 'already-installed',
+      connector: { entryId: 'legacy-notion', serverName: 'notion' },
+    })
+
+    expect(live.update).toHaveBeenCalledWith('legacy-notion', {
+      inject: [...MANAGED_MCP_INJECT],
+    })
+    expect(live.create).not.toHaveBeenCalled()
+
+    const persisted = JSON.parse(readFileSync(patchPath, 'utf8')) as Array<{
+      insert: Array<{ id: string; inject?: string[] }>
+    }>
+    expect(persisted[0]?.insert[0]).toMatchObject({
+      id: 'legacy-notion',
+      inject: [...MANAGED_MCP_INJECT],
+    })
+  })
+
   it('repairs a curated Supabase MCP from the Host-pinned endpoint', async () => {
     const patchPath = tempPatch()
     const live = loader()
@@ -362,6 +418,7 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenCalledWith({
       name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
       config: {
         transport: 'streamable-http',
         serverName: 'binance-agent-os',
@@ -407,6 +464,7 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenNthCalledWith(1, {
       name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
       config: {
         transport: 'streamable-http',
         serverName: 'x-docs',
@@ -417,6 +475,7 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenNthCalledWith(2, {
       name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
       config: {
         transport: 'stdio',
         serverName: 'x-api',
@@ -465,6 +524,7 @@ describe('ManagedMcpController', () => {
     })
     expect(live.create).toHaveBeenNthCalledWith(3, {
       name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
       config: {
         transport: 'stdio',
         serverName: 'x-api-phoenix',
@@ -508,6 +568,7 @@ describe('ManagedMcpController', () => {
         {
           id: 'legacy-jev',
           name: '@phoenix-ai/dsh-mcp-client',
+          inject: [...MANAGED_MCP_INJECT],
           config: {
             transport: 'streamable-http',
             serverName: 'jev',
@@ -529,6 +590,7 @@ describe('ManagedMcpController', () => {
         {
           id: 'calendar-managed',
           name: '@phoenix-ai/dsh-mcp-client',
+          inject: [...MANAGED_MCP_INJECT],
           config: {
             transport: 'streamable-http',
             serverName: 'calendar-a1b2c3d',
