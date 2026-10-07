@@ -16,6 +16,9 @@ import { TeamMailbox } from './mailbox.ts'
 import { TeamRoster } from './roster.ts'
 import type { TeamMembership } from './roster.ts'
 import { TeamTaskBoard } from './task-board.ts'
+import { TeamDesignRuntime } from './team-design.ts'
+import { teamSocialStyle as defaultTeamSocialStyle, teamSocialStyleFromProfile } from './personas.ts'
+import type { TeamDesign, TeamDesignDocument, TeamDesignMemberId, TeamDesignPerson } from './design-types.ts'
 import { TeamId, TeamTaskId } from './types.ts'
 import type {
   Config,
@@ -49,6 +52,28 @@ export {
   teamSocialStyle,
 } from './personas.ts'
 export type { TeamPersonaGender, TeamPersonaKind, TeamSkill } from './personas.ts'
+export { teamSocialStyleFromProfile } from './personas.ts'
+export {
+  DEFAULT_TEAM_DESIGN,
+  DEFAULT_TEAM_DESIGN_DOCUMENT,
+  DEFAULT_TEAM_DESIGN_JSON,
+  TEAM_DESIGN_MEMBER_IDS,
+  TEAM_DESIGN_SETTINGS_NAMESPACE,
+  activeTeamDesign,
+  normalizeTeamDesign,
+  normalizeTeamDesignDocument,
+  parseTeamDesignDocument,
+} from './design-types.ts'
+export type {
+  TeamDesign,
+  TeamDesignAvatarId,
+  TeamDesignDocument,
+  TeamDesignGender,
+  TeamDesignMemberId,
+  TeamDesignMotion,
+  TeamDesignPerson,
+  TeamDesignSettingsEnvelope,
+} from './design-types.ts'
 
 declare module '@phoenix-ai/cordis' {
   interface Context {
@@ -101,6 +126,7 @@ export class TeamService extends TypertRemoteService {
   private readonly roster: TeamRoster
   private readonly mailbox: TeamMailbox
   private readonly tasks: TeamTaskBoard
+  private readonly design: TeamDesignRuntime
   private readonly chat: TeamChat
   private readonly pendingChat = new Set<Promise<unknown>>()
 
@@ -133,6 +159,7 @@ export class TeamService extends TypertRemoteService {
       this.config.maxMessageBytes,
     )
     this.tasks = new TeamTaskBoard(this.journal, this.config.maxTasks)
+    this.design = new TeamDesignRuntime(ctx)
     this.chat = new TeamChat(ctx, this.journal, this.config.maxMessageBytes, this.config.maxMembers, this.lifecycle.signal)
     ctx.inject(['sessionProjections'], (child) => {
       child.sessionProjections.register(teamChatReactionsDefinition)
@@ -226,6 +253,46 @@ export class TeamService extends TypertRemoteService {
    */
   listMembers(agent: Agent): TeamMemberView[] {
     return this.roster.list(this.roster.membership(agent))
+  }
+
+  /** Current durable Team Studio document (up to twelve saved teams, twenty persona slots each). */
+  teamDesignDocument(): TeamDesignDocument {
+    return this.design.get()
+  }
+
+  /** Current user-selected Team Studio team. */
+  activeTeamDesign(): TeamDesign {
+    return this.design.active()
+  }
+
+  /** Replace Team Studio state. Only the active Team lead may perform a model-authored write. */
+  async replaceTeamDesign(caller: Agent, document: TeamDesignDocument): Promise<TeamDesignDocument> {
+    const membership = this.roster.membership(caller)
+    if (membership.role !== 'lead') {
+      throw new TeamError('only the Team Lead may redesign the Team', 'TEAM_NOT_AUTHORIZED')
+    }
+    return await this.design.replace(document)
+  }
+
+  /** Resolve one stable runtime persona to the user-designed visible profile. */
+  teamDesignPerson(name: string, role: 'lead' | 'teammate'): TeamDesignPerson | undefined {
+    const team = this.design.active()
+    if (role === 'lead') return team.lead
+    const key = name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').trim().toLocaleLowerCase()
+    const alias: TeamDesignMemberId | undefined = key === 'la-forja' || key === 'forja' || key === 'forge'
+      ? 'atlas'
+      : key === 'aegis'
+        ? 'zenith'
+        : (team.members.some(member => member.id === key) ? key as TeamDesignMemberId : undefined)
+    return alias === undefined ? undefined : team.members.find(member => member.id === alias)
+  }
+
+  /** Compact system-prompt identity: customized when a stable Team Studio persona exists. */
+  teamSocialStyle(name: string, role: 'lead' | 'teammate'): string {
+    const profile = this.teamDesignPerson(name, role)
+    return profile === undefined
+      ? defaultTeamSocialStyle(name, role)
+      : teamSocialStyleFromProfile(profile, role)
   }
 
   /**
