@@ -296,6 +296,30 @@ export function apply(ctx: ClientContext): void {
       }
       return value as unknown as AssistantMailSnapshot
     },
+    checkConsoleKey: async (apiKey) => {
+      const result = await connection.rpc.call('/phoenix-mail', 'console-key-check', { apiKey })
+      if (!result.ok) throw new Error(result.error.message)
+      const value: unknown = result.value
+      if (!assistantMailRecord(value)
+        || value.valid !== true
+        || typeof value.organizationId !== 'string'
+        || typeof value.inboxCount !== 'number'
+        || (value.inboxLimit !== undefined && typeof value.inboxLimit !== 'number')
+        || typeof value.capacityAvailable !== 'boolean'
+        || typeof value.inboxRead !== 'boolean'
+        || (value.authenticationType !== undefined && typeof value.authenticationType !== 'string')) {
+        throw new Error('Invalid AgentMail API key check response')
+      }
+      return {
+        valid: true as const,
+        organizationId: value.organizationId,
+        ...(value.authenticationType === undefined ? {} : { authenticationType: value.authenticationType }),
+        inboxCount: value.inboxCount,
+        ...(value.inboxLimit === undefined ? {} : { inboxLimit: value.inboxLimit }),
+        capacityAvailable: value.capacityAvailable,
+        inboxRead: value.inboxRead,
+      }
+    },
     prepareClaim: async () => {
       const result = await connection.rpc.call('/phoenix-mail', 'claim', {})
       if (!result.ok) throw new Error(result.error.message)
