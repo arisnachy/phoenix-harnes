@@ -10,6 +10,55 @@ import { launchWebScaffold, type WebScaffold } from './scaffold.ts'
 // Exercise the shipped browser, Host RPC and authorization interaction. Only
 // the external provider is replaced; no client API response is intercepted.
 describe('connector OAuth browser handoff', () => {
+  it('serves the legacy OAuth waiting URL and forwards only a valid consent URL', async () => {
+    let scaffold: WebScaffold | undefined
+    let browser: Browser | undefined
+    try {
+      scaffold = await launchWebScaffold()
+      browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ?? '/usr/bin/chromium' })
+      const page = await browser.newPage({ locale: 'es-ES' })
+      const consent = 'https://mcp.notion.com/oauth/authorize?state=legacy-browser-probe'
+      await page.context().route(consent, async route => route.fulfill({
+        contentType: 'text/html', body: '<h1>Legacy provider consent fixture</h1>',
+      }))
+      await page.goto(scaffold.baseUrl)
+      await page.evaluate(() => {
+        const button = document.createElement('button')
+        button.id = 'launch-legacy-oauth'
+        button.textContent = 'Launch legacy OAuth'
+        button.onclick = () => {
+          (window as Window & { __legacyOAuthPopup?: Window | null }).__legacyOAuthPopup =
+            window.open('/oauth-waiting.html?v=20261007-1', '_blank')
+        }
+        document.body.appendChild(button)
+      })
+      const [popup] = await Promise.all([
+        page.waitForEvent('popup'),
+        page.locator('#launch-legacy-oauth').click(),
+      ])
+      await popup.getByRole('heading', { name: 'Conectando con tu proveedor…' }).waitFor()
+      expect(new URL(popup.url()).pathname).toBe('/oauth-waiting.html')
+
+      // A cached client must never turn this compatibility page into an
+      // untrusted open redirect or a javascript: execution primitive.
+      await page.evaluate(() => {
+        (window as Window & { __legacyOAuthPopup?: Window | null }).__legacyOAuthPopup?.postMessage(
+          { type: 'phoenix/oauth-navigate', url: 'javascript:alert(1)' }, window.location.origin)
+      })
+      await popup.getByText('El servidor no entregó una URL de autorización segura.', { exact: false }).waitFor()
+      expect(new URL(popup.url()).pathname).toBe('/oauth-waiting.html')
+      await page.evaluate((destination) => {
+        (window as Window & { __legacyOAuthPopup?: Window | null }).__legacyOAuthPopup?.postMessage(
+          { type: 'phoenix/oauth-navigate', url: destination }, window.location.origin)
+      }, consent)
+      await popup.getByRole('heading', { name: 'Legacy provider consent fixture' }).waitFor()
+      expect(popup.url()).toBe(consent)
+    } finally {
+      await browser?.close()
+      await scaffold?.close()
+    }
+  })
+
   it.each(['browser-probe', 'notion-browser-probe', 'mcp-a1b2c3d'])('hands off consent through the real Host (%s)', async (id) => {
     const temporary = await mkdtemp(join(tmpdir(), 'phoenix-oauth-browser-'))
     const overlay = join(temporary, 'isolated.patch.yml')
