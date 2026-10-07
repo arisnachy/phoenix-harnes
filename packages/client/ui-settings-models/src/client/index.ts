@@ -272,20 +272,45 @@ export function apply(ctx: ClientContext): void {
     localModel,
     localT,
   })
-  const assistantMail: AssistantMailClient = { call: async (action, input = {}) => {
-    const result = await connection.rpc.call('/phoenix-mail', action, input)
-    if (!result.ok) throw new Error(result.error.message)
-    const value: unknown = result.value
-    const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
-    const stringOrAbsent = (value: unknown): boolean => value === undefined || typeof value === 'string'
-    if (!record(value) || !record(value.account) || !Array.isArray(value.jobs) || !Array.isArray(value.account.contacts)
-      || typeof value.account.state !== 'string' || typeof value.connection !== 'string'
-      || !(value.account.contacts as unknown[]).every(contact => typeof contact === 'string')
-      || ![value.account.inboxId, value.account.ownerEmail, value.account.sessionId].every(stringOrAbsent)
-      || !(value.jobs as unknown[]).every(job => record(job) && typeof job.id === 'string' && typeof job.title === 'string' && typeof job.state === 'string' && stringOrAbsent(job.summary) && stringOrAbsent(job.error))
-      || (value.startup !== undefined && (!record(value.startup) || typeof value.startup.supported !== 'boolean' || typeof value.startup.enabled !== 'boolean'))) throw new Error('Invalid local mailbox response')
-    return value as unknown as AssistantMailSnapshot
-  } }
+  const assistantMailRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+  const assistantMail: AssistantMailClient = {
+    call: async (action, input = {}) => {
+      const result = await connection.rpc.call('/phoenix-mail', action, input)
+      if (!result.ok) throw new Error(result.error.message)
+      const value: unknown = result.value
+      const stringOrAbsent = (candidate: unknown): boolean => candidate === undefined || typeof candidate === 'string'
+      if (!assistantMailRecord(value) || !assistantMailRecord(value.account)
+        || !Array.isArray(value.jobs) || !Array.isArray(value.account.contacts)
+        || typeof value.account.state !== 'string' || typeof value.connection !== 'string'
+        || !(value.account.contacts as unknown[]).every(contact => typeof contact === 'string')
+        || ![value.account.inboxId, value.account.ownerEmail, value.account.ownerLink, value.account.sessionId].every(stringOrAbsent)
+        || (value.account.ownerLink !== undefined
+          && !['attached', 'pending', 'provider-conflict'].includes(String(value.account.ownerLink)))
+        || !(value.jobs as unknown[]).every(job => assistantMailRecord(job)
+          && typeof job.id === 'string' && typeof job.title === 'string' && typeof job.state === 'string'
+          && stringOrAbsent(job.summary) && stringOrAbsent(job.error))
+        || (value.startup !== undefined && (!assistantMailRecord(value.startup)
+          || typeof value.startup.supported !== 'boolean' || typeof value.startup.enabled !== 'boolean'))) {
+        throw new Error('Invalid local mailbox response')
+      }
+      return value as unknown as AssistantMailSnapshot
+    },
+    prepareClaim: async () => {
+      const result = await connection.rpc.call('/phoenix-mail', 'claim', {})
+      if (!result.ok) throw new Error(result.error.message)
+      const value: unknown = result.value
+      if (!assistantMailRecord(value)
+        || typeof value.apiKey !== 'string'
+        || typeof value.inboxId !== 'string'
+        || typeof value.claimUrl !== 'string'
+        || !value.apiKey.startsWith('am_us_')
+        || value.claimUrl !== 'https://console.agentmail.to/claim') {
+        throw new Error('Invalid local mailbox claim response')
+      }
+      return { apiKey: value.apiKey, inboxId: value.inboxId, claimUrl: value.claimUrl }
+    },
+  }
   const connectorsInjected = (): ConnectorsSettingsSectionProps => ({
     api: connection.api.authorization,
     assistantMail,
