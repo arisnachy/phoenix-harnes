@@ -95,7 +95,7 @@ function PersonCard({ person, selected, onClick, isLead = false }: {
       <span className={css.avatarShell}>
         <ModelActivityAvatar
           kind={person.avatar as ModelAvatarKind}
-          activity={selected ? { phase: 'verifying' } : undefined}
+          activity={selected ? { provider: 'phoenix', model: 'team-studio', phase: 'verifying' } : undefined}
           running={selected}
           pending={false}
           ready={!selected}
@@ -316,7 +316,7 @@ export function TeamDesignerSection(props: TeamDesignerSectionProps): ReactNode 
           <div className={css.preview}>
             <ModelActivityAvatar
               kind={person.avatar as ModelAvatarKind}
-              activity={{ phase: 'running-tools' }}
+              activity={{ provider: 'phoenix', model: 'team-studio', phase: 'running-tools' }}
               running
               pending={false}
             />
