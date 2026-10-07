@@ -253,12 +253,32 @@ describe('owned durable outgoing mail', () => {
 
 })
 
-it('retains a wake arriving during an active inbox check without waiting for the poll timer', async () => {
+it('retains a real AgentMail inbound wake arriving during an active inbox check without waiting for the poll timer', async () => {
   const sockets: EventTarget[] = []
+  const messageEvent = (data: unknown): Event => {
+    const event = new Event('message') as Event & { data?: unknown }
+    Object.defineProperty(event, 'data', { value: JSON.stringify(data) })
+    return event
+  }
   class Socket extends EventTarget {
-    constructor(_url: string) { super(); sockets.push(this); queueMicrotask(() => { this.dispatchEvent(new Event('open')) }) }
-    send(_data: string): void {}
+    constructor(_url: string) {
+      super()
+      sockets.push(this)
+      queueMicrotask(() => { this.dispatchEvent(new Event('open')) })
+    }
+    send(_data: string): void {
+      queueMicrotask(() => {
+        this.dispatchEvent(messageEvent({ type: 'subscribed', inbox_ids: ['kira@agentmail.to'] }))
+      })
+    }
     close(): void {}
+    receive(): void {
+      this.dispatchEvent(messageEvent({
+        type: 'message_received',
+        event_type: 'message.received',
+        message: { inbox_id: 'kira@agentmail.to' },
+      }))
+    }
   }
   let calls = 0
   let release!: () => void
@@ -271,9 +291,9 @@ it('retains a wake arriving during an active inbox check without waiting for the
   const { runtime, directory } = await fixture()
   try {
     await vi.waitFor(() => { expect(sockets).toHaveLength(1); expect(calls).toBe(1) })
-    sockets[0]!.dispatchEvent(new Event('message'))
+    ;(sockets[0] as Socket).receive()
     await vi.waitFor(() => { expect(calls).toBe(2) })
-    sockets[0]!.dispatchEvent(new Event('message'))
+    ;(sockets[0] as Socket).receive()
     release()
     await vi.waitFor(() => { expect(calls).toBe(3) })
   } finally { release?.(); await runtime.dispose(); vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }) }

@@ -117,6 +117,62 @@ export async function agentMailDeleteInbox(inboxId: string,
   if (!response.ok && response.status !== 404) throw await responseError(response, true)
 }
 
+function firstNonemptyMailText(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const normalized = value.replace(/\r\n?/gu, '\n').trim()
+    if (normalized.length > 0) return normalized.slice(0, 64_000)
+  }
+  return undefined
+}
+
+/**
+ * Reduce provider HTML to bounded task text when an email has no text/plain part.
+ * AgentMail documents HTML-only mail as normal for forwarded Gmail/Outlook messages.
+ */
+function htmlMailText(value: unknown): string | undefined {
+  if (typeof value !== 'string' || value.trim().length === 0) return undefined
+  const withoutActiveContent = value
+    .replace(/<(script|style)[^>]*>[\s\S]*?<\/\1\s*>/giu, ' ')
+    .replace(/<(br|hr)\s*\/?>/giu, '\n')
+    .replace(/<\/(p|div|li|tr|h[1-6])\s*>/giu, '\n')
+    .replace(/<[^>]+>/gu, ' ')
+    .replace(/&nbsp;/giu, ' ')
+    .replace(/&amp;/giu, '&')
+    .replace(/&lt;/giu, '<')
+    .replace(/&gt;/giu, '>')
+    .replace(/&quot;/giu, '"')
+    .replace(/&#39;/giu, "'")
+    .replace(/[ \t]+/gu, ' ')
+    .replace(/\n[ \t]+/gu, '\n')
+    .replace(/[ \t]+\n/gu, '\n')
+    .replace(/\n{3,}/gu, '\n\n')
+    .trim()
+  return withoutActiveContent.length === 0 ? undefined : withoutActiveContent.slice(0, 64_000)
+}
+
+function inboundEventForInbox(event: Event, inboxId: string): 'subscribed' | 'message.received' | 'error' | undefined {
+  const raw = (event as Event & { data?: unknown }).data
+  if (typeof raw !== 'string') return undefined
+  let payload: Record<string, unknown>
+  try { payload = mailRecord(JSON.parse(raw) as unknown) } catch { return undefined }
+  if (payload.type === 'error') return 'error'
+  if (payload.type === 'subscribed') {
+    const ids = payload.inbox_ids ?? payload.inboxIds
+    return Array.isArray(ids) && ids.includes(inboxId) ? 'subscribed' : undefined
+  }
+  const eventType = payload.event_type ?? payload.eventType
+  const isInbound = payload.type === 'message_received'
+    || eventType === 'message.received'
+  if (!isInbound) return undefined
+  const message = payload.message
+  if (message === undefined) return undefined
+  let record: Record<string, unknown>
+  try { record = mailRecord(message) } catch { return undefined }
+  const eventInbox = record.inbox_id ?? record.inboxId
+  return eventInbox === inboxId ? 'message.received' : undefined
+}
+
 /** AgentMail implementation with outgoing WebSocket notifications and authenticated-only reconciliation. */
 export class AgentMailTransport implements AssistantMailTransport {
   private authenticatedIds = new Set<MailMessageId>()
@@ -160,7 +216,10 @@ export class AgentMailTransport implements AssistantMailTransport {
     return {
       inboxId: this.inboxId, messageId: id, threadId: MailThreadId(mailString(data.thread_id)), from,
       subject: typeof data.subject === 'string' ? data.subject.slice(0, 1024) : '(sin asunto)',
-      text: mailString(data.extracted_text ?? data.text ?? '(mensaje sin texto)', 64_000),
+      text: firstNonemptyMailText(data.extracted_text, data.text)
+        ?? htmlMailText(data.extracted_html)
+        ?? htmlMailText(data.html)
+        ?? '(mensaje sin texto)',
       authenticated: this.authenticatedIds.has(id) && labels.includes('received') && !labels.some(label => ['unauthenticated', 'spam', 'blocked', 'sent'].includes(String(label))),
       automatic: labels.includes('sent') || from === this.inboxId.toLowerCase() || (autoSubmitted !== undefined && autoSubmitted !== 'no') || /^(mailer-daemon|postmaster)@/u.test(from),
     }
@@ -194,6 +253,8 @@ export class AgentMailTransport implements AssistantMailTransport {
     return { messageId: MailMessageId(mailString(data.message_id)), threadId: MailThreadId(mailString(data.thread_id)) }
   }
   /** Outgoing-only wake channel. Polling remains the recovery authority.
+   * The promise resolves only after AgentMail confirms the inbox subscription,
+   * so callers never report "connected" for a socket that never became a wake channel.
    * @param onMessage Reconciliation callback.
    * @param onDisconnected Closed/error channel notification.
    * @returns Socket disposer.
@@ -201,17 +262,75 @@ export class AgentMailTransport implements AssistantMailTransport {
   async subscribe(onMessage: () => void, onDisconnected?: () => void): Promise<() => void> {
     const key = await this.key()
     if (key === undefined) throw new Error('mail credential is unavailable')
+    if (this.signal?.aborted === true) throw new Error('mail wake subscription cancelled')
     const socket = new WebSocket(`wss://ws.agentmail.to/v0?api_key=${encodeURIComponent(key)}`)
-    socket.addEventListener('open', () => { socket.send(JSON.stringify({ type: 'subscribe', inbox_ids: [this.inboxId], event_types: ['message.received'] })) })
-    socket.addEventListener('message', () => { onMessage() })
-    let closed = false
+    const ready = Promise.withResolvers<void>()
+    let settled = false
+    let subscribed = false
+    let disposed = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    function aborted(): void {
+      disposed = true
+      settleReady(new Error('mail wake subscription cancelled'))
+      try { socket.close() } catch { /* The socket may already be closing. */ }
+    }
+    function settleReady(error?: Error): void {
+      if (settled) return
+      settled = true
+      if (timer !== undefined) clearTimeout(timer)
+      this.signal?.removeEventListener('abort', aborted)
+      if (error === undefined) ready.resolve()
+      else ready.reject(error)
+    }
     const disconnected = (): void => {
-      if (closed) return
-      closed = true
+      if (disposed) return
+      if (!subscribed) {
+        settleReady(new Error('mail wake channel disconnected before subscription confirmation'))
+        return
+      }
+      subscribed = false
       try { onDisconnected?.() } catch { /* Callback failure cannot escape the provider event loop. */ }
     }
+    timer = setTimeout(() => {
+      settleReady(new Error('mail wake subscription timed out'))
+      try { socket.close() } catch { /* The socket may already be closing. */ }
+    }, this.timeoutMs)
+    this.signal?.addEventListener('abort', aborted, { once: true })
+    socket.addEventListener('open', () => {
+      if (disposed) return
+      try {
+        socket.send(JSON.stringify({
+          type: 'subscribe',
+          inbox_ids: [this.inboxId],
+          event_types: ['message.received'],
+        }))
+      } catch {
+        settleReady(new Error('mail wake subscription could not be sent'))
+      }
+    })
+    socket.addEventListener('message', (event) => {
+      const kind = inboundEventForInbox(event, this.inboxId)
+      if (kind === 'subscribed') {
+        subscribed = true
+        settleReady()
+        return
+      }
+      if (kind === 'error') {
+        settleReady(new Error('AgentMail rejected the wake subscription'))
+        return
+      }
+      if (kind !== 'message.received' || disposed) return
+      try { onMessage() } catch { /* Reconciliation callback failure cannot escape provider delivery. */ }
+    })
     socket.addEventListener('close', disconnected)
     socket.addEventListener('error', disconnected)
-    return () => { closed = true; socket.close() }
+    await ready.promise
+    return () => {
+      if (disposed) return
+      disposed = true
+      subscribed = false
+      this.signal?.removeEventListener('abort', aborted)
+      try { socket.close() } catch { /* Disposal is idempotent. */ }
+    }
   }
 }
