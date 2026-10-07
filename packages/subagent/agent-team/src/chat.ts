@@ -214,10 +214,18 @@ export class TeamChat {
         const text = textOf(event.data.message.content)
         if (known.has(id) || text.trim() === '') continue
         const proof = teamExecutionProof(events, { upToSeq: event.seq })
-        // An operational teammate response is not user-visible until the
+        // An operational result is not user-visible until the
         // durable child log contains a successful non-Team tool receipt. This
         // prevents prose such as "sent" or "updated" from masquerading as work.
-        if (proof.requirement !== 'none' && !proof.satisfied) continue
+        // A narrowly recognized first-action update is participation, not a result.
+        const workStart = [
+          /^(?:Kira[, :]\s*)?(?:empiezo por|voy a|comienzo por)\b/iu,
+          /^(?:Kira[, :]\s*)?I(?:['’]ll| will) start by\b/iu,
+          /^(?:Kira[, :]\s*)?I(?:['’]m| am) starting with\b/iu,
+        ].some(pattern => pattern.test(text.trim()))
+          && !answerNeedsEvidence(text)
+          && !/\b(?:ya|listo|hecho|terminado|completado|done|finished|completed|already)\b/iu.test(text)
+        if (proof.requirement !== 'none' && !proof.satisfied && !workStart) continue
         const visibleText = proof.requirement === 'none' || proof.tools.length === 0
           ? text
           : `${text}\n\n✓ Evidencia ejecutada: ${proof.tools.join(', ')}`

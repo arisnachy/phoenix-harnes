@@ -1826,6 +1826,26 @@ describe('Team mailbox and waiting', () => {
 
 
 describe('visible team conversation', () => {
+  it('publishes a real worker start before receipts but still hides unsupported completion', async () => {
+    const { ctx, lead } = await setup([], {}, true)
+    const child = ctx.sessions.create(SessionId('starting-worker'), {
+      meta: { parentSession: lead.id, origin: 'subagent' },
+    })
+    child.append('user/message', createUserMessage({
+      source: { kind: 'user' }, content: content('Revisa el archivo y verifica el resultado.'),
+    }), { surfaceOp: 'append' })
+    for (const message of ['Kira, empiezo por revisar el archivo y sus pruebas.', 'Kira, empiezo por el informe. El archivo ya fue actualizado.']) {
+      child.append('assistant/message', {
+        turn: 1, step: 1, message: createAssistantMessage({
+          source: { provider: 'mock', model: 'mock' }, content: content(message),
+        }),
+      }, { surfaceOp: 'append' })
+    }
+    const rows = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
+    expect(rows.map(row => row.text)).toEqual(['Kira, empiezo por revisar el archivo y sus pruebas.'])
+    expect(rows[0]?.senderId).toBe(child.id)
+  })
+
   it('hides theatrical operational claims until a real tool receipt exists', async () => {
     const { ctx, lead } = await setup([], {}, true)
     const child = ctx.sessions.create(SessionId('receipt-child'), {
