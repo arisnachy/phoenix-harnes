@@ -863,3 +863,62 @@ it('refuses an API key that is not attached to a human Console organization', as
     expect((await account.status()).state).toBe('not-configured')
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
+
+
+it('reconciles an ambiguous Console-key inbox create without minting a duplicate', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-ambiguous-'))
+  try {
+    const path = join(directory, 'account.json')
+    await writeFile(path, JSON.stringify({
+      state: 'pending-verification',
+      inboxId: 'old-signup@agentmail.to',
+      ownerEmail: 'owner@example.com',
+      ownerLink: 'provider-conflict',
+      contacts: [],
+    }))
+    let saved = ''
+    let createdUsername = ''
+    let createdClientId = ''
+    let creates = 0
+    const account = new MailOnboarding({
+      path,
+      timeoutMs: 1000,
+      saveKey: async (value) => { saved = value },
+      resolveKey: async () => saved || undefined,
+      fetch: async (url, init) => {
+        const address = requestAddress(url)
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_human',
+            authentication_id: 'user_human',
+            authentication_type: 'clerk',
+          })
+        }
+        if (address === 'https://api.agentmail.to/v0/inboxes') {
+          creates++
+          const body = requestBody(init) as Record<string, unknown>
+          createdUsername = String(body.username)
+          createdClientId = String(body.client_id)
+          throw new Error('confirmation lost')
+        }
+        expect(address).toBe(`https://api.agentmail.to/v0/inboxes/${createdUsername}%40agentmail.to`)
+        return Response.json({
+          inbox_id: `${createdUsername}@agentmail.to`,
+          email: `${createdUsername}@agentmail.to`,
+          client_id: createdClientId,
+        })
+      },
+    })
+
+    await expect(account.adoptConsoleKey('am_us_console_key')).rejects.toThrow('confirmation is ambiguous')
+    expect(saved).toBe('am_us_console_key')
+    expect(creates).toBe(1)
+
+    await expect(account.adoptConsoleKey('am_us_console_key')).resolves.toMatchObject({
+      state: 'ready',
+      inboxId: `${createdUsername}@agentmail.to`,
+      ownerLink: 'attached',
+    })
+    expect(creates).toBe(1)
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
