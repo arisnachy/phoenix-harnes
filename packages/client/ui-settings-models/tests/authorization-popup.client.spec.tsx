@@ -23,17 +23,22 @@ function ok<T>(value: T): RpcResponse<T> {
 interface ReservedWindow {
   closed: boolean
   close: ReturnType<typeof vi.fn>
+  postMessage: ReturnType<typeof vi.fn>
   location: { replace: ReturnType<typeof vi.fn> }
 }
 
 function reservedWindow(): ReservedWindow {
-  return { closed: false, close: vi.fn(), location: { replace: vi.fn() } }
+  return { closed: false, close: vi.fn(), postMessage: vi.fn(), location: { replace: vi.fn() } }
 }
 
 const KEY = 'mcp-client/notion-notion'
 const LABEL = 'MCP notion-notion'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
-const WAITING_URL = new URL('/oauth-waiting.html', window.location.href).href
+const WAITING_URL = (() => {
+  const url = new URL('/oauth-waiting.html', window.location.href)
+  url.searchParams.set('v', '20261006-2')
+  return url.href
+})()
 
 function panelApi(statusResult: () => Promise<RpcResponse<unknown>>) {
   return {
@@ -130,7 +135,7 @@ describe('authorization consent window', () => {
     open.mockRestore()
   })
 
-  it('closes the reserved Phoenix waiting page when authorization cannot even start', async () => {
+  it('keeps the reserved Phoenix page visible and reports a start failure there', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     const api = panelApi(pendingForever)
@@ -139,7 +144,13 @@ describe('authorization consent window', () => {
     renderPanel(api)
     await clickAuthorize()
 
-    await waitFor(() => { expect(reserved.close).toHaveBeenCalledTimes(1) })
+    await waitFor(() => {
+      expect(reserved.postMessage).toHaveBeenCalledWith(
+        { type: 'phoenix/oauth-status', message: 'Error: connector unavailable', state: 'error' },
+        window.location.origin,
+      )
+    })
+    expect(reserved.close).not.toHaveBeenCalled()
     expect(screen.getByText('Error: connector unavailable')).toBeTruthy()
     open.mockRestore()
   })
@@ -258,10 +269,9 @@ describe('authorization popup isolation and pre-consent prompts', () => {
     } finally { open.mockRestore() }
   })
 
-  it('closes an unused reservation to show a prerequisite prompt, then retains a manual consent link', async () => {
+  it('keeps the reservation alive through a prerequisite prompt and later reuses it for consent', async () => {
     const reserved = reservedWindow()
-    reserved.close.mockImplementation(() => { reserved.closed = true })
-    const open = vi.spyOn(window, 'open').mockReturnValueOnce(reserved as unknown as Window).mockReturnValue(null)
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     let answered = false
     const api = panelApi(async () => answered ? ok({ attemptId: 'attempt-1', status: 'pending', nextSeq: 2,
       notices: [{ notice: { message: 'Approve in the tab', url: CONSENT_URL } }, { notice: { message: 'Waiting for consent' } }] }) : ok({
@@ -271,13 +281,24 @@ describe('authorization popup isolation and pre-consent prompts', () => {
     try {
       renderPanel(api)
       await clickAuthorize()
-      await waitFor(() => { expect(reserved.close).toHaveBeenCalledOnce() }, { timeout: 3000 })
+      await waitFor(() => {
+        expect(reserved.postMessage).toHaveBeenCalledWith(
+          {
+            type: 'phoenix/oauth-status',
+            message: 'Completa el dato solicitado en PHOENIX. Esta pestaña continuará automáticamente.',
+            state: 'waiting',
+          },
+          window.location.origin,
+        )
+      }, { timeout: 3000 })
+      expect(reserved.close).not.toHaveBeenCalled()
       const accountCard = document.querySelector(`[data-authorization-key="${KEY}"]`)
       expect(accountCard?.textContent).toContain('Google Desktop OAuth client ID')
       expect(screen.getByText('Google Desktop OAuth client ID')).toBeTruthy()
       answered = true
       await waitFor(() => { expect(screen.getByRole('link', { name: /open/i }).getAttribute('href')).toBe(CONSENT_URL) }, { timeout: 3000 })
-      expect(open).toHaveBeenLastCalledWith(CONSENT_URL, '_blank')
+      await waitFor(() => { expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL) }, { timeout: 3000 })
+      expect(open).toHaveBeenCalledTimes(1)
     } finally { open.mockRestore() }
   })
 })
