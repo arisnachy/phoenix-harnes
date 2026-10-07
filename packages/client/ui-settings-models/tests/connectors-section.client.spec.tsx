@@ -1328,6 +1328,53 @@ describe('connectors settings section', () => {
     }
   })
 
+  it('does not claim a ready registry connector is callable when no tools were registered', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        runtime: [{
+          serverName: 'empty-tools-fixture',
+          transport: 'streamable-http' as const,
+          status: 'ready' as const,
+          toolNames: [],
+        }],
+        managed: [{
+          entryId: 'empty-tools-entry',
+          serverName: 'empty-tools-fixture',
+          url: 'https://mcp.example.com/empty-tools-fixture',
+          source: { kind: 'registry' as const, name: 'io.example/empty-tools-fixture', version: '1.0.0' },
+        }],
+      })),
+      install: vi.fn(),
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'empty-tools-fixture',
+        fetchedAt: '2026-10-07T12:00:00.000Z',
+        stale: false,
+        candidates: [{
+          name: 'io.example/empty-tools-fixture',
+          title: 'Empty Tools MCP',
+          description: 'No tools registered.',
+          version: '1.0.0',
+          status: 'active' as const,
+          trust: 'registry-listed' as const,
+          icons: [],
+          transports: ['streamable-http' as const],
+          packages: [],
+          remoteUrl: 'https://mcp.example.com/empty-tools-fixture',
+        }],
+      })),
+    }
+    renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'empty-tools-fixture' } })
+    const card = (await screen.findByText('Empty Tools MCP')).closest('article')
+    expect(card?.textContent).toContain('Connected · no tools exposed')
+    expect(card?.textContent).not.toContain('Connected · callable')
+  })
+
   it('marks a persisted registry connector with no runtime as broken and removable', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
