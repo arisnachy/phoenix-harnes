@@ -12,7 +12,7 @@ Kira mailbox creation could still fail at the first `phoenix_mail_identity actio
 
 Keep owner-bound sign-up as the preferred recoverable path. When that unauthenticated sign-up is *confirmed* rejected with HTTP 403 (except an explicit provider quota limit), Phoenix falls back to AgentMail's documented two-step onboarding: create a receive-only inbox with `POST /v0/agent/sign-up` using only the username, immediately persist the one-time API key and inbox identity, then attach the stored human owner through authenticated `POST /v0/agent/human` so AgentMail sends the six-digit OTP.
 
-The fallback persists the key before human attachment because email-less AgentMail keys cannot be recovered. If the attachment step fails, Phoenix retains the receive-only inbox and credential instead of losing them. A later explicit `ensure` on a pending mailbox resumes owner attachment through the existing recovery path. Bare unauthenticated gateway 403 is classified separately from a stale stored credential so diagnostics do not claim that a nonexistent key was rejected.
+The fallback persists the key before human attachment because email-less AgentMail keys cannot be recovered. If the attachment step fails, Phoenix retains and returns the receive-only inbox instead of turning a successful mailbox creation into a failed `ensure`; a later explicit `ensure` on the pending mailbox resumes owner attachment through the existing recovery path. Bare unauthenticated gateway 403 is classified separately from a stale stored credential so diagnostics do not claim that a nonexistent key was rejected.
 
 ## Alternatives considered
 
