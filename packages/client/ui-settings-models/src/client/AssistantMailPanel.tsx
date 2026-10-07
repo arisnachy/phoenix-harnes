@@ -156,7 +156,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const claimMailbox = (): void => {
     // Open the provider page during the user gesture so popup blockers do not eat it while
     // the loopback Host resolves the credential. The secret itself never enters React state.
-    const claimWindow = globalThis.open?.('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer')
+    globalThis.open?.('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer')
     setBusy(true)
     setFailure(undefined)
     setClaimNotice(undefined)
@@ -167,9 +167,6 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         const clipboard = globalThis.navigator.clipboard
         if (clipboard?.writeText === undefined) throw new Error('El navegador no permite copiar la clave de AgentMail al portapapeles.')
         await clipboard.writeText(claim.apiKey)
-        if (claimWindow !== undefined && claimWindow !== null && claimWindow.location.href !== claim.claimUrl) {
-          claimWindow.location.href = claim.claimUrl
-        }
         setClaimNotice(`Clave de ${claim.inboxId} copiada. Pégala en “Agent API key” y pulsa Continue.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo preparar la reclamación del buzón.'
