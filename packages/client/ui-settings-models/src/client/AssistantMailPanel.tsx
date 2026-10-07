@@ -9,6 +9,7 @@ export interface AssistantMailSnapshot {
     readonly state: string
     readonly inboxId?: string
     readonly ownerEmail?: string
+    readonly ownerLink?: 'attached' | 'pending' | 'provider-conflict'
     readonly contacts: readonly string[]
     readonly sessionId?: string
   }
@@ -87,7 +88,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       if (value.account.ownerEmail !== undefined) setOwner(value.account.ownerEmail)
       setCode('')
     } catch (error) {
-      setFailure(error instanceof Error ? error.message : 'No se pudo completar la operación de correo.')
+      const message = error instanceof Error ? error.message : 'No se pudo completar la operación de correo.'
+      setFailure(message === 'mail provider request failed (403)'
+        ? 'AgentMail rechazó la vinculación del propietario. Phoenix conservará el buzón y evitará repetir el alta.'
+        : message)
     } finally {
       setBusy(false)
     }
@@ -101,6 +105,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const persistedOwner = snapshot?.account.ownerEmail?.trim().toLowerCase()
   const requestedOwner = owner.trim()
   const ownerChanged = requestedOwner.length > 0 && requestedOwner.toLowerCase() !== persistedOwner
+  const ownerLinkConflict = pendingVerification && snapshot?.account.ownerLink === 'provider-conflict'
   const connection = snapshot?.connection ?? 'disconnected'
   const recoveryRequired = ready && (connection === 'verification-required' || connection === 'recovery-required')
   const providerWarning = recoveryRequired || (ready && ['quota-reached', 'message-rejected'].includes(connection))
@@ -118,7 +123,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
               : connection === 'message-rejected'
                 ? 'Último envío rechazado'
                 : 'Correo verificado · Sin conexión'
-    : pendingVerification ? 'Verifica una vez'
+    : pendingVerification ? ownerLinkConflict ? 'Vincula propietario' : 'Verifica una vez'
       : ambiguous ? 'Necesita recuperación'
         : 'Aún sin correo'
   const statusClass = ready && !providerWarning
@@ -244,7 +249,26 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       </div>
     </div> : null}
 
-    {pendingVerification ? <div className={styles.setup}>
+    {ownerLinkConflict ? <div className={styles.setup}>
+      <p className={styles.note}>
+        El buzón ya fue creado y Phoenix conservó su clave, pero AgentMail rechazó asociar este correo
+        como propietario. Esto ocurre, entre otros casos, cuando ese correo ya pertenece a una cuenta
+        de AgentMail. No introduzcas un código: AgentMail todavía no lo ha enviado.
+      </p>
+      <button type="button" className={styles.button} disabled={busy}
+        onClick={() => { void operate('recover') }}>
+        Reintentar vinculación
+      </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={() => { globalThis.open?.('https://console.agentmail.to/claim', '_blank', 'noopener,noreferrer') }}>
+        Abrir AgentMail para resolver el vínculo
+      </button>
+      <p className={styles.help}>
+        Phoenix no creará buzones adicionales mientras este vínculo siga pendiente.
+      </p>
+    </div> : null}
+
+    {pendingVerification && !ownerLinkConflict ? <div className={styles.setup}>
       <p className={styles.note}>
         El buzón ya existe. Revisa el correo propietario antes de introducir el código.
         Si estaba mal escrito, corrígelo aquí y Phoenix pedirá un código nuevo sin clave API.
