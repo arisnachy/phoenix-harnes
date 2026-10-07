@@ -32,6 +32,7 @@ describe('Team Studio design document', () => {
         personality: 'Firme, estratégica y cálida.',
         voice: 'Profunda y serena.',
         avatar: 'vega',
+        enabled: false,
       },
       members: DEFAULT_TEAM_DESIGN.members.map((member, index) => ({
         ...member,
@@ -52,6 +53,7 @@ describe('Team Studio design document', () => {
       displayName: 'Athena',
       role: 'Directora',
       avatar: 'vega',
+      enabled: true,
     })
     expect(normalized.members).toHaveLength(20)
     expect(normalized.members.map(member => member.id)).toEqual(TEAM_DESIGN_MEMBER_IDS)
