@@ -4,13 +4,13 @@ import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
 import {
+  normalizeTeamDesign,
   selectTeamPersonaName,
   TeamError,
   TeamMessageId,
   TeamTaskId,
   teamExecutionProof,
   teamExecutionRequirement,
-  teamSocialStyle,
 } from '@phoenix-ai/dsh-agent-team'
 import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
 import { foldRequestHeader } from '@phoenix-ai/dsh-session'
@@ -176,6 +176,17 @@ const WAIT_VALUE_SCHEMA = {
   },
 } as const
 
+const DESIGN_TEAM_VALUE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    teamId: { type: 'string', required: true },
+    teamName: { type: 'string', required: true },
+    leadName: { type: 'string', required: true },
+    members: { type: 'integer', required: true },
+  },
+} as const
+
 const INTERRUPT_VALUE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -311,10 +322,48 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       order: 60,
       text: () => {
         const membership = ctx.agentTeams.membership(agent)
-        const socialStyle = teamSocialStyle(membership.name, membership.role)
+        const socialStyle = ctx.agentTeams.teamSocialStyle(membership.name, membership.role)
         return `${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}`
       },
     }))
+
+    register(scoped.tools.register(defineTool({
+      name: 'design_team',
+      description: 'Apply a complete user-requested visual/social redesign to the active Phoenix Team while preserving its stable runtime ids. Use this when the user asks to rename Kira/the Team, change personas, sex/gender, roles, voices, avatar assignments, motion style, or generate a themed 20-person roster. The JSON may be creative or franchise-inspired, but prefer an original interpretation rather than copying protected characters verbatim. Lead only.',
+      parameters: {
+        design_json: {
+          type: 'string',
+          required: true,
+          description: 'JSON object for the active Team with fields id, name, themePrompt, motion (subtle|normal|expressive), lead, and members. lead/member fields: displayName, role, gender (female|male|neutral), personality, voice, avatar, enabled. members should cover the 20 stable ids: vortice, aurora, atlas, nova, lumen, helix, prisma, orion, vega, eclipse, argo, solaria, nexo, astra, lyra, zenith, cobalto, quasar, senda, orbita. Missing/invalid fields inherit the current design.',
+        },
+      },
+      output: jsonOutput(DESIGN_TEAM_VALUE_SCHEMA),
+      async execute(args, exec) {
+        const caller = callingAgent(exec.agent, 'design_team')
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(args.design_json)
+        } catch {
+          throw new Error('design_json must be valid JSON')
+        }
+        const current = ctx.agentTeams.activeTeamDesign()
+        const nextTeam = normalizeTeamDesign(parsed, current)
+        const document = ctx.agentTeams.teamDesignDocument()
+        const teams = document.teams.map(team => team.id === document.activeTeamId ? nextTeam : team)
+        const saved = await ctx.agentTeams.replaceTeamDesign(caller, {
+          ...document,
+          activeTeamId: nextTeam.id,
+          teams,
+        })
+        const active = saved.teams.find(team => team.id === saved.activeTeamId) ?? nextTeam
+        return {
+          teamId: active.id,
+          teamName: active.name,
+          leadName: active.lead.displayName,
+          members: active.members.length,
+        }
+      },
+    })))
 
     register(scoped.tools.register(defineTool({
       name: 'spawn_teammate',
