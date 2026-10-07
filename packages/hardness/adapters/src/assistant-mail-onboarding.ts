@@ -238,7 +238,7 @@ export class MailOnboarding {
     let inboxRead = true
     let reusableInboxId: string | undefined
     try {
-      const listing = mailRecord(await agentMailRequest('/inboxes?limit=100', key,
+      const listing = mailRecord(await agentMailRequest('/inboxes', key,
         this.options.timeoutMs, this.options.fetch ?? fetch))
       if (!Array.isArray(listing.inboxes)) throw new Error('AgentMail returned an invalid inbox listing')
       for (const value of listing.inboxes) {
@@ -414,7 +414,7 @@ export class MailOnboarding {
     key: string,
     preferredInboxId?: string,
   ): Promise<Record<string, unknown> | undefined> {
-    const listing = mailRecord(await agentMailRequest('/inboxes?limit=100', key,
+    const listing = mailRecord(await agentMailRequest('/inboxes', key,
       this.options.timeoutMs, this.options.fetch ?? fetch))
     if (!Array.isArray(listing.inboxes)) throw new Error('AgentMail returned an invalid inbox listing')
     const rows = listing.inboxes.map(value => mailRecord(value))
