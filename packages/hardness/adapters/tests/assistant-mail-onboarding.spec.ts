@@ -1084,21 +1084,35 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
-it('refuses an API key that is not attached to a human Console organization', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-agent-org-'))
+it('does not require optional organization authentication metadata during a key check', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-optional-auth-'))
   try {
     let saved = ''
     const account = new MailOnboarding({
       path: join(directory, 'account.json'),
       timeoutMs: 1000,
       saveKey: async (value) => { saved = value },
-      fetch: async () => Response.json({
-        organization_id: 'org_agent_only',
-        inbox_count: 1,
-      }),
+      fetch: async (url) => {
+        const address = requestAddress(url)
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_console',
+            inbox_count: 1,
+            inbox_limit: 3,
+          })
+        }
+        expect(address).toBe('https://api.agentmail.to/v0/inboxes?limit=1')
+        return Response.json({ count: 1, inboxes: [], limit: 1 })
+      },
     })
 
-    await expect(account.adoptConsoleKey('am_us_agent_only')).rejects.toThrow('human-owned AgentMail Console')
+    await expect(account.inspectConsoleKey('am_us_console_optional_auth')).resolves.toMatchObject({
+      valid: true,
+      organizationId: 'org_console',
+      inboxCount: 1,
+      inboxLimit: 3,
+      inboxRead: true,
+    })
     expect(saved).toBe('')
     expect((await account.status()).state).toBe('not-configured')
   } finally { await rm(directory, { recursive: true, force: true }) }
