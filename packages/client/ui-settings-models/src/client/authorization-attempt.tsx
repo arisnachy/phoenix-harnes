@@ -137,7 +137,11 @@ export function useAuthorizationAttempt(
     }
   }, [closeReservedPopup])
 
-  useEffect(() => () => { closeReservedPopup() }, [closeReservedPopup])
+  useEffect(() => () => {
+    // Unmounting Settings must not close an already-open provider consent page.
+    // Only discard the blank reservation when the user has not navigated yet.
+    if (!navigatedRef.current) closeReservedPopup()
+  }, [closeReservedPopup])
 
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending') return
@@ -314,8 +318,8 @@ export function AuthorizationAttemptProgress(props: {
   return (
     <>
       {attempt.message === undefined ? null : <p role="status">{attempt.message}</p>}
-      {attempt.url === undefined ? null : (
-        <p><a href={attempt.url} target="_blank" rel="noreferrer">{props.t('openAuthorizationPage')}</a></p>
+      {attempt.url === undefined || safeOAuthConsentUrl(attempt.url) === undefined ? null : (
+        <p><a href={safeOAuthConsentUrl(attempt.url)} target="_blank" rel="noreferrer">{props.t('openAuthorizationPage')}</a></p>
       )}
       {attempt.code === undefined ? null : <p>{`${props.t('authorizationCode')}: ${attempt.code}`}</p>}
       {attempt.prompt === undefined ? null : (
