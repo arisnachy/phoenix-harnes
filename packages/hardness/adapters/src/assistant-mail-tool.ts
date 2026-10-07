@@ -173,7 +173,7 @@ export function createAssistantMailIdentityTool(
 export function createAssistantMailSendTool(resolve: () => AssistantMailControl | undefined): ToolDefinition {
   return defineTool({
     name: 'phoenix_mail_send',
-    description: 'Send an explicitly requested email or test message from Kira’s own AgentMail mailbox to its verified owner or a contact explicitly authorized in Kira Settings. '
+    description: 'Send an explicitly requested email from Kira AgentMail to its verified owner or an authorized contact. '
       + 'Use this tool, not Gmail or a separate MCP, when the user asks Kira to email them. '
       + 'This uses the mailbox credential already stored by Phoenix, not Gmail or a separately connected sending service. '
       + 'Only a confirmed provider receipt means sent. Pending confirmation means wait for recovery, not create another send. '
@@ -181,7 +181,10 @@ export function createAssistantMailSendTool(resolve: () => AssistantMailControl 
     parameters: {
       subject: { type: 'string', required: true, description: 'Email subject, at most 1024 characters.' },
       text: { type: 'string', required: true, description: 'Exact requested email body, at most 64000 characters.' },
-      to: { type: 'string', description: 'Optional recipient address. Omit for the verified owner; a different recipient must already be authorized in Kira Settings.' },
+      to: {
+        type: 'string',
+        description: 'Optional recipient. Omit for owner; other recipients must be authorized in Kira Settings.',
+      },
     },
     output: { schema: { type: 'object', additionalProperties: true },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }] },
