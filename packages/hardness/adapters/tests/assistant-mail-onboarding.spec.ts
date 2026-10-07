@@ -1039,7 +1039,7 @@ it('creates the first Kira inbox from a corroborated Console key and explicit Ph
             inbox_limit: 3,
           })
         }
-        if (address === 'https://api.agentmail.to/v0/inboxes') {
+        if (address === 'https://api.agentmail.to/v0/inboxes' && init?.method !== 'POST') {
           return Response.json({ count: 0, inboxes: [], limit: 100 })
         }
         if (address === 'https://api.agentmail.to/v0/inboxes') {
@@ -1048,7 +1048,7 @@ it('creates the first Kira inbox from a corroborated Console key and explicit Ph
           return Response.json({
             inbox_id: createdInbox,
             email: createdInbox,
-                      })
+          })
         }
         if (createdInbox.length > 0
           && address === `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(createdInbox)}`) {
@@ -1107,7 +1107,7 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
             inbox_limit: 3,
           })
         }
-        if (address === 'https://api.agentmail.to/v0/inboxes') {
+        if (address === 'https://api.agentmail.to/v0/inboxes' && init?.method !== 'POST') {
           expect(auth).toBe('Bearer am_us_console_key')
           return Response.json({ count: 0, inboxes: [], limit: 100 })
         }
@@ -1130,7 +1130,7 @@ it('adopts a human Console API key by creating a fresh inbox in that organizatio
         return Response.json({
           inbox_id: createdInbox,
           email: createdInbox,
-                  })
+        })
       },
     })
 
@@ -1215,7 +1215,7 @@ it('reconciles an ambiguous Console-key inbox create without minting a duplicate
             authentication_type: 'clerk',
           })
         }
-        if (address === 'https://api.agentmail.to/v0/inboxes') {
+        if (address === 'https://api.agentmail.to/v0/inboxes' && init?.method !== 'POST') {
           return Response.json({ count: 0, inboxes: [], limit: 100 })
         }
         if (address === 'https://api.agentmail.to/v0/inboxes') {
@@ -1230,7 +1230,7 @@ it('reconciles an ambiguous Console-key inbox create without minting a duplicate
         return Response.json({
           inbox_id: `${createdUsername}@agentmail.to`,
           email: `${createdUsername}@agentmail.to`,
-                  })
+        })
       },
     })
 
