@@ -63,6 +63,18 @@ const UPDATE_STORAGE_RETENTION_MS = Math.max(
     ? configuredUpdateStorageRetentionMs
     : DEFAULT_UPDATE_STORAGE_RETENTION_MS,
 )
+// Runtimes are full dependency/build copies and can exceed a gigabyte each.
+// Time-based retention allowed a burst of stable updates to fill ~/p before
+// the grace period elapsed. Keep only one inactive runtime as rollback cushion;
+// active runtimes, the currently executing runtime, and owning-checkout leases
+// are protected separately below.
+const configuredInactiveRuntimeBackups = Number.parseInt(
+  process.env.PHOENIX_UPDATE_RUNTIME_BACKUPS ?? '',
+  10,
+)
+const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBackups)
+  ? Math.max(0, Math.min(2, configuredInactiveRuntimeBackups))
+  : 1
 const STAGE_STORAGE_RETENTION_MS = Math.max(
   60 * 60 * 1000,
   Math.min(UPDATE_STORAGE_RETENTION_MS, 6 * 60 * 60 * 1000),
@@ -430,12 +442,19 @@ function stageProtectedByOwningCheckout(path) {
   }
 }
 
-function managedDirectoryAgeMs(path) {
+function managedDirectoryMtimeMs(path) {
   try {
-    return Math.max(0, Date.now() - statSync(path).mtimeMs)
+    return statSync(path).mtimeMs
   } catch {
-    return Number.POSITIVE_INFINITY
+    return Number.NEGATIVE_INFINITY
   }
+}
+
+function managedDirectoryAgeMs(path) {
+  const mtimeMs = managedDirectoryMtimeMs(path)
+  return Number.isFinite(mtimeMs)
+    ? Math.max(0, Date.now() - mtimeMs)
+    : Number.POSITIVE_INFINITY
 }
 
 function runtimeProtectedByOwningCheckout(path) {
@@ -545,16 +564,23 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
   const registeredWorktrees = registeredWorktreePaths()
   let removedRuntimes = 0
   let removedStages = 0
-  for (const candidate of runtimeDirectoriesForCleanup()) {
-    const key = runtimePathKey(candidate)
-    if (keep.has(key)) continue
 
-    // Never unregister a live runtime. A cleanup helper may race the safe
-    // handoff before every process has observed the active marker, so both the
-    // owning-checkout marker and the retention grace period are mandatory for
-    // every runtime, including runtimes created by this checkout.
-    if (runtimeProtectedByOwningCheckout(candidate)) continue
-    if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue
+  const inactiveRuntimes = runtimeDirectoriesForCleanup()
+    .filter((candidate) => {
+      const key = runtimePathKey(candidate)
+      return !keep.has(key) && !runtimeProtectedByOwningCheckout(candidate)
+    })
+    .sort((left, right) => managedDirectoryMtimeMs(right) - managedDirectoryMtimeMs(left))
+
+  let retainedInactiveRuntimes = 0
+  for (const candidate of inactiveRuntimes) {
+    // Keep at most one newest inactive runtime as a rollback cushion. Every
+    // older runtime is disposable immediately: retaining by age let frequent
+    // releases accumulate tens of gigabytes before the grace window expired.
+    if (retainedInactiveRuntimes < MAX_INACTIVE_RUNTIME_BACKUPS) {
+      retainedInactiveRuntimes += 1
+      continue
+    }
 
     if (!removeManagedWorktree(candidate, registeredWorktrees)) continue
     removedRuntimes += 1
@@ -591,7 +617,8 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
   } else if (removedRuntimes > 0 || removedStages > 0) {
     console.error(
       `[PHOENIX UPDATE] storage cleanup removed ${String(removedRuntimes)} obsolete runtime(s) `
-      + `and ${String(removedStages)} stale staging worktree(s).`,
+      + `and ${String(removedStages)} stale staging worktree(s); `
+      + `inactive runtime backups kept: ${String(retainedInactiveRuntimes)}.`,
     )
   }
 }
