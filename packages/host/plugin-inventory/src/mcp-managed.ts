@@ -797,6 +797,21 @@ export class ManagedMcpController {
   }
 
   /**
+   * Recreate the persisted row when a repair fails after unload. The existing
+   * credentials are intentionally left untouched, and the original stable row
+   * remains available to the next Host start even if live restoration fails.
+   */
+  private async restoreRemovedManagedRow(row: ManagedMcpRow): Promise<void> {
+    await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
+    await withFileLock(this.path, async () => {
+      const rows = await readManagedRows(this.path)
+      if (rows.some(existing => existing.id === row.id
+        || managedIdentity(existing.config) === managedIdentity(row.config))) return
+      await writeManagedRows(this.path, [...rows, row])
+    }, { waitMs: 15_000 })
+  }
+
+  /**
    * Repair a managed registry connector from its persisted trusted source.
    * Legacy rows without source metadata stay removable but are not guessed.
    * @param request - Exact managed entry id to repair.
@@ -818,18 +833,21 @@ export class ManagedMcpController {
       const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
       if (!removed.removed) throw new Error(`managed MCP entry "${entryId}" disappeared during repair`)
       if (!removed.liveUnloaded) {
-        throw new Error(
-          `managed MCP entry "${entryId}" was removed from persistence but its live runtime could not be unloaded; restart Phoenix before retrying repair`,
-        )
+        await this.restoreRemovedManagedRow(row)
+        throw new Error(`managed MCP entry "${entryId}" could not be unloaded; its previous configuration was preserved`)
       }
-      return this.installCuratedMcp(connectorId)
+      try {
+        return await this.installCuratedMcp(connectorId)
+      } catch (error) {
+        await this.restoreRemovedManagedRow(row)
+        throw new Error(`MCP repair failed; the previous configuration was preserved for the next Phoenix start: ${String(error)}`, { cause: error })
+      }
     }
 
     const snapshot = await this.registrySearch({ query: row.source.name, limit: 20 })
-    const candidate = selectInstallableCandidate(snapshot, {
-      name: row.source.name,
-      ...(row.source.version === undefined ? {} : { version: row.source.version }),
-    })
+    // Repair follows the latest active registry version. Keeping the originally
+    // installed version pinned makes repair fail whenever the publisher updates.
+    const candidate = selectInstallableCandidate(snapshot, { name: row.source.name })
     if (isRetiredJevCandidate(candidate)) {
       throw new Error('Jev integration is retired and cannot be repaired through the Official MCP Registry')
     }
@@ -839,22 +857,26 @@ export class ManagedMcpController {
     const removed = await this.removeManagedRowsReceipt(candidateRow => candidateRow.id === entryId)
     if (!removed.removed) throw new Error(`managed MCP entry "${entryId}" disappeared during repair`)
     if (!removed.liveUnloaded) {
-      throw new Error(
-        `managed MCP entry "${entryId}" was removed from persistence but its live runtime could not be unloaded; restart Phoenix before retrying repair`,
-      )
+      await this.restoreRemovedManagedRow(row)
+      throw new Error(`managed MCP entry "${entryId}" could not be unloaded; its previous configuration was preserved`)
     }
 
-    return this.installManagedConfig({
-      transport: 'streamable-http',
-      serverName: serverNameFor(candidate),
-      url: remoteUrl,
-      headers: {},
-      oauth: true,
-    }, candidate.name, {
-      kind: 'registry',
-      name: candidate.name,
-      version: candidate.version,
-    })
+    try {
+      return await this.installManagedConfig({
+        transport: 'streamable-http',
+        serverName: serverNameFor(candidate),
+        url: remoteUrl,
+        headers: {},
+        oauth: true,
+      }, candidate.name, {
+        kind: 'registry',
+        name: candidate.name,
+        version: candidate.version,
+      })
+    } catch (error) {
+      await this.restoreRemovedManagedRow(row)
+      throw new Error(`MCP repair failed; the previous configuration was preserved for the next Phoenix start: ${String(error)}`, { cause: error })
+    }
   }
 
   /**
