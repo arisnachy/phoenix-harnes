@@ -1230,7 +1230,11 @@ export function ConnectorsSettingsSection({ api,
       }
       setRefresh(current => current + 1)
       onAuthorized()
-      if (!recoverAuthorization || api === undefined) return
+      if (!recoverAuthorization) return
+      if (api === undefined) {
+        closeOAuthPopup()
+        return
+      }
 
       const expectedKey = `mcp-client/${runtime.serverName.toLowerCase().replaceAll('_', '-')}`
       for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
@@ -1242,7 +1246,10 @@ export function ConnectorsSettingsSection({ api,
         setMcpHub(snapshot)
         setEntries(allEntries)
         const currentRuntime = snapshot.runtime.find(entry => entry.serverName === runtime.serverName)
-        if (currentRuntime?.status === 'ready') return
+        if (currentRuntime?.status === 'ready') {
+          closeOAuthPopup()
+          return
+        }
         const entry = allEntries.find(candidate => candidate.key === expectedKey)
         const method = entry?.methods[0]
         if (entry !== undefined && method !== undefined) {
