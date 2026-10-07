@@ -90,6 +90,8 @@ export interface AssistantMailTransport {
 export interface MailAccount {
   readonly state: 'not-configured' | 'signup-ambiguous' | 'pending-verification' | 'ready'
   readonly ownerEmail?: string
+  /** Whether AgentMail has actually attached the human owner to an agent-created organization. */
+  readonly ownerLink?: 'attached' | 'pending' | 'provider-conflict'
   readonly inboxId?: string
   readonly sessionId?: SessionId
   readonly contacts: readonly string[]
