@@ -1216,7 +1216,7 @@ export function ConnectorsSettingsSection({ api,
     ).finally(() => { setRegistryBusy(false) })
   }
 
-  const reconnectMcpConnector = (runtime: McpConnectorRuntimeView, isNotion = false): void => {
+  const reconnectMcpConnector = (runtime: McpConnectorRuntimeView): void => {
     const registry = mcpRegistry
     const reconnect = registry?.reconnect?.bind(registry)
     if (registry === undefined || reconnect === undefined || reconnectingServerName !== undefined) return
@@ -1224,7 +1224,7 @@ export function ConnectorsSettingsSection({ api,
     // Browser popup policy requires window.open() to happen in the original
     // click stack. The MCP authorization flow may register only after this
     // reconnect finishes, so reserve the blank tab now and navigate it later.
-    if (recoverAuthorization && !isNotion && !/^notion(?:-|$)/u.test(runtime.serverName)) reserveOAuthPopup()
+    if (recoverAuthorization) reserveOAuthPopup()
     setCatalogFailure(undefined)
     setReconnectingServerName(runtime.serverName)
     void reconnect({ serverName: runtime.serverName }).then(async (result) => {
@@ -1258,7 +1258,7 @@ export function ConnectorsSettingsSection({ api,
         const entry = allEntries.find(candidate => candidate.key === expectedKey)
         const method = entry?.methods[0]
         if (entry !== undefined && method !== undefined) {
-          begin(entry.key, method.id, { deferPopup: isNotion })
+          begin(entry.key, method.id)
           return
         }
       }
@@ -1581,7 +1581,7 @@ export function ConnectorsSettingsSection({ api,
                   removing={row.managed !== undefined && removingEntryId === row.managed.entryId}
                   onAuthorize={(entry) => {
                     const method = entry.methods[0]
-                    if (method !== undefined) begin(entry.key, method.id, { deferPopup: row.definition.id === 'notion' })
+                    if (method !== undefined) begin(entry.key, method.id)
                   }}
                   onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
                     ? undefined
@@ -1599,7 +1599,7 @@ export function ConnectorsSettingsSection({ api,
                       setQuery(row.definition.name)
                     }}
                   onReconnect={mcpRegistry?.reconnect === undefined
-                    ? undefined : (runtime) => { reconnectMcpConnector(runtime, row.definition.id === 'notion') }}
+                    ? undefined : (runtime) => { reconnectMcpConnector(runtime) }}
                   onRepair={mcpRegistry?.repair === undefined ? undefined : repairManagedConnector}
                   onRemove={mcpRegistry?.remove === undefined ? undefined : removeManagedConnector}
                   onConfigure={row.definition.id === 'jev' && mcpRegistry?.configureJev !== undefined ? () => {

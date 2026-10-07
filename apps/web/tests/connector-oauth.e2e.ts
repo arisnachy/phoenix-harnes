@@ -44,16 +44,13 @@ describe('connector OAuth browser handoff', () => {
       const card = page.locator(id !== 'browser-probe'
         ? '[data-connector-id="notion"]' : '[data-authorization-key="mcp-client/browser-probe"]')
       await card.getByRole('button', { name: 'Authorize', exact: true }).click()
-      if (id === 'browser-probe') {
-        const waiting = await popupPromise
-        await expect.poll(async () => waiting.locator('#status').textContent(), { timeout: 15000 }).toContain('Completa el dato')
-      } else {
-        await page.getByLabel('Provider prerequisite').waitFor()
-        expect(page.context().pages()).toHaveLength(1)
-      }
+      // Every provider reserves a lightweight blank tab in the user's click
+      // gesture; no Phoenix waiting HTML page or cross-window relay is loaded.
+      const popup = await popupPromise
+      expect(popup.url()).toBe('about:blank')
+      await page.getByLabel('Provider prerequisite').waitFor()
       await page.getByLabel('Provider prerequisite').fill('continue')
       await page.getByRole('button', { name: 'Continue', exact: true }).click()
-      const popup = await popupPromise
       await popup.getByRole('heading', { name: 'Provider consent fixture' }).waitFor({ timeout: 15000 })
       expect(popup.url()).toBe(consent)
       await page.getByRole('button', { name: 'Cancel', exact: true }).last().click()

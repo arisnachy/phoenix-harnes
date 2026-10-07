@@ -6,25 +6,21 @@ import styles from './ModelsSection.module.css'
 
 type AuthorizationClient = IApiClient['authorization']
 
-function oauthWaitingPageUrl(): string {
-  const url = new URL('/oauth-waiting.html', window.location.href)
-  // Cache-bust the tiny bridge page: an older cached copy has no navigation
-  // listener and would strand the user on "Preparando autorización…".
-  url.searchParams.set('v', '20261007-1')
-  return url.href
-}
-
-type OAuthWaitingMessage =
-  | { type: 'phoenix/oauth-navigate'; url: string }
-  | { type: 'phoenix/oauth-status'; message: string; state?: 'waiting' | 'error' }
-
-function postOAuthWaitingMessage(popup: Window, message: OAuthWaitingMessage): void {
+/**
+ * A provider consent URL must be HTTPS, except for a loopback OAuth server.
+ * Never navigate a reserved privileged popup to javascript:, file:, data:,
+ * an insecure remote endpoint, or a URL containing embedded credentials.
+ */
+function safeOAuthConsentUrl(value: string): string | undefined {
   try {
-    popup.postMessage(message, window.location.origin)
+    const url = new URL(value)
+    if (url.username !== '' || url.password !== '') return undefined
+    if (url.protocol === 'https:') return url.href
+    if (url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]')) return url.href
   } catch {
-    // The reserved page may already be navigating cross-origin. The provider
-    // page is then authoritative and must not be interrupted.
+    // An authorization provider may return a malformed URL.
   }
+  return undefined
 }
 
 /** One browser-visible authorization attempt, carrying its last notice forward. */
@@ -47,14 +43,10 @@ export interface AuthorizationAttempt {
 }
 
 /**
- * The state machine behind one sign-in flow, shared by the account-connections
- * panel and the per-provider cards: begin an attempt, poll it while pending,
- * surface notices (auto-opening the consent page once), answer prompts, cancel.
- * Neither business rejections nor transport failures may reach the browser as
- * unhandled rejections — both land in `failure` for the caller to render.
- * @param api - the authorization wire face, absent when the deployment mounts none.
- * @param onAuthorized - called once when an attempt reaches `authorized`.
- * @returns the live attempt plus the actions that drive it.
+ * Start the Host authorization attempt, then navigate a browser tab straight
+ * to the consent URL returned by the Host. Reserving about:blank *inside the
+ * click gesture* avoids popup blockers without shipping a waiting page, a
+ * postMessage relay, or races between page load and URL delivery.
  */
 export function useAuthorizationAttempt(
   api: AuthorizationClient | undefined,
@@ -66,7 +58,7 @@ export function useAuthorizationAttempt(
   failure: string | undefined
   reserveOAuthPopup: () => void
   closeOAuthPopup: () => void
-  begin: (key: string, method?: string, options?: { deferPopup?: boolean }) => void
+  begin: (key: string, method?: string) => void
   submitAnswer: () => void
   cancel: () => void
 } {
@@ -77,20 +69,17 @@ export function useAuthorizationAttempt(
   const [failure, setFailure] = useState<string | undefined>()
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
-  const pendingPopupNavigation = useRef<string | undefined>(undefined)
-  const pendingPopupStatus = useRef<{ message: string; state: 'waiting' | 'error' } | undefined>(undefined)
+  const navigatedRef = useRef(false)
 
   const closeReservedPopup = useCallback((): void => {
     const popup = popupRef.current
     popupRef.current = null
-    pendingPopupNavigation.current = undefined
-    pendingPopupStatus.current = undefined
+    navigatedRef.current = false
     if (popup === null) return
     try {
       if (!popup.closed) popup.close()
     } catch {
-      // Cross-origin isolation may revoke access to a provider window. The
-      // authorization attempt itself remains authoritative.
+      // Cross-origin isolation can sever a window handle after consent loads.
     }
   }, [])
 
@@ -99,112 +88,70 @@ export function useAuthorizationAttempt(
     try {
       if (current !== null && !current.closed) return
     } catch {
-      popupRef.current = null
+      // The browser may sever cross-origin WindowProxy references.
     }
+    popupRef.current = null
+    navigatedRef.current = false
     let popup: Window | null = null
-    try { popup = window.open(oauthWaitingPageUrl(), '_blank') } catch {
-      // Embedded browsers may throw instead of returning null for blocked windows.
+    try { popup = window.open('about:blank', '_blank') } catch {
+      // Embedded browsers can reject popups even inside a click gesture.
     }
     popupRef.current = popup
-    if (popup !== null) return
-    setFailure('El navegador bloqueó la ventana de autorización. PHOENIX seguirá preparando el enlace; usa “Abrir página de autorización” cuando aparezca.')
-  }, [])
-
-  const showOAuthPopupStatus = useCallback((message: string, state: 'waiting' | 'error' = 'waiting'): void => {
-    pendingPopupStatus.current = { message, state }
-    const popup = popupRef.current
-    if (popup === null) return
-    try {
-      if (popup.closed) return
-      postOAuthWaitingMessage(popup, { type: 'phoenix/oauth-status', message, state })
-    } catch {
-      // The window can become cross-origin after provider navigation.
+    if (popup === null) {
+      setFailure('El navegador bloqueó la pestaña OAuth. Cuando aparezca el enlace, pulsa “Abrir página de autorización” en PHOENIX.')
     }
   }, [])
 
   const navigateOAuthPopup = useCallback((url: string): void => {
-    pendingPopupNavigation.current = url
+    const destination = safeOAuthConsentUrl(url)
+    if (destination === undefined) {
+      if (!navigatedRef.current) closeReservedPopup()
+      setFailure('El proveedor no entregó una URL de autorización HTTPS válida. Se rechazó la navegación.')
+      return
+    }
     const popup = popupRef.current
     if (popup !== null) {
       try {
         if (!popup.closed) {
-          // The same-origin waiting page can navigate itself even when the
-          // opener is no longer allowed to assign popup.location because of
-          // COOP/browser hardening. Send first, then keep location.replace as
-          // a fast-path for browsers that permit it.
-          postOAuthWaitingMessage(popup, { type: 'phoenix/oauth-navigate', url })
-          try {
-            popup.location.replace(url)
-          } catch {
-            // The message bridge is the primary recovery path.
-          }
-          // A consent URL can arrive before oauth-waiting.html finishes loading;
-          // messages are not buffered. Retry briefly so the page's listener
-          // cannot miss the hand-off.
-          for (const delay of [80, 240, 700]) {
-            window.setTimeout(() => {
-              try {
-                if (!popup.closed) postOAuthWaitingMessage(popup, { type: 'phoenix/oauth-navigate', url })
-              } catch {
-                // Already cross-origin/navigated or closed.
-              }
-            }, delay)
-          }
+          popup.location.replace(destination)
+          navigatedRef.current = true
           return
         }
       } catch {
-        // COOP/cross-origin policies can sever the reserved Window handle.
+        // The popup may have been closed or isolated by browser policy.
       }
-      popupRef.current = null
     }
+
+    // Browsers that block a delayed window.open still receive an explicit
+    // hyperlink in the attempt card. Never lose or cancel the Host attempt.
+    popupRef.current = null
+    navigatedRef.current = false
     let fallback: Window | null = null
-    try { fallback = window.open(url, '_blank') } catch {
-      // Preserve the Host attempt and manual consent link when automatic opening fails.
+    try { fallback = window.open(destination, '_blank') } catch {
+      // Manual consent is available on the card.
     }
     popupRef.current = fallback
+    navigatedRef.current = fallback !== null
     if (fallback === null) {
-      setFailure('No pude abrir automáticamente la página del proveedor. Pulsa “Abrir página de autorización” en esta tarjeta para continuar.')
+      setFailure('No se abrió automáticamente la autorización. Pulsa “Abrir página de autorización” en PHOENIX para continuar.')
     }
-  }, [])
+  }, [closeReservedPopup])
 
-  useEffect(() => {
-    const handleWaitingReady = (event: MessageEvent<unknown>): void => {
-      if (event.origin !== window.location.origin) return
-      const popup = popupRef.current
-      if (popup === null || event.source !== popup) return
-      const data = event.data
-      if (data === null || typeof data !== 'object'
-        || !('type' in data) || data.type !== 'phoenix/oauth-ready') return
-
-      const status = pendingPopupStatus.current
-      if (status !== undefined) {
-        postOAuthWaitingMessage(popup, {
-          type: 'phoenix/oauth-status',
-          message: status.message,
-          state: status.state,
-        })
-      }
-      const url = pendingPopupNavigation.current
-      if (url !== undefined) {
-        postOAuthWaitingMessage(popup, { type: 'phoenix/oauth-navigate', url })
-      }
-    }
-    window.addEventListener('message', handleWaitingReady)
-    return () => { window.removeEventListener('message', handleWaitingReady) }
-  }, [])
-
-  useEffect(() => () => { closeReservedPopup() }, [closeReservedPopup])
+  useEffect(() => () => {
+    // Unmounting Settings must not close an already-open provider consent page.
+    // Only discard the blank reservation when the user has not navigated yet.
+    if (!navigatedRef.current) closeReservedPopup()
+  }, [closeReservedPopup])
 
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending') return
     let stale = false
     const timer = window.setTimeout(() => {
-      // Cross-origin isolation can report an open consent window as closed.
-      // Only the provider outcome or explicit Cancel ends authorization.
+      // The Host, not the state of a cross-origin WindowProxy, decides success.
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
         if (stale) return
         if (!response.result.ok) {
-          showOAuthPopupStatus(response.result.error.message, 'error')
+          if (!navigatedRef.current) closeReservedPopup()
           setAttempt(undefined)
           setFailure(response.result.error.message)
           return
@@ -212,12 +159,6 @@ export function useAuthorizationAttempt(
         const view = response.result.value
         const latest = view.notices.at(-1)?.notice
         const consent = view.notices.findLast(item => item.notice.url !== undefined)?.notice
-        if (latest?.message !== undefined && consent?.url === undefined && attempt.url === undefined) {
-          showOAuthPopupStatus(latest.message)
-        }
-        if (view.prompt !== undefined && consent?.url === undefined && attempt.url === undefined) {
-          showOAuthPopupStatus('Completa el dato solicitado en PHOENIX. Esta pestaña continuará automáticamente.')
-        }
         if (consent?.url !== undefined && !opened.current.has(consent.url)) {
           opened.current.add(consent.url)
           navigateOAuthPopup(consent.url)
@@ -242,42 +183,36 @@ export function useAuthorizationAttempt(
         } else if (view.status === 'cancelled') {
           closeReservedPopup()
         } else if (view.status === 'failed') {
-          showOAuthPopupStatus(view.error ?? 'La autorización no pudo iniciarse. Revisa PHOENIX para ver el error.', 'error')
+          if (!navigatedRef.current) closeReservedPopup()
+          setFailure(view.error ?? 'El proveedor no pudo iniciar OAuth. Comprueba la configuración y vuelve a intentar.')
         }
       }, (error: unknown) => {
         if (stale) return
-        showOAuthPopupStatus(String(error), 'error')
+        if (!navigatedRef.current) closeReservedPopup()
         setAttempt(undefined)
         setFailure(String(error))
       })
     }, 650)
     return () => { stale = true; window.clearTimeout(timer) }
-  }, [api, attempt, closeReservedPopup, navigateOAuthPopup, showOAuthPopupStatus])
+  }, [api, attempt, closeReservedPopup, navigateOAuthPopup])
 
-  const begin = (key: string, method = 'oauth', options?: { deferPopup?: boolean }): void => {
+  const begin = (key: string, method = 'oauth'): void => {
     if (api === undefined) return
     setFailure(undefined)
     setAttempt(undefined)
     opened.current.clear()
-    pendingPopupNavigation.current = undefined
-    pendingPopupStatus.current = undefined
-    // Notion prepares in its Settings card and opens only the provider URL.
-    // Other OAuth flows keep a real same-origin PHOENIX page opened synchronously inside
-    // the click gesture so popup blockers allow the later provider navigation.
-    // Never reserve about:blank: the user should always see a real PHOENIX URL
-    // while discovery is still in progress.
-    const isNotion = options?.deferPopup === true || /^mcp-client\/notion(?:-|$)/u.test(key)
-    if (method === 'oauth' && !isNotion) reserveOAuthPopup()
+    // Reserve a tab synchronously, independent of which MCP vendor is used.
+    if (method === 'oauth') reserveOAuthPopup()
     else closeReservedPopup()
     void api.begin({ key, method }).then((response) => {
       if (!response.result.ok) {
-        showOAuthPopupStatus(response.result.error.message, 'error')
+        if (!navigatedRef.current) closeReservedPopup()
         setFailure(response.result.error.message)
         return
       }
       setAttempt({ id: response.result.value.attemptId, key, status: 'pending', nextSeq: 0 })
     }, (error: unknown) => {
-      showOAuthPopupStatus(String(error), 'error')
+      if (!navigatedRef.current) closeReservedPopup()
       setFailure(String(error))
     })
   }
@@ -383,8 +318,8 @@ export function AuthorizationAttemptProgress(props: {
   return (
     <>
       {attempt.message === undefined ? null : <p role="status">{attempt.message}</p>}
-      {attempt.url === undefined ? null : (
-        <p><a href={attempt.url} target="_blank" rel="noreferrer">{props.t('openAuthorizationPage')}</a></p>
+      {attempt.url === undefined || safeOAuthConsentUrl(attempt.url) === undefined ? null : (
+        <p><a href={safeOAuthConsentUrl(attempt.url)} target="_blank" rel="noreferrer">{props.t('openAuthorizationPage')}</a></p>
       )}
       {attempt.code === undefined ? null : <p>{`${props.t('authorizationCode')}: ${attempt.code}`}</p>}
       {attempt.prompt === undefined ? null : (
