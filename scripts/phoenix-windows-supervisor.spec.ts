@@ -309,18 +309,23 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('instead of relaunching a broken update')
   })
 
-  it('garbage-collects obsolete isolated runtimes without deleting the active runtime', () => {
+  it('caps obsolete isolated runtimes without deleting the active runtime', () => {
     expect(source).toContain('function runtimeDirectoriesForCleanup()')
     expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [])')
     expect(source).toContain('const active = readActiveRuntimeRecord()')
     expect(source).toContain('keep.add(runtimePathKey(active.path))')
     expect(source).toContain('const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()')
-    expect(source).toContain('if (runtimeProtectedByOwningCheckout(candidate)) continue')
-    expect(source).toContain('if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue')
-    expect(source).toContain("spawnSync('git', ['worktree', 'remove', '--force', path]")
+    expect(source).toContain("process.env.PHOENIX_UPDATE_RUNTIME_BACKUPS ?? ''")
+    expect(source).toContain('MAX_INACTIVE_RUNTIME_BACKUPS')
+    expect(source).toContain('const inactiveRuntimes = runtimeDirectoriesForCleanup()')
+    expect(source).toContain('!keep.has(key) && !runtimeProtectedByOwningCheckout(candidate)')
+    expect(source).toContain('.sort((left, right) => managedDirectoryMtimeMs(right) - managedDirectoryMtimeMs(left))')
+    expect(source).toContain('if (retainedInactiveRuntimes < MAX_INACTIVE_RUNTIME_BACKUPS)')
+    expect(source).not.toContain('if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue')
+    expect(source).toContain("spawnSync('git', ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path]")
     expect(source).toContain("spawnSync('git', ['worktree', 'prune', '--expire', 'now']")
     expect(source).toContain('removed obsolete isolated runtime')
-    expect(source).toContain('storage cleanup removed')
+    expect(source).toContain('inactive runtime backups kept')
   })
 
   it('keeps this checkout persistent updater stage and protects live preparations', () => {
