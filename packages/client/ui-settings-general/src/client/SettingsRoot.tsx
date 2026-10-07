@@ -23,7 +23,7 @@ import css from './SettingsRoot.module.css'
 function navIcon(id: string) {
   if (id === 'profile') return <IconProfileOutline16 className={css.navIcon} size={16} />
   if (id === 'models') return <IconDataOutline16 className={css.navIcon} size={16} />
-  if (id === 'agent-presets') return <IconAgentPresetOutline16 className={css.navIcon} size={16} />
+  if (id === 'agent-presets' || id === 'team-studio') return <IconAgentPresetOutline16 className={css.navIcon} size={16} />
   if (id === 'connectors' || id === 'plugins') return <IconPlugOutline16 className={css.navIcon} size={16} />
   return <IconSettingsOutline16 className={css.navIcon} size={16} />
 }
