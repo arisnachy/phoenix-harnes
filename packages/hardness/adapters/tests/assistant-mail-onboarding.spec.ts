@@ -957,6 +957,54 @@ it('rotates a ready Kira mailbox to a corroborated Console key without changing 
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
+it('creates the first Kira inbox from a corroborated Console key and explicit Phoenix owner', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-first-run-'))
+  try {
+    let saved = ''
+    let createdInbox = ''
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async (value) => { saved = value },
+      fetch: async (url, init) => {
+        const address = requestAddress(url)
+        if (address.endsWith('/organizations')) {
+          return Response.json({
+            organization_id: 'org_human',
+            authentication_id: 'user_human',
+            authentication_type: 'clerk',
+            inbox_count: 0,
+            inbox_limit: 3,
+          })
+        }
+        if (address === 'https://api.agentmail.to/v0/inboxes') {
+          const body = requestBody(init) as Record<string, unknown>
+          createdInbox = `${String(body.username)}@agentmail.to`
+          return Response.json({
+            inbox_id: createdInbox,
+            email: createdInbox,
+            client_id: body.client_id,
+          })
+        }
+        if (createdInbox.length > 0
+          && address === `https://api.agentmail.to/v0/inboxes/${encodeURIComponent(createdInbox)}`) {
+          return Response.json({ inbox_id: createdInbox })
+        }
+        if (address.includes('/messages?')) return Response.json({ messages: [] })
+        throw new Error(`unexpected request: ${address}`)
+      },
+    })
+
+    await expect(account.adoptConsoleKey('am_us_console_key', 'owner@example.com')).resolves.toMatchObject({
+      state: 'ready',
+      inboxId: createdInbox,
+      ownerEmail: 'owner@example.com',
+      ownerLink: 'attached',
+    })
+    expect(saved).toBe('am_us_console_key')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
 it('adopts a human Console API key by creating a fresh inbox in that organization', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-console-key-'))
   try {
