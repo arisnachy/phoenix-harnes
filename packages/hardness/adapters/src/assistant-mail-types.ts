@@ -91,13 +91,17 @@ export interface MailConsoleKeyCheck {
   readonly valid: true
   readonly organizationId: string
   readonly authenticationType?: string
+  readonly scopeType?: 'organization' | 'pod' | 'inbox'
   readonly inboxCount: number
   readonly inboxLimit?: number
   readonly capacityAvailable: boolean
   readonly inboxRead: boolean
+  readonly inboxCreate?: boolean
+  readonly messageSend?: boolean
   /** Present when Kira already has a ready inbox and the candidate key was checked against it. */
   readonly currentInboxAccess?: boolean
   readonly messageRead?: boolean
+  readonly realtime?: boolean
 }
 
 /** Local enrollment state, containing no secret values. */
