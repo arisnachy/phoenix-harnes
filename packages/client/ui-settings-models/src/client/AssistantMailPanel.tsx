@@ -372,7 +372,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         <span>API key <b>✓ válida</b></span>
         <span>Identidad AgentMail <b>✓ autenticada</b></span>
         <span>
+          Alcance <b>{consoleKeyCheck.scopeType ?? 'no informado'}</b>
+        </span>
+        <span>
           Lectura de buzones <b>{consoleKeyCheck.inboxRead ? '✓ disponible' : '✕ falta inbox_read'}</b>
+        </span>
+        <span>
+          Envío de mensajes <b>{consoleKeyCheck.messageSend ? '✓ message_send' : '✕ falta message_send'}</b>
         </span>
         <span>
           Cupo <b>{consoleKeyCheck.inboxLimit === undefined
@@ -389,13 +395,21 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           <span>
             Lectura de mensajes <b>{consoleKeyCheck.messageRead ? '✓ disponible' : '✕ falta message_read'}</b>
           </span>
-        </> : <span>
-          Nuevo buzón <b>{consoleKeyCheck.capacityAvailable ? '✓ hay capacidad' : '✕ límite alcanzado'}</b>
-        </span>}
+          <span>
+            Canal en tiempo real <b>{consoleKeyCheck.realtime ? '✓ conectado' : '✕ no confirmado'}</b>
+          </span>
+        </> : <>
+          <span>
+            Crear buzones <b>{consoleKeyCheck.inboxCreate ? '✓ inbox_create' : '✕ falta inbox_create'}</b>
+          </span>
+          <span>
+            Nuevo buzón <b>{consoleKeyCheck.capacityAvailable ? '✓ hay capacidad' : '✕ límite alcanzado'}</b>
+          </span>
+        </>}
         <small>
           {ready
-            ? 'Phoenix no reemplaza la clave guardada hasta comprobar el buzón actual y message_read. message_send se confirma cuando Kira realiza un envío.'
-            : 'La creación comprueba inbox_create y, antes de marcar Kira como lista, Phoenix comprueba inbox_read y message_read. message_send se confirma cuando Kira realiza un envío.'}
+            ? 'Phoenix solo guarda la clave después de comprobar inbox_read, message_read, message_send y una suscripción WebSocket real al buzón actual.'
+            : 'Antes de crear el buzón Phoenix exige alcance de organización, inbox_create, inbox_read y message_send; luego comprueba message_read.'}
         </small>
       </div>}
       <p className={styles.help}>
@@ -442,6 +456,15 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           Copiar
         </button>
       </div>
+    </div>}
+
+    {providerIssue === undefined ? null : <div className={styles.setup}>
+      <p className={styles.failure}>
+        AgentMail {providerIssue.status}
+        {providerIssue.code === undefined ? '' : ` · ${providerIssue.code}`}
+        {providerIssue.permission === undefined ? '' : ` · falta ${providerIssue.permission}`}
+      </p>
+      {providerIssue.fix === undefined ? null : <p className={styles.help}>{providerIssue.fix}</p>}
     </div>}
 
     {recoveryRequired ? <div className={styles.setup}>
