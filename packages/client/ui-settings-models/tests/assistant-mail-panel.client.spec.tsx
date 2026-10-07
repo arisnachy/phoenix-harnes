@@ -130,3 +130,28 @@ it('turns an AgentMail permission 403 into a visible recovery action', async () 
   expect(await screen.findByText('Verifica una vez')).toBeTruthy()
   expect(calls).toContain('recover')
 })
+
+it('shows owner-link recovery instead of an OTP field when AgentMail refused the human attachment', async () => {
+  const calls: string[] = []
+  const client = { call: async (action: string) => {
+    calls.push(action)
+    return {
+      account: {
+        state: 'pending-verification',
+        inboxId: 'kira@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        ownerLink: 'provider-conflict' as const,
+        contacts: [],
+      },
+      connection: 'disconnected',
+      jobs: [],
+    }
+  } }
+
+  render(<AssistantMailPanel client={client} />)
+  expect(await screen.findByText('Vincula propietario')).toBeTruthy()
+  expect(screen.queryByLabelText('Código de verificación')).toBeNull()
+  expect(screen.getByText(/AgentMail rechazó asociar este correo/u)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Reintentar vinculación' }))
+  expect(calls).toContain('recover')
+})

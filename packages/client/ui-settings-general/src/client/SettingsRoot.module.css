@@ -79,6 +79,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
+  padding: 16px;
 }
 
 .mask {
@@ -252,8 +254,9 @@
 /* Phoenix 2026 settings refresh: preserve the existing structure and theme
    tokens while giving the dialog a calmer, more premium visual hierarchy. */
 .panel {
-  width: min(1040px, calc(100vw - 48px));
-  height: min(780px, calc(100vh - 48px));
+  width: min(1040px, 100%);
+  height: min(760px, calc(100vh - 32px));
+  max-height: calc(100dvh - 32px);
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 28px;
   background: var(--dsw-alias-bg-layer-2);
@@ -335,4 +338,25 @@
 
 .options {
   padding: 4px 30px 30px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+@media (max-height: 720px) {
+  .panel {
+    border-radius: 20px;
+  }
+
+  .nav {
+    padding-top: 18px;
+  }
+
+  .header {
+    height: 54px;
+    padding-top: 10px;
+  }
+
+  .options {
+    padding-bottom: 18px;
+  }
 }

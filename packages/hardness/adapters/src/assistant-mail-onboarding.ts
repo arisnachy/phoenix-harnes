@@ -22,6 +22,9 @@ interface OnboardingOptions {
 function enrollment(value: unknown): Enrollment {
   const data = mailRecord(value)
   if (!['not-configured', 'signup-ambiguous', 'pending-verification', 'ready'].includes(String(data.state)) || !Array.isArray(data.contacts)) throw new Error('invalid mail enrollment')
+  if (data.ownerLink !== undefined && !['attached', 'pending', 'provider-conflict'].includes(String(data.ownerLink))) {
+    throw new Error('invalid mail owner link state')
+  }
   return {
     state: data.state as MailAccount['state'], contacts: data.contacts.map(value => mailAddress(mailString(value))),
     ...(data.signupUsername === undefined ? {} : { signupUsername: mailString(data.signupUsername) }),
@@ -30,6 +33,7 @@ function enrollment(value: unknown): Enrollment {
       clientId: mailString(mailRecord(data.newInboxRequest).clientId),
     } }),
     ...(data.ownerEmail === undefined ? {} : { ownerEmail: mailAddress(mailString(data.ownerEmail)) }),
+    ...(data.ownerLink === undefined ? {} : { ownerLink: data.ownerLink as NonNullable<MailAccount['ownerLink']> }),
     ...(data.inboxId === undefined ? {} : { inboxId: mailAddress(mailString(data.inboxId)) }),
     ...(data.sessionId === undefined ? {} : { sessionId: SessionId(mailString(data.sessionId)) }),
     ...(typeof data.challengeExpires === 'number' && Number.isFinite(data.challengeExpires) ? { challengeExpires: data.challengeExpires } : {}),
@@ -120,8 +124,21 @@ export class MailOnboarding {
             if (mailAddress(mailString(attached.human_email)) !== previous.ownerEmail) {
               throw new Error('mail owner recovery returned a different human email')
             }
+            await this.file.change(current => current.state === 'pending-verification'
+              ? { ...current, ownerLink: 'attached' } : current)
             return await this.status()
           } catch (error) {
+            // AgentMail refuses attaching an email that already belongs to a Console account,
+            // and older gateways have surfaced that conflict as an otherwise-unclassified 403.
+            // Preserve the receive-only inbox and key instead of looping through new sign-ups.
+            const ownerAttachConflict = error instanceof AgentMailHttpError
+              && (error.status === 409 || (error.status === 403
+                && !['verification-required', 'limit-exceeded', 'message-rejected'].includes(error.reason ?? '')))
+            if (ownerAttachConflict) {
+              await this.file.change(current => current.state === 'pending-verification'
+                ? { ...current, ownerLink: 'provider-conflict' } : current)
+              return await this.status()
+            }
             const rejectedCredential = error instanceof AgentMailHttpError
               && (error.reason === 'credential-rejected' || error.reason === 'permission-missing')
             if (!rejectedCredential) throw error
@@ -256,7 +273,7 @@ export class MailOnboarding {
       }
       throw new Error('signup result ambiguous; use owner-bound recovery to continue')
     }
-    await this.persistPendingSignup(data, owner, username)
+    await this.persistPendingSignup(data, owner, username, 'attached')
     return this.status()
   }
 
@@ -280,17 +297,23 @@ export class MailOnboarding {
       }
       throw new Error('receive-only signup result ambiguous; retry recovery instead of creating another mailbox')
     }
-    const { key } = await this.persistPendingSignup(data, owner, username)
+    const { key } = await this.persistPendingSignup(data, owner, username, 'pending')
     let attached: Record<string, unknown>
     try {
       attached = mailRecord(await agentMailRequest('/agent/human', key, this.options.timeoutMs,
         this.options.fetch ?? fetch, { human_email: owner }))
-    } catch {
+    } catch (error) {
       // The mailbox and its unrecoverable one-time key are already durable. Keep the inbox
       // usable for later owner recovery instead of turning a successful creation into a failed ensure.
+      if (error instanceof AgentMailHttpError && (error.status === 403 || error.status === 409)) {
+        await this.file.change(current => current.state === 'pending-verification'
+          ? { ...current, ownerLink: 'provider-conflict' } : current)
+      }
       return this.status()
     }
     if (mailAddress(mailString(attached.human_email)) !== owner) throw new Error('mail owner attachment returned a different human email')
+    await this.file.change(current => current.state === 'pending-verification'
+      ? { ...current, ownerLink: 'attached' } : current)
     return this.status()
   }
 
@@ -300,14 +323,15 @@ export class MailOnboarding {
    * @param username Requested local-part used for recovery diagnostics.
    * @returns Persisted key and inbox identity.
    */
-  private async persistPendingSignup(data: Record<string, unknown>, owner: string, username: string):
+  private async persistPendingSignup(data: Record<string, unknown>, owner: string, username: string,
+    ownerLink: NonNullable<MailAccount['ownerLink']>):
     Promise<{ readonly key: string; readonly inboxId: string }> {
     const key = mailString(data.api_key, 8192)
     const inboxId = mailAddress(mailString(data.inbox_id))
     await this.options.saveKey(key)
     await this.file.change((current) => {
       const { challengeHash: _challenge, challengeExpires: _expiry, challengeAttempts: _attempts, ...account } = current
-      return { ...account, state: 'pending-verification', ownerEmail: owner, signupUsername: username, inboxId }
+      return { ...account, state: 'pending-verification', ownerEmail: owner, ownerLink, signupUsername: username, inboxId }
     })
     return { key, inboxId }
   }
@@ -371,7 +395,7 @@ export class MailOnboarding {
       if (identity.inbox_id !== inbox) throw new Error('mail inbox identity mismatch')
       await this.options.saveKey(key)
       const code = String(randomInt(100_000, 1_000_000))
-      await this.file.change(() => ({ state: 'pending-verification', ownerEmail: owner, inboxId: inbox, contacts: [], challengeHash: digest(code), challengeExpires: Date.now() + 24 * 3_600_000, challengeAttempts: 0 }))
+      await this.file.change(() => ({ state: 'pending-verification', ownerEmail: owner, ownerLink: 'attached', inboxId: inbox, contacts: [], challengeHash: digest(code), challengeExpires: Date.now() + 24 * 3_600_000, challengeAttempts: 0 }))
       await agentMailRequest(`/inboxes/${encodeURIComponent(inbox)}/messages/send`, key, this.options.timeoutMs, this.options.fetch ?? fetch, { to: [owner], subject: 'Phoenix: verifica tu correo', text: `Código de verificación de Phoenix: ${code}` })
       return this.status()
     })
@@ -385,6 +409,9 @@ export class MailOnboarding {
       if (!/^\d{6}$/u.test(code)) throw new Error('enter the six-digit verification code')
       const account = await this.file.read()
       if (account.state !== 'pending-verification') throw new Error('mail verification is not pending')
+      if (account.challengeHash === undefined && (account.ownerLink === 'pending' || account.ownerLink === 'provider-conflict')) {
+        throw new Error('AgentMail has not attached the owner yet; recover the mailbox or resolve the owner link before entering a code')
+      }
       if (account.challengeHash !== undefined) {
         const result = await this.file.change((current) => {
           if (current.state !== 'pending-verification' || current.challengeHash === undefined || (current.challengeExpires ?? 0) <= Date.now() || (current.challengeAttempts ?? 10) >= 10) throw new Error('verification expired; reconnect to request a new code')
