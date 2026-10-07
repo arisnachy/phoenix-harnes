@@ -331,6 +331,7 @@ it('corroborates and rotates the API key of an already active Kira inbox without
 
   render(<AssistantMailPanel client={client} />)
   expect(await screen.findByText('kira-current@agentmail.to')).toBeTruthy()
+  fireEvent.click(screen.getByText('API key de AgentMail · verificar o reemplazar'))
   const key = screen.getByLabelText<HTMLInputElement>('Nueva API key de AgentMail')
   fireEvent.change(key, { target: { value: 'am_us_rotated_secret' } })
   fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
