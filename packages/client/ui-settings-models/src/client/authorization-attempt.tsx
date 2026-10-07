@@ -67,6 +67,8 @@ export function useAuthorizationAttempt(
     popupRef.current = window.open('', '_blank')
   }, [])
 
+  useEffect(() => () => { closeReservedPopup() }, [closeReservedPopup])
+
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending') return
     let stale = false
