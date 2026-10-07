@@ -261,7 +261,20 @@ export function installAssistantMail(ctx: Context,
   const isDisposed = (): boolean => disposed
   let pumping: Promise<void> | undefined
   let repumpRequested = false
+  let socketRecoveryTimer: ReturnType<typeof setTimeout> | undefined
   const hasQueuedWake = (): boolean => repumpRequested
+  const clearSocketRecovery = (): void => {
+    if (socketRecoveryTimer === undefined) return
+    clearTimeout(socketRecoveryTimer)
+    socketRecoveryTimer = undefined
+  }
+  function scheduleSocketRecovery(): void {
+    if (disposed || socketRecoveryTimer !== undefined) return
+    socketRecoveryTimer = setTimeout(() => {
+      socketRecoveryTimer = undefined
+      if (!disposed) void pump()
+    }, Math.min(config.pollMs, 5_000))
+  }
   const outbox = new MailOutbox(join(config.directory, 'outbox.json'), async (reply) => {
     assertActive()
     const account = await onboarding.status()
@@ -353,11 +366,13 @@ export function installAssistantMail(ctx: Context,
         if (isDisposed()) return
         socketDispose?.(); socketDispose = undefined
         status = 'disconnected'
+        scheduleSocketRecovery()
       })
     } else {
       await receiver.reconcile()
     }
     if (status === 'connecting') status = 'connected'
+    if (status === 'connected') clearSocketRecovery()
     automaticCredentialRecoveryAttempted = false
   }
   const pump = (): Promise<void> => {
@@ -373,8 +388,10 @@ export function installAssistantMail(ctx: Context,
           await handleProviderFailure(error)
           socketDispose?.(); socketDispose = undefined
           // A successfully rotated credential should be consumed immediately instead of
-          // waiting for the next poll. Other failures keep durable work for later recovery.
+          // waiting for the next poll. Network/socket failures get a bounded short retry,
+          // while the ordinary poll remains the durable recovery backstop.
           if (status === 'connecting') repumpRequested = true
+          else if (status === 'disconnected') scheduleSocketRecovery()
         }
       } while (hasQueuedWake() && !isDisposed())
     })().finally(() => {
@@ -671,6 +688,7 @@ export function installAssistantMail(ctx: Context,
     disposed = true
     controller.abort()
     clearInterval(timer)
+    clearSocketRecovery()
     unbind()
     unbindCreated()
     socketDispose?.()
