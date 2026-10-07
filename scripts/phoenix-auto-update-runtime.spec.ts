@@ -101,16 +101,21 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
 
-  it('prunes stale updater storage only after the retention grace period', () => {
+  it('caps runtime copies while keeping age-based staging cleanup', () => {
     expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000')
     expect(supervisor).toContain('PHOENIX_UPDATE_STORAGE_RETENTION_MS')
+    expect(supervisor).toContain("process.env.PHOENIX_UPDATE_RUNTIME_BACKUPS ?? ''")
+    expect(supervisor).toContain('MAX_INACTIVE_RUNTIME_BACKUPS')
     expect(supervisor).toContain('function runtimeDirectoriesForCleanup()')
     expect(supervisor).toContain('/^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu')
     expect(supervisor).toContain('function runtimeProtectedByOwningCheckout(path)')
-    expect(supervisor).toContain('if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue')
+    expect(supervisor).toContain('const inactiveRuntimes = runtimeDirectoriesForCleanup()')
+    expect(supervisor).toContain('if (retainedInactiveRuntimes < MAX_INACTIVE_RUNTIME_BACKUPS)')
+    expect(supervisor).not.toContain('if (managedDirectoryAgeMs(candidate) < UPDATE_STORAGE_RETENTION_MS) continue')
     expect(supervisor).toContain('Math.min(UPDATE_STORAGE_RETENTION_MS, 6 * 60 * 60 * 1000)')
     expect(supervisor).toContain('function stageDirectoriesForCleanup()')
     expect(supervisor).toContain('/^phoenix-stage-[0-9a-f]{10}(?:-conflict-\\d+-\\d+)?$/iu')
+    expect(supervisor).toContain('if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue')
     expect(supervisor).toContain('removed stale updater staging worktree')
   })
 
