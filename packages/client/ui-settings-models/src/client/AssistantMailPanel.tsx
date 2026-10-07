@@ -15,6 +15,13 @@ export interface AssistantMailSnapshot {
   }
   readonly startup?: { readonly supported: boolean; readonly enabled: boolean }
   readonly connection: string
+  readonly providerIssue?: {
+    readonly status: number
+    readonly code?: string
+    readonly reason?: string
+    readonly permission?: string
+    readonly fix?: string
+  }
   readonly jobs: readonly {
     readonly id: string
     readonly title: string
@@ -33,8 +40,12 @@ export interface AssistantMailConsoleKeyCheck {
   readonly inboxLimit?: number
   readonly capacityAvailable: boolean
   readonly inboxRead: boolean
+  readonly scopeType?: 'organization' | 'pod' | 'inbox'
+  readonly inboxCreate?: boolean
+  readonly messageSend?: boolean
   readonly currentInboxAccess?: boolean
   readonly messageRead?: boolean
+  readonly realtime?: boolean
 }
 
 /** Local owner configuration; key inputs never enter the chat. */
@@ -140,8 +151,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const ownerChanged = requestedOwner.length > 0 && requestedOwner.toLowerCase() !== persistedOwner
   const ownerLinkConflict = pendingVerification && snapshot?.account.ownerLink === 'provider-conflict'
   const connection = snapshot?.connection ?? 'disconnected'
+  const providerIssue = snapshot?.providerIssue
   const recoveryRequired = ready && (connection === 'verification-required' || connection === 'recovery-required')
-  const providerWarning = recoveryRequired || (ready && ['quota-reached', 'message-rejected'].includes(connection))
+  const providerWarning = recoveryRequired || providerIssue !== undefined
+    || (ready && ['quota-reached', 'message-rejected', 'permission-required'].includes(connection))
   const statusText = ready
     ? connection === 'connected'
       ? 'Correo verificado · Activo'
@@ -151,7 +164,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           ? 'AgentMail requiere verificación'
           : connection === 'recovery-required'
             ? 'AgentMail requiere recuperar acceso'
-            : connection === 'quota-reached'
+            : connection === 'permission-required'
+              ? 'AgentMail requiere permisos'
+              : connection === 'quota-reached'
               ? 'Límite gratuito alcanzado'
               : connection === 'message-rejected'
                 ? 'Último envío rechazado'
@@ -226,17 +241,19 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         setConsoleKeyCheck(await checker(apiKey))
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo corroborar la API key.'
-        setFailure(message.includes('requires an organization-scoped')
-          ? 'Para crear un buzón nuevo, AgentMail exige una API key con alcance de organización.'
-          : message.includes('belongs to a different inbox')
-            ? 'La API key está limitada a otro buzón. Usa una clave de organización o una clave del buzón actual de Kira.'
-            : message.includes('not organization-scoped')
-              ? 'La clave no tiene alcance de organización. Crea una API key de organización en AgentMail Console.'
-              : message.includes('rejected this API key')
-            ? 'AgentMail rechazó la API key. Comprueba que esté completa, vigente y no revocada.'
-            : message.includes('human-owned AgentMail Console organization')
-              ? 'La clave no pertenece a una organización humana de AgentMail Console.'
-              : message)
+        setFailure(message.includes('api_key_read')
+          ? 'La clave es demasiado restringida para corroborar sus permisos. Añade api_key_read o usa una clave de organización sin restricciones.'
+          : message.includes('requires an organization-scoped')
+            ? 'Para crear un buzón nuevo, AgentMail exige una API key con alcance de organización.'
+            : message.includes('belongs to a different inbox')
+              ? 'La API key está limitada a otro buzón. Usa una clave de organización o una clave del buzón actual de Kira.'
+              : message.includes('not organization-scoped')
+                ? 'La clave no tiene alcance de organización. Crea una API key de organización en AgentMail Console.'
+                : message.includes('rejected this API key')
+                  ? 'AgentMail rechazó la API key. Comprueba que esté completa, vigente y no revocada.'
+                  : message.includes('human-owned AgentMail Console organization')
+                    ? 'La clave no pertenece a una organización humana de AgentMail Console.'
+                    : message)
       } finally {
         setBusy(false)
       }
@@ -250,12 +267,18 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       return
     }
     const readyKeyUsable = ready
-      ? consoleKeyCheck.currentInboxAccess === true && consoleKeyCheck.messageRead === true
-      : consoleKeyCheck.inboxRead && consoleKeyCheck.capacityAvailable
+      ? consoleKeyCheck.currentInboxAccess === true
+        && consoleKeyCheck.messageRead === true
+        && consoleKeyCheck.messageSend === true
+        && consoleKeyCheck.realtime === true
+      : consoleKeyCheck.inboxRead
+        && consoleKeyCheck.inboxCreate === true
+        && consoleKeyCheck.messageSend === true
+        && consoleKeyCheck.capacityAvailable
     if (!readyKeyUsable) {
       setFailure(ready
-        ? 'La nueva API key todavía no puede leer el buzón actual de Kira y sus mensajes.'
-        : 'La comprobación de AgentMail todavía no permite activar Kira con esta clave.')
+        ? 'La nueva API key debe poder leer el buzón, leer/enviar mensajes y abrir el canal en tiempo real.'
+        : 'La API key debe tener alcance de organización, inbox_create, inbox_read y message_send antes de activar Kira.')
       return
     }
     setBusy(true)
@@ -277,15 +300,19 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           : `API guardada y buzón ${value.account.inboxId ?? 'de Kira'} activado. Phoenix comprobó lectura de mensajes antes de marcarlo listo.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo activar la API key.'
-        setFailure(message.includes('inbox_create permission')
-          ? 'La API key necesita alcance de organización y permiso inbox_create.'
-          : message.includes('message_read permission')
-            ? 'La API key no tiene message_read. Crea o ajusta una clave con inbox_read, message_read y message_send; si vas a crear otro buzón, añade inbox_create.'
-            : message.includes('cannot read the current Kira inbox')
-              ? 'La API key es válida, pero no puede acceder al buzón actual de Kira. Usa una clave con inbox_read y alcance sobre ese buzón.'
-              : message.includes('confirmation is ambiguous')
-              ? 'AgentMail no confirmó la creación. Vuelve a pegar la misma API key: Phoenix reconciliará el mismo buzón sin duplicarlo.'
-              : message)
+        setFailure(message.includes('message_send permission')
+          ? 'La API key no tiene message_send. Activa ese permiso en AgentMail y vuelve a corroborarla.'
+          : message.includes('inbox_create permission')
+            ? 'La API key necesita alcance de organización y permiso inbox_create.'
+            : message.includes('message_read permission')
+              ? 'La API key no tiene message_read. Crea o ajusta una clave con inbox_read, message_read y message_send; si vas a crear otro buzón, añade inbox_create.'
+              : message.includes('cannot read the current Kira inbox')
+                ? 'La API key es válida, pero no puede acceder al buzón actual de Kira. Usa una clave con inbox_read y alcance sobre ese buzón.'
+                : message.includes('realtime mailbox channel')
+                  ? 'La API key pasó las pruebas REST, pero AgentMail no confirmó el canal en tiempo real. Phoenix no la guardará como operativa.'
+                  : message.includes('confirmation is ambiguous')
+                    ? 'AgentMail no confirmó la creación. Vuelve a pegar la misma API key: Phoenix reconciliará el mismo buzón sin duplicarlo.'
+                    : message)
       } finally {
         setBusy(false)
       }
@@ -293,9 +320,12 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   }
   const consoleKeyReady = consoleKeyCheck !== undefined
     && consoleKeyCheck.inboxRead
+    && consoleKeyCheck.messageSend === true
     && (ready
-      ? consoleKeyCheck.currentInboxAccess === true && consoleKeyCheck.messageRead === true
-      : consoleKeyCheck.capacityAvailable)
+      ? consoleKeyCheck.currentInboxAccess === true
+        && consoleKeyCheck.messageRead === true
+        && consoleKeyCheck.realtime === true
+      : consoleKeyCheck.inboxCreate === true && consoleKeyCheck.capacityAvailable)
     && (ready || persistedOwner !== undefined || requestedOwner.length > 0)
   const consoleKeyFallback = <details className={styles.advanced} open={!ready}>
     <summary>API key de AgentMail · verificar o reemplazar</summary>
@@ -344,7 +374,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         <span>API key <b>✓ válida</b></span>
         <span>Identidad AgentMail <b>✓ autenticada</b></span>
         <span>
+          Alcance <b>{consoleKeyCheck.scopeType ?? 'no informado'}</b>
+        </span>
+        <span>
           Lectura de buzones <b>{consoleKeyCheck.inboxRead ? '✓ disponible' : '✕ falta inbox_read'}</b>
+        </span>
+        <span>
+          Envío de mensajes <b>{consoleKeyCheck.messageSend ? '✓ message_send' : '✕ falta message_send'}</b>
         </span>
         <span>
           Cupo <b>{consoleKeyCheck.inboxLimit === undefined
@@ -361,20 +397,28 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           <span>
             Lectura de mensajes <b>{consoleKeyCheck.messageRead ? '✓ disponible' : '✕ falta message_read'}</b>
           </span>
-        </> : <span>
-          Nuevo buzón <b>{consoleKeyCheck.capacityAvailable ? '✓ hay capacidad' : '✕ límite alcanzado'}</b>
-        </span>}
+          <span>
+            Canal en tiempo real <b>{consoleKeyCheck.realtime ? '✓ conectado' : '✕ no confirmado'}</b>
+          </span>
+        </> : <>
+          <span>
+            Crear buzones <b>{consoleKeyCheck.inboxCreate ? '✓ inbox_create' : '✕ falta inbox_create'}</b>
+          </span>
+          <span>
+            Nuevo buzón <b>{consoleKeyCheck.capacityAvailable ? '✓ hay capacidad' : '✕ límite alcanzado'}</b>
+          </span>
+        </>}
         <small>
           {ready
-            ? 'Phoenix no reemplaza la clave guardada hasta comprobar el buzón actual y message_read. message_send se confirma cuando Kira realiza un envío.'
-            : 'La creación comprueba inbox_create y, antes de marcar Kira como lista, Phoenix comprueba inbox_read y message_read. message_send se confirma cuando Kira realiza un envío.'}
+            ? 'Phoenix solo guarda la clave después de comprobar inbox_read, message_read, message_send y una suscripción WebSocket real al buzón actual.'
+            : 'Antes de crear el buzón Phoenix exige alcance de organización, inbox_create, inbox_read y message_send; luego comprueba message_read.'}
         </small>
       </div>}
       <p className={styles.help}>
         La corroboración no guarda ni cambia nada. {ready
           ? 'Solo al confirmar Phoenix sustituye la credencial guardada, manteniendo el mismo buzón.'
           : 'Solo al confirmar Phoenix crea el nuevo buzón y guarda la clave en Credenciales.'}
-        {' '}Para una clave restringida usa inbox_read, message_read y message_send; añade inbox_create cuando Phoenix deba crear el buzón.
+        {' '}Para una clave restringida usa api_key_read, inbox_read, message_read y message_send; añade inbox_create cuando Phoenix deba crear el buzón.
       </p>
     </div>
   </details>
@@ -414,6 +458,15 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           Copiar
         </button>
       </div>
+    </div>}
+
+    {providerIssue === undefined ? null : <div className={styles.setup}>
+      <p className={styles.failure}>
+        AgentMail {providerIssue.status}
+        {providerIssue.code === undefined ? '' : ` · ${providerIssue.code}`}
+        {providerIssue.permission === undefined ? '' : ` · falta ${providerIssue.permission}`}
+      </p>
+      {providerIssue.fix === undefined ? null : <p className={styles.help}>{providerIssue.fix}</p>}
     </div>}
 
     {recoveryRequired ? <div className={styles.setup}>

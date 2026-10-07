@@ -290,6 +290,9 @@ export function apply(ctx: ClientContext): void {
         || !(value.jobs as unknown[]).every(job => assistantMailRecord(job)
           && typeof job.id === 'string' && typeof job.title === 'string' && typeof job.state === 'string'
           && stringOrAbsent(job.summary) && stringOrAbsent(job.error))
+        || (value.providerIssue !== undefined && (!assistantMailRecord(value.providerIssue)
+          || typeof value.providerIssue.status !== 'number'
+          || ![value.providerIssue.code, value.providerIssue.reason, value.providerIssue.permission, value.providerIssue.fix].every(stringOrAbsent)))
         || (value.startup !== undefined && (!assistantMailRecord(value.startup)
           || typeof value.startup.supported !== 'boolean' || typeof value.startup.enabled !== 'boolean'))) {
         throw new Error('Invalid local mailbox response')
@@ -307,8 +310,12 @@ export function apply(ctx: ClientContext): void {
         || (value.inboxLimit !== undefined && typeof value.inboxLimit !== 'number')
         || typeof value.capacityAvailable !== 'boolean'
         || typeof value.inboxRead !== 'boolean'
+        || (value.scopeType !== undefined && !['organization', 'pod', 'inbox'].includes(String(value.scopeType)))
+        || (value.inboxCreate !== undefined && typeof value.inboxCreate !== 'boolean')
+        || (value.messageSend !== undefined && typeof value.messageSend !== 'boolean')
         || (value.currentInboxAccess !== undefined && typeof value.currentInboxAccess !== 'boolean')
         || (value.messageRead !== undefined && typeof value.messageRead !== 'boolean')
+        || (value.realtime !== undefined && typeof value.realtime !== 'boolean')
         || (value.authenticationType !== undefined && typeof value.authenticationType !== 'string')) {
         throw new Error('Invalid AgentMail API key check response')
       }
@@ -320,8 +327,12 @@ export function apply(ctx: ClientContext): void {
         ...(value.inboxLimit === undefined ? {} : { inboxLimit: value.inboxLimit }),
         capacityAvailable: value.capacityAvailable,
         inboxRead: value.inboxRead,
+        ...(value.scopeType === undefined ? {} : { scopeType: value.scopeType as 'organization' | 'pod' | 'inbox' }),
+        ...(value.inboxCreate === undefined ? {} : { inboxCreate: value.inboxCreate }),
+        ...(value.messageSend === undefined ? {} : { messageSend: value.messageSend }),
         ...(value.currentInboxAccess === undefined ? {} : { currentInboxAccess: value.currentInboxAccess }),
         ...(value.messageRead === undefined ? {} : { messageRead: value.messageRead }),
+        ...(value.realtime === undefined ? {} : { realtime: value.realtime }),
       }
     },
     prepareClaim: async () => {

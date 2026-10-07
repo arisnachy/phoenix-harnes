@@ -25,12 +25,29 @@ function providerFailureReason(status: number, code: string | undefined, fix: st
   return undefined
 }
 
-function providerFailureMessage(status: number, reason: AgentMailFailureReason | undefined): string {
+function safeProviderFix(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined
+  const compact = value.replace(/\s+/gu, ' ').trim()
+    .replace(/\bam_[A-Za-z0-9._-]+\b/gu, 'am_[redacted]')
+  return compact.length === 0 ? undefined : compact.slice(0, 1200)
+}
+
+function permissionFromFix(fix: string | undefined): string | undefined {
+  const match = fix?.match(/['"`]([a-z][a-z0-9_]{1,63})['"`]\s+permission/iu)
+  return match?.[1]
+}
+
+function providerFailureMessage(status: number, reason: AgentMailFailureReason | undefined,
+  permission?: string): string {
   if (status === 429) return 'mail quota reached; no paid upgrade will be requested'
   if (reason === 'verification-required') return 'AgentMail requires Kira mailbox verification again; recover access and enter the six-digit owner code'
   if (reason === 'credential-rejected') return 'AgentMail rejected the stored credential; Phoenix can recover the existing Kira mailbox automatically'
   if (reason === 'signup-rejected') return 'AgentMail rejected owner-bound mailbox signup; Phoenix can retry through receive-only agent onboarding'
-  if (reason === 'permission-missing') return 'AgentMail credential permissions are insufficient; recover Kira mailbox access to renew the credential'
+  if (reason === 'permission-missing') {
+    return permission === undefined
+      ? 'AgentMail API key lacks a required permission; replace it with a key whose scope and permissions cover Kira mailbox'
+      : `AgentMail API key lacks required permission ${permission}`
+  }
   if (reason === 'limit-exceeded') return 'AgentMail free mailbox/resource limit reached; remove an old inbox before creating another'
   if (reason === 'message-rejected') return 'AgentMail rejected the message; review the recipient or mailbox verification state'
   return `mail provider request failed (${status})`
@@ -43,8 +60,10 @@ export class AgentMailHttpError extends Error {
     readonly status: number,
     readonly code?: string,
     readonly reason?: AgentMailFailureReason,
+    readonly fix?: string,
+    readonly permission?: string,
   ) {
-    super(providerFailureMessage(status, reason))
+    super(providerFailureMessage(status, reason, permission))
   }
 }
 
@@ -64,7 +83,9 @@ async function responseError(response: Response, authenticated: boolean): Promis
   } catch {
     // A malformed provider error body must not hide the confirmed HTTP status.
   }
-  return new AgentMailHttpError(response.status, code, providerFailureReason(response.status, code, fix, authenticated))
+  const safeFix = safeProviderFix(fix)
+  const reason = providerFailureReason(response.status, code, safeFix, authenticated)
+  return new AgentMailHttpError(response.status, code, reason, safeFix, permissionFromFix(safeFix))
 }
 
 /** Official provider API; errors deliberately exclude provider bodies and secrets.
@@ -269,7 +290,6 @@ export class AgentMailTransport implements AssistantMailTransport {
     let settled = false
     let subscribed = false
     let disposed = false
-    let timer: ReturnType<typeof setTimeout> | undefined
     function aborted(): void {
       disposed = true
       settleReady(new Error('mail wake subscription cancelled'))
@@ -278,7 +298,7 @@ export class AgentMailTransport implements AssistantMailTransport {
     function settleReady(error?: Error): void {
       if (settled) return
       settled = true
-      if (timer !== undefined) clearTimeout(timer)
+      clearTimeout(timer)
       signal?.removeEventListener('abort', aborted)
       if (error === undefined) ready.resolve()
       else ready.reject(error)
@@ -292,7 +312,7 @@ export class AgentMailTransport implements AssistantMailTransport {
       subscribed = false
       try { onDisconnected?.() } catch { /* Callback failure cannot escape the provider event loop. */ }
     }
-    timer = setTimeout(() => {
+    const timer = setTimeout(() => {
       settleReady(new Error('mail wake subscription timed out'))
       try { socket.close() } catch { /* The socket may already be closing. */ }
     }, this.timeoutMs)

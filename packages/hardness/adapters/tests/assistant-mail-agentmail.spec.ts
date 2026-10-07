@@ -54,6 +54,26 @@ describe('AgentMail transport', () => {
     expect((error as Error).message).toContain('verification')
     expect((error as Error).message).not.toContain('private-key')
   })
+  it('keeps a sanitized AgentMail missing-permission fix without leaking a credential', async () => {
+    const error = await agentMailRequest('/inboxes/kira%40agentmail.to/messages/send', 'private-key', 1000, async () =>
+      Response.json({
+        code: 'missing_permission',
+        message: 'Forbidden',
+        fix: "This API key does not have the 'message_send' permission. Replace am_super_secret with a key that includes it.",
+      }, { status: 403 })).catch((value: unknown) => value)
+    expect(error).toBeInstanceOf(AgentMailHttpError)
+    expect(error).toMatchObject({
+      status: 403,
+      code: 'missing_permission',
+      reason: 'permission-missing',
+      permission: 'message_send',
+    })
+    expect((error as AgentMailHttpError).fix).toContain('message_send')
+    expect((error as AgentMailHttpError).fix).toContain('am_[redacted]')
+    expect((error as AgentMailHttpError).fix).not.toContain('am_super_secret')
+    expect((error as Error).message).toContain('message_send')
+  })
+
   it('classifies a bare gateway 403 as a rejected stored credential', async () => {
     const error = await agentMailRequest('/inboxes/kira%40agentmail.to/messages', 'stale-key', 1000, async () =>
       Response.json({ message: 'Forbidden' }, { status: 403 })).catch((value: unknown) => value)
@@ -168,7 +188,7 @@ it('rejects identity mismatches and admits only candidates from the authenticate
 })
 
 it('uses HTML mail content as task text when AgentMail has no plain-text part', async () => {
-  const transport = new AgentMailTransport(async () => 'secret', 'kira@agentmail.to', 1000, async url => {
+  const transport = new AgentMailTransport(async () => 'secret', 'kira@agentmail.to', 1000, async (url) => {
     const address = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
     if (address.includes('/messages?')) return Response.json({ messages: [{ message_id: 'html-only' }] })
     return Response.json({
