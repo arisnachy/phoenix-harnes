@@ -271,7 +271,7 @@ it('corroborates a new Console API key before storing it and activating the new 
   const key = await screen.findByLabelText<HTMLInputElement>('Nueva API key de AgentMail')
   expect(key.type).toBe('password')
   const activate = screen.getByRole('button', { name: 'Guardar API y activar Kira' })
-  expect(activate).toBeDisabled()
+  expect((activate as HTMLButtonElement).disabled).toBe(true)
 
   fireEvent.change(key, { target: { value: 'am_us_console_secret' } })
   fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
@@ -280,7 +280,7 @@ it('corroborates a new Console API key before storing it and activating the new 
   expect(screen.getByText('✓ válida')).toBeTruthy()
   expect(screen.getByText('1/3')).toBeTruthy()
   expect(checks).toEqual(['am_us_console_secret'])
-  expect(activate).not.toBeDisabled()
+  expect((activate as HTMLButtonElement).disabled).toBe(false)
   expect(calls.some(call => call.action === 'console-key')).toBe(false)
 
   fireEvent.click(activate)
