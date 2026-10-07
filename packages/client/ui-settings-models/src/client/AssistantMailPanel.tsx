@@ -259,7 +259,11 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     setClaimNotice(undefined)
     void (async () => {
       try {
-        const value = await client.call('console-key', { apiKey })
+        const value = await client.call('console-key', {
+          apiKey,
+          ...(!ready && persistedOwner === undefined && requestedOwner.length > 0
+            ? { ownerEmail: requestedOwner } : {}),
+        })
         setSnapshot(value)
         if (value.account.ownerEmail !== undefined) setOwner(value.account.ownerEmail)
         if (input !== null) input.value = ''
@@ -288,13 +292,16 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     && (ready
       ? consoleKeyCheck.currentInboxAccess === true && consoleKeyCheck.messageRead === true
       : consoleKeyCheck.capacityAvailable)
+    && (ready || persistedOwner !== undefined || requestedOwner.length > 0)
   const consoleKeyFallback = <details className={styles.advanced}>
     <summary>API key de AgentMail · verificar o reemplazar</summary>
     <div className={styles.advancedBody}>
       <p className={styles.help}>
         {ready
           ? 'Pega una API key nueva para rotar la credencial de Kira sin cambiar su dirección. Phoenix la corrobora contra la organización, el buzón actual y la lectura de mensajes antes de guardarla.'
-          : 'Si reclamar el buzón falla porque tu correo ya tiene una cuenta de AgentMail, crea una API key en tu organización. Phoenix la corrobora antes de crear el nuevo buzón de Kira.'}
+          : state === 'not-configured' || state === undefined
+            ? 'Si ya tienes AgentMail, puedes usar una API key de tu organización en vez del alta automática. Escribe arriba tu correo propietario y Phoenix corroborará la clave antes de crear el buzón.'
+            : 'Si reclamar el buzón falla porque tu correo ya tiene una cuenta de AgentMail, crea una API key en tu organización. Phoenix la corrobora antes de crear el nuevo buzón de Kira.'}
       </p>
       <button type="button" className={styles.secondaryButton} disabled={busy}
         onClick={() => { globalThis.open?.('https://console.agentmail.to', '_blank', 'noopener,noreferrer') }}>
@@ -491,7 +498,6 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         Phoenix usa la clave original que guardó al crear el buzón; no necesitas haberla recibido por correo.
         No creará buzones adicionales mientras este vínculo siga pendiente.
       </p>
-      {consoleKeyFallback}
     </div> : null}
 
     {pendingVerification && !ownerLinkConflict ? <div className={styles.setup}>
@@ -537,7 +543,6 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         onClick={replaceMailbox}>
         Eliminar buzón viejo y empezar de nuevo
       </button>
-      {consoleKeyFallback}
     </div> : null}
 
     {ready ? <>
@@ -606,7 +611,6 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           </button>
         </div>
       </details>
-      {consoleKeyFallback}
     </> : null}
 
     {ambiguous ? <div className={styles.setup}>
@@ -629,8 +633,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         Phoenix intentará borrar el buzón anterior si conserva acceso. Si la credencial ya no sirve,
         olvidará ese buzón localmente para que no bloquee una configuración nueva.
       </p>
-      {consoleKeyFallback}
     </div> : null}
+
+    {consoleKeyFallback}
 
     {claimNotice === undefined ? null : <p className={styles.help} role="status">{claimNotice}</p>}
     {failure === undefined ? null : <p className={styles.failure} role="alert">{failure}</p>}
