@@ -51,6 +51,10 @@ function fakeAuthorization() {
         running = undefined
         finish?.({ status: 'cancelled' })
       })
+      authorization.signal?.addEventListener('abort', () => {
+        running = undefined
+        finish?.({ status: 'cancelled' })
+      }, { once: true })
       return new Promise<{ status: 'authorized' | 'cancelled' }>((resolve) => { finish = resolve })
     },
     cancel: () => {
@@ -88,6 +92,29 @@ describe('authorization API domain', () => {
     expect(state.status).toBe('authorized')
     expect(JSON.stringify(state)).not.toContain('secret-value')
     expect(state.prompt).toBeUndefined()
+  })
+
+  it('keeps a background OAuth attempt alive after the begin request signal is aborted', async () => {
+    const ctx = new Context()
+    const { service, key } = fakeAuthorization()
+    ctx.provide('authorization', service)
+    ctx.provide('userQuestions', { registerProvider: () => () => {} } as never)
+    const api = createApiProxy(ctx, DEFAULTS)
+    const carrier = new AbortController()
+
+    const begun = ok(await api.authorization.begin(
+      request({ key: String(key), method: 'oauth' }),
+      carrier.signal,
+    ))
+    carrier.abort(new Error('request completed'))
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const state = ok(await api.authorization.status(request({ attemptId: begun.attemptId })))
+    expect(state.status).toBe('pending')
+    expect(state.notices[0]?.notice.url).toBe('https://example.test/oauth')
+
+    ok(await api.authorization.cancel(request({ attemptId: begun.attemptId })))
   })
 
   it('rejects a second attempt for the same key and keeps the answer method loopback-gated by connection policy', async () => {

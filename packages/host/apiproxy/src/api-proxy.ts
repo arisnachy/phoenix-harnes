@@ -813,7 +813,6 @@ interface AuthorizationAttempt {
   nextSeq: number
   prompt?: PendingAuthorizationPrompt
   error?: string
-  removeSignalListener?: () => void
 }
 
 /** Project a pending entry into its answerable mux frame (initial push and mux-open replay share it). */
@@ -2296,7 +2295,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     id: string,
     key: string,
     method: string,
-    signal: AbortSignal | undefined,
   ): void {
     const attempt = authorizationAttempts.get(id)
     const authorization = ctx.get('authorization')
@@ -2355,14 +2353,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         current.prompt = pending
       }),
     }
-    const onAbort = (): void => {
-      rejectAuthorizationPrompt(attempt, new AuthorizationDeclinedError('authorization was cancelled'))
-      attempt.controller.abort(signal?.reason)
-    }
-    if (signal !== undefined) {
-      signal.addEventListener('abort', onAbort, { once: true })
-      attempt.removeSignalListener = () => { signal.removeEventListener('abort', onAbort) }
-    }
     void authorization.begin({
       key: parseCredentialKey(key),
       method,
@@ -2375,8 +2365,6 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
       attempt.error = authorizationFailure(error)
     }).finally(() => {
       rejectAuthorizationPrompt(attempt, new Error('authorization attempt ended'))
-      attempt.removeSignalListener?.()
-      delete attempt.removeSignalListener
       authorizationAttemptByKey.delete(key)
       trimAuthorizationAttempts()
     })
@@ -3940,7 +3928,7 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         return ok(request, { entries })
       },
 
-      begin(request, signal) {
+      begin(request) {
         const authorization = ctx.get('authorization')
         if (authorization === undefined) {
           return Promise.resolve(err(request, {
@@ -3986,7 +3974,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         }
         authorizationAttempts.set(id, attempt)
         authorizationAttemptByKey.set(request.payload.key, id)
-        startAuthorizationAttempt(id, request.payload.key, method, signal)
+        // This attempt outlives the unary HTTP request that created it. Carrier
+        // cancellation must not tear down OAuth before the provider URL is
+        // published; explicit authorization.cancel owns user cancellation.
+        startAuthorizationAttempt(id, request.payload.key, method)
         return Promise.resolve(ok(request, { attemptId: id, status: 'pending' as const }))
       },
 
