@@ -22,7 +22,8 @@ interface OnboardingOptions {
 function enrollment(value: unknown): Enrollment {
   const data = mailRecord(value)
   if (!['not-configured', 'signup-ambiguous', 'pending-verification', 'ready'].includes(String(data.state)) || !Array.isArray(data.contacts)) throw new Error('invalid mail enrollment')
-  if (data.ownerLink !== undefined && !['attached', 'pending', 'provider-conflict'].includes(String(data.ownerLink))) {
+  if (data.ownerLink !== undefined
+    && (typeof data.ownerLink !== 'string' || !['attached', 'pending', 'provider-conflict'].includes(data.ownerLink))) {
     throw new Error('invalid mail owner link state')
   }
   return {
@@ -181,7 +182,7 @@ export class MailOnboarding {
       if (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0) {
         throw new Error('AgentMail has not exposed Console ownership yet; finish Claim inbox and retry in a moment')
       }
-      await this.file.change(current => {
+      await this.file.change((current) => {
         if (current.state !== 'pending-verification' || current.inboxId !== previous.inboxId) {
           throw new Error('mail enrollment changed during claim confirmation')
         }
@@ -599,7 +600,7 @@ export class MailOnboarding {
    */
   private async persistPendingSignup(data: Record<string, unknown>, owner: string, username: string,
     ownerLink: NonNullable<MailAccount['ownerLink']>):
-    Promise<{ readonly key: string; readonly inboxId: string }> {
+  Promise<{ readonly key: string; readonly inboxId: string }> {
     const key = mailString(data.api_key, 8192)
     const inboxId = mailAddress(mailString(data.inbox_id))
     await this.options.saveKey(key)
