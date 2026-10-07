@@ -66,7 +66,7 @@ export function useAuthorizationAttempt(
   failure: string | undefined
   reserveOAuthPopup: () => void
   closeOAuthPopup: () => void
-  begin: (key: string, method?: string) => void
+  begin: (key: string, method?: string, options?: { deferPopup?: boolean }) => void
   submitAnswer: () => void
   cancel: () => void
 } {
@@ -254,7 +254,7 @@ export function useAuthorizationAttempt(
     return () => { stale = true; window.clearTimeout(timer) }
   }, [api, attempt, closeReservedPopup, navigateOAuthPopup, showOAuthPopupStatus])
 
-  const begin = (key: string, method = 'oauth'): void => {
+  const begin = (key: string, method = 'oauth', options?: { deferPopup?: boolean }): void => {
     if (api === undefined) return
     setFailure(undefined)
     setAttempt(undefined)
@@ -266,7 +266,7 @@ export function useAuthorizationAttempt(
     // the click gesture so popup blockers allow the later provider navigation.
     // Never reserve about:blank: the user should always see a real PHOENIX URL
     // while discovery is still in progress.
-    const isNotion = /^mcp-client\/notion(?:-|$)/u.test(key)
+    const isNotion = options?.deferPopup === true || /^mcp-client\/notion(?:-|$)/u.test(key)
     if (method === 'oauth' && !isNotion) reserveOAuthPopup()
     else closeReservedPopup()
     void api.begin({ key, method }).then((response) => {

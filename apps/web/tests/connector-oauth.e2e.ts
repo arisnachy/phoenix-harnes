@@ -10,7 +10,7 @@ import { launchWebScaffold, type WebScaffold } from './scaffold.ts'
 // Exercise the shipped browser, Host RPC and authorization interaction. Only
 // the external provider is replaced; no client API response is intercepted.
 describe('connector OAuth browser handoff', () => {
-  it.each(['browser-probe', 'notion-browser-probe'])('hands off consent through the real Host (%s)', async (id) => {
+  it.each(['browser-probe', 'notion-browser-probe', 'mcp-a1b2c3d'])('hands off consent through the real Host (%s)', async (id) => {
     const temporary = await mkdtemp(join(tmpdir(), 'phoenix-oauth-browser-'))
     const overlay = join(temporary, 'isolated.patch.yml')
     await writeFile(overlay, '- id: plugin-inventory\n  disabled: true\n')
@@ -21,7 +21,7 @@ describe('connector OAuth browser handoff', () => {
       const consent = 'https://www.notion.so/oauth/authorize?client_id=browser-probe'
       scaffold.ctx.authorization.registerFlow({
         key: credentialKey('mcp-client', id),
-        label: 'Browser OAuth probe',
+        label: id === 'browser-probe' ? 'Browser OAuth probe' : 'MCP notion',
         methods: [{ id: 'oauth', label: 'Authorize Notion' }],
         async run(session) {
           session.notify({ message: 'Discovering the Notion authorization endpoint' })
@@ -41,10 +41,10 @@ describe('connector OAuth browser handoff', () => {
       await page.getByRole('button', { name: /^Settings/ }).click()
       await page.getByRole('dialog').getByRole('button', { name: 'Connectors', exact: true }).click()
       const popupPromise = page.waitForEvent('popup')
-      const card = page.locator(id.startsWith('notion')
+      const card = page.locator(id !== 'browser-probe'
         ? '[data-connector-id="notion"]' : '[data-authorization-key="mcp-client/browser-probe"]')
       await card.getByRole('button', { name: 'Authorize', exact: true }).click()
-      if (!id.startsWith('notion')) {
+      if (id === 'browser-probe') {
         const waiting = await popupPromise
         await expect.poll(async () => waiting.locator('#status').textContent(), { timeout: 15000 }).toContain('Completa el dato')
       } else {

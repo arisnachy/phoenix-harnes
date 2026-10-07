@@ -385,18 +385,23 @@ it('shows a rejected explicit cancellation without an unhandled rejection', asyn
 })
 
 
-it.each([true, false])('prepares Notion in its card and keeps its consent link (popup allowed: %s)', async (allowed) => {
+it.each([
+  { key: 'mcp-client/notion', allowed: true },
+  { key: 'mcp-client/notion', allowed: false },
+  { key: 'mcp-client/mcp-a1b2c3d', allowed: true },
+  { key: 'mcp-client/mcp-a1b2c3d', allowed: false },
+])('prepares Notion in its card and keeps its consent link (%j)', async ({ key, allowed }) => {
   const open = vi.spyOn(window, 'open').mockReturnValue(allowed ? reservedWindow() as unknown as Window : null)
   const api = panelApi(consentNotice)
   api.list = vi.fn(async () => ok({ entries: [{
-    key: 'mcp-client/notion', label: 'MCP notion',
+    key, label: 'MCP notion',
     methods: [{ id: 'oauth', label: 'Authorize Notion' }], inFlight: false,
   }] }))
   try {
     renderPanel(api)
     await clickAuthorize()
     expect(open).not.toHaveBeenCalled()
-    expect(api.begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+    expect(api.begin).toHaveBeenCalledWith({ key, method: 'oauth' })
     await waitFor(() => { expect(open).toHaveBeenCalledWith(CONSENT_URL, '_blank') }, { timeout: 3000 })
     expect(open).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('link', { name: /open/i }).getAttribute('href')).toBe(CONSENT_URL)
