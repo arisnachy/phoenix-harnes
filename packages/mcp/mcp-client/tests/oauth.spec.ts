@@ -181,6 +181,61 @@ describe('createMcpOAuthProvider', () => {
     expect(records.size).toBe(0)
   })
 
+  it('reuses a dynamic client registered by this Host so authorization can publish its URL', async () => {
+    const records = new Map<string, unknown>()
+    const credentials = {
+      readRecord: vi.fn(async (recordKey: unknown) => records.get(String(recordKey))),
+      modifyRecord: vi.fn(async (recordKey: unknown, mutate: (current: unknown) => Promise<unknown>) => {
+        const next = await mutate(records.get(String(recordKey)))
+        if (next === undefined) records.delete(String(recordKey))
+        else records.set(String(recordKey), next)
+        return next
+      }),
+      deleteRecord: vi.fn(async (recordKey: unknown) => { records.delete(String(recordKey)) }),
+    } as unknown as CredentialProvider
+    const controller = new McpOAuthController(
+      credentials,
+      'notion',
+      'https://mcp.notion.com/mcp',
+    )
+    const authorizationUrl = new URL('https://mcp.notion.com/authorize?client_id=current-runtime-client')
+    const notify = vi.fn()
+
+    try {
+      await controller.ready
+
+      // StreamableHTTPClientTransport performs discovery/DCR while probing the
+      // unauthenticated server. That registration belongs to this controller's
+      // current loopback callback and must survive the later user click.
+      const transportProvider = controller.provider()
+      await transportProvider.saveClientInformation?.({ client_id: 'current-runtime-client' })
+      await transportProvider.saveDiscoveryState?.({
+        authorizationServerUrl: 'https://mcp.notion.com',
+      })
+
+      vi.mocked(auth).mockImplementationOnce(async (provider) => {
+        expect(await provider.clientInformation()).toEqual({ client_id: 'current-runtime-client' })
+        expect(provider.clientMetadata.redirect_uris).toEqual([controller.callbackServer.redirectUri])
+        await provider.redirectToAuthorization(authorizationUrl)
+        return 'AUTHORIZED'
+      })
+
+      await expect(controller.authorize({
+        method: 'oauth',
+        signal: new AbortController().signal,
+        notify,
+        prompt: vi.fn(),
+      })).resolves.toBeUndefined()
+
+      expect(notify).toHaveBeenCalledWith({
+        message: 'Continúa en tu navegador para autorizar notion. PHOENIX conserva los tokens solo en el Host.',
+        url: authorizationUrl.href,
+      })
+    } finally {
+      await controller.close()
+    }
+  })
+
   it('drops a stale dynamic client registration before reauthorization on a new loopback redirect', async () => {
     const key = credentialKey('mcp-client', 'monday-com-monday-com')
     const records = new Map<string, unknown>([[
