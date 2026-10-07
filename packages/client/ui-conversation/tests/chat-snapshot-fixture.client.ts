@@ -245,6 +245,7 @@ export function chatSnapshotFixture(input: {
     const metrics = deriveTurnMetrics(legacy.nodes).get(turnNumber)
     const tailData = {
       turn: turnNumber,
+      reason: { kind: 'completed' } as const,
       seq: endSeq,
       time: turn.end?.time ?? 0,
       closing,
