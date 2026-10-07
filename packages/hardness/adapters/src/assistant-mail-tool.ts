@@ -227,7 +227,10 @@ export function createAssistantMailInboxTool(resolve: () => AssistantMailControl
       if (service === undefined) throw new Error('Kira mailbox runtime is unavailable')
       if (args.action === 'refresh') {
         const identity = await service.refresh()
-        return { kind: 'kira_mail_refresh', connection: identity.connection, state: identity.state, address: identity.inboxId }
+        return {
+          kind: 'kira_mail_refresh', connection: identity.connection, state: identity.state,
+          ...(identity.inboxId === undefined ? {} : { address: identity.inboxId }),
+        }
       }
       if (args.action === 'jobs') return { kind: 'kira_mail_jobs', jobs: await service.listMailJobs() }
       if (args.action === 'read') {
