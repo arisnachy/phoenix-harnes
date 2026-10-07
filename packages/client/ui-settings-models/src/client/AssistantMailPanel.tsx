@@ -265,12 +265,18 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       return
     }
     const readyKeyUsable = ready
-      ? consoleKeyCheck.currentInboxAccess === true && consoleKeyCheck.messageRead === true
-      : consoleKeyCheck.inboxRead && consoleKeyCheck.capacityAvailable
+      ? consoleKeyCheck.currentInboxAccess === true
+        && consoleKeyCheck.messageRead === true
+        && consoleKeyCheck.messageSend === true
+        && consoleKeyCheck.realtime === true
+      : consoleKeyCheck.inboxRead
+        && consoleKeyCheck.inboxCreate === true
+        && consoleKeyCheck.messageSend === true
+        && consoleKeyCheck.capacityAvailable
     if (!readyKeyUsable) {
       setFailure(ready
-        ? 'La nueva API key todavía no puede leer el buzón actual de Kira y sus mensajes.'
-        : 'La comprobación de AgentMail todavía no permite activar Kira con esta clave.')
+        ? 'La nueva API key debe poder leer el buzón, leer/enviar mensajes y abrir el canal en tiempo real.'
+        : 'La API key debe tener alcance de organización, inbox_create, inbox_read y message_send antes de activar Kira.')
       return
     }
     setBusy(true)
@@ -292,15 +298,19 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           : `API guardada y buzón ${value.account.inboxId ?? 'de Kira'} activado. Phoenix comprobó lectura de mensajes antes de marcarlo listo.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo activar la API key.'
-        setFailure(message.includes('inbox_create permission')
-          ? 'La API key necesita alcance de organización y permiso inbox_create.'
-          : message.includes('message_read permission')
-            ? 'La API key no tiene message_read. Crea o ajusta una clave con inbox_read, message_read y message_send; si vas a crear otro buzón, añade inbox_create.'
-            : message.includes('cannot read the current Kira inbox')
-              ? 'La API key es válida, pero no puede acceder al buzón actual de Kira. Usa una clave con inbox_read y alcance sobre ese buzón.'
-              : message.includes('confirmation is ambiguous')
-              ? 'AgentMail no confirmó la creación. Vuelve a pegar la misma API key: Phoenix reconciliará el mismo buzón sin duplicarlo.'
-              : message)
+        setFailure(message.includes('message_send permission')
+          ? 'La API key no tiene message_send. Activa ese permiso en AgentMail y vuelve a corroborarla.'
+          : message.includes('inbox_create permission')
+            ? 'La API key necesita alcance de organización y permiso inbox_create.'
+            : message.includes('message_read permission')
+              ? 'La API key no tiene message_read. Crea o ajusta una clave con inbox_read, message_read y message_send; si vas a crear otro buzón, añade inbox_create.'
+              : message.includes('cannot read the current Kira inbox')
+                ? 'La API key es válida, pero no puede acceder al buzón actual de Kira. Usa una clave con inbox_read y alcance sobre ese buzón.'
+                : message.includes('realtime mailbox channel')
+                  ? 'La API key pasó las pruebas REST, pero AgentMail no confirmó el canal en tiempo real. Phoenix no la guardará como operativa.'
+                  : message.includes('confirmation is ambiguous')
+                    ? 'AgentMail no confirmó la creación. Vuelve a pegar la misma API key: Phoenix reconciliará el mismo buzón sin duplicarlo.'
+                    : message)
       } finally {
         setBusy(false)
       }
@@ -308,9 +318,12 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   }
   const consoleKeyReady = consoleKeyCheck !== undefined
     && consoleKeyCheck.inboxRead
+    && consoleKeyCheck.messageSend === true
     && (ready
-      ? consoleKeyCheck.currentInboxAccess === true && consoleKeyCheck.messageRead === true
-      : consoleKeyCheck.capacityAvailable)
+      ? consoleKeyCheck.currentInboxAccess === true
+        && consoleKeyCheck.messageRead === true
+        && consoleKeyCheck.realtime === true
+      : consoleKeyCheck.inboxCreate === true && consoleKeyCheck.capacityAvailable)
     && (ready || persistedOwner !== undefined || requestedOwner.length > 0)
   const consoleKeyFallback = <details className={styles.advanced} open={!ready}>
     <summary>API key de AgentMail · verificar o reemplazar</summary>
