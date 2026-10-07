@@ -6,6 +6,10 @@ import styles from './ModelsSection.module.css'
 
 type AuthorizationClient = IApiClient['authorization']
 
+function oauthWaitingPageUrl(): string {
+  return new URL('/oauth-waiting.html', window.location.href).href
+}
+
 /** One browser-visible authorization attempt, carrying its last notice forward. */
 export interface AuthorizationAttempt {
   id: string
@@ -67,22 +71,6 @@ export function useAuthorizationAttempt(
     }
   }, [])
 
-  const prepareReservedPopup = useCallback((popup: Window): void => {
-    try {
-      popup.document.title = 'PHOENIX · Preparando autorización'
-      popup.document.body.innerHTML = [
-        '<main style="font-family:system-ui,sans-serif;max-width:520px;margin:12vh auto;padding:32px;text-align:center">',
-        '<h1 style="font-size:22px;margin:0 0 12px">PHOENIX</h1>',
-        '<p style="font-size:16px;margin:0 0 8px">Preparando autorización…</p>',
-        '<p style="opacity:.7;margin:0">Esta pestaña abrirá el proveedor automáticamente. No la cierres.</p>',
-        '</main>',
-      ].join('')
-    } catch {
-      // A browser may make the reserved context opaque immediately. Navigation
-      // still gets a chance once the provider URL arrives.
-    }
-  }, [])
-
   const reserveOAuthPopup = useCallback((): void => {
     const current = popupRef.current
     try {
@@ -90,14 +78,11 @@ export function useAuthorizationAttempt(
     } catch {
       popupRef.current = null
     }
-    const popup = window.open('', '_blank')
+    const popup = window.open(oauthWaitingPageUrl(), '_blank')
     popupRef.current = popup
-    if (popup !== null) {
-      prepareReservedPopup(popup)
-      return
-    }
+    if (popup !== null) return
     setFailure('El navegador bloqueó la ventana de autorización. PHOENIX seguirá preparando el enlace; usa “Abrir página de autorización” cuando aparezca.')
-  }, [prepareReservedPopup])
+  }, [])
 
   const navigateOAuthPopup = useCallback((url: string): void => {
     const popup = popupRef.current
@@ -180,10 +165,10 @@ export function useAuthorizationAttempt(
     setFailure(undefined)
     setAttempt(undefined)
     opened.current.clear()
-    // OAuth needs a window reserved synchronously inside the click gesture so
-    // popup blockers allow the later consent navigation. Other methods never
-    // reserve a tab. Any failed/cancelled attempt closes an unused reservation
-    // immediately so broken connectors cannot strand a blank window.
+    // OAuth needs a real same-origin PHOENIX page opened synchronously inside
+    // the click gesture so popup blockers allow the later provider navigation.
+    // Never reserve about:blank: the user should always see a real PHOENIX URL
+    // while discovery is still in progress.
     if (method === 'oauth') reserveOAuthPopup()
     else closeReservedPopup()
     void api.begin({ key, method }).then((response) => {
