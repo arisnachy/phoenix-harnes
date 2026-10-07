@@ -241,17 +241,19 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         setConsoleKeyCheck(await checker(apiKey))
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo corroborar la API key.'
-        setFailure(message.includes('requires an organization-scoped')
-          ? 'Para crear un buzón nuevo, AgentMail exige una API key con alcance de organización.'
-          : message.includes('belongs to a different inbox')
-            ? 'La API key está limitada a otro buzón. Usa una clave de organización o una clave del buzón actual de Kira.'
-            : message.includes('not organization-scoped')
-              ? 'La clave no tiene alcance de organización. Crea una API key de organización en AgentMail Console.'
-              : message.includes('rejected this API key')
-            ? 'AgentMail rechazó la API key. Comprueba que esté completa, vigente y no revocada.'
-            : message.includes('human-owned AgentMail Console organization')
-              ? 'La clave no pertenece a una organización humana de AgentMail Console.'
-              : message)
+        setFailure(message.includes('api_key_read')
+          ? 'La clave es demasiado restringida para corroborar sus permisos. Añade api_key_read o usa una clave de organización sin restricciones.'
+          : message.includes('requires an organization-scoped')
+            ? 'Para crear un buzón nuevo, AgentMail exige una API key con alcance de organización.'
+            : message.includes('belongs to a different inbox')
+              ? 'La API key está limitada a otro buzón. Usa una clave de organización o una clave del buzón actual de Kira.'
+              : message.includes('not organization-scoped')
+                ? 'La clave no tiene alcance de organización. Crea una API key de organización en AgentMail Console.'
+                : message.includes('rejected this API key')
+                  ? 'AgentMail rechazó la API key. Comprueba que esté completa, vigente y no revocada.'
+                  : message.includes('human-owned AgentMail Console organization')
+                    ? 'La clave no pertenece a una organización humana de AgentMail Console.'
+                    : message)
       } finally {
         setBusy(false)
       }
@@ -416,7 +418,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         La corroboración no guarda ni cambia nada. {ready
           ? 'Solo al confirmar Phoenix sustituye la credencial guardada, manteniendo el mismo buzón.'
           : 'Solo al confirmar Phoenix crea el nuevo buzón y guarda la clave en Credenciales.'}
-        {' '}Para una clave restringida usa inbox_read, message_read y message_send; añade inbox_create cuando Phoenix deba crear el buzón.
+        {' '}Para una clave restringida usa api_key_read, inbox_read, message_read y message_send; añade inbox_create cuando Phoenix deba crear el buzón.
       </p>
     </div>
   </details>
