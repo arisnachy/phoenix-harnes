@@ -60,3 +60,5 @@ Prefix-stable while the Team plugin generation, configuration, member role/name,
 - **No Web controls** — browser roster, model-profile editing, and task-board presentation are outside this runtime package.
 
 Kira responds to material teammate handoffs by name, evaluates the evidence and states the next decision before stopping or releasing work. The response belongs in the existing turn; finished workers are not awakened merely for acknowledgement.
+
+Peer conversation advances through a decision and real action rather than repeating a report to the user. Workers must not stop at a plan; the Lead executes the next step or resumes a needed worker. Personality does not add idle turns or replace verification and delivery.
