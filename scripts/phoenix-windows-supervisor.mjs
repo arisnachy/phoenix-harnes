@@ -76,8 +76,8 @@ const MAX_INACTIVE_RUNTIME_BACKUPS = Number.isFinite(configuredInactiveRuntimeBa
   ? Math.max(0, Math.min(2, configuredInactiveRuntimeBackups))
   : 1
 // Absolute circuit breaker: even if Windows temporarily locks stale worktrees,
- // PHOENIX must never keep allocating full runtime copies until the drive fills.
- // Default capacity is active + candidate + configured rollback cushion.
+// PHOENIX must never keep allocating full runtime copies until the drive fills.
+// Default capacity is active + candidate + configured rollback cushion.
 const configuredRuntimeDirectoryLimit = Number.parseInt(
   process.env.PHOENIX_UPDATE_RUNTIME_LIMIT ?? '',
   10,
