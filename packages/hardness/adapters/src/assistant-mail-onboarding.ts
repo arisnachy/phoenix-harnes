@@ -120,7 +120,7 @@ export class MailOnboarding {
             if (mailAddress(mailString(attached.human_email)) !== previous.ownerEmail) {
               throw new Error('mail owner recovery returned a different human email')
             }
-            return this.status()
+            return await this.status()
           } catch (error) {
             const rejectedCredential = error instanceof AgentMailHttpError
               && (error.reason === 'credential-rejected' || error.reason === 'permission-missing')
@@ -157,7 +157,7 @@ export class MailOnboarding {
             if (current.state !== 'pending-verification') throw new Error('mail enrollment changed during owner repair')
             return { ...current, ownerEmail: owner }
           })
-          return this.status()
+          return await this.status()
         } catch (error) {
           const rejectedCredential = error instanceof AgentMailHttpError
             && (error.reason === 'credential-rejected' || error.reason === 'permission-missing')
