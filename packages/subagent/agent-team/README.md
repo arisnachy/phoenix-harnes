@@ -15,7 +15,7 @@ The generated `chatMessages`, `chatReact` and `chatReply` remotes use exact root
 - id: agent-team
   name: '@phoenix-ai/dsh-agent-team'
   config:
-    maxMembers: 8
+    maxMembers: 3
     maxTasks: 256
     maxPendingMessagesPerMember: 64
     maxMessageBytes: 65536
@@ -36,6 +36,13 @@ Fresh children have no parent-history seed. Fork children capture the Lead's com
 
 The roster reports durable provisioning/failed phases and live `running`/`idle` status. An active but non-resident teammate is `inactive`; later waking delivery cold-resumes it through the continuation owner. Creation may carry provider-neutral `agentOptions`; the continuation manager validates and persists that route, while the roster reports its LLM `modelProvider` and `model` separately from the subagent transport provider. Waking mailbox deliveries and directed user replies refresh an existing teammate from the lead's latest durable selection, falling back to its configured route. Codex selections use the Luna execution handoff; other providers retain the selected provider and model. An in-flight action finishes before a safe-boundary user reply uses the refreshed route.
 
+## Team Studio identity
+
+The operational Team roster keeps immutable runtime names and Session ids for routing, persistence, authorization, and replay. A separate settings-backed Team Studio document owns user-facing identity: team name, Kira's display identity, twenty specialist display names, roles, gender/self-reference, personality, voice description, avatar assignment, enabled state, and restrained avatar-motion level. Renaming or reskinning a persona therefore never changes the technical member address.
+
+The document keeps exactly twenty stable specialist slots and can retain up to twelve saved teams, with one active team selected at a time. Browser writes replace the one JSON document field atomically. `@phoenix-ai/dsh-tool-agent-team` exposes the Lead-only `design_team` tool so Kira can apply a prompt-authored redesign instead of merely suggesting it. The model receives only the active persona's compact social style; the twenty personality descriptions are never dumped into every request.
+
+The design roster is not an execution fan-out limit. Phoenix still starts only the small number of teammates justified by the task; Team Studio makes twenty identities available for specialization without turning all twenty models on.
 ## Durable mailbox
 
 `sendMessage()` validates peer membership, appends `team/message/queued`, and flushes before attempting delivery. The result always identifies that durable message; `queued` means immediate delivery was deferred and is not an instruction to resend. Quiet delivery injects, flushes, and acknowledges context immediately when the target is live, but never activates an inactive target; an inactive target's quiet message remains queued. Wakeup delivery becomes the target's next FIFO turn and cold-resumes it when needed.
