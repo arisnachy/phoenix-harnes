@@ -124,6 +124,46 @@ describe('mail onboarding', () => {
     } finally { await rm(directory, { recursive: true, force: true }) }
   })
 
+  it('falls back to a fresh corrected owner enrollment when the pending key gets a bare 403', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-owner-403-'))
+    try {
+      const path = join(directory, 'account.json')
+      await writeFile(path, JSON.stringify({
+        state: 'pending-verification',
+        inboxId: 'old@agentmail.to',
+        ownerEmail: 'owner@example.comy',
+        contacts: [],
+      }))
+      let saved = ''
+      let calls = 0
+      const account = new MailOnboarding({
+        path,
+        timeoutMs: 1000,
+        saveKey: async (value) => { saved = value },
+        resolveKey: async () => 'am_stale',
+        fetch: async (url, init) => {
+          calls++
+          const address = requestAddress(url)
+          if (address.endsWith('/agent/human')) {
+            expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_stale')
+            return Response.json({ message: 'Forbidden' }, { status: 403 })
+          }
+          expect(address).toBe('https://api.agentmail.to/v0/agent/sign-up')
+          expect(requestBody(init)).toMatchObject({ human_email: 'owner@example.com' })
+          return Response.json({ api_key: 'am_fresh', inbox_id: 'fresh@agentmail.to' })
+        },
+      })
+
+      await expect(account.changeOwner('owner@example.com')).resolves.toMatchObject({
+        state: 'pending-verification',
+        inboxId: 'fresh@agentmail.to',
+        ownerEmail: 'owner@example.com',
+      })
+      expect(saved).toBe('am_fresh')
+      expect(calls).toBe(2)
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+
   it('starts a corrected owner enrollment when an ambiguous signup has no recoverable key', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-owner-restart-'))
     try {
@@ -201,6 +241,44 @@ describe('mail onboarding', () => {
         'https://api.agentmail.to/v0/agent/sign-up',
         'https://api.agentmail.to/v0/inboxes/kira-existing%40agentmail.to',
       ])
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+
+  it('adopts the provider signup inbox when the persisted verified inbox was deleted', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-restore-stale-inbox-'))
+    try {
+      const path = join(directory, 'account.json')
+      await writeFile(path, JSON.stringify({
+        state: 'ready',
+        inboxId: 'deleted@agentmail.to',
+        ownerEmail: 'owner@example.com',
+        contacts: [],
+        signupUsername: 'kira-original',
+      }))
+      const account = new MailOnboarding({
+        path,
+        timeoutMs: 1000,
+        saveKey: async () => {},
+        fetch: async (url) => {
+          const address = requestAddress(url)
+          if (address.endsWith('/agent/sign-up')) {
+            return Response.json({ api_key: 'am_rotated', inbox_id: 'current@agentmail.to' })
+          }
+          if (address.endsWith('/inboxes/deleted%40agentmail.to')) {
+            return Response.json({ code: 'not_found' }, { status: 404 })
+          }
+          if (address.endsWith('/inboxes/current%40agentmail.to')) {
+            return Response.json({ inbox_id: 'current@agentmail.to' })
+          }
+          throw new Error(`unexpected request: ${address}`)
+        },
+      })
+
+      await expect(account.restoreCredential()).resolves.toMatchObject({
+        state: 'ready',
+        inboxId: 'current@agentmail.to',
+        ownerEmail: 'owner@example.com',
+      })
     } finally { await rm(directory, { recursive: true, force: true }) }
   })
 
