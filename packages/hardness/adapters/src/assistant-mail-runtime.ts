@@ -160,6 +160,10 @@ export function installAssistantMail(ctx: Context,
     if (enrolling !== undefined) return enrolling
     enrolling = (async () => {
       const account = await onboarding.status()
+      if (account.state === 'pending-verification' && requireOwner) {
+        await onboarding.recover()
+        return
+      }
       if (account.state !== 'not-configured') return
       // Never create the provider account until Phoenix can durably retain the returned key.
       if (ctx.get('credentials') === undefined) throw new Error('secure credential storage is unavailable')
