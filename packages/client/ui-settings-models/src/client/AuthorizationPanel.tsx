@@ -1145,7 +1145,12 @@ export function ConnectorsSettingsSection({ api,
       : definition.id === 'jev'
         ? mcpHub.managed.find(candidate => candidate.serverName === 'jev')
         : mcpHub.managed.find(candidate => managedMatchesDefinition(candidate, definition))
-    const catalogAccount = entries.find(entry => entryMatchesDefinitionAuthorization(entry, definition))
+    // A legacy provider API-key grant can share the same name as a curated
+    // OAuth MCP (notably Cloudflare). Never substitute that unrelated flow:
+    // it prompts for an API token even though the official MCP offers login.
+    const catalogAccount = definition.curatedMcp === true
+      ? entries.find(entry => entry.key === `mcp-client/${definition.id}`)
+      : entries.find(entry => entryMatchesDefinitionAuthorization(entry, definition))
     const account = managed === undefined
       ? catalogAccount
       : managedAuthorizationEntry(managed, entries) ?? catalogAccount

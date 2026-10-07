@@ -57,6 +57,92 @@ describe('connectors settings section', () => {
     })
   })
 
+  it('uses official Cloudflare MCP OAuth and never substitutes a legacy API-key flow', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'cloudflare-oauth', status: 'pending' as const }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: [
+        {
+          key: 'authorization-cloudflare/account',
+          label: 'Cloudflare API',
+          methods: [{ id: 'api-key', label: 'Cloudflare API token' }],
+          inFlight: false,
+        },
+        {
+          key: 'mcp-client/cloudflare',
+          label: 'MCP cloudflare',
+          methods: [{ id: 'oauth', label: 'Cloudflare OAuth' }],
+          inFlight: false,
+        },
+      ] })),
+      begin,
+      status: vi.fn(async () => ok({
+        attemptId: 'cloudflare-oauth', status: 'pending' as const,
+        notices: [], nextSeq: 0,
+      })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'cloudflare-entry',
+          serverName: 'cloudflare',
+          url: 'https://mcp.cloudflare.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'cloudflare' },
+        }],
+        runtime: [{
+          serverName: 'cloudflare',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          toolNames: [],
+        }],
+      })),
+      install: vi.fn(), search: vi.fn(),
+    }
+    const popup = { closed: false, close: vi.fn(), location: { replace: vi.fn() } }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+    try {
+      renderHub(api, { mcpRegistry })
+      const card = await waitFor(() => {
+        const found = document.querySelector('[data-connector-id="cloudflare"]')
+        if (found === null || !found.textContent?.includes('Authorization required')) throw new Error('Cloudflare MCP not ready')
+        return found
+      })
+      const authorize = Array.from(card.querySelectorAll('button')).find(button => button.textContent === 'Authorize')
+      expect(authorize).toBeTruthy()
+      fireEvent.click(authorize!)
+      await waitFor(() => expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/cloudflare', method: 'oauth' }))
+      expect(begin).not.toHaveBeenCalledWith({ key: 'authorization-cloudflare/account', method: 'api-key' })
+    } finally {
+      open.mockRestore()
+    }
+  })
+
+  it('offers official Cloudflare MCP installation instead of a legacy API-key prompt', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'authorization-cloudflare/account',
+        label: 'Cloudflare API',
+        methods: [{ id: 'api-key', label: 'Cloudflare API token' }],
+        inFlight: false,
+      }] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({ status: 'installed' as const, connector: {
+      entryId: 'cf', serverName: 'cloudflare', url: 'https://mcp.cloudflare.com/mcp',
+    } }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="cloudflare"]')
+    expect(card).not.toBeNull()
+    expect(Array.from(card?.querySelectorAll('button') ?? []).some(button => button.textContent === 'Authorize')).toBe(false)
+    const install = Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Install')
+    expect(install).toBeTruthy()
+    fireEvent.click(install!)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'cloudflare' }))
+  })
+
   it('keeps the legacy Models authorization panel empty', () => {
     const { container } = render(<AuthorizationPanel t={key => en[key]} onAuthorized={vi.fn()} />)
     expect(container.childElementCount).toBe(0)
@@ -713,9 +799,11 @@ describe('connectors settings section', () => {
 
   it('reserves the Notion consent tab synchronously and navigates when its URL arrives', async () => {
     const consentUrl = 'https://www.notion.so/oauth/authorize?client_id=phoenix-test'
+    const popupDocument = document.implementation.createHTMLDocument()
     const popup = {
       closed: false,
       close: vi.fn(),
+      document: popupDocument,
       location: { replace: vi.fn() },
     }
     const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
@@ -772,8 +860,10 @@ describe('connectors settings section', () => {
 
       fireEvent.click(authorize!)
 
-      // Even a late registration starts with one click, never a waiting HTML page.
+      // The temporary tab must explain the pending OAuth hand-off rather than
+      // leaving the user on an empty about:blank page.
       expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+      expect(popupDocument.body.textContent).toContain('Conectando con tu proveedor')
 
       await waitFor(() => {
         expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })

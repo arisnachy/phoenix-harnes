@@ -193,6 +193,33 @@ describe('ManagedMcpController', () => {
   })
 
 
+  it('installs Cloudflare Code Mode through official OAuth instead of requiring an API key', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    const installed = await controller.installCuratedMcp('cloudflare')
+    expect(installed.connector).toMatchObject({
+      serverName: 'cloudflare',
+      url: 'https://mcp.cloudflare.com/mcp',
+      source: { kind: 'curated', connectorId: 'cloudflare' },
+    })
+    expect(live.create).toHaveBeenCalledWith({
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({
+        serverName: 'cloudflare',
+        url: 'https://mcp.cloudflare.com/mcp',
+        transport: 'streamable-http',
+        oauth: true,
+        headers: {},
+      }),
+    })
+    const config = live.create.mock.calls[0]?.[0]?.config
+    expect(config).not.toHaveProperty('bearerTokenRef')
+    expect(config).not.toHaveProperty('oauthClientIdRef')
+    expect(config).not.toHaveProperty('oauthClientSecretRef')
+  })
+
   it('installs, persists, repairs, and removes Canva\'s pinned official MCP', async () => {
     const patchPath = tempPatch()
     const live = loader()
