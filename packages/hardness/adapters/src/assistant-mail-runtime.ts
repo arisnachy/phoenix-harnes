@@ -474,6 +474,29 @@ export function installAssistantMail(ctx: Context,
     rpcDispose = next?.rpc.handle('/phoenix-mail', async (endpoint, input) => {
       try {
         const args = input === undefined ? {} : mailRecord(input)
+        if (endpoint === 'claim') {
+          if (Object.keys(args).length > 0) throw new Error('mail claim does not accept parameters')
+          const account = await onboarding.status()
+          if (account.state !== 'pending-verification' || account.inboxId === undefined) {
+            throw new Error('only an unverified Kira mailbox can be claimed')
+          }
+          const key = await resolveKey()
+          if (key === undefined) {
+            throw new Error('Phoenix no longer has the original AgentMail signup key; this receive-only inbox cannot be claimed with the local credential')
+          }
+          const claimKey = mailString(key, 8192)
+          if (!claimKey.startsWith('am_us_')) {
+            throw new Error('AgentMail Console claiming is only available for US-region agent inboxes')
+          }
+          // The ordinary mailbox projection is deliberately secret-free. The signup key crosses
+          // the loopback-only RPC only for this explicit human action so the browser can place it
+          // directly on the local clipboard; it is never persisted in UI state or logs.
+          return { ok: true as const, value: {
+            apiKey: claimKey,
+            inboxId: account.inboxId,
+            claimUrl: 'https://console.agentmail.to/claim',
+          } }
+        }
         if (endpoint === 'signup') await onboarding.signup(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
         else if (endpoint === 'recover') {
           if (Object.keys(args).length > 0) throw new Error('mail recovery uses only the persisted owner')
