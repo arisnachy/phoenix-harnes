@@ -32,6 +32,10 @@
     "./chat-types": {
       "types": "./lib/types/chat-types.d.ts",
       "default": "./lib/types/chat-types.js"
+    },
+    "./design-types": {
+      "types": "./lib/types/design-types.d.ts",
+      "default": "./lib/types/design-types.js"
     }
   },
   "files": [
@@ -60,7 +64,8 @@
     "@phoenix-ai/dsh-subagent": "workspace:^",
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-typert-protocol": "workspace:^",
-    "@phoenix-ai/dsh-session-projection": "workspace:^"
+    "@phoenix-ai/dsh-session-projection": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^"
   },
   "devDependencies": {
     "@phoenix-ai/dsh-agent": "workspace:^",
@@ -79,7 +84,8 @@
     "@phoenix-ai/cordis": "workspace:^",
     "@phoenix-ai/dsh-typert-protocol": "workspace:^",
     "@phoenix-ai/dsh-session-projection": "workspace:^",
-    "@phoenix-ai/dsh-tools": "workspace:^"
+    "@phoenix-ai/dsh-tools": "workspace:^",
+    "@phoenix-ai/dsh-settings": "workspace:^"
   },
   "publishConfig": {
     "access": "public"
