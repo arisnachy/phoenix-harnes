@@ -227,8 +227,9 @@ it('confirms a claimed inbox and leaves the verification-only state', async () =
   expect(screen.queryByText('Vincula propietario')).toBeNull()
 })
 
-it('accepts a new Console API key only in the local password field and switches to the new inbox', async () => {
+it('corroborates a new Console API key before storing it and activating the new inbox', async () => {
   const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
+  const checks: string[] = []
   const client = {
     call: async (action: string, input?: Record<string, unknown>) => {
       calls.push({ action, ...(input === undefined ? {} : { input }) })
@@ -252,13 +253,37 @@ it('accepts a new Console API key only in the local password field and switches 
         jobs: [],
       }
     },
+    checkConsoleKey: async (apiKey: string) => {
+      checks.push(apiKey)
+      return {
+        valid: true as const,
+        organizationId: 'org_human',
+        authenticationType: 'clerk',
+        inboxCount: 1,
+        inboxLimit: 3,
+        capacityAvailable: true,
+        inboxRead: true,
+      }
+    },
   }
 
   render(<AssistantMailPanel client={client} />)
   const key = await screen.findByLabelText<HTMLInputElement>('Nueva API key de AgentMail')
   expect(key.type).toBe('password')
+  const activate = screen.getByRole('button', { name: 'Guardar API y activar Kira' })
+  expect(activate).toBeDisabled()
+
   fireEvent.change(key, { target: { value: 'am_us_console_secret' } })
-  fireEvent.click(screen.getByRole('button', { name: 'Usar esta API key y crear buzón nuevo' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Corroborar API key' }))
+
+  expect(await screen.findByText('Comprobación de AgentMail')).toBeTruthy()
+  expect(screen.getByText('✓ válida')).toBeTruthy()
+  expect(screen.getByText('1/3')).toBeTruthy()
+  expect(checks).toEqual(['am_us_console_secret'])
+  expect(activate).not.toBeDisabled()
+  expect(calls.some(call => call.action === 'console-key')).toBe(false)
+
+  fireEvent.click(activate)
 
   expect(await screen.findByText('kira-new@agentmail.to')).toBeTruthy()
   expect(calls).toContainEqual({
