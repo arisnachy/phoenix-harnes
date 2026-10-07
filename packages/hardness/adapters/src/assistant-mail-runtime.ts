@@ -249,7 +249,7 @@ export function installAssistantMail(ctx: Context,
     }
   }
   const probeCandidateRealtime = async (candidate: string, inboxId: string): Promise<boolean> => {
-    const transport = new AgentMailTransport(async () => candidate, inboxId, config.timeoutMs, fetch, controller.signal)
+    const transport = new AgentMailTransport(() => Promise.resolve(candidate), inboxId, config.timeoutMs, fetch, controller.signal)
     try {
       const stop = await transport.subscribe(() => {})
       stop()
@@ -449,7 +449,7 @@ export function installAssistantMail(ctx: Context,
         && ['permission-missing', 'message-rejected', 'limit-exceeded'].includes(error.reason ?? '')) {
         providerIssue = issueFromError(error)
         // The incoming socket is healthy; retain connected state and surface the precise send issue separately.
-        status = socketDispose === undefined ? providerStatus(error) : 'connected'
+        status = 'connected'
         return
       }
       throw error
