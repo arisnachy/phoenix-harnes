@@ -35,7 +35,7 @@ export interface AssistantMailClient {
   /** Retrieve the original receive-only signup key for an explicit local claim action.
    * The caller must copy it immediately and must not retain it in UI state.
    */
-  prepareClaim(): Promise<{ readonly apiKey: string; readonly inboxId: string; readonly claimUrl: string }>
+  prepareClaim?(): Promise<{ readonly apiKey: string; readonly inboxId: string; readonly claimUrl: string }>
 }
 
 const JOB_LABELS: Readonly<Record<string, string>> = {
@@ -162,6 +162,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     setClaimNotice(undefined)
     void (async () => {
       try {
+        if (client.prepareClaim === undefined) throw new Error('Esta versión de Phoenix todavía no puede recuperar la clave guardada para reclamar el buzón.')
         const claim = await client.prepareClaim()
         const clipboard = globalThis.navigator.clipboard
         if (clipboard?.writeText === undefined) throw new Error('El navegador no permite copiar la clave de AgentMail al portapapeles.')
