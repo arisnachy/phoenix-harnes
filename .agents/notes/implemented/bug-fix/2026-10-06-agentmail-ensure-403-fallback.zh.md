@@ -12,7 +12,7 @@ Status: implemented
 
 继续把带所有者邮箱的注册作为首选且可恢复的路径。当这个未认证注册被明确以 HTTP 403 拒绝时（显式的服务商配额限制除外），Phoenix 自动切换到 AgentMail 已记录的两阶段注册：先仅用用户名调用 `POST /v0/agent/sign-up` 创建只接收邮件的 inbox，立即持久化一次性 API key 和 inbox 身份，然后使用该 key 调用 `POST /v0/agent/human` 绑定已保存的人类所有者，使 AgentMail 发送六位 OTP。
 
-回退路径必须在绑定人类之前保存 key，因为没有 human_email 的 AgentMail 注册无法恢复丢失的 key。如果绑定步骤失败，Phoenix 仍保留刚创建的 receive-only inbox 与凭据，而不是把它们丢失。之后用户再次显式调用 `ensure` 时，会通过已有恢复路径继续绑定所有者。未认证注册的裸 403 也会和旧凭据被拒绝分开分类，避免诊断错误地声称不存在的 key 已失效。
+回退路径必须在绑定人类之前保存 key，因为没有 human_email 的 AgentMail 注册无法恢复丢失的 key。如果绑定步骤失败，Phoenix 会保留并返回刚创建的 receive-only inbox，而不是把已经成功的邮箱创建变成失败的 `ensure`；之后用户再次显式调用 `ensure` 时，会通过已有恢复路径继续绑定所有者。未认证注册的裸 403 也会和旧凭据被拒绝分开分类，避免诊断错误地声称不存在的 key 已失效。
 
 ## 考虑过的替代方案
 
