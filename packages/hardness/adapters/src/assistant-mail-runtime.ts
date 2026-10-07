@@ -442,7 +442,8 @@ export function installAssistantMail(ctx: Context,
 
     try {
       await ownerOutbox.flush()
-      if (status === 'connected') providerIssue = undefined
+      const ownerPending = (await ownerOutbox.list()).some(row => row.state === 'pending')
+      if (status === 'connected' && !ownerPending) providerIssue = undefined
     } catch (error) {
       if (error instanceof AgentMailHttpError
         && ['permission-missing', 'message-rejected', 'limit-exceeded'].includes(error.reason ?? '')) {
