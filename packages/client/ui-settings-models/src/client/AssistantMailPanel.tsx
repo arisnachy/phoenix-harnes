@@ -33,13 +33,15 @@ export interface AssistantMailConsoleKeyCheck {
   readonly inboxLimit?: number
   readonly capacityAvailable: boolean
   readonly inboxRead: boolean
+  readonly currentInboxAccess?: boolean
+  readonly messageRead?: boolean
 }
 
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
    * @param action Status, signup, recover, claim-status, console-key, owner, create-inbox, replace, discard, verify, configure or refresh.
-   * @param input Operation properties; secrets are accepted only by connect.
+   * @param input Operation properties; secrets are accepted only by explicit local credential actions.
    * @returns Secret-free account and job status.
    */
   call(action: string, input?: Record<string, unknown>): Promise<AssistantMailSnapshot>
@@ -243,8 +245,13 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       setFailure('Primero pega la API key y pulsa “Corroborar API key”.')
       return
     }
-    if (!consoleKeyCheck.inboxRead || !consoleKeyCheck.capacityAvailable) {
-      setFailure('La comprobación de AgentMail todavía no permite activar Kira con esta clave.')
+    const readyKeyUsable = ready
+      ? consoleKeyCheck.currentInboxAccess === true && consoleKeyCheck.messageRead === true
+      : consoleKeyCheck.inboxRead && consoleKeyCheck.capacityAvailable
+    if (!readyKeyUsable) {
+      setFailure(ready
+        ? 'La nueva API key todavía no puede leer el buzón actual de Kira y sus mensajes.'
+        : 'La comprobación de AgentMail todavía no permite activar Kira con esta clave.')
       return
     }
     setBusy(true)
@@ -257,14 +264,18 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         if (value.account.ownerEmail !== undefined) setOwner(value.account.ownerEmail)
         if (input !== null) input.value = ''
         setConsoleKeyCheck(undefined)
-        setClaimNotice(`API guardada y buzón ${value.account.inboxId ?? 'de Kira'} activado. Phoenix comprobó lectura de mensajes antes de marcarlo listo.`)
+        setClaimNotice(ready
+          ? `API actualizada. Phoenix corroboró acceso al buzón ${value.account.inboxId ?? 'de Kira'} y lectura de mensajes.`
+          : `API guardada y buzón ${value.account.inboxId ?? 'de Kira'} activado. Phoenix comprobó lectura de mensajes antes de marcarlo listo.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo activar la API key.'
         setFailure(message.includes('inbox_create permission')
           ? 'La API key necesita alcance de organización y permiso inbox_create.'
           : message.includes('message_read permission')
-            ? 'El buzón se creó, pero la API key no tiene message_read. Crea o ajusta una clave con inbox_read, inbox_create, message_read y message_send, y vuelve a pegarla.'
-            : message.includes('confirmation is ambiguous')
+            ? 'La API key no tiene message_read. Crea o ajusta una clave con inbox_read, message_read y message_send; si vas a crear otro buzón, añade inbox_create.'
+            : message.includes('cannot read the current Kira inbox')
+              ? 'La API key es válida, pero no puede acceder al buzón actual de Kira. Usa una clave con inbox_read y alcance sobre ese buzón.'
+              : message.includes('confirmation is ambiguous')
               ? 'AgentMail no confirmó la creación. Vuelve a pegar la misma API key: Phoenix reconciliará el mismo buzón sin duplicarlo.'
               : message)
       } finally {
@@ -272,14 +283,18 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       }
     })()
   }
+  const consoleKeyReady = consoleKeyCheck !== undefined
+    && consoleKeyCheck.inboxRead
+    && (ready
+      ? consoleKeyCheck.currentInboxAccess === true && consoleKeyCheck.messageRead === true
+      : consoleKeyCheck.capacityAvailable)
   const consoleKeyFallback = <details className={styles.advanced}>
-    <summary>¿Ya tienes cuenta en AgentMail? Usar una API key nueva</summary>
+    <summary>API key de AgentMail · verificar o reemplazar</summary>
     <div className={styles.advancedBody}>
       <p className={styles.help}>
-        Si reclamar el buzón falla porque tu correo ya tiene una cuenta de AgentMail, la documentación
-        oficial indica crear una API key en tu organización y dejar que Kira cree un buzón nuevo dentro
-        de esa cuenta. Usa una clave de organización, no una clave limitada a un solo buzón. El buzón viejo
-        queda fuera y Phoenix deja de usarlo.
+        {ready
+          ? 'Pega una API key nueva para rotar la credencial de Kira sin cambiar su dirección. Phoenix la corrobora contra la organización, el buzón actual y la lectura de mensajes antes de guardarla.'
+          : 'Si reclamar el buzón falla porque tu correo ya tiene una cuenta de AgentMail, crea una API key en tu organización. Phoenix la corrobora antes de crear el nuevo buzón de Kira.'}
       </p>
       <label>
         <span className={styles.fieldLabel}>Nueva API key de AgentMail</span>
@@ -304,9 +319,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           Corroborar API key
         </button>
         <button type="button" className={styles.button}
-          disabled={busy || consoleKeyCheck === undefined || !consoleKeyCheck.inboxRead || !consoleKeyCheck.capacityAvailable}
+          disabled={busy || !consoleKeyReady}
           onClick={useConsoleKey}>
-          Guardar API y activar Kira
+          {ready ? 'Guardar API y verificar acceso' : 'Guardar API y activar Kira'}
         </button>
       </div>
       {consoleKeyCheck === undefined ? null : <div className={styles.keyCheck} aria-label="Comprobación de API key">
@@ -321,18 +336,27 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
             ? `${consoleKeyCheck.inboxCount} usados · límite no informado`
             : `${consoleKeyCheck.inboxCount}/${consoleKeyCheck.inboxLimit}`}</b>
         </span>
-        <span>
+        {ready ? <>
+          <span>
+            Buzón actual <b>{consoleKeyCheck.currentInboxAccess ? '✓ accesible' : '✕ sin acceso'}</b>
+          </span>
+          <span>
+            Lectura de mensajes <b>{consoleKeyCheck.messageRead ? '✓ disponible' : '✕ falta message_read'}</b>
+          </span>
+        </> : <span>
           Nuevo buzón <b>{consoleKeyCheck.capacityAvailable ? '✓ hay capacidad' : '✕ límite alcanzado'}</b>
-        </span>
+        </span>}
         <small>
-          La creación comprueba inbox_create y, antes de marcar Kira como lista, Phoenix comprueba message_read.
-          message_send se valida por AgentMail cuando Kira realiza un envío.
+          {ready
+            ? 'Phoenix no reemplaza la clave guardada hasta comprobar el buzón actual y message_read. message_send se confirma cuando Kira realiza un envío.'
+            : 'La creación comprueba inbox_create y, antes de marcar Kira como lista, Phoenix comprueba inbox_read y message_read. message_send se confirma cuando Kira realiza un envío.'}
         </small>
       </div>}
       <p className={styles.help}>
-        La corroboración no guarda ni cambia nada. Solo después de pulsar “Guardar API y activar Kira”
-        Phoenix crea el nuevo buzón y guarda la clave en Credenciales. Para una clave restringida, incluye
-        inbox_create, inbox_read, message_read y message_send.
+        La corroboración no guarda ni cambia nada. {ready
+          ? 'Solo al confirmar Phoenix sustituye la credencial guardada, manteniendo el mismo buzón.'
+          : 'Solo al confirmar Phoenix crea el nuevo buzón y guarda la clave en Credenciales.'}
+        {' '}Para una clave restringida usa inbox_read, message_read y message_send; añade inbox_create cuando Phoenix deba crear el buzón.
       </p>
     </div>
   </details>
@@ -578,6 +602,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
           </button>
         </div>
       </details>
+      {consoleKeyFallback}
     </> : null}
 
     {ambiguous ? <div className={styles.setup}>
