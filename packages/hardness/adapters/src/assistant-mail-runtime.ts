@@ -488,11 +488,32 @@ export function installAssistantMail(ctx: Context,
           if (!claimKey.startsWith('am_us_')) {
             throw new Error('AgentMail Console claiming is only available for US-region agent inboxes')
           }
-          // The ordinary mailbox projection is deliberately secret-free. The signup key crosses
-          // the loopback-only RPC only for this explicit human action so the browser can place it
-          // directly on the local clipboard; it is never persisted in UI state or logs.
+          if (process.platform !== 'win32') {
+            throw new Error('secure AgentMail claim clipboard handoff is currently available only on Windows')
+          }
+          const subprocess = ctx.get('subprocess')
+          if (subprocess === undefined) throw new Error('secure clipboard handoff is unavailable on this host')
+          const systemRoot = process.env.SystemRoot ?? process.env.WINDIR
+          const powershell = systemRoot === undefined
+            ? 'powershell.exe'
+            : join(systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+          const child = subprocess.spawn({
+            argv: [powershell, '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
+              'Set-Clipboard -Value ([Console]::In.ReadToEnd())'],
+            cwd: config.directory,
+            stdio: {
+              stdin: { data: claimKey },
+              stdout: { maxBytes: 1024 },
+              stderr: { maxBytes: 4096 },
+            },
+            graceMs: 1500,
+            signal: AbortSignal.timeout(10_000),
+          })
+          const outcome = await child.done
+          if (outcome.exitCode !== 0) throw new Error('could not copy the saved AgentMail key to the Windows clipboard')
+          // The secret never crosses the browser RPC or appears in ordinary status projection.
           return { ok: true as const, value: {
-            apiKey: claimKey,
+            copied: true,
             inboxId: account.inboxId,
             claimUrl: 'https://console.agentmail.to/claim',
           } }
