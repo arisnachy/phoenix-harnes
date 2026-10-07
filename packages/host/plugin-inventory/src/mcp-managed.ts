@@ -704,8 +704,18 @@ export class ManagedMcpController {
     return withFileLock(this.path, async () => {
       const migration = await this.ensureManagedDependencies(await readManagedRows(this.path))
       const rows = migration.rows
-      const existing = rows.find(row => managedIdentity(row.config) === managedIdentity(config))
+      // The registry can publish a new remote URL for an existing MCP. A
+      // second row with the same serverName would conflict at tool registration
+      // and appear 'broken' despite the old account still being configured.
+      const existing = rows.find(row => managedIdentity(row.config) === managedIdentity(config)
+        || row.config.serverName === config.serverName
+        || (source?.kind === 'registry' && row.source?.kind === 'registry' && row.source.name === source.name))
       if (existing !== undefined) {
+        const sameSource = source?.kind === 'registry' && existing.source?.kind === 'registry'
+          && existing.source.name === source.name
+        if (managedIdentity(existing.config) !== managedIdentity(config) && !sameSource) {
+          throw new Error(`MCP namespace "${config.serverName}" is already used by another connector. Remove or repair the existing entry first.`)
+        }
         const failure = migration.failed.find(item => item.row.id === existing.id)
         if (failure !== undefined) {
           throw new Error(`failed to repair managed MCP dependencies for "${existing.id}": ${failure.message}`)
@@ -932,7 +942,8 @@ export class ManagedMcpController {
       const rows = migration.rows
       const alreadyInstalled = CORE_MCP_PACK_IDS.filter((connectorId) => {
         const config = CURATED_MCP_SPECS[connectorId].config()
-        return rows.some(row => managedIdentity(row.config) === managedIdentity(config))
+        return rows.some(row => managedIdentity(row.config) === managedIdentity(config)
+          || row.config.serverName === config.serverName)
       })
       // Boot restores only explicitly installed MCPs. Creating twelve optional
       // connectors on every cold start made fresh accounts look broken before
