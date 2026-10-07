@@ -31,8 +31,8 @@ function reservedWindow(): ReservedWindow {
   return { closed: false, close: vi.fn(), postMessage: vi.fn(), location: { replace: vi.fn() } }
 }
 
-const KEY = 'mcp-client/notion-notion'
-const LABEL = 'MCP notion-notion'
+const KEY = 'mcp-client/linear-linear'
+const LABEL = 'MCP linear-linear'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
 const WAITING_URL = (() => {
   const url = new URL('/oauth-waiting.html', window.location.href)
@@ -359,7 +359,7 @@ describe('authorization popup isolation and pre-consent prompts', () => {
         )
       }, { timeout: 3000 })
       expect(reserved.close).not.toHaveBeenCalled()
-      const accountCard = document.querySelector('[data-connector-id="notion"]')
+      const accountCard = document.querySelector('[data-connector-id="linear"]')
       expect(accountCard?.textContent).toContain('Google Desktop OAuth client ID')
       expect(screen.getByText('Google Desktop OAuth client ID')).toBeTruthy()
       answered = true
@@ -381,5 +381,24 @@ it('shows a rejected explicit cancellation without an unhandled rejection', asyn
     await clickAuthorize()
     fireEvent.click(await screen.findByRole('button', { name: en.cancel }))
     expect(await screen.findByText(/cancel transport failed/)).toBeTruthy()
+  } finally { open.mockRestore() }
+})
+
+
+it.each([true, false])('prepares Notion in its card and keeps its consent link (popup allowed: %s)', async (allowed) => {
+  const open = vi.spyOn(window, 'open').mockReturnValue(allowed ? reservedWindow() as unknown as Window : null)
+  const api = panelApi(consentNotice)
+  api.list = vi.fn(async () => ok({ entries: [{
+    key: 'mcp-client/notion', label: 'MCP notion',
+    methods: [{ id: 'oauth', label: 'Authorize Notion' }], inFlight: false,
+  }] }))
+  try {
+    renderPanel(api)
+    await clickAuthorize()
+    expect(open).not.toHaveBeenCalled()
+    expect(api.begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+    await waitFor(() => { expect(open).toHaveBeenCalledWith(CONSENT_URL, '_blank') }, { timeout: 3000 })
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('link', { name: /open/i }).getAttribute('href')).toBe(CONSENT_URL)
   } finally { open.mockRestore() }
 })

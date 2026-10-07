@@ -1224,7 +1224,7 @@ export function ConnectorsSettingsSection({ api,
     // Browser popup policy requires window.open() to happen in the original
     // click stack. The MCP authorization flow may register only after this
     // reconnect finishes, so reserve the blank tab now and navigate it later.
-    if (recoverAuthorization) reserveOAuthPopup()
+    if (recoverAuthorization && !/^notion(?:-|$)/u.test(runtime.serverName)) reserveOAuthPopup()
     setCatalogFailure(undefined)
     setReconnectingServerName(runtime.serverName)
     void reconnect({ serverName: runtime.serverName }).then(async (result) => {

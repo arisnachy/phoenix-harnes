@@ -711,7 +711,7 @@ describe('connectors settings section', () => {
     })
   })
 
-  it('reserves the OAuth tab in the original click before a late MCP flow begins', async () => {
+  it('opens the Notion consent tab only after a late MCP flow publishes its URL', async () => {
     const consentUrl = 'https://www.notion.so/oauth/authorize?client_id=phoenix-test'
     const popup = {
       closed: false,
@@ -772,19 +772,14 @@ describe('connectors settings section', () => {
 
       fireEvent.click(authorize!)
 
-      // This must happen synchronously in the click stack, before the MCP
-      // reconnect promise resolves and before its authorization flow exists.
-      expect(open).toHaveBeenCalledTimes(1)
-      const waitingUrl = new URL('/oauth-waiting.html', window.location.href)
-      waitingUrl.searchParams.set('v', '20261007-1')
-      expect(open).toHaveBeenCalledWith(waitingUrl.href, '_blank')
-      expect(open.mock.invocationCallOrder[0]).toBeLessThan(reconnect.mock.invocationCallOrder[0]!)
+      // Notion stays in its card until the Host publishes the real consent URL.
+      expect(open).not.toHaveBeenCalled()
 
       await waitFor(() => {
         expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
       })
       await waitFor(() => {
-        expect(popup.location.replace).toHaveBeenCalledWith(consentUrl)
+        expect(open).toHaveBeenCalledWith(consentUrl, '_blank')
       }, { timeout: 2_000 })
 
       const manual = screen.getByRole('link', { name: 'Open authorization page' }) as HTMLAnchorElement

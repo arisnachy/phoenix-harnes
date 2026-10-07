@@ -261,11 +261,13 @@ export function useAuthorizationAttempt(
     opened.current.clear()
     pendingPopupNavigation.current = undefined
     pendingPopupStatus.current = undefined
-    // OAuth needs a real same-origin PHOENIX page opened synchronously inside
+    // Notion prepares in its Settings card and opens only the provider URL.
+    // Other OAuth flows keep a real same-origin PHOENIX page opened synchronously inside
     // the click gesture so popup blockers allow the later provider navigation.
     // Never reserve about:blank: the user should always see a real PHOENIX URL
     // while discovery is still in progress.
-    if (method === 'oauth') reserveOAuthPopup()
+    const isNotion = /^mcp-client\/notion(?:-|$)/u.test(key)
+    if (method === 'oauth' && !isNotion) reserveOAuthPopup()
     else closeReservedPopup()
     void api.begin({ key, method }).then((response) => {
       if (!response.result.ok) {
