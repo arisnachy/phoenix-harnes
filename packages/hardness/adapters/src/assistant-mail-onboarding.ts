@@ -246,7 +246,7 @@ export class MailOnboarding {
     } catch (error) {
       const ownerSignupRejected = error instanceof AgentMailHttpError
         && error.status === 403
-        && error.reason === 'signup-rejected'
+        && error.reason !== 'limit-exceeded'
       if (ownerSignupRejected) {
         return await this.enrollReceiveOnly(previous, owner, username)
       }
@@ -294,7 +294,7 @@ export class MailOnboarding {
    * @returns Persisted key and inbox identity.
    */
   private async persistPendingSignup(data: Record<string, unknown>, owner: string, username: string):
-  Promise<{ readonly key: string; readonly inboxId: string }> {
+    Promise<{ readonly key: string; readonly inboxId: string }> {
     const key = mailString(data.api_key, 8192)
     const inboxId = mailAddress(mailString(data.inbox_id))
     await this.options.saveKey(key)
