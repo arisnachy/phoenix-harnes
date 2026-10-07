@@ -188,7 +188,7 @@ it('rejects identity mismatches and admits only candidates from the authenticate
 })
 
 it('uses HTML mail content as task text when AgentMail has no plain-text part', async () => {
-  const transport = new AgentMailTransport(async () => 'secret', 'kira@agentmail.to', 1000, async url => {
+  const transport = new AgentMailTransport(async () => 'secret', 'kira@agentmail.to', 1000, async (url) => {
     const address = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url
     if (address.includes('/messages?')) return Response.json({ messages: [{ message_id: 'html-only' }] })
     return Response.json({
