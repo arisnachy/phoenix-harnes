@@ -200,19 +200,19 @@ it('confirms a claimed inbox and leaves the verification-only state', async () =
       return {
         account: action === 'claim-status'
           ? {
-              state: 'ready',
-              inboxId: 'kira@agentmail.to',
-              ownerEmail: 'owner@example.com',
-              ownerLink: 'attached' as const,
-              contacts: [],
-            }
+            state: 'ready',
+            inboxId: 'kira@agentmail.to',
+            ownerEmail: 'owner@example.com',
+            ownerLink: 'attached' as const,
+            contacts: [],
+          }
           : {
-              state: 'pending-verification',
-              inboxId: 'kira@agentmail.to',
-              ownerEmail: 'owner@example.com',
-              ownerLink: 'provider-conflict' as const,
-              contacts: [],
-            },
+            state: 'pending-verification',
+            inboxId: 'kira@agentmail.to',
+            ownerEmail: 'owner@example.com',
+            ownerLink: 'provider-conflict' as const,
+            contacts: [],
+          },
         connection: action === 'claim-status' ? 'connecting' : 'disconnected',
         jobs: [],
       }
