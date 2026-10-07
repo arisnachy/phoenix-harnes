@@ -1233,6 +1233,101 @@ describe('connectors settings section', () => {
     expect(screen.getByRole('button', { name: 'Reauthorize' })).toBeTruthy()
   })
 
+  it('explains why header-protected registry remotes cannot be auto-installed', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const install = vi.fn()
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ runtime: [], managed: [] })),
+      install,
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'restricted-registry-fixture',
+        fetchedAt: '2026-10-07T12:00:00.000Z',
+        stale: false,
+        candidates: [{
+          name: 'io.example/restricted-registry-fixture',
+          title: 'Restricted Remote MCP',
+          description: 'Needs provider key headers.',
+          version: '1.0.0',
+          status: 'active' as const,
+          trust: 'registry-listed' as const,
+          icons: [],
+          transports: ['streamable-http' as const],
+          packages: [],
+          remoteSetupRequired: 'headers' as const,
+        }],
+      })),
+    }
+    renderHub(api, { mcpRegistry })
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'restricted-registry-fixture' } })
+    const card = (await screen.findByText('Restricted Remote MCP')).closest('article')
+    expect(card?.textContent).toContain('Needs provider-specific API headers')
+    expect(card?.querySelector('button')).toBeNull()
+    expect(install).not.toHaveBeenCalled()
+  })
+
+  it('offers an actual Authorize action for a registry-installed MCP that needs OAuth', async () => {
+    const api = {
+      list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const reconnect = vi.fn(async () => ({ accepted: false }))
+    const popup = { closed: false, close: vi.fn(), location: { replace: vi.fn() } }
+    const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        runtime: [{
+          serverName: 'registry-auth-123',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+        managed: [{
+          entryId: 'registry-auth-entry',
+          serverName: 'registry-auth-123',
+          url: 'https://mcp.example.com/registry-auth-fixture',
+          source: { kind: 'registry' as const, name: 'io.example/registry-auth-fixture', version: '1.0.0' },
+        }],
+      })),
+      reconnect,
+      search: vi.fn(async () => ({
+        source: 'official-mcp-registry' as const,
+        query: 'registry-auth-fixture',
+        fetchedAt: '2026-10-07T12:00:00.000Z',
+        stale: false,
+        candidates: [{
+          name: 'io.example/registry-auth-fixture',
+          title: 'OAuth Registry MCP',
+          description: 'OAuth connector.',
+          version: '1.0.0',
+          status: 'active' as const,
+          trust: 'registry-listed' as const,
+          icons: [],
+          transports: ['streamable-http' as const],
+          packages: [],
+          remoteUrl: 'https://mcp.example.com/registry-auth-fixture',
+        }],
+      })),
+    }
+    try {
+      renderHub(api, { mcpRegistry })
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-auth-fixture' } })
+      const card = (await screen.findByText('OAuth Registry MCP')).closest('article')
+      expect(card?.textContent).toContain('Authorization required')
+      const authorize = Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')
+      expect(authorize).toBeTruthy()
+      fireEvent.click(authorize!)
+      await waitFor(() => { expect(reconnect).toHaveBeenCalledWith({ serverName: 'registry-auth-123' }) })
+      expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+    } finally {
+      open.mockRestore()
+    }
+  })
+
   it('marks a persisted registry connector with no runtime as broken and removable', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
@@ -1268,7 +1363,7 @@ describe('connectors settings section', () => {
     renderHub(api, { mcpRegistry })
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'registry-fixture' } })
-    expect(await screen.findByText('Broken')).toBeTruthy()
+    expect(await screen.findByText('Installed · runtime not started')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Install' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Repair' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Uninstall' }))
