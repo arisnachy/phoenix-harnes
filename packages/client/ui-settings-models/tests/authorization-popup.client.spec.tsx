@@ -216,23 +216,23 @@ describe('authorization consent window', () => {
     open.mockRestore()
   })
 
-  it('falls back when the reserved window refuses cross-origin navigation', async () => {
+  it('uses the waiting-page message bridge when direct cross-origin navigation is refused', async () => {
     const reserved = reservedWindow()
     reserved.location.replace.mockImplementation(() => { throw new DOMException('navigation blocked', 'SecurityError') })
-    const fallback = reservedWindow()
-    const open = vi.spyOn(window, 'open')
-      .mockReturnValueOnce(reserved as unknown as Window)
-      .mockReturnValueOnce(fallback as unknown as Window)
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     const api = panelApi(consentNotice)
 
     renderPanel(api)
     await clickAuthorize()
 
-    await waitFor(
-      () => { expect(open).toHaveBeenLastCalledWith(CONSENT_URL, '_blank') },
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      expect(reserved.postMessage).toHaveBeenCalledWith(
+        { type: 'phoenix/oauth-navigate', url: CONSENT_URL },
+        window.location.origin,
+      )
+    }, { timeout: 5000 })
     expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL)
+    expect(open).toHaveBeenCalledTimes(1)
     open.mockRestore()
   })
 
