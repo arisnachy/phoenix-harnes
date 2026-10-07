@@ -209,9 +209,10 @@ export function installAssistantMail(ctx: Context,
     if (error instanceof AgentMailHttpError) {
       if (error.reason === 'verification-required') return 'verification-required'
       if (error.reason === 'credential-rejected') return 'recovery-required'
-      if (error.reason === 'permission-missing') return socketDispose === undefined ? 'permission-required' : status
-      if (error.reason === 'limit-exceeded' || error.status === 429) return socketDispose === undefined ? 'quota-reached' : status
-      if (error.reason === 'message-rejected') return socketDispose === undefined ? 'message-rejected' : status
+      const inboundHealthy = status === 'connected' || status === 'connected-polling'
+      if (error.reason === 'permission-missing') return inboundHealthy ? status : 'permission-required'
+      if (error.reason === 'limit-exceeded' || error.status === 429) return inboundHealthy ? status : 'quota-reached'
+      if (error.reason === 'message-rejected') return inboundHealthy ? status : 'message-rejected'
     }
     return error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
   }
