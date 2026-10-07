@@ -777,7 +777,7 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, recon
       </div>
       <p className={connectorStyles['connectorDescription']}>{candidate.description}</p>
       <div className={connectorStyles['connectorFooter']}>
-        <span className={`${connectorStyles['connectorStatus'] ?? ''} ${needsRepair ? connectorStyles['connectorStatusError'] ?? '' : runtime?.status === 'ready' ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
+        <span title={status} className={`${connectorStyles['connectorStatus'] ?? ''} ${needsRepair ? connectorStyles['connectorStatusError'] ?? '' : runtime?.status === 'ready' ? connectorStyles['connectorStatusReady'] ?? '' : candidate.status === 'active' ? connectorStyles['connectorStatusInfo'] ?? '' : connectorStyles['connectorStatusDisabled'] ?? ''}`.trim()}>
           {status}{stale ? ` · ${t('registryCachedStatus')}` : ''}
         </span>
         <div className={connectorStyles['connectorActions']}>
