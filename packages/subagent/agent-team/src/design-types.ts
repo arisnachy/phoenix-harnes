@@ -130,7 +130,7 @@ function normalizePerson(raw: unknown, fallback: TeamDesignPerson, expectedId: '
     personality: text(value.personality, fallback.personality, 1200),
     voice: text(value.voice, fallback.voice, 500),
     avatar: avatarId(value.avatar) ? value.avatar : fallback.avatar,
-    enabled: typeof value.enabled === 'boolean' ? value.enabled : fallback.enabled,
+    enabled: expectedId === 'lead' ? true : typeof value.enabled === 'boolean' ? value.enabled : fallback.enabled,
   }
 }
 
