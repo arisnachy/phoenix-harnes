@@ -33,6 +33,7 @@ function reservedWindow(): ReservedWindow {
 const KEY = 'mcp-client/notion-notion'
 const LABEL = 'MCP notion-notion'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
+const WAITING_URL = new URL('/oauth-waiting.html', window.location.href).href
 
 function panelApi(statusResult: () => Promise<RpcResponse<unknown>>) {
   return {
@@ -124,12 +125,12 @@ describe('authorization consent window', () => {
     await clickAuthorize()
 
     // Same tick as the gesture: this is what the popup blocker checks.
-    expect(open).toHaveBeenCalledWith('', '_blank')
+    expect(open).toHaveBeenCalledWith(WAITING_URL, '_blank')
     expect(begin).toHaveBeenCalledWith({ key: KEY, method: 'oauth' })
     open.mockRestore()
   })
 
-  it('closes the reserved blank window when authorization cannot even start', async () => {
+  it('closes the reserved Phoenix waiting page when authorization cannot even start', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     const api = panelApi(pendingForever)
