@@ -315,11 +315,8 @@ it('keeps the inbound AgentMail channel connected when message_send is missing a
     set: async (_ref: unknown, value: string) => { credential = value },
     unset: async () => { credential = '' },
   })
-  const messageEvent = (data: unknown): Event => {
-    const event = new Event('message') as Event & { data?: unknown }
-    Object.defineProperty(event, 'data', { value: JSON.stringify(data) })
-    return event
-  }
+  const messageEvent = (data: unknown): Event =>
+    new MessageEvent('message', { data: JSON.stringify(data) })
   class Socket extends EventTarget {
     constructor(_url: string) {
       super()
