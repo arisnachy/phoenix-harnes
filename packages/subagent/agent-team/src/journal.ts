@@ -4,10 +4,10 @@ import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { Context } from '@phoenix-ai/cordis'
 import type { SessionEventMap, SessionId } from '@phoenix-ai/dsh-session'
 import { foldTeam } from './fold.ts'
-import type { TeamEventType, TeamFoldState } from './fold.ts'
+import type { TeamFoldState } from './fold.ts'
 
-type AppendTeamEvent = <T extends TeamEventType>(type: T, data: SessionEventMap[T]) => void
-type MutableTeamEventType = 'team/member' | 'team/task' | 'team/message/queued' | 'team/message/delivered' | 'team/reaction'
+type AppendTeamEvent = <T extends MutableTeamEventType>(type: T, data: SessionEventMap[T]) => void
+type MutableTeamEventType = 'team/member' | 'team/task' | 'team/message/queued' | 'team/message/delivered' | 'team/reaction' | 'team/chat-message'
 
 /** Owns per-Lead transaction order and committed Team event publication. */
 export class TeamJournal {

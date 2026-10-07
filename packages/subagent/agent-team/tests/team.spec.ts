@@ -2363,6 +2363,22 @@ describe('visible team conversation', () => {
     expect(adapter.requests).toHaveLength(0)
   })
 
+  it('shows the addressed initial task rather than the roster description', async () => {
+    const { ctx, lead } = await setup(['hang'], {}, true)
+    const started = await ctx.agentTeams.spawnTeammate(lead, {
+      name: 'argo', description: 'Research assignment',
+      prompt: content('Busca fuentes anteriores al corte y explica los bloqueos.'),
+      context: 'fresh', provider: 'spawn', signal: SIGNAL,
+    })
+    const rows = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
+      .filter(row => row.id === `team-member:${started.member.id}`)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.text).toBe('Argo, Busca fuentes anteriores al corte y explica los bloqueos.')
+    expect(rows[0]?.targetId).toBe(started.member.id)
+    ctx.agentTeams.interrupt(lead, 'argo')
+    await waitNoAgent(ctx, started.member.id)
+  })
+
   it('gives a new teammate the exact visible Kira assignment id in its first prompt', async () => {
     const { ctx, lead, adapter } = await setup(['hang'], {}, true)
     const started = await spawn(ctx, lead, 'zenith')

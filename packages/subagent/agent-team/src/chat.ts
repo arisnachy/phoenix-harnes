@@ -15,6 +15,7 @@ import { chatMessageSchema, chatParticipantSchema, chatReactionSchema } from './
 import { foldTeam } from './fold.ts'
 import { teamExecutionProof, isConversationalTeamUserRequest } from './execution-evidence.ts'
 import { TeamId } from './types.ts'
+import { boundedTranscriptText } from './validation.ts'
 import type { TeamJournal } from './journal.ts'
 import type { TeamChatMessage, TeamChatParticipant, TeamChatReadResult, TeamChatReaction, TeamChatReactRequest, TeamChatReplyRequest } from './chat-types.ts'
 
@@ -93,6 +94,7 @@ export class TeamChat {
         && event.data.teamId === TeamId(root.id)
         && (event.data.member.phase === 'provisioning' || event.data.member.phase === 'active')) {
         const member = event.data.member
+        if (rows.has(`team-member:${member.id}`)) continue
         rows.set(`team-member:${member.id}`, {
           id: `team-member:${member.id}`, senderId: root.id, senderName: 'Kira', senderKind: 'kira',
           avatar: 'kira', role: 'skill.orchestration', missionId: root.id, text: member.description,
@@ -230,17 +232,7 @@ export class TeamChat {
           ? text
           : `${text}\n\n✓ Evidencia ejecutada: ${proof.tools.join(', ')}`
         // Bound copied text by the same configured mailbox limit, without splitting a Unicode scalar.
-        let bounded = visibleText
-        if (Buffer.byteLength(visibleText) > this.maxBytes) {
-          let used = 0
-          bounded = ''
-          for (const char of visibleText) {
-            const bytes = Buffer.byteLength(char)
-            if (used + bytes > this.maxBytes) break
-            bounded += char
-            used += bytes
-          }
-        }
+        const bounded = boundedTranscriptText(visibleText, this.maxBytes)
         root.append('team/chat-message', { version: 1, message: { id, senderId: header.id,
           senderName: person.name, senderKind: 'agent', avatar: person.avatar, role: person.role, missionId: root.id, text: bounded,
           time: event.time, sourceSeq: event.seq, mentions: [], reactions: [] } })

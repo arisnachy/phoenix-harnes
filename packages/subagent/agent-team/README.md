@@ -81,3 +81,5 @@ Peer messages append after the target's reusable history prefix. Cold resume reu
 - **Flat immutable roster** — only the Lead creates direct teammates; there is no nested Team, rename, deletion, or name reuse.
 - **No automatic ownership release** — idle, interruption, process exit, and failed work do not release a task owner.
 - **Mailbox is not cross-process exactly-once** — concurrent harness processes over one Team are unsupported.
+
+Initial delegation publishes the real bounded assignment addressed to the teammate by name. The child is instructed to publish its own useful first-action update through `send_message` to the Lead before executing; no acceptance is fabricated.

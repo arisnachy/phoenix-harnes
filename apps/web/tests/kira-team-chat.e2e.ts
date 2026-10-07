@@ -14,7 +14,9 @@ import { connectFreshWorkspace, newEnglishPage } from './support.ts'
 function continueAddressedMission(options: GenerateOptions) {
   const text = options.messages.flatMap(message => message.content)
     .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
-  const name = text.includes('Review zenith') ? 'ZENITH' : text.includes('Review argo') ? 'ARGO' : undefined
+  const assignment = options.messages.find(message => message.role === 'user')?.content
+    .flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') ?? ''
+  const name = assignment.includes('Review zenith') ? 'ZENITH' : assignment.includes('Review argo') ? 'ARGO' : undefined
   if (name === undefined) return textResponse('KIRA_TEAM_COMPLETION')
   const requestId = text.match(/\[Team user message ([a-zA-Z0-9_-]+)\]/u)?.[1]
   if (requestId === undefined) throw new Error('No real directed user question reached the teammate')
@@ -38,7 +40,9 @@ describe('Kira team in the existing main chat', () => {
   let entered = 0
   const adapter = new MockAdapter([
     textResponse('KIRA_TEAM_COORDINATION'),
+    toolCallResponse('start-zenith', 'send_message', { target: 'lead', purpose: 'update', message: 'Kira, contrastaré las fuentes de Zenith antes de entregar el resultado.' }),
     toolCallResponse('hold-zenith', 'team_test_hold', {}, 'ZENITH_REAL_FINDING'),
+    toolCallResponse('start-argo', 'send_message', { target: 'lead', purpose: 'update', message: 'Kira, buscaré las fuentes de Argo y te diré qué puedo verificar.' }),
     toolCallResponse('hold-argo', 'team_test_hold', {}, 'ARGO_REAL_VERIFICATION'),
     ...Array.from({ length: 12 }, () => continueAddressedMission),
   ])
@@ -112,6 +116,14 @@ describe('Kira team in the existing main chat', () => {
     const zenith = await start('zenith')
     const argo = await start('argo')
     await expect.poll(() => entered).toBe(2)
+    try { await page.getByText('Zenith, Review zenith', { exact: true }).waitFor({ timeout: 5000 }) } catch (error) {
+      throw new Error(JSON.stringify({ errors: tripwire.pageErrors, body: await page.locator('body').innerText() }), { cause: error })
+    }
+    await page.getByText('Argo, Review argo', { exact: true }).waitFor()
+    const argoStart = page.locator(`[data-team-sender-id="${argo.member.id}"]`).filter({ hasText: 'Kira, buscaré las fuentes de Argo' })
+    await argoStart.waitFor()
+    expect(await argoStart.locator('img').count()).toBeGreaterThan(0)
+    await page.screenshot({ path: '/tmp/phoenix-team-real-handoff.png', fullPage: true })
     const zenithRow = page.locator(`[data-team-sender-id="${zenith.member.id}"]`).filter({ hasText: 'ZENITH_REAL_FINDING' })
     const argoRow = page.locator(`[data-team-sender-id="${argo.member.id}"]`).filter({ hasText: 'ARGO_REAL_VERIFICATION' })
     await zenithRow.waitFor()

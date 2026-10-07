@@ -81,3 +81,5 @@ Peer 消息追加在 target 可复用历史前缀之后。冷恢复会先复用�
 - **扁平且不可变的 roster**：只有 Lead 可以创建直接 teammate；不支持嵌套 Team、重命名、删除或名字复用。
 - **不会自动释放 owner**：idle、interrupt、进程退出与工作失败都不会释放任务 owner。
 - **mailbox 不保证跨进程 exactly-once**：不支持多个 harness 进程并发操作同一 Team。
+
+初始委派会发布按真实成员姓名称呼的任务，并限制文本长度。子代理在执行前通过 `send_message` 向负责人发布自己的首次行动更新，不会伪造接受任务的回复。

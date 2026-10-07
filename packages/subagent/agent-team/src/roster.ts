@@ -19,7 +19,8 @@ import type {
   TeamMemberSnapshot,
   TeamMemberView,
 } from './types.ts'
-import { requiredText } from './validation.ts'
+import { requiredText, boundedTranscriptText } from './validation.ts'
+import { TEAM_PERSONAS } from './personas.ts'
 
 const MEMBER_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 
@@ -86,12 +87,14 @@ export class TeamRoster {
    * @param journal - authoritative Lead-log transaction owner.
    * @param lifecycle - shared Team runtime admission cutoff.
    * @param maxMembers - maximum provisioning or successfully created members per Team.
+   * @param maxMessageBytes - maximum public assignment text size.
    */
   constructor(
     private readonly ctx: Context,
     private readonly journal: TeamJournal,
     private readonly lifecycle: TeamRuntimeLifecycle,
     private readonly maxMembers: number,
+    private readonly maxMessageBytes: number,
   ) {}
 
   /**
@@ -317,11 +320,26 @@ export class TeamRoster {
         }
         : {
           type: 'text' as const,
-          text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. Before substantive work, use your first normal assistant update to address Kira and state the concrete first action you are about to take in your own voice (for example, 'Kira, empiezo por revisar las pistas.'). Then execute the assignment. Do not claim completed work, repeat the assignment or add an acknowledgement-only turn. team_chat_react is optional; never substitute an emoji for the useful work update.`,
+          text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. Before substantive work, publish your own brief first-action update through send_message with target lead and purpose update, addressing Kira in your own voice (for example, 'Kira, buscaré las fuentes y comprobaré su fecha.'). This is your own update, not text for Kira to paraphrase. Then execute the assignment in the same turn. Do not claim completed work, repeat the assignment or add an acknowledgement-only turn. team_chat_react is optional; never substitute an emoji for the useful work update.`,
         },
     ]
     let started: ContinuableStart
     try {
+      await this.journal.transact(root.id, async () => {
+        signal.throwIfAborted()
+        const task = request.prompt.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n').trim()
+        const addressedName = TEAM_PERSONAS.find(person => person.kind === name)?.name ?? name
+        const text = task.toLocaleLowerCase().startsWith(addressedName.toLocaleLowerCase() + ',')
+          ? task : `${addressedName}, ${task || description}`
+        const event = root.session.events.findLast(event => event.type === 'team/member' && event.data.member.id === childId)
+        if (event === undefined) throw new TeamError('assignment has no committed roster entry', 'TEAM_PROVISIONING_CONFLICT')
+        await this.journal.appendAndFlush(root, 'team/chat-message', { version: 1, update: true, message: {
+          id: `team-member:${childId}`, senderId: root.id, senderName: 'Kira', senderKind: 'kira',
+          avatar: 'kira', role: 'skill.orchestration', missionId: root.id,
+          text: boundedTranscriptText(text, this.maxMessageBytes), time: event.time, sourceSeq: event.seq,
+          targetId: childId, mentions: [childId], reactions: [],
+        } })
+      })
       started = await this.ctx.subagents.startContinuable({
         childId,
         provider: request.provider,
