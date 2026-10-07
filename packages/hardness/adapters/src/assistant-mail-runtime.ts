@@ -32,12 +32,22 @@ export interface AssistantMailConfig { readonly directory: string
   readonly authorizeOutgoing: (ownership: MailOutgoingOwnership) => Promise<boolean>
   /** Resolve the already-connected owner email used for automatic first-run enrollment. */
   readonly resolveOwnerEmail?: () => Promise<string | undefined> }
+/** Sanitized provider failure surfaced to Settings and Kira without provider bodies or credentials. */
+export interface AssistantMailProviderIssue {
+  readonly status: number
+  readonly code?: string
+  readonly reason?: string
+  readonly permission?: string
+  readonly fix?: string
+}
+
 /** Secret-free Kira mailbox identity exposed to model-facing tools. */
 export interface AssistantMailIdentity {
   readonly state: MailAccount['state']
   readonly inboxId?: string
   readonly connection: string
   readonly ownerEmail?: string
+  readonly providerIssue?: AssistantMailProviderIssue
 }
 
 /** Host service used by Kira to inspect or create her own mailbox without touching Gmail setup. */
@@ -187,17 +197,70 @@ export function installAssistantMail(ctx: Context,
   let socketDispose: (() => void) | undefined
   let transportInbox: string | undefined
   let status = 'not-configured'
+  let providerIssue: AssistantMailProviderIssue | undefined
+  const issueFromError = (error: AgentMailHttpError): AssistantMailProviderIssue => ({
+    status: error.status,
+    ...(error.code === undefined ? {} : { code: error.code }),
+    ...(error.reason === undefined ? {} : { reason: error.reason }),
+    ...(error.permission === undefined ? {} : { permission: error.permission }),
+    ...(error.fix === undefined ? {} : { fix: error.fix }),
+  })
   const providerStatus = (error: unknown): string => {
     if (error instanceof AgentMailHttpError) {
       if (error.reason === 'verification-required') return 'verification-required'
-      if (error.reason === 'credential-rejected' || error.reason === 'permission-missing') return 'recovery-required'
-      if (error.reason === 'limit-exceeded' || error.status === 429) return 'quota-reached'
-      if (error.reason === 'message-rejected') return 'message-rejected'
+      if (error.reason === 'credential-rejected') return 'recovery-required'
+      if (error.reason === 'permission-missing') return socketDispose === undefined ? 'permission-required' : status
+      if (error.reason === 'limit-exceeded' || error.status === 429) return socketDispose === undefined ? 'quota-reached' : status
+      if (error.reason === 'message-rejected') return socketDispose === undefined ? 'message-rejected' : status
     }
     return error instanceof Error && error.message.includes('quota') ? 'quota-reached' : 'disconnected'
   }
+  type CandidateKeyAccess = {
+    readonly scopeType: 'organization' | 'pod' | 'inbox'
+    readonly inboxCreate: boolean
+    readonly messageSend: boolean
+  }
+  const inspectCandidateKeyAccess = async (candidate: string, account: MailAccount): Promise<CandidateKeyAccess> => {
+    const auth = mailRecord(await agentMailRequest('/auth/me', candidate, config.timeoutMs, fetch))
+    const scope = mailString(auth.scope_type)
+    if (!['organization', 'pod', 'inbox'].includes(scope)) throw new Error('AgentMail returned an invalid API key scope')
+    const scopeType = scope as CandidateKeyAccess['scopeType']
+    if (account.state !== 'ready' && scopeType !== 'organization') {
+      throw new Error('a new Kira inbox requires an organization-scoped AgentMail API key')
+    }
+    if (account.state === 'ready' && scopeType === 'inbox'
+      && (account.inboxId === undefined || auth.inbox_id !== account.inboxId)) {
+      throw new Error('this inbox-scoped AgentMail API key belongs to a different inbox')
+    }
+
+    let permissions: Record<string, unknown> | undefined
+    if (auth.permissions !== undefined && auth.permissions !== null) permissions = mailRecord(auth.permissions)
+    else if (typeof auth.api_key_id === 'string' && auth.api_key_id.length > 0) {
+      const metadata = mailRecord(await agentMailRequest(
+        `/api-keys/${encodeURIComponent(auth.api_key_id)}`, candidate, config.timeoutMs, fetch,
+      ))
+      if (metadata.permissions !== undefined && metadata.permissions !== null) permissions = mailRecord(metadata.permissions)
+    }
+    const allowed = (name: string): boolean => permissions === undefined || permissions[name] === true
+    return {
+      scopeType,
+      inboxCreate: scopeType === 'organization' && allowed('inbox_create'),
+      messageSend: allowed('message_send'),
+    }
+  }
+  const probeCandidateRealtime = async (candidate: string, inboxId: string): Promise<boolean> => {
+    const transport = new AgentMailTransport(async () => candidate, inboxId, config.timeoutMs, fetch, controller.signal)
+    try {
+      const stop = await transport.subscribe(() => {})
+      stop()
+      return true
+    } catch {
+      return false
+    }
+  }
   let automaticCredentialRecoveryAttempted = false
   const handleProviderFailure = async (error: unknown, recoverVerification = true): Promise<void> => {
+    if (error instanceof AgentMailHttpError) providerIssue = issueFromError(error)
     status = providerStatus(error)
     if (!recoverVerification || !(error instanceof AgentMailHttpError)) return
     if (error.reason === 'verification-required') {
@@ -211,7 +274,7 @@ export function installAssistantMail(ctx: Context,
       }
       return
     }
-    if (!['credential-rejected', 'permission-missing'].includes(error.reason ?? '') || automaticCredentialRecoveryAttempted) return
+    if (error.reason !== 'credential-rejected' || automaticCredentialRecoveryAttempted) return
     automaticCredentialRecoveryAttempted = true
     // A stale/rejected stored key is recoverable without a manually pasted API key:
     // AgentMail's owner-bound sign-up rotates the credential idempotently, and
@@ -233,7 +296,7 @@ export function installAssistantMail(ctx: Context,
     } catch (error) {
       await handleProviderFailure(error)
       const recoverable = error instanceof AgentMailHttpError
-        && (error.reason === 'credential-rejected' || error.reason === 'permission-missing')
+        && error.reason === 'credential-rejected'
         && status === 'connecting'
       if (!recoverable) throw error
       try {
