@@ -210,7 +210,8 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       setFailure('Pega una API key creada en tu cuenta de AgentMail Console.')
       return
     }
-    if (client.checkConsoleKey === undefined) {
+    const checker = client.checkConsoleKey
+    if (checker === undefined) {
       setFailure('Esta versión de Phoenix todavía no puede corroborar una API key antes de activarla.')
       return
     }
@@ -220,7 +221,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     setConsoleKeyCheck(undefined)
     void (async () => {
       try {
-        setConsoleKeyCheck(await client.checkConsoleKey?.(apiKey))
+        setConsoleKeyCheck(await checker(apiKey))
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo corroborar la API key.'
         setFailure(message.includes('not organization-scoped')
