@@ -121,7 +121,7 @@
         env:
           PHOENIX_BROWSER_AUTOSTART: 'true'
           PHOENIX_BROWSER_PREFERRED_ENGINE: chrome
-          PHOENIX_BROWSER_ALLOW_ACTIONS: 'true'
+          PHOENIX_BROWSER_ALLOW_ACTIONS: !!js "process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'read-only' ? 'false' : 'true')"
         failOnStartupError: false
         startupTimeoutMs: 1000
         reconnect:

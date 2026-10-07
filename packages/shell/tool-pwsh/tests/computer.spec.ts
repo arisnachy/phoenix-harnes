@@ -4,11 +4,13 @@ import {
   browserCommandForAction,
   computerActionNeedsApproval,
   computerModeForSandbox,
+  desktopControlConnectionWasNeverEstablished,
   legacyDesktopObservationCommandForAction,
   parseDesktopBrowserControlDescriptor,
   residentComputerRequestForAction,
   runWindowsComputerAction,
   shouldCaptureAfterAction,
+  systemBrowserOpenInvocation,
   validateComputerArgs,
   windowsComputerInvocation,
 } from '../src/computer.ts'
@@ -39,6 +41,24 @@ describe('Computer Use permissions', () => {
     expect(computerActionNeedsApproval('workspace-write', 'browser_inspect')).toBe(false)
     expect(computerActionNeedsApproval('workspace-write', 'browser_login')).toBe(true)
     expect(computerActionNeedsApproval('read-only', 'click')).toBe(false)
+  })
+})
+
+describe('Computer Use desktop broker recovery', () => {
+  it('replays only failures that prove the named pipe was never connected', () => {
+    expect(desktopControlConnectionWasNeverEstablished(Object.assign(new Error('missing pipe'), { code: 'ENOENT' }))).toBe(true)
+    expect(desktopControlConnectionWasNeverEstablished(Object.assign(new Error('refused'), { code: 'ECONNREFUSED' }))).toBe(true)
+    expect(desktopControlConnectionWasNeverEstablished(Object.assign(new Error('lost after write'), { code: 'EPIPE' }))).toBe(false)
+    expect(desktopControlConnectionWasNeverEstablished(new Error('timed out'))).toBe(false)
+  })
+
+  it('opens fallback browser URLs without putting user input on the PowerShell command line', () => {
+    const invocation = systemBrowserOpenInvocation('https://example.com/game?q=phoenix')
+    expect(invocation.file).toBe('powershell.exe')
+    expect(invocation.argv.join(' ')).not.toContain('example.com')
+    expect(invocation.env.PHX_URL).toBe('https://example.com/game?q=phoenix')
+    expect((invocation as unknown as { stdin?: string }).stdin).toContain('Start-Process')
+    expect(() => systemBrowserOpenInvocation('file:///C:/secret.txt')).toThrow(/HTTP\(S\)/i)
   })
 })
 

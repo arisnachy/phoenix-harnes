@@ -4,7 +4,7 @@
  * It attaches only to loopback CDP endpoints. When no user-provided endpoint
  * exists, PHOENIX can start a dedicated Chromium instance with an isolated
  * temporary profile; personal Chrome/Edge profile files are never opened.
- * Mutating actions require explicit PHOENIX_BROWSER_ALLOW_ACTIONS=true.
+ * Mutating actions are controlled by Phoenix's permission-derived PHOENIX_BROWSER_ALLOW_ACTIONS policy.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
@@ -269,7 +269,7 @@ server.registerTool('navigate', {
   description: 'Navega una pestaña a una URL HTTP(S). No envía formularios ni ejecuta acciones de cuenta.',
   inputSchema: { url: z.url(), tabId: z.string().optional() },
 }, async ({ url, tabId }) => {
-  if (!actionsAllowed()) throw new Error('Navegación bloqueada: habilita PHOENIX_BROWSER_ALLOW_ACTIONS solo después de aprobarlo explícitamente.')
+  if (!actionsAllowed()) throw new Error('Navegación bloqueada por la política de permisos del navegador (modo read-only o PHOENIX_BROWSER_ALLOW_ACTIONS=false).')
   const parsed = new URL(url)
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Solo se permiten URLs HTTP(S)')
   const tab = await selectedTab(tabId)
@@ -288,10 +288,10 @@ server.registerTool('read_page', {
 })
 
 server.registerTool('click_text', {
-  description: 'Hace clic en un elemento cuyo texto coincide. Requiere PHOENIX_BROWSER_ALLOW_ACTIONS=true.',
+  description: 'Hace clic en un elemento cuyo texto coincide cuando la política de permisos del navegador permite acciones.',
   inputSchema: { text: z.string().min(1), tabId: z.string().optional() },
 }, async ({ text, tabId }) => {
-  if (!actionsAllowed()) throw new Error('Acción bloqueada: habilita PHOENIX_BROWSER_ALLOW_ACTIONS solo después de aprobarlo explícitamente.')
+  if (!actionsAllowed()) throw new Error('Acción bloqueada por la política de permisos del navegador (modo read-only o PHOENIX_BROWSER_ALLOW_ACTIONS=false).')
   const tab = await selectedTab(tabId)
   const escaped = JSON.stringify(text)
   const result = await evaluate(tab, `(() => { const wanted=${escaped}; const el=[...document.querySelectorAll('button,a,[role="button"],input[type="submit"]')].find(e => (e.innerText || e.value || '').trim().includes(wanted)); if (!el) return 'No encontrado'; el.click(); return 'Clic realizado'; })()`)

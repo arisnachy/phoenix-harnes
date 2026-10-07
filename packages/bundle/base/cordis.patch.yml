@@ -749,8 +749,9 @@
     # Stable browser automation path. This connector is isolated from Phoenix
     # Desktop and can start its own temporary Chrome/Edge profile over loopback
     # CDP. Failure is non-fatal: the Host keeps running and the connector
-    # retries independently. Mutating browser actions are automatic in Full
-    # access, or can be enabled explicitly with PHOENIX_BROWSER_ALLOW_ACTIONS.
+    # retries independently. Interactive Phoenix modes may navigate/click by
+    # default; read-only remains blocked and an explicit environment override
+    # can still force either behavior.
     - id: phoenix-browser
       name: '@phoenix-ai/dsh-mcp-client'
       disabled: !!js "['0', 'false', 'off'].includes((process.env.PHOENIX_BROWSER_CONNECTOR ?? '').trim().toLowerCase())"
@@ -769,7 +770,7 @@
           PHOENIX_BROWSER_PREFERRED_ENGINE: !!js process.env.PHOENIX_BROWSER_PREFERRED_ENGINE ?? 'chrome'
           PHOENIX_BROWSER_HEADLESS: !!js process.env.PHOENIX_BROWSER_HEADLESS ?? 'false'
           PHOENIX_BROWSER_AUTOSTART: !!js process.env.PHOENIX_BROWSER_AUTOSTART ?? 'true'
-          PHOENIX_BROWSER_ALLOW_ACTIONS: !!js "process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'true' : 'false')"
+          PHOENIX_BROWSER_ALLOW_ACTIONS: !!js "process.env.PHOENIX_BROWSER_ALLOW_ACTIONS ?? ((process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'read-only' ? 'false' : 'true')"
         failOnStartupError: false
         startupTimeoutMs: 1500
         toolCallTimeoutMs: 60000

@@ -14,7 +14,7 @@
 
 import { execFile } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
+import { readFile, unlink } from 'node:fs/promises'
 import { createConnection } from 'node:net'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -251,6 +251,28 @@ function desktopControlDescriptorPath(): string {
   return join(localAppData, 'Phoenix', 'desktop-control.json')
 }
 
+/**
+ * A named-pipe connection failure that proves no native command reached the
+ * Desktop broker. Only these pre-connect failures are safe to retry through
+ * another actuator; EPIPE/timeouts remain ambiguous and are never replayed.
+ */
+export function desktopControlConnectionWasNeverEstablished(error: unknown): boolean {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code
+  return code === 'ENOENT' || code === 'ECONNREFUSED'
+}
+
+async function clearStaleDesktopControlDescriptor(
+  descriptor: DesktopBrowserControlDescriptor,
+): Promise<void> {
+  const path = desktopControlDescriptorPath()
+  try {
+    const current = parseDesktopBrowserControlDescriptor(await readFile(path, 'utf8'))
+    if (current.pipeName === descriptor.pipeName) await unlink(path)
+  } catch {
+    // Discovery cleanup is best effort and must never mask the original pipe failure.
+  }
+}
+
 function requestNamedPipeLine(pipePath: string, line: string, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false
@@ -333,10 +355,15 @@ export function residentComputerRequestForAction(args: ComputerToolArgs, request
 }
 
 async function readDesktopControlDescriptorIfAvailable(): Promise<DesktopBrowserControlDescriptor | undefined> {
+  const path = desktopControlDescriptorPath()
   try {
-    return parseDesktopBrowserControlDescriptor(await readFile(desktopControlDescriptorPath(), 'utf8'))
+    return parseDesktopBrowserControlDescriptor(await readFile(path, 'utf8'))
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
+    if (error instanceof Error && error.message.startsWith('Phoenix Desktop control descriptor')) {
+      try { await unlink(path) } catch { /* ephemeral discovery record: best effort */ }
+      return undefined
+    }
     throw error
   }
 }
@@ -1124,6 +1151,34 @@ export function windowsComputerInvocation(args: ComputerToolArgs): ComputerInvoc
   }
 }
 
+const SYSTEM_BROWSER_OPEN_DRIVER = String.raw`
+$ErrorActionPreference = 'Stop'
+$raw = $env:PHX_URL
+$uri = $null
+if (-not [Uri]::TryCreate($raw, [UriKind]::Absolute, [ref]$uri)) {
+  throw 'browser_open fallback requires an absolute HTTP(S) URL'
+}
+if ($uri.Scheme -ne 'http' -and $uri.Scheme -ne 'https') {
+  throw 'browser_open fallback permits only HTTP(S) URLs'
+}
+Start-Process -FilePath $uri.AbsoluteUri | Out-Null
+Write-Output ('Opened system browser: ' + $uri.AbsoluteUri)
+`
+
+/** Build an injection-safe fallback that opens an HTTP(S) URL in Windows' default browser. */
+export function systemBrowserOpenInvocation(url: string): ComputerInvocation {
+  const parsed = new URL(url)
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new TypeError('computer browser_open fallback permits only HTTP(S) URLs')
+  }
+  return {
+    file: 'powershell.exe',
+    argv: ['-NoLogo', '-NoProfile', '-NonInteractive', '-STA', '-Command', '-'],
+    env: { PHX_URL: parsed.toString() },
+    stdin: SYSTEM_BROWSER_OPEN_DRIVER,
+  }
+}
+
 function executeComputerInvocation(invocation: ComputerInvocation, signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = execFile(invocation.file, [...invocation.argv], {
@@ -1186,10 +1241,13 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
     try {
       const nativeObservation = await runLegacyDesktopObservation(args, descriptor, signal)
       if (nativeObservation.length > 0) return nativeObservation
-    } catch {
-      // Rolling upgrades can pair a new runtime with an older Phoenix.exe that
-      // does not know the native observation commands yet. Observation is
-      // side-effect-free, so falling back to the fixed PowerShell driver is safe.
+    } catch (error) {
+      if (desktopControlConnectionWasNeverEstablished(error)) {
+        await clearStaleDesktopControlDescriptor(descriptor)
+      }
+      // Rolling upgrades can pair a new runtime with an older/dead Phoenix.exe.
+      // Observation is side-effect-free, so the fixed PowerShell driver remains
+      // the source-of-truth fallback for the real interactive Windows session.
     }
   }
   if (descriptor?.schema === RESIDENT_DESKTOP_CONTROL_SCHEMA) {
@@ -1202,17 +1260,47 @@ export async function runWindowsComputerAction(args: ComputerToolArgs, signal?: 
       }
       if (args.action !== 'screenshot' || resident.length > 0) return resident
     } catch (error) {
-      // Observation calls are safe to retry through the fixed PowerShell driver.
-      // Never replay mutations: a lost reply does not prove the input was not sent.
-      if (args.action !== 'screenshot' && args.action !== 'windows') throw error
+      const neverConnected = desktopControlConnectionWasNeverEstablished(error)
+      if (neverConnected) await clearStaleDesktopControlDescriptor(descriptor)
+
+      // Observation calls are always safe to retry. A pre-connect ENOENT /
+      // ECONNREFUSED also proves a mutation never reached the broker, so general
+      // Windows actions may safely fall back to the fixed PowerShell actuator.
+      if (args.action === 'screenshot' || args.action === 'windows') {
+        // fall through
+      } else if (neverConnected && !isEmbeddedBrowserAction(args.action)) {
+        return await executeComputerInvocation(windowsComputerInvocation(args), signal)
+      } else if (neverConnected && args.action === 'browser_open' && args.url !== undefined) {
+        return await executeComputerInvocation(systemBrowserOpenInvocation(args.url), signal)
+      } else {
+        // Never replay a mutation after an ambiguous lost reply.
+        throw error
+      }
     }
   }
 
   if (isEmbeddedBrowserAction(args.action)) {
     if (descriptor === undefined) {
-      throw new Error('Phoenix Desktop browser control is unavailable; start/restart Phoenix Desktop and retry.')
+      if (args.action === 'browser_open' && args.url !== undefined) {
+        return await executeComputerInvocation(systemBrowserOpenInvocation(args.url), signal)
+      }
+      throw new Error(
+        'Phoenix Desktop browser control is unavailable. Continue with the phoenix_browser/chrome MCP route for web work; general Windows control remains available through computer.',
+      )
     }
-    return await runEmbeddedBrowserAction(args, signal)
+    try {
+      return await runEmbeddedBrowserAction(args, signal)
+    } catch (error) {
+      if (!desktopControlConnectionWasNeverEstablished(error)) throw error
+      await clearStaleDesktopControlDescriptor(descriptor)
+      if (args.action === 'browser_open' && args.url !== undefined) {
+        return await executeComputerInvocation(systemBrowserOpenInvocation(args.url), signal)
+      }
+      throw new Error(
+        'Phoenix Desktop browser broker is stale or offline. Continue with phoenix_browser/chrome for web work; do not stop the task because computer Windows control is still available.',
+        { cause: error },
+      )
+    }
   }
 
   const invocation = windowsComputerInvocation(args)
@@ -1386,7 +1474,7 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. A /secret login-set grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values.',
+    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. A /secret login-set grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
   })
 
   ctx.tools.register(defineTool({
