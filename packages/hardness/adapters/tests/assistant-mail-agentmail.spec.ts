@@ -62,6 +62,14 @@ describe('AgentMail transport', () => {
     expect((error as Error).message).not.toContain('stale-key')
   })
 
+  it('classifies an unauthenticated signup gateway 403 separately from stale credentials', async () => {
+    const error = await agentMailRequest('/agent/sign-up', undefined, 1000, async () =>
+      Response.json({ message: 'Forbidden' }, { status: 403 }), { username: 'kira-local' })
+      .catch((value: unknown) => value)
+    expect(error).toMatchObject({ status: 403, reason: 'signup-rejected' })
+    expect((error as Error).message).toContain('receive-only')
+  })
+
   it('classifies AgentMail authentication 401 as a rejected stored credential', async () => {
     const error = await agentMailRequest('/inboxes/kira%40agentmail.to/messages', 'stale-key', 1000, async () =>
       Response.json({ code: 'unknown_api_key', message: 'Unknown API key' }, { status: 401 })).catch((value: unknown) => value)
