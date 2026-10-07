@@ -293,7 +293,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       ? consoleKeyCheck.currentInboxAccess === true && consoleKeyCheck.messageRead === true
       : consoleKeyCheck.capacityAvailable)
     && (ready || persistedOwner !== undefined || requestedOwner.length > 0)
-  const consoleKeyFallback = <details className={styles.advanced} open={!ready}>
+  const consoleKeyFallback = <details className={styles.advanced}>
     <summary>API key de AgentMail · verificar o reemplazar</summary>
     <div className={styles.advancedBody}>
       <p className={styles.help}>
