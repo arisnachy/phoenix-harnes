@@ -400,10 +400,12 @@ export function TeamDesignerSection(props: TeamDesignerSectionProps): ReactNode 
             <p className={css.hint}>Los retratos incluidos son ligeros y reactivos. Kira puede usar el generador de imágenes de Phoenix desde el chat para crear arte nuevo cuando lo pidas.</p>
           </div>
 
-          <label className={css.enabledRow}>
-            <input type="checkbox" checked={person.enabled} onChange={event => { patchPerson({ enabled: event.target.checked }) }} />
-            <span>Disponible para este equipo</span>
-          </label>
+          {selected === 'lead' ? null : (
+            <label className={css.enabledRow}>
+              <input type="checkbox" checked={person.enabled} onChange={event => { patchPerson({ enabled: event.target.checked }) }} />
+              <span>Disponible para este equipo</span>
+            </label>
+          )}
         </aside>
       </div>
     </div>
