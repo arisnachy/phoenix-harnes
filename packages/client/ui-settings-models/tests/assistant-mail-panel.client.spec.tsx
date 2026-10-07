@@ -195,3 +195,39 @@ it('copies the saved AgentMail signup key and opens the claim page without rende
   vi.unstubAllGlobals()
   Object.defineProperty(globalThis.navigator, 'clipboard', { configurable: true, value: undefined })
 })
+
+
+it('confirms a claimed inbox and leaves the verification-only state', async () => {
+  const calls: string[] = []
+  const client = {
+    call: async (action: string) => {
+      calls.push(action)
+      return {
+        account: action === 'claim-status'
+          ? {
+              state: 'ready',
+              inboxId: 'kira@agentmail.to',
+              ownerEmail: 'owner@example.com',
+              ownerLink: 'attached' as const,
+              contacts: [],
+            }
+          : {
+              state: 'pending-verification',
+              inboxId: 'kira@agentmail.to',
+              ownerEmail: 'owner@example.com',
+              ownerLink: 'provider-conflict' as const,
+              contacts: [],
+            },
+        connection: action === 'claim-status' ? 'connecting' : 'disconnected',
+        jobs: [],
+      }
+    },
+  }
+
+  render(<AssistantMailPanel client={client} />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Ya lo reclamé · comprobar' }))
+
+  expect(await screen.findByText(/Correo verificado/u)).toBeTruthy()
+  expect(calls).toContain('claim-status')
+  expect(screen.queryByText('Vincula propietario')).toBeNull()
+})
