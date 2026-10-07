@@ -9,7 +9,7 @@ import { randomUUID, createHash } from 'node:crypto'
 import { Service, type Context } from '@phoenix-ai/cordis'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import type { HostConnectionHandle } from '@phoenix-ai/dsh-client-connection'
-import { AgentMailHttpError, AgentMailTransport } from './assistant-mail-agentmail.ts'
+import { AgentMailHttpError, AgentMailTransport, agentMailRequest } from './assistant-mail-agentmail.ts'
 import { MailOnboarding } from './assistant-mail-onboarding.ts'
 import { MailJournal } from './assistant-mail-journal.ts'
 import { MailOutbox } from './assistant-mail-outbox.ts'
@@ -522,7 +522,21 @@ export function installAssistantMail(ctx: Context,
           if (Object.keys(args).some(key => key !== 'apiKey') || args.apiKey === undefined) {
             throw new Error('AgentMail Console key check requires only apiKey')
           }
-          return { ok: true as const, value: await onboarding.inspectConsoleKey(mailString(args.apiKey, 8192)) }
+          const candidate = mailString(args.apiKey, 8192)
+          const auth = mailRecord(await agentMailRequest('/auth/me', candidate, config.timeoutMs, fetch))
+          const scopeType = mailString(auth.scope_type)
+          if (!['organization', 'pod', 'inbox'].includes(scopeType)) {
+            throw new Error('AgentMail returned an invalid API key scope')
+          }
+          const account = await onboarding.status()
+          if (account.state !== 'ready' && scopeType !== 'organization') {
+            throw new Error('a new Kira inbox requires an organization-scoped AgentMail API key')
+          }
+          if (account.state === 'ready' && scopeType === 'inbox'
+            && (account.inboxId === undefined || auth.inbox_id !== account.inboxId)) {
+            throw new Error('this inbox-scoped AgentMail API key belongs to a different inbox')
+          }
+          return { ok: true as const, value: await onboarding.inspectConsoleKey(candidate) }
         }
         if (endpoint === 'signup') await onboarding.signup(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
         else if (endpoint === 'recover') {
