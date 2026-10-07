@@ -298,3 +298,85 @@ it('retains a real AgentMail inbound wake arriving during an active inbox check 
     await vi.waitFor(() => { expect(calls).toBe(3) })
   } finally { release?.(); await runtime.dispose(); vi.unstubAllGlobals(); await rm(directory, { recursive: true, force: true }) }
 })
+
+
+it('keeps the inbound AgentMail channel connected when message_send is missing and does not rotate the key', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-send-permission-'))
+  await writeFile(join(directory, 'account.json'), JSON.stringify({
+    state: 'ready',
+    inboxId: 'kira@agentmail.to',
+    ownerEmail: 'owner@example.com',
+    contacts: [],
+  }))
+  const ctx = new Context()
+  let credential = 'am_restricted'
+  ctx.reflect.provide('credentials', {
+    resolve: async () => ({ value: credential }),
+    set: async (_ref: unknown, value: string) => { credential = value },
+    unset: async () => { credential = '' },
+  })
+  const messageEvent = (data: unknown): Event => {
+    const event = new Event('message') as Event & { data?: unknown }
+    Object.defineProperty(event, 'data', { value: JSON.stringify(data) })
+    return event
+  }
+  class Socket extends EventTarget {
+    constructor(_url: string) {
+      super()
+      queueMicrotask(() => { this.dispatchEvent(new Event('open')) })
+    }
+    send(_data: string): void {
+      queueMicrotask(() => {
+        this.dispatchEvent(messageEvent({ type: 'subscribed', inbox_ids: ['kira@agentmail.to'] }))
+      })
+    }
+    close(): void { this.dispatchEvent(new Event('close')) }
+  }
+  let signups = 0
+  vi.stubGlobal('WebSocket', Socket)
+  vi.stubGlobal('fetch', async (url: string) => {
+    if (url.endsWith('/agent/sign-up')) {
+      signups++
+      return Response.json({ message: 'must not recover permissions through signup' }, { status: 403 })
+    }
+    if (url.endsWith('/send')) {
+      return Response.json({
+        code: 'missing_permission',
+        message: 'Forbidden',
+        fix: "This API key does not have the 'message_send' permission.",
+      }, { status: 403 })
+    }
+    if (url.includes('/messages?')) return Response.json({ messages: [], count: 0 })
+    return Response.json({ inbox_id: 'kira@agentmail.to' })
+  })
+  const runtime = installAssistantMail(ctx, {
+    directory,
+    authorizeOutgoing: async () => true,
+    credentialRef: 'MAIL_KEY',
+    pollMs: 60_000,
+    timeoutMs: 1000,
+    workTimeoutMs: 1000,
+  }, { pollMs: 60_000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000 })
+  try {
+    const service = ctx.get('assistantMail') as AssistantMailControl | undefined
+    expect(service).toBeDefined()
+    await vi.waitFor(async () => {
+      expect((await service!.status()).connection).toBe('connected')
+    })
+    await expect(service!.sendToOwner('Phoenix test', 'Confirm AgentMail send access', 'agentmail-permission-test'))
+      .rejects.toThrow('pending')
+    const identity = await service!.status()
+    expect(identity.connection).toBe('connected')
+    expect(identity.providerIssue).toMatchObject({
+      status: 403,
+      code: 'missing_permission',
+      reason: 'permission-missing',
+      permission: 'message_send',
+    })
+    expect(signups).toBe(0)
+  } finally {
+    await runtime.dispose()
+    vi.unstubAllGlobals()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
