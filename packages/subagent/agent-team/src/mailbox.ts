@@ -138,7 +138,8 @@ export class TeamMailbox {
         delivery: request.delivery,
         content,
       }
-      if (Buffer.byteLength(JSON.stringify(this.deliveryContent(queued)), 'utf8') > this.maxMessageBytes) {
+      if (Buffer.byteLength(JSON.stringify(this.deliveryContent(queued, queued.targetId === root.id && queued.senderId !== root.id
+        && ['result', 'blocker', 'review', 'question'].includes(queued.purpose ?? ''))), 'utf8') > this.maxMessageBytes) {
         throw new TeamError(`team message exceeds ${this.maxMessageBytes} bytes`, 'TEAM_MESSAGE_TOO_LARGE')
       }
       await this.journal.appendAndFlush(root, 'team/message/queued', {
@@ -241,9 +242,18 @@ export class TeamMailbox {
         senderName: message.senderName,
         ...message.purpose === undefined ? {} : { purpose: message.purpose },
       }
-      const content = this.deliveryContent(message)
+      const handoff = message.targetId === root.id && message.senderId !== root.id
+        && ['result', 'blocker', 'review', 'question'].includes(message.purpose ?? '')
+      const content = this.deliveryContent(message, handoff)
       if (message.targetId === root.id) {
         const input = createUserMessage({ content, source })
+        const boundary = root.session.events.findLast(event => event.type === 'turn/start' || event.type === 'turn/end')
+        const cancelled = boundary?.type === 'turn/end' && boundary.data.reason.kind === 'aborted'
+          && ['user', 'parent', 'disposed'].includes(boundary.data.reason.reason.kind)
+        if (handoff && !cancelled) {
+          root.steer(input)
+          return await this.checkpointDelivered(root, root.session, message.id)
+        }
         if (message.delivery === 'wakeup') {
           root.followup(input)
           return await this.checkpointDelivered(root, root.session, message.id)
@@ -319,10 +329,11 @@ export class TeamMailbox {
   }
 
   /** Frame peer content with stable sender and message identity for the receiving model. */
-  private deliveryContent(message: TeamMessageSnapshot): ContentBlock[] {
+  private deliveryContent(message: TeamMessageSnapshot, handoff = false): ContentBlock[] {
     return [
       { type: 'text', text: `Team message ${message.id} from ${message.senderName}${message.purpose === undefined ? '' : ` [${message.purpose}]`}:` },
       ...structuredClone(message.content),
+      ...handoff ? [{ type: 'text' as const, text: `Kira: this material handoff requires your decision. Respond to ${message.senderName} by name in your own visible text before releasing or stopping their work. State what you actually checked and the concrete next action: accept verified evidence, request a specific correction, or try an available alternative for the blocker. Do not claim verification you have not performed or wake a finished worker just for acknowledgement. Integrate the outcome into your user-facing answer; explain any remaining blocker before ending.` }] : [],
     ]
   }
 

@@ -83,3 +83,5 @@ Peer messages append after the target's reusable history prefix. Cold resume reu
 - **Mailbox is not cross-process exactly-once** — concurrent harness processes over one Team are unsupported.
 
 Initial delegation publishes the real bounded assignment addressed to the teammate by name. The child is instructed to publish its own useful first-action update through `send_message` to the Lead before executing; no acceptance is fabricated.
+
+Material result, blocker, review and question handoffs to the Lead wake an idle driver through steering; an active Lead receives them at the next step. The delivered frame asks Kira to address the sender, assess evidence and decide what follows before releasing work or closing. Ordinary updates remain quiet and no acknowledgement is synthesized.

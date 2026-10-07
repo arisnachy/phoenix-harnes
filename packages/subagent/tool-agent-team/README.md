@@ -58,3 +58,5 @@ Prefix-stable while the Team plugin generation, configuration, member role/name,
 - **Prompt policy is coordination, not confinement** — it cannot stop Bash or external processes from writing overlapping files.
 - **No autonomous team creation** — ordinary tasks do not trigger delegation unless the user explicitly requests it.
 - **No Web controls** — browser roster, model-profile editing, and task-board presentation are outside this runtime package.
+
+Kira responds to material teammate handoffs by name, evaluates the evidence and states the next decision before stopping or releasing work. The response belongs in the existing turn; finished workers are not awakened merely for acknowledgement.
