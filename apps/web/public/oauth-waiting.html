@@ -21,8 +21,49 @@
   <main>
     <div class="mark" aria-hidden="true">☾</div>
     <h1>Preparando autorización…</h1>
-    <p>PHOENIX está obteniendo la página segura del proveedor. Esta pestaña se redirigirá automáticamente.</p>
+    <p id="status">PHOENIX está obteniendo la página segura del proveedor. Esta pestaña se redirigirá automáticamente.</p>
     <div class="spinner" aria-hidden="true"></div>
   </main>
+  <script>
+    (() => {
+      const status = document.getElementById('status')
+      const spinner = document.querySelector('.spinner')
+      const allowedOrigin = window.location.origin
+
+      const safeProviderUrl = (value) => {
+        if (typeof value !== 'string') return null
+        try {
+          const url = new URL(value)
+          return url.protocol === 'https:' || (url.protocol === 'http:' && (url.hostname === '127.0.0.1' || url.hostname === 'localhost'))
+            ? url
+            : null
+        } catch {
+          return null
+        }
+      }
+
+      window.addEventListener('message', (event) => {
+        if (event.origin !== allowedOrigin) return
+        const data = event.data
+        if (data === null || typeof data !== 'object') return
+
+        if (data.type === 'phoenix/oauth-navigate') {
+          const target = safeProviderUrl(data.url)
+          if (target === null) {
+            if (status) status.textContent = 'PHOENIX rechazó una URL de autorización no segura.'
+            if (spinner) spinner.hidden = true
+            return
+          }
+          window.location.replace(target.href)
+          return
+        }
+
+        if (data.type === 'phoenix/oauth-status' && typeof data.message === 'string') {
+          if (status) status.textContent = data.message
+          if (data.state === 'error' && spinner) spinner.hidden = true
+        }
+      })
+    })()
+  </script>
 </body>
 </html>
