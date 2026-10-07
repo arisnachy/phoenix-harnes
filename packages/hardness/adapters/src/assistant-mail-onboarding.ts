@@ -159,7 +159,9 @@ export class MailOnboarding {
           })
           return this.status()
         } catch (error) {
-          if (!(error instanceof AgentMailHttpError) || error.reason !== 'credential-rejected') throw error
+          const rejectedCredential = error instanceof AgentMailHttpError
+            && (error.reason === 'credential-rejected' || error.reason === 'permission-missing')
+          if (!rejectedCredential) throw error
           // A bare/expired-key 403 cannot repair the old organization. The owner explicitly
           // changed the address, so start a fresh owner-bound enrollment instead of looping.
         }
