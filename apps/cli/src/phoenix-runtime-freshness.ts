@@ -63,6 +63,37 @@ function readActiveRuntime(root: string): { readonly path: string; readonly reco
   }
 }
 
+/**
+ * Choose the code location for the external Windows supervisor.
+ *
+ * A protected isolated runtime can be newer than the durable source checkout.
+ * Launching the supervisor from the stale checkout defeats that protection:
+ * updater handoff bugs fixed in the active runtime can still crash before the
+ * new Host is activated. Use the verified active worktree for supervisor code
+ * while keeping its cwd on the durable checkout, so Git/control state remains
+ * anchored there.
+ */
+export function phoenixSupervisorSourceRoot(root: string): string {
+  const sourceRoot = resolve(root)
+  const sourceHead = gitValue(sourceRoot, ['rev-parse', 'HEAD'])
+  const active = readActiveRuntime(sourceRoot)
+  if (sourceHead === undefined || active === undefined) return sourceRoot
+  if (sourceCheckoutSupersedesRuntime(sourceRoot, active.record.target, sourceHead)) return sourceRoot
+
+  const candidate = resolve(active.record.path)
+  if (!existsSync(join(candidate, 'scripts', 'phoenix-windows-supervisor.mjs'))) return sourceRoot
+  if (gitValue(candidate, ['rev-parse', 'HEAD']) !== active.record.target) return sourceRoot
+
+  const sourceCommon = gitValue(sourceRoot, ['rev-parse', '--git-common-dir'])
+  const candidateCommon = gitValue(candidate, ['rev-parse', '--git-common-dir'])
+  if (sourceCommon === undefined || candidateCommon === undefined) return sourceRoot
+  const absoluteSourceCommon = resolve(isAbsolute(sourceCommon) ? sourceCommon : resolve(sourceRoot, sourceCommon))
+  const absoluteCandidateCommon = resolve(isAbsolute(candidateCommon) ? candidateCommon : resolve(candidate, candidateCommon))
+  if (absoluteSourceCommon.toLowerCase() !== absoluteCandidateCommon.toLowerCase()) return sourceRoot
+
+  return candidate
+}
+
 /** Whether a clean source checkout is a newer descendant of a saved isolated runtime. */
 export function sourceCheckoutSupersedesRuntime(root: string, target: string, sourceHead?: string): boolean {
   const head = sourceHead ?? gitValue(root, ['rev-parse', 'HEAD'])
