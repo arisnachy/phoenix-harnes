@@ -347,6 +347,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
             ? `${consoleKeyCheck.inboxCount} usados · límite no informado`
             : `${consoleKeyCheck.inboxCount}/${consoleKeyCheck.inboxLimit}`}</b>
         </span>
+        {!ready && persistedOwner === undefined ? <span>
+          Correo propietario <b>{requestedOwner.length > 0 ? '✓ definido' : '✕ escríbelo arriba'}</b>
+        </span> : null}
         {ready ? <>
           <span>
             Buzón actual <b>{consoleKeyCheck.currentInboxAccess ? '✓ accesible' : '✕ sin acceso'}</b>
