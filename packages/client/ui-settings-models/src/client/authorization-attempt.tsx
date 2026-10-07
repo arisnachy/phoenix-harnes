@@ -70,8 +70,14 @@ export function useAuthorizationAttempt(
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
   const navigatedRef = useRef(false)
+  const popupTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const oauthAttemptRef = useRef(false)
 
   const closeReservedPopup = useCallback((): void => {
+    if (popupTimeoutRef.current !== undefined) {
+      window.clearTimeout(popupTimeoutRef.current)
+      popupTimeoutRef.current = undefined
+    }
     const popup = popupRef.current
     popupRef.current = null
     navigatedRef.current = false
@@ -99,8 +105,30 @@ export function useAuthorizationAttempt(
     popupRef.current = popup
     if (popup === null) {
       setFailure('El navegador bloqueó la pestaña OAuth. Cuando aparezca el enlace, pulsa “Abrir página de autorización” en PHOENIX.')
+      return
     }
-  }, [])
+    // A reserved popup cannot know the provider URL until OAuth discovery
+    // finishes, but it must not be a blank, unexplained browser page.
+    try {
+      const doc = popup.document
+      if (doc?.body !== undefined && doc.body !== null) {
+        doc.title = 'PHOENIX · Autorización segura'
+        doc.body.style.cssText = 'font:16px system-ui,sans-serif;max-width:35rem;margin:12vh auto;padding:1.5rem;line-height:1.6;color:#26322e;background:#fbf8f1;'
+        const heading = doc.createElement('h2')
+        heading.textContent = 'Conectando con tu proveedor…'
+        const description = doc.createElement('p')
+        description.textContent = 'PHOENIX está solicitando la URL de inicio de sesión del MCP. Esta pestaña se abrirá automáticamente cuando el proveedor responda. Si no responde, revisa el aviso en PHOENIX.'
+        doc.body.replaceChildren(heading, description)
+      }
+    } catch {
+      // Embedded browsers may prevent access even to a new popup document.
+    }
+    popupTimeoutRef.current = window.setTimeout(() => {
+      if (popupRef.current !== popup || navigatedRef.current) return
+      closeReservedPopup()
+      setFailure('El servidor MCP no entregó una URL de autorización. Comprueba la conexión y las credenciales requeridas por el proveedor; puedes cancelar o reintentar en PHOENIX.')
+    }, 45_000)
+  }, [closeReservedPopup])
 
   const navigateOAuthPopup = useCallback((url: string): void => {
     const destination = safeOAuthConsentUrl(url)
@@ -108,6 +136,10 @@ export function useAuthorizationAttempt(
       if (!navigatedRef.current) closeReservedPopup()
       setFailure('El proveedor no entregó una URL de autorización HTTPS válida. Se rechazó la navegación.')
       return
+    }
+    if (popupTimeoutRef.current !== undefined) {
+      window.clearTimeout(popupTimeoutRef.current)
+      popupTimeoutRef.current = undefined
     }
     const popup = popupRef.current
     if (popup !== null) {
@@ -159,6 +191,11 @@ export function useAuthorizationAttempt(
         const view = response.result.value
         const latest = view.notices.at(-1)?.notice
         const consent = view.notices.findLast(item => item.notice.url !== undefined)?.notice
+        // Confidential OAuth clients may ask for their client ID/secret before
+        // producing a consent URL. Close the temporary tab during that prompt.
+        if (view.prompt !== undefined && consent?.url === undefined && !navigatedRef.current) {
+          closeReservedPopup()
+        }
         if (consent?.url !== undefined && !opened.current.has(consent.url)) {
           opened.current.add(consent.url)
           navigateOAuthPopup(consent.url)
@@ -201,6 +238,7 @@ export function useAuthorizationAttempt(
     setFailure(undefined)
     setAttempt(undefined)
     opened.current.clear()
+    oauthAttemptRef.current = method === 'oauth'
     // Reserve a tab synchronously, independent of which MCP vendor is used.
     if (method === 'oauth') reserveOAuthPopup()
     else closeReservedPopup()
@@ -228,6 +266,9 @@ export function useAuthorizationAttempt(
 
   const submitAnswer = (): void => {
     if (api === undefined || attempt?.prompt === undefined) return
+    // If the provider required a client ID/secret first, reserve a new tab on
+    // this click, rather than leaving the original about:blank open for minutes.
+    if (oauthAttemptRef.current) reserveOAuthPopup()
     void api.answer({ attemptId: attempt.id, promptId: attempt.prompt.promptId, value: answer }).then((response) => {
       if (!response.result.ok) {
         setFailure(response.result.error.message)
