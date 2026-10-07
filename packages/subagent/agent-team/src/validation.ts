@@ -1,5 +1,7 @@
 /** Input normalization shared by Team roster and task commands. */
 
+import { Buffer } from 'node:buffer'
+
 import { TeamError } from './error.ts'
 
 /**
@@ -31,4 +33,18 @@ export function writeScope(value: string): string {
     throw new TeamError(`invalid workspace-relative write scope ${JSON.stringify(value)}`, 'TEAM_INVALID_WRITE_SCOPE')
   }
   return normalized
+}
+
+/** Bound public transcript text without splitting a Unicode scalar. */
+export function boundedTranscriptText(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text) <= maxBytes) return text
+  let used = 0
+  let bounded = ''
+  for (const char of text) {
+    const bytes = Buffer.byteLength(char)
+    if (used + bytes > maxBytes) break
+    bounded += char
+    used += bytes
+  }
+  return bounded
 }

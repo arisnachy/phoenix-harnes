@@ -81,7 +81,7 @@ describe('KIRA Team conversation node', () => {
         phase: 'provisioning',
       },
     })
-    expect(kiraTeamMessageDefinition.match(provisioning)).toBeNull()
+    expect(kiraTeamMessageDefinition.match(provisioning)).toEqual({ id: 'team-member:worker-a', role: 'start' })
 
     const active = match('team/member', {
       version: 1,
@@ -97,7 +97,7 @@ describe('KIRA Team conversation node', () => {
     }, 7, { kind: 'turn', turn: 1 })
     expect(kiraTeamMessageDefinition.match(active.event)).toEqual({
       id: 'team-member:worker-a',
-      role: 'start',
+      role: 'update',
     })
 
     const state = kiraTeamMessageDefinition.start(context(undefined), active, {} as never)
@@ -299,4 +299,34 @@ it('assembles one human reply through per-target receipts, supervision and full 
   assembler.replaceWindow(inputs, false)
   assembler.flush()
   expect(assembler.snapshot('chat')).toHaveLength(1)
+})
+
+it('keeps the real named assignment through activation and replay', () => {
+  const ctx = new Context()
+  const events = new ConversationEventRegistry(ctx)
+  const views = new ConversationViewRegistry(ctx)
+  events.register(kiraTeamMessageDefinition)
+  views.register({ target: 'chat', create: () => ({ empty: [], replace: ({ nodes }) => nodes,
+    apply: ({ upserts }) => upserts }) })
+  const assembler = new ConversationNodeAssembler(events, views)
+  const member = { id: 'argo', name: 'argo', description: 'Short title' }
+  const inputs = [
+    event('team/member', { version: 1, teamId: 'root', member: { ...member, phase: 'provisioning' } }, 1),
+    event('team/chat-message', { version: 1, update: true, message: {
+      id: 'team-member:argo', senderId: 'root', senderName: 'Kira', senderKind: 'kira',
+      targetId: 'argo', text: 'Argo, busca fuentes y comprueba sus fechas.', reactions: [],
+    } }, 2),
+    event('team/member', { version: 1, teamId: 'root', member: { ...member, phase: 'active' } }, 3),
+  ].map(event => ({ event, view: undefined }))
+  assembler.replaceWindow([inputs[0]!], false)
+  assembler.flush()
+  for (const input of inputs.slice(1)) { assembler.append(input); assembler.flush() }
+  expect(assembler.snapshot('chat')).toMatchObject([{ data: {
+    targetName: 'argo', purpose: 'assignment', content: [{ type: 'text', text: 'Argo, busca fuentes y comprueba sus fechas.' }],
+  } }])
+  expect(assembler.snapshot('chat')).toHaveLength(1)
+  assembler.replaceWindow(inputs, false)
+  assembler.flush()
+  expect(assembler.snapshot('chat')).toHaveLength(1)
+  expect(assembler.snapshot('chat')).toMatchObject([{ data: { content: [{ type: 'text', text: 'Argo, busca fuentes y comprueba sus fechas.' }] } }])
 })

@@ -62,7 +62,7 @@ function delegated(match: ConversationMatch): KiraTeamMessageChatData | undefine
   const member = record(data?.member)
   if (data?.version !== 1 || typeof data.teamId !== 'string'
     || typeof member?.id !== 'string' || typeof member.name !== 'string'
-    || typeof member.description !== 'string' || member.phase !== 'active') return undefined
+    || typeof member.description !== 'string' || !['provisioning', 'active'].includes(String(member.phase))) return undefined
   return {
     messageId: `team-member:${member.id}`,
     senderId: data.teamId,
@@ -124,9 +124,9 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
       const data = record(event.data)
       const member = record(data?.member)
       return data?.version === 1 && typeof data.teamId === 'string'
-        && member?.phase === 'active' && typeof member.id === 'string'
+        && ['provisioning', 'active'].includes(String(member?.phase)) && typeof member?.id === 'string'
         && typeof member.name === 'string' && typeof member.description === 'string'
-        ? { id: `team-member:${member.id}`, role: 'start' }
+        ? { id: `team-member:${member.id}`, role: member.phase === 'provisioning' ? 'start' : 'update' }
         : null
     }
     if ((event.type as string) === 'team/message/queued' || (event.type as string) === 'team/chat-message') {
@@ -149,8 +149,10 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
   update: (context, match) => {
     if ((match.event.type as string) === 'team/chat-message') {
       const message = queued(match)
-      return message === undefined ? context.state : { ...message, reactions: context.state.reactions }
+      return message === undefined ? context.state : { ...context.state, ...message, reactions: context.state.reactions }
     }
+    const assignment = delegated(match)
+    if (assignment?.targetName !== undefined) return { ...context.state, targetName: assignment.targetName }
     const next = reaction(match)
     if (next === undefined || next.messageId !== context.state.messageId) return context.state
     if (context.state.reactions.some(item => item.reactorId === next.value.reactorId)) return context.state
