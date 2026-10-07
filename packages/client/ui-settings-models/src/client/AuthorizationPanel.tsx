@@ -1442,8 +1442,7 @@ export function ConnectorsSettingsSection({ api,
                 && runtime !== undefined
                 && (runtime.status === 'failed' || runtime.status === 'disconnected')
                 && mcpRegistry?.reconnect !== undefined
-              const authorizationPending = attempt?.status === 'pending'
-              const thisAuthorizationPending = authorizationPending && attempt.key === entry.key
+              const thisAuthorizationPending = attempt?.status === 'pending' && attempt.key === entry.key
               const preferredMethod = entry.methods[0]
               return (
                 <article key={entry.key} className={connectorStyles['connectorCard']} data-authorization-key={entry.key}>
@@ -1476,7 +1475,7 @@ export function ConnectorsSettingsSection({ api,
                         <button
                           type="button"
                           className={connectorStyles['connectorPrimaryButton']}
-                          disabled={authorizationPending || entry.inFlight
+                          disabled={thisAuthorizationPending || entry.inFlight
                             || (runtimeReconnect && reconnectingServerName !== undefined)}
                           onClick={() => {
                             if (runtimeReconnect && runtime !== undefined) {
@@ -1540,7 +1539,15 @@ export function ConnectorsSettingsSection({ api,
         </div>
         {visibleRows.length === 0 ? <p className={styles['advancedHint']}>{connectorT('noResults')}</p> : (
           <div className={connectorStyles['connectorGrid']}>
-            {visibleRows.map(row => (
+            {visibleRows.map((row) => {
+              const authorizationKey = row.account?.key
+                ?? (row.managed === undefined
+                  ? undefined
+                  : `mcp-client/${row.managed.serverName.toLowerCase().replaceAll('_', '-')}`)
+              const rowAuthorizationPending = attempt?.status === 'pending'
+                && authorizationKey !== undefined
+                && attempt.key === authorizationKey
+              return (
               <CatalogCard
                 key={row.definition.id}
                 definition={row.definition}
@@ -1551,12 +1558,7 @@ export function ConnectorsSettingsSection({ api,
                 openClaw={row.openClaw}
                 connected={row.connected}
                 t={connectorT}
-                authorizationProgress={attempt?.key === (
-                  row.account?.key
-                    ?? (row.managed === undefined
-                      ? undefined
-                      : `mcp-client/${row.managed.serverName.toLowerCase().replaceAll('_', '-')}`)
-                ) ? (
+                authorizationProgress={attempt?.key === authorizationKey ? (
                   <AuthorizationAttemptProgress
                     attempt={attempt}
                     answer={answer}
@@ -1566,7 +1568,7 @@ export function ConnectorsSettingsSection({ api,
                     t={t}
                   />
                 ) : undefined}
-                pending={attempt?.status === 'pending' || jevBusy}
+                pending={rowAuthorizationPending || jevBusy}
                 installingCurated={installingCuratedId === row.definition.id}
                 reconnecting={row.mcpRuntime !== undefined && reconnectingServerName === row.mcpRuntime.serverName}
                 repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
@@ -1598,7 +1600,8 @@ export function ConnectorsSettingsSection({ api,
                   setJevSetupOpen(true)
                 } : undefined}
               />
-            ))}
+              )
+            })}
           </div>
         )}
         {!jevSetupOpen ? null : (
