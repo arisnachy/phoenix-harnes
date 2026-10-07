@@ -7,7 +7,24 @@ import styles from './ModelsSection.module.css'
 type AuthorizationClient = IApiClient['authorization']
 
 function oauthWaitingPageUrl(): string {
-  return new URL('/oauth-waiting.html', window.location.href).href
+  const url = new URL('/oauth-waiting.html', window.location.href)
+  // Cache-bust the tiny bridge page: an older cached copy has no navigation
+  // listener and would strand the user on "Preparando autorización…".
+  url.searchParams.set('v', '20261006-2')
+  return url.href
+}
+
+type OAuthWaitingMessage =
+  | { type: 'phoenix/oauth-navigate'; url: string }
+  | { type: 'phoenix/oauth-status'; message: string; state?: 'waiting' | 'error' }
+
+function postOAuthWaitingMessage(popup: Window, message: OAuthWaitingMessage): void {
+  try {
+    popup.postMessage(message, window.location.origin)
+  } catch {
+    // The reserved page may already be navigating cross-origin. The provider
+    // page is then authoritative and must not be interrupted.
+  }
 }
 
 /** One browser-visible authorization attempt, carrying its last notice forward. */
@@ -84,18 +101,48 @@ export function useAuthorizationAttempt(
     setFailure('El navegador bloqueó la ventana de autorización. PHOENIX seguirá preparando el enlace; usa “Abrir página de autorización” cuando aparezca.')
   }, [])
 
+  const showOAuthPopupStatus = useCallback((message: string, state: 'waiting' | 'error' = 'waiting'): void => {
+    const popup = popupRef.current
+    if (popup === null) return
+    try {
+      if (popup.closed) return
+      postOAuthWaitingMessage(popup, { type: 'phoenix/oauth-status', message, state })
+    } catch {
+      // The window can become cross-origin after provider navigation.
+    }
+  }, [])
+
   const navigateOAuthPopup = useCallback((url: string): void => {
     const popup = popupRef.current
     if (popup !== null) {
       try {
         if (!popup.closed) {
-          popup.location.replace(url)
+          // The same-origin waiting page can navigate itself even when the
+          // opener is no longer allowed to assign popup.location because of
+          // COOP/browser hardening. Send first, then keep location.replace as
+          // a fast-path for browsers that permit it.
+          postOAuthWaitingMessage(popup, { type: 'phoenix/oauth-navigate', url })
+          try {
+            popup.location.replace(url)
+          } catch {
+            // The message bridge is the primary recovery path.
+          }
+          // A consent URL can arrive before oauth-waiting.html finishes loading;
+          // messages are not buffered. Retry briefly so the page's listener
+          // cannot miss the hand-off.
+          for (const delay of [80, 240, 700]) {
+            window.setTimeout(() => {
+              try {
+                if (!popup.closed) postOAuthWaitingMessage(popup, { type: 'phoenix/oauth-navigate', url })
+              } catch {
+                // Already cross-origin/navigated or closed.
+              }
+            }, delay)
+          }
           return
         }
       } catch {
         // COOP/cross-origin policies can sever the reserved Window handle.
-        // Fall through to a best-effort fresh tab and always keep the manual
-        // consent link rendered in the PHOENIX card.
       }
       popupRef.current = null
     }
@@ -117,7 +164,7 @@ export function useAuthorizationAttempt(
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
         if (stale) return
         if (!response.result.ok) {
-          closeReservedPopup()
+          showOAuthPopupStatus(response.result.error.message, 'error')
           setAttempt(undefined)
           setFailure(response.result.error.message)
           return
@@ -125,7 +172,9 @@ export function useAuthorizationAttempt(
         const view = response.result.value
         const latest = view.notices.at(-1)?.notice
         const consent = view.notices.findLast(item => item.notice.url !== undefined)?.notice
-        if (view.prompt !== undefined && consent?.url === undefined && attempt.url === undefined) closeReservedPopup()
+        if (view.prompt !== undefined && consent?.url === undefined && attempt.url === undefined) {
+          showOAuthPopupStatus('Completa el dato solicitado en PHOENIX. Esta pestaña continuará automáticamente.')
+        }
         if (consent?.url !== undefined && !opened.current.has(consent.url)) {
           opened.current.add(consent.url)
           navigateOAuthPopup(consent.url)
@@ -147,18 +196,20 @@ export function useAuthorizationAttempt(
         if (view.status === 'authorized') {
           closeReservedPopup()
           onAuthorized()
-        } else if (view.status === 'cancelled' || view.status === 'failed') {
+        } else if (view.status === 'cancelled') {
           closeReservedPopup()
+        } else if (view.status === 'failed') {
+          showOAuthPopupStatus(view.error ?? 'La autorización no pudo iniciarse. Revisa PHOENIX para ver el error.', 'error')
         }
       }, (error: unknown) => {
         if (stale) return
-        closeReservedPopup()
+        showOAuthPopupStatus(String(error), 'error')
         setAttempt(undefined)
         setFailure(String(error))
       })
     }, 650)
     return () => { stale = true; window.clearTimeout(timer) }
-  }, [api, attempt, onAuthorized, closeReservedPopup, navigateOAuthPopup])
+  }, [api, attempt, onAuthorized, closeReservedPopup, navigateOAuthPopup, showOAuthPopupStatus])
 
   const begin = (key: string, method = 'oauth'): void => {
     if (api === undefined) return
@@ -173,13 +224,13 @@ export function useAuthorizationAttempt(
     else closeReservedPopup()
     void api.begin({ key, method }).then((response) => {
       if (!response.result.ok) {
-        closeReservedPopup()
+        showOAuthPopupStatus(response.result.error.message, 'error')
         setFailure(response.result.error.message)
         return
       }
       setAttempt({ id: response.result.value.attemptId, key, status: 'pending', nextSeq: 0 })
     }, (error: unknown) => {
-      closeReservedPopup()
+      showOAuthPopupStatus(String(error), 'error')
       setFailure(String(error))
     })
   }
