@@ -400,6 +400,26 @@ it('returns the receive-only inbox when human attachment is temporarily rejected
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
+it('rejects a mismatched human identity after the receive-only fallback', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-fallback-owner-mismatch-'))
+  try {
+    let calls = 0
+    const account = new MailOnboarding({
+      path: join(directory, 'account.json'),
+      timeoutMs: 1000,
+      saveKey: async () => {},
+      fetch: async () => {
+        calls++
+        if (calls === 1) return Response.json({ message: 'Forbidden' }, { status: 403 })
+        if (calls === 2) return Response.json({ api_key: 'am_receive_only', inbox_id: 'kira-local@agentmail.to' })
+        return Response.json({ human_email: 'someone-else@example.com', instructions: 'Enter the OTP.' })
+      },
+    })
+    await expect(account.signup('owner@example.com', 'kira-local')).rejects.toThrow('different human')
+    expect((await account.status()).inboxId).toBe('kira-local@agentmail.to')
+  } finally { await rm(directory, { recursive: true, force: true }) }
+})
+
 it('does not bypass an explicit AgentMail quota 403 with another signup', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-signup-quota-'))
   try {
