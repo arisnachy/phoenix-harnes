@@ -799,9 +799,11 @@ describe('connectors settings section', () => {
 
   it('reserves the Notion consent tab synchronously and navigates when its URL arrives', async () => {
     const consentUrl = 'https://www.notion.so/oauth/authorize?client_id=phoenix-test'
+    const popupDocument = document.implementation.createHTMLDocument()
     const popup = {
       closed: false,
       close: vi.fn(),
+      document: popupDocument,
       location: { replace: vi.fn() },
     }
     const open = vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
@@ -858,8 +860,10 @@ describe('connectors settings section', () => {
 
       fireEvent.click(authorize!)
 
-      // Even a late registration starts with one click, never a waiting HTML page.
+      // The temporary tab must explain the pending OAuth hand-off rather than
+      // leaving the user on an empty about:blank page.
       expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+      expect(popupDocument.body.textContent).toContain('Conectando con tu proveedor')
 
       await waitFor(() => {
         expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
