@@ -2,8 +2,13 @@ import { useEffect, useState } from 'react'
 import type { ILayout } from '@phoenix-ai/dsh-client-ui-layout/client'
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import type {
-  SessionId, SessionListState, SessionSummary, SubagentAddress,
+  SessionId, SessionListState, SessionSummary, SubagentAddress, type SettingsScope,
 } from '@phoenix-ai/dsh-client-runtime/client'
+import {
+  activeTeamDesign,
+  parseTeamDesignDocument,
+  type TeamDesignSettingsEnvelope,
+} from '@phoenix-ai/dsh-agent-team/design-types'
 import type { InjectFace, PropsLocale, PropsRuntime, TranslateNS } from '@phoenix-ai/dsh-client-ui-slots'
 import { NS, zh, type KiraTeamsKey } from './locales.ts'
 import {
@@ -13,10 +18,13 @@ import css from './KiraTeamsDock.module.css'
 
 /** Sessions face plus business actions supplied by the slot registration. */
 export interface KiraTeamsInjected {
-  hooks: { list: {
-    getSnapshot(): SessionListState
-    subscribe(fn: () => void): () => void
-  } }
+  hooks: {
+    list: {
+      getSnapshot(): SessionListState
+      subscribe(fn: () => void): () => void
+    }
+    teamDesign: SettingsScope<TeamDesignSettingsEnvelope>
+  }
   layout: Pick<ILayout, 'setWorkspaceOccupant'>
   openChild: (address: SubagentAddress) => void
   refresh: (parentSessionId: SessionId) => void
@@ -376,10 +384,20 @@ function openAgent(card: KiraRosterCard, openChild: (address: SubagentAddress) =
  * The rail is presence/navigation only, so a subagent response can never appear here
  * before its durable chat message is available to the user.
  */
-export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockProps) {
+export function KiraTeamsDock({ useList, useTeamDesign, openChild, t, layout }: KiraTeamsDockProps) {
   const state = useList(value => value)
+  const designSnapshot = useTeamDesign(value => value)
+  const design = activeTeamDesign(parseTeamDesignDocument(designSnapshot.value?.document))
   const { root, rows } = lineageMembers(state)
-  const cards = liveCardsOf(rows, root?.projectionValues?.teamChatParticipants)
+  const cards = liveCardsOf(rows, root?.projectionValues?.teamChatParticipants).map((card) => {
+    const designed = design.members.find(member => member.id === card.kind)
+    return designed === undefined ? card : {
+      ...card,
+      name: designed.displayName,
+      tagline: designed.personality,
+      kind: designed.avatar as ModelAvatarKind,
+    }
+  })
   const [selectedId, setSelectedId] = useState<string>()
 
   useEffect(() => {
