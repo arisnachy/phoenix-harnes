@@ -437,11 +437,12 @@ export function installAssistantMail(ctx: Context,
       if (messageId !== undefined && id !== messageId) continue
       const mail = await transport.readMessage(id)
       if (!mail.authenticated || mail.automatic || !allowed.has(mail.from)) continue
+      const taskState = jobStates.get(id)
       messages.push({
         messageId: mail.messageId, from: mail.from, subject: mail.subject,
         preview: mail.text.slice(0, 240),
         ...(messageId === undefined ? {} : { text: mail.text.slice(0, 16_000) }),
-        ...(jobStates.has(id) ? { taskState: jobStates.get(id) } : {}),
+        ...(taskState === undefined ? {} : { taskState }),
       })
     }
     if (messageId !== undefined && messages.length === 0) {
