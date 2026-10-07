@@ -262,7 +262,8 @@ export class AgentMailTransport implements AssistantMailTransport {
   async subscribe(onMessage: () => void, onDisconnected?: () => void): Promise<() => void> {
     const key = await this.key()
     if (key === undefined) throw new Error('mail credential is unavailable')
-    if (this.signal?.aborted === true) throw new Error('mail wake subscription cancelled')
+    const signal = this.signal
+    if (signal?.aborted === true) throw new Error('mail wake subscription cancelled')
     const socket = new WebSocket(`wss://ws.agentmail.to/v0?api_key=${encodeURIComponent(key)}`)
     const ready = Promise.withResolvers<void>()
     let settled = false
@@ -278,7 +279,7 @@ export class AgentMailTransport implements AssistantMailTransport {
       if (settled) return
       settled = true
       if (timer !== undefined) clearTimeout(timer)
-      this.signal?.removeEventListener('abort', aborted)
+      signal?.removeEventListener('abort', aborted)
       if (error === undefined) ready.resolve()
       else ready.reject(error)
     }
@@ -295,7 +296,7 @@ export class AgentMailTransport implements AssistantMailTransport {
       settleReady(new Error('mail wake subscription timed out'))
       try { socket.close() } catch { /* The socket may already be closing. */ }
     }, this.timeoutMs)
-    this.signal?.addEventListener('abort', aborted, { once: true })
+    signal?.addEventListener('abort', aborted, { once: true })
     socket.addEventListener('open', () => {
       if (disposed) return
       try {
@@ -329,7 +330,7 @@ export class AgentMailTransport implements AssistantMailTransport {
       if (disposed) return
       disposed = true
       subscribed = false
-      this.signal?.removeEventListener('abort', aborted)
+      signal?.removeEventListener('abort', aborted)
       try { socket.close() } catch { /* Disposal is idempotent. */ }
     }
   }
