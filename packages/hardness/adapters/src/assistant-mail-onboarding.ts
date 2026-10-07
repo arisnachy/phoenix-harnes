@@ -200,7 +200,7 @@ export class MailOnboarding {
   adoptConsoleKey(apiKey: string): Promise<MailAccount> {
     return this.exclusively(async () => {
       const key = mailString(apiKey, 8192)
-      if (!/^am_[A-Za-z0-9_-]+$/u.test(key)) throw new Error('enter a complete AgentMail API key beginning with am_')
+      if (!key.startsWith('am_') || key.length <= 3) throw new Error('enter a complete AgentMail API key beginning with am_')
       const previous = await this.file.read()
       if (previous.state === 'ready') throw new Error('the Kira mailbox is already active; replace it explicitly before changing credentials')
       let organization: Record<string, unknown>
