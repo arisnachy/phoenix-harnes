@@ -164,8 +164,17 @@ export class MailOnboarding {
       }
       const key = await this.options.resolveKey?.()
       if (key === undefined) throw new Error('mail claim confirmation requires the original signup key')
-      const organization = mailRecord(await agentMailRequest('/organizations', key, this.options.timeoutMs,
-        this.options.fetch ?? fetch))
+      let organization: Record<string, unknown>
+      try {
+        organization = mailRecord(await agentMailRequest('/organizations', key, this.options.timeoutMs,
+          this.options.fetch ?? fetch))
+      } catch (error) {
+        if (error instanceof AgentMailHttpError
+          && (error.reason === 'permission-missing' || error.reason === 'verification-required')) {
+          throw new Error('AgentMail has not exposed Console ownership yet; finish Claim inbox and retry in a moment')
+        }
+        throw error
+      }
       if (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0) {
         throw new Error('AgentMail has not exposed Console ownership yet; finish Claim inbox and retry in a moment')
       }
