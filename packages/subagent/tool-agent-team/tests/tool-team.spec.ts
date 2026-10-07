@@ -253,6 +253,31 @@ describe('dsh-tool-team', () => {
     await waitNoAgent(ctx, childId)
   })
 
+  it('keeps disabled Team Studio specialists out of execution', async () => {
+    const { ctx, lead } = await setup([])
+    const current = ctx.agentTeams.activeTeamDesign()
+    const atlas = current.members.find(member => member.id === 'atlas')
+    expect(atlas).toBeDefined()
+    const redesigned = {
+      ...current,
+      members: current.members.map(member => member.id === 'atlas'
+        ? { ...member, displayName: 'Constructor oculto', enabled: false }
+        : member),
+    }
+    const apply = await execute(ctx, lead, 'design_team', {
+      design_json: JSON.stringify(redesigned),
+    })
+    expect(apply.isError).toBe(false)
+
+    const explicit = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'atlas',
+      description: 'engineering implementation',
+      prompt: 'work',
+    })
+    expect(explicit.isError).toBe(true)
+    expect(text(explicit)).toContain('disabled for the active team')
+  })
+
   it('injects only the active named KIRA persona instead of all twenty voices', async () => {
     const { ctx, lead } = await setup(['hang'])
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
