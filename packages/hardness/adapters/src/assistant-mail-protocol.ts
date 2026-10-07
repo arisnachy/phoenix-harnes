@@ -15,7 +15,9 @@ export const ASSISTANT_MAIL_PROTOCOL = [
   '- The mailbox is a free AgentMail address owned by Phoenix/Kira. The user\'s connected Google identity is '
     + 'used only as the owner identity for enrollment and delivery defaults; it is not Kira\'s mailbox.',
   '- If the tool returns pending-verification, tell the user the real Kira address immediately and explain '
-    + 'that only the one-time owner verification remains in Settings. Do not create a second mailbox.',
+    + 'that only the one-time owner verification remains. If the saved owner email is wrong, call '
+    + 'phoenix_mail_identity action "owner" with the corrected owner_email so Phoenix can repair it and resend '
+    + 'verification without asking for an API key. Do not create a second mailbox just to correct the owner.',
   '- If signup is ambiguous, never repeat signup automatically. First offer/reuse the existing-account '
     + 'recovery flow. If recovery fails, or the user explicitly says the old mailbox is broken/stale and wants '
     + 'a new one, phoenix_mail_identity action "replace" abandons the stale enrollment and immediately starts '
