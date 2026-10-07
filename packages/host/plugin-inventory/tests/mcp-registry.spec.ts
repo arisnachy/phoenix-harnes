@@ -208,11 +208,8 @@ describe('Official MCP Registry proxy', () => {
 
   it('does not offer broken one-click installs for MCP remotes that need headers or URL variables', async () => {
     const mk = (name: string, remotes: unknown[]) => ({
-      ...activeServer(name),
-      server: {
-        ...activeServer(name).server,
-        remotes,
-      },
+      server: { name, title: name, description: `Tools for ${name}`, version: '1.0.0', remotes },
+      _meta: { 'io.modelcontextprotocol.registry/official': { status: 'active', isLatest: true } },
     })
     vi.stubGlobal('fetch', vi.fn(async () => response([
       mk('io.example/header-auth-fixture', [{
