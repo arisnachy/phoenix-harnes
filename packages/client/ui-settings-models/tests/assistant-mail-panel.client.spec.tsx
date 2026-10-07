@@ -68,6 +68,26 @@ it('offers owner-bound recovery without requiring an API key', async () => {
 })
 
 
+it('repairs a mistyped owner email during recovery instead of looping on the bad address', async () => {
+  const calls: Array<{ action: string; input?: Record<string, unknown> }> = []
+  const client = { call: async (action: string, input?: Record<string, unknown>) => {
+    calls.push({ action, ...(input === undefined ? {} : { input }) })
+    return {
+      account: action === 'owner'
+        ? { state: 'pending-verification', inboxId: 'kira@agentmail.to', ownerEmail: 'owner@example.com', contacts: [] }
+        : { state: 'signup-ambiguous', ownerEmail: 'owner@example.comy', contacts: [] },
+      connection: action === 'owner' ? 'verification-required' : 'disconnected',
+      jobs: [],
+    }
+  } }
+  render(<AssistantMailPanel client={client} />)
+  const owner = await screen.findByLabelText<HTMLInputElement>('Correo propietario que recibirá el código')
+  expect(owner.value).toBe('owner@example.comy')
+  fireEvent.change(owner, { target: { value: 'owner@example.com' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Corregir correo y continuar' }))
+  expect(await screen.findByText('Verifica una vez')).toBeTruthy()
+  expect(calls).toContainEqual({ action: 'owner', input: { ownerEmail: 'owner@example.com' } })
+})
 it('can replace an unrecoverable mailbox in one click', async () => {
   vi.stubGlobal('confirm', () => true)
   const calls: string[] = []

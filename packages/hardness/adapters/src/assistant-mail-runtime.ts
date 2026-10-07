@@ -49,9 +49,14 @@ export interface AssistantMailControl {
    */
   ensure(ownerEmail?: string): Promise<AssistantMailIdentity>
   /** Recover the persisted owner account without a manually supplied key.
-   * @returns Existing inbox pending owner verification.
+   * @returns Existing inbox in the strongest provider state Phoenix can prove.
    */
   recover(): Promise<AssistantMailIdentity>
+  /** Correct the human email attached to an unverified AgentMail organization.
+   * @param ownerEmail Correct owner email that should receive the OTP.
+   * @returns Existing or fresh inbox pending verification for that owner.
+   */
+  changeOwner(ownerEmail: string): Promise<AssistantMailIdentity>
   /** Create a separate included-domain inbox for the verified owner, subject to provider quota.
    * @returns Confirmed new inbox identity.
    */
@@ -90,6 +95,7 @@ class AssistantMailControlService extends Service implements AssistantMailContro
     private readonly reconcile: AssistantMailControl['refresh'],
     private readonly send: AssistantMailControl['sendToOwner'],
     private readonly restore: AssistantMailControl['recover'],
+    private readonly repairOwner: AssistantMailControl['changeOwner'],
     private readonly replaceInbox: AssistantMailControl['createInbox'],
     private readonly discardEnrollment: AssistantMailControl['discard'],
     private readonly replaceEnrollment: AssistantMailControl['replace']) {
@@ -98,6 +104,7 @@ class AssistantMailControlService extends Service implements AssistantMailContro
   status(): Promise<AssistantMailIdentity> { return this.read() }
   ensure(ownerEmail?: string): Promise<AssistantMailIdentity> { return this.create(ownerEmail) }
   recover(): Promise<AssistantMailIdentity> { return this.restore() }
+  changeOwner(ownerEmail: string): Promise<AssistantMailIdentity> { return this.repairOwner(ownerEmail) }
   createInbox(): Promise<AssistantMailIdentity> { return this.replaceInbox() }
   discard(): Promise<AssistantMailIdentity> { return this.discardEnrollment() }
   replace(ownerEmail?: string): Promise<AssistantMailIdentity> { return this.replaceEnrollment(ownerEmail) }
@@ -190,9 +197,10 @@ export function installAssistantMail(ctx: Context,
     status = providerStatus(error)
     if (!recoverVerification || !(error instanceof AgentMailHttpError)) return
     if (error.reason === 'verification-required') {
-      // The organization itself needs OTP verification. Preserve that explicit owner gate.
+      // The provider, not local state, proved that OTP verification is required.
+      // Re-enter verification explicitly; ordinary credential recovery must not demote ready mailboxes.
       try {
-        await onboarding.recover()
+        await onboarding.reverify()
         status = 'verification-required'
       } catch {
         // Keep the actionable status. Manual Recover remains available if provider recovery is refused.
@@ -381,6 +389,18 @@ export function installAssistantMail(ctx: Context,
       ...(account.ownerEmail === undefined ? {} : { ownerEmail: account.ownerEmail }),
     }
   }
+  const recoverEnrollment = async (): Promise<AssistantMailIdentity> => {
+    const account = await onboarding.recover()
+    status = account.state === 'ready' ? 'connecting' : 'verification-required'
+    if (account.state === 'ready') void pump()
+    return identity()
+  }
+  const repairOwnerEnrollment = async (ownerEmail: string): Promise<AssistantMailIdentity> => {
+    const account = await onboarding.changeOwner(ownerEmail)
+    status = account.state === 'ready' ? 'connecting' : 'verification-required'
+    if (account.state === 'ready') void pump()
+    return identity()
+  }
   const discardEnrollment = async (): Promise<AssistantMailIdentity> => {
     const credentials = ctx.get('credentials')
     if (credentials === undefined) throw new Error('secure credential storage is unavailable')
@@ -433,7 +453,8 @@ export function installAssistantMail(ctx: Context,
       async (code) => { await onboarding.verify(code); void pump(); return identity() },
       async () => { void pump(); return identity() },
       sendToOwner,
-      async () => { await onboarding.recover(); return identity() },
+      recoverEnrollment,
+      repairOwnerEnrollment,
       async () => { await onboarding.createInbox(); void pump(); return identity() },
       discardEnrollment,
       replaceEnrollment,
@@ -450,10 +471,19 @@ export function installAssistantMail(ctx: Context,
       try {
         const args = input === undefined ? {} : mailRecord(input)
         if (endpoint === 'signup') await onboarding.signup(mailString(args.ownerEmail), args.username === undefined ? `kira-${randomUUID().slice(0, 8)}` : mailString(args.username))
-        else if (endpoint === 'recover' || endpoint === 'create-inbox') {
-          if (Object.keys(args).length > 0) throw new Error('mail recovery and inbox creation use only the verified persisted owner')
-          if (endpoint === 'recover') await onboarding.recover()
-          else await onboarding.createInbox()
+        else if (endpoint === 'recover') {
+          if (Object.keys(args).length > 0) throw new Error('mail recovery uses only the persisted owner')
+          await recoverEnrollment()
+        }
+        else if (endpoint === 'owner') {
+          if (Object.keys(args).some(key => key !== 'ownerEmail') || args.ownerEmail === undefined) {
+            throw new Error('mail owner repair requires only ownerEmail')
+          }
+          await repairOwnerEnrollment(mailString(args.ownerEmail))
+        }
+        else if (endpoint === 'create-inbox') {
+          if (Object.keys(args).length > 0) throw new Error('mail inbox creation uses only the persisted owner')
+          await onboarding.createInbox()
         }
         else if (endpoint === 'discard') {
           if (Object.keys(args).length > 0) throw new Error('mail discard does not accept parameters')
@@ -476,7 +506,7 @@ export function installAssistantMail(ctx: Context,
           const outcome = await child.done
           if (outcome.exitCode !== 0) throw new Error('could not configure local Windows startup')
         } else if (endpoint !== 'status' && endpoint !== 'refresh') throw new Error('unknown mail operation')
-        if (endpoint !== 'status' && endpoint !== 'discard' && endpoint !== 'replace') {
+        if (endpoint !== 'status' && endpoint !== 'discard' && endpoint !== 'replace' && endpoint !== 'recover' && endpoint !== 'owner') {
           const account = await onboarding.status()
           const root = ctx.get('agents')?.roots()[0]
           if (account.sessionId === undefined && root !== undefined) await onboarding.bindSessionIfUnset(root.id)

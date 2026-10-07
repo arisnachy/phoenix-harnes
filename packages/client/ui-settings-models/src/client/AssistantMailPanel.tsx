@@ -26,7 +26,7 @@ export interface AssistantMailSnapshot {
 /** Local owner configuration; key inputs never enter the chat. */
 export interface AssistantMailClient {
   /** Invoke one local owner operation.
-   * @param action Status, signup, recover, create-inbox, replace, discard, verify, configure or refresh.
+   * @param action Status, signup, recover, owner, create-inbox, replace, discard, verify, configure or refresh.
    * @param input Operation properties; secrets are accepted only by connect.
    * @returns Secret-free account and job status.
    */
@@ -82,7 +82,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     setBusy(true)
     setFailure(undefined)
     try {
-      setSnapshot(await client.call(action, input))
+      const value = await client.call(action, input)
+      setSnapshot(value)
+      if (value.account.ownerEmail !== undefined) setOwner(value.account.ownerEmail)
       setCode('')
     } catch (error) {
       setFailure(error instanceof Error ? error.message : 'No se pudo completar la operación de correo.')
@@ -96,6 +98,9 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
   const ready = state === 'ready'
   const pendingVerification = state === 'pending-verification'
   const ambiguous = state === 'signup-ambiguous'
+  const persistedOwner = snapshot?.account.ownerEmail?.trim().toLowerCase()
+  const requestedOwner = owner.trim()
+  const ownerChanged = requestedOwner.length > 0 && requestedOwner.toLowerCase() !== persistedOwner
   const connection = snapshot?.connection ?? 'disconnected'
   const recoveryRequired = ready && (connection === 'verification-required' || connection === 'recovery-required')
   const providerWarning = recoveryRequired || (ready && ['quota-reached', 'message-rejected'].includes(connection))
@@ -126,11 +131,29 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
     if (kiraInbox === undefined) return
     void globalThis.navigator.clipboard.writeText(kiraInbox)
   }
+  const recoverMailbox = (): void => {
+    if (ownerChanged) {
+      void operate('owner', { ownerEmail: requestedOwner })
+      return
+    }
+    void operate('recover')
+  }
   const replaceMailbox = (): void => {
     const label = kiraInbox ?? 'el buzón guardado'
     if (!globalThis.confirm(`Phoenix dejará de usar ${label}. Si la credencial aún funciona, también intentará borrarlo de AgentMail. ¿Crear un buzón nuevo desde cero?`)) return
-    void operate('replace')
+    void operate('replace', requestedOwner.length === 0 ? undefined : { ownerEmail: requestedOwner })
   }
+  const recoveryOwnerField = <label>
+    <span className={styles.fieldLabel}>Correo propietario que recibirá el código</span>
+    <input
+      className={styles.field}
+      type="email"
+      value={owner}
+      onChange={(event) => { setOwner(event.target.value) }}
+      disabled={busy}
+      placeholder="tu@correo.com"
+    />
+  </label>
 
   return <section className={styles.mailCard} aria-label="Correo de Kira">
     <div className={styles.hero}>
@@ -223,9 +246,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
 
     {pendingVerification ? <div className={styles.setup}>
       <p className={styles.note}>
-        El buzón ya existe. Revisa {snapshot?.account.ownerEmail ?? 'tu correo'} e introduce
-        el código de seis dígitos. No se creará otro buzón.
+        El buzón ya existe. Revisa el correo propietario antes de introducir el código.
+        Si estaba mal escrito, corrígelo aquí y Phoenix pedirá un código nuevo sin clave API.
       </p>
+      {recoveryOwnerField}
       <label>
         <span className={styles.fieldLabel}>Código de verificación</span>
         <input
@@ -246,9 +270,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       >
         Verificar y activar
       </button>
-      <button type="button" className={styles.secondaryButton} disabled={busy}
-        onClick={() => { void operate('recover') }}>
-        Recuperar acceso
+      <button type="button" className={styles.secondaryButton}
+        disabled={busy || requestedOwner.length === 0}
+        onClick={recoverMailbox}>
+        {ownerChanged ? 'Corregir correo y reenviar código' : 'Reenviar código / recuperar acceso'}
       </button>
       <button type="button" className={styles.secondaryButton} disabled={busy}
         onClick={replaceMailbox}>
@@ -326,12 +351,15 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
 
     {ambiguous ? <div className={styles.setup}>
       <p className={styles.failure}>
-        Phoenix no pudo confirmar el alta. Puedes recuperar el mismo buzón de {snapshot?.account.ownerEmail ?? 'tu correo'}
-        y continuar con la verificación, sin contraseña ni clave API. La recuperación renueva el acceso a esa cuenta.
+        Phoenix no pudo confirmar el alta. Revisa el correo propietario: si tiene un error, corrígelo antes
+        de continuar. Phoenix recuperará el buzón existente o iniciará uno nuevo para el correo corregido,
+        sin pedir contraseña ni clave API.
       </p>
-      <button type="button" className={styles.button} disabled={busy}
-        onClick={() => { void operate('recover') }}>
-        Recuperar y continuar
+      {recoveryOwnerField}
+      <button type="button" className={styles.button}
+        disabled={busy || requestedOwner.length === 0}
+        onClick={recoverMailbox}>
+        {ownerChanged ? 'Corregir correo y continuar' : 'Recuperar y continuar'}
       </button>
       <button type="button" className={styles.secondaryButton} disabled={busy}
         onClick={replaceMailbox}>

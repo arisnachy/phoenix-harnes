@@ -5,6 +5,7 @@ import type { AssistantMailControl } from '../src/assistant-mail-runtime.ts'
 function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailControl {
   return {
     recover: overrides.recover ?? (async () => ({ state: 'pending-verification', inboxId: 'kira-real@agentmail.to', connection: 'disconnected' })),
+    changeOwner: overrides.changeOwner ?? (async (ownerEmail: string) => ({ state: 'pending-verification', inboxId: 'kira-real@agentmail.to', ownerEmail, connection: 'verification-required' })),
     createInbox: overrides.createInbox ?? (async () => ({ state: 'ready', inboxId: 'kira-another@agentmail.to', connection: 'disconnected' })),
     discard: overrides.discard ?? (async () => ({ state: 'not-configured', connection: 'not-configured' })),
     replace: overrides.replace ?? (async (ownerEmail?: string) => ({ state: 'pending-verification', inboxId: 'kira-replacement@agentmail.to', connection: 'not-configured', ...(ownerEmail === undefined ? {} : { ownerEmail }) })),
@@ -123,6 +124,22 @@ it('does not turn missing runtime or pending delivery into a sent result', async
     { agent: { id: 'lead' }, callId: 'mail' } as never)).rejects.toThrow('confirmation pending')
 })
 
+
+it('repairs the pending mailbox owner without replacing the inbox', async () => {
+  const changeOwner = vi.fn(async (ownerEmail: string) => ({
+    state: 'pending-verification' as const,
+    inboxId: 'kira-real@agentmail.to',
+    ownerEmail,
+    connection: 'verification-required',
+  }))
+  const tool = createAssistantMailIdentityTool(() => control({ changeOwner }))
+  await expect(tool.execute({ action: 'owner', owner_email: 'owner@example.com' }, {} as never)).resolves.toMatchObject({
+    state: 'pending-verification',
+    address: 'kira-real@agentmail.to',
+    owner_email: 'owner@example.com',
+  })
+  expect(changeOwner).toHaveBeenCalledWith('owner@example.com')
+})
 
 it('supports the mailbox discard action', async () => {
   const discard = vi.fn(async () => ({ state: 'not-configured' as const, connection: 'not-configured' }))
