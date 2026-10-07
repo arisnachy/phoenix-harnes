@@ -170,7 +170,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         const clipboard = globalThis.navigator.clipboard
         if (clipboard?.writeText === undefined) throw new Error('El navegador no permite copiar la clave de AgentMail al portapapeles.')
         await clipboard.writeText(claim.apiKey)
-        setClaimNotice(`Clave de ${claim.inboxId} copiada. Pégala en “Agent API key” y pulsa Continue.`)
+        setClaimNotice(`Clave de ${claim.inboxId} copiada. Pégala en “Agent API key”, termina “Claim inbox” y vuelve a Phoenix para comprobar.`)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'No se pudo preparar la reclamación del buzón.'
         setFailure(message.includes('no longer has the original AgentMail signup key')
@@ -346,6 +346,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       <button type="button" className={styles.secondaryButton} disabled={busy}
         onClick={claimMailbox}>
         No llegó el código · reclamar con la clave guardada
+      </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={() => { void operate('claim-status') }}>
+        Ya lo reclamé · comprobar
       </button>
       <button type="button" className={styles.secondaryButton} disabled={busy}
         onClick={replaceMailbox}>
