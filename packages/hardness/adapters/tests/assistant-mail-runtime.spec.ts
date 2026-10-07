@@ -254,7 +254,7 @@ describe('owned durable outgoing mail', () => {
 })
 
 it('retains a real AgentMail inbound wake arriving during an active inbox check without waiting for the poll timer', async () => {
-  const sockets: Socket[] = []
+  const sockets: EventTarget[] = []
   const messageEvent = (data: unknown): Event => {
     const event = new Event('message') as Event & { data?: unknown }
     Object.defineProperty(event, 'data', { value: JSON.stringify(data) })
@@ -291,7 +291,7 @@ it('retains a real AgentMail inbound wake arriving during an active inbox check 
   const { runtime, directory } = await fixture()
   try {
     await vi.waitFor(() => { expect(sockets).toHaveLength(1); expect(calls).toBe(1) })
-    sockets[0]!.receive()
+    ;(sockets[0] as Socket).receive()
     await vi.waitFor(() => { expect(calls).toBe(2) })
     sockets[0]!.receive()
     release()
