@@ -765,8 +765,8 @@ describe('ManagedMcpController', () => {
   it('refuses to persist registry entries requiring unsupported headers or tenant variables', async () => {
     const patchPath = tempPatch()
     const live = loader()
-    const protectedServer = candidate({ remoteUrl: undefined, remoteSetupRequired: 'headers' })
-    const templatedServer = candidate({ remoteUrl: undefined, remoteSetupRequired: 'variables' })
+    const { remoteUrl: _protectedUrl, ...protectedServer } = candidate({ remoteSetupRequired: 'headers' })
+    const { remoteUrl: _templatedUrl, ...templatedServer } = candidate({ remoteSetupRequired: 'variables' })
     const headers = new ManagedMcpController(live, {
       patchPath, registrySearch: registry([protectedServer]),
     })
