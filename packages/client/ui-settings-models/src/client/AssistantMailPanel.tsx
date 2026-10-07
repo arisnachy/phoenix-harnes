@@ -306,7 +306,6 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         onClick={replaceMailbox}>
         La clave se perdió · crear buzón nuevo
       </button>
-      {claimNotice === undefined ? null : <p className={styles.help} role="status">{claimNotice}</p>}
       <p className={styles.help}>
         Phoenix usa la clave original que guardó al crear el buzón; no necesitas haberla recibido por correo.
         No creará buzones adicionales mientras este vínculo siga pendiente.
@@ -343,6 +342,10 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
         disabled={busy || requestedOwner.length === 0}
         onClick={recoverMailbox}>
         {ownerChanged ? 'Corregir correo y reenviar código' : 'Reenviar código / recuperar acceso'}
+      </button>
+      <button type="button" className={styles.secondaryButton} disabled={busy}
+        onClick={claimMailbox}>
+        No llegó el código · reclamar con la clave guardada
       </button>
       <button type="button" className={styles.secondaryButton} disabled={busy}
         onClick={replaceMailbox}>
@@ -440,6 +443,7 @@ export function AssistantMailPanel({ client }: { readonly client: AssistantMailC
       </p>
     </div> : null}
 
+    {claimNotice === undefined ? null : <p className={styles.help} role="status">{claimNotice}</p>}
     {failure === undefined ? null : <p className={styles.failure} role="alert">{failure}</p>}
 
     {snapshot?.jobs.length === 0 ? null : <details className={styles.advanced}>
