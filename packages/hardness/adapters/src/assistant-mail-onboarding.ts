@@ -157,8 +157,9 @@ export class MailOnboarding {
   confirmClaim(): Promise<MailAccount> {
     return this.exclusively(async () => {
       const previous = await this.file.read()
+      const legacyAgentSignup = previous.ownerLink === undefined && previous.challengeHash === undefined
       if (previous.state !== 'pending-verification' || previous.inboxId === undefined
-        || (previous.ownerLink !== 'pending' && previous.ownerLink !== 'provider-conflict')) {
+        || (!legacyAgentSignup && previous.ownerLink !== 'pending' && previous.ownerLink !== 'provider-conflict')) {
         throw new Error('mail claim confirmation requires an unverified receive-only inbox')
       }
       const key = await this.options.resolveKey?.()
