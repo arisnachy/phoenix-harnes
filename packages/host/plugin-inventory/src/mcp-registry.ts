@@ -38,7 +38,7 @@ function safeHttpsUrl(value: unknown): string | undefined {
   if (raw === undefined) return undefined
   try {
     const url = new URL(raw)
-    return url.protocol === 'https:' ? url.toString() : undefined
+    return url.protocol === 'https:' && url.username === '' && url.password === '' ? url.toString() : undefined
   } catch {
     return undefined
   }
@@ -127,14 +127,27 @@ function projectCandidate(value: unknown): McpRegistryCandidate | undefined {
   const remotes = Array.isArray(server.remotes) ? server.remotes : []
   const remoteTransports: McpRegistryTransport[] = []
   let remoteUrl: string | undefined
+  let remoteSetupRequired: 'headers' | 'variables' | undefined
   for (const remote of remotes) {
     const item = record(remote)
     const transport = transportOf(item)
     if (transport === undefined) continue
     remoteTransports.push(transport)
-    if (remoteUrl === undefined && transport === 'streamable-http') {
-      const candidate = safeHttpsUrl(item?.url)
-      if (candidate !== undefined && !/[{}]|%7[bd]/iu.test(candidate)) remoteUrl = candidate
+    if (transport !== 'streamable-http') continue
+    const rawUrl = text(item?.url)
+    const candidate = safeHttpsUrl(rawUrl)
+    if (candidate === undefined) continue
+    // The official registry describes headers and URL-template variables.
+    // A bare URL is *not* installable when these required settings are lost.
+    const templated = /[{}]|%7[bd]/iu.test(candidate)
+    const variables = record(item?.variables)
+    const needsVariables = templated || (variables !== undefined && Object.keys(variables).length > 0)
+    const headers = Array.isArray(item?.headers) ? item.headers : []
+    const needsHeaders = headers.some(header => record(header)?.isRequired === true)
+    if (!needsVariables && !needsHeaders) {
+      if (remoteUrl === undefined) remoteUrl = candidate
+    } else if (remoteSetupRequired === undefined) {
+      remoteSetupRequired = needsVariables ? 'variables' : 'headers'
     }
   }
   const transports = [...new Set<McpRegistryTransport>([
@@ -160,6 +173,7 @@ function projectCandidate(value: unknown): McpRegistryCandidate | undefined {
     ...(repositoryUrl === undefined ? {} : { repositoryUrl }),
     ...(websiteUrl === undefined ? {} : { websiteUrl }),
     ...(remoteUrl === undefined ? {} : { remoteUrl }),
+    ...(remoteUrl !== undefined || remoteSetupRequired === undefined ? {} : { remoteSetupRequired }),
   }
 }
 
