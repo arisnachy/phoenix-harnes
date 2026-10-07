@@ -28,6 +28,7 @@ import * as toolTeam from '../src/index.ts'
 
 const SIGNAL = new AbortController().signal
 const TOOL_NAMES = [
+  'design_team',
   'spawn_teammate',
   'send_message',
   'followup_task',
@@ -195,6 +196,61 @@ describe('dsh-tool-team', () => {
     expect(text(denied)).toContain('only the Team Lead')
     await execute(ctx, lead, 'interrupt_agent', { target: 'tool-worker' })
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
+  })
+
+  it('lets the Lead apply a full twenty-person Team Studio redesign without changing runtime ids', async () => {
+    const { ctx, lead } = await setup([])
+    const before = ctx.agentTeams.activeTeamDesign()
+    const members = before.members.map((member, index) => ({
+      ...member,
+      displayName: `Crew ${index + 1}`,
+      personality: `Custom specialist ${index + 1}`,
+    }))
+    const designed = await execute(ctx, lead, 'design_team', {
+      design_json: JSON.stringify({
+        ...before,
+        id: 'hero-lab',
+        name: 'Hero Lab',
+        motion: 'expressive',
+        lead: {
+          ...before.lead,
+          displayName: 'Athena',
+          gender: 'female',
+          personality: 'Strategic, warm, decisive and witty.',
+        },
+        members,
+      }),
+    })
+    expect(designed.isError).toBe(false)
+    expect(JSON.parse(text(designed))).toEqual({
+      teamId: 'hero-lab',
+      teamName: 'Hero Lab',
+      leadName: 'Athena',
+      members: 20,
+    })
+    const after = ctx.agentTeams.activeTeamDesign()
+    expect(after.members).toHaveLength(20)
+    expect(after.members.map(member => member.id)).toEqual(before.members.map(member => member.id))
+    expect(after.members[0]?.displayName).toBe('Crew 1')
+    expect(ctx.agentTeams.teamSocialStyle('lead', 'lead')).toContain('Athena')
+    expect(ctx.agentTeams.teamSocialStyle('lead', 'lead')).toContain('Strategic, warm, decisive and witty.')
+
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'atlas',
+      description: 'engineering implementation',
+      prompt: 'stay available',
+    })
+    const childId = spawnedChildId(spawned)
+    const child = await waitRunning(ctx, childId)
+    const childPrompt = renderPrompt(await assembly(ctx, child))
+    expect(childPrompt).toContain('Crew 3')
+    expect(childPrompt).toContain('Custom specialist 3')
+    expect(childPrompt).toContain('Your Team name is atlas')
+    const denied = await execute(ctx, child, 'design_team', { design_json: JSON.stringify(before) })
+    expect(denied.isError).toBe(true)
+    expect(text(denied)).toContain('only the Team Lead')
+    await execute(ctx, lead, 'interrupt_agent', { target: 'atlas' })
+    await waitNoAgent(ctx, childId)
   })
 
   it('injects only the active named KIRA persona instead of all twenty voices', async () => {
