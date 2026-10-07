@@ -1,0 +1,30 @@
+# Phoenix MCP: official endpoints and authentication review (2026-10-07)
+
+This document reviews the Host-pinned connectors in `packages/host/plugin-inventory/src/mcp-managed.ts` against provider-published setup instructions. **Documentation verification is not live user-account authentication**. A runtime may still require provider approval, client registration, installed local binaries, a login, or a workspace entitlement.
+
+| Phoenix connector | MCP transport URL / runner | Authentication and requirements | Official reference |
+| --- | --- | --- | --- |
+| **Cloudflare API** | `https://mcp.cloudflare.com/mcp` | **OAuth first**: sign in to Cloudflare and choose permissions; API token is optional for unattended/CI access. Do **not** substitute a generic Cloudflare API-key authorization record in Settings. Cloudflare Code Mode is the token-efficient default; `?codemode=false` exposes thousands of tools and is **not** the default. | https://github.com/cloudflare/mcp and https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/ |
+| Cloudflare documentation (separate server, not auto-installed) | `https://docs.mcp.cloudflare.com/mcp` | Provider documentation MCP; treat as a distinct server identity. | https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/ |
+| Cloudflare observability (separate server, not auto-installed) | `https://observability.mcp.cloudflare.com/mcp` | Cloudflare-hosted MCP for logs and analytics; OAuth where required. | https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/ |
+| **Supabase** | `https://mcp.supabase.com/mcp` | User OAuth with dynamic client registration; no personal access token needed for interactive auth. Project/read-only/feature restrictions are optional URL query parameters and should never be invented. | https://supabase.com/docs/guides/ai-tools/mcp |
+| **Notion** | `https://mcp.notion.com/mcp` | User OAuth. SSE at `/sse` is only a fallback for legacy clients. | https://developers.notion.com/guides/mcp/get-started-with-mcp |
+| **Linear** | `https://mcp.linear.app/mcp` | OAuth 2.1 with dynamic client registration, or optional bearer/API key. Read-only URL `/mcp/readonly` is available. | https://linear.app/docs/mcp |
+| **Canva** | `https://mcp.canva.com/mcp` | OAuth **plus a recognized client**: the Canva Developer Portal can issue `client_id`/`client_secret` with authorized redirect URIs. DCR remains for backward compatibility but is not a universal guarantee that an unregistered arbitrary harness is allowed. | https://www.canva.dev/docs/apps/mcp/access/ and https://www.canva.dev/docs/apps/mcp/verify-app/ |
+| **HeyGen** | `https://mcp.heygen.com/mcp/v1/` | User OAuth for MCP, no direct HeyGen API key required; plan/credits may restrict use. | https://www.heygen.com/blog/generate-ai-videos-with-claude and https://www.heygen.com/es-es/integrations |
+| **Figma Desktop** | `http://127.0.0.1:3845/mcp` | Local connection requires Figma Desktop running with MCP enabled. No browser OAuth for this local mode. Figma's **remote** MCP is a different endpoint `https://mcp.figma.com/mcp`, not interchangeable with the desktop runtime. | https://developers.figma.com/docs/figma-mcp-server/local-server-installation/ and https://developers.figma.com/docs/figma-mcp-server/remote-server-installation/ |
+| **Slack** | `https://mcp.slack.com/mcp` | OAuth for a registered Slack application with a known client ID, and for a custom harness typically client secret/approved redirect URI. **No Dynamic Client Registration.** Workspace app policies can still block access. | https://docs.slack.dev/ai/slack-mcp-server/ |
+| **Brave Search** | `npx -y @brave/brave-search-mcp-server --transport stdio` | API key `BRAVE_API_KEY` is required; this is **not** browser OAuth. | https://github.com/brave/brave-search-mcp-server |
+| **Filesystem** | `npx -y @modelcontextprotocol/server-filesystem .` | Local stdio server; no browser OAuth. Access is limited to its configured root. | https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem |
+| **Memory** | `npx -y @modelcontextprotocol/server-memory` | Local stdio knowledge graph; no browser OAuth. | https://github.com/modelcontextprotocol/servers/tree/main/src/memory |
+| **Fetch** | `uvx mcp-server-fetch` | Local stdio process; requires `uvx` installation. No browser OAuth. | https://github.com/modelcontextprotocol/servers/tree/main/src/fetch |
+| **Devpost** | `https://devpost.com/mcp` | Configured in Phoenix as a remote OAuth integration; authenticate and inspect tools before claiming readiness. Provider-specific open documentation and live authorization still require validation. | https://devpost.com/ |
+| **Binance Agent OS** | `https://agent.binance.com/mcp/agentic` | Optional gated connector; keep account activity and real trading behind explicit user approval. Not included in automatic core installs. | https://developers.binance.com/en/docs/agent-native/mcp-server |
+
+## UI and lifecycle requirements
+
+1. MCP `auth-required` means `Authorize` via that MCP's own `mcp-client/<server>` flow, not a similarly named legacy API-token flow. This is especially important for **Cloudflare**.
+2. Browser-based OAuth needs a valid authorization URL from the provider. A reserved browser tab is not itself a consent page; show an explanation while discovery/registration runs, then navigate when the provider supplies the HTTPS URL.
+3. A missing OAuth URL is a failure or unmet prerequisite, **not** a successful login; show actionable detail and do not leave an unexplained empty tab.
+4. `installed` means persisted configuration only; `ready` with nonempty tools is needed to advertise working tool access.
+5. Do not silently install all optional remotes on every startup. Do not claim that all published registry entries support one-click installation.
