@@ -218,7 +218,9 @@ export class MailOnboarding {
       throw error
     }
     const organizationId = mailString(organization.organization_id)
-    if (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0) {
+    const current = await this.file.read()
+    if (current.state !== 'ready'
+      && (typeof organization.authentication_id !== 'string' || organization.authentication_id.trim().length === 0)) {
       throw new Error('use an API key created in your human-owned AgentMail Console organization')
     }
 
@@ -238,7 +240,6 @@ export class MailOnboarding {
       && Number.isInteger(organization.inbox_limit) && organization.inbox_limit >= 0
       ? organization.inbox_limit
       : undefined
-    const current = await this.file.read()
     let currentInboxAccess: boolean | undefined
     let messageRead: boolean | undefined
     if (current.state === 'ready' && current.inboxId !== undefined) {
