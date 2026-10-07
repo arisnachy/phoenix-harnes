@@ -206,6 +206,42 @@ describe('Official MCP Registry proxy', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
+  it('does not offer broken one-click installs for MCP remotes that need headers or URL variables', async () => {
+    const mk = (name: string, remotes: unknown[]) => ({
+      ...activeServer(name),
+      server: {
+        ...activeServer(name).server,
+        remotes,
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => response([
+      mk('io.example/header-auth-fixture', [{
+        type: 'streamable-http', url: 'https://mcp.example.com/protected',
+        headers: [{ name: 'X-API-Key', isRequired: true, isSecret: true }],
+      }]),
+      mk('io.example/variable-fixture', [{
+        type: 'streamable-http', url: 'https://mcp.example.com/{tenant}/mcp',
+        variables: { tenant: { isRequired: true } },
+      }]),
+      mk('io.example/fallback-fixture', [
+        { type: 'streamable-http', url: 'https://mcp.example.com/restricted', headers: [{ name: 'X-API-Key', isRequired: true }] },
+        { type: 'streamable-http', url: 'https://mcp.example.com/public' },
+      ]),
+      mk('io.example/unsafe-fixture', [
+        { type: 'streamable-http', url: 'https://user:secret@mcp.example.com/mcp' },
+      ]),
+    ])))
+
+    const result = await searchOfficialMcpRegistry({ query: 'remote-preflight-fixture' })
+    expect(result.candidates[0]).toMatchObject({ remoteSetupRequired: 'headers' })
+    expect(result.candidates[0]).not.toHaveProperty('remoteUrl')
+    expect(result.candidates[1]).toMatchObject({ remoteSetupRequired: 'variables' })
+    expect(result.candidates[1]).not.toHaveProperty('remoteUrl')
+    expect(result.candidates[2]).toMatchObject({ remoteUrl: 'https://mcp.example.com/public' })
+    expect(result.candidates[2]).not.toHaveProperty('remoteSetupRequired')
+    expect(result.candidates[3]).not.toHaveProperty('remoteUrl')
+  })
+
   it('normalizes limits, validates requests, and serves a fresh cache without another fetch', async () => {
     const requestedUrls: string[] = []
     const fetchMock = vi.fn(async (input: string | URL) => {
