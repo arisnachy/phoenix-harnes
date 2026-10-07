@@ -203,6 +203,19 @@ it('exposes received messages and real task state through the inbox tool', async
   expect(jobs).toMatchObject({ kind: 'kira_mail_jobs', jobs: [{ state: 'replied' }] })
 })
 
+it('keeps refresh JSON-valid when no AgentMail address exists yet', async () => {
+  const refresh = vi.fn(async () => ({ state: 'not-configured' as const, connection: 'not-configured' }))
+  const tool = createAssistantMailInboxTool(() => control({ refresh }))
+  const result = await tool.execute({ action: 'refresh' }, {} as never)
+  expect(result).toEqual({
+    kind: 'kira_mail_refresh',
+    connection: 'not-configured',
+    state: 'not-configured',
+  })
+  expect(result).not.toHaveProperty('address')
+  expect(JSON.stringify(result)).not.toContain('undefined')
+})
+
 it('does not fake inbox contents when the Kira mailbox host is missing', async () => {
   const tool = createAssistantMailInboxTool(() => undefined)
   await expect(tool.execute({ action: 'list' }, {} as never)).rejects.toThrow('unavailable')
