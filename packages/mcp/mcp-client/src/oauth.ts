@@ -29,6 +29,8 @@ export interface McpOAuthProviderOptions {
   onAuthorizationUrl: (url: URL) => void | Promise<void>
   state?: string | (() => string | Promise<string>)
   clientInformation?: OAuthClientInformationMixed | (() => Promise<OAuthClientInformationMixed | undefined>)
+  /** Called when this provider dynamically registers a client for its current redirect URI. */
+  onClientInformationSaved?: (clientInformation: OAuthClientInformationMixed) => void | Promise<void>
   tokenEndpointAuthMethod?: 'none' | 'client_secret_post' | 'client_secret_basic'
 }
 
@@ -83,6 +85,7 @@ export function createMcpOAuthProvider(options: McpOAuthProviderOptions): OAuthC
     },
     async saveClientInformation(clientInformation) {
       await updateState(options.store, current => ({ ...current, clientInformation }))
+      await options.onClientInformationSaved?.(clientInformation)
     },
     async tokens() {
       return (await options.store.read())?.tokens
@@ -383,6 +386,12 @@ export class McpOAuthController {
   private readonly serverUrl: string
   private readonly resolveClientInformation: (() => Promise<OAuthClientInformationMixed | undefined>) | undefined
   private readonly tokenEndpointAuthMethod: 'none' | 'client_secret_post' | 'client_secret_basic' | undefined
+  /**
+   * True only after this controller instance has registered client information
+   * against its current loopback redirect URI. Persisted registrations from a
+   * previous Host start deliberately do not set this flag.
+   */
+  private currentRedirectClientRegistered = false
   private closed = false
 
   constructor(
@@ -420,6 +429,7 @@ export class McpOAuthController {
       redirectUrl: this.callbackServer.redirectUri,
       store: this.store,
       onAuthorizationUrl,
+      onClientInformationSaved: () => { this.currentRedirectClientRegistered = true },
       ...(this.resolveClientInformation === undefined
         ? {}
         : { clientInformation: this.resolveClientInformation }),
@@ -436,21 +446,26 @@ export class McpOAuthController {
   async authorize(session: AuthorizationSession): Promise<void> {
     await this.ready
     const previous = await this.store.read()
-    // The callback server deliberately binds an ephemeral loopback port. Any
-    // dynamically registered OAuth client from an earlier PHOENIX process is
-    // therefore bound to a redirect_uri that no longer exists. Reusing that
-    // client_id makes providers such as monday.com reject the new authorization
-    // request with "redirect_uri is not registered for this app". An explicit
-    // authorization attempt is a fresh registration boundary: keep reusable
-    // discovery metadata, but drop the old client registration, tokens, and
-    // verifier so the SDK registers a client for the callback URI of this run.
+    // The callback server deliberately binds an ephemeral loopback port, so a
+    // persisted dynamic client from an earlier Host process can point at a dead
+    // redirect URI and must be discarded. However, the live Streamable HTTP
+    // transport may already have completed discovery + DCR in THIS controller
+    // before the user clicks Authorize. That registration was created for this
+    // exact callback URI. Throwing it away here forces a second DCR round-trip
+    // before the SDK can build the authorization URL; providers can rate-limit,
+    // reject, or stall that duplicate registration, leaving the UI forever at
+    // "Preparando autorización…" with no URL. Preserve only registrations that
+    // this controller observed being saved; a new Host starts with the flag
+    // false and still drops genuinely stale registrations.
     if (previous !== undefined) {
       const {
-        clientInformation: _clientInformation,
         tokens: _tokens,
         codeVerifier: _codeVerifier,
-        ...reusable
+        ...withoutSessionCredentials
       } = previous
+      const reusable = this.currentRedirectClientRegistered
+        ? withoutSessionCredentials
+        : cloneWithout(withoutSessionCredentials, 'clientInformation')
       await this.store.write(reusable)
     }
     const state = randomState()
@@ -464,6 +479,7 @@ export class McpOAuthController {
       redirectUrl: this.callbackServer.redirectUri,
       store: this.store,
       state,
+      onClientInformationSaved: () => { this.currentRedirectClientRegistered = true },
       onAuthorizationUrl: (url) => {
         session.notify({
           message: `Continúa en tu navegador para autorizar ${this.serverName}. PHOENIX conserva los tokens solo en el Host.`,
@@ -495,6 +511,7 @@ export class McpOAuthController {
 
   /** Clear persisted OAuth state for this MCP server. */
   async disconnect(): Promise<void> {
+    this.currentRedirectClientRegistered = false
     await this.store.clear()
   }
 
