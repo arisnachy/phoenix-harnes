@@ -15,6 +15,13 @@ export interface AssistantMailSnapshot {
   }
   readonly startup?: { readonly supported: boolean; readonly enabled: boolean }
   readonly connection: string
+  readonly providerIssue?: {
+    readonly status: number
+    readonly code?: string
+    readonly reason?: string
+    readonly permission?: string
+    readonly fix?: string
+  }
   readonly jobs: readonly {
     readonly id: string
     readonly title: string
@@ -33,8 +40,12 @@ export interface AssistantMailConsoleKeyCheck {
   readonly inboxLimit?: number
   readonly capacityAvailable: boolean
   readonly inboxRead: boolean
+  readonly scopeType?: 'organization' | 'pod' | 'inbox'
+  readonly inboxCreate?: boolean
+  readonly messageSend?: boolean
   readonly currentInboxAccess?: boolean
   readonly messageRead?: boolean
+  readonly realtime?: boolean
 }
 
 /** Local owner configuration; key inputs never enter the chat. */
