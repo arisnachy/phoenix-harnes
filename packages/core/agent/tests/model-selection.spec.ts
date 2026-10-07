@@ -162,6 +162,7 @@ describe('installModelSelection()', () => {
         { name: 'spawn_teammate', description: 'create a Kira teammate', parameters: { type: 'object' } },
         { name: 'subagent', description: 'legacy subagent', parameters: { type: 'object' } },
         { name: 'subagent_fork', description: 'legacy fork', parameters: { type: 'object' } },
+        { name: 'codex_auto_review', description: 'Codex native auto-review worker', parameters: { type: 'object' } },
       ],
     }))
     const selection: ModelSelectionRef = {
@@ -171,12 +172,12 @@ describe('installModelSelection()', () => {
     const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
 
     const autoAssembly = await ctx.systemPrompt.assemble()
-    expect(autoAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
-    expect(selection.assembledToolCount).toBe(2)
+    expect(autoAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate', 'codex_auto_review'])
+    expect(selection.assembledToolCount).toBe(3)
 
     selection.current = { provider: 'openai-codex', model: 'gpt-6-luna' }
     const explicitAssembly = await ctx.systemPrompt.assemble()
-    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
+    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate', 'codex_auto_review'])
 
     selection.current = { provider: 'deepseek', model: 'deepseek-v4-pro' }
     const nonCodexAssembly = await ctx.systemPrompt.assemble()
@@ -830,6 +831,30 @@ describe('installModelSelection()', () => {
       model: 'gpt-6-luna',
       reasoningEffort: ReasoningEffortId('max'),
     })
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('synchronizes Phoenix Auto provider identity without persisting the synthetic model id', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const agent = {
+      options: { provider: 'deepseek', model: 'deepseek-v4-pro', reasoningEffort: ReasoningEffortId('high') },
+      session: { events: [] },
+    } as unknown as Agent
+    ctx.agent = agent
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+
+    await ctx.systemPrompt.assemble()
+
+    expect(agent.options.provider).toBe('openai-codex')
+    expect(agent.options.model).toBe('deepseek-v4-pro')
+    expect(agent.options.reasoningEffort).toBe(ReasoningEffortId('high'))
 
     dispose()
     await ctx.fiber.dispose()
