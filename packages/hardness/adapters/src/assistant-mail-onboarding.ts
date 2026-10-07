@@ -6,6 +6,7 @@ import { MailFile, mailAddress, mailRecord, mailString } from './assistant-mail-
 import { AgentMailHttpError, agentMailDeleteInbox, agentMailRequest } from './assistant-mail-agentmail.ts'
 
 interface Enrollment extends MailAccount {
+  readonly credentialMode?: 'agent-signup' | 'console-api-key'
   readonly signupUsername?: string
   readonly newInboxRequest?: { readonly username: string; readonly clientId: string }
   readonly challengeHash?: string
@@ -28,6 +29,10 @@ function enrollment(value: unknown): Enrollment {
   }
   return {
     state: data.state as MailAccount['state'], contacts: data.contacts.map(value => mailAddress(mailString(value))),
+    ...(data.credentialMode === undefined ? {} : {
+      credentialMode: data.credentialMode === 'agent-signup' || data.credentialMode === 'console-api-key'
+        ? data.credentialMode : (() => { throw new Error('invalid mail credential mode') })(),
+    }),
     ...(data.signupUsername === undefined ? {} : { signupUsername: mailString(data.signupUsername) }),
     ...(data.newInboxRequest === undefined ? {} : { newInboxRequest: {
       username: mailString(mailRecord(data.newInboxRequest).username),
@@ -62,7 +67,7 @@ export class MailOnboarding {
   async status(): Promise<MailAccount> {
     const {
       challengeHash: _privateChallenge, challengeExpires: _expiry, challengeAttempts: _attempts,
-      signupUsername: _username, newInboxRequest: _newInbox, ...account
+      credentialMode: _credentialMode, signupUsername: _username, newInboxRequest: _newInbox, ...account
     } = await this.file.read()
     return account
   }
@@ -115,7 +120,16 @@ export class MailOnboarding {
       if (!['signup-ambiguous', 'pending-verification', 'ready'].includes(previous.state) || previous.ownerEmail === undefined) {
         throw new Error('mail recovery requires an existing owner enrollment')
       }
-      if (previous.state === 'ready') return this.restoreCredentialFrom(previous)
+      if (previous.state === 'ready') {
+        if (previous.credentialMode === 'console-api-key') {
+          if (previous.inboxId === undefined) throw new Error('ready Kira mailbox is missing its inbox identity')
+          const key = await this.options.resolveKey?.()
+          if (key === undefined) throw new Error('AgentMail Console API key is unavailable; paste a new key in Settings')
+          await this.verifyConsoleInboxAccess(previous.inboxId, key)
+          return this.status()
+        }
+        return this.restoreCredentialFrom(previous)
+      }
       if (previous.newInboxRequest !== undefined) {
         throw new Error('Console-key inbox creation is pending; retry with the same API key so Phoenix can reconcile it')
       }
@@ -222,8 +236,24 @@ export class MailOnboarding {
     const current = await this.file.read()
 
     let inboxRead = true
+    let reusableInboxId: string | undefined
     try {
-      await agentMailRequest('/inboxes?limit=1', key, this.options.timeoutMs, this.options.fetch ?? fetch)
+      const listing = mailRecord(await agentMailRequest('/inboxes?limit=100', key,
+        this.options.timeoutMs, this.options.fetch ?? fetch))
+      if (!Array.isArray(listing.inboxes)) throw new Error('AgentMail returned an invalid inbox listing')
+      for (const value of listing.inboxes) {
+        const row = mailRecord(value)
+        const rawInbox = row.inbox_id ?? row.email
+        if (typeof rawInbox !== 'string') continue
+        let inboxId: string
+        try { inboxId = mailAddress(rawInbox) } catch { continue }
+        const display = typeof row.display_name === 'string' ? row.display_name.trim().toLowerCase() : ''
+        const localPart = inboxId.slice(0, inboxId.indexOf('@'))
+        if (inboxId === current.inboxId || display === 'kira' || localPart.startsWith('kira-')) {
+          reusableInboxId = inboxId
+          break
+        }
+      }
     } catch (error) {
       if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') inboxRead = false
       else throw error
@@ -275,19 +305,18 @@ export class MailOnboarding {
       ...(inboxLimit === undefined ? {} : { inboxLimit }),
       capacityAvailable: inboxLimit === undefined || inboxCount < inboxLimit,
       inboxRead,
+      ...(reusableInboxId === undefined ? {} : { reusableInboxId }),
       ...(currentInboxAccess === undefined ? {} : { currentInboxAccess }),
       ...(messageRead === undefined ? {} : { messageRead }),
     }
   }
 
-  /** Replace a failed agent-signup enrollment with an inbox inside a human-owned Console organization.
-   * AgentMail explicitly recommends this path when the human already has a Console account and claim cannot
-   * create another organization: create a Console API key, give it to the agent, then create a fresh inbox.
-   * The old sign-up inbox remains at AgentMail and Phoenix stops using it. A persisted client id makes an
-   * uncertain create result reconcilable instead of producing duplicate inboxes on retry.
+  /** Adopt a human AgentMail Console API key without ever re-entering agent-signup.
+   * If the persisted inbox belongs to the old agent organization, migrate Kira to a reusable
+   * Console inbox or create a fresh free-domain inbox inside the human Console organization.
    * @param apiKey Bearer key created by the human in AgentMail Console.
    * @param ownerEmail Optional persisted human owner when no owner has been saved yet.
-   * @returns Ready account backed by the newly created inbox.
+   * @returns Ready account backed by an inbox visible to the Console key.
    */
   adoptConsoleKey(apiKey: string, ownerEmail?: string): Promise<MailAccount> {
     return this.exclusively(async () => {
@@ -299,9 +328,8 @@ export class MailOnboarding {
         throw new Error('Console API key adoption cannot silently change the persisted Kira owner')
       }
       const owner = previous.ownerEmail ?? explicitOwner
-      if (previous.state !== 'ready' && owner === undefined) {
-        throw new Error('owner email required before creating Kira inbox from a Console API key')
-      }
+      if (owner === undefined) throw new Error('owner email required before activating Kira with a Console API key')
+
       let organization: Record<string, unknown>
       try {
         organization = mailRecord(await agentMailRequest('/organizations', key, this.options.timeoutMs,
@@ -317,16 +345,27 @@ export class MailOnboarding {
         throw new Error('AgentMail returned an invalid organization for this API key')
       }
 
-      if (previous.state === 'ready') {
-        if (previous.inboxId === undefined) throw new Error('ready Kira mailbox is missing its inbox identity')
-        await this.verifyConsoleInboxAccess(previous.inboxId, key)
-        await this.options.saveKey(key)
-        return this.status()
+      // A Console key may legitimately belong to a different organization from the
+      // stale agent-signup inbox. Keep the same inbox only when the new key proves access.
+      if (previous.state === 'ready' && previous.inboxId !== undefined) {
+        try {
+          await this.verifyConsoleInboxAccess(previous.inboxId, key)
+          await this.options.saveKey(key)
+          await this.file.change(current => ({ ...current, credentialMode: 'console-api-key', ownerLink: 'attached' }))
+          return this.status()
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.includes('cannot read the current Kira inbox')) throw error
+          // Continue into Console migration; never call /agent/sign-up or /agent/human.
+        }
       }
 
-      // Once the user explicitly chooses Console-key recovery, make that credential durable before
-      // creating the inbox. The old agent-signup inbox is intentionally abandoned per AgentMail docs.
       await this.options.saveKey(key)
+
+      // Reuse an existing Kira-like Console inbox first. This avoids quota churn and
+      // also repairs retries after a create response was lost.
+      const reusable = await this.findReusableConsoleInbox(key, previous.inboxId)
+      if (reusable !== undefined) return this.finishExistingConsoleInbox(reusable, key, owner)
+
       const request = previous.newInboxRequest ?? {
         username: `kira-${randomUUID().slice(0, 8)}`,
         clientId: randomUUID(),
@@ -334,7 +373,8 @@ export class MailOnboarding {
       if (previous.newInboxRequest === undefined) {
         await this.file.change(current => ({
           ...current,
-          ...(current.ownerEmail === undefined && owner !== undefined ? { ownerEmail: owner } : {}),
+          ownerEmail: owner,
+          credentialMode: 'console-api-key',
           newInboxRequest: request,
         }))
       } else {
@@ -343,22 +383,21 @@ export class MailOnboarding {
             `/inboxes/${encodeURIComponent(`${request.username}@agentmail.to`)}`,
             key, this.options.timeoutMs, this.options.fetch ?? fetch,
           ))
-          return await this.finishConsoleInbox(found, request, key)
+          return await this.finishConsoleInbox(found, request, key, owner)
         } catch (error) {
-          // A confirmed 404 proves the prior create did not land. Any other result stays ambiguous
-          // and must not mint a different username.
           if (!(error instanceof AgentMailHttpError) || error.status !== 404) throw error
         }
       }
 
       let created: Record<string, unknown>
       try {
+        // Keep this payload aligned with AgentMail's documented Create Inbox fields.
+        // client_id is not an idempotency token and must not receive a Phoenix UUID.
         created = mailRecord(await agentMailRequest('/inboxes', key, this.options.timeoutMs,
           this.options.fetch ?? fetch, {
             username: request.username,
             domain: 'agentmail.to',
             display_name: 'Kira',
-            client_id: request.clientId,
           }))
       } catch (error) {
         if (error instanceof AgentMailHttpError && error.reason === 'permission-missing') {
@@ -367,8 +406,58 @@ export class MailOnboarding {
         if (error instanceof AgentMailHttpError && error.status >= 400 && error.status < 500 && error.status !== 408) throw error
         throw new Error('new Console inbox confirmation is ambiguous; retry with the same API key so Phoenix can reconcile it')
       }
-      return this.finishConsoleInbox(created, request, key)
+      return this.finishConsoleInbox(created, request, key, owner)
     })
+  }
+
+  private async findReusableConsoleInbox(
+    key: string,
+    preferredInboxId?: string,
+  ): Promise<Record<string, unknown> | undefined> {
+    const listing = mailRecord(await agentMailRequest('/inboxes?limit=100', key,
+      this.options.timeoutMs, this.options.fetch ?? fetch))
+    if (!Array.isArray(listing.inboxes)) throw new Error('AgentMail returned an invalid inbox listing')
+    const rows = listing.inboxes.map(value => mailRecord(value))
+    if (preferredInboxId !== undefined) {
+      const exact = rows.find((row) => row.inbox_id === preferredInboxId || row.email === preferredInboxId)
+      if (exact !== undefined) return exact
+    }
+    return rows.find((row) => {
+      const raw = row.inbox_id ?? row.email
+      if (typeof raw !== 'string') return false
+      let inboxId: string
+      try { inboxId = mailAddress(raw) } catch { return false }
+      const display = typeof row.display_name === 'string' ? row.display_name.trim().toLowerCase() : ''
+      return display === 'kira' || inboxId.slice(0, inboxId.indexOf('@')).startsWith('kira-')
+    })
+  }
+
+  private async finishExistingConsoleInbox(
+    result: Record<string, unknown>,
+    key: string,
+    owner: string,
+  ): Promise<MailAccount> {
+    const inboxId = mailAddress(mailString(result.inbox_id ?? result.email))
+    await this.verifyConsoleInboxAccess(inboxId, key)
+    await this.file.change((current) => {
+      const {
+        challengeHash: _challenge,
+        challengeExpires: _expiry,
+        challengeAttempts: _attempts,
+        newInboxRequest: _request,
+        ...retained
+      } = current
+      return {
+        ...retained,
+        state: 'ready',
+        credentialMode: 'console-api-key',
+        ownerEmail: owner,
+        ownerLink: 'attached',
+        inboxId,
+        signupUsername: inboxId.slice(0, inboxId.indexOf('@')),
+      }
+    })
+    return this.status()
   }
 
   private async verifyConsoleInboxAccess(inboxId: string, key: string): Promise<void> {
@@ -401,10 +490,10 @@ export class MailOnboarding {
     result: Record<string, unknown>,
     request: { readonly username: string; readonly clientId: string },
     key: string,
+    owner: string,
   ): Promise<MailAccount> {
     const inboxId = mailAddress(mailString(result.inbox_id ?? result.email))
     if (inboxId !== `${request.username}@agentmail.to`) throw new Error('new AgentMail inbox address mismatch')
-    if (result.client_id !== undefined && result.client_id !== request.clientId) throw new Error('new AgentMail inbox identity mismatch')
     await this.verifyConsoleInboxAccess(inboxId, key)
     await this.file.change((current) => {
       const {
@@ -417,6 +506,8 @@ export class MailOnboarding {
       return {
         ...retained,
         state: 'ready',
+        credentialMode: 'console-api-key',
+        ownerEmail: owner,
         ownerLink: 'attached',
         inboxId,
         signupUsername: request.username,
@@ -480,6 +571,9 @@ export class MailOnboarding {
       if (!['pending-verification', 'ready'].includes(previous.state) || previous.ownerEmail === undefined) {
         throw new Error('mail reverification requires an existing owner enrollment')
       }
+      if (previous.credentialMode === 'console-api-key') {
+        throw new Error('Console API keys do not use AgentMail agent-signup verification; replace or recheck the Console API key instead')
+      }
       return this.enroll(previous, previous.ownerEmail,
         previous.signupUsername ?? previous.inboxId?.slice(0, previous.inboxId.lastIndexOf('@')) ?? `kira-${randomUUID().slice(0, 8)}`)
     })
@@ -496,6 +590,16 @@ export class MailOnboarding {
       const previous = await this.file.read()
       if (previous.state !== 'ready' || previous.ownerEmail === undefined || previous.inboxId === undefined) {
         throw new Error('credential recovery requires an existing verified mailbox')
+      }
+      if (previous.credentialMode === 'console-api-key') {
+        const key = await this.options.resolveKey?.()
+        if (key === undefined) throw new Error('AgentMail Console API key is unavailable; paste a new key in Settings')
+        try {
+          await this.verifyConsoleInboxAccess(previous.inboxId, key)
+        } catch {
+          throw new Error('AgentMail Console API key no longer grants access; paste a valid Console API key in Settings instead of using agent recovery')
+        }
+        return this.status()
       }
       return this.restoreCredentialFrom(previous)
     })
@@ -607,7 +711,7 @@ export class MailOnboarding {
     await this.options.saveKey(key)
     await this.file.change((current) => {
       const { challengeHash: _challenge, challengeExpires: _expiry, challengeAttempts: _attempts, ...account } = current
-      return { ...account, state: 'pending-verification', ownerEmail: owner, ownerLink, signupUsername: username, inboxId }
+      return { ...account, state: 'pending-verification', credentialMode: 'agent-signup', ownerEmail: owner, ownerLink, signupUsername: username, inboxId }
     })
     return { key, inboxId }
   }
@@ -635,7 +739,7 @@ export class MailOnboarding {
       }
       let result: Record<string, unknown>
       try { result = mailRecord(await agentMailRequest('/inboxes', key, this.options.timeoutMs, this.options.fetch ?? fetch,
-        { username: request.username, domain: 'agentmail.to', display_name: 'Kira', client_id: request.clientId })) } catch (error) {
+        { username: request.username, domain: 'agentmail.to', display_name: 'Kira' })) } catch (error) {
         if (error instanceof AgentMailHttpError && error.status >= 400 && error.status < 500
           && error.status !== 408 && error.status !== 409) {
           await this.file.change((current) => { const { newInboxRequest: _request, ...retained } = current; return retained })
@@ -651,7 +755,7 @@ export class MailOnboarding {
     request: { readonly username: string; readonly clientId: string },
   ): Promise<MailAccount> {
     const inboxId = mailAddress(mailString(result.inbox_id))
-    if (inboxId !== `${request.username}@agentmail.to` || result.client_id !== request.clientId) throw new Error('new inbox identity mismatch; the existing inbox remains active')
+    if (inboxId !== `${request.username}@agentmail.to`) throw new Error('new inbox identity mismatch; the existing inbox remains active')
     await this.file.change((current) => { const { newInboxRequest: _request, ...retained } = current; return { ...retained, inboxId } })
     return this.status()
   }
