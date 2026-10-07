@@ -711,7 +711,7 @@ describe('connectors settings section', () => {
     })
   })
 
-  it('opens the Notion consent tab only after a late MCP flow publishes its URL', async () => {
+  it('reserves the Notion consent tab synchronously and navigates when its URL arrives', async () => {
     const consentUrl = 'https://www.notion.so/oauth/authorize?client_id=phoenix-test'
     const popup = {
       closed: false,
@@ -772,14 +772,14 @@ describe('connectors settings section', () => {
 
       fireEvent.click(authorize!)
 
-      // Notion stays in its card until the Host publishes the real consent URL.
-      expect(open).not.toHaveBeenCalled()
+      // Even a late registration starts with one click, never a waiting HTML page.
+      expect(open).toHaveBeenCalledWith('about:blank', '_blank')
 
       await waitFor(() => {
         expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
       })
       await waitFor(() => {
-        expect(open).toHaveBeenCalledWith(consentUrl, '_blank')
+        expect(popup.location.replace).toHaveBeenCalledWith(consentUrl)
       }, { timeout: 2_000 })
 
       const manual = screen.getByRole('link', { name: 'Open authorization page' }) as HTMLAnchorElement
@@ -937,7 +937,7 @@ describe('connectors settings section', () => {
     expect(screen.queryByText(/access-token|refresh-token|password/i)).toBeNull()
   })
 
-  it('cancels a pending OAuth attempt when the user closes the consent window and restores connector actions', async () => {
+  it('keeps Host OAuth active across a severed popup, and cancels only on explicit user action', async () => {
     vi.useFakeTimers()
     const popup = {
       closed: false,
@@ -984,9 +984,12 @@ describe('connectors settings section', () => {
         await Promise.resolve()
       })
 
+      expect(cancel).not.toHaveBeenCalled()
+      expect(status).toHaveBeenCalled()
+      fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' }).at(-1)!)
+      await act(async () => { await Promise.resolve(); await Promise.resolve() })
       expect(cancel).toHaveBeenCalledWith({ attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546015' })
       expect(screen.getByText('Authorization cancelled')).toBeTruthy()
-      expect((screen.getAllByRole('button', { name: 'Authorize' })[0] as HTMLButtonElement).disabled).toBe(false)
     } finally {
       open.mockRestore()
       vi.useRealTimers()
@@ -1028,6 +1031,7 @@ describe('connectors settings section', () => {
       renderHub(api)
       await act(async () => { await Promise.resolve() })
       fireEvent.click(screen.getAllByRole('button', { name: 'Authorize' })[0]!)
+      expect(open).toHaveBeenCalledWith('about:blank', '_blank')
       await act(async () => {
         await Promise.resolve()
         vi.advanceTimersByTime(700)
