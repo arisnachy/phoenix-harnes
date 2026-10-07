@@ -426,3 +426,75 @@ it('keeps a REST-valid AgentMail inbox active by polling when realtime cannot co
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+it('exposes authenticated received mail and sends only to contacts allowed by Kira owner', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-operations-'))
+  await writeFile(join(directory, 'account.json'), JSON.stringify({
+    state: 'ready', inboxId: 'kira@agentmail.to', ownerEmail: 'owner@example.com',
+    contacts: ['trusted@example.com'],
+  }))
+  const ctx = new Context()
+  ctx.reflect.provide('credentials', {
+    resolve: async () => ({ value: 'am_console_approved' }),
+    set: async () => {},
+    unset: async () => {},
+  })
+  let sends = 0
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/messages?')) {
+      return Response.json({ count: 2, messages: [
+        { message_id: 'owner-message' }, { message_id: 'stranger-message' },
+      ] })
+    }
+    if (url.endsWith('/messages/owner-message')) return Response.json({
+      inbox_id: 'kira@agentmail.to', thread_id: 'thread-1', message_id: 'owner-message',
+      from: 'owner@example.com', subject: 'Revisa el informe',
+      extracted_text: 'Comprueba los datos', labels: ['received'],
+    })
+    if (url.endsWith('/messages/stranger-message')) return Response.json({
+      inbox_id: 'kira@agentmail.to', thread_id: 'thread-2', message_id: 'stranger-message',
+      from: 'stranger@example.com', subject: 'No autorizado',
+      extracted_text: 'No debe ejecutarse', labels: ['received'],
+    })
+    if (url.endsWith('/messages/send')) {
+      sends++
+      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer am_console_approved')
+      expect(JSON.parse(String(init?.body))).toMatchObject({ to: ['trusted@example.com'], subject: 'Prueba', text: 'Hola' })
+      return Response.json({ message_id: 'provider-confirmed', thread_id: 'thread-sent' })
+    }
+    throw new Error(`unexpected AgentMail call: ${url}`)
+  })
+  vi.stubGlobal('fetch', fetcher)
+  class OfflineSocket extends EventTarget {
+    constructor(_url: string) {
+      super()
+      queueMicrotask(() => { this.dispatchEvent(new Event('error')) })
+    }
+    close(): void {}
+    send(_payload: string): void {}
+  }
+  vi.stubGlobal('WebSocket', OfflineSocket)
+  const runtime = installAssistantMail(ctx, {
+    directory, authorizeOutgoing: async () => false, credentialRef: 'MAIL_KEY',
+    pollMs: 60_000, timeoutMs: 1000, workTimeoutMs: 1000,
+  }, { pollMs: 60_000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000 })
+  try {
+    const service = ctx.get('assistantMail') as AssistantMailControl
+    const inbox = await service.readInbox(10)
+    expect(inbox.messages).toHaveLength(1)
+    expect(inbox.messages[0]).toMatchObject({ messageId: 'owner-message', from: 'owner@example.com', subject: 'Revisa el informe' })
+    await expect(service.readInbox(1, 'stranger-message')).rejects.toThrow('not found')
+    expect((await service.readInbox(1, 'owner-message')).messages[0]?.text).toBe('Comprueba los datos')
+    await expect(service.sendToAuthorized('stranger@example.com', 'Prueba', 'Hola', 'chat-denied'))
+      .rejects.toThrow('not the verified owner')
+    expect(sends).toBe(0)
+    await expect(service.sendToAuthorized('trusted@example.com', 'Prueba', 'Hola', 'chat-confirmed'))
+      .resolves.toMatchObject({ from: 'kira@agentmail.to', to: 'trusted@example.com', messageId: 'provider-confirmed' })
+    await service.sendToAuthorized('trusted@example.com', 'Prueba', 'Hola', 'chat-confirmed')
+    expect(sends).toBe(1)
+  } finally {
+    await runtime.dispose()
+    vi.unstubAllGlobals()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
