@@ -18,7 +18,8 @@
 import { useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  IconNewChatOutline16, IconPanelLeftOutline16, PhoenixLogo, Tooltip,
+  IconAgentPresetOutline16, IconFolderOpenOutline16, IconGlobeOutline14, IconNewChatOutline16,
+  IconPanelLeftOutline16, IconPlugOutline16, PhoenixLogo, Tooltip,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SidebarRootComponentProps } from './contract/slots.ts'
 import css from './SidebarRoot.module.css'
@@ -56,6 +57,12 @@ export function SidebarRoot({
     return () => { window.clearTimeout(timer) }
   }, [collapsed])
   const wide = !collapsed || !settled
+  const openSettingsSection = (id: string): void => {
+    window.dispatchEvent(new CustomEvent('phoenix:open-settings-section', { detail: id }))
+  }
+  const openWorkspaceSearch = (): void => {
+    window.dispatchEvent(new Event('phoenix:open-workspace-search'))
+  }
 
   // Freeze the content at its expanded width while it fades out (collapsed
   // && wide): the sliding column then clips it instead of reflowing it. The
@@ -186,6 +193,26 @@ export function SidebarRoot({
           {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
         </button>
       </Tooltip>
+
+      {wide && (
+        <nav className={css.primaryNavigation} aria-label="Navegación principal">
+          <button type="button" className={css.navLink} onClick={() => { startSession() }}>
+            <IconNewChatOutline16 size={19} /><span>Inicio</span>
+          </button>
+          <button type="button" className={css.navLink} onClick={() => { openSettingsSection('plugins') }}>
+            <IconGlobeOutline14 size={19} /><span>Descubrir</span>
+          </button>
+          <button type="button" className={css.navLink} onClick={() => { openSettingsSection('connectors') }}>
+            <IconPlugOutline16 size={19} /><span>Conectores</span>
+          </button>
+          <button type="button" className={css.navLink} onClick={() => { openSettingsSection('agent-presets') }}>
+            <IconAgentPresetOutline16 size={19} /><span>Equipo</span>
+          </button>
+          <button type="button" className={css.navLink} onClick={openWorkspaceSearch}>
+            <IconFolderOpenOutline16 size={19} /><span>Biblioteca</span>
+          </button>
+        </nav>
+      )}
 
       {/* The browsing region fills the column between the controls and the
           foot in both states; its rail icon column rides the same slot. */}
