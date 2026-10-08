@@ -33,6 +33,11 @@ describe('display-to-voice adaptation', () => {
     )).toBe('Resultado La misión está lista. Abrir informe redacted')
   })
 
+  it('never pronounces trademark labels or invisible formatting as invented words', () => {
+    expect(displayOutputToVoiceText('Phoenix®™℠© está listo.')).toBe('Phoenix está listo.')
+    expect(displayOutputToVoiceText('Kira\u200b terminó el trabajo.')).toBe('Kira terminó el trabajo.')
+  })
+
   it('caps long announcements without cutting the middle of a sentence', () => {
     expect(displayOutputToVoiceText('Primera frase completa. Segunda frase que ya no cabe.', 24)).toBe('Primera frase completa.')
   })
@@ -171,33 +176,54 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     expect(languages).toEqual(['es-DO'])
   })
 
-  it('uses Kokoro then the platform voice for hands-free conversation fallback', async () => {
-    const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural' })
+  it('prefers a configured natural neural voice over Kokoro for conversation', async () => {
+    const { voice } = await mountVoice()
     const natural = vi.fn(() => Promise.resolve())
-    const kokoro = vi.fn(() => Promise.reject(new Error('kokoro unavailable for this utterance')))
+    const kokoro = vi.fn(() => Promise.resolve())
     const system = vi.fn(() => Promise.resolve())
     voice.registerTextToSpeechProvider(provider('phoenix-natural', natural, 300))
-    voice.registerTextToSpeechProvider(provider('system', system, 10))
     voice.registerTextToSpeechProvider(provider('kokoro', kokoro, 100))
-
-    await expect(voice.conversationStatus()).resolves.toEqual({
+    voice.registerTextToSpeechProvider(provider('system', system, 10))
+    await expect(voice.conversationStatus()).resolves.toMatchObject({
       enabled: true,
       natural: true,
-      provider: 'kokoro',
+      provider: 'phoenix-natural',
     })
     await expect(voice.conversationSpeak({
-      key: 'assistant:fallback',
+      key: 'assistant:natural-voice',
       sequence: 0,
       text: 'La tarea terminó.',
       final: true,
-    })).resolves.toEqual({
-      accepted: true,
-      provider: 'system',
-    })
+    })).resolves.toEqual({ accepted: true, provider: 'phoenix-natural' })
+    expect(natural).toHaveBeenCalledTimes(1)
+    expect(kokoro).not.toHaveBeenCalled()
+    expect(system).not.toHaveBeenCalled()
+  })
 
+  it('falls back from a broken neural voice to Kokoro, never robotic Windows SAPI', async () => {
+    const { voice } = await mountVoice()
+    const natural = vi.fn(() => Promise.reject(new Error('neural startup unavailable')))
+    const kokoro = vi.fn(() => Promise.reject(new Error('Kokoro model unavailable')))
+    const system = vi.fn(() => Promise.resolve())
+    voice.registerTextToSpeechProvider(provider('phoenix-natural', natural, 300))
+    voice.registerTextToSpeechProvider(provider('kokoro', kokoro, 100))
+    voice.registerTextToSpeechProvider(provider('system', system, 10))
+    await expect(voice.conversationSpeak({
+      key: 'assistant:no-robot',
+      sequence: 0,
+      text: 'Estoy lista.',
+      language: 'es-DO',
+      final: true,
+    })).resolves.toMatchObject({ accepted: false, reason: 'natural-unavailable' })
+    expect(natural).toHaveBeenCalledTimes(1)
     expect(kokoro).toHaveBeenCalledTimes(1)
-    expect(system).toHaveBeenCalledTimes(1)
-    expect(natural).not.toHaveBeenCalled()
+    expect(system).not.toHaveBeenCalled()
+  })
+
+  it('reports no host conversation voice when only a robotic system voice exists', async () => {
+    const { voice } = await mountVoice()
+    voice.registerTextToSpeechProvider(provider('system', vi.fn(), 10))
+    await expect(voice.conversationStatus()).resolves.toEqual({ enabled: true, natural: false })
   })
 
   it('never mixes fallback TTS into an active native Codex realtime call', async () => {

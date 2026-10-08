@@ -179,7 +179,7 @@ export interface Config {
   readonly sttCommand?: string
   /** Arguments for the STT command. */
   readonly sttArgs?: string[]
-  /** Whether to register the platform fallback after neural TTS and Kokoro. */
+  /** Register legacy platform TTS for alerts; off by default on Windows to avoid robotic speech. */
   readonly systemTts?: boolean
 }
 
@@ -197,7 +197,7 @@ export const Config: z<Config> = z.object({
   kokoroArgs: z.array(z.string()).default([]),
   sttCommand: z.string(),
   sttArgs: z.array(z.string()).default([]),
-  systemTts: z.boolean().default(true),
+  systemTts: z.boolean().default(process.platform !== 'win32'),
 })
 
 /** Resolve the completed per-user Windows Kokoro installation.
@@ -287,7 +287,11 @@ export function apply(ctx: Context, config: Config): void {
       kokoro?.close()
     }, 'kokoro voice installation and daemon teardown')
   }
-  if (config.systemTts !== false) voice.registerTextToSpeechProvider(createSystemTextToSpeechProvider())
+  // Windows SAPI defaults are characteristically robotic; opt in explicitly
+  // for alerts if desired. Hands-free conversation uses neural/browser routes.
+  if (config.systemTts ?? process.platform !== 'win32') {
+    voice.registerTextToSpeechProvider(createSystemTextToSpeechProvider())
+  }
   const sttCommand = config.sttCommand?.trim()
   if (sttCommand !== undefined && sttCommand !== '') {
     voice.registerSpeechToTextProvider(createLocalSpeechToTextProvider({ command: sttCommand, args: config.sttArgs ?? [] }))

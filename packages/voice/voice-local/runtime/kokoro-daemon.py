@@ -11,6 +11,7 @@ import contextlib
 import json
 import os
 import queue
+import re
 import sys
 import tempfile
 import threading
@@ -63,7 +64,17 @@ model = None
 phonemizers: dict[str, Any] = {}
 
 
+def spoken_text(text: str) -> str:
+    """Remove non-spoken marks before phonemization (also for old Host clients)."""
+    text = re.sub(r"[®™℠©]", " ", text)
+    text = re.sub(r"[\u200b-\u200f\u202a-\u202e\u2060\ufeff]", "", text)
+    return " ".join(text.split())
+
+
 def generate(text: str, language: str, gender: str, pace: str):
+    text = spoken_text(text)
+    if not text:
+        raise ValueError("No speakable words after voice text cleanup")
     voice, code, primary = voice_for(language, gender)
     speed = 0.98 if pace == "calm" else 1.02 if pace == "brisk" else 1.0
     with contextlib.redirect_stdout(sys.stderr):
@@ -153,6 +164,7 @@ def main() -> int:
         assert voice_for("es-DO", "masculine")[0] == "em_alex"
         assert voice_for("en-US", "feminine")[0] == "af_heart"
         assert voice_for("en-US", "masculine")[0] == "am_michael"
+        assert spoken_text("Phoenix®™℠© está lista.") == "Phoenix está lista."
         try:
             voice_for("zh-CN", "feminine")
         except ValueError:
