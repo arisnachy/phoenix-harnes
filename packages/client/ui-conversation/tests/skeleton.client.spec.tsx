@@ -307,11 +307,14 @@ describe('Hero chrome', () => {
 })
 
 describe('Approved welcome chrome', () => {
-  it('keeps the existing welcome toolbar and live model seat', () => {
+  it('keeps global tools without duplicating the composer model selector', () => {
     const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
     expect(b.view.getByRole('button', { name: 'Buscar sesiones' })).toBeTruthy()
     expect(b.view.getByRole('button', { name: 'Abrir perfil' })).toBeTruthy()
-    expect(b.slotCalls).toContain('conversation.hero.model')
+    expect(b.slotCalls).not.toContain('conversation.hero.model')
+    expect(b.slotCalls).toContain('conversation.input.model')
+    const unified = b.view.container.querySelector('[aria-label="Barra superior de Phoenix"]')
+    expect(unified?.contains(b.view.getByRole('button', { name: 'Buscar sesiones' }))).toBe(true)
     const sections: string[] = []
     const onSettings = (event: Event) => { sections.push((event as CustomEvent<string>).detail) }
     window.addEventListener('phoenix:open-settings-section', onSettings)
@@ -442,6 +445,12 @@ describe('ConversationRoot resident composer', () => {
     expect(b.slotCalls).toContain('conversation.session.header.lineage')
     expect(b.slotCalls).toContain('conversation.session.header.actions')
     expect(b.slotCalls).toContain('conversation.session.header.utilities')
+    const unified = b.view.container.querySelector('[aria-label="Barra superior de Phoenix"]')
+    expect(unified?.contains(header)).toBe(true)
+    expect(unified?.contains(b.view.getByRole('button', { name: 'Buscar sesiones' }))).toBe(true)
+    expect(b.view.getByRole('tab', { name: 'Chat' })).toBeTruthy()
+    expect(b.view.getByRole('tab', { name: 'Trajectory' })).toBeTruthy()
+    expect(b.slotCalls).not.toContain('conversation.hero.model')
   })
 
   it('sticky composer seat wraps the whole overlay chain, not only the fallback stack', () => {
@@ -468,7 +477,7 @@ describe('ConversationRoot resident composer', () => {
     expect(host).not.toBeNull()
     expect(header?.getAttribute('aria-hidden')).toBe('true')
     expect(b.view.getByRole('heading', { level: 1 })).toBeTruthy()
-    expect(b.view.getByText('¿Qué quieres construir hoy en Phoenix?')).toBeTruthy()
+    expect(b.view.getByText('¿En qué podemos trabajar hoy?')).toBeTruthy()
     expect(b.view.queryByTestId('view-chat')).toBeNull()
     // The same machine-backed textarea is live in the hero, and the
     // persistence mirror stays bound (ConversationSession mounts chrome-hidden
