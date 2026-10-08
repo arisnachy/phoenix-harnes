@@ -142,6 +142,8 @@ describe('official AgentMail mailbox management operations', () => {
       action: 'draft_create', to: 'owner@example.com', subject: 'Hola', text: 'Hola',
     })
     expect(created).toMatchObject({ draft: { draftId: 'd1' } })
+    expect(created.draft).not.toHaveProperty('sendAt')
+    expect(created.draft).not.toHaveProperty('sendStatus')
     await operateKiraMail(cfg, { action: 'draft_update', draftId: 'd1', subject: 'Actualizado' })
     await expect(operateKiraMail(cfg, { action: 'draft_send', draftId: 'd1' }))
       .rejects.toThrow('confirmation')
