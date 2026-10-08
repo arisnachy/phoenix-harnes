@@ -112,14 +112,14 @@ function convert(type: unknown, props: unknown, children: Node[]): Node | null {
         && (props.value === undefined || strOrEmpty(props.value))
         ? { type: 'input', id: String(props.id ?? props.name), label: props.label,
             ...(props.placeholder === undefined ? {} : { placeholder: String(props.placeholder) }),
-            ...(props.value ?? props.defaultValue === undefined ? {} : { value: String(props.value ?? props.defaultValue) }) } : null
+            ...((props.value ?? props.defaultValue) === undefined ? {} : { value: String(props.value ?? props.defaultValue) }) } : null
     case 'Select':
       return children.length === 0 && is(['name','id','label','options','defaultValue','value'])
         && string(props.id ?? props.name) && string(props.label) && Array.isArray(props.options)
         && props.options.every(o=>strOrEmpty(o) || (object(o) && only(o,['label','value']) && strOrEmpty(o.label) && strOrEmpty(o.value)))
         ? { type: 'select', id: String(props.id ?? props.name), label: props.label,
             options: props.options as Array<{label:string;value:string}>,
-            ...(props.value ?? props.defaultValue === undefined ? {} : { value: String(props.value ?? props.defaultValue) }) } : null
+            ...((props.value ?? props.defaultValue) === undefined ? {} : { value: String(props.value ?? props.defaultValue) }) } : null
     case 'Checkbox':
       return children.length === 0 && is(['name','id','label','defaultChecked','value'])
         && string(props.id ?? props.name) && string(props.label)
@@ -170,11 +170,14 @@ function assistantTree(node: unknown, level: number, budget: { value: number }):
 function flatTree(spec: unknown): Node | null {
   if (!object(spec) || !only(spec,['root','elements']) || !string(spec.root) || !object(spec.elements)
     || Object.keys(spec.elements).length > maxNodes) return null
+  // Capture the validated map before entering the recursive closure. A
+  // captured value cannot silently switch to a different object mid-parse.
+  const elements = spec.elements as ObjectValue
   const budget = { value: 0 }
   const visit = (ref: string, level: number, parents: ReadonlySet<string>): Node | null => {
     if (level > maxDepth || ++budget.value > maxNodes || parents.has(ref)
-      || !Object.prototype.hasOwnProperty.call(spec.elements,ref)) return null
-    const node = spec.elements[ref]
+      || !Object.prototype.hasOwnProperty.call(elements,ref)) return null
+    const node = elements[ref]
     if (!object(node) || !only(node,['type','props','children']) || !object(node.props)) return null
     const children = node.children ?? []
     if (!Array.isArray(children) || children.length > 24 || !children.every(string)) return null
