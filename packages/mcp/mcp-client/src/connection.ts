@@ -179,12 +179,11 @@ export function startConnection(
     toolCallTimeoutMs: config.toolCallTimeoutMs,
     onAuthorizationRequired: () => { markAuthorizationRequired?.() },
   }
-  // The initial sync uses 'throw' when failOnStartupError is configured, so
-  // a registration conflict propagates to the startup-await path. Re-syncs
-  // and reconnect syncs always contain conflicts.
-  const startupOpts: ToolBridgeOptions = config.failOnStartupError
-    ? { ...opts, registrationFailure: 'throw' }
-    : opts
+  // Every new connection generation must prove that MCP tools really
+  // registered. Containing the registration error made the supervisor announce
+  // "ready" with no callable tools, even though the registry swap failed.
+  // Notification re-syncs retain the existing compatibility policy.
+  const generationOpts: ToolBridgeOptions = { ...opts, registrationFailure: 'throw' }
 
   let disposed = false
   /** Current generation: the connecting or connected client; undefined during backoff waits and after final failure. */
@@ -381,7 +380,7 @@ export function startConnection(
         generationDown(generation, { status: 'failed', reasonCode: 'connection-failed' })
         return
       }
-      await enqueueSync(generation, startup ? startupOpts : opts)
+      await enqueueSync(generation, generationOpts)
     } catch (error) {
       if (firstAttemptError === undefined) firstAttemptError = error
       // Disposal clears current ownership before it closes the generation, so
