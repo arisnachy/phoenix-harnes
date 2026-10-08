@@ -431,7 +431,7 @@
   font-size: 13px;
   font-weight: 600;
 }
-.heroTopModel :global([role='menu']) { z-index: 100; }
+.heroTopModel :global([role='menu']) { top: calc(100% + 8px); bottom: auto; z-index: 100; }
 .heroTopPickWorkspace {
   display: flex;
   align-items: center;
