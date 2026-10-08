@@ -157,6 +157,47 @@ export function parseCanvasSpec(value: unknown): CanvasSpec | null {
 }
 
 type Values = Record<string, string | number | boolean>
+type TableFilter = { kind: 'search'; term: string } | { kind: 'column'; term: string; label: string }
+
+/** UI-only data operations; searching a table must not consume model tokens. */
+const matchText = (value: string): string =>
+  value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase()
+const isAll = (value: string): boolean => ['todos', 'todas', 'all', '*', 'any'].includes(matchText(value))
+
+function collectFilters(nodes: readonly CanvasNode[], values: Values): TableFilter[] {
+  const result: TableFilter[] = []
+  const visit = (node: CanvasNode): void => {
+    if (node.type === 'group') node.children.forEach(visit)
+    else if (node.type === 'tabs') node.tabs.forEach(tab => tab.children.forEach(visit))
+    else if (node.type === 'input' && /search|buscar|find|filtrar/i.test(node.id + ' ' + node.label)) {
+      const term = String(values[node.id] ?? '').trim()
+      if (term) result.push({ kind: 'search', term })
+    } else if (node.type === 'select') {
+      const term = String(values[node.id] ?? '').trim()
+      if (term && !isAll(term)) result.push({ kind: 'column', label: node.label, term })
+    }
+  }
+  nodes.forEach(visit)
+  return result
+}
+
+function matchesTable(row: readonly string[], columns: readonly string[], filters: readonly TableFilter[]): boolean {
+  return filters.every(filter => {
+    if (filter.kind === 'search') return row.some(cell => matchText(cell).includes(matchText(filter.term)))
+    const columnIndex = columns.findIndex(column => matchText(column) === matchText(filter.label))
+    // Unrelated selects (e.g. display options) must never hide table rows.
+    return columnIndex < 0 || matchText(row[columnIndex] ?? '').includes(matchText(filter.term))
+  })
+}
+
+const isFilterButton = (node: Extract<CanvasNode,{type:'button'}>): boolean =>
+  node.action === 'filter' || /^(aplicar filtros|apply filters|filtrar|filter)$/i.test(node.label.trim())
+function hasFilterButton(nodes: readonly CanvasNode[]): boolean {
+  return nodes.some(node => node.type === 'button' ? isFilterButton(node)
+    : node.type === 'group' ? hasFilterButton(node.children)
+    : node.type === 'tabs' ? node.tabs.some(tab => hasFilterButton(tab.children))
+    : false)
+}
 function initialValues(nodes: CanvasNode[]): Values {
   const values: Values = {}
   const walk = (node: CanvasNode): void => {
@@ -176,6 +217,8 @@ interface RendererProps {
   values: Values
   setValue: (id: string, value: string | number | boolean) => void
   onAction?: CanvasAction | undefined
+  onFilter: () => void
+  filters: readonly TableFilter[]
 }
 
 function expandPrompt(prompt: string, values: Values): string {
@@ -183,11 +226,13 @@ function expandPrompt(prompt: string, values: Values): string {
     Object.prototype.hasOwnProperty.call(values, key) ? String(values[key]) : match)
 }
 
-function Tabs({ tabs, values, setValue, onAction }: {
+function Tabs({ tabs, values, setValue, onAction, onFilter, filters }: {
   tabs: Extract<CanvasNode,{type:'tabs'}>['tabs']
   values: Values
   setValue: RendererProps['setValue']
   onAction?: CanvasAction | undefined
+  onFilter: () => void
+  filters: readonly TableFilter[]
 }): ReactNode {
   const [active, setActive] = useState(0)
   return (
@@ -199,17 +244,17 @@ function Tabs({ tabs, values, setValue, onAction }: {
         ))}
       </div>
       <div role="tabpanel" className={css.column}>
-        {tabs[active]?.children.map((node, i) => <Node key={i} node={node} values={values} setValue={setValue} onAction={onAction} />)}
+        {tabs[active]?.children.map((node, i) => <Node key={i} node={node} values={values} setValue={setValue} onAction={onAction} onFilter={onFilter} filters={filters} />)}
       </div>
     </div>
   )
 }
 
-function Node({ node, values, setValue, onAction }: RendererProps): ReactNode {
+function Node({ node, values, setValue, onAction, onFilter, filters }: RendererProps): ReactNode {
   switch (node.type) {
     case 'group':
       return <div className={node.layout === 'grid' ? css.grid : node.layout === 'row' ? css.row : css.column}>
-        {node.children.map((child, i) => <Node key={i} node={child} values={values} setValue={setValue} onAction={onAction} />)}
+        {node.children.map((child, i) => <Node key={i} node={child} values={values} setValue={setValue} onAction={onAction} onFilter={onFilter} filters={filters} />)}
       </div>
     case 'heading': return <h4 className={css.heading}>{node.text}</h4>
     case 'text': return <p className={css.text}>{node.text}</p>
@@ -224,11 +269,14 @@ function Node({ node, values, setValue, onAction }: RendererProps): ReactNode {
       return <div className={css.progress}><div><span>{node.label}</span><strong>{Math.round(node.value / max * 100)}%</strong></div>
         <progress aria-label={node.label} max={max} value={node.value} /></div>
     }
-    case 'table':
+    case 'table': {
+      const visible = node.rows.filter(row => matchesTable(row, node.columns, filters))
       return <div className={css.tableScroll}><table>
         <thead><tr>{node.columns.map((c,i) => <th key={i} scope="col">{c}</th>)}</tr></thead>
-        <tbody>{node.rows.map((row,i) => <tr key={i}>{row.map((cell,j) => <td key={j}>{cell}</td>)}</tr>)}</tbody>
+        <tbody>{visible.map((row,i) => <tr key={i}>{row.map((cell,j) => <td key={j}>{cell}</td>)}</tr>)}
+        {visible.length === 0 && <tr><td colSpan={node.columns.length}>Sin resultados para los filtros seleccionados.</td></tr>}</tbody>
       </table></div>
+    }
     case 'chart': {
       const max = Math.max(1,...node.points.map(p => p.value))
       return <div className={css.chart} role="img" aria-label={node.title ?? 'Gráfico de barras'}>
@@ -255,24 +303,31 @@ function Node({ node, values, setValue, onAction }: RendererProps): ReactNode {
         <input type="range" min={node.min} max={node.max} step={node.step ?? 1}
           value={Number(values[node.id] ?? node.min)}
           onChange={event => setValue(node.id,Number(event.target.value))} /></label>
-    case 'button':
+    case 'button': {
+      const localFilter = isFilterButton(node)
       return <button type="button" className={css.action}
-        disabled={onAction === undefined}
-        title={onAction === undefined ? 'Acción no disponible en esta conversación' : undefined}
-        onClick={() => onAction?.(expandPrompt(node.prompt, values), node.action ?? 'draft')}>{node.label}</button>
-    case 'tabs': return <Tabs tabs={node.tabs} values={values} setValue={setValue} onAction={onAction} />
+        disabled={!localFilter && onAction === undefined}
+        title={!localFilter && onAction === undefined ? 'Acción no disponible en esta conversación' : undefined}
+        onClick={() => localFilter ? onFilter() : onAction?.(expandPrompt(node.prompt, values), node.action ?? 'draft')}>
+        {node.label}
+      </button>
+    }
+    case 'tabs': return <Tabs tabs={node.tabs} values={values} setValue={setValue} onAction={onAction} onFilter={onFilter} filters={filters} />
   }
 }
 
 /** Self-contained local state: no model roundtrip for sliders, tabs or filters. */
 export function GenerativeCanvas({ spec, onAction }: { spec: CanvasSpec; onAction?: CanvasAction | undefined }): ReactNode {
   const [values, setValues] = useState<Values>(() => initialValues(spec.props.children))
+  const [applied, setApplied] = useState<Values>(() => initialValues(spec.props.children))
   const setValue = (key: string, value: string | number | boolean): void =>
     setValues(current => ({ ...current, [key]: value }))
+  const onFilter = (): void => setApplied({ ...values })
+  const filters = collectFilters(spec.props.children, hasFilterButton(spec.props.children) ? applied : values)
   return <section className={css.canvas} data-generative-ui="ui_canvas">
     <header><h3>{spec.props.title}</h3>{spec.props.subtitle && <p>{spec.props.subtitle}</p>}</header>
     <div className={css.column}>
-      {spec.props.children.map((node,i) => <Node key={i} node={node} values={values} setValue={setValue} onAction={onAction} />)}
+      {spec.props.children.map((node,i) => <Node key={i} node={node} values={values} setValue={setValue} onAction={onAction} onFilter={onFilter} filters={filters} />)}
     </div>
   </section>
 }
