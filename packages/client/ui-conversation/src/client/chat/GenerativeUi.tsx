@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react'
+import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec } from './GenerativeCanvas.tsx'
 import css from './GenerativeUi.module.css'
 
-const MAX_UI_BLOCKS = 3
+const MAX_UI_BLOCKS = 6
 const MAX_TEXT = 1200
 const MAX_SHORT_TEXT = 180
 
@@ -71,7 +72,7 @@ type SmartCard = {
   }
 }
 
-export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard
+export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | CanvasSpec
 
 export type GenerativeUiSegment =
   | { kind: 'markdown'; text: string }
@@ -192,6 +193,7 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     case 'comparison': return validateComparison(value) ? value : null
     case 'timeline': return validateTimeline(value) ? value : null
     case 'smart_card': return validateSmartCard(value) ? value : null
+    case 'ui_canvas': return parseCanvasSpec(value)
     default: return null
   }
 }
@@ -279,8 +281,9 @@ const Header = ({ title, subtitle, badge }: HeaderProps) => (
 const statusClass = (status: Status | undefined): string =>
   status === undefined ? '' : (css[status] ?? '')
 
-export function GenerativeUi({ block }: { block: GenerativeUiBlock }): ReactNode {
+export function GenerativeUi({ block, onAction }: { block: GenerativeUiBlock; onAction?: CanvasAction }): ReactNode {
   switch (block.component) {
+    case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
     case 'event_card': {
       const { title, subtitle, badge, left, center, right, footer } = block.props
       return (
