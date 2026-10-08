@@ -2,6 +2,13 @@ import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-
 
 const VISUAL_TYPES = ['chart', 'table', 'metrics', 'timeline', 'cards', 'progress', 'visual'] as const
 
+/** The connector registry owns present-tense MCP state; a model-created card is not a live probe. */
+function requestsCurrentConnectorStatus(title: string): boolean {
+  const normalized = title.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  return /\b(?:mcp|conectores?|connectors?)\b/u.test(normalized)
+    && /\b(?:estado|status|health|salud|diagnostico|diagnostics?|actual|current|live)\b/u.test(normalized)
+}
+
 /**
  * Create Phoenix's model-facing rich visual presentation tool.
  *
@@ -12,7 +19,7 @@ const VISUAL_TYPES = ['chart', 'table', 'metrics', 'timeline', 'cards', 'progres
 export function createPhoenixVisualizerTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_visualize',
-    description: 'Present structured information as a rich inline Phoenix visual only from real populated data. Tables accept columns with rows as arrays or keyed objects. Never pass blank placeholder rows or headers without verified data. For current connector/MCP status FIRST run connector_list: its receipt already includes a live status visualization, so do not invent or duplicate an empty table. Prefer this over ASCII charts or dumping visualization JSON into prose. This tool is for data/structure only: never use it to imitate a requested photo, illustration, logo, hero, banner, or generated image with shapes or SVG-like artwork; use image_generation for real raster imagery. The visual is declarative and presentation-only.',
+    description: 'Present structured information as a rich inline Phoenix visual only from real populated data. Tables accept columns with rows as arrays or keyed objects. Never pass blank placeholder rows or headers without verified data. For current connector/MCP status, use connector_list with target=mcp instead: it emits a truthful live status visual. phoenix_visualize rejects live MCP status summaries even when they contain apparently populated rows; do not construct or duplicate these tables. Prefer this over ASCII charts or dumping visualization JSON into prose. This tool is for data/structure only: never use it to imitate a requested photo, illustration, logo, hero, banner, or generated image with shapes or SVG-like artwork; use image_generation for real raster imagery. The visual is declarative and presentation-only.',
     parameters: {
       title: {
         type: 'string',
@@ -60,6 +67,13 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
     async execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0) throw new Error('title must be a non-empty string')
+      if (requestsCurrentConnectorStatus(title)) {
+        throw new ToolArgsError([
+          'Current MCP/connector status must be sourced from the real connector_list tool '
+            + '(target=mcp), which automatically renders a live inventory artifact. '
+            + 'Do not use phoenix_visualize to reproduce or invent MCP status tables.',
+        ])
+      }
       const spec = args.visual
       const table = spec.visualType === 'table' || (spec.visualType === 'visual'
         && Array.isArray(spec.columns) && (Array.isArray(spec.rows) || Array.isArray(spec.data)))

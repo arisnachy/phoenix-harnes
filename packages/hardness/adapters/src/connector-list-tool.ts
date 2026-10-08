@@ -241,7 +241,7 @@ export function createConnectorListTool(
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
       presentationMeta: (args, value) => {
         const target = args.target?.trim().toLowerCase()
-        if (target !== undefined && target.length > 0 && target !== 'mcp') return {}
+        if (target !== 'mcp') return {}
         const mcp = value.connectors.filter(connector => connector.kind === 'mcp')
         return {
           artifact: {
@@ -249,7 +249,10 @@ export function createConnectorListTool(
             mime: 'application/vnd.phoenix.visual+json',
             title: 'Estado real de conectores MCP',
             executable: false,
-            data: mcp.length === 0 ? {
+            data: mcpConnectors === undefined ? {
+              visualType: 'metrics',
+              metrics: [{ label: 'Registro MCP del Host', value: 'No disponible' }],
+            } : mcp.length === 0 ? {
               visualType: 'metrics',
               metrics: [{ label: 'MCP observados en esta sesión', value: 0 }],
             } : {

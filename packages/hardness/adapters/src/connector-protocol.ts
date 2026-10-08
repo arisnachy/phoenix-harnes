@@ -20,6 +20,7 @@ Use a foreground connector budget of at most two connect/repair attempts or abou
 
 2. Select the fastest healthy path.
 - If the matching connector tool is already available and healthy, call it directly. Do not call connector_list first just to confirm what the tool registry already proves.
+- To report the current status of MCP connectors as an inventory/dashboard, call connector_list with target="mcp". Its receipt automatically generates the live status visualization; do not duplicate it via phoenix_visualize or claim that a model-generated table is a live state.
 - Call connector_list once when the needed app capability is not directly available, when several connectors could satisfy the request, or after an authorization/connection failure. When the user named a service/provider, pass that concise name in connector_list.target (for example "Hostinger" or "Google Workspace") so only connectors relevant to this task can become actionable.
 - Read connector status, advertised services, callable flags, MCP tool names, and relevance. A connector that is auth-required but not relevant to connector_list.target is background inventory, not a user action. An untargeted connector_list result is inventory-only: before showing Connect/Reconnect, re-run connector_list with the specific service/capability target and require relevant=true. Prefer an already connected/ready connector that actually exposes the required capability. Do not install a duplicate connector.
 - connected/ready plus a callable matching capability -> use it.
