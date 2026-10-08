@@ -224,6 +224,21 @@ it('does not fake inbox contents when the Kira mailbox host is missing', async (
     .rejects.toThrow('message_id')
 })
 
+it('returns JSON-only mail management output and narrows optional folder fields', async () => {
+  const manageMail = vi.fn(async () => ({
+    action: 'attachment',
+    attachmentId: 'attachment-1',
+    expiresAt: undefined,
+    nested: { optional: undefined, present: 'ready' },
+  }))
+  const tool = createAssistantMailManageTool(() => control({ manageMail }))
+  const result = await tool.execute({ action: 'attachment', message_id: 'message-1', attachment_id: 'attachment-1' }, {} as never)
+  expect(result).toEqual({ action: 'attachment', attachmentId: 'attachment-1', nested: { present: 'ready' } })
+  expect(JSON.stringify(result)).not.toContain('undefined')
+  await tool.execute({ action: 'list', folder: 'trash' }, {} as never)
+  expect(manageMail).toHaveBeenLastCalledWith({ action: 'list', folder: 'trash' })
+})
+
 it('exposes mailbox message management with exact ids and stable manual reply identity', async () => {
   const manageMail = vi.fn(async (input: { action: string }) => ({ action: input.action, ok: true }))
   const tool = createAssistantMailManageTool(() => control({ manageMail }))
