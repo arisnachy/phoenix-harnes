@@ -81,6 +81,7 @@ function fromPairs(spec: Visual): Visual | undefined {
   }
 }
 
+/** Validated chart data or a specific, actionable data-admission error. */
 export interface VisualChartAdmission {
   readonly spec?: Visual
   readonly error?: string
@@ -95,6 +96,8 @@ const example = 'Para una línea: {"visualType":"chart","chartType":"line","xKey
  * Handle the common chart formats (canonical, paired points, labels/values,
  * Chart.js) plus an explicitly requested zero-cost synthetic example.
  * Other visual types are returned untouched; existing MCP truth checks stay intact.
+ * @param spec - Raw, non-executable visual data submitted by the model.
+ * @returns A normalized chart or an error without publishing an artifact.
  */
 export function admitVisualChart(spec: Visual): VisualChartAdmission {
   if (spec.visualType !== 'chart' && !(spec.visualType === 'visual' && nonempty(spec.chartType))) return { spec }
