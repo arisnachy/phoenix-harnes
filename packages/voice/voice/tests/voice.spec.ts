@@ -98,6 +98,61 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     expect(system).not.toHaveBeenCalled()
   })
 
+  it('passes the selected feminine presentation to fallback synthesis', async () => {
+    const { voice } = await mountVoice()
+    const genders: (string | undefined)[] = []
+    voice.registerTextToSpeechProvider({
+      id: 'kokoro',
+      priority: 100,
+      available: () => true,
+      speak: async (request) => { genders.push(request.gender) },
+    })
+    await voice.conversationSpeak({
+      key: 'assistant:gender',
+      sequence: 0,
+      text: 'Ya terminé.',
+      language: 'es-DO',
+      final: true,
+    })
+    expect(genders).toEqual(['feminine'])
+  })
+
+  it('switches to masculine fallback after the assistant profile is changed', async () => {
+    const { ctx, voice } = await mountVoice()
+    const context = ctx as unknown as { get(name: string): unknown }
+    const originalGet = context.get.bind(context)
+    let selectedGender: 'feminine' | 'masculine' = 'feminine'
+    vi.spyOn(context, 'get').mockImplementation((name) => {
+      if (name === 'userProfile') {
+        return { getAssistantIdentity: () => ({ name: 'Kira', gender: selectedGender }) }
+      }
+      return originalGet(name)
+    })
+    const genders: Array<string | undefined> = []
+    voice.registerTextToSpeechProvider({
+      id: 'kokoro',
+      priority: 100,
+      available: () => true,
+      speak: async (request) => { genders.push(request.gender) },
+    })
+    await voice.conversationSpeak({
+      key: 'assistant:before',
+      sequence: 0,
+      text: 'Hola, preparada.',
+      language: 'es-DO',
+      final: true,
+    })
+    selectedGender = 'masculine'
+    await voice.conversationSpeak({
+      key: 'assistant:after',
+      sequence: 0,
+      text: 'Hola, preparado.',
+      language: 'es-DO',
+      final: true,
+    })
+    expect(genders).toEqual(['feminine', 'masculine'])
+  })
+
   it('uses Kokoro then the platform voice for hands-free conversation fallback', async () => {
     const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural' })
     const natural = vi.fn(() => Promise.resolve())
