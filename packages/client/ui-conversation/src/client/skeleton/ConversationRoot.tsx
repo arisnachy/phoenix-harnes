@@ -4,7 +4,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
-import { IconSearchOutline16, IconChevronDownOutline14 } from '@phoenix-ai/dsh-client-ui-primitives'
+import { IconSearchOutline16 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SessionId, WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
 import {
@@ -234,9 +234,11 @@ export function ConversationRoot({
 
   return (
     <div ref={rootRef} className={css.root} data-phase={phase}>
-      {hero && (
-        <div className={css.heroTopbar} aria-label="Herramientas de Phoenix">
-          <div className={css.heroTopbarSpacer} />
+      <div className={css.unifiedHeader} aria-label="Barra superior de Phoenix">
+        <div className={css.sessionChrome}>
+          <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
+        </div>
+        <div className={css.headerGlobal} aria-label="Herramientas globales">
           <button type="button" className={css.heroTopIcon} aria-label="Buscar sesiones" onClick={openWorkspaceSearch}>
             <IconSearchOutline16 size={19} />
           </button>
@@ -247,22 +249,11 @@ export function ConversationRoot({
               ))}
             </svg>
           </button>
-          <div className={css.heroTopModel}>
-            <span className={css.heroTopModelCaption}>Modelos</span>
-            {sessionId === undefined
-              ? (
-                <button type="button" className={css.heroTopPickWorkspace} onClick={() => { setPickerOpen(true) }}>
-                  Seleccionar modelo <IconChevronDownOutline14 size={13} />
-                </button>
-              )
-              : renderSlot('conversation.hero.model', { locked: false })}
-          </div>
           <button type="button" className={css.heroTopProfile} aria-label="Abrir perfil" onClick={() => { openSettingsSection('profile') }}>
             {profileInitials}
           </button>
         </div>
-      )}
-      <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
+      </div>
       <div className={css.scrollBody} data-conversation-scroll="">
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
         {composerSeat}
