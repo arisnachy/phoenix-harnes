@@ -310,7 +310,7 @@ export function createAssistantMailManageTool(resolve: () => AssistantMailContro
         ...(args.thread_id === undefined ? {} : { threadId: args.thread_id }),
         ...(args.draft_id === undefined ? {} : { draftId: args.draft_id }),
         ...(args.attachment_id === undefined ? {} : { attachmentId: args.attachment_id }),
-        ...(args.folder === undefined ? {} : { folder: args.folder as KiraMailOperationInput['folder'] }),
+        ...(args.folder === undefined ? {} : { folder: args.folder }),
         ...(args.query === undefined ? {} : { query: args.query }),
         ...(args.page_token === undefined ? {} : { pageToken: args.page_token }),
         ...(args.limit === undefined ? {} : { limit: args.limit }),
