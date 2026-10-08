@@ -50,7 +50,7 @@ function mentionRowOf(participant: TeamChatParticipant, team: TeamDesign): Menti
   return {
     id: participant.id,
     name: profile?.displayName ?? identity.name,
-    role: profile?.role ?? participant.role ?? identity.role,
+    role: profile?.role || participant.role || identity.role,
     status: participant.status,
     avatar: profile?.avatar ?? KIRA_ROSTER.find(persona => persona.kind === participant.avatar)?.kind ?? identity.kind,
   }
