@@ -155,6 +155,21 @@ describe('official AgentMail mailbox management operations', () => {
     expect(requests.find(r => r.method === 'DELETE')?.url).toContain('/drafts/d1')
   })
 
+  it('omits unavailable draft metadata so tool results survive JSON transport unchanged', async () => {
+    const fetcher = vi.fn(async () => Response.json({ draft_id: 'd1' })) as unknown as typeof fetch
+    const result = await operateKiraMail(config(fetcher), { action: 'draft', draftId: 'd1' })
+    expect(result.draft).not.toHaveProperty('sendAt')
+    expect(result.draft).not.toHaveProperty('sendStatus')
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result)
+  })
+
+  it.each(['thread_restore', 'read_status'] as const)('normalizes provider labels for %s', async (action) => {
+    const fetcher = vi.fn(async () => Response.json({ labels: ['read', null, 42, { invalid: true }] })) as unknown as typeof fetch
+    const result = await operateKiraMail(config(fetcher), { action, threadId: 't1', messageId: 'm1' })
+    expect(result.labels).toEqual(['read'])
+    expect(JSON.parse(JSON.stringify(result))).toEqual(result)
+  })
+
   it('replies only to authorized senders in their original thread with stable deduplication', async () => {
     const requests: Array<{ url: string; body: unknown; headers: Headers }> = []
     const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
