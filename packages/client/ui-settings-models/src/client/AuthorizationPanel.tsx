@@ -274,7 +274,7 @@ function normalize(value: string): string {
 const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
 const MCP_AUTH_FLOW_RETRY_MS = [0, 120, 350, 800, 1_600] as const
 const CURATED_OAUTH_MCP_IDS = new Set<string>([
-  'devpost', 'canva', 'supabase', 'heygen', 'notion', 'linear', 'cloudflare', 'slack',
+  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
 ])
 const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
@@ -593,7 +593,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
       || mcpRuntime.status === 'disconnected'
       || (mcpRuntime.status === 'auth-required' && authorizationAccount === undefined))
     && onReconnect !== undefined
-  const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed')
+  const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed'
+    || (mcpRuntime.status === 'ready' && mcpRuntime.toolNames.length === 0))
   const canRepair = brokenManaged && managed.source !== undefined && onRepair !== undefined
   return (
     <article className={connectorStyles['connectorCard']} data-connector-id={definition.id}>
