@@ -197,19 +197,19 @@ export function SidebarRoot({
       {wide && (
         <nav className={css.primaryNavigation} aria-label="Navegación principal">
           <button type="button" className={css.navLink} onClick={() => { startSession() }}>
-            <IconNewChatOutline16 size={19} /><span>Inicio</span>
+            <IconNewChatOutline16 size={19} /><span>{t('nav.home')}</span>
           </button>
           <button type="button" className={css.navLink} onClick={() => { openSettingsSection('plugins') }}>
-            <IconGlobeOutline14 size={19} /><span>Descubrir</span>
+            <IconGlobeOutline14 size={19} /><span>{t('nav.discover')}</span>
           </button>
           <button type="button" className={css.navLink} onClick={() => { openSettingsSection('connectors') }}>
-            <IconPlugOutline16 size={19} /><span>Conectores</span>
+            <IconPlugOutline16 size={19} /><span>{t('nav.connectors')}</span>
           </button>
           <button type="button" className={css.navLink} onClick={() => { openSettingsSection('agent-presets') }}>
-            <IconAgentPresetOutline16 size={19} /><span>Equipo</span>
+            <IconAgentPresetOutline16 size={19} /><span>{t('nav.team')}</span>
           </button>
           <button type="button" className={css.navLink} onClick={openWorkspaceSearch}>
-            <IconFolderOpenOutline16 size={19} /><span>Biblioteca</span>
+            <IconFolderOpenOutline16 size={19} /><span>{t('nav.library')}</span>
           </button>
         </nav>
       )}
