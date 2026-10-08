@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec } from './GenerativeCanvas.tsx'
+import { parseInteroperableCanvas } from './IntelligentUiInterop.ts'
 import css from './GenerativeUi.module.css'
 
 const MAX_UI_BLOCKS = 6
@@ -195,6 +196,8 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     case 'timeline': return validateTimeline(value) ? value : null
     case 'smart_card': return validateSmartCard(value) ? value : null
     case 'ui_canvas': return parseCanvasSpec(value)
+    case 'assistant_ui':
+    case 'json_render': return parseInteroperableCanvas(value)
     default: return null
   }
 }
@@ -239,7 +242,7 @@ export function splitGenerativeUiText(
       }
     }
     if (parsed === null) {
-      if (/"component"\s*:\s*"ui_canvas"/.test(body ?? ''))
+      if (/"component"\s*:\s*"(?:ui_canvas|assistant_ui|json_render)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
       else appendMarkdown(segments, raw)
     }
@@ -253,7 +256,7 @@ export function splitGenerativeUiText(
   let tail = text.slice(cursor)
   if (options.streaming === true) {
     const lastJsonFence = tail.lastIndexOf('```json')
-    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"ui_canvas"/.test(tail.slice(lastJsonFence))
+    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:ui_canvas|assistant_ui|json_render)"/.test(tail.slice(lastJsonFence))
       ? lastJsonFence : -1
     const unfinishedFence = Math.max(tail.lastIndexOf('```generative-ui'), relevantJson)
     if (unfinishedFence >= 0) tail = tail.slice(0, unfinishedFence)
@@ -281,7 +284,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
       continue
     }
     const source = segment.text
-    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"ui_canvas"/gm
+    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:ui_canvas|assistant_ui|json_render)"/gm
     let cursor = 0
     for (const match of source.matchAll(startPattern)) {
       if (count >= MAX_UI_BLOCKS) break

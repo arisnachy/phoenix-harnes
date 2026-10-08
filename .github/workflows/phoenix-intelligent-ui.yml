@@ -2,15 +2,17 @@ name: PHOENIX Intelligent UI components
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, stable]
     paths:
       - 'packages/client/ui-conversation/src/client/chat/**'
       - 'packages/client/ui-conversation/tests/generative-canvas.client.spec.tsx'
+      - 'apps/cli/config/agent-presets/standard/agent.cordis.yml'
       - '.github/workflows/phoenix-intelligent-ui.yml'
   push:
     branches:
       - 'feat/phoenix-prebuilt-generative-components-20261008'
       - main
+      - stable
     paths:
       - 'packages/client/ui-conversation/src/client/chat/**'
       - 'packages/client/ui-conversation/tests/generative-canvas.client.spec.tsx'
