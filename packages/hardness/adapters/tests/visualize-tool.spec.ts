@@ -63,6 +63,27 @@ describe('phoenix_visualize tool', () => {
     }, execution())).resolves.toMatchObject({ artifactId: 'phoenix-visual:visual-1' })
   })
 
+  it('requires real connector_list state for any present-tense MCP dashboard', async () => {
+    const tool = createPhoenixVisualizerTool()
+    for (const title of [
+      'Estado actual de conectores MCP',
+      'Estado de conectores MCP',
+      'MCP connection status',
+      'Diagnóstico de conectores',
+    ]) {
+      await expect(tool.execute({
+        title,
+        visual: { visualType: 'table', columns: ['Estado', 'Cantidad'],
+          rows: [['ready', 4]] },
+      }, execution())).rejects.toThrow('must be sourced from the real connector_list tool')
+    }
+    await expect(tool.execute({
+      title: 'Histórico mensual de adopción',
+      visual: { visualType: 'table', columns: ['Mes', 'Cantidad'],
+        rows: [['Septiembre', 4]] },
+    }, execution())).resolves.toMatchObject({ artifactId: 'phoenix-visual:visual-1' })
+  })
+
   it('describes the visual surface clearly to the model', () => {
     const tool = createPhoenixVisualizerTool()
     expect(tool.name).toBe('phoenix_visualize')
