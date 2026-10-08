@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { AssistantMarkdown } from '../src/client/chat/AssistantMarkdown.tsx'
+import type { ChatViewSlotProps } from '../src/client/contract/slots.ts'
 import { GenerativeCanvas, parseCanvasSpec } from '../src/client/chat/GenerativeCanvas.tsx'
 import { GenerativeUi, parseGenerativeUiBlock, splitGenerativeUiText } from '../src/client/chat/GenerativeUi.tsx'
 
@@ -87,6 +89,24 @@ describe('Phoenix intelligent UI canvas', () => {
     expect(splitGenerativeUiText(content).map(x => x.kind)).toEqual(['markdown','ui','markdown'])
     expect(splitGenerativeUiText(content.slice(0,content.indexOf('\n```',content.indexOf('generative-ui'))), { streaming:true })
       .some(x => x.kind === 'ui')).toBe(false)
+  })
+
+  it('mounts a complete canvas in the real assistant Markdown flow alongside ordinary prose', () => {
+    const blockText = 'He revisado el estado.\\n\\n' + '```generative-ui\\n'
+      + JSON.stringify(sample()) + '\\n```\\n\\nAquí tienes las opciones.'
+    const handle = vi.fn()
+    const { container } = render(<AssistantMarkdown
+      blocks={[{ kind: 'text', text: blockText }]}
+      streaming={false}
+      renderMessageImages={() => null}
+      t={((key: string) => key) as ChatViewSlotProps['t']}
+      onUiAction={handle}
+    />)
+    expect(screen.getByText('He revisado el estado.')).not.toBeNull()
+    expect(container.querySelector('[data-generative-ui="ui_canvas"]')).not.toBeNull()
+    expect(screen.getByText('Aquí tienes las opciones.')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar a Kira' }))
+    expect(handle).toHaveBeenCalledWith('diagnosticar Notion', 'submit')
   })
 
   it('renders the validated canvas through the existing assistant UI bridge', () => {
