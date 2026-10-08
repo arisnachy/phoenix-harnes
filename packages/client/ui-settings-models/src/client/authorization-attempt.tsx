@@ -298,13 +298,13 @@ export function useAuthorizationAttempt(
         // producing a consent URL. Close the temporary tab during that prompt.
         if (view.prompt !== undefined && consent?.url === undefined && !navigatedRef.current) {
           closeReservedPopup()
-        } else if (view.status === 'pending' && consent?.url === undefined && latest !== undefined) {
+        } else if (view.status === 'pending' && consent?.url === undefined && latest !== undefined && !failedPopupRef.current) {
           showPopupStatus(
             'Esperando enlace de autorización…',
             'El servidor MCP está preparando el inicio de sesión. Si no entrega el enlace, PHOENIX mostrará el error.',
           )
         }
-        if (consent?.url !== undefined && !opened.current.has(consent.url)) {
+        if (consent?.url !== undefined && !failedPopupRef.current && !opened.current.has(consent.url)) {
           opened.current.add(consent.url)
           navigateOAuthPopup(consent.url)
         }
