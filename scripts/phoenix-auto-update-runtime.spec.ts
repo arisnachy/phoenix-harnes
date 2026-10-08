@@ -24,7 +24,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
   it('promotes each green current main SHA to the stable release pointer', () => {
-    expect(stableWorkflow).toContain('Promote stable release pointer')
+    expect(stableWorkflow).toContain('Keep stable exactly aligned with main')
     expect(stableWorkflow).toContain('"$TARGET_SHA:refs/heads/stable"')
     expect(stableWorkflow).toContain('--force-with-lease="refs/heads/stable:$stable_sha"')
   })
