@@ -111,6 +111,17 @@
   box-shadow: 0 1px 4px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 6%, transparent);
 }
 
+.row[data-team-activity='true'] .bubble {
+  padding: 7px 10px;
+  border-style: dashed;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 55%, transparent);
+  box-shadow: none;
+}
+
+.row[data-team-activity='true'] .bubble :global(.markdown) {
+  font-size: 12px;
+  line-height: 18px;
+}
 .bubble :global(.markdown) {
   overflow-wrap: anywhere;
   font-size: 14px;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId, type Session } from '@phoenix-ai/dsh-session'
 import type { Agent } from '@phoenix-ai/dsh-agent'
-import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
+import { CallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { TeamChat } from '../src/chat.ts'
 import { TEAM_PERSONAS } from '../src/personas.ts'
 import { TeamId } from '../src/types.ts'
@@ -221,6 +221,34 @@ describe('chat durable ownership and delivery', () => {
     await f.chat.recover(f.lead)
     expect(f.followup).toHaveBeenCalledTimes(1)
     expect(f.followup.mock.calls[0]?.[2][0]?.text).toContain('Reply to User (original)')
+  })
+
+  it('projects only real tool activity, updates one row and keeps private payloads out of chat', async () => {
+    const f = await fixture()
+    const callId = CallId('github-read')
+    f.child.append('tool/call', { turn: 1, step: 1, callId, name: 'mcp__GitHub__fetch_file',
+      arguments: '{"secret":"PRIVATE_ARGUMENT"}' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    const activity = () => f.chat.messages(f.root).filter(row => row.id.startsWith(f.child.id + ':activity:'))
+    expect(activity()).toHaveLength(1)
+    expect(activity()[0]?.text).toContain('en ejecución')
+    expect(activity()[0]?.text).not.toContain('PRIVATE_ARGUMENT')
+    f.child.append('tool/result', { turn: 1, step: 1, message: createToolResultMessage({
+      callId, content: content('PRIVATE_RESULT'), isError: false,
+    }) }, { surfaceOp: 'append' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    expect(activity()).toHaveLength(1)
+    expect(activity()[0]?.text).toContain('1 respuesta(s) sin error')
+    expect(activity()[0]?.text).not.toContain('PRIVATE_RESULT')
+    const published = f.root.events.filter(event => event.type === 'team/chat-message'
+      && event.data.message.id.startsWith(f.child.id + ':activity:'))
+    expect(published).toHaveLength(2)
+    expect(published[1]).toMatchObject({ data: { update: true } })
+    f.child.append('tool/call', { turn: 1, step: 2, callId: CallId('peer'),
+      name: 'team_chat_react', arguments: '{}' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    expect(activity()).toHaveLength(1)
+    expect(activity()[0]?.text).toContain('1 respuesta(s) sin error')
   })
 
 })

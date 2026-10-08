@@ -169,6 +169,10 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('Your Team role is lead')
     expect(leadPrompt).toContain('Warm, confident, curious, and witty')
     expect(leadPrompt).toContain('high quality, fast completion, and low cost')
+    expect(leadPrompt).toContain('The fixed priority is quality, then speed, then low token cost')
+    expect(leadPrompt).toContain('reuses available teammates and verifies acceptance')
+    expect(leadPrompt).toContain('never repeat the same failed operation unchanged')
+    expect(leadPrompt).toContain('peers exchange only new evidence')
     expect(leadPrompt).toContain('never synthesize roster filenames')
     expect(leadPrompt).toContain('Phoenix has no repository-root cordis.yml')
 

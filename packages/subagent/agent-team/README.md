@@ -6,7 +6,9 @@ Implicit-root Agent Teams domain. `ctx.agentTeams` owns a flat Lead/teammate ros
 
 ## Main chat
 
-The service publishes actual direct-child text in the root transcript, excluding inherited history, replacement output, reasoning and tool blocks. `teamChatParticipants` retains mission-owned names, portraits and operational states after completion. Capture and Unicode reaction set/remove mutations never wake a model. Reaction projection version 2 replays historical semantic Team reactions into the canonical emoji stream when restoring version 1 checkpoints, preserving the Lead or teammate reactor identity. A narrowly recognized first-action update can appear before execution receipts; it does not count as a result or task completion. Operational completion claims retain their receipt gate. New workers receive this start guidance directly with the actual assignment; emoji acknowledgement is optional.
+The service publishes actual direct-child text in the root transcript, excluding inherited history, replacement output, reasoning and tool blocks. `teamChatParticipants` retains mission-owned names, portraits and operational states after completion. Capture and Unicode reaction set/remove mutations never wake a model. Reaction projection version 2 replays historical semantic Team reactions into the canonical emoji stream when restoring version 1 checkpoints, preserving the Lead or teammate reactor identity. Genuine non-completion work updates and blockers can appear before tool receipts, but operational completion claims retain their receipt gate. Each worker starts a real action in the first step; a separate `send_message` acknowledgement is unnecessary. Material findings and result/blocker handoffs remain durable peer messages. New workers receive this start guidance directly with the actual assignment; emoji acknowledgement is optional.
+
+Every actual non-Team child tool call and result also updates one compact activity row per child turn in the existing root chat. It reflects in-flight calls and returned tool outcomes using bounded tool identifiers and counts; arguments, outputs and credentials are never copied. A response without a tool error is *not* external delivery confirmation or completion evidence. Team coordination tools do not create duplicate activity rows. This projection does not wake a model or spend an additional agent turn.
 
 The generated `chatMessages`, `chatReact` and `chatReply` remotes use exact root and message identities. Replies address existing continuable direct children, preserve quoted context, publish one human row and keep durable per-target admission receipts. `requestId` is retained across retries; `queued` distinguishes pending deliveries. Root recovery resumes pending admission and supervisory context. Model-facing reads share one configured `maxMessageBytes` budget. See the [conversation contracts](../../../docs/subsystems/agent-team.md#main-conversation) and [ownership decision](../../../.agents/notes/implemented/feature/2026-10-01-kira-main-chat.md).
 ## Config
@@ -15,7 +17,7 @@ The generated `chatMessages`, `chatReact` and `chatReply` remotes use exact root
 - id: agent-team
   name: '@phoenix-ai/dsh-agent-team'
   config:
-    maxMembers: 8
+    maxMembers: 3
     maxTasks: 256
     maxPendingMessagesPerMember: 64
     maxMessageBytes: 65536
