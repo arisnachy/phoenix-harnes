@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { spokenLanguage } from '../src/client/speech-output.ts'
 import {
   configureCodexRealtimeUserTranscriptHandler,
   configureVoiceAssistantRemote,
@@ -43,6 +44,14 @@ class FakeRecognition implements VoiceRecognitionLike {
 }
 
 describe('browser voice adapter', () => {
+  it('uses Spanish for the panel and text rather than a hidden Host English default', () => {
+    expect(spokenLanguage('Completado.', 'es')).toBe('es-DO')
+    expect(spokenLanguage('He encontrado el problema. Voy a corregirlo.', 'en')).toBe('es-DO')
+    expect(spokenLanguage('The task is complete and ready.', 'es')).toBe('en-US')
+    expect(spokenLanguage('Hola, todo está listo.', 'en')).toBe('es-DO')
+    expect(spokenLanguage('您好。', 'zh-CN')).toBe('zh-CN')
+  })
+
   afterEach(() => { setVoiceAssistantActive(false) })
 
   it('reports unsupported browsers without constructing a recognizer', () => {
@@ -393,6 +402,7 @@ describe('browser voice adapter', () => {
         key: 'assistant:2:1',
         sequence: 0,
         text: 'Encontré el problema.',
+        language: 'es-DO',
       })
 
       expect(interruptVoiceAssistantSpeech()).toBe(true)

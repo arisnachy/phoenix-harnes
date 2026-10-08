@@ -356,7 +356,7 @@ function compactRealtimeContextText(text: string, limit: number): string {
 export class VoiceRuntime extends TypertRemoteService {
   static Config: z<VoiceRuntimeConfig> = z.object({
     enabled: z.boolean().default(true),
-    language: z.string().default('en-US'),
+    language: z.string().default('es-DO'),
     maxQueue: z.number().default(3),
     maxChars: z.number().default(480),
     ttsProvider: z.string(),
@@ -379,7 +379,7 @@ export class VoiceRuntime extends TypertRemoteService {
     super(ctx, 'voice')
     this.config = {
       enabled: config.enabled ?? true,
-      language: config.language?.trim() || 'en-US',
+      language: config.language?.trim() || 'es-DO',
       maxQueue: positiveInteger(config.maxQueue ?? 3, 'maxQueue'),
       maxChars: positiveInteger(config.maxChars ?? 480, 'maxChars'),
       ...config.ttsProvider?.trim() ? { ttsProvider: config.ttsProvider.trim() } : {},
