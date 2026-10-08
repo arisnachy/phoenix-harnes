@@ -1878,7 +1878,7 @@ describe('visible team conversation', () => {
     child.append('user/message', createUserMessage({
       source: { kind: 'user' }, content: content('Revisa el archivo y verifica el resultado.'),
     }), { surfaceOp: 'append' })
-    for (const message of ['Kira, empiezo por revisar el archivo y sus pruebas.', 'Kira, empiezo por el informe. El archivo ya fue actualizado.']) {
+    for (const message of ['Kira, empiezo por revisar el archivo y sus pruebas.', 'Kira, la API devolvió 403; contrastaré otra ruta.', 'Kira, empiezo por el informe. El archivo ya fue actualizado.']) {
       child.append('assistant/message', {
         turn: 1, step: 1, message: createAssistantMessage({
           source: { provider: 'mock', model: 'mock' }, content: content(message),
@@ -1886,7 +1886,7 @@ describe('visible team conversation', () => {
       }, { surfaceOp: 'append' })
     }
     const rows = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
-    expect(rows.map(row => row.text)).toEqual(['Kira, empiezo por revisar el archivo y sus pruebas.'])
+    expect(rows.map(row => row.text)).toEqual(['Kira, empiezo por revisar el archivo y sus pruebas.', 'Kira, la API devolvió 403; contrastaré otra ruta.'])
     expect(rows[0]?.senderId).toBe(child.id)
   })
 
@@ -2432,7 +2432,8 @@ describe('visible team conversation', () => {
       .join('\n') ?? ''
     expect(promptText).toContain(`Visible Kira assignment reaction target: team-member:${started.member.id}`)
     expect(promptText).toContain('team_chat_react')
-    expect(promptText).toContain('Before substantive work')
+    expect(promptText).toContain('In your first normal work step')
+    expect(promptText).toContain('do NOT call send_message just to acknowledge')
     expect(promptText).toContain('Do not end after announcing your plan')
     expect(promptText).toContain('send_message to lead with purpose result or blocker')
     ctx.agentTeams.interrupt(lead, 'zenith')
@@ -2449,7 +2450,7 @@ describe('visible team conversation', () => {
     expect(promptText).toContain('Aegis silent review mode')
     expect(promptText).toContain('Do not acknowledge this assignment with a reaction or status message')
     expect(promptText).not.toContain('Visible Kira assignment reaction target')
-    expect(promptText).not.toContain('Before substantive work')
+    expect(promptText).not.toContain('In your first normal work step')
     ctx.agentTeams.interrupt(lead, 'aegis')
     await waitNoAgent(ctx, started.member.id)
   })
