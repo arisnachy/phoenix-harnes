@@ -24,11 +24,18 @@ interface ReservedWindow {
   closed: boolean
   close: ReturnType<typeof vi.fn>
   postMessage: ReturnType<typeof vi.fn>
+  document: Document
   location: { replace: ReturnType<typeof vi.fn> }
 }
 
 function reservedWindow(): ReservedWindow {
-  return { closed: false, close: vi.fn(), postMessage: vi.fn(), location: { replace: vi.fn() } }
+  return {
+    closed: false,
+    close: vi.fn(),
+    postMessage: vi.fn(),
+    document: document.implementation.createHTMLDocument(''),
+    location: { replace: vi.fn() },
+  }
 }
 
 const KEY = 'mcp-client/linear-linear'
@@ -165,7 +172,7 @@ describe('authorization consent window', () => {
     } finally { open.mockRestore() }
   })
 
-  it('closes a reserved popup and reports start failure in Phoenix', async () => {
+  it('shows the actual startup failure inside the existing tab instead of leaving it on Conectando', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     const api = panelApi(pendingForever)
@@ -174,10 +181,61 @@ describe('authorization consent window', () => {
       renderPanel(api)
       await clickAuthorize()
       await waitFor(() => {
-        expect(reserved.close).toHaveBeenCalled()
+        expect(reserved.document.title).toContain('Autorización no iniciada')
       })
+      expect(reserved.document.body.textContent).toContain('No se pudo abrir la autorización')
+      expect(reserved.document.body.textContent).toContain('El servidor no proporcionó una URL de autorización válida')
       expect(screen.getByText('Error: connector unavailable')).toBeTruthy()
-      expect(reserved.postMessage).not.toHaveBeenCalled()
+      expect(reserved.close).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
+
+  it('renders pending backend notices and the safe failure status in the same browser tab', async () => {
+    const reserved = reservedWindow()
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    let calls = 0
+    const api = panelApi(async () => {
+      calls += 1
+      return calls === 1
+        ? ok({ attemptId: 'attempt-1', status: 'pending' as const, nextSeq: 1,
+          notices: [{ notice: { message: 'Preparando autorización de Cloudflare…' } }] })
+        : ok({ attemptId: 'attempt-1', status: 'failed' as const, nextSeq: 1,
+          notices: [], error: 'El MCP no entregó una URL de autorización en 38 segundos.' })
+    })
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => { expect(reserved.document.body.textContent).toContain('Esperando enlace de autorización') }, { timeout: 2500 })
+      await waitFor(() => { expect(reserved.document.body.textContent).toContain('agotó el tiempo de preparación') }, { timeout: 3500 })
+      expect(reserved.document.title).toContain('Autorización no iniciada')
+      expect(reserved.close).not.toHaveBeenCalled()
+      expect(open).toHaveBeenCalledTimes(1)
+    } finally { open.mockRestore() }
+  })
+
+  it('uses the active popup clock to end an OAuth wait and cancels the Host attempt', async () => {
+    const reserved = reservedWindow()
+    const timers: Array<() => void> = []
+    const popupWithClock = Object.assign(reserved, {
+      setTimeout: vi.fn((callback: () => void) => {
+        timers.push(callback)
+        return 27
+      }),
+      clearTimeout: vi.fn(),
+    })
+    const open = vi.spyOn(window, 'open').mockReturnValue(popupWithClock as unknown as Window)
+    const api = panelApi(pendingForever)
+    api.cancel = vi.fn(async () => ok({ cancelled: true }))
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => { expect(api.begin).toHaveBeenCalledTimes(1) })
+      expect(popupWithClock.setTimeout).toHaveBeenCalledWith(expect.any(Function), 45_000)
+      await act(async () => { timers[0]?.() })
+      expect(reserved.document.body.textContent).toContain('No se pudo abrir la autorización')
+      expect(reserved.document.body.textContent).toContain('servidor no proporcionó una URL')
+      await waitFor(() => { expect(api.cancel).toHaveBeenCalledWith({ attemptId: 'attempt-1' }) })
+      expect(reserved.close).not.toHaveBeenCalled()
     } finally { open.mockRestore() }
   })
 
@@ -242,12 +300,10 @@ describe('authorization consent window', () => {
     open.mockRestore()
   })
 
-  it('offers the provider link when the reserved popup refuses navigation', async () => {
+  it('keeps the open tab usable when Chromium blocks scripted consent navigation', async () => {
     const reserved = reservedWindow()
     reserved.location.replace.mockImplementation(() => { throw new DOMException('navigation blocked', 'SecurityError') })
-    const open = vi.spyOn(window, 'open')
-      .mockReturnValueOnce(reserved as unknown as Window)
-      .mockReturnValueOnce(null)
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     try {
       renderPanel(panelApi(consentNotice))
       await clickAuthorize()
@@ -255,8 +311,12 @@ describe('authorization consent window', () => {
         expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL)
       })
       expect(await screen.findByRole('link', { name: /open/i })).toHaveProperty('href', CONSENT_URL)
-      expect(open).toHaveBeenLastCalledWith(CONSENT_URL, '_blank')
-      expect(reserved.postMessage).not.toHaveBeenCalled()
+      const popupLink = reserved.document.getElementById('phoenix-oauth-manual-link') as HTMLAnchorElement | null
+      expect(popupLink?.href).toBe(CONSENT_URL)
+      expect(popupLink?.target).toBe('_self')
+      expect(reserved.document.body.textContent).toContain('Tu navegador bloqueó la redirección')
+      expect(reserved.close).not.toHaveBeenCalled()
+      expect(open).toHaveBeenCalledTimes(1)
     } finally { open.mockRestore() }
   })
 
