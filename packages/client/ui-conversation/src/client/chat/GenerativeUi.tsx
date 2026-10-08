@@ -281,7 +281,7 @@ const Header = ({ title, subtitle, badge }: HeaderProps) => (
 const statusClass = (status: Status | undefined): string =>
   status === undefined ? '' : (css[status] ?? '')
 
-export function GenerativeUi({ block, onAction }: { block: GenerativeUiBlock; onAction?: CanvasAction }): ReactNode {
+export function GenerativeUi({ block, onAction }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined }): ReactNode {
   switch (block.component) {
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
     case 'event_card': {
