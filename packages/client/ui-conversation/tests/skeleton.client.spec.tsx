@@ -307,7 +307,7 @@ describe('Hero chrome', () => {
 })
 
 describe('Approved welcome chrome', () => {
-  it('shows a real welcome toolbar with live model seat and functional shortcuts', () => {
+  it('keeps the existing welcome toolbar and live model seat', () => {
     const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
     expect(b.view.getByRole('button', { name: 'Buscar sesiones' })).toBeTruthy()
     expect(b.view.getByRole('button', { name: 'Abrir perfil' })).toBeTruthy()
@@ -326,23 +326,18 @@ describe('Approved welcome chrome', () => {
 })
 
 describe('ConversationRoot resident composer', () => {
-  it('puts a welcome action in the current draft without submitting a turn', () => {
+  it('keeps the original input and workspace controls without starter cards', () => {
     const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
-    fireEvent.click(b.view.getByRole('button', { name: 'Crear' }))
-    const box = b.view.getByRole('textbox') as HTMLTextAreaElement
-    expect(box.value).toContain('Ayúdame a crear un proyecto')
+    expect(b.view.getByRole('textbox')).toBeTruthy()
+    expect(b.view.getByText(/podemos trabajar hoy/)).toBeTruthy()
+    expect(b.view.queryByRole('button', { name: 'Crear' })).toBeNull()
+    expect(b.view.queryByRole('button', { name: 'Analizar' })).toBeNull()
+    expect(b.view.queryByRole('button', { name: 'Programar' })).toBeNull()
+    expect(b.view.queryByRole('button', { name: 'Dame una gráfica de datos ficticios' })).toBeNull()
+    expect(b.slotCalls).toContain('conversation.hero.workspace')
+    expect(b.slotCalls).toContain('conversation.hero.agentPreset')
+    expect(b.slotCalls).toContain('conversation.input.model')
     expect(b.sink).not.toHaveBeenCalled()
-    fireEvent.click(b.view.getByRole('button', { name: 'Dame una gráfica de datos ficticios' }))
-    expect(box.value).toContain('Crea una gráfica de líneas')
-    expect(b.sink).not.toHaveBeenCalled()
-  })
-
-  it('opens the real workspace picker when a welcome action has no workspace', () => {
-    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }), [], undefined, {
-      summaryBlank: true,
-    })
-    fireEvent.click(b.view.getByRole('button', { name: 'Programar' }))
-    expect((b.pickerOwner() as { open: boolean }).open).toBe(true)
   })
 
   it('renders the composer inert with the blocker\u2019s own reason', () => {

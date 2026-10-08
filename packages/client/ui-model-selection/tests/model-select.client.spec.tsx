@@ -367,6 +367,54 @@ describe('ModelSelect reasoning effort', () => {
   })
 })
 
+describe('ModelSelect popup viewport', () => {
+  it('opens downward near the top and keeps the first model accessible', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state())
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    const trigger = screen.getByRole('button', { name: /DeepSeek V4 Flash/ })
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      top: 90, bottom: 118, left: 1000, right: 1180,
+    } as DOMRect)
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const menu = screen.getByRole('menu')
+    expect(menu.style.top).toBe('calc(100% + 8px)')
+    expect(menu.style.bottom).toBe('auto')
+    expect(screen.getByRole('menuitemradio', { name: 'DeepSeek V4 Flash' })).toBeTruthy()
+  })
+
+  it('caps upward dropdown height to the available viewport space', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state())
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+
+    const trigger = screen.getByRole('button', { name: /DeepSeek V4 Flash/ })
+    vi.spyOn(trigger, 'getBoundingClientRect').mockReturnValue({
+      top: 320, bottom: 348, left: 1000, right: 1180,
+    } as DOMRect)
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const menu = screen.getByRole('menu')
+    expect(menu.style.bottom).toBe('calc(100% + 8px)')
+    expect(parseInt(menu.style.maxHeight, 10)).toBeLessThanOrEqual(300)
+    expect(screen.getByRole('menuitemradio', { name: 'DeepSeek V4 Flash' })).toBeTruthy()
+  })
+})
+
 describe('ModelSelect catalog scrolling', () => {
   it('returns to the first row when a startup refresh replaces the open catalog', () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state())
