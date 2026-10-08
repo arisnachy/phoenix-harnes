@@ -147,7 +147,7 @@ export class TeamService extends TypertRemoteService {
       if (root !== undefined && session.header.origin === 'subagent' && (event.type === 'subagent/descriptor' || event.type === 'turn/start' || event.type === 'turn/end')) {
         void this.trackChat(this.chat.presence(root, session, event)).catch((error: unknown) => { ctx.logger.warn(`Team presence publication failed: ${errorMessage(error)}`) })
       }
-      if (root !== undefined && event.type === 'assistant/message') {
+      if (root !== undefined && (event.type === 'assistant/message' || event.type === 'tool/call' || event.type === 'tool/result')) {
         void this.trackChat(this.chat.capture(root, session.header, session.events.slice(0, event.seq + 1))).catch((error: unknown) => {
           ctx.logger.warn(`Team chat publication failed: ${errorMessage(error)}`)
         })
