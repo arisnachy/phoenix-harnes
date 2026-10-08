@@ -2,6 +2,7 @@
    remain independent. Warm surfaces are translucent over the user's theme. */
 
 .root {
+  box-sizing: border-box;
   position: relative;
   display: flex;
   align-items: center;
