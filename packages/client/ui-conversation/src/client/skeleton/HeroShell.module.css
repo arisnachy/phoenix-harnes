@@ -505,3 +505,15 @@
   .fish { width: 58px; height: 58px; }
   .suggestions { margin-top: 14px; }
 }
+
+/* Reference suggestion chips carry a quiet leading topic glyph. */
+.suggestion { display: inline-flex; align-items: center; gap: 8px; }
+.suggestionIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  font-family: var(--ds-font-family-code);
+  font-size: 15px;
+  color: var(--dsw-alias-label-secondary);
+}
