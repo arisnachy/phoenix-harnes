@@ -213,7 +213,7 @@ export function useAuthorizationAttempt(
         'Tu navegador bloqueó la redirección',
         'El MCP entregó el enlace de autorización. Pulsa el enlace de abajo para abrir la página oficial.',
       )
-      const link = doc.getElementById('phoenix-oauth-manual-link') ?? doc.createElement('a')
+      const link = doc.querySelector<HTMLAnchorElement>('#phoenix-oauth-manual-link') ?? doc.createElement('a')
       link.id = 'phoenix-oauth-manual-link'
       link.textContent = 'Abrir página de autorización'
       link.href = destination
