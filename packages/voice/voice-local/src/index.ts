@@ -252,22 +252,36 @@ export function apply(ctx: Context, config: Config): void {
   if (kokoroCommand !== undefined && kokoroCommand !== '') {
     voice.registerTextToSpeechProvider(createKokoroTextToSpeechProvider({ command: kokoroCommand, args: config.kokoroArgs ?? [] }))
   } else {
-    const installed = detectInstalledKokoro()
-    if (installed !== undefined) {
-      const kokoro = createNaturalTextToSpeechProvider({
+    let kokoro: ReturnType<typeof createNaturalTextToSpeechProvider> | undefined
+    let poll: ReturnType<typeof setInterval> | undefined
+    const attach = (): void => {
+      if (kokoro !== undefined) return
+      const installed = detectInstalledKokoro()
+      if (installed === undefined) return
+      kokoro = createNaturalTextToSpeechProvider({
         id: 'kokoro',
         priority: 100,
         command: installed.command,
         args: installed.args,
       })
       voice.registerTextToSpeechProvider(kokoro)
-      ctx.effect(() => () => { kokoro.close() }, 'kokoro voice daemon teardown')
+      if (poll !== undefined) clearInterval(poll)
+      poll = undefined
       if (config.kokoroPrewarm === true) {
         void kokoro.warmup().catch((error: unknown) => {
           ctx.logger('voice-local').warn(`Kokoro warmup failed; system voice remains available: ${String(error)}`)
         })
       }
     }
+    attach()
+    if (process.platform === 'win32' && kokoro === undefined) {
+      poll = setInterval(attach, 15_000)
+      poll.unref()
+    }
+    ctx.effect(() => () => {
+      if (poll !== undefined) clearInterval(poll)
+      kokoro?.close()
+    }, 'kokoro voice installation and daemon teardown')
   }
   if (config.systemTts !== false) voice.registerTextToSpeechProvider(createSystemTextToSpeechProvider())
   const sttCommand = config.sttCommand?.trim()
