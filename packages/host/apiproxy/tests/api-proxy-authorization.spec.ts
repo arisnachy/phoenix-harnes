@@ -80,7 +80,7 @@ describe('authorization API domain', () => {
           { code },
         )
       },
-    } as AuthorizationService)
+    } as unknown as AuthorizationService)
     const api = createApiProxy(ctx, DEFAULTS)
     const begun = ok(await api.authorization.begin(request({ key: String(key), method: 'oauth' })))
     await Promise.resolve()
