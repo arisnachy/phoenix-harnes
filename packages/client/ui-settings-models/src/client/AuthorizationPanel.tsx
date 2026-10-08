@@ -593,7 +593,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
       || mcpRuntime.status === 'disconnected'
       || (mcpRuntime.status === 'auth-required' && authorizationAccount === undefined))
     && onReconnect !== undefined
-  const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed'
+  const brokenManaged = managed !== undefined && (mcpRuntime === undefined
+    || mcpRuntime.status === 'failed' || mcpRuntime.status === 'disconnected'
     || (mcpRuntime.status === 'ready' && mcpRuntime.toolNames.length === 0))
   const canRepair = brokenManaged && managed.source !== undefined && onRepair !== undefined
   return (
