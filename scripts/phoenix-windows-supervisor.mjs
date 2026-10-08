@@ -1214,6 +1214,8 @@ function startHost() {
       PHOENIX_RUNTIME_ROOT: runtimeRoot,
       PHOENIX_INSTALL_ROOT: root,
       PHOENIX_UPDATE_SUPERVISED: '1',
+      // Strict MCPs still block startup; optional connectors initialize after Web starts.
+      PHOENIX_MCP_BACKGROUND_STARTUP: process.env.PHOENIX_MCP_BACKGROUND_STARTUP ?? '1',
     },
   })
 }
@@ -1473,7 +1475,8 @@ process.once('SIGTERM', requestShutdown)
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
 repairDesktopShortcut()
-cleanupObsoleteRuntimes()
+// Gigabyte-scale pnpm worktree removal was a synchronous pre-boot gate.
+// Capacity checks and the periodic sweep keep it safe without blocking Host startup.
 recoverConfigurationBeforeFirstBoot()
 
 const startupFallbackMissing = profileFallbackHasMissingRuntimeArtifact()
@@ -1553,7 +1556,7 @@ while (true) {
   clearTimeout(stableTimer)
   activeHost = undefined
 
-  if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()
+  // Cleanup is deferred until maintenance; never delay the replacement Host.
 
   if (shutdownRequested) {
     finalCode = hostExit.code ?? (hostExit.signal === null ? 0 : 0)
@@ -1574,7 +1577,6 @@ while (true) {
       clearPreparedRecord()
       clearRestartRequest()
       clearHostRestartRequest()
-      cleanupObsoleteRuntimes()
       console.error(
         '[PHOENIX UPDATE] recovered onto stable ' + runtime.target.slice(0, 12)
         + '; relaunching PHOENIX from the verified runtime.',
@@ -1610,7 +1612,6 @@ while (true) {
       console.error(
         `[PHOENIX UPDATE] consumed duplicate post-exit activation request for already-active runtime ${requestedTarget.slice(0, 12)}.`,
       )
-      cleanupObsoleteRuntimes()
       continue
     }
 
@@ -1638,7 +1639,6 @@ while (true) {
         repairDesktopShortcut()
         clearPreparedRecord()
         clearRestartRequest()
-        cleanupObsoleteRuntimes()
         console.error(`[PHOENIX UPDATE] isolated runtime ${runtime.target.slice(0, 12)} activated; relaunching PHOENIX without touching the source checkout.`)
       } catch (error) {
         clearRestartRequest()
@@ -1681,7 +1681,6 @@ while (true) {
 
     runtimeRoot = root
     clearActiveRuntime()
-    cleanupObsoleteRuntimes()
     repairDesktopShortcut()
     console.error('[PHOENIX UPDATE] activation succeeded; relaunching PHOENIX now...')
     continue
