@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-08-kokoro-secondary-voice.md
-2026-10-08-kokoro-secondary-voice.md: 5f2db68319a3fdd85d3e64ea3a44cecbc45cc616
-2026-10-08-kokoro-secondary-voice.zh.md: 0d9b9d51149ab3cc34082a355c35a8dc9b238a96
+2026-10-08-kokoro-secondary-voice.md: af264eefb5f08f4b1e19982d016b2254317fd6a0
+2026-10-08-kokoro-secondary-voice.zh.md: 23fa05543ddbbcb43b823e6fa8119673f4f9ce5e
