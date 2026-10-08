@@ -281,7 +281,7 @@ export function useAuthorizationAttempt(
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending') return
     let stale = false
-    const timer = window.setTimeout(() => {
+    const poll = (): void => {
       // The Host, not the state of a cross-origin WindowProxy, decides success.
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
         if (stale) return
@@ -342,8 +342,37 @@ export function useAuthorizationAttempt(
         setAttempt(undefined)
         setFailure(reason)
       })
-    }, 650)
-    return () => { stale = true; window.clearTimeout(timer) }
+    }
+    // When the authorization popup is the active tab, Chrome can throttle the
+    // background PHOENIX page's timers to one minute or longer. Schedule the
+    // consent URL status poll on the active popup clock until it navigates.
+    // Once it becomes cross-origin, fall back to the regular app clock.
+    let timerHost: Window = window
+    if (!navigatedRef.current) {
+      try {
+        const popup = popupRef.current
+        if (popup !== null && !popup.closed
+          && typeof popup.setTimeout === 'function' && typeof popup.clearTimeout === 'function') {
+          timerHost = popup
+        }
+      } catch {
+        // COOP or a browser embedding may isolate the popup WindowProxy.
+      }
+    }
+    let timer: number
+    try {
+      timer = timerHost.setTimeout(poll, 650)
+    } catch {
+      timerHost = window
+      timer = window.setTimeout(poll, 650)
+    }
+    return () => {
+      stale = true
+      try { timerHost.clearTimeout(timer) } catch {
+        // A just-navigated cross-origin popup may reject timer cleanup.
+        window.clearTimeout(timer)
+      }
+    }
   }, [api, attempt, closeReservedPopup, failReservedPopup, navigateOAuthPopup, showPopupStatus])
 
   const begin = (key: string, method = 'oauth'): void => {
