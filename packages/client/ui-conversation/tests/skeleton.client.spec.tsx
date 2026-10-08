@@ -306,6 +306,25 @@ describe('Hero chrome', () => {
   })
 })
 
+describe('Approved welcome chrome', () => {
+  it('shows a real welcome toolbar with live model seat and functional shortcuts', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
+    expect(b.view.getByRole('button', { name: 'Buscar sesiones' })).toBeTruthy()
+    expect(b.view.getByRole('button', { name: 'Abrir perfil' })).toBeTruthy()
+    expect(b.slotCalls).toContain('conversation.hero.model')
+    const sections: string[] = []
+    const onSettings = (event: Event) => { sections.push((event as CustomEvent<string>).detail) }
+    window.addEventListener('phoenix:open-settings-section', onSettings)
+    try {
+      fireEvent.click(b.view.getByRole('button', { name: 'Abrir perfil' }))
+      fireEvent.click(b.view.getByRole('button', { name: 'Descubrir herramientas' }))
+      expect(sections).toEqual(['profile', 'plugins'])
+    } finally {
+      window.removeEventListener('phoenix:open-settings-section', onSettings)
+    }
+  })
+})
+
 describe('ConversationRoot resident composer', () => {
   it('puts a welcome action in the current draft without submitting a turn', () => {
     const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
