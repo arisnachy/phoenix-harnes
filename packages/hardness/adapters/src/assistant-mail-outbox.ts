@@ -10,7 +10,7 @@ interface Outgoing {
   readonly firstAttempt?: number
   readonly delivery?: MailDelivery
   /** Sanitized provider error, retained so chat can explain a failed send. */
-  readonly lastError?: string
+  readonly lastError?: string | undefined
 }
 function outgoing(value: unknown): Outgoing[] {
   if (!Array.isArray(value)) throw new Error('invalid mail outbox')
