@@ -14,7 +14,7 @@ export const PHOENIX_CANVAS_MIME = 'application/vnd.phoenix.canvas+html'
 export function createPhoenixCanvasTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_canvas',
-    description: 'Create an inline HTML mini-app only when the user explicitly requests an HTML experience, an interactive app, web page, canvas application or mockup. NEVER use phoenix_canvas for an ordinary chart (line, bar, pie, time series) or data dashboard: prefer phoenix_visualize for structured charts, because external JS/CSS CDNs are blocked by the iframe security policy and may show an empty screen. A simple fictional chart is one phoenix_visualize call with chartType:line and demo:true. The canvas stays inside the chat conversation with automatic height; do not open a side workspace or editor file.',
+    description: 'Create an inline HTML mini-app only when the user explicitly requests an HTML experience, an interactive app, web page, canvas application or mockup. NEVER use phoenix_canvas for an ordinary chart (line, bar, pie, time series) or data dashboard: prefer phoenix_visualize for structured charts, because external JS/CSS CDNs are blocked by the iframe security policy and may show an empty screen. A simple fictional chart is one phoenix_visualize call with chartType:line and demo:true. The canvas renders directly inside Phoenix, inside the chat conversation with automatic height; do not open a side workspace or editor file and do not create a Cursor/Codex .canvas.tsx file.',
     parameters: {
       title: {
         type: 'string',
