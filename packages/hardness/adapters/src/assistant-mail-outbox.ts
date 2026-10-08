@@ -1,9 +1,17 @@
 /** Durable outbound replies and new messages with the provider's 24-hour idempotency lifetime. */
+import { AgentMailHttpError } from './assistant-mail-agentmail.ts'
 import { MailMessageId, MailThreadId } from './assistant-mail-types.ts'
 import type { MailDelivery, MailReply, MailOutgoingMessage, MailOutgoingOwnership } from './assistant-mail-types.ts'
 import { MailFile, mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 
-interface Outgoing { readonly reply: MailReply | MailOutgoingMessage; readonly state: 'pending' | 'sent' | 'ambiguous'; readonly firstAttempt?: number; readonly delivery?: MailDelivery }
+interface Outgoing {
+  readonly reply: MailReply | MailOutgoingMessage
+  readonly state: 'pending' | 'sent' | 'ambiguous'
+  readonly firstAttempt?: number
+  readonly delivery?: MailDelivery
+  /** Sanitized provider error, retained so chat can explain a failed send. */
+  readonly lastError?: string
+}
 function outgoing(value: unknown): Outgoing[] {
   if (!Array.isArray(value)) throw new Error('invalid mail outbox')
   return value.map((raw) => {
@@ -15,6 +23,7 @@ function outgoing(value: unknown): Outgoing[] {
     if (row.state === 'sent' && delivery === undefined) throw new Error('sent mail has no provider confirmation')
     return { state: row.state as Outgoing['state'], reply: { inboxId: mailAddress(mailString(input.inboxId)), ...(input.subject === undefined ? { messageId: MailMessageId(mailString(input.messageId)) } : { subject: mailString(input.subject, 1024), taskId: mailString(input.taskId), scheduledFor: mailString(input.scheduledFor) }), to: mailAddress(mailString(input.to)), text: mailString(input.text, 64_000), idempotencyKey: mailString(input.idempotencyKey) },
       ...(row.firstAttempt === undefined ? {} : { firstAttempt: row.firstAttempt }),
+      ...(row.lastError === undefined ? {} : { lastError: mailString(row.lastError, 512) }),
       ...(delivery === undefined ? {} : { delivery: { messageId: MailMessageId(mailString(delivery.messageId)),
         threadId: MailThreadId(mailString(delivery.threadId)) } }),
     }
@@ -89,9 +98,18 @@ export class MailOutbox {
           if (sendMessage === undefined) throw new Error('outbox new-message sender is unavailable')
           delivery = await sendMessage(row.reply)
         } else delivery = await this.send(row.reply)
-      } catch { continue /* Provider failure is retained as pending;
-         periodic recovery retries within its guarantee. */ }
-      await this.file.change(rows => rows.map(item => item.reply.idempotencyKey === key ? { ...item, state: 'sent', delivery } : item))
+      } catch (error) {
+        // Persist a sanitized validation/permission diagnosis without losing the
+        // immutable payload or the provider's 24-hour deduplication identity.
+        const lastError = error instanceof AgentMailHttpError ? error.message.slice(0, 512) : undefined
+        if (lastError !== undefined) {
+          await this.file.change(rows => rows.map(item => item.reply.idempotencyKey === key
+            ? { ...item, lastError } : item))
+        }
+        continue
+      }
+      await this.file.change(rows => rows.map(item => item.reply.idempotencyKey === key
+        ? { ...item, state: 'sent', delivery, lastError: undefined } : item))
     }
   }
 }
