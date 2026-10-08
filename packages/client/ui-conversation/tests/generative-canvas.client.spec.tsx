@@ -5,6 +5,7 @@ import { AssistantMarkdown } from '../src/client/chat/AssistantMarkdown.tsx'
 import type { ChatViewSlotProps } from '../src/client/contract/slots.ts'
 import { GenerativeCanvas, parseCanvasSpec } from '../src/client/chat/GenerativeCanvas.tsx'
 import { GenerativeUi, parseGenerativeUiBlock, splitGenerativeUiText } from '../src/client/chat/GenerativeUi.tsx'
+import { PHOENIX_INTELLIGENT_UI_CAPABILITIES, parseInteroperableCanvas } from '../src/client/chat/IntelligentUiInterop.ts'
 
 afterEach(cleanup)
 
@@ -251,4 +252,75 @@ describe('Phoenix intelligent UI canvas', () => {
     const { container } = render(<GenerativeUi block={block} />)
     expect(container.querySelector('[data-generative-ui="ui_canvas"]')).not.toBeNull()
   })
+
+  it('advertises the exact supported visual systems without claiming full vendor runtimes', () => {
+    expect(PHOENIX_INTELLIGENT_UI_CAPABILITIES.formats).toEqual(['ui_canvas', 'assistant_ui', 'json_render'])
+    expect(PHOENIX_INTELLIGENT_UI_CAPABILITIES.ecosystems['openai/apps-sdk-ui']).toContain('not mounted')
+    expect(PHOENIX_INTELLIGENT_UI_CAPABILITIES.actions).toContain('submit prompt after user click')
+  })
+
+  it('converts assistant-ui declarative facts, chart and user-clicked actions into an inline Phoenix card', () => {
+    const value = {
+      component: 'assistant_ui', version: 1, props: {
+        title: 'Panel de conectores',
+        tree: { $type: 'Card', title: 'Conectores MCP', children: [
+          { $type: 'Row', children: [
+            { $type: 'Fact', label: 'Listos', value: '5' },
+            { $type: 'Fact', label: 'Fallidos', value: '4' },
+          ] },
+          { $type: 'Chart', data: [{ label: 'Activos', value: 5 }, { label: 'OAuth', value: 9 }] },
+          { $type: 'Input', name: 'connector', label: 'Conector', defaultValue: 'Canva' },
+          { $type: 'Button', label: 'Diagnosticar', prompt: 'Diagnostica {connector}', action: 'draft' },
+        ] },
+      },
+    }
+    const parsed = parseInteroperableCanvas(value)
+    expect(parsed?.component).toBe('ui_canvas')
+    expect(parseGenerativeUiBlock(value)).toEqual(parsed)
+    if (parsed === null) throw new Error('assistant-ui format was rejected')
+    const send = vi.fn()
+    render(<GenerativeCanvas spec={parsed} onAction={send}/>)
+    expect(screen.getByText('Conectores MCP')).not.toBeNull()
+    expect(screen.getByText('Fallidos')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Diagnosticar' }))
+    expect(send).toHaveBeenCalledWith('Diagnostica Canva', 'draft')
+    expect(splitGenerativeUiText('Inicial.\n\n```generative-ui\n' + JSON.stringify(value) + '\n```').map(x=>x.kind)).toEqual(['markdown','ui'])
+  })
+
+  it('converts json-render root/elements safely while preserving controls and table', () => {
+    const value = { component: 'json_render', version: 1, props: {
+      title: 'Laboratorio UI Phoenix',
+      spec: { root: 'card', elements: {
+        card: { type: 'Card', props: { title: 'MCP' }, children: ['metric','table','select','button'] },
+        metric: { type: 'Metric', props: { label: 'Listos', value: '5' }, children: [] },
+        table: { type: 'Table', props: { columns: ['Proveedor','Estado'], rows: [['Notion','OAuth'],['Canva','Error']] }, children: [] },
+        select: { type: 'Select', props: { name: 'provider', label: 'Proveedor', options: ['Notion','Canva'] }, children: [] },
+        button: { type: 'Button', props: { label: 'Revisar', prompt: 'Revisa {provider}', action: 'draft' }, children: [] },
+      } },
+    } }
+    const parsed = parseGenerativeUiBlock(value)
+    expect(parsed?.component).toBe('ui_canvas')
+    if (parsed === null || parsed.component !== 'ui_canvas') throw new Error('json-render format was rejected')
+    const send = vi.fn()
+    render(<GenerativeCanvas spec={parsed} onAction={send}/>)
+    expect(screen.getByText('MCP')).not.toBeNull()
+    expect(screen.getByText('OAuth')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button',{name:'Revisar'}))
+    expect(send).toHaveBeenCalledWith('Revisa Notion','draft')
+    expect(splitGenerativeUiText(JSON.stringify(value)).map(x=>x.kind)).toEqual(['ui'])
+  })
+
+  it('rejects unknown components, prototype fields, cycles, script actions and dynamic bindings', () => {
+    const make = (tree: unknown) => ({ component: 'assistant_ui', version: 1, props: { title: 'X', tree } })
+    expect(parseInteroperableCanvas(make({ $type: 'WebView', url: 'https://evil.example' }))).toBeNull()
+    expect(parseInteroperableCanvas(make({ $type: 'Button', label: 'Run', prompt: 'run', $action: { type:'exec' } }))).toBeNull()
+    expect(parseInteroperableCanvas(make({ $type: 'Text', content: 'ok', onclick: 'bad' }))).toBeNull()
+    expect(parseInteroperableCanvas(make({ $type: 'Column', children: Array.from({length:65},()=>({ $type:'Text', text:'x' })) }))).toBeNull()
+    const flat = (elements: unknown) => ({ component: 'json_render', version: 1, props: { title:'X', spec: { root:'main', elements } } })
+    expect(parseInteroperableCanvas(flat({ main: { type:'Card',props:{},children:['main'] } }))).toBeNull()
+    expect(parseInteroperableCanvas(flat({ main: { type:'Text',props:{ content: { $state:'/secret' } },children:[] } }))).toBeNull()
+    expect(parseInteroperableCanvas(flat({ main: { type:'Button',props:{ label:'Execute',prompt:'x',href:'javascript:alert(1)' },children:[] } }))).toBeNull()
+    expect(splitGenerativeUiText('```generative-ui\n'+JSON.stringify(make({ $type:'WebView' }))+'\n```').map(x=>x.kind)).toEqual(['notice'])
+  })
+
 })
