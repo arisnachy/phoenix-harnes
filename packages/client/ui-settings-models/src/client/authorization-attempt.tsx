@@ -202,6 +202,31 @@ export function useAuthorizationAttempt(
     }
   }, [api, closeReservedPopup, failReservedPopup, showPopupStatus])
 
+  const offerManualPopupConsent = useCallback((destination: string): boolean => {
+    const popup = popupRef.current
+    if (popup === null) return false
+    try {
+      if (popup.closed) return false
+      const doc = popup.document
+      if (doc?.body === undefined || doc.body === null) return false
+      showPopupStatus(
+        'Tu navegador bloqueó la redirección',
+        'El MCP entregó el enlace de autorización. Pulsa el enlace de abajo para abrir la página oficial.',
+      )
+      const link = doc.getElementById('phoenix-oauth-manual-link') ?? doc.createElement('a')
+      link.id = 'phoenix-oauth-manual-link'
+      link.textContent = 'Abrir página de autorización'
+      link.href = destination
+      link.target = '_self'
+      link.rel = 'noreferrer'
+      if (link.parentElement !== doc.body) doc.body.appendChild(link)
+      return true
+    } catch {
+      // Cannot expose a manual link if the browser isolated this window.
+      return false
+    }
+  }, [showPopupStatus])
+
   const navigateOAuthPopup = useCallback((url: string): void => {
     const destination = safeOAuthConsentUrl(url)
     if (destination === undefined) {
@@ -219,7 +244,16 @@ export function useAuthorizationAttempt(
           return
         }
       } catch {
-        // The popup may have been closed or isolated by browser policy.
+        // Some Chromium policies refuse scripted cross-window navigation.
+        // Do not lose the already-open tab or leave it frozen on Conectando.
+        if (offerManualPopupConsent(destination)) {
+          setFailure('El navegador bloqueó la redirección automática. Pulsa “Abrir página de autorización” en la pestaña abierta o en PHOENIX.')
+          return
+        }
+        try { popup.close() } catch {
+          // A fully isolated tab cannot be controlled; the main card still
+          // offers the same validated consent URL for an explicit click.
+        }
       }
     }
 
@@ -236,7 +270,7 @@ export function useAuthorizationAttempt(
     if (fallback === null) {
       setFailure('No se abrió automáticamente la autorización. Pulsa “Abrir página de autorización” en PHOENIX para continuar.')
     }
-  }, [failReservedPopup])
+  }, [failReservedPopup, offerManualPopupConsent])
 
   useEffect(() => () => {
     // Unmounting Settings must not close an already-open provider consent page.
