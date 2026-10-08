@@ -225,6 +225,10 @@ export function displayOutputToVoiceText(displayOutput: string, maxChars = 480):
     .replace(/^\s*#{1,6}\s*/gm, '')
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/[>*_~`|{}[\]\\]/g, ' ')
+    // These are legal/visual symbols, not words. Otherwise some TTS backends
+    // pronounce "marca registrada" or "trademark" even though nobody said it.
+    .replace(/[®™℠©]/gu, ' ')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/gu, '')
     .replace(/[\p{Extended_Pictographic}\u200D\uFE0F]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
@@ -404,7 +408,7 @@ export class VoiceRuntime extends TypertRemoteService {
     const provider = this.selectConversationTtsProvider()
     return {
       enabled: this.config.enabled,
-      natural: this.config.enabled && provider?.id === 'kokoro',
+      natural: this.config.enabled && (provider?.id === 'kokoro' || provider?.id === 'phoenix-natural'),
       ...(provider === undefined ? {} : { provider: provider.id }),
     }
   }
@@ -841,11 +845,11 @@ export class VoiceRuntime extends TypertRemoteService {
   }
 
   private conversationTtsProviders(): VoiceTextToSpeechProvider[] {
-    // Hands-free fallback is intentionally deterministic: Codex Live is owned
-    // by the Realtime bridge; when it is unavailable the Host speaks through
-    // Kokoro first, then the platform-native engine. Other optional neural
-    // engines remain available for non-conversation announcements only.
-    const ids = ['kokoro', 'system'] as const
+    // Keep hands-free conversation human-sounding: use a configured natural
+    // neural engine first, then Kokoro. The old Windows SAPI voice is NOT a
+    // conversational fallback: if neither neural route works, the Client
+    // tries a language-matching browser voice instead of a robotic SAPI voice.
+    const ids = ['phoenix-natural', 'kokoro'] as const
     const providers: VoiceTextToSpeechProvider[] = []
     for (const id of ids) {
       const provider = this.ttsProviders.get(id)

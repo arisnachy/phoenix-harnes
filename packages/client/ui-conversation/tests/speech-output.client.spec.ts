@@ -34,6 +34,13 @@ describe('speech output adapter', () => {
     expect(hasSpeechOutput({ SpeechSynthesisUtterance: FakeUtterance })).toBe(false)
   })
 
+  it('never speaks trademark symbols that TTS may expand into extra words', () => {
+    const { value, speak } = scope()
+    const output = createSpeechOutput(() => {}, 'es-DO', value)
+    output.speak('Phoenix®™℠© está lista.')
+    expect(speak.mock.calls[0]?.[0].text).toBe('Phoenix está lista.')
+  })
+
   it('speaks trimmed text, configures language, and returns to idle on completion', () => {
     const { value, speak, cancel } = scope()
     const states: string[] = []

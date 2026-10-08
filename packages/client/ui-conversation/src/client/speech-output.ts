@@ -72,8 +72,10 @@ function defaultScope(): SpeechOutputScope | undefined {
 }
 
 function defaultLanguage(): string {
-  if (typeof navigator === 'undefined' || navigator.language.trim() === '') return 'en-US'
-  return navigator.language
+  const documentLanguage = typeof document === 'undefined' ? '' : document.documentElement.lang.trim()
+  if (documentLanguage !== '') return spokenLanguage('', documentLanguage)
+  if (typeof navigator === 'undefined' || navigator.language.trim() === '') return 'es-DO'
+  return spokenLanguage('', navigator.language)
 }
 
 /**
@@ -91,6 +93,8 @@ export function conversationalSpeechText(text: string): string {
     .replace(/^\s*#{1,6}\s*/gm, '')
     .replace(/^\s*[-*+]\s+/gm, '')
     .replace(/[>*_~`|{}[\]\\]/g, ' ')
+    .replace(/[®™℠©]/gu, ' ')
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/gu, '')
     .replace(/[\p{Extended_Pictographic}\u200D\uFE0F]/gu, ' ')
     .replace(/\s+/g, ' ')
     .replace(/\s+([.,!?;:])/g, '$1')
