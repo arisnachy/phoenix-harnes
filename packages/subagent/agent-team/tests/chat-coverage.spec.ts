@@ -235,7 +235,7 @@ describe('chat durable ownership and delivery', () => {
     expect(activity()[0]?.text).not.toContain('PRIVATE_ARGUMENT')
     f.child.append('tool/result', { turn: 1, step: 1, message: createToolResultMessage({
       callId, content: content('PRIVATE_RESULT'), isError: false,
-    }) })
+    }) }, { surfaceOp: 'append' })
     await f.chat.capture(f.root, f.child.header, f.child.events)
     expect(activity()).toHaveLength(1)
     expect(activity()[0]?.text).toContain('1 respuesta(s) sin error')
