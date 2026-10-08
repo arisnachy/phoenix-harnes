@@ -2,6 +2,7 @@ import {
   defineTool,
   ToolArgsError,
   type ToolDefinition,
+  type JsonValue,
 } from '@phoenix-ai/dsh-tools'
 import type { AssistantMailControl, AssistantMailIdentity } from './assistant-mail-runtime.ts'
 import type { KiraMailOperationInput } from './assistant-mail-management.ts'
@@ -310,7 +311,7 @@ export function createAssistantMailManageTool(resolve: () => AssistantMailContro
         ...(args.thread_id === undefined ? {} : { threadId: args.thread_id }),
         ...(args.draft_id === undefined ? {} : { draftId: args.draft_id }),
         ...(args.attachment_id === undefined ? {} : { attachmentId: args.attachment_id }),
-        ...(args.folder === undefined ? {} : { folder: args.folder as KiraMailOperationInput['folder'] }),
+        ...(args.folder === undefined ? {} : { folder: args.folder }),
         ...(args.query === undefined ? {} : { query: args.query }),
         ...(args.page_token === undefined ? {} : { pageToken: args.page_token }),
         ...(args.limit === undefined ? {} : { limit: args.limit }),
@@ -323,7 +324,10 @@ export function createAssistantMailManageTool(resolve: () => AssistantMailContro
           idempotencyKey: `phoenix-mail-manual-reply-${execution.agent?.id ?? 'unknown'}-${execution.callId}`,
         } : {}),
       }
-      return service.manageMail(input)
+      // AgentMail management results may contain optional undefined fields.
+      // The model-facing tool contract only accepts real JSON values.
+      const result = await service.manageMail(input)
+      return JSON.parse(JSON.stringify(result)) as Record<string, JsonValue>
     },
     presentCall(args) {
       const reading = ['list', 'search', 'read', 'threads', 'search_threads', 'thread',
