@@ -64,6 +64,57 @@
   display: none;
 }
 
+/* Apply the agent-card treatment to Kira's actual narration only. Empty
+   reasoning/tool-only steps keep the existing compact transcript layout. */
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 76%, transparent);
+  border-radius: 20px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 6%, transparent);
+}
+
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] {
+  min-height: 59px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 18px 12px 40px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 68%, transparent);
+  border-radius: 20px 20px 0 0;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 36%, var(--dsw-alias-bg-layer-1));
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] > :first-child {
+  position: relative;
+  z-index: 1;
+  margin-left: -65px;
+  margin-right: 7px;
+}
+
+.flowItem[data-chat-flow-kind='assistant-step'] > [data-assistant-body] {
+  padding: 18px 22px 20px;
+}
+
+@media (max-width: 620px) {
+  .flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] {
+    min-height: 51px;
+    padding: 10px 12px 10px 32px;
+  }
+
+  .flowItem[data-chat-flow-kind='assistant-step']:has(> [data-team-author='kira'] + [data-assistant-body]) > [data-team-author='kira'] > :first-child {
+    margin-left: -53px;
+  }
+
+  .flowItem[data-chat-flow-kind='assistant-step'] > [data-assistant-body] {
+    padding: 13px 15px 15px;
+  }
+}
+
 .callRow {
   border-radius: 6px;
 }
