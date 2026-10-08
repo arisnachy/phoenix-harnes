@@ -234,6 +234,36 @@ describe('apply (plugin lifecycle)', () => {
     await fiber.dispose()
   })
 
+  it('does not block supervised Web boot behind optional MCP discovery', async () => {
+    vi.stubEnv('PHOENIX_MCP_BACKGROUND_STARTUP', '1')
+    const gate: PromiseWithResolvers<void> = Promise.withResolvers()
+    mockConnect.mockImplementation(() => gate.promise)
+    try {
+      await expect(apply(ctx, stdioConfig)).resolves.toBeUndefined()
+      expect(mockConnect).toHaveBeenCalledTimes(1)
+      expect(ctx.tools.get('mcp__srv__remote')).toBeUndefined()
+
+      gate.resolve()
+      await vi.waitFor(() => {
+        expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
+        expect(ctx.mcpConnectors.list()[0]?.status).toBe('ready')
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('keeps strict MCP startup gating in background boot mode', async () => {
+    vi.stubEnv('PHOENIX_MCP_BACKGROUND_STARTUP', '1')
+    mockConnect.mockRejectedValue(new Error('offline'))
+    try {
+      await expect(apply(ctx, { ...stdioConfig, failOnStartupError: true }))
+        .rejects.toThrow('initial connection or tool synchronization failed')
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('continues boot after a bounded MCP startup timeout when startup failure is non-fatal', async () => {
     mockConnect.mockImplementation(() => new Promise<void>(() => {}))
     const warn = vi.spyOn(ctx.logger, 'warn')
