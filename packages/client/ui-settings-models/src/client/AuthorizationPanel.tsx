@@ -1317,7 +1317,7 @@ export function ConnectorsSettingsSection({ api,
         setMcpHub(snapshot)
         setEntries(allEntries)
         const currentRuntime = snapshot.runtime.find(entry => entry.serverName === runtime.serverName)
-        if (currentRuntime?.status === 'ready') {
+        if (currentRuntime?.status === 'ready' && currentRuntime.toolNames.length > 0) {
           closeOAuthPopup()
           return
         }
