@@ -324,8 +324,8 @@ describe('ManagedMcpController', () => {
     expect(configs.get('figma')).toMatchObject({
       transport: 'streamable-http',
       serverName: 'figma',
-      url: 'http://127.0.0.1:3845/mcp',
-      oauth: false,
+      url: 'https://mcp.figma.com/mcp',
+      oauth: true,
     })
     expect(configs.get('slack')).toMatchObject({
       transport: 'streamable-http',
@@ -365,7 +365,7 @@ describe('ManagedMcpController', () => {
       }),
       expect.objectContaining({
         serverName: 'figma',
-        url: 'http://127.0.0.1:3845/mcp',
+        url: 'https://mcp.figma.com/mcp',
         source: { kind: 'curated', connectorId: 'figma' },
       }),
       expect.objectContaining({

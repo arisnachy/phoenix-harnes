@@ -293,7 +293,7 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   canva: { label: 'Canva', config: canvaMcpConfig },
   supabase: { label: 'Supabase', config: () => remoteOauthMcpConfig('supabase', SUPABASE_MCP_URL) },
   heygen: { label: 'HeyGen', config: () => remoteOauthMcpConfig('heygen', HEYGEN_MCP_URL, 120_000) },
-  figma: { label: 'Figma', config: figmaDesktopMcpConfig },
+  figma: { label: 'Figma', config: () => remoteOauthMcpConfig('figma', FIGMA_MCP_URL) },
   notion: { label: 'Notion', config: () => remoteOauthMcpConfig('notion', NOTION_MCP_URL) },
   linear: { label: 'Linear', config: () => remoteOauthMcpConfig('linear', LINEAR_MCP_URL) },
   cloudflare: { label: 'Cloudflare', config: () => remoteOauthMcpConfig('cloudflare', CLOUDFLARE_MCP_URL) },

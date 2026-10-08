@@ -117,6 +117,76 @@ describe('connectors settings section', () => {
     }
   })
 
+  it('takes installed Canva straight to its registered OAuth flow instead of stopping after install', async () => {
+    let installed = false
+    const begin = vi.fn(async () => ok({ attemptId: 'canva-live-oauth' }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: installed ? [{
+        key: 'mcp-client/canva', label: 'MCP canva',
+        methods: [{ id: 'oauth', label: 'Authorize Canva' }], inFlight: false,
+      }] : [] })),
+      begin,
+      status: vi.fn(async () => ok({
+        attemptId: 'canva-live-oauth', status: 'pending' as const,
+        nextSeq: 0, notices: [],
+      })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const receipt = {
+      status: 'installed' as const,
+      connector: { entryId: 'canva-live', serverName: 'canva', url: 'https://mcp.canva.com/mcp' },
+    }
+    const installCurated = vi.fn(async () => {
+      installed = true
+      return receipt
+    })
+    const state = vi.fn(async () => ({
+      managed: installed ? [receipt.connector] : [],
+      runtime: installed ? [{
+        serverName: 'canva', transport: 'streamable-http' as const,
+        status: 'auth-required' as const, reasonCode: 'authorization-required' as const,
+        toolNames: [],
+      }] : [],
+    }))
+    const popup = vi.spyOn(window, 'open').mockReturnValue(null)
+    try {
+      renderHub(api, { mcpRegistry: { state, install: vi.fn(), installCurated, search: vi.fn() } })
+      const card = document.querySelector('[data-connector-id="canva"]')
+      const button = Array.from(card?.querySelectorAll('button') ?? [])
+        .find(item => item.textContent === 'Install')
+      expect(button).toBeTruthy()
+      fireEvent.click(button!)
+      await waitFor(() => expect(begin).toHaveBeenCalledWith({
+        key: 'mcp-client/canva', method: 'oauth',
+      }))
+      expect(installCurated).toHaveBeenCalledWith({ connectorId: 'canva' })
+    } finally {
+      popup.mockRestore()
+    }
+  })
+
+  it('does not call a no-tools MCP connected even when its transport reports ready', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const state = vi.fn(async () => ({
+      managed: [{
+        entryId: 'canva-no-tools', serverName: 'canva', url: 'https://mcp.canva.com/mcp',
+        source: { kind: 'curated' as const, connectorId: 'canva' },
+      }],
+      runtime: [{
+        serverName: 'canva', transport: 'streamable-http' as const,
+        status: 'ready' as const, toolNames: [],
+      }],
+    }))
+    renderHub(api, { mcpRegistry: { state, install: vi.fn(), search: vi.fn() } })
+    await waitFor(() => expect(document.querySelector('[data-connector-id="canva"]')?.textContent)
+      .toContain(connectorEn.registryNoToolsStatus))
+    fireEvent.click(screen.getByRole('button', { name: connectorEn.connected }))
+    expect(document.querySelector('[data-connector-id="canva"]')).toBeNull()
+  })
+
   it('offers official Cloudflare MCP installation instead of a legacy API-key prompt', async () => {
     const api = {
       list: vi.fn(async () => ok({ entries: [{

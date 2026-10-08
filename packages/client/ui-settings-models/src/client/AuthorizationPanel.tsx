@@ -273,6 +273,9 @@ function normalize(value: string): string {
 
 const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
 const MCP_AUTH_FLOW_RETRY_MS = [0, 120, 350, 800, 1_600] as const
+const CURATED_OAUTH_MCP_IDS = new Set<string>([
+  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
+])
 const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
 function isTransientConnectorRemoteFailure(error: unknown): boolean {
@@ -590,7 +593,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
       || mcpRuntime.status === 'disconnected'
       || (mcpRuntime.status === 'auth-required' && authorizationAccount === undefined))
     && onReconnect !== undefined
-  const brokenManaged = managed !== undefined && (mcpRuntime === undefined || mcpRuntime.status === 'failed')
+  const brokenManaged = managed !== undefined && (mcpRuntime === undefined
+    || mcpRuntime.status === 'failed' || mcpRuntime.status === 'disconnected'
+    || (mcpRuntime.status === 'ready' && mcpRuntime.toolNames.length === 0))
   const canRepair = brokenManaged && managed.source !== undefined && onRepair !== undefined
   return (
     <article className={connectorStyles['connectorCard']} data-connector-id={definition.id}>
@@ -1163,8 +1168,8 @@ export function ConnectorsSettingsSection({ api,
     const runtimeAuthoritative = managed !== undefined || mcpRuntime !== undefined
     const connected = openClawRoute?.connected === true
       || (runtimeAuthoritative
-        ? mcpRuntime?.status === 'ready'
-        : live?.installed === true || live?.callable === true || accountConnected)
+        ? mcpRuntime?.status === 'ready' && mcpRuntime.toolNames.length > 0
+        : live?.callable === true || accountConnected)
       || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
   }), [entries, liveConnectors, mcpHub, openClaw])
@@ -1340,19 +1345,66 @@ export function ConnectorsSettingsSection({ api,
     ).finally(() => { setRemovingEntryId(undefined) })
   }
 
+  /** Installation is not readiness: complete the explicit user's click by finding
+   * its actual Host auth flow and performing the next necessary step. */
+  const finishMcpInstall = async (serverName: string): Promise<void> => {
+    if (mcpRegistry === undefined) return
+    if (api === undefined) {
+      closeOAuthPopup()
+      setCatalogFailure('MCP instalado, pero el servicio de autorización de PHOENIX no está disponible. Reinicia PHOENIX e inténtalo de nuevo.')
+      return
+    }
+    const key = `mcp-client/${serverName.toLowerCase().replaceAll('_', '-')}`
+    for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
+      if (delayMs > 0) await new Promise<void>(resolve => { globalThis.setTimeout(resolve, delayMs) })
+      const [snapshot, allEntries] = await Promise.all([
+        readConnectorRemoteWithRetry(() => mcpRegistry.state(), () => false),
+        readConnectorRemoteWithRetry(() => readAuthorizationEntries(api), () => false),
+      ])
+      setMcpHub(snapshot)
+      setEntries(allEntries)
+      const runtime = snapshot.runtime.find(item => item.serverName === serverName)
+      if (runtime?.status === 'ready' && runtime.toolNames.length > 0) {
+        closeOAuthPopup()
+        return
+      }
+      const entry = allEntries.find(item => item.key === key)
+      const method = entry?.methods[0]
+      if (entry !== undefined && method !== undefined
+        && (runtime?.status === 'auth-required' || entry.stored === undefined)) {
+        begin(entry.key, method.id)
+        return
+      }
+      if (runtime?.status === 'failed' || runtime?.status === 'disconnected') break
+    }
+    closeOAuthPopup()
+    setCatalogFailure(
+      `El MCP ${serverName} se instaló, pero todavía no expone herramientas operativas. `
+        + 'Revisa su estado y utiliza Reparar o Autorizar; PHOENIX no lo marcará como conectado.',
+    )
+  }
+
   const installCuratedConnector = (definition: ConnectorDefinition): void => {
     const installCurated = mcpRegistry?.installCurated?.bind(mcpRegistry)
     if (installCurated === undefined || definition.curatedMcp !== true || !isCuratedMcpConnectorId(definition.id)
       || installingCuratedId !== undefined || repairingEntryId !== undefined || removingEntryId !== undefined) return
     setCatalogFailure(undefined)
+    if (CURATED_OAUTH_MCP_IDS.has(definition.id)) reserveOAuthPopup()
     setInstallingCuratedId(definition.id)
     void installCurated({ connectorId: definition.id }).then(
-      () => {
+      async receipt => {
         setRefresh(current => current + 1)
         onAuthorized()
+        await finishMcpInstall(receipt.connector.serverName)
       },
-      (error: unknown) => { setCatalogFailure(String(error)) },
-    ).finally(() => { setInstallingCuratedId(undefined) })
+      (error: unknown) => {
+        closeOAuthPopup()
+        setCatalogFailure(String(error))
+      },
+    ).catch((error: unknown) => {
+      closeOAuthPopup()
+      setCatalogFailure(String(error))
+    }).finally(() => { setInstallingCuratedId(undefined) })
   }
 
   const installRegistryCandidate = (candidate: McpRegistryCandidateView): void => {
@@ -1365,14 +1417,22 @@ export function ConnectorsSettingsSection({ api,
       return
     }
     setCatalogFailure(undefined)
+    reserveOAuthPopup()
     setInstallingRegistryName(candidate.name)
     void mcpRegistry.install({ name: candidate.name, version: candidate.version }).then(
-      () => {
+      async receipt => {
         setRefresh(current => current + 1)
         onAuthorized()
+        await finishMcpInstall(receipt.connector.serverName)
       },
-      (error: unknown) => { setCatalogFailure(String(error)) },
-    ).finally(() => { setInstallingRegistryName(undefined) })
+      (error: unknown) => {
+        closeOAuthPopup()
+        setCatalogFailure(String(error))
+      },
+    ).catch((error: unknown) => {
+      closeOAuthPopup()
+      setCatalogFailure(String(error))
+    }).finally(() => { setInstallingRegistryName(undefined) })
   }
 
   const disconnect = (key: string): void => {
