@@ -106,6 +106,7 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
     name: 'conversation.input.dock', id: 'team-mention', order: 90, locale: NS,
     inject: (sessionId: SessionId) => ({
+      hooks: { teamDesign },
       setDraft(draft: string) {
         const scope = sessions.scope(sessionId)
         if (scope === undefined) return
