@@ -82,6 +82,29 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
 }
 
 describe('SidebarRoot shell', () => {
+  it('navigates from reference links to real Settings and workspace search destinations', () => {
+    const b = mountShell()
+    const sections: string[] = []
+    let searches = 0
+    const onSettings = (e: Event) => { sections.push((e as CustomEvent<string>).detail) }
+    const onSearch = () => { searches++ }
+    window.addEventListener('phoenix:open-settings-section', onSettings)
+    window.addEventListener('phoenix:open-workspace-search', onSearch)
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Inicio' }))
+      expect(b.startSession).toHaveBeenCalledOnce()
+      fireEvent.click(screen.getByRole('button', { name: 'Conectores' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Equipo' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Biblioteca' }))
+      expect(sections).toEqual(['connectors', 'agent-presets'])
+      expect(searches).toBe(1)
+    } finally {
+      window.removeEventListener('phoenix:open-settings-section', onSettings)
+      window.removeEventListener('phoenix:open-workspace-search', onSearch)
+    }
+  })
+
+
   it('routes New Session (capsule + wordmark) and the column toggle', () => {
     const b = mountShell()
     expect(screen.getByTestId('custom-brand-mark')).toBeTruthy()
