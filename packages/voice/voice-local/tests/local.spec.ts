@@ -46,7 +46,9 @@ describe('local voice providers', () => {
     const provider = createKokoroTextToSpeechProvider({ command: 'python', args: ['kokoro-cli.py'], run })
     expect(provider.available()).toBe(true)
     await provider.speak({ text: 'Una misión lista.', language: 'es-DO' })
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ command: 'python', stdin: 'Una misión lista.' }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'python', stdin: 'Una misión lista.', language: 'es-DO',
+    }))
   })
 
   it('uses the configured local STT command and returns its transcript', async () => {
