@@ -414,6 +414,9 @@ export function installAssistantMail(ctx: Context,
     const row = (await ownerOutbox.list()).find(row => row.reply.idempotencyKey === key)
     if (row?.state === 'ambiguous') throw new Error('mail delivery requires owner review; do not resend with another identity')
     if (row?.state !== 'sent' || row.delivery === undefined) {
+      // A provider HTTP rejection is a concrete, actionable error, not just a
+      // transient pending status. Keep the durable message for safe recovery.
+      if (row?.lastError !== undefined) throw new Error(row.lastError)
       throw new ProactivityDeferredError('Email is retained for retry; provider confirmation is pending. Do not claim it was sent or create another send.')
     }
     return { ...row.delivery, from: account.inboxId, to: recipient }

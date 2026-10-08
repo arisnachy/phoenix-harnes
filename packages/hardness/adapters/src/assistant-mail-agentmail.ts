@@ -1,4 +1,5 @@
 /** Pinned free-domain AgentMail IO; no billing, domain-upgrade or public ingress endpoints. */
+import { createHash } from 'node:crypto'
 import { MailMessageId, MailThreadId } from './assistant-mail-types.ts'
 import type { AssistantMailTransport, MailDelivery, MailMessage, MailPage, MailReply } from './assistant-mail-types.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
@@ -85,11 +86,15 @@ async function responseError(response: Response, authenticated: boolean): Promis
           const issues = record.errors.flatMap((item) => {
             if (item === null || typeof item !== 'object' || Array.isArray(item)) return []
             const issue = item as Record<string, unknown>
-            const path = typeof issue.path === 'string'
-              ? issue.path.replace(/[^a-zA-Z0-9_.\[\]-]/gu, '').slice(0, 160)
+            const parts = Array.isArray(issue.path)
+              ? issue.path.filter(part => typeof part === 'string' || typeof part === 'number').join('.')
+              : issue.path
+            const path = typeof parts === 'string'
+              ? parts.replace(/[^a-zA-Z0-9_.\[\]-]/gu, '').slice(0, 160)
               : 'request'
             const message = typeof issue.message === 'string'
-              ? issue.message.replace(/\s+/gu, ' ').trim().slice(0, 320)
+              ? issue.message.replace(/\bam_[A-Za-z0-9._-]+\b/gu, 'am_[redacted]')
+                .replace(/\s+/gu, ' ').trim().slice(0, 320)
               : 'invalid value'
             return [`${path}: ${message}`]
           }).slice(0, 3)
@@ -103,6 +108,20 @@ async function responseError(response: Response, authenticated: boolean): Promis
   const safeFix = safeProviderFix(fix)
   const reason = providerFailureReason(response.status, code, safeFix, authenticated)
   return new AgentMailHttpError(response.status, code, reason, safeFix, permissionFromFix(safeFix), validation)
+}
+
+/** Map any durable Phoenix mail identity to AgentMail's exact HTTP header alphabet.
+ * The application journal keeps the original identity for local deduplication.
+ * The provider receives a deterministic SHA-256 alias only for malformed/oversized
+ * internal IDs, so retries, restarts and recovery preserve the same remote key.
+ *
+ * AgentMail allows 1–256 chars in A-Z, a-z, 0-9, hyphen, dot, underscore, tilde.
+ * A nested agent call or scheduled occurrence may contain a colon, which is invalid.
+ */
+export function agentMailIdempotencyKey(value: string): string {
+  const key = mailString(value, 4096)
+  if (/^[A-Za-z0-9._~-]{1,256}$/u.test(key)) return key
+  return `phoenix-${createHash('sha256').update(key).digest('hex')}`
 }
 
 /** Official provider API; errors deliberately exclude provider bodies and secrets.
@@ -124,7 +143,7 @@ export async function agentMailRequest(path: string,
   signal?: AbortSignal): Promise<unknown> {
   const response = await fetcher(`https://api.agentmail.to/v0${path}`, {
     method: body === undefined ? 'GET' : 'POST',
-    headers: { 'Content-Type': 'application/json', ...(key === undefined ? {} : { Authorization: `Bearer ${key}` }), ...(idempotencyKey === undefined ? {} : { 'Idempotency-Key': idempotencyKey }) },
+    headers: { 'Content-Type': 'application/json', ...(key === undefined ? {} : { Authorization: `Bearer ${key}` }), ...(idempotencyKey === undefined ? {} : { 'Idempotency-Key': agentMailIdempotencyKey(idempotencyKey) }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
   })
