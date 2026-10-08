@@ -325,6 +325,29 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByRole('button', { name: /sandboxed interaction/i })).toBeNull()
   })
 
+  it('explains blocked remote Chart.js dependencies instead of silently showing an empty canvas', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'external-chart-1', mime: 'text/html', title: 'grafica.html',
+      data: '<h1>Gráfica ficticia</h1><canvas id="chart"></canvas>'
+        + '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
+        + '<script>new Chart(document.getElementById("chart"),{});</script>',
+    })} />)
+    const frame = screen.getByTitle('grafica.html') as HTMLIFrameElement
+    expect(frame.getAttribute('srcdoc')).toContain('biblioteca externa bloqueada')
+    expect(frame.getAttribute('srcdoc')).toContain('phoenix_visualize')
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")
+  })
+
+  it('does not warn for fully self-contained HTML charts', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'inline-chart-1', mime: 'text/html', title: 'grafica-autonoma.html',
+      data: '<h1>Gráfica ficticia</h1><canvas id="chart"></canvas><script>document.body.dataset.ok="1"</script>',
+    })} />)
+    const frame = screen.getByTitle('grafica-autonoma.html') as HTMLIFrameElement
+    expect(frame.getAttribute('srcdoc')).not.toContain('biblioteca externa bloqueada')
+  })
+
   it('preserves an explicit static HTML opt-out with scripts disabled', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'app-static',
