@@ -1,5 +1,13 @@
 import { useState, type ReactNode } from 'react'
 import css from './GenerativeCanvas.module.css'
+// Actual ready-made React components from the MIT-licensed react-generative-ui library.
+// Imported from the upstream shadcn-style vendor copies, not rewritten templates.
+import { StatCard } from './prebuilt/stat-card/StatCard.tsx'
+import { DataTable } from './prebuilt/data-table/DataTable.tsx'
+import { ProgressBar } from './prebuilt/progress-bar/ProgressBar.tsx'
+import { QuickReplyButtons } from './prebuilt/quick-reply-buttons/QuickReplyButtons.tsx'
+import { AlertBox } from './prebuilt/alert-box/AlertBox.tsx'
+import { Timeline } from './prebuilt/timeline/Timeline.tsx'
 
 /**
  * A bounded, script-free renderer for UI emitted by an assistant.
@@ -15,6 +23,8 @@ type CanvasNode =
   | { type: 'badge'; text: string; status?: Status }
   | { type: 'metric'; label: string; value: string; detail?: string; status?: Status }
   | { type: 'progress'; label: string; value: number; max?: number }
+  | { type: 'alert'; title?: string; message: string; status?: Status }
+  | { type: 'timeline'; title?: string; items: Array<{ date: string; title: string; description?: string }> }
   | { type: 'table'; columns: string[]; rows: string[][] }
   | { type: 'chart'; title?: string; points: Array<{ label: string; value: number }> }
   | { type: 'input'; id: string; label: string; placeholder?: string; value?: string }
@@ -72,6 +82,14 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
     case 'metric':
       return keys(value, ['type','label','value','detail','status'])
         && text(value.label) && text(value.value) && optionalText(value.detail) && status(value.status)
+    case 'alert':
+      return keys(value, ['type','title','message','status'])
+        && optionalText(value.title) && text(value.message, 1200) && status(value.status)
+    case 'timeline':
+      return keys(value, ['type','title','items']) && optionalText(value.title)
+        && Array.isArray(value.items) && value.items.length >= 1 && value.items.length <= 20
+        && value.items.every(item => isObject(item) && keys(item, ['date','title','description'])
+          && text(item.date) && text(item.title) && optionalText(item.description, 1200))
     case 'progress':
       return keys(value, ['type','label','value','max']) && text(value.label)
         && finite(value.value) && value.value >= 0
@@ -252,30 +270,51 @@ function Tabs({ tabs, values, setValue, onAction, onFilter, filters }: {
 
 function Node({ node, values, setValue, onAction, onFilter, filters }: RendererProps): ReactNode {
   switch (node.type) {
-    case 'group':
+    case 'group': {
+      // The upstream QuickReplyButtons template provides the horizontal
+      // action pills; action/permission routing stays owned by Phoenix.
+      const allButtons = node.layout === 'row'
+        && node.children.length > 0 && node.children.every(child => child.type === 'button')
+      if (allButtons && onAction !== undefined) {
+        return <QuickReplyButtons buttons={node.children.map((child, index) => ({
+          label: child.type === 'button' ? child.label : '', id: String(index),
+        }))} onSelect={id => {
+          const item = node.children[Number(id)]
+          if (item?.type !== 'button') return
+          if (isFilterButton(item)) { onFilter(); return }
+          onAction(expandPrompt(item.prompt, values), item.action === 'submit' ? 'submit' : 'draft')
+        }} />
+      }
       return <div className={node.layout === 'grid' ? css.grid : node.layout === 'row' ? css.row : css.column}>
         {node.children.map((child, i) => <Node key={i} node={child} values={values} setValue={setValue} onAction={onAction} onFilter={onFilter} filters={filters} />)}
       </div>
+    }
     case 'heading': return <h4 className={css.heading}>{node.text}</h4>
     case 'text': return <p className={css.text}>{node.text}</p>
     case 'caption': return <p className={css.caption}>{node.text}</p>
     case 'divider': return <hr className={css.divider} />
     case 'badge': return <span className={css.badge} data-status={node.status}>{node.text}</span>
-    case 'metric': return <div className={css.metric} data-status={node.status}>
-      <span>{node.label}</span><strong>{node.value}</strong>{node.detail && <small>{node.detail}</small>}
-    </div>
+    case 'metric':
+      return <div className={css.prebuiltMetric} data-status={node.status}>
+        <StatCard title={node.label} value={node.value} />
+        {node.detail && <small>{node.detail}</small>}
+      </div>
+    case 'alert':
+      return <AlertBox type={node.status === 'positive' ? 'success'
+        : node.status === 'negative' ? 'error'
+        : node.status === 'warning' ? 'warning' : 'info'} title={node.title} message={node.message} />
+    case 'timeline': return <Timeline title={node.title} items={node.items} />
     case 'progress': {
       const max = node.max ?? 100
-      return <div className={css.progress}><div><span>{node.label}</span><strong>{Math.round(node.value / max * 100)}%</strong></div>
-        <progress aria-label={node.label} max={max} value={node.value} /></div>
+      return <ProgressBar label={node.label} value={Math.round(node.value / max * 100)} />
     }
     case 'table': {
       const visible = node.rows.filter(row => matchesTable(row, node.columns, filters))
-      return <div className={css.tableScroll}><table>
-        <thead><tr>{node.columns.map((c,i) => <th key={i} scope="col">{c}</th>)}</tr></thead>
-        <tbody>{visible.map((row,i) => <tr key={i}>{row.map((cell,j) => <td key={j}>{cell}</td>)}</tr>)}
-        {visible.length === 0 && <tr><td colSpan={node.columns.length}>Sin resultados para los filtros seleccionados.</td></tr>}</tbody>
-      </table></div>
+      const rows = visible.map(row => Object.fromEntries(node.columns.map((header, i) => [header, row[i] ?? ''])))
+      return <div className={css.tableScroll}>
+        <DataTable headers={node.columns} rows={rows} />
+        {visible.length === 0 && <p role="status">Sin resultados para los filtros seleccionados.</p>}
+      </div>
     }
     case 'chart': {
       const max = Math.max(1,...node.points.map(p => p.value))
