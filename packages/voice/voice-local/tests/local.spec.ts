@@ -91,7 +91,14 @@ describe('local voice providers', () => {
     const run = vi.fn<VoiceCommandRunner>(() => Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }))
     const provider = createSystemTextToSpeechProvider({ platform: 'win32', run })
     await provider.speak({ text: 'Texto seguro; no se ejecuta como código.', language: 'es-DO' })
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ command: 'powershell.exe', stdin: 'Texto seguro; no se ejecuta como código.' }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'powershell.exe',
+      stdin: JSON.stringify({
+        text: 'Texto seguro; no se ejecuta como código.',
+        language: 'es-DO',
+      }),
+    }))
+    expect(run.mock.calls[0]?.[0].args.join(' ')).toContain('GetInstalledVoices')
     expect(run.mock.calls[0]?.[0].args.join(' ')).toContain('-NoProfile')
   })
 })

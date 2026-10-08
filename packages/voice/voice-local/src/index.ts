@@ -117,7 +117,11 @@ export function createSystemTextToSpeechProvider(options: SystemTtsProviderOptio
       assertSuccessful(await run({
         command,
         args,
-        stdin: request.text,
+        // Windows System.Speech must select an installed voice matching the
+        // requested language instead of silently using the English default.
+        stdin: platform === 'win32' && options.args === undefined
+          ? JSON.stringify({ text: request.text, language: request.language, gender: request.gender })
+          : request.text,
         ...request.signal === undefined ? {} : { signal: request.signal },
       }))
     },
@@ -368,7 +372,17 @@ function defaultSystemArgs(platform: NodeJS.Platform): readonly string[] {
   if (platform === 'win32') {
     return [
       '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-      '$text = [Console]::In.ReadToEnd(); Add-Type -AssemblyName System.Speech; $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speaker.Speak($text)',
+      '$request = [Console]::In.ReadToEnd() | ConvertFrom-Json; Add-Type -AssemblyName System.Speech; ' +
+      '$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; ' +
+      '$culture = [string]$request.language; $language = $culture.Split("-")[0].ToLowerInvariant(); ' +
+      '$voices = @($speaker.GetInstalledVoices() | Where-Object { $_.Enabled -and $_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq $language }); ' +
+      'if ($voices.Count -eq 0) { [Console]::Error.WriteLine("No native voice for " + $culture); exit 3 }; ' +
+      '$requestedGender = if ($request.gender -eq "masculine") { "Male" } else { "Female" }; ' +
+      '$gendered = @($voices | Where-Object { $_.VoiceInfo.Gender.ToString() -eq $requestedGender }); ' +
+      '$eligible = if ($gendered.Count -gt 0) { $gendered } else { $voices }; ' +
+      '$sameCulture = @($eligible | Where-Object { $_.VoiceInfo.Culture.Name -eq $culture }); ' +
+      '$choice = if ($sameCulture.Count -gt 0) { $sameCulture[0] } else { $eligible[0] }; ' +
+      '$speaker.SelectVoice($choice.VoiceInfo.Name); $speaker.Speak([string]$request.text)',
     ]
   }
   if (platform === 'darwin') return ['-f', '-']
