@@ -27,7 +27,7 @@ export interface AssistantMarkdownProps {
   /** The owning view's locale seat, passed down as a plain prop. */
   t: ChatViewSlotProps['t']
   /** User-clicked generative controls route through the session composer. */
-  onUiAction?: CanvasAction
+  onUiAction?: CanvasAction | undefined
 }
 
 /** User-facing assistant prose/media; technical reasoning is owned by ToolActivityFlow. */
