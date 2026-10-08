@@ -1,9 +1,7 @@
-// Vendored unchanged from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
+// Adapted from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
 import React from 'react';
-import { z } from 'zod';
-import { QuickReplyButtonsSchema } from './QuickReplyButtons.schema';
-
-export { QuickReplyButtonsSchema };
+// Phoenix validates declarative props before this upstream visual component renders.
+// Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
 /**
  * Recommended registry connection pattern:
@@ -16,7 +14,7 @@ export { QuickReplyButtonsSchema };
  * );
  * ```
  */
-export interface QuickReplyButtonsProps extends z.infer<typeof QuickReplyButtonsSchema> {
+export interface QuickReplyButtonsProps { buttons: Array<{ label: string; id: string }>;
   onSelect?: (id: string) => void;
 }
 

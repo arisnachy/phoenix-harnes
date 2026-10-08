@@ -1,11 +1,9 @@
-// Vendored unchanged from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
+// Adapted from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
 import React from 'react';
-import { z } from 'zod';
-import { DataTableSchema } from './DataTable.schema';
+// Phoenix validates declarative props before this upstream visual component renders.
+// Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
-export { DataTableSchema };
-
-export type DataTableProps = z.infer<typeof DataTableSchema>;
+export type DataTableProps = { title?: string; headers: string[]; rows: Array<Record<string, unknown>> };
 
 export const DataTable: React.FC<DataTableProps> = ({
   title,

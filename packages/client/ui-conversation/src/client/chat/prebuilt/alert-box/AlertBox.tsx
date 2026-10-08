@@ -1,11 +1,9 @@
-// Vendored unchanged from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
+// Adapted from https://github.com/hemasurya106/react-generative-ui (v0.4.6, MIT)
 import React from 'react';
-import { z } from 'zod';
-import { AlertBoxSchema } from './AlertBox.schema';
+// Phoenix validates declarative props before this upstream visual component renders.
+// Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
-export { AlertBoxSchema };
-
-export type AlertBoxProps = z.infer<typeof AlertBoxSchema>;
+export type AlertBoxProps = { type: 'info' | 'success' | 'warning' | 'error'; title?: string; message: string };
 
 const ALERTS_CONFIG = {
   info: {
