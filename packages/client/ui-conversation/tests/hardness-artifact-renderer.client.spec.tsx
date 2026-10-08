@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HardnessArtifactNodeView } from '../src/client/chat/HardnessArtifactNodeView.tsx'
 
 function props(data: {
@@ -32,6 +32,7 @@ function props(data: {
 }
 
 describe('HARDNESS inline artifact renderer', () => {
+  afterEach(() => { cleanup() })
   it('renders a compact card and expands in place', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'table-1',
