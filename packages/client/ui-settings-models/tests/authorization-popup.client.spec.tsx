@@ -191,6 +191,30 @@ describe('authorization consent window', () => {
     } finally { open.mockRestore() }
   })
 
+  it('replays an early failed authorization after the waiting page becomes ready', async () => {
+    const reserved = reservedWindow()
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    const api = panelApi(pendingForever)
+    api.begin = vi.fn(() => Promise.reject(new Error('connector unavailable')))
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => {
+        expect(reserved.document.title).toContain('Autorización no iniciada')
+      })
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: reserved as unknown as MessageEventSource,
+        data: { type: 'phoenix/oauth-ready' },
+      }))
+      expect(reserved.postMessage).toHaveBeenCalledWith({
+        type: 'phoenix/oauth-status',
+        message: 'El servidor no proporcionó una URL de autorización válida. Regresa a PHOENIX para consultar el error y reintentar.',
+        state: 'error',
+      }, window.location.origin)
+    } finally { open.mockRestore() }
+  })
+
   it('renders pending backend notices and the safe failure status in the same browser tab', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
