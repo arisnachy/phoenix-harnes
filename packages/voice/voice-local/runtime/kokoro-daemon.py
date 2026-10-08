@@ -71,7 +71,11 @@ def generate(text: str, language: str, gender: str, pace: str):
     with contextlib.redirect_stdout(sys.stderr):
         if primary in ESPEAK_LANGUAGES:
             if primary not in phonemizers:
+                import espeakng_loader
+                from phonemizer.backend.espeak.wrapper import EspeakWrapper
                 from misaki.espeak import EspeakG2P
+                EspeakWrapper.set_library(espeakng_loader.get_library_path())
+                EspeakWrapper.set_data_path(espeakng_loader.get_data_path())
                 phonemizers[primary] = EspeakG2P(language=code)
             phonemes, _ = phonemizers[primary](text)
             if not phonemes.strip():
