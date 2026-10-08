@@ -302,8 +302,8 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
     case 'alert':
       return <AlertBox type={node.status === 'positive' ? 'success'
         : node.status === 'negative' ? 'error'
-        : node.status === 'warning' ? 'warning' : 'info'} title={node.title} message={node.message} />
-    case 'timeline': return <Timeline title={node.title} items={node.items} />
+        : node.status === 'warning' ? 'warning' : 'info'} {...(node.title === undefined ? {} : { title: node.title })} message={node.message} />
+    case 'timeline': return <Timeline {...(node.title === undefined ? {} : { title: node.title })} items={node.items} />
     case 'progress': {
       const max = node.max ?? 100
       return <ProgressBar label={node.label} value={Math.round(node.value / max * 100)} />
