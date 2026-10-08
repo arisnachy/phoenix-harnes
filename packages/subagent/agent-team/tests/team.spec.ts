@@ -1938,9 +1938,13 @@ describe('visible team conversation', () => {
     }, { surfaceOp: 'append' })
 
     const visible = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
-    expect(visible).toHaveLength(1)
-    expect(visible[0]?.text).toContain('Correo de prueba enviado correctamente.')
-    expect(visible[0]?.text).toContain('✓ Evidencia ejecutada: send_email')
+    const activity = visible.filter(row => row.id.startsWith(child.id + ':activity:'))
+    expect(activity).toHaveLength(1)
+    expect(activity[0]?.text).toContain('send_email')
+    const answers = visible.filter(row => !row.id.startsWith(child.id + ':activity:'))
+    expect(answers).toHaveLength(1)
+    expect(answers[0]?.text).toContain('Correo de prueba enviado correctamente.')
+    expect(answers[0]?.text).toContain('✓ Evidencia ejecutada: send_email')
   })
 
   it('captures actual generic child text once without injecting the lead or leaking reasoning', async () => {
