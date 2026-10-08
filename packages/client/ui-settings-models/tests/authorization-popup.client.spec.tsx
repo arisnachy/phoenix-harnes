@@ -258,7 +258,7 @@ describe('authorization consent window', () => {
       expect(popupWithClock.setTimeout).toHaveBeenCalledWith(expect.any(Function), 45_000)
       await act(async () => { timers[0]?.() })
       expect(reserved.document.body.textContent).toContain('No se pudo abrir la autorización')
-      expect(reserved.document.body.textContent).toContain('servidor no proporcionó una URL')
+      expect(reserved.document.body.textContent).toContain('agotó el tiempo de preparación')
       await waitFor(() => { expect(api.cancel).toHaveBeenCalledWith({ attemptId: 'attempt-1' }) })
       expect(reserved.close).not.toHaveBeenCalled()
     } finally { open.mockRestore() }
