@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { MailOutbox } from '../src/assistant-mail-outbox.ts'
+import { AgentMailHttpError } from '../src/assistant-mail-agentmail.ts'
 const reply = { inboxId: 'kira@agentmail.to', messageId: MailMessageId('incoming'), to: 'owner@example.com', text: 'Done', idempotencyKey: 'job-1' }
 
 describe('durable reply outbox', () => {
@@ -67,4 +68,32 @@ describe('durable reply outbox', () => {
     } finally { await rm(directory, { recursive: true, force: true }) }
   })
 
+})
+
+it('persists a safe AgentMail 400 diagnosis and clears it after a successful idempotent retry', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-diagnostic-'))
+  try {
+    const path = join(directory, 'outbox.json')
+    let sends = 0
+    const send = async () => {
+      if (++sends === 1) {
+        throw new AgentMailHttpError(400, 'validation_error', undefined, undefined, undefined,
+          'headers.Idempotency-Key: invalid characters')
+      }
+      return { messageId: MailMessageId('sent'), threadId: MailThreadId('thread') }
+    }
+    const first = new MailOutbox(path, send)
+    await first.enqueue(reply)
+    await first.flush()
+    expect((await first.list())[0]).toMatchObject({
+      state: 'pending', lastError: 'AgentMail rejected request field: headers.Idempotency-Key: invalid characters',
+    })
+    const restarted = new MailOutbox(path, send)
+    await restarted.flush()
+    expect((await restarted.list())[0]).toMatchObject({ state: 'sent', delivery: { messageId: 'sent' } })
+    expect((await restarted.list())[0]?.lastError).toBeUndefined()
+    expect(sends).toBe(2)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
