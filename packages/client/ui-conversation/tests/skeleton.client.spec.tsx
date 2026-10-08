@@ -307,6 +307,24 @@ describe('Hero chrome', () => {
 })
 
 describe('ConversationRoot resident composer', () => {
+  it('shows nine usable welcome cards and writes a chosen prompt into the resident editor', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }), undefined, undefined, { summaryBlank: true })
+    const original = b.view.getByRole('textbox') as HTMLTextAreaElement
+    expect(b.view.getAllByRole('button', { name: /Crear una gráfica|Conectar un MCP|Chat inteligente|Automatización|Conectores|Tareas|Redactar correo|Revisar código|Analizar un archivo/ })).toHaveLength(9)
+    fireEvent.click(b.view.getByRole('button', { name: /Crear una gráfica/ }))
+    expect((b.view.getByRole('textbox') as HTMLTextAreaElement)).toBe(original)
+    expect(original.value).toContain('Crea una gráfica interactiva')
+    expect(b.sink).not.toHaveBeenCalled()
+  })
+
+  it('asks for a workspace instead of writing to an unavailable hero composer', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }), [], undefined, { summaryBlank: true })
+    fireEvent.click(b.view.getByRole('button', { name: /Revisar código/ }))
+    const picker = b.view.container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')
+    expect(picker?.getAttribute('aria-expanded')).toBe('true')
+    expect(b.sink).not.toHaveBeenCalled()
+  })
+
   it('renders the composer inert with the blocker\u2019s own reason', () => {
     const b = mount(conversationSnapshot(), undefined, undefined, {
       composerBlock: { reason: 'select a model first' },

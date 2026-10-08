@@ -1,13 +1,29 @@
-/* NEW SESSION hero: clean Codex-like welcome above the existing workspace row
-   and shared InputBar. The sidebar/folder tree and composer keep their current
-   positions; this file only styles the hero presentation and workspace chip. */
+/* Welcome-only styling. The resident composer, sidebar and session transcript
+   remain independent. Warm surfaces are translucent over the user's theme. */
 
 .root {
+  box-sizing: border-box;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
-  padding: 0 24px 4px;
+  width: 100%;
+  padding: 18px 16px 4px;
+  isolation: isolate;
+}
+
+.scenery {
+  position: absolute;
+  top: -34px;
+  left: 50%;
+  z-index: -1;
+  width: min(1290px, 112%);
+  height: 255px;
+  transform: translateX(-50%);
+  color: var(--dsw-specific-phoenix-accent);
+  opacity: .55;
+  pointer-events: none;
 }
 
 .stack {
@@ -15,29 +31,27 @@
   flex-direction: column;
   align-items: center;
   width: 100%;
-  max-width: var(--dsh-composer-card-max-width);
-  overflow: visible;
+  max-width: 1170px;
+  min-width: 0;
   text-align: center;
 }
 
-/* Detailed transparent Phoenix image: no synthetic ring or SVG treatment. */
 .fishHitbox {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 80px;
-  height: 80px;
-  margin-bottom: 14px;
+  width: 116px;
+  height: 116px;
+  margin-bottom: 8px;
 }
 
 .fish {
   display: block;
-  width: 72px;
-  height: 72px;
+  width: 104px;
+  height: 104px;
   object-fit: contain;
   transform-origin: 50% 60%;
-  filter: drop-shadow(0 5px 12px rgba(54, 46, 40, 0.10));
-  opacity: 1;
+  filter: drop-shadow(0 8px 14px rgba(54, 46, 40, .09));
 }
 
 .headline {
@@ -47,10 +61,10 @@
   flex-wrap: wrap;
   margin: 0;
   color: var(--dsw-alias-label-primary);
-  font-size: clamp(30px, 2.45vw, 38px);
+  font-size: clamp(30px, 2.6vw, 44px);
   line-height: 1.2;
-  font-weight: 600;
-  letter-spacing: -0.035em;
+  font-weight: 650;
+  letter-spacing: -.035em;
 }
 
 .preferredName {
@@ -58,12 +72,159 @@
 }
 
 .subtitle {
-  margin: 8px 0 0;
+  margin: 7px 0 0;
   color: var(--dsw-alias-label-tertiary);
-  font-size: clamp(16px, 1.3vw, 18px);
+  font-size: clamp(16px, 1.25vw, 19px);
   line-height: 1.45;
   font-weight: 400;
-  letter-spacing: -0.01em;
+  letter-spacing: -.01em;
+}
+
+.quickActions,
+.featureActions {
+  display: grid;
+  width: 100%;
+  gap: 12px;
+  text-align: left;
+}
+
+.quickActions {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-top: 28px;
+}
+
+.featureActions {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 16px;
+}
+
+.quickCard,
+.featureCard {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  gap: 12px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 58%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-base) 91%, var(--hero-card-tint));
+  box-shadow: 0 7px 22px rgba(70, 46, 26, .035);
+  color: var(--dsw-alias-label-primary);
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+}
+
+.quickCard {
+  min-height: 78px;
+  padding: 12px;
+}
+
+.featureCard {
+  min-height: 108px;
+  padding: 16px;
+}
+
+.quickCard[data-tone='peach'],
+.featureCard[data-tone='peach'] { --hero-card-tint: #f6d8c2; --hero-icon-color: #d56528; }
+.quickCard[data-tone='blue'],
+.featureCard[data-tone='blue'] { --hero-card-tint: #d5e7ff; --hero-icon-color: #2a69bb; }
+.quickCard[data-tone='violet'],
+.featureCard[data-tone='violet'] { --hero-card-tint: #e6dbff; --hero-icon-color: #7652c8; }
+.quickCard[data-tone='green'],
+.featureCard[data-tone='green'] { --hero-card-tint: #d9efdc; --hero-icon-color: #23824c; }
+.quickCard[data-tone='amber'],
+.featureCard[data-tone='amber'] { --hero-card-tint: #ffead2; --hero-icon-color: #ce7a21; }
+
+.quickIcon,
+.featureIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--hero-card-tint) 42%, var(--dsw-alias-bg-base));
+  color: var(--hero-icon-color);
+}
+
+.featureIcon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+}
+
+.actionText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 4px;
+}
+
+.actionText strong {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.actionText small {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.quickCard:hover:not(:disabled),
+.featureCard:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--hero-icon-color) 24%, var(--dsw-alias-border-l2));
+  box-shadow: 0 11px 26px rgba(70, 46, 26, .09);
+}
+
+.quickCard:focus-visible,
+.featureCard:focus-visible {
+  outline: 2px solid var(--dsw-alias-state-business-primary);
+  outline-offset: 2px;
+}
+
+.quickCard:disabled,
+.featureCard:disabled {
+  opacity: .65;
+  cursor: default;
+}
+
+@media (max-width: 1150px) {
+  .quickActions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .featureActions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .scenery { height: 200px; }
+  .quickActions,
+  .featureActions { gap: 9px; }
+  .quickActions { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 20px; }
+  .featureActions { margin-top: 10px; }
+  .quickCard { min-height: 68px; padding: 9px; gap: 8px; }
+  .featureCard { min-height: 86px; padding: 10px; gap: 8px; }
+  .quickIcon { width: 32px; height: 32px; }
+  .featureIcon { width: 36px; height: 36px; }
+  .quickIcon svg,
+  .featureIcon svg { width: 20px; height: 20px; }
+  .actionText strong { font-size: 12px; }
+  .actionText small { font-size: 11px; }
+}
+
+@media (max-width: 390px) {
+  .quickActions,
+  .featureActions { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quickCard,
+  .featureCard { transition: none; }
+  .quickCard:hover:not(:disabled),
+  .featureCard:hover:not(:disabled) { transform: none; }
 }
 
 .attention {
