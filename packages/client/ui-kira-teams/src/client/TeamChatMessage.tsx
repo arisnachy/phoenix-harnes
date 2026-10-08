@@ -161,8 +161,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   if (isToolActivity || text.trim() === '') return null
 
   return (
-    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId}
->
+    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId}>
       <div className={css.avatar}>
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
           kind={sender.kind}
