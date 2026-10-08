@@ -156,13 +156,23 @@ export function projectVisualTable(spec: JsonRecord): {
   if (columns.length === 0) return undefined
   const normalize = (key: string): string => key.normalize('NFKD')
     .replace(/[\u0300-\u036f]/gu, '').trim().toLowerCase().replace(/[^a-z0-9]+/gu, '')
+  const aliases: Readonly<Record<string, readonly string[]>> = {
+    estado: ['status', 'state'],
+    conectores: ['connectors', 'connector', 'names', 'name'],
+    conector: ['connector', 'connectors', 'name'],
+    cantidad: ['count', 'total', 'quantity'],
+    herramientas: ['tools', 'toolcount'],
+    diagnostico: ['diagnostic', 'reason', 'reasoncode'],
+  }
   const rows = source.map((entry): readonly unknown[] => {
     if (Array.isArray(entry)) return columns.map((_, index) => entry[index])
     if (!isRecord(entry)) return columns.map(() => undefined)
     const keys = Object.keys(entry)
     return columns.map(column => {
       if (Object.hasOwn(entry, column)) return entry[column]
-      const key = keys.find(candidate => normalize(candidate) === normalize(column))
+      const normalizedColumn = normalize(column)
+      const accepted = [normalizedColumn, ...(aliases[normalizedColumn] ?? [])]
+      const key = keys.find(candidate => accepted.includes(normalize(candidate)))
       return key === undefined ? undefined : entry[key]
     })
   })
