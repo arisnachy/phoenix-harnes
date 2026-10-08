@@ -153,6 +153,24 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     expect(genders).toEqual(['feminine', 'masculine'])
   })
 
+  it('defaults legacy Spanish conversation requests to Dominican Spanish', async () => {
+    const { voice } = await mountVoice()
+    const languages: string[] = []
+    voice.registerTextToSpeechProvider({
+      id: 'kokoro',
+      priority: 100,
+      available: () => true,
+      speak: async request => { languages.push(request.language) },
+    })
+    await expect(voice.conversationSpeak({
+      key: 'assistant:spanish-default',
+      sequence: 0,
+      text: 'La tarea está lista.',
+      final: true,
+    })).resolves.toMatchObject({ accepted: true, provider: 'kokoro' })
+    expect(languages).toEqual(['es-DO'])
+  })
+
   it('uses Kokoro then the platform voice for hands-free conversation fallback', async () => {
     const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural' })
     const natural = vi.fn(() => Promise.resolve())
