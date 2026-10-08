@@ -153,10 +153,12 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
     ? assignmentStatusKey(targetStatus)
     : undefined
   const text = textOf(data.content)
+  const isToolActivity = data.senderKind === 'agent' && data.messageId.startsWith(data.senderId + ':activity:')
   if (text.trim() === '') return null
 
   return (
-    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId}>
+    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId}
+      data-team-activity={isToolActivity ? 'true' : undefined}>
       <div className={css.avatar}>
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
           kind={sender.kind}
