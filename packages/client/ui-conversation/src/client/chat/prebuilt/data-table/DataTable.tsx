@@ -13,20 +13,20 @@ export const DataTable: React.FC<DataTableProps> = ({
   return (
     <div style={{
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      margin: '1rem 0',
+      margin: 0,
       width: '100%',
       overflowX: 'auto',
-      border: '1px solid #e5e7eb',
-      borderRadius: '0.5rem',
-      backgroundColor: '#ffffff',
+      border: '1px solid var(--dsw-alias-border-subtle,rgba(120,120,120,.18))',
+      borderRadius: '0.75rem',
+      backgroundColor: 'var(--dsw-alias-surface-primary,transparent)',
     }}>
       {title && (
         <div style={{
-          padding: '1rem 1.25rem',
-          borderBottom: '1px solid #e5e7eb',
+          padding: '0.75rem 0.875rem',
+          borderBottom: '1px solid var(--dsw-alias-border-subtle,rgba(120,120,120,.18))',
           fontWeight: 600,
-          fontSize: '1rem',
-          color: '#111827',
+          fontSize: '0.8125rem',
+          color: 'var(--dsw-alias-label-primary,inherit)',
         }}>
           {title}
         </div>
@@ -38,9 +38,9 @@ export const DataTable: React.FC<DataTableProps> = ({
         fontSize: '0.875rem',
       }}>
         <thead>
-          <tr style={{ backgroundColor: '#f9fafb', borderBottom: '1px solid #e5e7eb' }}>
+          <tr style={{ backgroundColor: 'var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.045))', borderBottom: '1px solid var(--dsw-alias-border-subtle,rgba(120,120,120,.18))' }}>
             {headers.map((h, i) => (
-              <th key={i} style={{ padding: '0.75rem 1.25rem', fontWeight: 600, color: '#374151' }}>{h}</th>
+              <th key={i} style={{ padding: '0.625rem 0.75rem', fontWeight: 600, color: 'var(--dsw-alias-label-secondary,#777)' }}>{h}</th>
             ))}
           </tr>
         </thead>
@@ -50,7 +50,7 @@ export const DataTable: React.FC<DataTableProps> = ({
               {headers.map((h, colIndex) => {
                 const cellValue = row[h] !== undefined ? row[h] : row[h.toLowerCase()];
                 return (
-                  <td key={colIndex} style={{ padding: '0.75rem 1.25rem', color: '#4b5563' }}>
+                  <td key={colIndex} style={{ padding: '0.75rem 1.25rem', color: 'var(--dsw-alias-label-primary,inherit)' }}>
                     {typeof cellValue === 'boolean' ? (cellValue ? 'Yes' : 'No') : String(cellValue ?? '')}
                   </td>
                 );

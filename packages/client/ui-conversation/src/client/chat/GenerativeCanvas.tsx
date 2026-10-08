@@ -296,8 +296,7 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
     case 'badge': return <span className={css.badge} data-status={node.status}>{node.text}</span>
     case 'metric':
       return <div className={css.prebuiltMetric} data-status={node.status}>
-        <StatCard title={node.label} value={node.value} />
-        {node.detail && <small>{node.detail}</small>}
+        <StatCard title={node.label} value={node.value} detail={node.detail} />
       </div>
     case 'alert':
       return <AlertBox type={node.status === 'positive' ? 'success'

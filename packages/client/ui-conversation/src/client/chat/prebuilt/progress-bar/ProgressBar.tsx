@@ -13,18 +13,18 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
   return (
     <div style={{
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      margin: '0.75rem 0',
+      margin: 0,
       width: '100%',
-      maxWidth: '480px',
+      maxWidth: '100%',
     }}>
       {(label || value !== undefined) && (
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           marginBottom: '0.25rem',
-          fontSize: '0.875rem',
+          fontSize: '0.8125rem',
           fontWeight: 500,
-          color: '#374151',
+          color: 'var(--dsw-alias-label-secondary,#777)',
         }}>
           {label && <span>{label}</span>}
           <span>{value}%</span>
@@ -33,7 +33,7 @@ export const ProgressBar: React.FC<ProgressBarProps> = ({
       <div style={{
         height: '0.5rem',
         width: '100%',
-        backgroundColor: '#e5e7eb',
+        backgroundColor: 'var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.14))',
         borderRadius: '9999px',
         overflow: 'hidden',
       }}>

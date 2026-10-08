@@ -42,19 +42,19 @@ export const AlertBox: React.FC<AlertBoxProps> = ({
   return (
     <div style={{
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      padding: '1rem',
-      borderRadius: '0.5rem',
+      padding: '0.75rem 0.875rem',
+      borderRadius: '0.75rem',
       backgroundColor: config.bg,
       border: `1px solid ${config.border}`,
       color: config.color,
       display: 'flex',
-      gap: '0.75rem',
-      margin: '0.75rem 0',
-      maxWidth: '600px',
+      gap: '0.625rem',
+      margin: 0,
+      maxWidth: '100%',
     }}>
-      <div style={{ fontSize: '1.25rem', userSelect: 'none', lineHeight: 1 }}>{config.icon}</div>
+      <div style={{ fontSize: '1rem', userSelect: 'none', lineHeight: 1 }}>{config.icon}</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-        {title && <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{title}</span>}
+        {title && <span style={{ fontWeight: 600, fontSize: '0.8125rem' }}>{title}</span>}
         <span style={{ fontSize: '0.875rem', lineHeight: 1.5, opacity: 0.9 }}>{message}</span>
       </div>
     </div>

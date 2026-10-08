@@ -28,32 +28,32 @@ export const QuickReplyButtons: React.FC<QuickReplyButtonsProps> = ({
       display: 'flex',
       flexWrap: 'wrap',
       gap: '0.5rem',
-      margin: '0.75rem 0',
+      margin: 0,
     }}>
       {buttons.map((btn) => (
         <button
           key={btn.id}
           onClick={() => onSelect?.(btn.id)}
           style={{
-            padding: '0.5rem 1rem',
+            padding: '0.5rem 0.875rem',
             borderRadius: '9999px',
-            backgroundColor: '#ffffff',
-            border: '1px solid #d1d5db',
-            color: '#374151',
-            fontSize: '0.875rem',
+            backgroundColor: 'var(--dsw-alias-surface-primary,transparent)',
+            border: '1px solid var(--dsw-alias-border-subtle,rgba(120,120,120,.28))',
+            color: 'var(--dsw-alias-label-primary,inherit)',
+            fontSize: '0.8125rem',
             fontWeight: 500,
             cursor: 'pointer',
-            boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+            boxShadow: 'none',
             transition: 'all 0.2s',
             outline: 'none',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = '#f9fafb';
-            e.currentTarget.style.borderColor = '#9ca3af';
+            e.currentTarget.style.backgroundColor = 'var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.08))';
+            e.currentTarget.style.borderColor = 'var(--dsw-alias-border-subtle,rgba(120,120,120,.4))';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = '#ffffff';
-            e.currentTarget.style.borderColor = '#d1d5db';
+            e.currentTarget.style.backgroundColor = 'var(--dsw-alias-surface-primary,transparent)';
+            e.currentTarget.style.borderColor = 'var(--dsw-alias-border-subtle,rgba(120,120,120,.28))';
           }}
         >
           {btn.label}

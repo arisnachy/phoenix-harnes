@@ -3,7 +3,7 @@ import React from 'react';
 // Phoenix validates declarative props before this upstream visual component renders.
 // Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
-export type StatCardProps = { title: string; value: string | number; change?: string | number; trend?: 'up' | 'down' | 'neutral'; icon?: string };
+export type StatCardProps = { title: string; value: string | number; change?: string | number; trend?: 'up' | 'down' | 'neutral'; icon?: string; detail?: string | undefined };
 
 export const StatCard: React.FC<StatCardProps> = ({
   title,
@@ -11,6 +11,7 @@ export const StatCard: React.FC<StatCardProps> = ({
   change,
   trend,
   icon,
+  detail,
 }) => {
   const isUp = trend === 'up';
   const isDown = trend === 'down';
@@ -19,25 +20,29 @@ export const StatCard: React.FC<StatCardProps> = ({
 
   return (
     <div style={{
-      padding: '1.25rem',
-      borderRadius: '0.75rem',
-      backgroundColor: '#ffffff',
-      border: '1px solid #e5e7eb',
-      boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)',
+      padding: '0.875rem 1rem',
+      borderRadius: '0.875rem',
+      backgroundColor: 'var(--dsw-alias-interactive-bg-hover, rgba(120,120,120,.045))',
+      border: '1px solid var(--dsw-alias-border-subtle,rgba(120,120,120,.14))',
+      boxShadow: 'none',
       display: 'flex',
       flexDirection: 'column',
-      gap: '0.5rem',
+      gap: '0.375rem',
       fontFamily: 'system-ui, -apple-system, sans-serif',
-      color: '#1f2937',
-      maxWidth: '320px',
-      margin: '0.5rem 0',
+      color: 'var(--dsw-alias-label-primary,inherit)',
+      maxWidth: 'none',
+      margin: 0,
+      boxSizing: 'border-box',
+      width: '100%',
+      minWidth: 0,
+      height: '100%',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: '0.875rem', color: '#6b7280', fontWeight: 500 }}>{title}</span>
+        <span style={{ fontSize: '0.78rem', color: 'var(--dsw-alias-label-secondary,#777)', fontWeight: 550, lineHeight: 1.35 }}>{title}</span>
         {icon && <span style={{ fontSize: '1.25rem' }}>{icon}</span>}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
-        <span style={{ fontSize: '1.875rem', fontWeight: 700, letterSpacing: '-0.025em' }}>{value}</span>
+        <span style={{ fontSize: 'clamp(1.4rem,2.2vw,1.75rem)', fontWeight: 690, letterSpacing: '-0.025em' }}>{value}</span>
         {change !== undefined && (
           <span style={{
             fontSize: '0.75rem',
@@ -56,6 +61,7 @@ export const StatCard: React.FC<StatCardProps> = ({
           </span>
         )}
       </div>
+      {detail && <small style={{ fontSize: '0.73rem', lineHeight: 1.35, color: 'var(--dsw-alias-label-secondary,#777)' }}>{detail}</small>}
     </div>
   );
 };
