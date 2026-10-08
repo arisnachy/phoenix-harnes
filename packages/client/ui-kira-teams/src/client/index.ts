@@ -131,12 +131,16 @@ export function apply(ctx: ClientContext): void {
       ...reactionInject(sessionId),
       reply(messageId: string, authorId: string, authorName: string, preview: string) {
         const identity = teamIdentityOf(authorName, authorId)
-        selectedReplies.set(sessionId, { messageId, authorId, name: identity.name, preview })
+        const active = activeTeamDesign(parseTeamDesignDocument(teamDesign.getSnapshot().value?.document))
+        const displayName = identity.kind === 'kira'
+          ? active.lead.displayName
+          : active.members.find(member => member.id === identity.kind)?.displayName ?? identity.name
+        selectedReplies.set(sessionId, { messageId, authorId, name: displayName, preview })
         publishReply(sessionId)
         const scope = sessions.scope(sessionId)
         if (scope === undefined) return
         const input = ctx.conversation.input.for(scope)
-        input.setDraft(`${identity.name.includes(' ') ? `@"${identity.name}"` : `@${identity.name}`} ${input.state.getSnapshot().draft}`)
+        input.setDraft(`${displayName.includes(' ') ? `@"${displayName}"` : `@${displayName}`} ${input.state.getSnapshot().draft}`)
       },
     }),
   }, TeamMessageActions))
