@@ -1329,7 +1329,8 @@ export function ConnectorsSettingsSection({ api,
         // remain a reconnect error, not trigger unsolicited reauthorization.
         if (entry !== undefined && method !== undefined
           && (currentRuntime?.status === 'auth-required'
-            || (entry.stored === undefined && method.id === 'oauth'))) {
+            || ((currentRuntime?.status === 'failed' || currentRuntime?.status === 'disconnected')
+              && entry.stored === undefined && method.id === 'oauth'))) {
           begin(entry.key, method.id)
           return
         }
