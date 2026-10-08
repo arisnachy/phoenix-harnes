@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+Authorization preparation and configuration prompts stay in a persistent panel above the connector catalog, independent of search filters and account refreshes. Phoenix opens a tab only for a validated provider consent URL and retains a manual link when popups are blocked. Outcomes remain visible instead of disappearing on a timer; authorization failures appear at the top of the page.
+
 Connectors automatically includes every registered pi-ai model authorization flow, including DeepSeek and newly added providers. It reuses Host account records after restart instead of requesting a second login, preserves disconnect controls, and retries transient authorization-list failures. Installation waits through early MCP connection failures for the bounded authorization-registration window. Registry remotes requiring headers or URL variables show their setup requirement instead of an unusable Install action.
 
 OpenAI Codex authenticates through the official ChatGPT/Codex account flow and never renders an API-key field, including while its authorization flow is unavailable. Its AUTH badge reflects account presence rather than an old API-key reference. Codex appears first when no provider order has been saved; an explicit order takes precedence. The first-run dialog offers Codex sign-in and proceeds to Phoenix after connection; configuring an API provider remains optional.

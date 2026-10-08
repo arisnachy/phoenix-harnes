@@ -1478,6 +1478,13 @@ export function ConnectorsSettingsSection({ api,
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
+      {failure === undefined ? null : <p role="alert" className={styles['error']}>{failure}</p>}
+      {attempt === undefined ? null : (
+        <section className={hubStyles['block']} aria-label={t('signingIn')}>
+          <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
+            submitAnswer={submitAnswer} cancel={cancel} t={t} />
+        </section>
+      )}
       <div className={hubStyles['intelligenceBanner']}>
         <div className={hubStyles['intelligenceIcon']} aria-hidden="true">✦</div>
         <div className={hubStyles['intelligenceCopy']}>
@@ -1617,16 +1624,7 @@ export function ConnectorsSettingsSection({ api,
                       )}
                     </div>
                   </div>
-                  {attempt?.key === entry.key ? (
-                    <AuthorizationAttemptProgress
-                      attempt={attempt}
-                      answer={answer}
-                      setAnswer={setAnswer}
-                      submitAnswer={submitAnswer}
-                      cancel={cancel}
-                      t={t}
-                    />
-                  ) : null}
+
                 </article>
               )
             })}
@@ -1634,7 +1632,7 @@ export function ConnectorsSettingsSection({ api,
         </section>
       )}
 
-      {failure === undefined ? null : <p className={styles['error']}>{failure}</p>}
+
       {catalogFailure === undefined ? null : <p className={styles['error']}>{catalogFailure}</p>}
 
       <section className={hubStyles['block']} aria-label={connectorT('catalog')}>
@@ -1673,16 +1671,6 @@ export function ConnectorsSettingsSection({ api,
                   openClaw={row.openClaw}
                   connected={row.connected}
                   t={connectorT}
-                  authorizationProgress={attempt?.key === authorizationKey ? (
-                    <AuthorizationAttemptProgress
-                      attempt={attempt}
-                      answer={answer}
-                      setAnswer={setAnswer}
-                      submitAnswer={submitAnswer}
-                      cancel={cancel}
-                      t={t}
-                    />
-                  ) : undefined}
                   pending={rowAuthorizationPending || jevBusy
                     || (disconnectingKey !== undefined && disconnectingKey === row.account?.key)}
                   installingCurated={installingCuratedId === row.definition.id}
