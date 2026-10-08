@@ -142,14 +142,16 @@ export async function agentMailRequest(path: string,
   fetcher: typeof fetch,
   body?: unknown,
   idempotencyKey?: string,
-  signal?: AbortSignal): Promise<unknown> {
+  signal?: AbortSignal,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = body === undefined ? 'GET' : 'POST'): Promise<unknown> {
   const response = await fetcher(`https://api.agentmail.to/v0${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
+    method,
     headers: { 'Content-Type': 'application/json', ...(key === undefined ? {} : { Authorization: `Bearer ${key}` }), ...(idempotencyKey === undefined ? {} : { 'Idempotency-Key': agentMailIdempotencyKey(idempotencyKey) }) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     signal: signal === undefined ? AbortSignal.timeout(timeoutMs) : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
   })
   if (!response.ok) throw await responseError(response, key !== undefined)
+  if (response.status === 204) return { ok: true }
   const text = await response.text()
   if (text.length > 2_000_000) throw new Error('mail provider response exceeds limit')
   try { return JSON.parse(text) as unknown } catch { throw new Error('invalid mail provider JSON response') }

@@ -15,6 +15,7 @@ import { MailJournal } from './assistant-mail-journal.ts'
 import { MailOutbox } from './assistant-mail-outbox.ts'
 import { MailReceiver } from './assistant-mail-receiver.ts'
 import { createMailExecutor } from './assistant-mail-executor.ts'
+import { operateKiraMail, type KiraMailOperationInput } from './assistant-mail-management.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 import type { MailAccount, MailDelivery, MailOutgoingOwnership, MailOutgoingMessage } from './assistant-mail-types.ts'
 import type { ProactivityAttentionItem, ProactivityRuntimeConfig } from './proactivity-runtime.ts'
@@ -104,6 +105,8 @@ export interface AssistantMailControl {
   }>
   /** Read the durable mail mission history independently of the email connection. */
   listMailJobs(): Promise<Array<{ id: string; subject: string; from: string; state: string; summary?: string; error?: string }>>
+  /** Manage verified Kira mailbox resources using the official AgentMail v0 API. */
+  manageMail(input: KiraMailOperationInput): Promise<Record<string, unknown>>
 }
 
 class AssistantMailControlService extends Service implements AssistantMailControl {
@@ -120,7 +123,8 @@ class AssistantMailControlService extends Service implements AssistantMailContro
     private readonly replaceEnrollment: AssistantMailControl['replace'],
     private readonly sendAuthorized: AssistantMailControl['sendToAuthorized'],
     private readonly inbox: AssistantMailControl['readInbox'],
-    private readonly jobs: AssistantMailControl['listMailJobs']) {
+    private readonly jobs: AssistantMailControl['listMailJobs'],
+    private readonly manager: AssistantMailControl['manageMail']) {
     super(ctx, 'assistantMail')
   }
   status(): Promise<AssistantMailIdentity> { return this.read() }
@@ -142,6 +146,9 @@ class AssistantMailControlService extends Service implements AssistantMailContro
     return this.inbox(limit, messageId)
   }
   listMailJobs(): ReturnType<AssistantMailControl['listMailJobs']> { return this.jobs() }
+  manageMail(input: KiraMailOperationInput): ReturnType<AssistantMailControl['manageMail']> {
+    return this.manager(input)
+  }
 }
 
 /** Mail host projection consumed by normal home attention. */
@@ -460,6 +467,17 @@ export function installAssistantMail(ctx: Context,
       ...(job.error === undefined ? {} : { error: job.error }),
     }))
   }
+  const manageMail: AssistantMailControl['manageMail'] = (input) => owned(async () => {
+    assertActive()
+    return operateKiraMail({
+      account: () => onboarding.status(),
+      key: resolveKey,
+      jobs: () => journal.list(),
+      timeoutMs: config.timeoutMs,
+      signal: controller.signal,
+      fetcher: fetch,
+    }, input)
+  })
   const delivery = async (key: string): Promise<string | undefined> => {
     const row = (await outbox.list()).find(row => row.reply.idempotencyKey === key)
     if (row === undefined) return undefined
@@ -648,6 +666,7 @@ export function installAssistantMail(ctx: Context,
       sendToAuthorized,
       readInbox,
       listMailJobs,
+      manageMail,
     )
   }
   let connection: HostConnectionHandle | undefined

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createAssistantMailIdentityTool, createAssistantMailSendTool, createAssistantMailInboxTool } from '../src/assistant-mail-tool.ts'
+import { createAssistantMailIdentityTool, createAssistantMailSendTool, createAssistantMailInboxTool, createAssistantMailManageTool } from '../src/assistant-mail-tool.ts'
 import type { AssistantMailControl } from '../src/assistant-mail-runtime.ts'
 
 function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailControl {
@@ -20,6 +20,7 @@ function control(overrides: Partial<AssistantMailControl> = {}): AssistantMailCo
       messages: [{ messageId: 'message-1', from: 'owner@example.com', subject: 'Tarea', preview: 'Informe', taskState: 'replied' }],
     })),
     listMailJobs: overrides.listMailJobs ?? (async () => [{ id: 'job-1', from: 'owner@example.com', subject: 'Tarea', state: 'replied' }]),
+    manageMail: overrides.manageMail ?? (async (input) => ({ action: input.action, ok: true })),
     status: overrides.status ?? (async () => ({
       state: 'ready',
       inboxId: 'kira-real@agentmail.to',
@@ -221,4 +222,17 @@ it('does not fake inbox contents when the Kira mailbox host is missing', async (
   await expect(tool.execute({ action: 'list' }, {} as never)).rejects.toThrow('unavailable')
   await expect(createAssistantMailInboxTool(() => control()).execute({ action: 'read' }, {} as never))
     .rejects.toThrow('message_id')
+})
+
+it('exposes mailbox message management with exact ids and stable manual reply identity', async () => {
+  const manageMail = vi.fn(async (input: { action: string }) => ({ action: input.action, ok: true }))
+  const tool = createAssistantMailManageTool(() => control({ manageMail }))
+  await tool.execute({ action: 'trash', message_id: 'message-10' }, {} as never)
+  expect(manageMail).toHaveBeenCalledWith({ action: 'trash', messageId: 'message-10' })
+  await tool.execute({ action: 'reply', message_id: 'message-10', text: 'Listo' },
+    { agent: { id: 'coordinator' }, callId: 'call:1' } as never)
+  expect(manageMail).toHaveBeenLastCalledWith({
+    action: 'reply', messageId: 'message-10', text: 'Listo',
+    idempotencyKey: 'phoenix-mail-manual-reply-coordinator-call:1',
+  })
 })
