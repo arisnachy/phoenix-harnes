@@ -84,7 +84,7 @@ export function useAuthorizationAttempt(
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
   const navigatedRef = useRef(false)
-  const popupTimeoutRef = useRef<number | undefined>(undefined)
+  const popupTimeoutRef = useRef<(() => void) | undefined>(undefined)
   const oauthAttemptRef = useRef(false)
   const failedPopupRef = useRef(false)
   const activeAttemptIdRef = useRef<string | undefined>(undefined)
@@ -121,10 +121,8 @@ export function useAuthorizationAttempt(
   }, [])
 
   const closeReservedPopup = useCallback((): void => {
-    if (popupTimeoutRef.current !== undefined) {
-      window.clearTimeout(popupTimeoutRef.current)
-      popupTimeoutRef.current = undefined
-    }
+    popupTimeoutRef.current?.()
+    popupTimeoutRef.current = undefined
     const popup = popupRef.current
     popupRef.current = null
     navigatedRef.current = false
@@ -138,10 +136,8 @@ export function useAuthorizationAttempt(
   }, [])
 
   const failReservedPopup = useCallback((message: string): void => {
-    if (popupTimeoutRef.current !== undefined) {
-      window.clearTimeout(popupTimeoutRef.current)
-      popupTimeoutRef.current = undefined
-    }
+    popupTimeoutRef.current?.()
+    popupTimeoutRef.current = undefined
     failedPopupRef.current = true
     showPopupStatus('No se pudo abrir la autorización', message, true)
     setFailure(message)
@@ -181,7 +177,16 @@ export function useAuthorizationAttempt(
       'Conectando con tu proveedor…',
       'PHOENIX está consultando el método de autorización del MCP. Este proceso tiene un límite de espera.',
     )
-    popupTimeoutRef.current = window.setTimeout(() => {
+    // A popup becomes Chrome's foreground tab while PHOENIX is backgrounded.
+    // Use its event loop for the timeout so the waiting message cannot remain
+    // forever if the browser throttles the original tab's timers.
+    let timerHost: Window = window
+    try {
+      if (typeof popup.setTimeout === 'function' && typeof popup.clearTimeout === 'function') timerHost = popup
+    } catch {
+      // Cross-origin isolation or an embedded browser may block the property.
+    }
+    const timeoutId = timerHost.setTimeout(() => {
       if (popupRef.current !== popup || navigatedRef.current) return
       const message = 'El servidor MCP no entregó una URL de autorización. Comprueba la conexión y la configuración del proveedor en PHOENIX.'
       failReservedPopup(message)
@@ -190,6 +195,11 @@ export function useAuthorizationAttempt(
         void api.cancel({ attemptId }).catch(() => undefined)
       }
     }, 45_000)
+    popupTimeoutRef.current = () => {
+      try { timerHost.clearTimeout(timeoutId) } catch {
+        // Browser already navigated and revoked access to the tab.
+      }
+    }
   }, [api, closeReservedPopup, failReservedPopup, showPopupStatus])
 
   const navigateOAuthPopup = useCallback((url: string): void => {
@@ -198,10 +208,8 @@ export function useAuthorizationAttempt(
       failReservedPopup('El proveedor no entregó una URL de autorización HTTPS válida. Se rechazó la navegación.')
       return
     }
-    if (popupTimeoutRef.current !== undefined) {
-      window.clearTimeout(popupTimeoutRef.current)
-      popupTimeoutRef.current = undefined
-    }
+    popupTimeoutRef.current?.()
+    popupTimeoutRef.current = undefined
     const popup = popupRef.current
     if (popup !== null) {
       try {
