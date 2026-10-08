@@ -7,17 +7,17 @@ $ProgressPreference = 'SilentlyContinue'
 if ($env:PHOENIX_KOKORO_AUTO_INSTALL -eq '0' -and -not $Force) { return }
 
 $source = Join-Path $PSScriptRoot 'packages\voice\voice-local\runtime\kokoro-daemon.py'
-$home = Join-Path $env:LOCALAPPDATA 'Phoenix\voice\kokoro'
-$venv = Join-Path $home '.venv'
+$kokoroHome = Join-Path $env:LOCALAPPDATA 'Phoenix\voice\kokoro'
+$venv = Join-Path $kokoroHome '.venv'
 $python = Join-Path $venv 'Scripts\python.exe'
-$daemon = Join-Path $home 'kokoro-daemon.py'
-$model = Join-Path $home 'kokoro-v1.0.onnx'
-$voices = Join-Path $home 'voices-v1.0.bin'
-$ready = Join-Path $home '.ready'
-$failure = Join-Path $home '.install-last-failure'
-$lockPath = Join-Path $home '.install.lock'
+$daemon = Join-Path $kokoroHome 'kokoro-daemon.py'
+$model = Join-Path $kokoroHome 'kokoro-v1.0.onnx'
+$voices = Join-Path $kokoroHome 'voices-v1.0.bin'
+$ready = Join-Path $kokoroHome '.ready'
+$failure = Join-Path $kokoroHome '.install-last-failure'
+$lockPath = Join-Path $kokoroHome '.install.lock'
 $release = 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.1'
-New-Item -ItemType Directory -Force -Path $home | Out-Null
+New-Item -ItemType Directory -Force -Path $kokoroHome | Out-Null
 
 # One live writer; a crashed installer cannot leave a permanent lock.
 $lock = $null
@@ -93,12 +93,13 @@ try {
   if (-not $Force -and (Test-Path -LiteralPath $failure)) {
     if (((Get-Date) - (Get-Item -LiteralPath $failure).LastWriteTime).TotalHours -lt 6) { return }
   }
-  if ((Get-PSDrive -Name ([IO.Path]::GetPathRoot($home).Substring(0,1))).Free -lt 1200000000) {
+  if ((Get-PSDrive -Name ([IO.Path]::GetPathRoot($kokoroHome).Substring(0,1))).Free -lt 1200000000) {
     throw 'Kokoro needs at least 1.2 GB of free space for its isolated environment and model.'
   }
-  $base = Get-Python312
   if (-not (Test-Path -LiteralPath $python -PathType Leaf)) {
-    & $base.Exe @($base.Args) -m venv $venv
+    $base = Get-Python312
+    $pythonArgs = @($base.Args)
+    & $base.Exe @pythonArgs -m venv $venv
     if ($LASTEXITCODE -ne 0) { throw 'Python could not create the Kokoro environment.' }
   }
   & $python -m pip install --disable-pip-version-check --no-input --prefer-binary 'kokoro-onnx' 'misaki-fork[en]' | Out-Null
