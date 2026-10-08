@@ -63,7 +63,7 @@ describe('local voice providers', () => {
     await provider.speak({ text: 'Texto seguro; no se ejecuta como código.', language: 'es-DO' })
     expect(run).toHaveBeenCalledWith(expect.objectContaining({
       command: 'powershell.exe',
-      stdin: 'es-DO\\nTexto seguro; no se ejecuta como código.',
+      stdin: 'es-DO\nTexto seguro; no se ejecuta como código.',
     }))
     expect(run.mock.calls[0]?.[0].args.join(' ')).toContain('-NoProfile')
     expect(run.mock.calls[0]?.[0].args.join(' ')).toContain('GetInstalledVoices')
