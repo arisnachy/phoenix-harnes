@@ -98,6 +98,10 @@ export function ModelSelect(
   const rootRef = useRef<HTMLDivElement | null>(null)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const groupsRef = useRef<HTMLDivElement | null>(null)
+  const [menuPlacement, setMenuPlacement] = useState<{
+    direction: 'above' | 'below'
+    maxHeight: number
+  }>({ direction: 'above', maxHeight: 360 })
   const itemRefs = useRef<(HTMLElement | null)[]>([])
   const id = useId()
 
@@ -162,6 +166,35 @@ export function ModelSelect(
   useEffect(() => {
     if (open && pane === 'effort') return
     setEffortDraftKey(null)
+  }, [open, pane])
+
+  // The model directory may be taller than the available space above the
+  // composer. Clamp it to the actual trigger/viewport geometry before paint,
+  // and flip below the trigger when there is more space there. This prevents
+  // the first model from being hidden outside the top of the browser window.
+  useLayoutEffect(() => {
+    if (!open) return
+    const measureMenu = (): void => {
+      const trigger = triggerRef.current
+      if (trigger === null) return
+      const rect = trigger.getBoundingClientRect()
+      const above = rect.top - 20
+      const below = window.innerHeight - rect.bottom - 20
+      const direction = above >= 180 || above >= below ? 'above' : 'below'
+      const room = direction === 'above' ? above : below
+      const cap = pane === 'model' ? 520 : pane === 'effort' ? 440 : 360
+      const maxHeight = Math.min(cap, Math.max(80, Math.floor(room)))
+      setMenuPlacement(previous => previous.direction === direction && previous.maxHeight === maxHeight
+        ? previous
+        : { direction, maxHeight })
+    }
+    measureMenu()
+    window.addEventListener('resize', measureMenu)
+    window.addEventListener('scroll', measureMenu, true)
+    return () => {
+      window.removeEventListener('resize', measureMenu)
+      window.removeEventListener('scroll', measureMenu, true)
+    }
   }, [open, pane])
 
   // Codex can replace the startup catalog immediately after the model pane opens.
@@ -342,6 +375,12 @@ export function ModelSelect(
             pane === 'effort' && css.effortMenu,
           )}
           role="menu"
+          style={{
+            maxHeight: menuPlacement.maxHeight,
+            ...(menuPlacement.direction === 'below'
+              ? { top: 'calc(100% + 8px)', bottom: 'auto' }
+              : { bottom: 'calc(100% + 8px)', top: 'auto' }),
+          }}
           aria-label={t('menu.aria')}
           aria-busy={state.status === 'loading' || busy}
         >
