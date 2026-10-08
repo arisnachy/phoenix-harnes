@@ -57,6 +57,7 @@ export function ConversationRoot({
   // send; its reason is already localized by whoever raised it.
   const composerBlock = useComposerBlock(block => block)
   const preferredName = useUserProfile(profile => profile.preferredName)
+  const profileInitials = preferredName?.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? '').join('').toUpperCase() || 'PX'
   const proactiveAttention = useProactivityAttention(items => items)
 
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -277,8 +278,7 @@ export function ConversationRoot({
               : renderSlot('conversation.hero.model', { locked: false })}
           </div>
           <button type="button" className={css.heroTopProfile} aria-label="Abrir perfil" onClick={() => { openSettingsSection('profile') }}>
-            AG
-            <span className={css.heroProfileStatus} aria-hidden="true" />
+            {profileInitials}
           </button>
         </div>
       )}
