@@ -77,6 +77,7 @@ export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | Timeli
 export type GenerativeUiSegment =
   | { kind: 'markdown'; text: string }
   | { kind: 'ui'; block: GenerativeUiBlock }
+  | { kind: 'notice'; text: string }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -220,7 +221,7 @@ export function splitGenerativeUiText(
   options: SplitGenerativeUiOptions = {},
 ): GenerativeUiSegment[] {
   const segments: GenerativeUiSegment[] = []
-  const fence = /```generative-ui[ \t]*\r?\n([\s\S]*?)```/g
+  const fence = /```(?:generative-ui|json)[ \t]*\r?\n([\s\S]*?)```/g
   let cursor = 0
   let rendered = 0
 
@@ -237,7 +238,11 @@ export function splitGenerativeUiText(
         parsed = null
       }
     }
-    if (parsed === null) appendMarkdown(segments, raw)
+    if (parsed === null) {
+      if (/"component"\s*:\s*"ui_canvas"/.test(body ?? ''))
+        segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
+      else appendMarkdown(segments, raw)
+    }
     else {
       segments.push({ kind: 'ui', block: parsed })
       rendered += 1
@@ -247,15 +252,81 @@ export function splitGenerativeUiText(
 
   let tail = text.slice(cursor)
   if (options.streaming === true) {
-    const unfinishedFence = tail.lastIndexOf('```generative-ui')
+    const lastJsonFence = tail.lastIndexOf('```json')
+    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"ui_canvas"/.test(tail.slice(lastJsonFence))
+      ? lastJsonFence : -1
+    const unfinishedFence = Math.max(tail.lastIndexOf('```generative-ui'), relevantJson)
     if (unfinishedFence >= 0) tail = tail.slice(0, unfinishedFence)
   }
   appendMarkdown(segments, tail)
 
-  if (segments.length > 0) return segments
-  return options.streaming === true && text.includes('```generative-ui')
+  const normalized = expandRawCanvases(segments, options.streaming === true)
+  if (normalized.length > 0) return normalized
+  return options.streaming === true && (text.includes('```generative-ui') || text.includes('```json'))
     ? []
     : [{ kind: 'markdown', text }]
+}
+
+/**
+ * Models often emit raw JSON rather than the special fenced format. Accept a
+ * bounded, balanced top-level canvas object at the start of a line, even with
+ * introductory or following prose. Do not interpret generic JSON as UI.
+ */
+function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean): GenerativeUiSegment[] {
+  const result: GenerativeUiSegment[] = []
+  let count = segments.filter(segment => segment.kind === 'ui').length
+  for (const segment of segments) {
+    if (segment.kind !== 'markdown' || !segment.text.includes('"component"') || segment.text.includes('```')) {
+      result.push(segment)
+      continue
+    }
+    const source = segment.text
+    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"ui_canvas"/gm
+    let cursor = 0
+    for (const match of source.matchAll(startPattern)) {
+      if (count >= MAX_UI_BLOCKS) break
+      const start = (match.index ?? 0) + (match[0]?.indexOf('{') ?? 0)
+      if (start < cursor) continue
+      let nesting = 0
+      let stringMode = false
+      let escaped = false
+      let end = -1
+      for (let i = start; i < source.length && i - start <= 100_000; i++) {
+        const ch = source[i]
+        if (stringMode) {
+          if (escaped) escaped = false
+          else if (ch === '\\') escaped = true
+          else if (ch === '"') stringMode = false
+        } else if (ch === '"') stringMode = true
+        else if (ch === '{') nesting += 1
+        else if (ch === '}') {
+          nesting -= 1
+          if (nesting === 0) { end = i + 1; break }
+        }
+      }
+      appendMarkdown(result, source.slice(cursor, start))
+      if (end === -1 && streaming) {
+        cursor = source.length // hide unfinished machine representation
+        break
+      }
+      if (end === -1) {
+        result.push({ kind: 'notice', text: 'La interfaz llegó incompleta. Pide a Kira que la actualice.' })
+        cursor = source.length
+        break
+      }
+      let block: GenerativeUiBlock | null = null
+      try { block = parseGenerativeUiBlock(JSON.parse(source.slice(start, end))) } catch { /* invalid UI */ }
+      if (block === null)
+        result.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
+      else {
+        result.push({ kind: 'ui', block })
+        count += 1
+      }
+      cursor = end
+    }
+    appendMarkdown(result, source.slice(cursor))
+  }
+  return result
 }
 
 const Initial = ({ label, symbol }: EventSide) => (

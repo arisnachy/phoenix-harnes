@@ -109,6 +109,81 @@ describe('Phoenix intelligent UI canvas', () => {
     expect(handle).toHaveBeenCalledWith('diagnosticar Notion', 'submit')
   })
 
+  it('accepts real-world text-only select options and preserves safe validation', () => {
+    const data = sample()
+    const select = { type: 'select', id: 'mcp-status', label: 'Estado', value: 'Todos',
+      options: ['Todos', 'Listo', 'Requiere autorización', 'Fallido'] }
+    const block = parseCanvasSpec({ ...data, props: { ...data.props, children: [select] } })
+    if (block === null) throw new Error('select shorthand rejected')
+    expect(block.props.children[0]).toMatchObject({ options: [
+      { label: 'Todos', value: 'Todos' }, { label: 'Listo', value: 'Listo' },
+      { label: 'Requiere autorización', value: 'Requiere autorización' },
+      { label: 'Fallido', value: 'Fallido' },
+    ] })
+    expect(parseCanvasSpec({ ...data, props: { ...data.props, children: [{
+      ...select, options: ['Todos', { label: 'X', value: 'X', onClick: 'bad' }],
+    }] } })).toBeNull()
+  })
+
+  it('renders raw JSON and a normal json fence without showing machine markup', () => {
+    const data = sample()
+    const json = JSON.stringify(data, null, 2)
+    expect(splitGenerativeUiText(json).map(item => item.kind)).toEqual(['ui'])
+    expect(splitGenerativeUiText('Resultado:\n' + json + '\nSiguiente paso.').map(item => item.kind))
+      .toEqual(['markdown','ui','markdown'])
+    expect(splitGenerativeUiText('```json\n' + json + '\n```').map(item => item.kind)).toEqual(['ui'])
+  })
+
+  it('hides unfinished raw JSON during streaming, rather than dumping it into chat', () => {
+    const json = JSON.stringify(sample(), null, 2)
+    expect(splitGenerativeUiText(json.slice(0, json.length - 5), { streaming: true })).toEqual([])
+    expect(splitGenerativeUiText(json, { streaming: true }).map(item => item.kind)).toEqual(['ui'])
+  })
+
+  it('shows a clean notice instead of exposing malformed canvas JSON', () => {
+    const malformed = JSON.stringify({ component: 'ui_canvas', version: 1, props: {
+      title: 'Unsafe', children: [{ type: 'button', label: 'Run', prompt: 'x', onclick: 'evil' }],
+    } }, null, 2)
+    const segments = splitGenerativeUiText(malformed)
+    expect(segments.map(item => item.kind)).toEqual(['notice'])
+    expect(JSON.stringify(segments)).not.toContain('onclick')
+  })
+
+  it('filters an MCP inventory locally with text, status, and Apply filters without a model call', () => {
+    const data = sample()
+    const spec = parseCanvasSpec({ ...data, props: {
+      ...data.props,
+      children: [
+        { type: 'group', layout: 'row', children: [
+          { type: 'input', id: 'mcp-search', label: 'Buscar servidor', value: '' },
+          { type: 'select', id: 'mcp-status', label: 'Estado', value: 'Todos',
+            options: ['Todos', 'Listo', 'Requiere autorización', 'Fallido'] },
+          { type: 'button', label: 'Aplicar filtros', prompt: 'Filtra la tabla usando los controles', action: 'submit' },
+        ] },
+        { type: 'table', columns: ['Servidor','Estado','Transporte','Herramientas','Siguiente paso'], rows: [
+          ['notion','Requiere autorización','streamable-http','0','Autorizar'],
+          ['figma','Fallido · connection-failed','streamable-http','0','Revisar'],
+          ['devpost','Listo','streamable-http','24','Usar'],
+        ] },
+      ],
+    } })
+    if (spec === null) throw new Error('inventory rejected')
+    const onAction = vi.fn()
+    const { container } = render(<GenerativeCanvas spec={spec} onAction={onAction} />)
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(3)
+    fireEvent.change(screen.getByRole('textbox', { name: 'Buscar servidor' }), { target: { value: 'fig' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1)
+    expect(screen.getByText('figma')).not.toBeNull()
+    expect(onAction).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Buscar servidor' }), { target: { value: '' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Estado' }), { target: { value: 'Requiere autorización' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }))
+    expect(container.querySelectorAll('tbody tr')).toHaveLength(1)
+    expect(screen.getByText('notion')).not.toBeNull()
+    expect(onAction).not.toHaveBeenCalled()
+  })
+
   it('renders the validated canvas through the existing assistant UI bridge', () => {
     const block = parseGenerativeUiBlock(sample())
     if (block === null) throw new Error('fixture is invalid')

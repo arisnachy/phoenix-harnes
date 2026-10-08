@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo } from 'react'
 import type { ChatNodeViewProps, TurnTailOwnerProps } from '../contract/slots.ts'
 import { AssistantMarkdown } from './AssistantMarkdown.tsx'
+import { splitGenerativeUiText } from './GenerativeUi.tsx'
 import { assistantText } from './turn-assistant.ts'
 import { streamVoiceAssistantResponse } from '../voice.ts'
 
@@ -16,15 +17,20 @@ export const AssistantNodeView = memo(function AssistantNodeView({
     if (mode === 'submit') inputActions.submit()
   }, [inputActions])
   const responseText = useMemo(() => assistantText(data.blocks), [data.blocks])
+  // Voice must never read declarative machine payloads aloud.
+  const spokenText = useMemo(() => splitGenerativeUiText(
+    responseText, { streaming: data.status === 'running' },
+  ).map(segment => segment.kind === 'ui' ? segment.block.props.title
+    : segment.text).join('\n').trim(), [responseText, data.status])
   useEffect(() => {
-    if (responseText === '') return
+    if (spokenText === '') return
     streamVoiceAssistantResponse(
       `assistant:${data.turn}:${data.step}`,
-      responseText,
+      spokenText,
       data.time,
       data.status !== 'running',
     )
-  }, [data.status, data.step, data.time, data.turn, responseText])
+  }, [data.status, data.step, data.time, data.turn, spokenText])
   const turn = node.location.kind === 'turn' || node.location.kind === 'step'
     ? node.location.turn
     : undefined
