@@ -1,4 +1,5 @@
 import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { admitVisualChart } from './visual-chart-contract.ts'
 
 const VISUAL_TYPES = ['chart', 'table', 'metrics', 'timeline', 'cards', 'progress', 'visual'] as const
 
@@ -19,7 +20,7 @@ function requestsCurrentConnectorStatus(title: string): boolean {
 export function createPhoenixVisualizerTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_visualize',
-    description: 'Present structured information as a rich inline Phoenix visual only from real populated data. Tables accept columns with rows as arrays or keyed objects. Never pass blank placeholder rows or headers without verified data. For current connector/MCP status, use connector_list with target=mcp instead: it emits a truthful live status visual. phoenix_visualize rejects live MCP status summaries even when they contain apparently populated rows; do not construct or duplicate these tables. Prefer this over ASCII charts or dumping visualization JSON into prose. This tool is for data/structure only: never use it to imitate a requested photo, illustration, logo, hero, banner, or generated image with shapes or SVG-like artwork; use image_generation for real raster imagery. The visual is declarative and presentation-only.',
+    description: 'Present structured information as a rich inline Phoenix visual. For a simple line chart with explicitly fictional/sample data, use one direct phoenix_visualize call: title="Tendencia de ejemplo", visual={visualType:"chart",chartType:"line",demo:true}. It generates 7 clearly labeled simulated points locally; NO hardness_run, subagents, search, file writes or extra visual review are needed. For real charts, supply xKey, series and populated numeric data: {visualType:"chart",chartType:"line",xKey:"mes",series:[{dataKey:"valor",label:"Valor"}],data:[{mes:"Ene",valor:10},{mes:"Feb",valor:17}]}. Invalid or empty charts are rejected before publishing. Tables accept columns with rows as arrays or keyed objects. Never pass blank placeholder rows or headers without verified data. For current connector/MCP status, use connector_list with target=mcp instead: it emits a truthful live status visual. phoenix_visualize rejects live MCP status summaries even when they contain apparently populated rows; do not construct or duplicate these tables. Prefer this over ASCII charts or dumping visualization JSON into prose. This tool is for data/structure only: never use it to imitate a requested photo, illustration, logo, hero, banner, or generated image with shapes or SVG-like artwork; use image_generation for real raster imagery. The visual is declarative and presentation-only.',
     parameters: {
       title: {
         type: 'string',
@@ -38,7 +39,7 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
             description: 'Primary renderer: chart, table, metrics, timeline, cards, progress, or visual.',
           },
         },
-        description: 'Declarative Phoenix visual specification. Charts accept chartType, xKey, series, and data; other kinds accept their matching arrays such as metrics, rows, timeline, cards, or progress.',
+        description: 'Declarative Phoenix visual specification. For an explicitly fictional chart use chartType:"line" and demo:true to generate labeled synthetic data without another tool. Real charts accept chartType, xKey, series, and numeric data; other kinds accept their matching arrays such as metrics, rows, timeline, cards, or progress.',
       },
     },
     output: {
@@ -48,6 +49,7 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
         properties: {
           artifactId: { type: 'string', required: true },
           title: { type: 'string', required: true },
+          visual: { type: 'json' },
         },
       },
       render: (_args, value) => [{
@@ -59,7 +61,7 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
           id: String(value.artifactId),
           mime: 'application/vnd.phoenix.visual+json',
           title: String(value.title),
-          data: args.visual,
+          data: value.visual ?? args.visual,
           executable: false,
         },
       }),
@@ -74,7 +76,11 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
             + 'Do not use phoenix_visualize to reproduce or invent MCP status tables.',
         ])
       }
-      const spec = args.visual
+      const admitted = admitVisualChart(args.visual)
+      if (admitted.spec === undefined) {
+        throw new ToolArgsError([admitted.error ?? 'Especificación de gráfica inválida.'])
+      }
+      const spec = admitted.spec
       const table = spec.visualType === 'table' || (spec.visualType === 'visual'
         && Array.isArray(spec.columns) && (Array.isArray(spec.rows) || Array.isArray(spec.data)))
       if (table) {
@@ -95,6 +101,7 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
       return {
         artifactId: `phoenix-visual:${String(exec.callId)}`,
         title,
+        ...(spec === args.visual ? {} : { visual: spec }),
       }
     },
     presentCall(args) {
