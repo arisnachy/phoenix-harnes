@@ -953,8 +953,6 @@ export function ConnectorsSettingsSection({ api,
     answer,
     setAnswer,
     failure,
-    reserveOAuthPopup,
-    closeOAuthPopup,
     begin,
     submitAnswer,
     cancel,
@@ -1246,15 +1244,11 @@ export function ConnectorsSettingsSection({ api,
     const reconnect = registry?.reconnect?.bind(registry)
     if (registry === undefined || reconnect === undefined || reconnectingServerName !== undefined) return
     const recoverAuthorization = runtime.status === 'auth-required'
-    // Browser popup policy requires window.open() to happen in the original
-    // click stack. The MCP authorization flow may register only after this
-    // reconnect finishes, so reserve the blank tab now and navigate it later.
-    if (recoverAuthorization) reserveOAuthPopup()
+    // Stay in Conectores while reconnecting; no temporary waiting tab.
     setCatalogFailure(undefined)
     setReconnectingServerName(runtime.serverName)
     void reconnect({ serverName: runtime.serverName }).then(async (result) => {
       if (!result.accepted) {
-        if (recoverAuthorization) closeOAuthPopup()
         setCatalogFailure(connectorT('reconnectRequiredStatus'))
         return
       }
@@ -1262,7 +1256,6 @@ export function ConnectorsSettingsSection({ api,
       onAuthorized()
       if (!recoverAuthorization) return
       if (api === undefined) {
-        closeOAuthPopup()
         return
       }
 
@@ -1277,7 +1270,6 @@ export function ConnectorsSettingsSection({ api,
         setEntries(allEntries)
         const currentRuntime = snapshot.runtime.find(entry => entry.serverName === runtime.serverName)
         if (currentRuntime?.status === 'ready') {
-          closeOAuthPopup()
           return
         }
         const entry = allEntries.find(candidate => candidate.key === expectedKey)
@@ -1287,10 +1279,8 @@ export function ConnectorsSettingsSection({ api,
           return
         }
       }
-      closeOAuthPopup()
       setCatalogFailure(connectorT('reconnectRequiredStatus'))
     }).catch((error: unknown) => {
-      if (recoverAuthorization) closeOAuthPopup()
       setCatalogFailure(String(error))
     }).finally(() => { setReconnectingServerName(undefined) })
   }
