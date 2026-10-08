@@ -90,7 +90,7 @@ export function useAuthorizationAttempt(
   }, [])
 
   useEffect(() => {
-    if (api === undefined || attempt?.status !== 'pending') return
+    if (api === undefined || attempt?.status !== 'pending' || !attempt.id) return
     let stale = false
     const timer = window.setTimeout(() => {
       void api.status({ attemptId: attempt.id, after: attempt.nextSeq }).then((response) => {
@@ -143,7 +143,7 @@ export function useAuthorizationAttempt(
   // The watchdog stops for a provider prompt or once consent was published: the
   // person has unlimited time to complete their login at the external provider.
   useEffect(() => {
-    if (api === undefined || attempt?.status !== 'pending'
+    if (api === undefined || attempt?.status !== 'pending' || !attempt.id
       || attempt.url !== undefined || attempt.prompt !== undefined) return
     const id = attempt.id
     const timer = window.setTimeout(() => {
