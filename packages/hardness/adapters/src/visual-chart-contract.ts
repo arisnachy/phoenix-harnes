@@ -34,11 +34,13 @@ function fromLabels(spec: Visual): Visual | undefined {
   if (!Array.isArray(spec.labels) || !Array.isArray(spec.values)
     || spec.labels.length < 1 || spec.labels.length !== spec.values.length
     || !spec.values.every(finite)) return undefined
+  const labels = spec.labels as unknown[]
+  const values = spec.values as number[]
   return {
     ...spec, visualType: 'chart', xKey: 'label',
     series: [{ dataKey: 'value', label: nonempty(spec.seriesName) ? spec.seriesName : 'Valor' }],
-    data: spec.labels.map((label, index) => ({
-      label: String(label), value: spec.values[index] as number,
+    data: labels.map((label, index) => ({
+      label: String(label), value: values[index],
     })),
   }
 }
@@ -47,14 +49,15 @@ function fromChartJs(spec: Visual): Visual | undefined {
   const payload = isRecord(spec.data) ? spec.data : undefined
   if (payload === undefined || !Array.isArray(payload.labels) || !Array.isArray(payload.datasets)
     || payload.labels.length === 0 || payload.datasets.length === 0 || payload.datasets.length > 8) return undefined
+  const labels = payload.labels as unknown[]
   const datasets = payload.datasets
   if (!datasets.every(dataset => isRecord(dataset) && Array.isArray(dataset.data)
-    && dataset.data.length === payload.labels.length && dataset.data.every(finite))) return undefined
+    && dataset.data.length === labels.length && dataset.data.every(finite))) return undefined
   const series = datasets.map((dataset, index) => ({
     dataKey: `series${index+1}`,
     label: isRecord(dataset) && nonempty(dataset.label) ? dataset.label : `Serie ${index+1}`,
   }))
-  const data = payload.labels.map((label, rowIndex) => {
+  const data = labels.map((label, rowIndex) => {
     const row: Record<string, unknown> = { label: String(label) }
     for (const [index, dataset] of datasets.entries()) {
       if (isRecord(dataset) && Array.isArray(dataset.data)) row[`series${index+1}`] = dataset.data[rowIndex]
