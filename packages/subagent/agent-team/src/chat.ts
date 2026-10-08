@@ -201,6 +201,7 @@ export class TeamChat {
    */
   private publishToolActivity(
     root: Session, header: SessionHeader, events: readonly SessionEvent[], person: TeamChatParticipant,
+    existing: readonly TeamChatMessage[],
   ): void {
     const turn = events.findLast(event => event.type === 'turn/start')
     const cutoff = Math.max(header.seedLength ?? 0, turn?.seq ?? 0)
@@ -232,7 +233,7 @@ export class TeamChat {
       + ' error(es), ' + inFlight + ' en curso.\nÚltima herramienta: ' + toolName + ' (' + lastStatus + ').'
     const text = boundedTranscriptText(summary, this.maxBytes)
     const id = header.id + ':activity:' + String(turn?.seq ?? cutoff)
-    const previous = this.messages(root).find(row => row.id === id)
+    const previous = existing.find(row => row.id === id)
     if (previous?.text === text) return
     const first = observed[0] as (typeof observed)[number]
     root.append('team/chat-message', { version: 1, ...(previous === undefined ? {} : { update: true }),
@@ -250,7 +251,8 @@ export class TeamChat {
     if (header.parentSession !== root.id || (header.origin !== 'subagent' && foldSubagentDescriptor(events.slice(header.seedLength ?? 0)) === undefined)) return
     await this.journal.transact(root.id, async () => {
       this.assertLive(root)
-      const known = new Set(this.messages(root).map(row => row.id))
+      const existing = this.messages(root)
+      const known = new Set(existing.map(row => row.id))
       const end = events.findLast(event => event.type === 'turn/start' || event.type === 'turn/end')
       const prior = this.participants(root).get(header.id)
       const status = end?.type === 'turn/end' ? end.data.reason.kind === 'error' ? 'failed' : 'done'
@@ -284,7 +286,7 @@ export class TeamChat {
           time: event.time, sourceSeq: event.seq, mentions: [], reactions: [] } })
         known.add(id)
       }
-      this.publishToolActivity(root, header, events, person)
+      this.publishToolActivity(root, header, events, person, existing)
       await this.ctx.sessions.flush(root)
     })
   }
