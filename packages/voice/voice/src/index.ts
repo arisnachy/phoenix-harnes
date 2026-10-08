@@ -233,11 +233,70 @@ export function displayOutputToVoiceText(displayOutput: string, maxChars = 480):
   return (sentenceEnd > 0 ? prefix.slice(0, sentenceEnd + 1) : prefix).trim()
 }
 
+
+/** Use PHOENIX's persisted panel locale, not the machine's TTS defaults. */
+export function voiceLanguageForPanel(locale: unknown, fallback = 'es-DO'): string {
+  if (locale === 'es') return 'es-DO'
+  if (locale === 'en') return 'en-US'
+  if (locale === 'zh') return 'zh-CN'
+  return fallback
+}
+
+/** The Host has only the user's explicitly selected locale, never browser globals. */
+function panelVoiceLanguage(ctx: Context, fallback: string): string {
+  const settings = (ctx as unknown as {
+    get(name: string): { describe?: () => readonly { ns: string; user?: unknown }[] } | undefined
+  }).get('settings')
+  try {
+    const locale = settings?.describe?.().find(row => row.ns === 'locale')?.user
+    if (isRecord(locale)) return voiceLanguageForPanel(locale.preference, fallback)
+  } catch {
+    // Settings is optional during initial boot; voice must remain available.
+  }
+  return fallback
+}
+
+const EVENT_COPY: Record<string, Record<VoiceEventKind, string>> = {
+  es: {
+    'mission-completed': 'La tarea está lista y ha pasado la revisión.',
+    discovery: 'Encontré una novedad importante.',
+    blocked: 'Necesito tu ayuda para continuar con la tarea.',
+    help: 'Necesito tu ayuda para continuar.',
+    authorization: 'Necesito tu autorización para continuar.',
+  },
+  en: {
+    'mission-completed': 'The task is complete and has passed review.',
+    discovery: 'I found an important update.',
+    blocked: 'I need your input before I can continue with the task.',
+    help: 'I need your help to continue.',
+    authorization: 'I need your approval before I can continue.',
+  },
+  zh: {
+    'mission-completed': '任务已完成并通过审核。',
+    discovery: '我发现了一项重要更新。',
+    blocked: '我需要你的帮助才能继续执行任务。',
+    help: '我需要你的帮助才能继续。',
+    authorization: '继续之前需要你的授权。',
+  },
+}
+
+/** Never pronounce a conspicuously different language with the panel voice. */
+export function localizedImportantSpeech(event: VoiceImportantEvent, language: string): string {
+  const locale = language.toLowerCase().split('-')[0] ?? 'es'
+  const text = displayOutputToVoiceText(event.displayOutput)
+  const containsHan = /[\\p{Script=Han}]/u.test(text)
+  const english = /\\b(?:everything|all is ready|ready|the task|task is|completed|finished|approval|i need|before i|continue|found|successfully|waiting for)\\b/i.test(text)
+  const spanish = /\\b(?:la tarea|está lista|terminad[oa]|completad[oa]|necesito|autorización|continuar|encontré|revisión|aprobación)\\b/i.test(text)
+  const incompatible = locale === 'zh' ? !containsHan
+    : containsHan || (locale === 'es' ? english && !spanish : spanish && !english)
+  return incompatible ? (EVENT_COPY[locale] ?? EVENT_COPY.es)![event.kind] : text
+}
+
 /** Return one event only when it is an explicitly speakable important event.
  * @param input - untrusted session event candidate.
  * @returns a normalized important voice event, or undefined.
  */
-export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | undefined {
+export function sessionEventToVoiceEvent(input: unknown, language = 'es-DO'): VoiceImportantEvent | undefined {
   if (!isRecord(input) || typeof input.type !== 'string' || !isRecord(input.data)) return undefined
   const data = input.data
   const id = stringValue(data.id) ?? stringValue(data.goalId) ?? 'event'
@@ -246,25 +305,28 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
     case 'approval/asked':
       return {
         kind: 'authorization',
-        displayOutput: 'I need your approval before I can continue.',
+        displayOutput: (EVENT_COPY[language.split('-')[0] ?? 'es'] ?? EVENT_COPY.es)!.authorization,
+        language,
         dedupeKey: `authorization:${id}`,
       }
     case 'goal/judge': {
       const verdict = data.verdict
       const summary = naturalEventSummary(data.summary)
+      const sameLanguage = stringValue(data.language)?.split('-')[0] === language.split('-')[0]
+      const localized = EVENT_COPY[language.split('-')[0] ?? 'es'] ?? EVENT_COPY.es
       if (verdict === 'pass') {
         return {
           kind: 'mission-completed',
-          displayOutput: summary ?? 'The task is complete and has passed review.',
+          displayOutput: sameLanguage && summary !== undefined ? summary : localized!['mission-completed'],
+          language,
           dedupeKey: `completed:${id}:${revision}`,
         }
       }
       if (verdict === 'blocked') {
         return {
           kind: 'blocked',
-          displayOutput: summary === undefined
-            ? 'I need your input before I can continue with the task.'
-            : `I need your input before I can continue. ${summary}`,
+          displayOutput: sameLanguage && summary !== undefined ? summary : localized!.blocked,
+          language,
           dedupeKey: `blocked:${id}:${revision}`,
         }
       }
@@ -274,7 +336,8 @@ export function sessionEventToVoiceEvent(input: unknown): VoiceImportantEvent | 
       if (data.status !== 'blocked' && data.nextAction !== 'blocked') return undefined
       return {
         kind: 'blocked',
-        displayOutput: 'I need your input before I can continue with the task.',
+        displayOutput: (EVENT_COPY[language.split('-')[0] ?? 'es'] ?? EVENT_COPY.es)!.blocked,
+        language,
         dedupeKey: `blocked:${id}:${revision}`,
       }
     default:
@@ -354,7 +417,7 @@ function compactRealtimeContextText(text: string, limit: number): string {
 export class VoiceRuntime extends TypertRemoteService {
   static Config: z<VoiceRuntimeConfig> = z.object({
     enabled: z.boolean().default(true),
-    language: z.string().default('en-US'),
+    language: z.string().default('es-DO'),
     maxQueue: z.number().default(3),
     maxChars: z.number().default(480),
     ttsProvider: z.string(),
@@ -377,7 +440,7 @@ export class VoiceRuntime extends TypertRemoteService {
     super(ctx, 'voice')
     this.config = {
       enabled: config.enabled ?? true,
-      language: config.language?.trim() || 'en-US',
+      language: config.language?.trim() || 'es-DO',
       maxQueue: positiveInteger(config.maxQueue ?? 3, 'maxQueue'),
       maxChars: positiveInteger(config.maxChars ?? 480, 'maxChars'),
       ...config.ttsProvider?.trim() ? { ttsProvider: config.ttsProvider.trim() } : {},
@@ -386,7 +449,7 @@ export class VoiceRuntime extends TypertRemoteService {
     }
     ctx.on('voice/important', (event) => { void this.announce(event) })
     ctx.on('session/event', (_session, event) => {
-      const important = sessionEventToVoiceEvent(event)
+      const important = sessionEventToVoiceEvent(event, panelVoiceLanguage(this.ctx, this.config.language))
       if (important !== undefined) void this.announce(important)
     })
     ctx.effect(() => () => { this.stop() }, 'voice queue teardown')
@@ -553,7 +616,7 @@ export class VoiceRuntime extends TypertRemoteService {
     channel.lastSequence = request.sequence
     const controller = new AbortController()
     channel.controllers.add(controller)
-    const language = request.language?.trim() || this.config.language
+    const language = request.language?.trim() || panelVoiceLanguage(this.ctx, this.config.language)
     const final = request.final === true
     const currentChannel = channel
     let spokenProvider = provider.id
@@ -635,7 +698,8 @@ export class VoiceRuntime extends TypertRemoteService {
     const id = randomUUID() as VoiceAnnouncementId
     if (!this.config.enabled) return { id, accepted: false, reason: 'disabled' }
     if (!isVoiceEventKind(event.kind)) return { id, accepted: false, reason: 'not-important' }
-    const text = displayOutputToVoiceText(event.displayOutput, this.config.maxChars)
+    const language = panelVoiceLanguage(this.ctx, this.config.language)
+    const text = displayOutputToVoiceText(localizedImportantSpeech(event, language), this.config.maxChars)
     if (text === '') return { id, accepted: false, reason: 'empty' }
     // Never mix the browser/system TTS voice into an active native Codex call.
     // The browser realtime surface (or the finalized harness answer) owns these
@@ -878,7 +942,7 @@ export class VoiceRuntime extends TypertRemoteService {
         try {
           await this.speakThroughProviders(
             item.text,
-            item.event.language ?? this.config.language,
+            panelVoiceLanguage(this.ctx, this.config.language),
             item.controller.signal,
             providers,
           )
