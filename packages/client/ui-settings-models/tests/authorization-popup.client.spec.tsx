@@ -24,11 +24,18 @@ interface ReservedWindow {
   closed: boolean
   close: ReturnType<typeof vi.fn>
   postMessage: ReturnType<typeof vi.fn>
+  document: Document
   location: { replace: ReturnType<typeof vi.fn> }
 }
 
 function reservedWindow(): ReservedWindow {
-  return { closed: false, close: vi.fn(), postMessage: vi.fn(), location: { replace: vi.fn() } }
+  return {
+    closed: false,
+    close: vi.fn(),
+    postMessage: vi.fn(),
+    document: document.implementation.createHTMLDocument(''),
+    location: { replace: vi.fn() },
+  }
 }
 
 const KEY = 'mcp-client/linear-linear'
@@ -165,7 +172,7 @@ describe('authorization consent window', () => {
     } finally { open.mockRestore() }
   })
 
-  it('closes a reserved popup and reports start failure in Phoenix', async () => {
+  it('shows the actual startup failure inside the existing tab instead of leaving it on Conectando', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     const api = panelApi(pendingForever)
@@ -174,10 +181,35 @@ describe('authorization consent window', () => {
       renderPanel(api)
       await clickAuthorize()
       await waitFor(() => {
-        expect(reserved.close).toHaveBeenCalled()
+        expect(reserved.document.title).toContain('Autorización no iniciada')
       })
+      expect(reserved.document.body.textContent).toContain('No se pudo abrir la autorización')
+      expect(reserved.document.body.textContent).toContain('Error: connector unavailable')
       expect(screen.getByText('Error: connector unavailable')).toBeTruthy()
-      expect(reserved.postMessage).not.toHaveBeenCalled()
+      expect(reserved.close).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
+
+  it('renders pending backend notices and the safe failure status in the same browser tab', async () => {
+    const reserved = reservedWindow()
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    let calls = 0
+    const api = panelApi(async () => {
+      calls += 1
+      return calls === 1
+        ? ok({ attemptId: 'attempt-1', status: 'pending' as const, nextSeq: 1,
+          notices: [{ notice: { message: 'Preparando autorización de Cloudflare…' } }] })
+        : ok({ attemptId: 'attempt-1', status: 'failed' as const, nextSeq: 1,
+          notices: [], error: 'El MCP no entregó una URL de autorización en 38 segundos.' })
+    })
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => { expect(reserved.document.body.textContent).toContain('Esperando enlace de autorización') }, { timeout: 2500 })
+      await waitFor(() => { expect(reserved.document.body.textContent).toContain('38 segundos') }, { timeout: 3500 })
+      expect(reserved.document.title).toContain('Autorización no iniciada')
+      expect(reserved.close).not.toHaveBeenCalled()
+      expect(open).toHaveBeenCalledTimes(1)
     } finally { open.mockRestore() }
   })
 
