@@ -368,3 +368,23 @@
     animation: none;
   }
 }
+
+/* A quieter navigation surface, retaining all existing workspace controls. */
+.root:not(.collapsed) {
+  padding-inline: 12px;
+}
+.root:not(.collapsed) .logoRow {
+  margin-bottom: 10px;
+}
+.root:not(.collapsed) .newSession {
+  min-height: 42px;
+  margin-bottom: 14px;
+  padding-inline: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 13px;
+  background: var(--dsw-specific-input-major);
+  font-weight: 500;
+}
+.root:not(.collapsed) .newSession:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}

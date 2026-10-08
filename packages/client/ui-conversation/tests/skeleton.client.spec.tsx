@@ -307,6 +307,25 @@ describe('Hero chrome', () => {
 })
 
 describe('ConversationRoot resident composer', () => {
+  it('puts a welcome action in the current draft without submitting a turn', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
+    fireEvent.click(b.view.getByRole('button', { name: 'Crear' }))
+    const box = b.view.getByRole('textbox') as HTMLTextAreaElement
+    expect(box.value).toContain('Ayúdame a crear un proyecto')
+    expect(b.sink).not.toHaveBeenCalled()
+    fireEvent.click(b.view.getByRole('button', { name: 'Dame una gráfica de datos ficticios' }))
+    expect(box.value).toContain('Crea una gráfica de líneas')
+    expect(b.sink).not.toHaveBeenCalled()
+  })
+
+  it('opens the real workspace picker when a welcome action has no workspace', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }), [], undefined, {
+      summaryBlank: true,
+    })
+    fireEvent.click(b.view.getByRole('button', { name: 'Programar' }))
+    expect((b.pickerOwner() as { open: boolean }).open).toBe(true)
+  })
+
   it('renders the composer inert with the blocker\u2019s own reason', () => {
     const b = mount(conversationSnapshot(), undefined, undefined, {
       composerBlock: { reason: 'select a model first' },

@@ -8,7 +8,8 @@
 import { useId } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import {
-  IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16, IconSparkle16,
+  IconChevronDownOutline14, IconChevronRightOutline14, IconCodeOutline16, IconFolderClose16, IconFolderOpen16,
+  IconGlobeOutline14, IconPlayOutline16, IconSearchOutline16, IconSparkle16,
   IconWarningOutline16, PhoenixLogo,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import { workspaceTitleOf } from '@phoenix-ai/dsh-client-runtime/client'
@@ -175,6 +176,38 @@ export function HeroAttentionList({
   )
 }
 
+
+/** Preset prompts fill the existing composer; they never send a turn by themselves. */
+const HERO_STARTERS = [
+  { title: 'Crear', description: 'Documentos, gráficos, apps', kind: 'create',
+    prompt: 'Ayúdame a crear un proyecto. Primero pregúntame qué necesito y propón un plan claro.',
+    icon: <IconSparkle16 size={21} /> },
+  { title: 'Analizar', description: 'Datos, informes, tendencias', kind: 'analyze',
+    prompt: 'Quiero analizar datos. Ayúdame a preparar un análisis riguroso y visual.',
+    icon: <IconFolderOpen16 size={21} /> },
+  { title: 'Automatizar', description: 'Tareas y flujos de trabajo', kind: 'automate',
+    prompt: 'Quiero automatizar una tarea en Phoenix. Diseña un flujo verificable y eficiente.',
+    icon: <IconPlayOutline16 size={21} /> },
+  { title: 'Investigar', description: 'Información en la web', kind: 'research',
+    prompt: 'Quiero investigar un tema. Ayúdame a definir las preguntas, fuentes y método.',
+    icon: <IconSearchOutline16 size={21} /> },
+  { title: 'Programar', description: 'Código, apps, integraciones', kind: 'code',
+    prompt: 'Quiero desarrollar software. Ayúdame a definir los requisitos y a implementarlo.',
+    icon: <IconCodeOutline16 size={21} /> },
+  { title: 'Usar herramientas', description: 'Conectores, archivos, MCP', kind: 'tools',
+    prompt: 'Ayúdame a realizar una tarea usando las herramientas y conectores disponibles en Phoenix.',
+    icon: <IconGlobeOutline14 size={21} /> },
+] as const
+
+const HERO_SUGGESTIONS = [
+  { label: 'Dame una gráfica de datos ficticios',
+    prompt: 'Crea una gráfica de líneas con datos ficticios y explícame lo que muestra.' },
+  { label: 'Resume este PDF', prompt: 'Quiero resumir un PDF. Pídeme el archivo y extrae los puntos clave.' },
+  { label: 'Crea una imagen', prompt: 'Ayúdame a crear una imagen con una descripción que vamos a definir.' },
+  { label: 'Escribe un script de Python',
+    prompt: 'Ayúdame a crear un script de Python. Primero definamos qué debe resolver.' },
+] as const
+
 /** Hero chrome props. The workspace row rides the InputBar accessory hole, not here. */
 export interface HeroShellProps {
   /** The owner's locale seat, retained for the workspace chip contract. */
@@ -183,6 +216,8 @@ export interface HeroShellProps {
   renderSlot: ConversationSlotProps['renderSlot']
   /** Durable preferred name from the current user's Profile settings. */
   preferredName?: string | undefined
+  /** Add the chosen starting prompt to the resident composer. */
+  onStarter?: (prompt: string) => void
   /** Overlay content after the stack (modals). */
   children?: ReactNode
 }
@@ -194,7 +229,7 @@ export interface HeroShellProps {
  * @param props - see {@link HeroShellProps}.
  * @returns the centered hero element tree.
  */
-export function HeroShell({ renderSlot, preferredName, children }: HeroShellProps) {
+export function HeroShell({ renderSlot, preferredName, onStarter, children }: HeroShellProps) {
   const greeting = greetingForHour(new Date().getHours())
   const displayName = preferredNameForHero(preferredName)
 
@@ -216,6 +251,38 @@ export function HeroShell({ renderSlot, preferredName, children }: HeroShellProp
           )}
         </h1>
         <p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>
+        <div className={css.starterGrid} aria-label="Acciones rápidas de Phoenix">
+          {HERO_STARTERS.map(starter => (
+            <button
+              key={starter.kind}
+              type="button"
+              className={css.starterCard}
+              aria-label={starter.title}
+              onClick={() => { onStarter?.(starter.prompt) }}
+            >
+              <span className={css.starterIcon} data-tone={starter.kind} aria-hidden="true">{starter.icon}</span>
+              <span className={css.starterCopy}>
+                <strong className={css.starterTitle}>{starter.title}</strong>
+                <span className={css.starterDescription}>{starter.description}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className={css.suggestions}>
+          <span className={css.suggestionHeading}>Sugerencias</span>
+          <div className={css.suggestionList}>
+            {HERO_SUGGESTIONS.map(suggestion => (
+              <button
+                key={suggestion.label}
+                type="button"
+                className={css.suggestion}
+                onClick={() => { onStarter?.(suggestion.prompt) }}
+              >
+                {suggestion.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       {children}
     </div>

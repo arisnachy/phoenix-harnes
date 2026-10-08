@@ -347,3 +347,21 @@
     transition: none;
   }
 }
+/* A wider home surface only: ordinary chat keeps its proven 768px axis. */
+.root[data-phase='hero'] {
+  --dsh-chat-content-width: 940px;
+  --dsh-composer-card-max-width: 1000px;
+}
+.root[data-phase='hero'] .composerHero {
+  gap: 12px;
+  padding-bottom: 26px;
+}
+.root[data-phase='hero'] .heroWorkspaceRow {
+  margin-top: 6px;
+}
+@media (max-width: 720px) {
+  .root[data-phase='hero'] {
+    --dsh-chat-content-width: 100%;
+    --dsh-composer-card-max-width: calc(100% - 20px);
+  }
+}
