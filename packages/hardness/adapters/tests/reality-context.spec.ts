@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { REALITY_OPERATING_PROTOCOL } from '../src/reality-protocol.ts'
 import {
   RealityContextEngine,
   realityConfigFromEnvironment,
@@ -7,6 +8,10 @@ import {
 afterEach(() => vi.restoreAllMocks())
 
 describe('Phoenix reality context', () => {
+  it('exempts simulated local previews from unnecessary remote verification', () => {
+    expect(REALITY_OPERATING_PROTOCOL).toContain('A purely simulated or local UI preview never depends on network')
+    expect(REALITY_OPERATING_PROTOCOL).toContain('Only access external tools if the requested result actually depends')
+  })
   it('does not accept partial or invalid coordinates as precise location', () => {
     expect(realityConfigFromEnvironment({
       PHOENIX_REALITY_LATITUDE: '19.45',
