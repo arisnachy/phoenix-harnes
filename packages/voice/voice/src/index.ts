@@ -779,7 +779,7 @@ export class VoiceRuntime extends TypertRemoteService {
    * @returns Current queue, speaking, and selected-provider state.
    */
   status(): VoiceRuntimeStatus {
-    const ttsProvider = this.selectTtsProvider()
+    const ttsProvider = this.selectConversationTtsProvider()
     const sttProvider = this.selectSttProvider()
     return {
       enabled: this.config.enabled,
@@ -918,10 +918,6 @@ export class VoiceRuntime extends TypertRemoteService {
 
   private selectConversationTtsProvider(): VoiceTextToSpeechProvider | undefined {
     return this.conversationTtsProviders()[0]
-  }
-
-  private selectTtsProvider(): VoiceTextToSpeechProvider | undefined {
-    return selectProvider(this.ttsProviders, this.config.ttsProvider)
   }
 
   private selectSttProvider(): VoiceSpeechToTextProvider | undefined {
