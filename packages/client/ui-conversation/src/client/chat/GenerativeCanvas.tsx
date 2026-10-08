@@ -90,7 +90,7 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
     case 'input':
       if (!keys(value, ['type','id','label','placeholder','value']) || !id(value.id)
         || ids.has(value.id) || !text(value.label) || !optionalText(value.placeholder)
-        || !optionalText(value.value, 500)) return false
+        || (value.value !== undefined && (typeof value.value !== 'string' || value.value.length > 500))) return false
       ids.add(value.id)
       return true
     case 'select':
