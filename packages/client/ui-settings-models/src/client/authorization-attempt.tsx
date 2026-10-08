@@ -32,7 +32,7 @@ function safeOAuthConsentUrl(value: string): string | undefined {
 
 /** Preserve only deterministic, secret-free failure categories in the popup tab. */
 function safePopupFailure(message: string): string {
-  if (/38 segundos|tiempo de espera|agot[oó] el tiempo|timeout/i.test(message)) {
+  if (/38 segundos|45 segundos|tiempo de espera|agot[oó] el tiempo|timeout/i.test(message)) {
     return 'El MCP agotó el tiempo de preparación y no abrió el inicio de sesión. Revisa el diagnóstico en PHOENIX.'
   }
   if (/client.id|client.secret|registro|registrar|DCR/i.test(message)) {
