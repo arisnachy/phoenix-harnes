@@ -9,6 +9,7 @@ export const PHOENIX_CANVAS_MIME = 'application/vnd.phoenix.canvas+html'
  * A Phoenix canvas is an HTML mini-app or visual composition that must be
  * presented inside Phoenix itself. It is deliberately distinct from editor-
  * specific ".canvas.tsx" files or Cursor/Codex canvas folders.
+ * @returns Tool definition for self-contained, in-chat HTML experiences.
  */
 export function createPhoenixCanvasTool(): ToolDefinition {
   return defineTool({
