@@ -435,7 +435,7 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
   return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
 }
 
-export function HardnessArtifactBody({ mime, data, expanded, title, executable = false, renderMessageImages }: ArtifactBodyProps) {
+export function HardnessArtifactBody({ mime, data, expanded, title, executable = true, renderMessageImages }: ArtifactBodyProps) {
   if (typeof data === 'string') {
     if (mime === 'application/vnd.phoenix.web-preview+json' || mime === 'application/vnd.hardness.web-preview+json') {
       const url = safeWebPreviewUrl(data)
