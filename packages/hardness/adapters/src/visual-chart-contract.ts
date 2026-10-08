@@ -35,7 +35,7 @@ function fromLabels(spec: Visual): Visual | undefined {
     || spec.labels.length < 1 || spec.labels.length !== spec.values.length
     || !spec.values.every(finite)) return undefined
   const labels = spec.labels as unknown[]
-  const values = spec.values as number[]
+  const values = spec.values
   return {
     ...spec, visualType: 'chart', xKey: 'label',
     series: [{ dataKey: 'value', label: nonempty(spec.seriesName) ? spec.seriesName : 'Valor' }],
@@ -74,7 +74,7 @@ function fromPairs(spec: Visual): Visual | undefined {
   return {
     ...spec, visualType: 'chart', xKey: 'label',
     series: [{ dataKey: 'value', label: 'Valor' }],
-    data: spec.data.map(entry => {
+    data: spec.data.map((entry) => {
       const pair = entry as [string | number, number]
       return { label: String(pair[0]), value: pair[1] }
     }),
