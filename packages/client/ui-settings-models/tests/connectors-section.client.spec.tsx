@@ -112,7 +112,10 @@ describe('connectors settings section', () => {
       fireEvent.click(Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')!)
       fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'not-in-catalog' } })
       expect(await screen.findByText('Provider client ID', {}, { timeout: 2000 })).toBeTruthy()
-      expect(open).not.toHaveBeenCalled()
+      expect(open).toHaveBeenCalledWith(
+        new URL('/oauth-waiting.html?v=20261008-gesture', window.location.href).href,
+        '_blank',
+      )
     } finally { open.mockRestore() }
   })
 
@@ -130,9 +133,14 @@ describe('connectors settings section', () => {
       renderHub(api)
       const card = (await screen.findByText('Probe Provider')).closest('article')
       fireEvent.click(Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')!)
-      expect(open).not.toHaveBeenCalled()
+      expect(open).toHaveBeenCalledWith(
+        new URL('/oauth-waiting.html?v=20261008-gesture', window.location.href).href,
+        '_blank',
+      )
       const link = await screen.findByRole('link', { name: 'Open authorization page' }, { timeout: 2000 })
       expect(link.getAttribute('href')).toBe('https://provider.example/consent')
+      // The popup was blocked in this test, so delayed navigation falls back to
+      // the manual consent URL (and a best-effort second window.open).
       expect(open).toHaveBeenCalledWith('https://provider.example/consent', '_blank')
       expect(api.cancel).not.toHaveBeenCalled()
     } finally { open.mockRestore() }
@@ -1070,13 +1078,16 @@ describe('connectors settings section', () => {
 
       fireEvent.click(authorize!)
 
-      expect(open).not.toHaveBeenCalled()
+      expect(open).toHaveBeenCalledWith(
+        new URL('/oauth-waiting.html?v=20261008-gesture', window.location.href).href,
+        '_blank',
+      )
 
       await waitFor(() => {
         expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
       })
       await waitFor(() => {
-        expect(open).toHaveBeenCalledWith(consentUrl, '_blank')
+        expect(popup.location.replace).toHaveBeenCalledWith(consentUrl)
       }, { timeout: 2_000 })
 
       const manual = screen.getByRole('link', { name: 'Open authorization page' }) as HTMLAnchorElement
@@ -1328,7 +1339,10 @@ describe('connectors settings section', () => {
       renderHub(api)
       await act(async () => { await Promise.resolve() })
       fireEvent.click(screen.getAllByRole('button', { name: 'Authorize' })[0]!)
-      expect(open).not.toHaveBeenCalled()
+      expect(open).toHaveBeenCalledWith(
+        new URL('/oauth-waiting.html?v=20261008-gesture', window.location.href).href,
+        '_blank',
+      )
       await act(async () => { await Promise.resolve() })
       await act(async () => { await vi.advanceTimersByTimeAsync(700) })
 
@@ -1336,7 +1350,7 @@ describe('connectors settings section', () => {
       expect(notice).not.toBeNull()
       expect(notice?.textContent).toContain('Account connected')
       expect(notice?.textContent).toContain('Authorization complete')
-      expect(popup.close).not.toHaveBeenCalled()
+      expect(popup.close).toHaveBeenCalled()
     } finally {
       open.mockRestore()
       vi.useRealTimers()
@@ -1617,7 +1631,10 @@ describe('connectors settings section', () => {
       expect(authorize).toBeTruthy()
       fireEvent.click(authorize!)
       await waitFor(() => { expect(reconnect).toHaveBeenCalledWith({ serverName: 'registry-auth-123' }) })
-      expect(open).not.toHaveBeenCalled()
+      expect(open).toHaveBeenCalledWith(
+        new URL('/oauth-waiting.html?v=20261008-gesture', window.location.href).href,
+        '_blank',
+      )
     } finally {
       open.mockRestore()
     }
