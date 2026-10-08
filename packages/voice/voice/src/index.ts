@@ -712,7 +712,7 @@ export class VoiceRuntime extends TypertRemoteService {
       return { id, accepted: false, reason: 'duplicate' }
     }
     if (this.queue.length >= this.config.maxQueue) return { id, accepted: false, reason: 'queue-full' }
-    if (this.selectTtsProvider() === undefined) return { id, accepted: false, reason: 'no-provider' }
+    if (this.selectConversationTtsProvider() === undefined) return { id, accepted: false, reason: 'no-provider' }
     const queued: QueuedAnnouncement = { id, event, text, controller: new AbortController() }
     this.queue.push(queued)
     if (key !== undefined) this.pendingKeys.add(key)
@@ -936,7 +936,10 @@ export class VoiceRuntime extends TypertRemoteService {
         const item = this.queue.shift()
         if (item === undefined) continue
         if (item.event.dedupeKey !== undefined) this.pendingKeys.delete(item.event.dedupeKey)
-        const providers = orderedProviders(this.ttsProviders, this.config.ttsProvider)
+        // Asynchronous announcements use the same explicitly preferred local
+        // chain as conversation fallback: Kokoro first, then the locale-matched
+        // platform voice. An unrelated natural engine must not override it.
+        const providers = this.conversationTtsProviders()
         if (providers.length === 0) continue
         this.current = item
         try {
