@@ -1,0 +1,6 @@
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-08-codex-live-harness-finality.md
+2026-10-08-codex-live-harness-finality.md: 73e7adac1814c72286cd9c666575a9e1ba7b9dcd
+2026-10-08-codex-live-harness-finality.zh.md: 65149db63220a1919debe8153633cce1aca963a6
