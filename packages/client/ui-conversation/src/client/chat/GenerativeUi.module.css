@@ -1,0 +1,58 @@
+/* Phoenix Intelligent UI: content-sized cards inside the assistant transcript. */
+.card {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  border: 1px solid var(--dsw-alias-border-subtle, rgba(120,120,120,.22));
+  border-radius: 18px;
+  background: var(--dsw-alias-surface-primary, transparent);
+  color: var(--dsw-alias-label-primary, inherit);
+  padding: clamp(14px, 2.6vw, 22px);
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.header { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; min-width: 0; }
+.header > div { min-width: 0; }
+.header h3 { margin: 0; font-size: 17px; font-weight: 650; line-height: 1.4; }
+.header p { margin: 3px 0 0; font-size: 13px; color: var(--dsw-alias-label-secondary, #777); }
+.badge { flex-shrink: 0; font-size: 11px; font-weight: 600; border-radius: 999px; border: 1px solid currentColor; padding: 3px 9px; }
+.eventGrid, .metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-top: 20px; }
+.participant, .eventCenter, .metric { min-width: 0; display: flex; flex-direction: column; gap: 4px; align-items: center; text-align: center; }
+.participant strong, .eventCenter strong { font-size: 17px; }
+.participant small, .eventCenter small, .metric small { color: var(--dsw-alias-label-secondary, #777); font-size: 12px; }
+.symbol { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--dsw-alias-border-subtle, #ddd); border-radius: 14px; font-size: 12px; font-weight: 700; }
+.metric { border-radius: 12px; padding: 10px 8px; background: var(--dsw-alias-interactive-bg-hover, rgba(120,120,120,.06)); }
+.metric > span { font-size: 12px; color: var(--dsw-alias-label-secondary, #777); }
+.metric strong { font-size: clamp(17px, 3vw, 26px); font-variant-numeric: tabular-nums; line-height: 1.3; }
+.tableWrap { max-width: 100%; overflow-x: auto; margin-top: 16px; }
+.table { border-collapse: collapse; width: 100%; min-width: 280px; font-size: 13px; }
+.table th, .table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--dsw-alias-border-subtle, #ddd); }
+.table thead th { color: var(--dsw-alias-label-secondary, #777); font-weight: 600; }
+.table tbody th { font-weight: 600; }
+.timeline { list-style: none; margin: 18px 0 0; padding: 0; display: grid; gap: 14px; }
+.timeline li { display: flex; gap: 12px; align-items: flex-start; }
+.dot { width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; background: currentColor; flex: 0 0 10px; }
+.timeline li div { display: flex; flex-direction: column; gap: 2px; }
+.timeline li strong { font-size: 13px; }
+.timeline li p { margin: 0; font-size: 13px; }
+.timeline li small { color: var(--dsw-alias-label-secondary, #777); }
+.description { margin: 12px 0; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%,170px),1fr)); gap: 10px; margin: 16px 0 0; }
+.fields > div { min-width: 0; background: var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.06)); border-radius: 12px; padding: 10px 12px; }
+.fields dt { color: var(--dsw-alias-label-secondary, #777); font-size: 12px; }
+.fields dd { margin: 4px 0 0; font-weight: 600; }
+.footer { margin-top: 16px; border-top: 1px solid var(--dsw-alias-border-subtle, #ddd); padding-top: 12px; color: var(--dsw-alias-label-secondary, #777); font-size: 12px; }
+.positive { color: #168456 !important; }
+.warning { color: #a86b08 !important; }
+.negative { color: #c43c3c !important; }
+.info { color: #427ec8 !important; }
+.neutral { color: var(--dsw-alias-label-secondary, #777) !important; }
+@media (max-width: 480px) {
+ .card { padding: 12px; border-radius: 14px; }
+ .eventGrid, .metrics { gap: 6px; }
+ .participant strong, .eventCenter strong { font-size: 14px; }
+ .metric { padding: 8px 3px; }
+ .metric > span, .metric small { font-size: 10px; }
+}
