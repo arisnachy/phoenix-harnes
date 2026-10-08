@@ -429,3 +429,88 @@
   font-size: 12px;
   line-height: 1;
 }
+
+/* Agent messages use a quiet two-tier card; the conversation canvas and
+   navigation keep their existing colors and layout. */
+.row:not([data-team-sender-kind='user']) {
+  gap: 0;
+  padding: 4px 0 8px;
+}
+
+.row:not([data-team-sender-kind='user']) .avatar {
+  position: relative;
+  z-index: 1;
+  width: 46px;
+  height: 46px;
+  margin-top: 5px;
+  margin-right: -15px;
+}
+
+.row:not([data-team-sender-kind='user']) .column {
+  flex: 1 1 0;
+  max-width: min(760px, calc(100% - 31px));
+}
+
+.card {
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 76%, transparent);
+  border-radius: 20px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 6%, transparent);
+}
+
+.card .meta {
+  min-height: 59px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 12px 18px 12px 30px;
+  border-bottom: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 68%, transparent);
+  border-radius: 20px 20px 0 0;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 36%, var(--dsw-alias-bg-layer-1));
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.card .meta strong {
+  font-size: 14px;
+}
+
+.card .bubble {
+  padding: 18px 22px 20px;
+  border: 0;
+  border-radius: 0 0 20px 20px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.card .bubble :global(.markdown) {
+  font-size: 16px;
+  line-height: 1.7;
+}
+
+.card + .messageActions {
+  padding-left: 8px;
+}
+
+@media (max-width: 620px) {
+  .row:not([data-team-sender-kind='user']) .avatar {
+    width: 36px;
+    height: 36px;
+    margin-right: -12px;
+  }
+
+  .row:not([data-team-sender-kind='user']) .column {
+    max-width: calc(100% - 24px);
+  }
+
+  .card .meta {
+    min-height: 51px;
+    padding: 10px 12px 10px 22px;
+  }
+
+  .card .bubble {
+    padding: 13px 15px 15px;
+  }
+}
