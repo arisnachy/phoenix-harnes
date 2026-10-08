@@ -77,6 +77,28 @@ export function teamSocialStyle(name: string, role: 'lead' | 'teammate'): string
   return `${voice} ${genderGuidance(name, role)} ${SOCIAL_BASE}`
 }
 
+/**
+ * Build the compact social contract from a user-designed visible persona.
+ * The stable runtime member id stays separate from display identity.
+ * @param profile - visible Team Studio identity selected for the active runtime slot.
+ * @param role - operational Team role used for authority guidance.
+ * @returns compact prompt guidance for the customized active persona.
+ */
+export function teamSocialStyleFromProfile(profile: {
+  readonly displayName: string
+  readonly gender: 'male' | 'female' | 'neutral'
+  readonly personality: string
+  readonly voice: string
+  readonly role: string
+}, role: 'lead' | 'teammate'): string {
+  const gender = profile.gender === 'male'
+    ? 'Your persona is male. In Spanish, use masculine self-reference when gendered wording is needed.'
+    : profile.gender === 'female'
+      ? 'Your persona is female. In Spanish, use feminine self-reference when gendered wording is needed.'
+      : 'Your persona gender is neutral/unspecified. Prefer gender-neutral self-reference when possible.'
+  return `Your visible Team name is "${profile.displayName}". Your user-designed personality: ${profile.personality} Preferred speaking style: ${profile.voice}. Your user-visible specialty: ${profile.role}. ${gender} Your operational authority is ${role}. ${SOCIAL_BASE}`
+}
+
 /** Operational specialty inferred from actual assigned work. */
 export type TeamSkill =
   | 'orchestration' | 'quality' | 'engineering' | 'testing' | 'research'

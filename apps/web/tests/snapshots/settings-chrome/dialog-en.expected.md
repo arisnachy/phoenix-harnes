@@ -10,6 +10,9 @@
     - button "Models":
       - img
       - text: Models
+    - button "Team":
+      - img
+      - text: Team
     - button "Plugins":
       - img
       - text: Plugins
