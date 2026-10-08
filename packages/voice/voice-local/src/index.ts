@@ -32,6 +32,8 @@ export interface VoiceCommandRequest {
   readonly signal?: AbortSignal
   /** Optional wall-clock limit. */
   readonly timeoutMs?: number
+  /** Voice locale passed to a configured local engine as PHOENIX_VOICE_LANGUAGE. */
+  readonly language?: string
 }
 
 /** Result from one local command. */
@@ -92,6 +94,7 @@ export function createKokoroTextToSpeechProvider(options: KokoroProviderOptions)
         command,
         args: options.args ?? [],
         stdin: request.text,
+        language: request.language,
         ...request.signal === undefined ? {} : { signal: request.signal },
       }))
     },
@@ -222,7 +225,7 @@ export function apply(ctx: Context, config: Config): void {
       })
     }
   }
-  const kokoroCommand = config.kokoroCommand?.trim()
+  const kokoroCommand = config.kokoroCommand?.trim() || process.env.PHOENIX_KOKORO_COMMAND?.trim()
   if (kokoroCommand !== undefined && kokoroCommand !== '') {
     voice.registerTextToSpeechProvider(createKokoroTextToSpeechProvider({ command: kokoroCommand, args: config.kokoroArgs ?? [] }))
   }
@@ -260,6 +263,7 @@ export function runVoiceCommand(request: VoiceCommandRequest): Promise<VoiceComm
       shell: false,
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
+      ...(request.language === undefined ? {} : { env: { ...process.env, PHOENIX_VOICE_LANGUAGE: request.language } }),
     })
     const stdout: Buffer[] = []
     const stderr: Buffer[] = []
