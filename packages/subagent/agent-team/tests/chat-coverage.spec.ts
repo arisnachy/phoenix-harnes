@@ -243,7 +243,7 @@ describe('chat durable ownership and delivery', () => {
     const published = f.root.events.filter(event => event.type === 'team/chat-message'
       && event.data.message.id.startsWith(f.child.id + ':activity:'))
     expect(published).toHaveLength(2)
-    expect(published[1]?.data.update).toBe(true)
+    expect(published[1]).toMatchObject({ data: { update: true } })
     f.child.append('tool/call', { turn: 1, step: 2, callId: CallId('peer'),
       name: 'team_chat_react', arguments: '{}' })
     await f.chat.capture(f.root, f.child.header, f.child.events)
