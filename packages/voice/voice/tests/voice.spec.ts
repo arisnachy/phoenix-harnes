@@ -149,10 +149,10 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     expect(speak).not.toHaveBeenCalled()
   })
 
-  it('falls back when the preferred provider fails during synthesis', async () => {
+  it('prefers Kokoro for notifications and falls back to platform when it fails', async () => {
     const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural' })
-    const natural = vi.fn(() => Promise.reject(new Error('engine warming failed')))
-    const kokoro = vi.fn(() => Promise.resolve())
+    const natural = vi.fn(() => Promise.resolve())
+    const kokoro = vi.fn(() => Promise.reject(new Error('kokoro temporarily unavailable')))
     const system = vi.fn(() => Promise.resolve())
     voice.registerTextToSpeechProvider(provider('system', system, 10))
     voice.registerTextToSpeechProvider(provider('kokoro', kokoro, 100))
@@ -161,9 +161,9 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     voice.announce({ kind: 'discovery', displayOutput: 'Encontré la causa.' })
     await new Promise(resolve => setTimeout(resolve, 0))
 
-    expect(natural).toHaveBeenCalledTimes(1)
+    expect(natural).not.toHaveBeenCalled()
     expect(kokoro).toHaveBeenCalledTimes(1)
-    expect(system).not.toHaveBeenCalled()
+    expect(system).toHaveBeenCalledTimes(1)
   })
 })
 
