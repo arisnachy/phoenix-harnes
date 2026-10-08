@@ -89,17 +89,27 @@ describe('connector OAuth browser handoff', () => {
       await page.goto(scaffold.baseUrl)
       await page.getByRole('button', { name: /^Settings/ }).click()
       await page.getByRole('dialog').getByRole('button', { name: 'Connectors', exact: true }).click()
-      const popupPromise = page.waitForEvent('popup')
+      const popups: import('playwright').Page[] = []
+      page.on('popup', opened => { popups.push(opened) })
       const card = page.locator(id !== 'browser-probe'
         ? '[data-connector-id="notion"]' : '[data-authorization-key="mcp-client/browser-probe"]')
       await card.getByRole('button', { name: 'Authorize', exact: true }).click()
-      // Every provider reserves a lightweight blank tab in the user's click
-      // gesture; no Phoenix waiting HTML page or cross-window relay is loaded.
-      const popup = await popupPromise
-      expect(popup.url()).toBe('about:blank')
+      // No tab is opened while the Host is still preparing OAuth or prompting.
       await page.getByLabel('Provider prerequisite').waitFor()
+      expect(popups).toHaveLength(0)
       await page.getByLabel('Provider prerequisite').fill('continue')
       await page.getByRole('button', { name: 'Continue', exact: true }).click()
+      const link = page.getByRole('link', { name: 'Open authorization page' })
+      await link.waitFor({ timeout: 15000 })
+      expect(await link.getAttribute('href')).toBe(consent)
+      // Chrome can reject a delayed script-open after the Host responds; the
+      // direct user-clickable link must always make consent reachable.
+      if (popups.length === 0) {
+        const popupPromise = page.waitForEvent('popup')
+        await link.click()
+        popups.push(await popupPromise)
+      }
+      const popup = popups[0]!
       await popup.getByRole('heading', { name: 'Provider consent fixture' }).waitFor({ timeout: 15000 })
       expect(popup.url()).toBe(consent)
       await page.getByRole('button', { name: 'Cancel', exact: true }).last().click()
