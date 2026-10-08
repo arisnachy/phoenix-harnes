@@ -2276,8 +2276,26 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
 
   /** Redact flow failures before they become browser-visible. */
   function authorizationFailure(error: unknown): string {
+    // Do not expose raw provider responses: OAuth errors may embed secrets,
+    // authorization codes, callback URLs, or request headers. Only known-safe
+    // stage codes and generic diagnostics are allowed across the browser API.
     const code = (error as { code?: unknown } | null)?.code
-    return typeof code === 'string' ? `authorization failed (${code})` : 'authorization failed'
+    if (code === 'MCP_OAUTH_DISCOVERY_TIMEOUT') {
+      return 'El MCP no entregó una URL de autorización en 38 segundos. Comprueba el endpoint, la conexión al proveedor y si exige registrar un cliente OAuth.'
+    }
+    if (code === 'MCP_OAUTH_NO_CONSENT_URL') {
+      return 'El MCP terminó la preparación sin una URL de autorización ni un token válido. Comprueba que el servidor admita OAuth o configura su método de acceso oficial.'
+    }
+    const message = error instanceof Error ? error.message : ''
+    if (/dynamic client registration|client registration|invalid_client|registration not supported/i.test(message)) {
+      return 'El MCP rechazó el registro del cliente OAuth. Este proveedor puede requerir un client ID/secret registrados y una URI de retorno autorizada.'
+    }
+    if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|fetch failed|certificate|network error/i.test(message)) {
+      return 'No se pudo contactar al proveedor MCP para iniciar OAuth. Comprueba la URL, red, DNS y certificados; el navegador no recibió una URL de autorización.'
+    }
+    return typeof code === 'string' && /^(?:NO_FLOW|UNKNOWN_METHOD|ALREADY_IN_FLIGHT|NOT_COMMITTED)$/.test(code)
+      ? `authorization failed (${code})`
+      : 'authorization failed (consulta el estado del MCP y sus requisitos de acceso)'
   }
 
   /** Retain terminal snapshots for a bounded period of attempts. */
