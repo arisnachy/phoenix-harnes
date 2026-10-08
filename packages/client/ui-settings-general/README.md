@@ -23,3 +23,5 @@ None; this package neither assembles nor sends a provider request.
 ## Known Limitations and Deferred Work
 
 - The General section has no built-in rows; each row appears only when its owning feature plugin is mounted.
+
+The one existing Settings modal may also be opened by the in-app sidebar or welcome toolbar via the `phoenix:open-settings-section` browser navigation event. It selects a registered section and does not create any new settings store.
