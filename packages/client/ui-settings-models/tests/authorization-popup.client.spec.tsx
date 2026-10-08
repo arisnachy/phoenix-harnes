@@ -213,6 +213,32 @@ describe('authorization consent window', () => {
     } finally { open.mockRestore() }
   })
 
+  it('uses the active popup clock to end an OAuth wait and cancels the Host attempt', async () => {
+    const reserved = reservedWindow()
+    const timers: Array<() => void> = []
+    const popupWithClock = Object.assign(reserved, {
+      setTimeout: vi.fn((callback: () => void) => {
+        timers.push(callback)
+        return 27
+      }),
+      clearTimeout: vi.fn(),
+    })
+    const open = vi.spyOn(window, 'open').mockReturnValue(popupWithClock as unknown as Window)
+    const api = panelApi(pendingForever)
+    api.cancel = vi.fn(async () => ok({ cancelled: true }))
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => { expect(api.begin).toHaveBeenCalledTimes(1) })
+      expect(popupWithClock.setTimeout).toHaveBeenCalledWith(expect.any(Function), 45_000)
+      await act(async () => { timers[0]?.() })
+      expect(reserved.document.body.textContent).toContain('No se pudo abrir la autorización')
+      expect(reserved.document.body.textContent).toContain('servidor no proporcionó una URL')
+      await waitFor(() => { expect(api.cancel).toHaveBeenCalledWith({ attemptId: 'attempt-1' }) })
+      expect(reserved.close).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
+
   it('navigates the reserved window once the backend publishes the consent URL', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
