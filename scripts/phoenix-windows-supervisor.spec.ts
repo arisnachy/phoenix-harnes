@@ -379,6 +379,16 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(updateWatchSource).toContain('garbage collection is owned by the external')
   })
 
+  it('reuses the verified restored-runtime preflight once for unchanged startup configuration', () => {
+    expect(source).toContain('let restoredRuntimeBootPreflight')
+    expect(source).toContain('fingerprint: configurationFingerprint(captureBootCriticalConfiguration())')
+    expect(source).toContain('const cached = restoredRuntimeBootPreflight')
+    expect(source).toContain('restoredRuntimeBootPreflight = undefined')
+    expect(source).toContain('cached?.path === runtimeRoot')
+    expect(source).toContain('cached.fingerprint === configurationFingerprint(captureBootCriticalConfiguration())')
+    expect(source).toContain(': preflightBootConfiguration()')
+  })
+
   it('keeps heavy cleanup off the Host startup and update-handoff paths', () => {
     const boot = source.slice(
       source.indexOf('recoverStaleStagingIndexLock()\\nrestoreActiveRuntime()'),
