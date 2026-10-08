@@ -23,9 +23,12 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
   const closing = data.closing
   const responseText = closing === null ? '' : assistantText(closing.blocks)
   useEffect(() => {
-    if (closing === null || responseText === '') return
+    // Only the actual completed Turn closes the harness action. Do not voice
+    // stale intermediate prose when a tool result arrived after that message.
+    if (closing === null || responseText === ''
+      || data.reason.kind !== 'completed' || data.branchUnavailable) return
     speakVoiceAssistantResponse(`assistant:${closing.turn}:${closing.step}`, responseText, closing.time)
-  }, [closing, node.key, responseText])
+  }, [closing, data.branchUnavailable, data.reason.kind, node.key, responseText])
   if (turn === undefined) return null
   const owner: TurnTailOwnerProps = { turn, seq: closing?.finalNode.seq ?? data.seq, openFile }
   const key = turnStopNotice(data.reason, closing !== null)

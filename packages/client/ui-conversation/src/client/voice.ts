@@ -90,6 +90,8 @@ interface CodexRealtimeVoiceSession {
   readonly microphone: MediaStream
   readonly events: RTCDataChannel
   readonly audio: HTMLAudioElement
+  /** Single authorized harness-owned speech request currently in flight. */
+  activeUtterance?: PendingCodexRealtimeUtterance
 }
 
 interface PendingCodexRealtimeUtterance {
@@ -124,7 +126,8 @@ function sendCodexRealtimeUtterance(
   session: CodexRealtimeVoiceSession,
   utterance: PendingCodexRealtimeUtterance,
 ): boolean {
-  if (session.key !== utterance.sessionKey || session.events.readyState !== 'open') return false
+  if (session.key !== utterance.sessionKey || session.events.readyState !== 'open'
+    || session.activeUtterance !== undefined) return false
   try {
     session.events.send(JSON.stringify({
       type: 'response.create',
@@ -133,6 +136,7 @@ function sendCodexRealtimeUtterance(
   } catch {
     return false
   }
+  session.activeUtterance = utterance
   voiceAssistantSpokenText = utterance.echoText
   if (utterance.assistantMessageKey !== undefined) {
     spokenAssistantMessages.add(utterance.assistantMessageKey)
@@ -567,7 +571,8 @@ function forwardCodexRealtimeUserTranscript(payload: string): void {
 }
 
 function updateCodexRealtimePhase(payload: string): void {
-  if (!voiceAssistantSnapshot.active || codexRealtimeVoiceSession === undefined) return
+  const session = codexRealtimeVoiceSession
+  if (!voiceAssistantSnapshot.active || session === undefined) return
   let type = ''
   try {
     const value = JSON.parse(payload) as { type?: unknown }
@@ -575,16 +580,32 @@ function updateCodexRealtimePhase(payload: string): void {
   } catch {
     return
   }
+  if (type === 'response.created' && session.activeUtterance === undefined) {
+    // Some realtime transports can start autonomous VAD replies even with
+    // create_response:false. Suppress unverified "sigo en ello" narration.
+    if (session.events.readyState === 'open') {
+      try { session.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* closing peer */ }
+    }
+    return
+  }
+  if (type === 'response.done') {
+    session.activeUtterance = undefined
+    publishVoiceIdle()
+    // Serialize speech until the preceding audio response really finished.
+    flushCodexRealtimeUtterances(session)
+    return
+  }
   if (type.includes('speech_started')) {
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'listening' })
     return
   }
-  if (type === 'response.created' || type.includes('output_audio')) {
+  if ((type === 'response.created' || type.includes('output_audio'))
+    && session.activeUtterance !== undefined) {
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
     return
   }
-  if (type === 'response.done' || type.includes('speech_stopped')) {
-    publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'listening' })
+  if (type.includes('speech_stopped') && session.activeUtterance === undefined) {
+    publishVoiceIdle()
   }
 }
 
@@ -715,11 +736,15 @@ export function interruptVoiceAssistantSpeech(): boolean {
   const hadPendingRealtimeSpeech = realtime !== undefined
     && pendingCodexRealtimeUtterances.some(item => item.sessionKey === realtime.key)
   const hadRealtimeSpeech = realtime !== undefined
-    && (voiceAssistantSnapshot.phase === 'speaking' || hadPendingRealtimeSpeech)
+    && (voiceAssistantSnapshot.phase === 'speaking' || hadPendingRealtimeSpeech
+      || realtime.activeUtterance !== undefined)
   if (hadRealtimeSpeech && realtime.events.readyState === 'open') {
     try { realtime.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* peer cleanup owns closure */ }
   }
-  if (realtime !== undefined && hadPendingRealtimeSpeech) discardCodexRealtimeUtterances(realtime.key)
+  if (realtime !== undefined) {
+    realtime.activeUtterance = undefined
+    if (hadPendingRealtimeSpeech) discardCodexRealtimeUtterances(realtime.key)
+  }
   voiceAssistantSpeech?.dispose()
   voiceAssistantSpeech = undefined
   voiceAssistantSpeechKey = undefined
@@ -760,13 +785,16 @@ export function streamVoiceAssistantResponse(
   text: string,
   messageTime: number,
   final = false,
+  fromCompletedHarnessTurn = false,
 ): void {
   if (!voiceAssistantSnapshot.active
     || text.trim() === '' || messageTime < voiceAssistantSnapshot.activatedAt - 1_000) return
   if (spokenAssistantMessages.has(messageKey)) return
-  voiceAssistantSpokenText = text
-
   const realtime = codexRealtimeVoiceSession
+  // Step-local assistant messages can precede more tool work. Codex Live
+  // must not voice them as if a real browser action had already settled.
+  if (realtime !== undefined && !fromCompletedHarnessTurn) return
+  voiceAssistantSpokenText = text
   if (realtime !== undefined) {
     // Native Codex is sticky for the whole hands-free session. A temporary
     // data-channel/WebRTC pause must never substitute another TTS voice after
@@ -780,7 +808,7 @@ export function streamVoiceAssistantResponse(
       key: `assistant:${messageKey}`,
       assistantMessageKey: messageKey,
       echoText: spoken,
-      instructions: `Speak the following PHOENIX assistant response faithfully in the user's current language and with the same voice/persona already in this call. Do not add claims, actions, or extra content.\n\n${spoken}`,
+      instructions: `Read only this finalized PHOENIX harness response in the user's current language and with the same voice/persona. Do not independently assess task progress, say "still working", claim tool use, or add any words.\n\n${spoken}`,
     }
     if (!sendCodexRealtimeUtterance(realtime, utterance)) {
       queueCodexRealtimeUtterance(utterance)
@@ -805,7 +833,7 @@ export function streamVoiceAssistantResponse(
  * @param messageTime - Durable event time in Unix milliseconds.
  */
 export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number): void {
-  streamVoiceAssistantResponse(messageKey, text, messageTime, true)
+  streamVoiceAssistantResponse(messageKey, text, messageTime, true, true)
 }
 
 /**
