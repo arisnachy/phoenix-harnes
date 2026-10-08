@@ -187,19 +187,59 @@ export interface HeroShellProps {
   children?: ReactNode
 }
 
+/** A small, deliberate set of composer prompts. Every card is an actual draft action. */
+export const HERO_QUICK_ACTIONS = [
+  { id: 'file', title: 'Analizar un archivo', detail: 'Resume, extrae y analiza', tone: 'peach', prompt: 'Analiza el archivo que voy a adjuntar. Extrae sus ideas principales y entrega un resumen estructurado.' },
+  { id: 'chart', title: 'Crear una gráfica', detail: 'Visualiza tus datos', tone: 'blue', prompt: 'Crea una gráfica interactiva a partir de mis datos. Ayúdame a elegir la visualización adecuada.' },
+  { id: 'code', title: 'Revisar código', detail: 'Obtén sugerencias', tone: 'violet', prompt: 'Revisa el código que voy a compartir. Detecta errores, explica los riesgos y propone mejoras concretas.' },
+  { id: 'link', title: 'Conectar un MCP', detail: 'Integra tus herramientas', tone: 'green', prompt: 'Ayúdame a conectar y comprobar un servidor MCP en Phoenix, paso a paso.' },
+  { id: 'mail', title: 'Redactar correo', detail: 'Escribe y mejora textos', tone: 'amber', prompt: 'Ayúdame a redactar un correo profesional. Pregúntame por el destinatario y el propósito.' },
+] as const
+
+export const HERO_CAPABILITIES = [
+  { id: 'chat', title: 'Chat inteligente', detail: 'Investiga, analiza y crea con tu equipo de IA.', tone: 'peach', prompt: 'Ayúdame a investigar y desarrollar una idea con mi equipo de IA.' },
+  { id: 'bolt', title: 'Automatización', detail: 'Convierte ideas en flujos de trabajo.', tone: 'amber', prompt: 'Diseña un flujo de automatización para una tarea repetitiva. Primero identifica los pasos necesarios.' },
+  { id: 'database', title: 'Conectores', detail: 'Integra herramientas y fuentes de datos.', tone: 'blue', prompt: 'Revisa las integraciones disponibles en Phoenix y ayúdame a configurar la que necesito.' },
+  { id: 'check', title: 'Tareas', detail: 'Planifica, ejecuta y da seguimiento.', tone: 'green', prompt: 'Ayúdame a planificar una tarea, ejecutarla y verificar su resultado.' },
+] as const
+
+type HeroIconName = (typeof HERO_QUICK_ACTIONS)[number]['id'] | (typeof HERO_CAPABILITIES)[number]['id']
+
+/** Icons are presentation-only; the native buttons and draft owner handle interaction. */
+function HeroActionIcon({ name }: { name: HeroIconName }) {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {name === 'file' && <><path d="M7 3h7l4 4v14H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z" /><path d="M14 3v5h5M9 12h6M9 16h6" /></>}
+      {name === 'chart' && <><path d="M4 20h16M6 17v-5h3v5M11 17V6h3v11M16 17V9h3v8" /></>}
+      {name === 'code' && <><path d="m8 7-5 5 5 5m8-10 5 5-5 5M14 4l-4 16" /></>}
+      {name === 'link' && <><path d="M10 13a5 5 0 0 0 7 .3l2-2a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7-.3l-2 2a5 5 0 0 0 7 7l2-2" /></>}
+      {name === 'mail' && <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m4 7 8 6 8-6" /></>}
+      {name === 'chat' && <><path d="M20 11a8 8 0 0 1-8 8 9 9 0 0 1-4-.9L4 20l1.9-4A8 8 0 1 1 20 11Z" /><path d="M8 11h8" /></>}
+      {name === 'bolt' && <path d="m13 2-9 12h7l-1 8 10-12h-7l0-8Z" />}
+      {name === 'database' && <><ellipse cx="12" cy="5" rx="8" ry="3" /><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3" /></>}
+      {name === 'check' && <><rect x="4" y="4" width="16" height="16" rx="3" /><path d="m8 12 3 3 5-6" /></>}
+    </svg>
+  )
+}
+
 /**
- * Render Phoenix's new-session welcome without moving the workspace row or
- * composer. Only the brand/greeting block changes; the folders and input keep
- * their existing tree positions.
- * @param props - see {@link HeroShellProps}.
- * @returns the centered hero element tree.
+ * Render the empty-session welcome, retaining the existing brand slot and
+ * resident composer. Quick actions only prepare editable drafts through the
+ * parent-owned input machine; they do not create sessions or execute tools.
  */
-export function HeroShell({ renderSlot, preferredName, children }: HeroShellProps) {
+export function HeroShell({ renderSlot, preferredName, onShortcut, children }: HeroShellProps & {
+  onShortcut?: (prompt: string) => void
+}) {
   const greeting = greetingForHour(new Date().getHours())
   const displayName = preferredNameForHero(preferredName)
 
   return (
     <div className={css.root}>
+      <svg className={css.scenery} viewBox="0 0 1280 290" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 195 Q115 159 219 188 T453 155 T675 190 T906 135 T1280 171 V290 H0Z" fill="currentColor" opacity=".13" />
+        <path d="M0 231 Q135 186 276 211 T582 199 T898 215 T1280 182 V290 H0Z" fill="currentColor" opacity=".095" />
+        <path d="M0 257 Q160 219 322 242 T664 230 T972 242 T1280 220 V290 H0Z" fill="currentColor" opacity=".075" />
+      </svg>
       <div className={css.stack}>
         <span className={css.fishHitbox} aria-hidden="true">
           {renderSlot('conversation.hero.brand.mark', { size: 64, className: css.fish }, {
@@ -216,6 +256,22 @@ export function HeroShell({ renderSlot, preferredName, children }: HeroShellProp
           )}
         </h1>
         <p className={css.subtitle}>¿Qué quieres construir hoy en Phoenix?</p>
+        <nav className={css.quickActions} aria-label="Accesos rápidos de Phoenix">
+          {HERO_QUICK_ACTIONS.map(action => (
+            <button type="button" key={action.id} className={css.quickCard} data-tone={action.tone} disabled={onShortcut === undefined} onClick={() => { onShortcut?.(action.prompt) }}>
+              <span className={css.quickIcon}><HeroActionIcon name={action.id} /></span>
+              <span className={css.actionText}><strong>{action.title}</strong><small>{action.detail}</small></span>
+            </button>
+          ))}
+        </nav>
+        <section className={css.featureActions} aria-label="Qué puedes hacer con Phoenix">
+          {HERO_CAPABILITIES.map(action => (
+            <button type="button" key={action.id} className={css.featureCard} data-tone={action.tone} disabled={onShortcut === undefined} onClick={() => { onShortcut?.(action.prompt) }}>
+              <span className={css.featureIcon}><HeroActionIcon name={action.id} /></span>
+              <span className={css.actionText}><strong>{action.title}</strong><small>{action.detail}</small></span>
+            </button>
+          ))}
+        </section>
       </div>
       {children}
     </div>
