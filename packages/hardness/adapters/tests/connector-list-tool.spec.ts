@@ -102,7 +102,7 @@ describe('connector_list tool', () => {
     const snapshot = await tool.execute({ target: 'mcp' }, {} as never)
     expect(tool.output.presentationMeta?.({ target: 'mcp' }, snapshot as never)).toMatchObject({
       artifact: { data: {
-        visualType: 'metrics', metrics: [{ label: 'MCP observados en esta sesión', value: 0 }],
+        visualType: 'metrics', metrics: [{ label: 'Registro MCP del Host', value: 'No disponible' }],
       } },
     })
   })
@@ -176,7 +176,8 @@ describe('connector_list tool', () => {
         },
       ],
     })
-    const meta = tool.output.presentationMeta?.({}, result as never)
+    expect(tool.output.presentationMeta?.({}, result as never)).toEqual({})
+    const meta = tool.output.presentationMeta?.({ target: 'mcp' }, result as never)
     expect(meta).toMatchObject({
       artifact: {
         title: 'Estado real de conectores MCP',
@@ -192,6 +193,12 @@ describe('connector_list tool', () => {
       },
     })
     const rendered = JSON.stringify(result)
+    const emptyMcp = createConnectorListTool(undefined, { list: () => [] })
+    const emptyInventory = await emptyMcp.execute({ target: 'mcp' }, {} as never)
+    expect(emptyMcp.output.presentationMeta?.({ target: 'mcp' }, emptyInventory as never))
+      .toMatchObject({ artifact: { data: {
+        visualType: 'metrics', metrics: [{ label: 'MCP observados en esta sesión', value: 0 }],
+      } } })
     expect(rendered).not.toContain('https://')
     expect(rendered).not.toContain('Authorization')
     expect(rendered).not.toContain('token')
