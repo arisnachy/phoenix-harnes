@@ -950,6 +950,11 @@ function activeRuntimeIsSupersededByLiveCheckout(target) {
   return gitSucceeds(root, ['merge-base', '--is-ancestor', target, liveHead])
 }
 
+// A restored isolated runtime already passed the expensive Web config preflight
+// in this same startup. Reuse that result once only, if its runtime and critical
+// configuration fingerprint remain identical before first Host launch.
+let restoredRuntimeBootPreflight
+
 function restoreActiveRuntime() {
   const markerPath = activeRuntimePath()
   if (markerPath === undefined || !existsSync(markerPath)) return
@@ -983,6 +988,11 @@ function restoreActiveRuntime() {
       return
     }
     runtimeRoot = candidate
+    restoredRuntimeBootPreflight = {
+      path: candidate,
+      fingerprint: configurationFingerprint(captureBootCriticalConfiguration()),
+      result: bootPreflight,
+    }
     console.error(`[PHOENIX UPDATE] restored verified isolated runtime ${value.target.slice(0, 12)}; source checkout remains untouched.`)
   } catch {
     clearActiveRuntime()
@@ -1170,7 +1180,12 @@ function preflightBootConfiguration() {
 }
 
 function recoverConfigurationBeforeFirstBoot() {
-  const preflight = preflightBootConfiguration()
+  const cached = restoredRuntimeBootPreflight
+  restoredRuntimeBootPreflight = undefined
+  const preflight = cached?.path === runtimeRoot
+    && cached.fingerprint === configurationFingerprint(captureBootCriticalConfiguration())
+    ? cached.result
+    : preflightBootConfiguration()
   if (preflight.ok) {
     if (readLastKnownGoodConfiguration() === undefined) persistLastKnownGoodConfiguration()
     return
