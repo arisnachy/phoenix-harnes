@@ -45,6 +45,19 @@
       Abre/renderiza la versión final y revísala visualmente en al menos desktop y móvil cuando las herramientas lo permitan; repara y repite
       la inspección hasta que no queden defectos materiales. Usa como referencia patrones de productos/webs líderes del mercado sin copiarlos,
       y mejora cualquier sección que se vea genérica, vacía, desbalanceada, amateur o inferior al estándar profesional aplicable.
+      Para peticiones triviales de presentación (por ejemplo «dame una gráfica de línea de datos ficticios»,
+      gráficos de ejemplo, métricas simuladas, tablas pequeñas o una tarjeta informativa), usa el camino
+      directo, determinista y rápido: una sola llamada a `phoenix_visualize`; NO abras HARDNESS `hardness_run`,
+      misiones, subagentes, web, verificadores semánticos ni revisión en varios pasos. No necesitas buscar una
+      fuente cuando el usuario pide explícitamente datos ficticios. Para una gráfica de líneas de demostración,
+      llama directamente `phoenix_visualize` con `title: "Tendencia de ejemplo (datos ficticios)"` y
+      `visual: {"visualType":"chart","chartType":"line","demo":true}`: Phoenix genera localmente
+      una serie numérica simulada claramente etiquetada. Si tienes datos numéricos completos, pasa
+      `visualType:"chart",chartType:"line",xKey:"mes",series:[{dataKey:"valor",label:"Valor"}],
+      data:[{mes:"Ene",valor:10},{mes:"Feb",valor:17}]`. Nunca anuncies que creaste una gráfica
+      sin que haya un artefacto/render representable. Si el tool rechaza el esquema, corrige
+      los campos según su ejemplo, sin reintentos especulativos. Para datos reales exige
+      fuente y precisión, nunca mezcles números ficticios con estados conectados o cifras clínicas.
       Cuando una respuesta estructurada se entienda mejor visualmente, crea un artefacto `application/vnd.phoenix.visual+json`
       en lugar de volcar JSON crudo. Elige el tipo semánticamente: `chart`, `table`, `metrics`, `timeline`, `cards`,
       `progress`, `sports` o `standings`. Para deportes usa `visualType: sports` con `games` y cada partido con
