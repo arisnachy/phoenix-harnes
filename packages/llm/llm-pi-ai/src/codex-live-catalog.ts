@@ -22,6 +22,8 @@ export const CODEX_PROVIDER = 'openai-codex'
 
 /** Avoid repeatedly spawning Codex while keeping selector data reasonably fresh. */
 export const CODEX_MODEL_REFRESH_INTERVAL_MS = 60_000
+/** A disconnected Codex catalog must not spawn another 45-second probe every minute. */
+export const CODEX_MODEL_FAILURE_COOLDOWN_MS = 5 * 60_000
 
 const SUPPORTED_THINKING_LEVELS = new Set<string>(THINKING_LEVELS)
 
@@ -112,6 +114,8 @@ export interface CodexLiveCatalogOptions {
   now?: () => number
   /** Freshness/failure cooldown. */
   refreshIntervalMs?: number
+  /** Failure retry cooldown; defaults to five minutes for production. */
+  failureCooldownMs?: number
   /** Installed route ids retained in the dispatch superset. */
   installedModelIds?: () => readonly string[]
   /** Optional Phoenix-compatible diagnostic sink. */
@@ -139,6 +143,7 @@ export class CodexLiveCatalog {
   private readonly transport: CodexModelListTransport
   private readonly now: () => number
   private readonly refreshIntervalMs: number
+  private readonly failureCooldownMs: number
   private readonly installedModelIds: () => readonly string[]
   private readonly logger: { warn(value: unknown): void } | undefined
   /** Monotonic catalog generation used to invalidate provider-profile memoization. */
@@ -148,6 +153,8 @@ export class CodexLiveCatalog {
     this.transport = options.transport ?? codexModelListTransport
     this.now = options.now ?? Date.now
     this.refreshIntervalMs = options.refreshIntervalMs ?? CODEX_MODEL_REFRESH_INTERVAL_MS
+    this.failureCooldownMs = options.failureCooldownMs ?? (options.refreshIntervalMs === undefined
+      ? CODEX_MODEL_FAILURE_COOLDOWN_MS : options.refreshIntervalMs)
     this.installedModelIds = options.installedModelIds
       ?? (() => [...catalogModels(CODEX_PROVIDER).keys()])
     this.logger = options.logger
@@ -287,7 +294,9 @@ export class CodexLiveCatalog {
     }
     // After that one pin-change attempt, failures still respect the cooldown
     // so an unavailable Codex process cannot be hammered by UI re-renders.
-    if (!force && !pinnedModelsChanged && now - this.lastAttemptAt < this.refreshIntervalMs) {
+    const lastAttemptFailed = this.lastSuccessAt < this.lastAttemptAt
+    const cooldown = lastAttemptFailed ? this.failureCooldownMs : this.refreshIntervalMs
+    if (!force && !pinnedModelsChanged && now - this.lastAttemptAt < cooldown) {
       return this.advertisedIds(profile)
     }
 
