@@ -172,3 +172,38 @@ describe('official AgentMail mailbox management operations', () => {
     expect(requests[1]?.headers.get('Idempotency-Key')).toMatch(/^[A-Za-z0-9._~-]{1,256}$/u)
   })
 })
+
+it('returns a short-lived HTTPS attachment link and forwards only to an authorized recipient', async () => {
+  const calls: Array<{ url: string; body: unknown; headers: Headers }> = []
+  const fetcher = vi.fn(async (url: string, init?: RequestInit) => {
+    calls.push({ url, headers: new Headers(init?.headers),
+      body: init?.body === undefined ? undefined : JSON.parse(String(init.body)) })
+    if (url.endsWith('/messages/m1')) return Response.json({ ...received, from: 'outsider@example.com' })
+    if (url.endsWith('/attachments/att-1')) {
+      return Response.json({
+        attachment_id: 'att-1', filename: 'memo.pdf',
+        download_url: 'https://cdn.agentmail.to/signed/file?token=private',
+        expires_at: '2026-10-07T22:00:00Z', content_type: 'application/pdf', size: 125,
+      })
+    }
+    if (url.endsWith('/forward')) return Response.json({ message_id: 'forward-1', thread_id: 'thread-1' })
+    throw new Error(`Unexpected AgentMail endpoint ${url}`)
+  }) as unknown as typeof fetch
+  const cfg = config(fetcher)
+  const attachment = await operateKiraMail(cfg, {
+    action: 'attachment', messageId: 'm1', attachmentId: 'att-1',
+  })
+  expect(attachment).toMatchObject({ transientPrivateUrl: true, filename: 'memo.pdf' })
+  await expect(operateKiraMail(cfg, {
+    action: 'forward', messageId: 'm1', to: 'outsider@example.com',
+    confirmation: 'REENVIAR MENSAJE', idempotencyKey: 'forward:1',
+  })).rejects.toThrow('not owner-authorized')
+  const forwarded = await operateKiraMail(cfg, {
+    action: 'forward', messageId: 'm1', to: 'owner@example.com',
+    confirmation: 'REENVIAR MENSAJE', idempotencyKey: 'forward:1',
+  })
+  expect(forwarded).toMatchObject({ state: 'sent', messageId: 'forward-1' })
+  expect(calls.find(row => row.url.endsWith('/forward'))?.body).toMatchObject({ to: ['owner@example.com'] })
+  expect(calls.find(row => row.url.endsWith('/forward'))?.headers.get('Idempotency-Key'))
+    .toMatch(/^[A-Za-z0-9._~-]{1,256}$/u)
+})
