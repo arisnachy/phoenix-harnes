@@ -322,7 +322,7 @@ function defaultSystemArgs(platform: NodeJS.Platform): readonly string[] {
       '$voices = @($speaker.GetInstalledVoices() | Where-Object { $_.Enabled -and $_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq $base }); ' +
       'if ($voices.Count -eq 0) { [Console]::Error.WriteLine(\'No installed speech voice for language \' + $lang); exit 3 }; ' +
       '$exact = @($voices | Where-Object { $_.VoiceInfo.Culture.Name -ieq $lang }); ' +
-      '$eligible = if ($exact.Count -gt 0) { $exact } else { $voices }; ' +
+      '$eligible = @(if ($exact.Count -gt 0) { $exact } else { $voices }); ' +
       '$female = @($eligible | Where-Object { $_.VoiceInfo.Gender -eq \'Female\' }); ' +
       '$selected = if ($female.Count -gt 0) { $female[0] } else { $eligible[0] }; ' +
       '$speaker.SelectVoice($selected.VoiceInfo.Name); $speaker.Speak($text)',
