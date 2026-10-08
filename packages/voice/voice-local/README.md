@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Local process providers for [`@phoenix-ai/dsh-voice`](../voice/). The package does not download models or start a process during boot.
+Local process providers for [`@phoenix-ai/dsh-voice`](../voice/). The plugin starts no Python process during boot unless `kokoroPrewarm` is explicitly enabled. On Windows the detached supervisor installer, `install-kokoro.ps1`, provisions a per-user Kokoro ONNX model in `%LOCALAPPDATA%\\Phoenix\\voice\\kokoro`, outside Git worktrees. Model weights are downloaded once and a ready marker is written only after Spanish female/male synthesis passes. Installation errors leave the system voice available and are retried at most once every six hours. Set `PHOENIX_KOKORO_AUTO_INSTALL=0` to disable the installer, or run `powershell -NoProfile -ExecutionPolicy Bypass -File .\\install-kokoro.ps1 -Force` to retry manually.
 
 ## Config
 
@@ -12,12 +12,13 @@ Local process providers for [`@phoenix-ai/dsh-voice`](../voice/). The package do
   config:
     kokoroCommand: null
     kokoroArgs: []
+    kokoroPrewarm: false
     sttCommand: null
     sttArgs: []
     systemTts: true
 ```
 
-When `kokoroCommand` is present, the `kokoro` provider receives normalized UTF-8 text on stdin and has priority over the system provider. `sttCommand` receives audio bytes on stdin and must print one transcript to stdout. The system provider uses PowerShell `System.Speech` on Windows, `say` on macOS, and `espeak-ng` on Linux.
+When `kokoroCommand` is present, the `kokoro` provider receives normalized UTF-8 text on stdin and has priority over the system provider. Otherwise the plugin detects the installed Windows Kokoro daemon; its model remains resident between utterances. The active assistant profile selects `ef_dora` (feminine) or `em_alex` (masculine) in Spanish, and `af_heart` or `am_michael` in English. Codex Realtime remains the first choice, Kokoro is second, and native system TTS is third. `sttCommand` receives audio bytes on stdin and must print one transcript to stdout. The system provider uses PowerShell `System.Speech` on Windows, `say` on macOS, and `espeak-ng` on Linux.
 
 Commands run with `shell: false`, explicit arguments, hidden Windows windows, bounded stdin/stdout pipes, and abort handling. No secret is put in command arguments or logs by this package.
 
@@ -43,5 +44,5 @@ There is no cache effect because command execution and audio playback stay outsi
 
 ## Known Limitations and Deferred Work
 
-- Availability checks are configuration checks; command installation is validated when the first request runs.
+- Explicit custom command availability is configuration-based. Bundled Kokoro requires an installed virtualenv, ONNX model, voice pack and successful setup marker. It runs locally only on Windows for now.
 - STT format conversion, microphone capture, and audio playback policy belong to the client or deployment adapter.
