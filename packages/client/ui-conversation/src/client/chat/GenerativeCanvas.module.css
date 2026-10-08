@@ -48,3 +48,34 @@
 .tabStrip button { border:0; border-radius:8px 8px 0 0; padding:8px 12px; background:transparent; color:inherit; font:inherit; cursor:pointer; white-space:nowrap; }
 .tabStrip .selected { background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.08)); border-bottom:2px solid currentColor; font-weight:650; }
 @media (max-width:480px){ .canvas { padding:12px; border-radius:14px; }.barRow { grid-template-columns:minmax(48px,1fr) minmax(55px,2fr) auto; gap:6px; } }
+
+/* Theme adapters for upstream predesigned components. These overrides keep
+   the library's layout and interactions while honoring Phoenix light/dark
+   palette and preventing overflow inside an assistant message. */
+.prebuiltMetric { min-width:0; width:100%; }
+.prebuiltMetric > :global(div) {
+  width:100% !important;
+  max-width:none !important;
+  margin:0 !important;
+  background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.06)) !important;
+  color:var(--dsw-alias-label-primary,inherit) !important;
+  border-color:var(--dsw-alias-border-subtle,rgba(120,120,120,.2)) !important;
+  box-sizing:border-box;
+}
+.prebuiltMetric > :global(div span) { color:var(--dsw-alias-label-primary,inherit) !important; }
+.prebuiltMetric > small {
+  display:block;
+  padding:0 16px 10px;
+  color:var(--dsw-alias-label-secondary,#777);
+  font-size:12px;
+}
+.tableScroll > :global(div) {
+  max-width:100%;
+  background:var(--dsw-alias-surface-primary,transparent) !important;
+  border-color:var(--dsw-alias-border-subtle,rgba(120,120,120,.2)) !important;
+}
+.tableScroll :global(th), .tableScroll :global(td) {
+  color:var(--dsw-alias-label-primary,inherit) !important;
+  border-color:var(--dsw-alias-border-subtle,rgba(120,120,120,.2)) !important;
+}
+.tableScroll :global(thead tr) { background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.06)) !important; }

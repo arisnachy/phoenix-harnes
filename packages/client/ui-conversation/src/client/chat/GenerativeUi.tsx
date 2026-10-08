@@ -262,9 +262,9 @@ export function splitGenerativeUiText(
 
   const normalized = expandRawCanvases(segments, options.streaming === true)
   if (normalized.length > 0) return normalized
-  return options.streaming === true && (text.includes('```generative-ui') || text.includes('```json'))
-    ? []
-    : [{ kind: 'markdown', text }]
+  // An unfinished bare JSON canvas is intentionally consumed by
+  // expandRawCanvases; do not resurrect it as Markdown while streaming.
+  return options.streaming === true ? [] : [{ kind: 'markdown', text }]
 }
 
 /**

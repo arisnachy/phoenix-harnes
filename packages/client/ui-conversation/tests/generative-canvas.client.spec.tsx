@@ -184,6 +184,48 @@ describe('Phoenix intelligent UI canvas', () => {
     expect(onAction).not.toHaveBeenCalled()
   })
 
+  it('uses real upstream predesigned components for metrics, data tables, progress, alerts and timeline', () => {
+    const input = sample()
+    const spec = parseCanvasSpec({ ...input, props: { ...input.props, children: [
+      { type: 'group', layout: 'grid', children: [
+        { type: 'metric', label: 'Listos', value: '5', detail: 'Con herramientas' },
+        { type: 'metric', label: 'Fallidos', value: '4' },
+      ] },
+      { type: 'progress', label: 'Conectados', value: 5, max: 18 },
+      { type: 'alert', title: 'OAuth', message: 'Pendiente de autorización', status: 'warning' },
+      { type: 'timeline', title: 'Actividad', items: [
+        { date: '08/10', title: 'Conector revisado', description: 'Validación' },
+      ] },
+      { type: 'table', columns: ['Servidor', 'Estado'], rows: [['notion', 'Requiere autorización']] },
+    ] } })
+    if (spec === null) throw new Error('prebuilt spec invalid')
+    const { container } = render(<GenerativeCanvas spec={spec} />)
+    expect(screen.getByText('Listos')).not.toBeNull()
+    expect(screen.getByText('Fallidos')).not.toBeNull()
+    expect(screen.getByText('Pendiente de autorización')).not.toBeNull()
+    expect(screen.getByText('Conector revisado')).not.toBeNull()
+    expect(screen.getByText('notion')).not.toBeNull()
+    expect(container.querySelector('table')).not.toBeNull()
+  })
+
+  it('routes upstream quick reply buttons through Phoenix user-clicked actions, not arbitrary model code', () => {
+    const input = sample()
+    const spec = parseCanvasSpec({ ...input, props: { ...input.props, children: [
+      { type: 'group', layout: 'row', children: [
+        { type: 'button', label: 'Actualizar estado', prompt: 'Actualiza el estado real de MCP', action: 'submit' },
+        { type: 'button', label: 'Ver fallidos', prompt: 'Muestra solamente los MCP fallidos', action: 'draft' },
+      ] },
+    ] } })
+    if (spec === null) throw new Error('quick replies rejected')
+    const send = vi.fn()
+    render(<GenerativeCanvas spec={spec} onAction={send} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Actualizar estado' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ver fallidos' }))
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(send).toHaveBeenNthCalledWith(1, 'Actualiza el estado real de MCP', 'submit')
+    expect(send).toHaveBeenNthCalledWith(2, 'Muestra solamente los MCP fallidos', 'draft')
+  })
+
   it('renders the validated canvas through the existing assistant UI bridge', () => {
     const block = parseGenerativeUiBlock(sample())
     if (block === null) throw new Error('fixture is invalid')
