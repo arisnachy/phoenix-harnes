@@ -264,18 +264,10 @@ export class TeamChat {
         const text = textOf(event.data.message.content)
         if (known.has(id) || text.trim() === '') continue
         const proof = teamExecutionProof(events, { upToSeq: event.seq })
-        // An operational result is not user-visible until the
-        // durable child log contains a successful non-Team tool receipt. This
-        // prevents prose such as "sent" or "updated" from masquerading as work.
-        // A narrowly recognized first-action update is participation, not a result.
-        const workStart = [
-          /^(?:Kira[, :]\s*)?(?:empiezo por|voy a|comienzo por)\b/iu,
-          /^(?:Kira[, :]\s*)?I(?:['’]ll| will) start by\b/iu,
-          /^(?:Kira[, :]\s*)?I(?:['’]m| am) starting with\b/iu,
-        ].some(pattern => pattern.test(text.trim()))
-          && !answerNeedsEvidence(text)
-          && !/\b(?:ya|listo|hecho|terminado|completado|done|finished|completed|already)\b/iu.test(text)
-        if (proof.requirement !== 'none' && !proof.satisfied && !workStart) continue
+        // Genuine work-in-progress and blockers belong in the shared chat even
+        // before a tool succeeds. Completion claims remain receipt-gated:
+        // a teammate cannot report an effect as finished based on prose alone.
+        if (proof.requirement !== 'none' && !proof.satisfied && answerNeedsEvidence(text)) continue
         const visibleText = proof.requirement === 'none' || proof.tools.length === 0
           ? text
           : `${text}\n\n✓ Evidencia ejecutada: ${proof.tools.join(', ')}`
