@@ -153,12 +153,15 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
     ? assignmentStatusKey(targetStatus)
     : undefined
   const text = textOf(data.content)
-  const isToolActivity = data.senderKind === 'agent' && data.messageId.startsWith(data.senderId + ':activity:')
-  if (text.trim() === '') return null
+  // Defensive render guard for cached chat snapshots created by older hosts.
+  // The new Host no longer publishes telemetry as speech; genuine agent
+  // messages continue to render with the same avatar and actions.
+  const isToolActivity = data.senderKind === 'agent'
+    && data.messageId.startsWith(data.senderId + ':activity:')
+  if (isToolActivity || text.trim() === '') return null
 
   return (
-    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId}
-      data-team-activity={isToolActivity ? 'true' : undefined}>
+    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId}>
       <div className={css.avatar}>
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
           kind={sender.kind}

@@ -223,32 +223,37 @@ describe('chat durable ownership and delivery', () => {
     expect(f.followup.mock.calls[0]?.[2][0]?.text).toContain('Reply to User (original)')
   })
 
-  it('projects only real tool activity, updates one row and keeps private payloads out of chat', async () => {
+  it('keeps raw tool telemetry in child events without impersonating a teammate in chat', async () => {
     const f = await fixture()
     const callId = CallId('github-read')
-    f.child.append('tool/call', { turn: 1, step: 1, callId, name: 'mcp__GitHub__fetch_file',
-      arguments: '{"secret":"PRIVATE_ARGUMENT"}' })
+    f.child.append('tool/call', {
+      turn: 1, step: 1, callId, name: 'mcp__GitHub__fetch_file',
+      arguments: '{"secret":"PRIVATE_ARGUMENT"}',
+    })
     await f.chat.capture(f.root, f.child.header, f.child.events)
-    const activity = () => f.chat.messages(f.root).filter(row => row.id.startsWith(f.child.id + ':activity:'))
-    expect(activity()).toHaveLength(1)
-    expect(activity()[0]?.text).toContain('en ejecución')
-    expect(activity()[0]?.text).not.toContain('PRIVATE_ARGUMENT')
-    f.child.append('tool/result', { turn: 1, step: 1, message: createToolResultMessage({
-      callId, content: content('PRIVATE_RESULT'), isError: false,
-    }) }, { surfaceOp: 'append' })
+    f.child.append('tool/result', {
+      turn: 1, step: 1,
+      message: createToolResultMessage({
+        callId, content: content('PRIVATE_RESULT'), isError: false,
+      }),
+    }, { surfaceOp: 'append' })
     await f.chat.capture(f.root, f.child.header, f.child.events)
-    expect(activity()).toHaveLength(1)
-    expect(activity()[0]?.text).toContain('1 respuesta(s) sin error')
-    expect(activity()[0]?.text).not.toContain('PRIVATE_RESULT')
-    const published = f.root.events.filter(event => event.type === 'team/chat-message'
-      && event.data.message.id.startsWith(f.child.id + ':activity:'))
-    expect(published).toHaveLength(2)
-    expect(published[1]).toMatchObject({ data: { update: true } })
-    f.child.append('tool/call', { turn: 1, step: 2, callId: CallId('peer'),
-      name: 'team_chat_react', arguments: '{}' })
-    await f.chat.capture(f.root, f.child.header, f.child.events)
-    expect(activity()).toHaveLength(1)
-    expect(activity()[0]?.text).toContain('1 respuesta(s) sin error')
+    expect(f.child.events.some(event => event.type === 'tool/call')).toBe(true)
+    expect(f.child.events.some(event => event.type === 'tool/result')).toBe(true)
+    expect(f.root.events.filter(event => event.type === 'team/chat-message'
+      && event.data.message.id.startsWith(f.child.id + ':activity:'))).toHaveLength(0)
+    expect(f.chat.messages(f.root)).toHaveLength(0)
+
+    // A pre-upgrade persisted activity row must not resurrect on backfill.
+    f.row({
+      id: f.child.id + ':activity:123', senderId: f.child.id, senderKind: 'agent',
+      text: '**Actividad real** · 3 respuesta(s) sin error. Última herramienta: mcp__phoenix_browser__navigate.',
+    })
+    f.row({
+      id: 'real-human-reply', senderId: f.child.id, senderKind: 'agent',
+      text: 'Revisé la navegación y no encontré errores.',
+    })
+    expect(f.chat.messages(f.root).map(row => row.id)).toEqual(['real-human-reply'])
   })
 
 })

@@ -330,3 +330,38 @@ it('keeps the real named assignment through activation and replay', () => {
   expect(assembler.snapshot('chat')).toHaveLength(1)
   expect(assembler.snapshot('chat')).toMatchObject([{ data: { content: [{ type: 'text', text: 'Argo, busca fuentes y comprueba sus fechas.' }] } }])
 })
+
+it('suppresses historical generated tool status cards without hiding genuine teammate replies', () => {
+  const legacy = {
+    id: 'aegis:activity:3', senderId: 'aegis', senderName: 'aegis',
+    senderKind: 'agent',
+    text: '**Actividad real** · 3 respuesta(s) sin error. Última herramienta: mcp__phoenix_browser__navigate.',
+  }
+  const normal = { ...legacy, id: 'aegis:real-response', text: 'Revisé la navegación; no encontré problemas.' }
+  expect(kiraTeamMessageDefinition.match(event('team/chat-message', {
+    version: 1, message: legacy,
+  }))).toBeNull()
+  expect(kiraTeamMessageDefinition.match(event('team/chat-message', {
+    version: 1, update: true, message: legacy,
+  }))).toBeNull()
+  expect(kiraTeamMessageDefinition.match(event('team/chat-message', {
+    version: 1, message: normal,
+  }))).toEqual({ id: 'aegis:real-response', role: 'start' })
+
+  const ctx = new Context()
+  const events = new ConversationEventRegistry(ctx)
+  const views = new ConversationViewRegistry(ctx)
+  events.register(kiraTeamMessageDefinition)
+  views.register({ target: 'chat', create: () => ({ empty: [], replace: ({ nodes }) => nodes,
+    apply: ({ upserts }) => upserts }) })
+  const assembler = new ConversationNodeAssembler(events, views)
+  assembler.replaceWindow([
+    { event: event('team/chat-message', { version: 1, message: legacy }, 1), view: undefined },
+    { event: event('team/chat-message', { version: 1, message: normal }, 2), view: undefined },
+  ], false)
+  assembler.flush()
+  expect(assembler.snapshot('chat')).toHaveLength(1)
+  expect(assembler.snapshot('chat')).toMatchObject([{
+    data: { messageId: 'aegis:real-response', content: [{ type: 'text', text: normal.text }] },
+  }])
+})

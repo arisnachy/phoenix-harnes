@@ -132,6 +132,10 @@ export const kiraTeamMessageDefinition: ConversationNodeDefinition<KiraTeamMessa
     if ((event.type as string) === 'team/message/queued' || (event.type as string) === 'team/chat-message') {
       const data = record(event.data)
       const message = record(data?.message)
+      // Historical generated tool-activity rows never enter the visible chat
+      // projection. Genuine teammate messages remain available unchanged.
+      if (typeof message?.id === 'string' && typeof message.senderId === 'string'
+        && message.id.startsWith(message.senderId + ':activity:')) return null
       return typeof message?.id === 'string' ? { id: message.id, role: data?.update === true ? 'update' : 'start' } : null
     }
     if ((event.type as string) === 'team/reaction') {
