@@ -9,7 +9,7 @@ import { useId } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import {
   IconChevronDownOutline14, IconChevronRightOutline14, IconFolderClose16, IconFolderOpen16,
-  IconWarningOutline16, PhoenixLogo,
+  IconSparkle16, IconWarningOutline16, PhoenixLogo,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import { workspaceTitleOf } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, ProactivityAttentionItem } from '../contract/slots.ts'
