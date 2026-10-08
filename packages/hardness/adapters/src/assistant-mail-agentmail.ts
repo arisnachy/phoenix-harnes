@@ -117,6 +117,8 @@ async function responseError(response: Response, authenticated: boolean): Promis
  *
  * AgentMail allows 1–256 chars in A-Z, a-z, 0-9, hyphen, dot, underscore, tilde.
  * A nested agent call or scheduled occurrence may contain a colon, which is invalid.
+ * @param value Stable Phoenix mail identity, retained in the durable local journal.
+ * @returns Provider-safe deterministic alias or the existing valid key.
  */
 export function agentMailIdempotencyKey(value: string): string {
   const key = mailString(value, 4096)
