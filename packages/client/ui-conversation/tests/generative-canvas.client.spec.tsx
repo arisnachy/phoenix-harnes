@@ -208,6 +208,25 @@ describe('Phoenix intelligent UI canvas', () => {
     expect(container.querySelector('table')).not.toBeNull()
   })
 
+  it('keeps KPI descriptions inside compact proportional cards', () => {
+    const template = sample()
+    const spec = parseCanvasSpec({ ...template, props: { ...template.props, children: [
+      { type: 'group', layout: 'grid', children: [
+        { type: 'metric', label: 'Conectores MCP', value: '18', detail: 'Inventario ficticio' },
+        { type: 'metric', label: 'Listos', value: '5', detail: '28% del total' },
+        { type: 'metric', label: 'Pendientes', value: '9', detail: 'Requieren autorización' },
+        { type: 'metric', label: 'Fallidos', value: '4', detail: 'Incidencias simuladas' },
+      ] },
+    ] } })
+    if (spec === null) throw new Error('KPI layout fixture invalid')
+    const { container } = render(<GenerativeCanvas spec={spec} />)
+    const stat = screen.getByText('Conectores MCP').closest('div[style*="padding"]')
+    expect(stat).not.toBeNull()
+    expect(stat?.textContent).toContain('Inventario ficticio')
+    expect(container.querySelectorAll('[data-generative-ui="ui_canvas"]')).toHaveLength(1)
+    expect(screen.getByText('28% del total').closest('div[style*="padding"]')?.textContent).toContain('Listos')
+  })
+
   it('routes upstream quick reply buttons through Phoenix user-clicked actions, not arbitrary model code', () => {
     const input = sample()
     const spec = parseCanvasSpec({ ...input, props: { ...input.props, children: [
