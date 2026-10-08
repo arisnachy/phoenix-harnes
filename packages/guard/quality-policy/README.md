@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 A low-latency completion-quality guard. It does not call a model, scan the filesystem, or run tests by itself. Instead it observes work PHOENIX is already doing, invalidates verification evidence when a successful mutation occurs, accepts only evidence observed after that mutation, and uses the existing tool-result and turn-stop flow to keep the model from mistaking stale evidence for completion.
 
-The compliant path adds no model round: the first successful mutation appends a short, source-attributed context to the next step that already has to consume the tool result. If the model verifies before stopping, the guard is silent. Only a turn that tries to close while still dirty can receive a bounded corrective steer.
+The compliant path adds no model round: the first successful mutation appends a short, source-attributed context to the next step that already has to consume the tool result. If the model verifies before stopping, the guard is silent. A turn that tries to close while still dirty can receive a bounded corrective steer. A last unresolved failed or blocked tool call also gets one bounded recovery steer even when nothing was mutated; a successful alternate tool call clears that pending failure.
 
 ## Config
 
@@ -29,11 +29,16 @@ The artifact domain is inferred from touched paths: code, web, docs, data, confi
 - Cheap first. The reminder directs the model toward deterministic checks before an LLM judge and toward one focused high-signal command rather than exhaustive redundant suites.
 - Parallel where possible. Independent checks should be batched into one command or run concurrently.
 - Real boundary. Domain hints prefer the actual build/start/render/read-back surface instead of internal helper-only tests.
-- Bounded correction. A missed verification receives at most maxStopNudges correction steps for one direct human task; the default is one. A new direct user prompt resets that budget.
+- Bounded correction. A missed verification or unresolved final tool failure receives at most maxStopNudges correction steps for one direct human task; the default is one. A new direct user prompt resets that budget.
 - No side-effect fiction. A successful mutation remains dirty even if a later post-execute policy blocks its presentation, because tool side effects are not rolled back.
 - Concurrency-safe freshness. Parallel calls settle in observed order: verification that finishes before a mutation cannot validate that later mutation; verification that finishes after it can.
 
 ## Model Experience
+
+### Unresolved-tool recovery
+
+If the last tool attempt failed or was blocked and no subsequent tool call succeeded, the turn-stop guard injects a single source-attributed recovery instruction. It also detects a narrow class of premature user handoffs after a technically successful but unhelpful search: the assistant reports that it found no source and asks the user to supply ordinary research inputs instead of delivering a usable answer. That path gets the same bounded recovery steer, without treating ordinary uncertainty or a request for indispensable credentials as an automatic failure. The model must inspect the failure, try a materially different relevant source/tool, or disclose an actual external blocker and deliver the best supported partial result. An unrelated account activation is never a recovery step. No notice is added for a successful alternative, and the same per-human-task `maxStopNudges` limit applies. This may add one model step only on a premature stop following a failure; normal successful turns add no cost.
+
 
 ### Post-mutation context
 

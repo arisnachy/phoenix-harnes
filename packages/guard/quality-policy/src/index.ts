@@ -129,6 +129,10 @@ interface QualityState {
   scaleVerifiedGeneration: number
   nudgedGeneration: number
   stopNudges: number
+  failedTool: string | undefined
+  failureNudged: boolean
+  handoffNudged: boolean
+  toolAttempts: number
   domains: Set<QualityDomain>
   signals: QualitySignals
 }
@@ -171,6 +175,10 @@ function newState(signals: QualitySignals = {
     scaleVerifiedGeneration: 0,
     nudgedGeneration: 0,
     stopNudges: 0,
+    failedTool: undefined,
+    failureNudged: false,
+    handoffNudged: false,
+    toolAttempts: 0,
     domains: new Set<QualityDomain>(),
     signals,
   }
@@ -242,6 +250,54 @@ function stopReminder(state: QualityState): UserMessage {
   )
 }
 
+/** A single stop-bound recovery chance after an unresolved tool error, even without file mutations. */
+function failureReminder(): UserMessage {
+  return pluginMessage(
+    'The last tool attempt failed or was blocked, and no successful alternative has been observed since. '
+      + 'Do not end the task merely because this route failed. Inspect the failure, then use a materially different, '
+      + 'relevant and permitted tool or source. Do not create unrelated accounts or financial side effects. '
+      + 'If only optional evidence is missing, provide the best truthful, useful result with clearly marked assumptions. '
+      + 'If credentials, permission, quota or another genuine external dependency prevent completion, state the exact '
+      + 'blocker and what was completed; never fabricate success or retry indefinitely.',
+    'unresolved tool failure: change strategy',
+  )
+}
+
+/** Detect a premature handoff after an unsuccessful lookup, without penalizing ordinary uncertainty.
+ * @param text - Last assistant message in the turn.
+ * @returns Whether the model transferred routine research back to the user without a usable output.
+ */
+export function isUnfinishedResearchHandoff(text: string): boolean {
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable multilingual heuristic kept as one regex.
+  const missing = /(?:no encontr[eé]|no consegu[ií]|no (?:pude|puedo) (?:encontrar|obtener|verificar|acceder)|could not find|couldn't find|unable to find|did not find)/iu
+  // oxlint-disable-next-line @stylistic/max-len -- Explicit user handoff phrases across Spanish and English.
+  const asksUserToResearch = /(?:si (?:me |nos )?(?:compartes|env[ií]as|proporcionas|facilitas)|(?:comparte|env[ií]ame|facil[ií]tame) (?:una? |los? |las? )?(?:captura|lista|datos|cuotas|resultados)|if you (?:send|share|provide)|please (?:send|share|provide))/iu
+  return missing.test(text) && asksUserToResearch.test(text)
+}
+
+function assistantTextInTurn(agent: Agent, turn: number): string {
+  const last = agent.session.events.findLast(event =>
+    event.type === 'assistant/message' && event.data.turn === turn)
+  if (last?.type !== 'assistant/message') return ''
+  return last.data.message.content
+    .filter(block => block.type === 'text')
+    .map(block => block.text)
+    .join(' ')
+}
+
+function handoffReminder(): UserMessage {
+  return pluginMessage(
+    'You found no useful information on one search route, then asked the user to supply routine research inputs. '
+      + 'That is not completion. Keep the original objective and any as-of knowledge cutoff. '
+      + 'Try a materially different authoritative source or a bounded offline route. '
+      + 'If precise historical odds are unavailable, offer a usable conditional or hypothetical deliverable '
+      + 'with plainly marked unknowns, without inventing real games, data, or guaranteed outcomes. '
+      + 'Do not move funds or activate unrelated services. A truly indispensable credential, permission '
+      + 'or unknown user preference may still require a focused clarification.',
+    'research handoff before delivering result',
+  )
+}
+
 function markMutation(state: QualityState, argumentsValue: unknown): boolean {
   const wasFresh = state.generation === state.verifiedGeneration
   state.generation += 1
@@ -294,9 +350,17 @@ export function apply(ctx: Context, config: Config = {}): void {
     const downstream = await next()
     if (exec.agent === undefined) return downstream
 
+    const state = stateFor(states, exec.agent)
+    state.toolAttempts += 1
+    if (result.isError || downstream.kind === 'block') {
+      state.failedTool = exec.name
+      state.failureNudged = false
+    } else {
+      state.failedTool = undefined
+    }
+
     const activity = classifyQualityActivity(exec.name, exec.arguments)
     if (activity === 'other') return downstream
-    const state = stateFor(states, exec.agent)
 
     if (activity === 'mutation') {
       if (result.isError) return downstream
@@ -310,14 +374,28 @@ export function apply(ctx: Context, config: Config = {}): void {
     return downstream
   })
 
-  ctx.on('agent/turn-stopping', ({ agent }) => {
+  ctx.on('agent/turn-stopping', ({ agent, turn }) => {
     if (maxStopNudges === 0) return
     const state = states.get(agent)
-    if (state === undefined || evidenceFresh(state)) return
-    if (state.stopNudges >= maxStopNudges || state.nudgedGeneration === state.generation) return
+    if (state === undefined || state.stopNudges >= maxStopNudges) return
+    if (!evidenceFresh(state)) {
+      if (state.nudgedGeneration === state.generation) return
+      state.stopNudges += 1
+      state.nudgedGeneration = state.generation
+      agent.steer(stopReminder(state))
+      return
+    }
+    if (state.failedTool !== undefined && !state.failureNudged) {
+      state.stopNudges += 1
+      state.failureNudged = true
+      agent.steer(failureReminder())
+      return
+    }
+    if (state.toolAttempts === 0 || state.handoffNudged
+      || !isUnfinishedResearchHandoff(assistantTextInTurn(agent, turn))) return
     state.stopNudges += 1
-    state.nudgedGeneration = state.generation
-    agent.steer(stopReminder(state))
+    state.handoffNudged = true
+    agent.steer(handoffReminder())
   })
 
   ctx.on('agent/disposed', ({ agent }) => {
