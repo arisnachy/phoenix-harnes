@@ -115,7 +115,7 @@ export function createSystemTextToSpeechProvider(options: SystemTtsProviderOptio
       assertSuccessful(await run({
         command,
         args,
-        stdin: platform === 'win32' ? `${request.language}\\n${request.text}` : request.text,
+        stdin: platform === 'win32' ? `${request.language}\n${request.text}` : request.text,
         ...request.signal === undefined ? {} : { signal: request.signal },
       }))
     },
