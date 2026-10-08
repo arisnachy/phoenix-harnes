@@ -10,6 +10,8 @@ The adapter separates host-owned indexing from model-facing tools. The host comp
 
 ## Local assistant mailbox
 
+Mailbox management returns JSON values: unavailable draft and attachment metadata is omitted, and provider labels are normalized to strings.
+
 Kira can inspect, create, verify and refresh her own mailbox through `phoenix_mail_identity`. `phoenix_mail_send` sends explicitly requested immediate messages from that inbox to its verified owner with the stored AgentMail credential, without another sending integration. Its success includes the provider receipt; unconfirmed sends remain durable and must not be reported as delivered. Scheduled mail uses `phoenix_task_create`.
 
 The resident Web host can enroll a Phoenix-owned inbox on AgentMail's included `agentmail.to` domain from Settings → Connectors → Correo propio de Phoenix. Signup returns the actual provider address; verification sent to the nominated human owner must finish before incoming mail becomes work. An existing free-domain account can instead be connected with its API key and a separate owner challenge. Secrets stay in the credential service, outside chat, account files and status replies. No custom domain, paid upgrade or public webhook is provisioned.

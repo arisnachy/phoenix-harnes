@@ -10,6 +10,8 @@ Capability index 不会执行 tools、加载 skill 正文或授予权限；每�
 
 ## 本地助手邮箱
 
+邮箱管理返回 JSON 值：缺失的草稿及附件元数据省略，服务商标签规范化为字符串。
+
 Kira 可通过 `phoenix_mail_identity` 查询、创建、验证及刷新自己的邮箱。`phoenix_mail_send` 使用已保存的 AgentMail 凭据，从该邮箱向已验证所有者发送明确请求的即时邮件，不需要另接发送服务。成功结果包含服务商回执；未确认邮件持久保存，不得声称已送达。定时邮件使用 `phoenix_task_create`。
 
 驻留 Web host 可在 Settings → Connectors → Correo propio de Phoenix 中注册 Phoenix 自有邮箱，使用 AgentMail 免费方案包含的 `agentmail.to` 域名。注册显示服务商实际返回的地址；指定的人类所有者必须先完成邮件验证，收到的邮件才会成为任务。已有免费域名账户可用 API key 连接，再单独验证所有者。密钥保存在 credential service 中，不进入聊天、账户文件或状态响应。不创建自定义域名、付费升级或公开 webhook。
