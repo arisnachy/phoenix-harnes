@@ -236,10 +236,22 @@ function sandboxDocument(html: string, executable: boolean): string {
     "base-uri 'none'",
     "form-action 'none'",
   ].join('; ') + ';'
+  // External scripts intentionally cannot load inside the isolated srcDoc.
+  // Explain this *in the visible artifact* when a chart depends on such a
+  // resource; a blank canvas otherwise looks like an apparently successful job.
+  const remoteChartDependency = /<script\\b[^>]*\\bsrc\\s*=/iu.test(html)
+    && /<canvas\\b|chart(?:\\.js)?|plotly|echarts|apexcharts|gr[aá]fica/iu.test(html)
+  const dependencyNotice = remoteChartDependency
+    ? '<p role="alert" style="margin:0 0 12px;padding:12px 14px;border:1px solid #dfba7e;'
+      + 'border-radius:10px;background:#fff8eb;color:#533e22;line-height:1.45">'
+      + 'Esta gráfica HTML utiliza una biblioteca externa bloqueada por seguridad. '
+      + 'Para verla en Phoenix, genera una gráfica nativa con phoenix_visualize, '
+      + 'o crea una versión HTML completamente autónoma, sin CDN.</p>'
+    : ''
   const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
   const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
   const heightReporter = '<script>(function(){function height(){var root=document.documentElement,body=document.body;return Math.max(root?root.scrollHeight:0,root?root.offsetHeight:0,body?body.scrollHeight:0,body?body.offsetHeight:0,1)}function report(){parent.postMessage({type:\'phoenix-artifact-height\',height:height()},\'*\')}if(window.ResizeObserver){var ro=new ResizeObserver(report);ro.observe(document.documentElement);if(document.body)ro.observe(document.body)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);window.addEventListener(\'resize\',report);report()})()<\/script>'
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${body}${heightReporter}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${dependencyNotice}${body}${heightReporter}</body></html>`
 }
 
 interface MiniAppProps {
