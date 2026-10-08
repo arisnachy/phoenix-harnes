@@ -239,8 +239,8 @@ function sandboxDocument(html: string, executable: boolean): string {
   // External scripts intentionally cannot load inside the isolated srcDoc.
   // Explain this *in the visible artifact* when a chart depends on such a
   // resource; a blank canvas otherwise looks like an apparently successful job.
-  const remoteChartDependency = /<script\\b[^>]*\\bsrc\\s*=/iu.test(html)
-    && /<canvas\\b|chart(?:\\.js)?|plotly|echarts|apexcharts|gr[aá]fica/iu.test(html)
+  const remoteChartDependency = /<script\b[^>]*\bsrc\s*=/iu.test(html)
+    && /<canvas\b|chart(?:\.js)?|plotly|echarts|apexcharts|gr[aá]fica/iu.test(html)
   const dependencyNotice = remoteChartDependency
     ? '<p role="alert" style="margin:0 0 12px;padding:12px 14px;border:1px solid #dfba7e;'
       + 'border-radius:10px;background:#fff8eb;color:#533e22;line-height:1.45">'
