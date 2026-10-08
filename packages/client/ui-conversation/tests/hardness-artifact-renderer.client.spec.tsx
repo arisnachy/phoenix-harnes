@@ -77,6 +77,41 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(frame.style.height).toBe('760px')
   })
 
+  it('shows MCP status rows from record-shaped visual data instead of blank cells', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'mcp-rows-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'Estado de conectores MCP',
+      data: {
+        visualType: 'table',
+        columns: ['Estado', 'Conectores', 'Cantidad'],
+        rows: [
+          { Estado: 'Conectado', Conectores: 'GitHub', Cantidad: 1 },
+          { Estado: 'Requiere autorización', Conectores: 'Canva', Cantidad: 1 },
+        ],
+      },
+    })} />)
+    const rows = screen.getByRole('table').querySelectorAll('tbody tr')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.textContent).toContain('Conectado')
+    expect(rows[0]?.textContent).toContain('GitHub')
+    expect(rows[1]?.textContent).toContain('Canva')
+    expect(document.querySelector('[data-phoenix-visual-qa="fail"]')).toBeNull()
+  })
+
+  it('refuses to present MCP status placeholder rows as a valid table', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'mcp-blank-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'Estado de conectores MCP',
+      data: { visualType: 'table', columns: ['Estado', 'Conectores', 'Cantidad'],
+        rows: [{}, {}, {}] },
+    })} />)
+    expect(screen.queryByRole('table')).toBeNull()
+    expect(screen.getByText(/La tabla no contiene datos verificables/)).toBeTruthy()
+    expect(document.querySelector('[data-phoenix-visual-qa="fail"]')).toBeTruthy()
+  })
+
   it('renders the Phoenix rich visual contract instead of raw JSON', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'visual-1',

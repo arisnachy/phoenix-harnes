@@ -2,11 +2,57 @@
 import { describe, expect, it } from 'vitest'
 import {
   auditRenderedVisual,
+  projectVisualTable,
   preflightVisualSpec,
   repairVisualSpec,
 } from '../src/client/chat/visual-quality-gate.ts'
 
 describe('visual quality gate', () => {
+  it('projects object-shaped MCP rows into their visible columns instead of blank rows', () => {
+    const spec = {
+      visualType: 'table',
+      columns: ['Estado', 'Conectores', 'Cantidad'],
+      rows: [
+        { Estado: 'Conectado', Conectores: 'GitHub', Cantidad: 1 },
+        { estado: 'Requiere autorización', conectores: 'Canva', cantidad: 1 },
+      ],
+    }
+    const table = projectVisualTable(spec)
+    expect(table?.rows).toEqual([
+      ['Conectado', 'GitHub', 1],
+      ['Requiere autorización', 'Canva', 1],
+    ])
+    expect(preflightVisualSpec(spec).valid).toBe(true)
+    expect(projectVisualTable({
+      visualType: 'table', columns: ['Estado', 'Conectores', 'Cantidad'],
+      rows: [{ status: 'ready', connectors: 'GitHub', count: 1 }],
+    })?.rows).toEqual([['ready', 'GitHub', 1]])
+  })
+
+  it('rejects placeholder tables that contain headers but no cell values', () => {
+    const empty = {
+      visualType: 'table', columns: ['Estado', 'Conectores', 'Cantidad'],
+      rows: [{}, { Estado: '', Cantidad: null }, []],
+    }
+    expect(preflightVisualSpec(empty)).toMatchObject({
+      valid: false, issues: ['table-empty-data'],
+    })
+    expect(preflightVisualSpec({ visualType: 'table', columns: ['Estado'], rows: [] }).issues)
+      .toContain('table-empty-data')
+    expect(preflightVisualSpec({ visualType: 'table', columns: ['Estado'] }).issues)
+      .toContain('table-no-rows')
+  })
+
+  it('flags DOM tables with an empty rendered row', () => {
+    const root = document.createElement('div')
+    root.innerHTML = '<section data-phoenix-visual-kind="table"><table><tbody><tr><td></td></tr></tbody></table></section>'
+    const report = auditRenderedVisual(root, {
+      visualType: 'table', columns: ['Estado'], rows: [['Conectado']],
+    }, 0)
+    expect(report.verdict).toBe('fail')
+    expect(report.issues).toContain('table-blank-rendered-row')
+  })
+
   it('rejects invalid candlestick contracts before render', () => {
     const result = preflightVisualSpec({
       visualType: 'chart',

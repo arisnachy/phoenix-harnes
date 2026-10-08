@@ -179,7 +179,7 @@ export function createConnectorListTool(
 ): ToolDefinition {
   return defineTool({
     name: 'connector_list',
-    description: 'List installed/authorized connectors and callable services without changing access. When the user names a service or capability, pass that concise name in target so PHOENIX can mark only task-relevant connectors. Results returned without target are inventory-only and must never trigger a user-facing Connect/Reconnect action; re-call with target first. Call this only when the needed connector is not already directly available, selection is ambiguous, or a connector just failed. Follow recommended_action: use, connect-or-reconnect, wait, repair, or inspect. Never surface an unrelated connector merely because it needs authorization. If target has no relevant match, call connector_discover for that target.',
+    description: 'For a user request to show/report MCP connector statuses, call connector_list first (target=mcp), before any phoenix_visualize call. This tool provides a truthful inline status table from the live MCP runtime; do NOT invent, duplicate or draw an unpopulated status table. List installed/authorized connectors and callable services without changing access. When the user names a service or capability, pass that concise name in target so PHOENIX can mark only task-relevant connectors. Results returned without target are inventory-only and must never trigger a user-facing Connect/Reconnect action; re-call with target first. Call this only when the needed connector is not already directly available, selection is ambiguous, or a connector just failed. Follow recommended_action: use, connect-or-reconnect, wait, repair, or inspect. Never surface an unrelated connector merely because it needs authorization. If target has no relevant match, call connector_discover for that target.',
     parameters: {
       target: { type: 'string' },
     },
@@ -239,6 +239,30 @@ export function createConnectorListTool(
         },
       },
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value) }],
+      presentationMeta: (args, value) => {
+        const target = args.target?.trim().toLowerCase()
+        if (target !== undefined && target.length > 0 && target !== 'mcp') return {}
+        const mcp = value.connectors.filter(connector => connector.kind === 'mcp')
+        return {
+          artifact: {
+            id: 'phoenix-live-mcp-inventory',
+            mime: 'application/vnd.phoenix.visual+json',
+            title: 'Estado real de conectores MCP',
+            executable: false,
+            data: mcp.length === 0 ? {
+              visualType: 'metrics',
+              metrics: [{ label: 'MCP observados en esta sesión', value: 0 }],
+            } : {
+              visualType: 'table',
+              columns: ['Conector', 'Estado', 'Herramientas', 'Diagnóstico'],
+              rows: mcp.map(connector => [
+                connector.label, connector.status, connector.tools?.length ?? 0,
+                connector.reason_code ?? 'Sin error reportado',
+              ]),
+            },
+          },
+        }
+      },
     },
     async execute(args) {
       const authorizationEntries = authorization === undefined
