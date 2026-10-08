@@ -84,3 +84,5 @@ The `conversation/addressed-submit` async routing hook lets a team plugin handle
 Team delegation keeps one chat row from provisioning through activation. The real named assignment replaces the provisional title and survives replay; activation preserves its text. Teammate updates render from actual published messages with their own identity.
 
 The new-session welcome offers six responsive, accessible action cards and four suggestion prompts. Each choice populates the resident composer without sending a model turn; if no workspace is selected, it opens the existing workspace picker and waits to populate the draft after selection. The active conversation's narrower reading column, input controls, session state, and model permissions are unchanged.
+
+The new-session hero now includes a 68px toolbar with search, the real shared model selector, discovery, and Profile. Its composer moves the model choice beside the left controls only in the hero; the active conversation toolbar remains unchanged. The hero is centered in the actual conversation column rather than inheriting the floating-team axis offset.
