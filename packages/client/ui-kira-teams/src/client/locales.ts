@@ -5,6 +5,7 @@ export const NS = 'kira-teams'
 
 /** Simplified Chinese dictionary (the key-set source of truth). */
 export const zh = {
+  'studio.nav': '团队',
   'skill.verification': '验证 / 证据',
   'chat.addReaction': '添加表情',
   'chat.historical': '此消息属于原始团队；在该会话中互动',
@@ -98,6 +99,7 @@ export type KiraTeamsKey = keyof typeof zh
 
 /** English dictionary, key-identical to the Chinese source of truth. */
 export const en: Record<KiraTeamsKey, string> = {
+  'studio.nav': 'Team',
   'skill.verification': 'Verification',
   'chat.addReaction': 'Add reaction',
   'chat.historical': 'This message belongs to the original team; interact in that session',
@@ -188,6 +190,7 @@ export const en: Record<KiraTeamsKey, string> = {
 
 /** Spanish dictionary, key-identical to the Chinese source of truth. */
 export const es: Record<KiraTeamsKey, string> = {
+  'studio.nav': 'Equipo',
   'skill.verification': 'Verificación',
   'chat.addReaction': 'Añadir reacción',
   'chat.historical': 'Este mensaje pertenece al equipo original; interactúa en esa sesión',

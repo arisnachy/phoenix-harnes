@@ -14,6 +14,8 @@ import {
 } from '@phoenix-ai/dsh-llm'
 import { scopeOf } from '@phoenix-ai/dsh-scope'
 import { SessionId } from '@phoenix-ai/dsh-session'
+import { SettingsProvider } from '@phoenix-ai/dsh-settings'
+import type { SettingsNamespace } from '@phoenix-ai/dsh-settings'
 import SessionProjections from '@phoenix-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
 import SubagentService from '@phoenix-ai/dsh-subagent'
@@ -28,6 +30,7 @@ import * as toolTeam from '../src/index.ts'
 
 const SIGNAL = new AbortController().signal
 const TOOL_NAMES = [
+  'design_team',
   'spawn_teammate',
   'send_message',
   'followup_task',
@@ -44,6 +47,23 @@ const TOOL_NAMES = [
 const roots: string[] = []
 let callNumber = 0
 
+class MemorySettings extends SettingsProvider {
+  private readonly doc: Record<string, unknown> = {}
+
+  get writable(): boolean {
+    return true
+  }
+
+  protected load(): Promise<Record<string, unknown>> {
+    return Promise.resolve(structuredClone(this.doc))
+  }
+
+  protected persist(ns: SettingsNamespace, section: Record<string, unknown>): Promise<void> {
+    this.doc[ns] = structuredClone(section)
+    return Promise.resolve()
+  }
+}
+
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
@@ -53,9 +73,11 @@ async function setup(
   legacyControl = false,
   config: toolTeam.Config = {},
   reasoning?: LlmModelReasoningInfo,
+  withSettings = true,
 ) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  if (withSettings) await ctx.plugin(MemorySettings)
   const storageRoot = mkdtempSync(join(tmpdir(), 'dsh-tool-team-'))
   roots.push(storageRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
@@ -166,13 +188,13 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('Address a known teammate by their real runtime name')
     expect(leadPrompt).toContain('worker uses its first normal work update')
     expect(leadPrompt).toContain('do not add a separate model turn')
-    expect(leadPrompt).toContain('Your Team role is lead')
-    expect(leadPrompt).toContain('Warm, confident, curious, and witty')
-    expect(leadPrompt).toContain('high quality, fast completion, and low cost')
     expect(leadPrompt).toContain('The fixed priority is quality, then speed, then low token cost')
     expect(leadPrompt).toContain('reuses available teammates and verifies acceptance')
     expect(leadPrompt).toContain('never repeat the same failed operation unchanged')
     expect(leadPrompt).toContain('peers exchange only new evidence')
+    expect(leadPrompt).toContain('Your Team role is lead')
+    expect(leadPrompt).toContain('Warm, confident, curious, and witty')
+    expect(leadPrompt).toContain('high quality, fast completion, and low cost')
     expect(leadPrompt).toContain('never synthesize roster filenames')
     expect(leadPrompt).toContain('Phoenix has no repository-root cordis.yml')
 
@@ -188,7 +210,7 @@ describe('dsh-tool-team', () => {
     expect(childAssembly.tools.map(schema => schema.name).filter(name => TOOL_NAMES.includes(name)).sort())
       .toEqual(TOOL_NAMES)
     const childPrompt = renderPrompt(childAssembly)
-    expect(childPrompt).toContain('Your Team role is teammate; your Team name is tool-worker')
+    expect(childPrompt).toContain('Your Team role is teammate; your visible Team name is tool-worker')
     expect(childPrompt).toContain('Natural, concise, collegial')
     expect(childPrompt).toContain('Resolve discoverable missing facts with available tools before asking the user')
     expect(childPrompt).toContain('never synthesize roster filenames')
@@ -204,6 +226,85 @@ describe('dsh-tool-team', () => {
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
   })
 
+  it('keeps the ordinary Agent Teams tools available without optional settings', async () => {
+    const { ctx, lead } = await setup([], false, {}, undefined, false)
+    const prompt = renderPrompt(await assembly(ctx, lead))
+    expect(prompt).toContain('Your visible Team name is Kira')
+    const agents = await execute(ctx, lead, 'list_agents', {})
+    expect(agents.isError).toBe(false)
+    const redesign = await execute(ctx, lead, 'design_team', {
+      design_json: JSON.stringify({ name: 'No settings' }),
+    })
+    expect(redesign.isError).toBe(true)
+    expect(text(redesign)).toContain('requires the Phoenix Settings service')
+  })
+
+  it('applies a twenty-person Team Studio redesign while preserving runtime ids', async () => {
+    const { ctx, lead } = await setup([])
+    const apply = await execute(ctx, lead, 'design_team', {
+      design_json: JSON.stringify({
+        name: 'Hero Lab',
+        themePrompt: 'Original superhero research team',
+        motion: 'expressive',
+        lead: {
+          id: 'lead',
+          displayName: 'Athena',
+          role: 'Directora',
+          gender: 'female',
+          personality: 'Strategic, warm, decisive and witty.',
+          voice: 'Calm and confident.',
+          avatar: 'vega',
+          enabled: true,
+        },
+        members: [
+          { id: 'atlas', displayName: 'Constructor', role: 'Ingeniería', gender: 'male', personality: 'Precise.', voice: 'Calm.', avatar: 'atlas', enabled: true },
+        ],
+      }),
+    })
+    expect(apply.isError).toBe(false)
+    expect(JSON.parse(text(apply))).toMatchObject({
+      teamName: 'Hero Lab',
+      leadName: 'Athena',
+      members: 20,
+    })
+    const prompt = renderPrompt(await assembly(ctx, lead))
+    expect(prompt).toContain('Your visible Team name is Athena')
+    expect(prompt).toContain('Strategic, warm, decisive and witty.')
+
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'atlas',
+      description: 'engineering implementation',
+      prompt: 'stay available',
+    })
+    expect(spawned.isError).toBe(false)
+    const child = await waitRunning(ctx, spawnedChildId(spawned))
+    const childPrompt = renderPrompt(await assembly(ctx, child))
+    expect(childPrompt).toContain('Your visible Team name is Constructor')
+    expect(childPrompt).toContain('your stable runtime handle is atlas')
+    await execute(ctx, lead, 'interrupt_agent', { target: 'atlas' })
+    await waitNoAgent(ctx, child.id)
+  })
+
+  it('keeps disabled Team Studio specialists out of execution', async () => {
+    const { ctx, lead } = await setup([])
+    const apply = await execute(ctx, lead, 'design_team', {
+      design_json: JSON.stringify({
+        name: 'Quiet Team',
+        members: [
+          { id: 'atlas', displayName: 'Constructor oculto', role: 'Ingeniería', gender: 'male', personality: 'Precise.', voice: 'Calm.', avatar: 'atlas', enabled: false },
+        ],
+      }),
+    })
+    expect(apply.isError).toBe(false)
+    const explicit = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'atlas',
+      description: 'engineering implementation',
+      prompt: 'work',
+    })
+    expect(explicit.isError).toBe(true)
+    expect(text(explicit)).toContain('disabled for the active team')
+  })
+
   it('injects only the active named KIRA persona instead of all twenty voices', async () => {
     const { ctx, lead } = await setup(['hang'])
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
@@ -214,7 +315,7 @@ describe('dsh-tool-team', () => {
     const childId = spawnedChildId(spawned)
     const child = await waitRunning(ctx, childId)
     const prompt = renderPrompt(await assembly(ctx, child))
-    expect(prompt).toContain('Your Team role is teammate; your Team name is argo; Team id is tool-team-lead.')
+    expect(prompt).toContain('Your Team role is teammate; your visible Team name is Argo; your stable runtime handle is argo; Team id is tool-team-lead.')
     expect(prompt).toContain('detective-like')
     expect(prompt).toContain('understated dry humor')
     expect(prompt).not.toContain('Playfully adversarial')
@@ -234,7 +335,7 @@ describe('dsh-tool-team', () => {
     expect(['cobalto', 'eclipse', 'zenith']).toContain(securityValue.member.name)
     const securityChild = await waitRunning(ctx, SessionId(securityValue.member.id))
     const securityPrompt = renderPrompt(await assembly(ctx, securityChild))
-    expect(securityPrompt.toLowerCase()).toContain(`Your Team name is ${securityValue.member.name}`.toLowerCase())
+    expect(securityPrompt.toLowerCase()).toContain(`your stable runtime handle is ${securityValue.member.name}`.toLowerCase())
     expect(securityPrompt).not.toContain('Natural, concise, collegial')
 
     const design = await execute(ctx, lead, 'spawn_teammate', {
@@ -782,7 +883,7 @@ describe('dsh-tool-team', () => {
     const resumed = await waitRunning(ctx, childId)
     expect((await assembly(ctx, resumed)).tools.map(schema => schema.name)
       .filter(name => TOOL_NAMES.includes(name)).sort()).toEqual(TOOL_NAMES)
-    expect(renderPrompt(await assembly(ctx, resumed))).toContain('Your Team role is teammate; your Team name is cold-worker')
+    expect(renderPrompt(await assembly(ctx, resumed))).toContain('Your Team role is teammate; your visible Team name is cold-worker')
     await execute(ctx, lead, 'interrupt_agent', { target: 'cold-worker' })
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
   })

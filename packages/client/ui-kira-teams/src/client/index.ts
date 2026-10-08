@@ -3,14 +3,23 @@ import type { ClientContext, ISessions, SessionId, SubagentAddress } from '@phoe
 import { KiraTeamsDock } from './KiraTeamsDock.tsx'
 import type {} from '@phoenix-ai/dsh-api-remotes/client'
 import type { TeamChatReplyRequest } from '@phoenix-ai/dsh-agent-team/chat-types'
+import {
+  TEAM_DESIGN_SETTINGS_NAMESPACE,
+  normalizeTeamDesignDocument,
+  parseTeamDesignDocument,
+  type TeamDesignDocument,
+  type TeamDesignSettingsEnvelope,
+} from '@phoenix-ai/dsh-agent-team/design-types'
 import { TeamReplyDock, type TeamReplyChoice } from './TeamReplyDock.tsx'
 import { TeamAuthor } from './TeamAuthor.tsx'
 import { AssistantReactionAction, TeamMessageActions } from './TeamMessageActions.tsx'
 import { TeamMentionDock } from './TeamMentionDock.tsx'
 import { teamIdentityOf, KiraTeamMessageView } from './TeamChatMessage.tsx'
+import { TeamDesignerSection } from './TeamDesignerSection.tsx'
 import type {} from '@phoenix-ai/dsh-client-locale/client'
 import type {} from '@phoenix-ai/dsh-client-ui-layout/client'
 import type {} from '@phoenix-ai/dsh-client-ui-conversation/client'
+import type {} from '@phoenix-ai/dsh-client-ui-settings/client'
 import { en, es, NS, zh, type KiraTeamsKey } from './locales.ts'
 
 declare module '@phoenix-ai/dsh-client-ui-slots' {
@@ -23,17 +32,62 @@ declare module '@phoenix-ai/dsh-client-ui-slots' {
 export type { KiraTeamsDockProps, KiraTeamsInjected } from './KiraTeamsDock.tsx'
 
 /** Required services for the KIRA mission-control overlay contribution. */
-export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams']
+export const inject = ['sessions', 'slots', 'locale', 'layout', 'conversation', 'remote', 'remote.agentTeams', 'settingsScope']
 
 /** Register the KIRA activity strip and rail inside the center-column overlay so agents never consume chat width or cover the sidebar. */
 export function apply(ctx: ClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en, es }), 'ui-kira-teams: dictionaries')
+  const t = ctx.locale.bind(NS)
+  const sessions = ctx.get('sessions') as unknown as ISessions
+  const teamDesign = ctx.settingsScope.bind<TeamDesignSettingsEnvelope>({
+    namespace: TEAM_DESIGN_SETTINGS_NAMESPACE,
+  })
   ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
     name: 'conversation.chat.node',
-    key: 'kira-team-message', locale: NS,
+    key: 'kira-team-message',
+    locale: NS,
+    inject: () => ({ hooks: { teamDesign } }),
   }, KiraTeamMessageView))
-  const sessions = ctx.get('sessions') as unknown as ISessions
-  ctx.slots.inject('conversation.chat.message-author', () => ctx.slots.register({ name: 'conversation.chat.message-author', id: 'kira', locale: NS }, TeamAuthor))
+  const saveTeamDesign = async (document: TeamDesignDocument): Promise<void> => {
+    await teamDesign.set('document', JSON.stringify(normalizeTeamDesignDocument(document)))
+  }
+  const generateWithKira = async (userPrompt: string): Promise<void> => {
+    const sessionId = sessions.list.getSnapshot().current
+    if (sessionId === undefined) throw new Error('Abre una sesión de Phoenix para diseñar el equipo con Kira.')
+    const scope = sessions.scope(sessionId)
+    if (scope === undefined) throw new Error('La sesión actual todavía no está disponible.')
+    const current = parseTeamDesignDocument(teamDesign.getSnapshot().value?.document)
+    const prompt = [
+      'Rediseña y APLICA mi equipo Phoenix; no te limites a describir una propuesta.',
+      'Usa la herramienta design_team exactamente una vez cuando tengas el diseño final.',
+      'Conserva los 20 ids técnicos de especialistas; esos ids son internos y no deben mostrarse como una limitación al usuario.',
+      'Puedes cambiar libremente nombre visible, rol, sexo/identidad, personalidad, voz y avatar asignado de Kira y de cada especialista.',
+      'Mantén veinte especialistas útiles además del líder. No cambies permisos ni capacidades por razones estéticas.',
+      'Si cita una franquicia, crea una reinterpretación original; no copies sus personajes literalmente.',
+      'Si el usuario pide personas reales, trata la apariencia como referencia estilística y no inventes hechos personales.',
+      `Equipo actual: ${JSON.stringify(current)}`,
+      `Idea del usuario: ${userPrompt}`,
+      'Al terminar, confirma brevemente el nombre del equipo y que los 20 perfiles quedaron aplicados.',
+    ].join('\n')
+    await scope.conversation.send(prompt)
+  }
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'team-studio',
+    order: 25,
+    label: () => t('studio.nav'),
+    inject: () => ({
+      hooks: { teamDesign },
+      save: saveTeamDesign,
+      generateWithKira,
+    }),
+  }, TeamDesignerSection))
+  ctx.slots.inject('conversation.chat.message-author', () => ctx.slots.register({
+    name: 'conversation.chat.message-author',
+    id: 'kira',
+    locale: NS,
+    inject: () => ({ hooks: { teamDesign } }),
+  }, TeamAuthor))
   const selectedReplies = new Map<SessionId, TeamReplyChoice>()
   const pendingRequests = new Map<string, { fingerprint: string; request: TeamChatReplyRequest }>()
   const replyListeners = new Map<SessionId, Set<() => void>>()
@@ -96,12 +150,27 @@ export function apply(ctx: ClientContext): void {
         const names = [...request.text.matchAll(/@(?:"([^"]{1,128})"|([\p{L}\p{N}_-]+))/gu)]
           .map(match => (match[1] ?? match[2])?.toLowerCase())
         const participants = new Map<string, string>()
+        const activeDesign = (() => {
+          const document = parseTeamDesignDocument(teamDesign.getSnapshot().value?.document)
+          return document.teams.find(team => team.id === document.activeTeamId) ?? document.teams[0]
+        })()
+        const customName = (name: string, id: string): string | undefined => {
+          if (activeDesign === undefined) return undefined
+          const identity = teamIdentityOf(name, id)
+          if (identity.kind === 'kira') return activeDesign.lead.displayName
+          return activeDesign.members.find(member => member.id === identity.kind)?.displayName
+        }
         for (const person of read.value.participants) {
           participants.set(person.name.toLowerCase(), person.id)
           participants.set(teamIdentityOf(person.name, person.id).name.toLowerCase(), person.id)
+          const alias = customName(person.name, person.id)
+          if (alias !== undefined) participants.set(alias.toLowerCase(), person.id)
         }
         for (const message of read.value.messages) {
-          if (message.senderKind === 'agent') participants.set(teamIdentityOf(message.senderName, message.senderId).name.toLowerCase(), message.senderId)
+          if (message.senderKind !== 'agent') continue
+          participants.set(teamIdentityOf(message.senderName, message.senderId).name.toLowerCase(), message.senderId)
+          const alias = customName(message.senderName, message.senderId)
+          if (alias !== undefined) participants.set(alias.toLowerCase(), message.senderId)
         }
         const targets = [...new Set(names.flatMap((name) => {
           const id = name === undefined ? undefined : participants.get(name)
@@ -155,7 +224,7 @@ export function apply(ctx: ClientContext): void {
     return () => { stop(); backfilled.clear(); loading.clear() }
   }, 'ui-kira-teams: existing conversation')
   const dockActions = () => ({
-    hooks: { list: sessions.list },
+    hooks: { list: sessions.list, teamDesign },
     layout: ctx.layout,
     openChild(address: SubagentAddress) {
       const rows = document.querySelectorAll<HTMLElement>('[data-team-sender-id]')
