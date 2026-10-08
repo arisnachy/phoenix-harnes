@@ -184,7 +184,7 @@ describe('authorization consent window', () => {
         expect(reserved.document.title).toContain('Autorización no iniciada')
       })
       expect(reserved.document.body.textContent).toContain('No se pudo abrir la autorización')
-      expect(reserved.document.body.textContent).toContain('Error: connector unavailable')
+      expect(reserved.document.body.textContent).toContain('El servidor no proporcionó una URL de autorización válida')
       expect(screen.getByText('Error: connector unavailable')).toBeTruthy()
       expect(reserved.close).not.toHaveBeenCalled()
     } finally { open.mockRestore() }
@@ -206,7 +206,7 @@ describe('authorization consent window', () => {
       renderPanel(api)
       await clickAuthorize()
       await waitFor(() => { expect(reserved.document.body.textContent).toContain('Esperando enlace de autorización') }, { timeout: 2500 })
-      await waitFor(() => { expect(reserved.document.body.textContent).toContain('38 segundos') }, { timeout: 3500 })
+      await waitFor(() => { expect(reserved.document.body.textContent).toContain('agotó el tiempo de preparación') }, { timeout: 3500 })
       expect(reserved.document.title).toContain('Autorización no iniciada')
       expect(reserved.close).not.toHaveBeenCalled()
       expect(open).toHaveBeenCalledTimes(1)
