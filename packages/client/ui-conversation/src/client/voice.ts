@@ -229,6 +229,10 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
   while (true) {
     const planned = nextStreamingSpeechSegment(state.transcript, state.through, final)
     if (planned === undefined) break
+    // A neural TTS engine can fill an unfinished clause with unwanted syllables.
+    // Wait for punctuation instead of feeding arbitrary 180-character cuts
+    // while the model is still streaming; flush the remainder at completion.
+    if (!final && !/[.!?…;:]$/u.test(planned.text)) break
     state.through = planned.end
     const sequence = state.sequence++
     const generation = state.generation
