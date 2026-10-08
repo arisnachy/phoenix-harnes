@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo } from 'react'
+import { memo, useCallback, useEffect, useMemo } from 'react'
 import type { ChatNodeViewProps, TurnTailOwnerProps } from '../contract/slots.ts'
 import { AssistantMarkdown } from './AssistantMarkdown.tsx'
 import { assistantText } from './turn-assistant.ts'
@@ -6,9 +6,15 @@ import { streamVoiceAssistantResponse } from '../voice.ts'
 
 /** Streaming, settled, and interrupted Assistant states share one keyed renderer instance. */
 export const AssistantNodeView = memo(function AssistantNodeView({
-  node, useTurnData, cwd, openFile, renderMessageImages, fileMentions, workspaceFileMentions, t,
+  node, useTurnData, cwd, openFile, renderMessageImages, fileMentions, workspaceFileMentions, inputActions, t,
 }: ChatNodeViewProps<'assistant-step'>) {
   const data = node.data
+  const onUiAction = useCallback((prompt: string, mode: 'draft' | 'submit') => {
+    // Never let a model-authored UI bypass the existing composer, admission,
+    // queue and permissions. Only a human click can reach this callback.
+    inputActions.setDraft(prompt)
+    if (mode === 'submit') inputActions.submit()
+  }, [inputActions])
   const responseText = useMemo(() => assistantText(data.blocks), [data.blocks])
   useEffect(() => {
     if (responseText === '') return
@@ -41,6 +47,7 @@ export const AssistantNodeView = memo(function AssistantNodeView({
       interrupted={data.status === 'interrupted'}
       renderMessageImages={renderMessageImages}
       mentions={mentions}
+      onUiAction={onUiAction}
       t={t}
     />
   )
