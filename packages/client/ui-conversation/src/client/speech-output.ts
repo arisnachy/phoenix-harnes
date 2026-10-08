@@ -72,7 +72,13 @@ function defaultScope(): SpeechOutputScope | undefined {
 }
 
 function defaultLanguage(): string {
-  if (typeof navigator === 'undefined' || navigator.language.trim() === '') return 'en-US'
+  // Settings → Idioma updates <html lang>. The browser/OS locale may be
+  // completely different from the language used in the PHOENIX panel.
+  const panel = typeof document === 'undefined' ? '' : document.documentElement.lang.trim().toLowerCase()
+  if (panel === 'es' || panel.startsWith('es-')) return 'es-DO'
+  if (panel === 'en' || panel.startsWith('en-')) return 'en-US'
+  if (panel === 'zh' || panel.startsWith('zh-')) return 'zh-CN'
+  if (typeof navigator === 'undefined' || navigator.language.trim() === '') return 'es-DO'
   return navigator.language
 }
 
