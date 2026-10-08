@@ -96,6 +96,77 @@ describe('connectors settings section', () => {
     }, { timeout: 3000 })
   })
 
+  it('keeps the actual OAuth prompt visible outside catalog filters without opening a blank tab', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{ key: 'llm-pi-ai/probe', label: 'Probe Provider',
+        methods: [{ id: 'oauth', label: 'Sign in' }], inFlight: false }] })),
+      begin: vi.fn(async () => ok({ attemptId: 'prompt-probe' })),
+      status: vi.fn(async () => ok({ attemptId: 'prompt-probe', status: 'pending', nextSeq: 1, notices: [],
+        prompt: { promptId: 'client', kind: 'text', message: 'Provider client ID' } })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    try {
+      renderHub(api)
+      const card = (await screen.findByText('Probe Provider')).closest('article')
+      fireEvent.click(Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')!)
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'not-in-catalog' } })
+      expect(await screen.findByText('Provider client ID', {}, { timeout: 2000 })).toBeTruthy()
+      expect(open).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
+
+  it('opens only the real provider consent URL and preserves the link if the popup is blocked', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{ key: 'llm-pi-ai/probe', label: 'Probe Provider',
+        methods: [{ id: 'oauth', label: 'Sign in' }], inFlight: false }] })),
+      begin: vi.fn(async () => ok({ attemptId: 'url-probe' })),
+      status: vi.fn(async () => ok({ attemptId: 'url-probe', status: 'pending', nextSeq: 1,
+        notices: [{ seq: 1, notice: { message: 'Continue with provider', url: 'https://provider.example/consent' } }] })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    try {
+      renderHub(api)
+      const card = (await screen.findByText('Probe Provider')).closest('article')
+      fireEvent.click(Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')!)
+      expect(open).not.toHaveBeenCalled()
+      const link = await screen.findByRole('link', { name: 'Open authorization page' }, { timeout: 2000 })
+      expect(link.getAttribute('href')).toBe('https://provider.example/consent')
+      expect(open).toHaveBeenCalledWith('https://provider.example/consent', '_blank')
+      expect(api.cancel).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
+
+  it('keeps the authorization result after account refresh and the old dismissal deadline', async () => {
+    vi.useFakeTimers()
+    let authorized = false
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{ key: 'llm-pi-ai/probe', label: 'Probe Provider',
+        methods: [{ id: 'api-key', label: 'Configure' }], inFlight: false,
+        ...(authorized ? { stored: { kind: 'api-key' as const } } : {}) }] })),
+      begin: vi.fn(async () => ok({ attemptId: 'result-probe' })),
+      status: vi.fn(async () => {
+        authorized = true
+        return ok({ attemptId: 'result-probe', status: 'authorized', nextSeq: 1,
+          notices: [{ seq: 1, notice: { message: 'Provider login completed' } }] })
+      }),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    try {
+      renderHub(api)
+      await act(async () => { await Promise.resolve() })
+      const card = screen.getByText('Probe Provider').closest('article')
+      fireEvent.click(Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Authorize')!)
+      await act(async () => { await Promise.resolve() })
+      await act(async () => { await vi.advanceTimersByTimeAsync(700) })
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search connectors' }), { target: { value: 'not-in-catalog' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(6000) })
+      expect(screen.getByText('Provider login completed')).toBeTruthy()
+      expect(document.querySelector('[data-authorization-outcome="success"]')).toBeTruthy()
+    } finally { vi.useRealTimers() }
+  })
+
   it('shows the ChatGPT Web switch and exposes its route only after bridge readiness', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
@@ -936,7 +1007,7 @@ describe('connectors settings section', () => {
     })
   })
 
-  it('reserves the Notion consent tab synchronously and navigates when its URL arrives', async () => {
+  it('opens Notion directly when its provider consent URL arrives', async () => {
     const consentUrl = 'https://www.notion.so/oauth/authorize?client_id=phoenix-test'
     const popupDocument = document.implementation.createHTMLDocument()
     const popup = {
@@ -999,16 +1070,13 @@ describe('connectors settings section', () => {
 
       fireEvent.click(authorize!)
 
-      // The temporary tab must explain the pending OAuth hand-off rather than
-      // leaving the user on an empty about:blank page.
-      expect(open).toHaveBeenCalledWith('about:blank', '_blank')
-      expect(popupDocument.body.textContent).toContain('Conectando con tu proveedor')
+      expect(open).not.toHaveBeenCalled()
 
       await waitFor(() => {
         expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
       })
       await waitFor(() => {
-        expect(popup.location.replace).toHaveBeenCalledWith(consentUrl)
+        expect(open).toHaveBeenCalledWith(consentUrl, '_blank')
       }, { timeout: 2_000 })
 
       const manual = screen.getByRole('link', { name: 'Open authorization page' }) as HTMLAnchorElement
@@ -1218,7 +1286,7 @@ describe('connectors settings section', () => {
       fireEvent.click(screen.getAllByRole('button', { name: 'Cancel' }).at(-1)!)
       await act(async () => { await Promise.resolve(); await Promise.resolve() })
       expect(cancel).toHaveBeenCalledWith({ attemptId: 'de305d54-75b4-431b-adb2-eb6b9e546015' })
-      expect(screen.getByText('Authorization cancelled')).toBeTruthy()
+      expect(screen.getByText(en.authorizationCancelled)).toBeTruthy()
     } finally {
       open.mockRestore()
       vi.useRealTimers()
@@ -1260,19 +1328,15 @@ describe('connectors settings section', () => {
       renderHub(api)
       await act(async () => { await Promise.resolve() })
       fireEvent.click(screen.getAllByRole('button', { name: 'Authorize' })[0]!)
-      expect(open).toHaveBeenCalledWith('about:blank', '_blank')
-      await act(async () => {
-        await Promise.resolve()
-        vi.advanceTimersByTime(700)
-        await Promise.resolve()
-        await Promise.resolve()
-      })
+      expect(open).not.toHaveBeenCalled()
+      await act(async () => { await Promise.resolve() })
+      await act(async () => { await vi.advanceTimersByTimeAsync(700) })
 
       const notice = document.querySelector('[data-authorization-outcome="success"]')
       expect(notice).not.toBeNull()
       expect(notice?.textContent).toContain('Account connected')
       expect(notice?.textContent).toContain('Authorization complete')
-      expect(popup.close).toHaveBeenCalled()
+      expect(popup.close).not.toHaveBeenCalled()
     } finally {
       open.mockRestore()
       vi.useRealTimers()
@@ -1553,7 +1617,7 @@ describe('connectors settings section', () => {
       expect(authorize).toBeTruthy()
       fireEvent.click(authorize!)
       await waitFor(() => { expect(reconnect).toHaveBeenCalledWith({ serverName: 'registry-auth-123' }) })
-      expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+      expect(open).not.toHaveBeenCalled()
     } finally {
       open.mockRestore()
     }
