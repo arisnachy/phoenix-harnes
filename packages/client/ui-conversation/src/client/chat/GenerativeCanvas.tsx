@@ -308,7 +308,7 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
       return <button type="button" className={css.action}
         disabled={!localFilter && onAction === undefined}
         title={!localFilter && onAction === undefined ? 'Acción no disponible en esta conversación' : undefined}
-        onClick={() => localFilter ? onFilter() : onAction?.(expandPrompt(node.prompt, values), node.action ?? 'draft')}>
+        onClick={() => localFilter ? onFilter() : onAction?.(expandPrompt(node.prompt, values), node.action === 'submit' ? 'submit' : 'draft')}>
         {node.label}
       </button>
     }
