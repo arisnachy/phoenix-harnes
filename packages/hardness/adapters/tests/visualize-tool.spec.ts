@@ -45,19 +45,19 @@ describe('phoenix_visualize tool', () => {
     })
   })
 
-  it('does not issue a successful artifact receipt for an empty MCP status table', async () => {
+  it('does not issue a successful artifact receipt for an empty generic table', async () => {
     const tool = createPhoenixVisualizerTool()
     await expect(tool.execute({
-      title: 'Estado de conectores MCP',
+      title: 'Resultados de encuesta ficticia',
       visual: { visualType: 'table', columns: ['Estado', 'Conectores', 'Cantidad'],
         rows: [{}, {}, {}] },
     }, execution())).rejects.toThrow('no populated rows')
     await expect(tool.execute({
-      title: 'Estado de conectores MCP',
+      title: 'Resultados de encuesta ficticia',
       visual: { visualType: 'table', columns: ['Estado', 'Conectores', 'Cantidad'], rows: [] },
     }, execution())).rejects.toThrow('no populated rows')
     await expect(tool.execute({
-      title: 'Estado de conectores MCP',
+      title: 'Resultados de encuesta ficticia',
       visual: { visualType: 'table', columns: ['Estado', 'Conectores', 'Cantidad'],
         rows: [{ Estado: 'Conectado', Conectores: 'GitHub', Cantidad: 1 }] },
     }, execution())).resolves.toMatchObject({ artifactId: 'phoenix-visual:visual-1' })
