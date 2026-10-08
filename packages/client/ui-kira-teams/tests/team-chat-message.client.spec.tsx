@@ -132,6 +132,23 @@ describe('KIRA Team chat message', () => {
     expect(view.queryByLabelText('Reacciones del equipo')).toBeNull()
   })
 
+  it('never renders legacy Aegis activity counters as human team speech', () => {
+    const stale = render(<View node={node({
+      messageId: 'worker-a:activity:12', senderId: 'worker-a', senderKind: 'agent',
+      senderName: 'aegis',
+      content: [{ type: 'text',
+        text: '**Actividad real** · 3 respuesta(s) sin error, 0 error(es). Última herramienta: mcp__phoenix_browser__navigate.' }],
+    })} />)
+    expect(stale.container.firstChild).toBeNull()
+    stale.unmount()
+    const real = render(<View node={node({
+      messageId: 'worker-a:review:13', senderId: 'worker-a', senderKind: 'agent',
+      senderName: 'aegis',
+      content: [{ type: 'text', text: 'Revisé la página y está funcionando bien.' }],
+    })} />)
+    expect(real.getByText('Revisé la página y está funcionando bien.')).toBeTruthy()
+  })
+
   it('keeps ordinary updates visually quiet and omits empty synthetic rows', () => {
     const update = render(<View node={node({
       purpose: 'update',
