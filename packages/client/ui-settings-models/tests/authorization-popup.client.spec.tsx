@@ -300,12 +300,10 @@ describe('authorization consent window', () => {
     open.mockRestore()
   })
 
-  it('offers the provider link when the reserved popup refuses navigation', async () => {
+  it('keeps the open tab usable when Chromium blocks scripted consent navigation', async () => {
     const reserved = reservedWindow()
     reserved.location.replace.mockImplementation(() => { throw new DOMException('navigation blocked', 'SecurityError') })
-    const open = vi.spyOn(window, 'open')
-      .mockReturnValueOnce(reserved as unknown as Window)
-      .mockReturnValueOnce(null)
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
     try {
       renderPanel(panelApi(consentNotice))
       await clickAuthorize()
@@ -313,8 +311,12 @@ describe('authorization consent window', () => {
         expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL)
       })
       expect(await screen.findByRole('link', { name: /open/i })).toHaveProperty('href', CONSENT_URL)
-      expect(open).toHaveBeenLastCalledWith(CONSENT_URL, '_blank')
-      expect(reserved.postMessage).not.toHaveBeenCalled()
+      const popupLink = reserved.document.getElementById('phoenix-oauth-manual-link') as HTMLAnchorElement | null
+      expect(popupLink?.href).toBe(CONSENT_URL)
+      expect(popupLink?.target).toBe('_self')
+      expect(reserved.document.body.textContent).toContain('Tu navegador bloqueó la redirección')
+      expect(reserved.close).not.toHaveBeenCalled()
+      expect(open).toHaveBeenCalledTimes(1)
     } finally { open.mockRestore() }
   })
 
