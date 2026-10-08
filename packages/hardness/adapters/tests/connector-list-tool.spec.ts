@@ -99,6 +99,12 @@ describe('connector_list tool', () => {
   it('returns an empty inventory when no authorization flows are registered', async () => {
     const tool = createConnectorListTool(service({ list: () => [] }))
     await expect(tool.execute({}, {} as never)).resolves.toEqual({ kind: 'connector_list', connectors: [] })
+    const snapshot = await tool.execute({ target: 'mcp' }, {} as never)
+    expect(tool.output.presentationMeta?.({ target: 'mcp' }, snapshot as never)).toMatchObject({
+      artifact: { data: {
+        visualType: 'metrics', metrics: [{ label: 'MCP observados en esta sesión', value: 0 }],
+      } },
+    })
   })
 
   it('merges ready and unavailable MCP state without exposing configuration', async () => {
@@ -169,6 +175,21 @@ describe('connector_list tool', () => {
           reason_code: 'authorization-required',
         },
       ],
+    })
+    const meta = tool.output.presentationMeta?.({}, result as never)
+    expect(meta).toMatchObject({
+      artifact: {
+        title: 'Estado real de conectores MCP',
+        data: {
+          visualType: 'table',
+          columns: ['Conector', 'Estado', 'Herramientas', 'Diagnóstico'],
+          rows: [
+            ['MCP github', 'ready', 1, 'Sin error reportado'],
+            ['MCP local', 'disconnected', 1, 'connection-lost'],
+            ['MCP private', 'auth-required', 0, 'authorization-required'],
+          ],
+        },
+      },
     })
     const rendered = JSON.stringify(result)
     expect(rendered).not.toContain('https://')
