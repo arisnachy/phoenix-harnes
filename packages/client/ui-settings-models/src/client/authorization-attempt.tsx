@@ -23,6 +23,20 @@ function safeOAuthConsentUrl(value: string): string | undefined {
   return undefined
 }
 
+/** Preserve only deterministic, secret-free failure categories in the popup tab. */
+function safePopupFailure(message: string): string {
+  if (/38 segundos|tiempo de espera|agot[oó] el tiempo|timeout/i.test(message)) {
+    return 'El MCP agotó el tiempo de preparación y no abrió el inicio de sesión. Revisa el diagnóstico en PHOENIX.'
+  }
+  if (/client.id|client.secret|registro|registrar|DCR/i.test(message)) {
+    return 'El MCP necesita configurar una aplicación cliente OAuth antes de iniciar sesión. Revisa el aviso en PHOENIX.'
+  }
+  if (/conexi[oó]n|network|ECONN|DNS|fetch failed/i.test(message)) {
+    return 'PHOENIX no pudo contactar al proveedor MCP. Revisa la URL y el diagnóstico en la pestaña principal.'
+  }
+  return 'El servidor no proporcionó una URL de autorización válida. Regresa a PHOENIX para consultar el error y reintentar.'
+}
+
 /** One browser-visible authorization attempt, carrying its last notice forward. */
 export interface AuthorizationAttempt {
   id: string
@@ -93,7 +107,7 @@ export function useAuthorizationAttempt(
       heading.textContent = headingText
       const description = doc.getElementById('phoenix-oauth-description') ?? doc.createElement('p')
       description.id = 'phoenix-oauth-description'
-      description.textContent = descriptionText
+      description.textContent = failed ? safePopupFailure(descriptionText) : descriptionText
       const footer = doc.getElementById('phoenix-oauth-footer') ?? doc.createElement('p')
       footer.id = 'phoenix-oauth-footer'
       footer.textContent = failed
