@@ -21,7 +21,7 @@ type CanvasNode =
   | { type: 'select'; id: string; label: string; options: Array<{ label: string; value: string }>; value?: string }
   | { type: 'toggle'; id: string; label: string; value?: boolean }
   | { type: 'slider'; id: string; label: string; min: number; max: number; step?: number; value?: number }
-  | { type: 'button'; label: string; prompt: string; action?: 'draft' | 'submit' }
+  | { type: 'button'; label: string; prompt: string; action?: 'draft' | 'submit' | 'filter' }
   | { type: 'tabs'; tabs: Array<{ label: string; children: CanvasNode[] }> }
 
 export interface CanvasSpec {
@@ -97,8 +97,8 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
       if (!keys(value, ['type','id','label','options','value']) || !id(value.id)
         || ids.has(value.id) || !text(value.label) || !Array.isArray(value.options)
         || value.options.length < 1 || value.options.length > 30
-        || !value.options.every(o => isObject(o) && keys(o,['label','value']) && text(o.label) && text(o.value))
-        || (value.value !== undefined && !value.options.some(o => o.value === value.value))) return false
+        || !value.options.every(o => text(o) || (isObject(o) && keys(o,['label','value']) && text(o.label) && text(o.value)))
+        || (value.value !== undefined && !value.options.some(o => typeof o === 'string' ? o === value.value : o.value === value.value))) return false
       ids.add(value.id)
       return true
     case 'toggle':
@@ -118,7 +118,7 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
     case 'button':
       return keys(value, ['type','label','prompt','action']) && text(value.label)
         && text(value.prompt, 1600)
-        && (value.action === undefined || value.action === 'draft' || value.action === 'submit')
+        && (value.action === undefined || value.action === 'draft' || value.action === 'submit' || value.action === 'filter')
     case 'tabs':
       return keys(value, ['type','tabs']) && Array.isArray(value.tabs)
         && value.tabs.length >= 2 && value.tabs.length <= 6
@@ -139,8 +139,21 @@ export function parseCanvasSpec(value: unknown): CanvasSpec | null {
     || value.props.children.length > 24) return null
   const count = { n: 0 }
   const ids = new Set<string>()
-  return value.props.children.every(child => validateNode(child, 0, count, ids))
-    ? value as unknown as CanvasSpec : null
+  if (!value.props.children.every(child => validateNode(child, 0, count, ids))) return null
+  // Providers sometimes emit select options as simple strings. Canonicalize
+  // that safe and common shorthand, while keeping every other validation strict.
+  const normalize = (node: CanvasNode): CanvasNode => {
+    if (node.type === 'group') return { ...node, children: node.children.map(normalize) }
+    if (node.type === 'tabs') return { ...node, tabs: node.tabs.map(tab => ({ ...tab, children: tab.children.map(normalize) })) }
+    if (node.type === 'select') return {
+      ...node,
+      options: (node.options as Array<string | { label: string; value: string }>).map(option =>
+        typeof option === 'string' ? { label: option, value: option } : option),
+    }
+    return node
+  }
+  const valid = value as unknown as CanvasSpec
+  return { ...valid, props: { ...valid.props, children: valid.props.children.map(normalize) } }
 }
 
 type Values = Record<string, string | number | boolean>
