@@ -173,6 +173,20 @@ export function ConversationRoot({
   // one disabled textarea, never a second tree. The no-workspace state wins
   // when both hold — picking a workspace is the earlier prerequisite.
   const blocked = !inert && composerBlock !== undefined
+
+  // Shortcut cards prepare an editable prompt in the ONE resident composer.
+  // When the workspace is missing, selecting it comes first; do not pretend
+  // that a disabled input can receive or submit a draft.
+  const prepareHeroShortcut = useCallback((prompt: string): void => {
+    if (inert) {
+      setPickerOpen(true)
+      return
+    }
+    if (inputActions === undefined) return
+    inputActions.setDraft(prompt)
+    requestAnimationFrame(() => { rootRef.current?.querySelector('textarea')?.focus() })
+  }, [inert, inputActions])
+
   const inputBar = renderSlot('conversation.composer.bar', {
     variant: hero ? 'hero' : 'composer',
     ...(inert
@@ -199,7 +213,7 @@ export function ConversationRoot({
   const composerBar = (
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
       {hero && <HeroGlow className={css.heroGlow} />}
-      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} />}
+      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} onShortcut={prepareHeroShortcut} />}
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
