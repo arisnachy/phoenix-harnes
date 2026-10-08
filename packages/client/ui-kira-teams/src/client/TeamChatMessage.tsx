@@ -161,7 +161,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   if (isToolActivity || text.trim() === '') return null
 
   return (
-    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId}>
+    <div className={css.row} data-kira-team-message={data.messageId} data-team-sender-id={data.senderId} data-team-sender-kind={data.senderKind}>
       <div className={css.avatar}>
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
           kind={sender.kind}
@@ -173,6 +173,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
         />}
       </div>
       <div className={css.column}>
+        <div className={data.senderKind === 'user' ? undefined : css.card}>
         <div className={css.meta}>
           <strong>{sender.name}</strong>
           <span>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
@@ -196,6 +197,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
         {data.replyQuote !== undefined && <blockquote>{data.replyQuote}</blockquote>}
         <div className={css.bubble}>
           <MarkdownText text={text} />
+        </div>
         </div>
         {messageActions !== undefined && <div className={css.messageActions}>{messageActions}</div>}
       </div>
