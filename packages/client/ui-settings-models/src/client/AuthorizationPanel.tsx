@@ -1279,12 +1279,13 @@ export function ConnectorsSettingsSection({ api,
     // An unreachable HTTP MCP can report "failed" rather than "auth-required"
     // before OAuth discovery completes. Treat both as candidates for an auth
     // handoff, but never force OAuth on stdio or on already-valid grants.
-    const recoverAuthorization = runtime.transport === 'streamable-http'
-      && (runtime.status === 'auth-required' || runtime.status === 'failed'
-        || runtime.status === 'disconnected')
     const expectedKey = `mcp-client/${runtime.serverName.toLowerCase().replaceAll('_', '-')}`
     const knownFlow = entries.find(candidate => candidate.key === expectedKey)
     const knownMethod = knownFlow?.methods[0]
+    const recoverAuthorization = runtime.transport === 'streamable-http'
+      && (runtime.status === 'auth-required'
+        || ((runtime.status === 'failed' || runtime.status === 'disconnected')
+          && knownFlow?.stored === undefined))
     setCatalogFailure(undefined)
     // If the runtime already asks for auth and the flow is registered, a
     // reconnect cannot produce consent; go directly to the Host authorization.
