@@ -141,13 +141,11 @@ export function apply(ctx: ClientContext): void {
           : Promise.resolve(false),
       }
     }
-    for (const seat of ['conversation.input.model', 'conversation.hero.model'] as const) {
-      scope.slots.inject(seat, () => scope.slots.register({
-        name: seat,
-        locale: NS,
-        inject: injectModel,
-      }, ModelSelect))
-    }
+    scope.slots.inject('conversation.input.model', () => scope.slots.register({
+      name: 'conversation.input.model',
+      locale: NS,
+      inject: injectModel,
+    }, ModelSelect))
   })
 
   // Cross-feature composition is intentionally through the slot ledger only.
