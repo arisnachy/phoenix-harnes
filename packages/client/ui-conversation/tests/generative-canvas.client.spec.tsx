@@ -92,8 +92,8 @@ describe('Phoenix intelligent UI canvas', () => {
   })
 
   it('mounts a complete canvas in the real assistant Markdown flow alongside ordinary prose', () => {
-    const blockText = 'He revisado el estado.\\n\\n' + '```generative-ui\\n'
-      + JSON.stringify(sample()) + '\\n```\\n\\nAquí tienes las opciones.'
+    const blockText = 'He revisado el estado.\n\n' + '```generative-ui\n'
+      + JSON.stringify(sample()) + '\n```\n\nAquí tienes las opciones.'
     const handle = vi.fn()
     const { container } = render(<AssistantMarkdown
       blocks={[{ kind: 'text', text: blockText }]}
