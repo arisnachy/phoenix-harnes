@@ -1,5 +1,7 @@
 /** Copy for the dedicated Settings → Connectors surface. */
 export const connectorEn = {
+  modelProviders: 'Model providers',
+  modelProviderHint: 'Uses your existing model-provider authorization. Sign in once; Phoenix keeps this connection across restarts.',
   nav: 'Connectors',
   title: 'MCP connectors',
   intro: 'Phoenix knows which connectors are installed, which need authorization, and which are missing. Search the Official MCP Registry only when you need something new.',
@@ -100,6 +102,8 @@ export type ConnectorKey = keyof typeof connectorEn
 
 /** Spanish copy for the dedicated Settings → Connectors surface. */
 export const connectorEs: { [Key in ConnectorKey]: string } = {
+  modelProviders: 'Proveedores de modelos',
+  modelProviderHint: 'Usa la autorización de tu proveedor de modelos. Conecta una vez; Phoenix conserva la conexión al reiniciar.',
   nav: 'Conectores',
   title: 'Conectores MCP',
   intro: 'Phoenix sabe cuáles conectores están instalados, cuáles requieren autorización y cuáles faltan. Busca en el Registro MCP oficial solo cuando necesites uno nuevo.',
@@ -197,6 +201,8 @@ export const connectorEs: { [Key in ConnectorKey]: string } = {
 
 /** Simplified Chinese copy for the dedicated Settings → Connectors surface. */
 export const connectorZh: { [Key in ConnectorKey]: string } = {
+  modelProviders: '模型服务商',
+  modelProviderHint: '复用模型服务商的授权；连接一次，Phoenix 在重启后保留连接。',
   nav: '连接器', title: 'MCP 连接器',
   intro: 'Phoenix 会识别已安装、需要授权以及缺失的连接器；只有需要新连接器时才搜索官方 MCP 注册表。',
   intelligenceTitle: 'Phoenix 知道你已经安装了哪些 MCP',
