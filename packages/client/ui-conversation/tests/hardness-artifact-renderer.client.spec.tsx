@@ -157,6 +157,31 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByText(/"candles"/)).toBeNull()
   })
 
+  it('renders a simple fictional line chart successfully on the first pass', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'synthetic-line-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'Tendencia ficticia',
+      data: {
+        visualType: 'chart',
+        chartType: 'line',
+        description: 'Datos ficticios · ejemplo demostrativo, no mediciones reales',
+        xKey: 'label',
+        series: [{ dataKey: 'value', label: 'Valor ficticio' }],
+        data: [
+          { label: 'Lun', value: 38 },
+          { label: 'Mar', value: 51 },
+          { label: 'Mié', value: 47 },
+          { label: 'Jue', value: 65 },
+        ],
+      },
+    })} />)
+    expect(screen.getByRole('img',{ name:'line chart' })).toBeTruthy()
+    expect(document.querySelectorAll('[data-phoenix-visual-mark="line-point"]')).toHaveLength(4)
+    expect(document.querySelector('[data-phoenix-visual-qa="fail"]')).toBeNull()
+    expect(screen.getByText(/Datos ficticios/)).toBeTruthy()
+  })
+
   it('blocks malformed charts instead of exposing raw visualization JSON', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'broken-candles-1',
@@ -172,7 +197,7 @@ describe('HARDNESS inline artifact renderer', () => {
     })} />)
 
     expect(document.querySelector('[data-phoenix-visual-qa="fail"]')).toBeTruthy()
-    expect(screen.getByText(/blocked a visual that did not pass render quality checks/i)).toBeTruthy()
+    expect(screen.getByText(/No se pudo representar esta gráfica/)).toBeTruthy()
     expect(screen.queryByText(/"chartType"/)).toBeNull()
     expect(screen.queryByText(/"candles"/)).toBeNull()
   })
