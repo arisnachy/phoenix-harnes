@@ -46,7 +46,9 @@ describe('local voice providers', () => {
     const provider = createKokoroTextToSpeechProvider({ command: 'python', args: ['kokoro-cli.py'], run })
     expect(provider.available()).toBe(true)
     await provider.speak({ text: 'Una misión lista.', language: 'es-DO' })
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ command: 'python', stdin: 'Una misión lista.' }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'python', stdin: 'Una misión lista.', language: 'es-DO',
+    }))
   })
 
   it('uses the configured local STT command and returns its transcript', async () => {
@@ -61,7 +63,12 @@ describe('local voice providers', () => {
     const run = vi.fn<VoiceCommandRunner>(() => Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }))
     const provider = createSystemTextToSpeechProvider({ platform: 'win32', run })
     await provider.speak({ text: 'Texto seguro; no se ejecuta como código.', language: 'es-DO' })
-    expect(run).toHaveBeenCalledWith(expect.objectContaining({ command: 'powershell.exe', stdin: 'Texto seguro; no se ejecuta como código.' }))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      command: 'powershell.exe',
+      stdin: 'es-DO\nTexto seguro; no se ejecuta como código.',
+    }))
     expect(run.mock.calls[0]?.[0].args.join(' ')).toContain('-NoProfile')
+    expect(run.mock.calls[0]?.[0].args.join(' ')).toContain('GetInstalledVoices')
+    expect(run.mock.calls[0]?.[0].args.join(' ')).toContain('SelectVoice')
   })
 })

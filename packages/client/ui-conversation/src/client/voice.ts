@@ -177,6 +177,16 @@ function resetRemoteSpeech(cancel = false): void {
   }
 }
 
+/** Speak in the language the user selected in PHOENIX, not the OS locale. */
+function panelSpeechLanguage(): string {
+  const panel = typeof document === 'undefined' ? '' : document.documentElement.lang.trim().toLowerCase()
+  if (panel === 'es' || panel.startsWith('es-')) return 'es-DO'
+  if (panel === 'en' || panel.startsWith('en-')) return 'en-US'
+  if (panel === 'zh' || panel.startsWith('zh-')) return 'zh-CN'
+  return typeof navigator !== 'undefined' && navigator.language.trim() !== ''
+    ? navigator.language : 'es-DO'
+}
+
 function browserSpeech(messageKey: string, text: string, final: boolean): void {
   if (!hasSpeechOutput()) return
   if (voiceAssistantSpeech === undefined || voiceAssistantSpeechKey !== messageKey) {
@@ -186,7 +196,7 @@ function browserSpeech(messageKey: string, text: string, final: boolean): void {
       if (!voiceAssistantSnapshot.active || voiceAssistantSpeechKey !== messageKey) return
       if (state === 'speaking') publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
       else publishVoiceIdle()
-    })
+    }, panelSpeechLanguage())
   }
   voiceAssistantSpeech.update(text, final)
 }
@@ -238,6 +248,7 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
       key: messageKey,
       sequence,
       text: planned.text,
+      language: panelSpeechLanguage(),
       final: isFinalSegment,
     }).then((result) => {
       if (remoteSpeech !== state || state.generation !== generation) return
@@ -342,16 +353,15 @@ export type CodexRealtimeVoiceStartResult =
 export async function tryStartCodexRealtimeVoice(
   sessionKey: string,
 ): Promise<CodexRealtimeVoiceStartResult> {
-  const resolveRoute = voiceModelRouteResolver
-  if (resolveRoute === undefined) return { kind: 'failed', reason: 'route-unavailable' }
-
+  // The user can run another text model while choosing Codex for speech.
+  // Probe authenticated Codex Live first, regardless of the text provider.
+  // A failed/quota-limited native call deliberately falls back to local TTS.
   let route: VoiceModelRoute | undefined
   try {
-    route = await resolveRoute(sessionKey)
+    route = await voiceModelRouteResolver?.(sessionKey)
   } catch {
-    return { kind: 'failed', reason: 'route-unavailable' }
+    // A missing model route does not prevent subscription-backed speech.
   }
-  if (route?.provider !== 'openai-codex') return { kind: 'not-codex' }
 
   const remote = voiceAssistantRemote
   if (remote === undefined || remote.conversationRealtimeStatus === undefined
@@ -448,7 +458,7 @@ export async function tryStartCodexRealtimeVoice(
     const result = await remote.conversationRealtimeStart({
       key: sessionKey,
       offerSdp,
-      model: route.model,
+      ...(route?.provider === 'openai-codex' ? { model: route.model } : {}),
     })
     if (!result.ok) throw new Error(result.error.code)
     if (!result.value.accepted || result.value.answerSdp === undefined) {
@@ -773,7 +783,7 @@ export function streamVoiceAssistantResponse(
       key: `assistant:${messageKey}`,
       assistantMessageKey: messageKey,
       echoText: spoken,
-      instructions: `Speak the following PHOENIX assistant response faithfully in the user's current language and with the same voice/persona already in this call. Do not add claims, actions, or extra content.\n\n${spoken}`,
+      instructions: `Speak the following PHOENIX assistant response faithfully using the language ${panelSpeechLanguage()} currently selected in the PHOENIX interface, with the same voice/persona already in this call. Do not add claims, actions, or extra content.\n\n${spoken}`,
     }
     if (!sendCodexRealtimeUtterance(realtime, utterance)) {
       queueCodexRealtimeUtterance(utterance)
@@ -925,7 +935,7 @@ export function hasVoiceRecognition(scope: VoiceRecognitionWindow | undefined =
 export function createVoiceRecognition(
   onTranscript: (text: string) => void,
   onState: (state: VoiceInputState) => void,
-  language = typeof navigator === 'undefined' ? 'en-US' : navigator.language,
+  language = panelSpeechLanguage(),
   scope: VoiceRecognitionWindow | undefined = typeof window === 'undefined' ? undefined : window as VoiceRecognitionWindow,
 ): VoiceRecognitionLike | undefined {
   const Constructor = voiceRecognitionConstructor(scope)

@@ -34,6 +34,19 @@ describe('speech output adapter', () => {
     expect(hasSpeechOutput({ SpeechSynthesisUtterance: FakeUtterance })).toBe(false)
   })
 
+  it('uses the PHOENIX panel language when browser and panel locales differ', () => {
+    const previous = document.documentElement.lang
+    document.documentElement.lang = 'es'
+    try {
+      const { value, speak } = scope()
+      const output = createSpeechOutput(() => {}, undefined, value)
+      output.speak('La tarea está lista.')
+      expect(speak.mock.calls[0]?.[0].lang).toBe('es-DO')
+    } finally {
+      document.documentElement.lang = previous
+    }
+  })
+
   it('speaks trimmed text, configures language, and returns to idle on completion', () => {
     const { value, speak, cancel } = scope()
     const states: string[] = []

@@ -50,14 +50,15 @@ describe('browser voice adapter', () => {
     expect(createVoiceRecognition(() => {}, () => {}, 'en-US', {})).toBeUndefined()
   })
 
-  it('allows legacy fallback only for a genuinely non-Codex route', async () => {
+  it('tries Codex Live even when the selected text model is DeepSeek, then falls back if unavailable', async () => {
     const disposeRoute = configureVoiceModelRouteResolver(async () => ({
       provider: 'deepseek',
       model: 'deepseek-chat',
     }))
     try {
       await expect(tryStartCodexRealtimeVoice('session-non-codex')).resolves.toEqual({
-        kind: 'not-codex',
+        kind: 'failed',
+        reason: 'host-realtime-unavailable',
       })
     } finally {
       disposeRoute()
