@@ -15,7 +15,7 @@
 
 .root[data-phase='hero'] {
   background:
-    radial-gradient(circle at 60% 44%, rgba(226, 95, 37, 0.018), transparent 32%),
+    radial-gradient(ellipse at 50% 16%, rgba(229, 132, 62, 0.045), transparent 55%),
     var(--dsw-alias-bg-base);
 }
 
@@ -288,8 +288,8 @@
   position: relative;
   align-self: center;
   gap: 10px;
-  padding-bottom: 36px;
-  width: min(calc(var(--dsh-composer-card-max-width) + 2 * var(--dsh-composer-side-clearance)), 100%);
+  padding: 12px 0 32px;
+  width: min(1200px, 100%);
   z-index: 1;
 }
 
@@ -309,12 +309,14 @@
   align-items: center;
   gap: 2px;
   min-width: 0;
-  margin-top: 5px;
-  padding-left: 20px;
+  width: min(var(--dsh-composer-card-max-width), calc(100% - 2 * var(--dsh-composer-side-clearance)));
+  align-self: center;
+  margin-top: 8px;
+  padding-left: 8px;
 }
 
 .root[data-phase='hero'] .scrollBody {
-  justify-content: center;
+  justify-content: safe center;
   overflow-y: auto;
 }
 
