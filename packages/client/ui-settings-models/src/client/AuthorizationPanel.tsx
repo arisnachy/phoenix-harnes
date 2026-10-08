@@ -281,6 +281,7 @@ const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 function isTransientConnectorRemoteFailure(error: unknown): boolean {
   const message = String(error).toLowerCase()
   return [
+    'websocket disconnected',
     'failed to fetch',
     'fetch failed',
     'networkerror',
@@ -375,6 +376,7 @@ function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDe
 }
 
 function serverMatchesDefinition(serverName: string, definition: ConnectorDefinition): boolean {
+  if (definition.authorizationKey?.startsWith('llm-pi-ai/') === true) return false
   const server = normalize(serverName)
   const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
     .map(normalize)
@@ -505,13 +507,13 @@ function accountStatus(
 }
 
 function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
-  if (account?.stored === undefined) return false
+  if (account === undefined || (account.stored === undefined && account.telemetry === undefined)) return false
   const scopedConnectors = account.telemetry?.connectors
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
 function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, authorizationProgress,
-  onAuthorize, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove,
+  onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove,
   pending, installingCurated, reconnecting,
   repairing, removing }: {
   definition: ConnectorDefinition
@@ -524,6 +526,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   t: ConnectorsSettingsSectionProps['connectorT']
   authorizationProgress?: ReactNode
   onAuthorize: (entry: Entry) => void
+  onDisconnect?: ((entry: Entry) => void) | undefined
   onConfigure?: (() => void) | undefined
   onInstallCurated?: (() => void) | undefined
   onFindOfficial?: (() => void) | undefined
@@ -637,6 +640,12 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               {reauthorizationRequired || connected ? t('reauthorize') : t('authorize')}
             </button>
           ) : null}
+          {account?.stored !== undefined && account.disconnectable === true && onDisconnect !== undefined ? (
+            <button className={hubStyles['compactButton']} type="button" disabled={pending || account.inFlight}
+              onClick={() => { onDisconnect(account) }}>
+              {t('disconnect')}
+            </button>
+          ) : null}
           {canReconnect ? (
             <button
               className={hubStyles['compactButton']}
@@ -725,6 +734,7 @@ function OfficialMcpCard({ candidate, stale, managed, runtime, installing, recon
   const displayName = candidate.title
   const technicalName = normalize(displayName) === normalize(candidate.name) ? undefined : candidate.name
   const installable = candidate.status === 'active' && candidate.remoteUrl !== undefined
+    && candidate.remoteSetupRequired === undefined
   const needsRepair = managed !== undefined && (runtime === undefined || runtime.status === 'failed')
   const canReconnect = runtime !== undefined
     && (runtime.status === 'failed' || runtime.status === 'disconnected' || runtime.status === 'auth-required')
@@ -858,7 +868,7 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
     if (api === undefined) return
     let stale = false
     setCatalogFailure(undefined)
-    void readAuthorizationEntries(api).then((allEntries) => {
+    void readConnectorRemoteWithRetry(() => readAuthorizationEntries(api), () => stale).then((allEntries) => {
       if (stale) return
       const oauthEntries = allEntries.filter(entry => entry.methods.some(method => method.id === 'oauth'))
       // Fresh installs put subscription-backed Codex first so the primary
@@ -987,7 +997,7 @@ export function ConnectorsSettingsSection({ api,
     if (api === undefined) return
     let stale = false
     setCatalogFailure(undefined)
-    void readAuthorizationEntries(api).then(
+    void readConnectorRemoteWithRetry(() => readAuthorizationEntries(api), () => stale).then(
       (allEntries) => { if (!stale) setEntries(allEntries) },
       (error: unknown) => { if (!stale) setCatalogFailure(String(error)) },
     )
@@ -1137,7 +1147,20 @@ export function ConnectorsSettingsSection({ api,
     [entries],
   )
 
-  const catalogRows = useMemo(() => CONNECTOR_CATALOG.map((definition) => {
+  const catalogDefinitions = useMemo(() => {
+    const providers: ConnectorDefinition[] = entries.filter(entry =>
+      entry.key.startsWith('llm-pi-ai/')
+      && !CONNECTOR_CATALOG.some(definition => entryMatchesDefinitionAuthorization(entry, definition)))
+      .map(entry => ({
+        id: entry.key, name: entry.label, category: connectorT('modelProviders'),
+        description: connectorT('modelProviderHint'),
+        mode: entry.methods.some(method => method.id === 'oauth') ? 'oauth' : 'api-key',
+        provenance: 'native', authorizationKey: entry.key, capabilities: ['models'],
+      }))
+    return [...CONNECTOR_CATALOG, ...providers]
+  }, [entries, connectorT])
+
+  const catalogRows = useMemo(() => catalogDefinitions.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
     const mcpRuntime = definition.id === 'binance'
       ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
@@ -1172,7 +1195,7 @@ export function ConnectorsSettingsSection({ api,
         : live?.callable === true || accountConnected)
       || definition.id === 'binance'
     return { definition, live, account, mcpRuntime, managed, openClaw: openClawRoute, connected }
-  }), [entries, liveConnectors, mcpHub, openClaw])
+  }), [catalogDefinitions, entries, liveConnectors, mcpHub, openClaw])
 
   const visibleRows = catalogRows.filter(({ definition, connected }) => {
     if (filter === 'connected' && !connected) return false
@@ -1183,9 +1206,9 @@ export function ConnectorsSettingsSection({ api,
   })
 
   const visibleAccountEntries = useMemo(() => entries.filter(entry =>
-    !CONNECTOR_CATALOG.some(definition =>
+    !catalogDefinitions.some(definition =>
       entryMatchesDefinitionAuthorization(entry, definition))),
-  [entries])
+  [catalogDefinitions, entries])
 
   const toggleChatGptWeb = (enabled: boolean): void => {
     if (chatGptWeb === undefined || settings === undefined || chatGptWebBusy) return
@@ -1356,7 +1379,7 @@ export function ConnectorsSettingsSection({ api,
     }
     const key = `mcp-client/${serverName.toLowerCase().replaceAll('_', '-')}`
     for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
-      if (delayMs > 0) await new Promise<void>(resolve => { globalThis.setTimeout(resolve, delayMs) })
+      if (delayMs > 0) await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
       const [snapshot, allEntries] = await Promise.all([
         readConnectorRemoteWithRetry(() => mcpRegistry.state(), () => false),
         readConnectorRemoteWithRetry(() => readAuthorizationEntries(api), () => false),
@@ -1375,7 +1398,8 @@ export function ConnectorsSettingsSection({ api,
         begin(entry.key, method.id)
         return
       }
-      if (runtime?.status === 'failed' || runtime?.status === 'disconnected') break
+      // A newly mounted MCP can fail its first connection before registering
+      // its authorization flow. Keep the bounded discovery window open.
     }
     closeOAuthPopup()
     setCatalogFailure(
@@ -1392,7 +1416,7 @@ export function ConnectorsSettingsSection({ api,
     if (CURATED_OAUTH_MCP_IDS.has(definition.id)) reserveOAuthPopup()
     setInstallingCuratedId(definition.id)
     void installCurated({ connectorId: definition.id }).then(
-      async receipt => {
+      async (receipt) => {
         setRefresh(current => current + 1)
         onAuthorized()
         await finishMcpInstall(receipt.connector.serverName)
@@ -1420,7 +1444,7 @@ export function ConnectorsSettingsSection({ api,
     reserveOAuthPopup()
     setInstallingRegistryName(candidate.name)
     void mcpRegistry.install({ name: candidate.name, version: candidate.version }).then(
-      async receipt => {
+      async (receipt) => {
         setRefresh(current => current + 1)
         onAuthorized()
         await finishMcpInstall(receipt.connector.serverName)
@@ -1659,7 +1683,8 @@ export function ConnectorsSettingsSection({ api,
                       t={t}
                     />
                   ) : undefined}
-                  pending={rowAuthorizationPending || jevBusy}
+                  pending={rowAuthorizationPending || jevBusy
+                    || (disconnectingKey !== undefined && disconnectingKey === row.account?.key)}
                   installingCurated={installingCuratedId === row.definition.id}
                   reconnecting={row.mcpRuntime !== undefined && reconnectingServerName === row.mcpRuntime.serverName}
                   repairing={row.managed !== undefined && repairingEntryId === row.managed.entryId}
@@ -1668,6 +1693,7 @@ export function ConnectorsSettingsSection({ api,
                     const method = entry.methods[0]
                     if (method !== undefined) begin(entry.key, method.id)
                   }}
+                  onDisconnect={(entry) => { disconnect(entry.key) }}
                   onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
                     ? undefined
                     : () => { installCuratedConnector(row.definition) }}

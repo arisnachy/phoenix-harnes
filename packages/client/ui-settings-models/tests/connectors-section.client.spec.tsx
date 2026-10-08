@@ -27,6 +27,75 @@ function renderHub(api: IApiClient['authorization'], extra: Partial<ConnectorsSe
 }
 
 describe('connectors settings section', () => {
+  it('automatically presents authenticated DeepSeek and newly registered model providers in the store', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [
+        { key: 'llm-pi-ai/deepseek', label: 'DeepSeek', methods: [{ id: 'api-key', label: 'API key' }],
+          inFlight: false, disconnectable: true, stored: { kind: 'api-key' },
+          telemetry: { kind: 'account', provider: 'DeepSeek' } },
+        { key: 'llm-pi-ai/new-model', label: 'New Model', methods: [{ id: 'oauth', label: 'Sign in' }],
+          inFlight: false, telemetry: { kind: 'account', provider: 'New Model' } },
+      ] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api)
+    await waitFor(() => {
+      for (const key of ['llm-pi-ai/deepseek', 'llm-pi-ai/new-model']) {
+        const card = document.querySelector(`[data-connector-id="${key}"]`)
+        expect(card?.textContent).toContain('Connected')
+        expect(card?.textContent).not.toContain('Authorize')
+      }
+    })
+    expect(screen.getAllByText('DeepSeek')).toHaveLength(1)
+    const deepSeekCard = document.querySelector('[data-connector-id="llm-pi-ai/deepseek"]')
+    const disconnect = Array.from(deepSeekCard?.querySelectorAll('button') ?? [])
+      .find(button => button.textContent === 'Disconnect')
+    expect(disconnect).toBeTruthy()
+    api.disconnect = vi.fn(async () => ok({ disconnected: true as const })) as typeof api.disconnect
+    fireEvent.click(disconnect!)
+    await waitFor(() => { expect(api.disconnect).toHaveBeenCalledWith({ key: 'llm-pi-ai/deepseek' }) })
+  })
+
+  it('recovers the initial authorization list after a temporary host disconnection', async () => {
+    const list = vi.fn().mockRejectedValueOnce(new Error('WebSocket disconnected'))
+      .mockResolvedValue(ok({ entries: [{ key: 'llm-pi-ai/deepseek', label: 'DeepSeek',
+        methods: [{ id: 'api-key', label: 'API key' }], inFlight: false, stored: { kind: 'api-key' } }] }))
+    renderHub({ list, begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn() } as unknown as IApiClient['authorization'])
+    await waitFor(() => { expect(list).toHaveBeenCalledTimes(2) }, { timeout: 2000 })
+    expect(await screen.findByText('DeepSeek')).toBeTruthy()
+  })
+
+  it('finishes installation by authorizing even after the first MCP connection fails', async () => {
+    let installed = false
+    let reads = 0
+    const begin = vi.fn(async () => ok({ attemptId: 'late-brave' }))
+    const api = {
+      list: vi.fn(async () => {
+        const ready = installed && ++reads > 2
+        return ok({ entries: ready ? [{ key: 'mcp-client/brave-search', label: 'MCP brave-search',
+          methods: [{ id: 'credentials', label: 'Configure' }], inFlight: false }] : [] })
+      }),
+      begin, status: vi.fn(async () => ok({ attemptId: 'late-brave', status: 'pending', notices: [], nextSeq: 0 })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const connector = { entryId: 'brave', serverName: 'brave-search', url: 'stdio://brave-search',
+      source: { kind: 'curated' as const, connectorId: 'brave-search' } }
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: installed ? [connector] : [], runtime: installed ? [{
+        serverName: 'brave-search', transport: 'stdio' as const, status: 'failed' as const, toolNames: [],
+      }] : [] })),
+      installCurated: vi.fn(async () => { installed = true; return { status: 'installed' as const, connector } }),
+      install: vi.fn(), search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="brave-search"]')
+    const install = Array.from(card?.querySelectorAll('button') ?? []).find(button => button.textContent === 'Install')
+    expect(install).toBeTruthy()
+    fireEvent.click(install!)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/brave-search', method: 'credentials' })
+    }, { timeout: 3000 })
+  })
+
   it('shows the ChatGPT Web switch and exposes its route only after bridge readiness', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
@@ -1417,6 +1486,7 @@ describe('connectors settings section', () => {
           icons: [],
           transports: ['streamable-http' as const],
           packages: [],
+          remoteUrl: 'https://example.com/requires-key/mcp',
           remoteSetupRequired: 'headers' as const,
         }],
       })),
