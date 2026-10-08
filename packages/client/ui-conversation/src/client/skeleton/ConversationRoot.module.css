@@ -373,18 +373,6 @@
     radial-gradient(ellipse at 55% 53%, rgba(230, 115, 51, 0.035) 0%, transparent 54%),
     var(--dsw-alias-bg-base);
 }
-.heroTopbar {
-  display: flex;
-  flex: none;
-  box-sizing: border-box;
-  align-items: center;
-  gap: 14px;
-  height: 68px;
-  padding: 0 24px;
-  border-bottom: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-base);
-}
-.heroTopbarSpacer { flex: 1; }
 .heroTopIcon {
   display: inline-flex;
   align-items: center;
@@ -399,50 +387,6 @@
   cursor: pointer;
 }
 .heroTopIcon:hover { background: var(--dsw-alias-interactive-bg-hover); }
-.heroTopModel {
-  position: relative;
-  display: flex;
-  box-sizing: border-box;
-  flex-direction: column;
-  justify-content: center;
-  min-width: 205px;
-  max-width: 275px;
-  height: 48px;
-  padding: 4px 15px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 28px;
-  background: var(--dsw-specific-input-major);
-}
-.heroTopModelCaption {
-  padding-left: 3px;
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 11px;
-  line-height: 15px;
-}
-.heroTopModel :global(button[aria-haspopup='menu']) {
-  display: flex;
-  max-width: 240px;
-  min-height: 22px;
-  padding: 0 2px;
-  border: 0;
-  box-shadow: none;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  font-weight: 600;
-}
-.heroTopModel :global([role='menu']) { top: calc(100% + 8px); bottom: auto; z-index: 100; }
-.heroTopPickWorkspace {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: 0;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
 .heroTopProfile {
   position: relative;
   display: grid;
@@ -459,30 +403,17 @@
   font-size: 12px;
   cursor: pointer;
 }
-.heroProfileStatus {
-  position: absolute;
-  right: -1px;
-  bottom: -1px;
-  width: 9px;
-  height: 9px;
-  border: 2px solid var(--dsw-alias-bg-base);
-  border-radius: 50%;
-  background: #2ca569;
-}
 .root[data-phase='hero'] .composerSeat { transform: none; }
 .root[data-phase='hero'] .composerHero { gap: 10px; padding-bottom: 10px; }
 .root[data-phase='hero'] .scrollBody { padding-block: 16px; }
 .root[data-phase='hero'] .heroWorkspaceRow { padding-left: 28px; }
 @media (max-width: 720px) {
-  .heroTopbar { gap: 5px; height: 56px; padding-inline: 10px; }
   .heroTopIcon { width: 34px; }
-  .heroTopModel { min-width: 125px; max-width: 160px; padding-inline: 10px; }
   .heroTopProfile { flex-basis: 34px; width: 34px; height: 34px; }
   .root[data-phase='hero'] .scrollBody { padding-block: 10px; justify-content: flex-start; }
 }
 @media (max-width: 380px) {
   .heroTopIcon { width: 30px; }
-  .heroTopModel { min-width: 110px; }
 }
 
 /* Card-free 2026 landing: the center is breathing space; the original
@@ -510,9 +441,6 @@
   margin-top: 0;
   margin-bottom: 4px;
 }
-.heroTopbar {
-  border-bottom-color: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
-}
 .root[data-phase='hero'] :global([data-composer-card]) {
   border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 84%, transparent);
   box-shadow: 0 12px 34px rgba(65, 45, 31, 0.055);
@@ -520,4 +448,76 @@
 @media (max-width: 720px) {
   .root[data-phase='hero'] .scrollBody { padding-block: 8px 14px; }
   .root[data-phase='hero'] .heroWorkspaceRow { padding-left: 12px; }
+}
+
+/* Single responsive conversation command surface: the existing session
+   breadcrumbs/actions/utilities and view tabs remain the owners of their own
+   live actions. Only the search/discovery/profile controls are new chrome. */
+.unifiedHeader {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin: 10px 14px 0;
+  padding: 7px 12px 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 19px;
+  background: var(--dsw-specific-input-major);
+  box-shadow: 0 8px 26px rgba(59, 44, 27, 0.035);
+}
+.sessionChrome { min-width: 0; }
+.unifiedHeader .header {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.unifiedHeader .header::after { display: none; }
+.unifiedHeader .titleRow { min-height: 43px; gap: 12px; }
+.unifiedHeader .titleCluster { flex-wrap: wrap; column-gap: 10px; row-gap: 3px; }
+.unifiedHeader .headerActions { flex-wrap: wrap; row-gap: 4px; }
+.unifiedHeader .headerUtilities { margin-left: auto; }
+.unifiedHeader .crumbCurrent { color: var(--dsw-alias-label-primary); font-weight: 600; }
+.unifiedHeader .tabs { gap: 22px; margin-top: 3px; padding-left: 9px; }
+.unifiedHeader .tab { padding-bottom: 11px; }
+.unifiedHeader .tabActive::after {
+  height: 3px;
+  background: var(--dsw-specific-phoenix-accent);
+}
+.headerGlobal {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-height: 43px;
+  flex: none;
+}
+.heroTopIcon:hover, .heroTopProfile:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.heroTopIcon:focus-visible, .heroTopProfile:focus-visible {
+  outline: 2px solid var(--dsw-specific-phoenix-accent);
+  outline-offset: 2px;
+}
+.root[data-phase='hero'] .unifiedHeader {
+  min-height: 60px;
+  padding-block: 8px;
+}
+.root[data-phase='hero'] .sessionChrome { display: none; }
+@media (max-width: 1120px) {
+  .unifiedHeader { grid-template-columns: minmax(0, 1fr); }
+  .headerGlobal { grid-row: 1; justify-self: end; }
+  .sessionChrome { grid-row: 2; min-width: 0; }
+  .root[data-phase='hero'] .unifiedHeader { grid-template-columns: minmax(0, 1fr) auto; }
+  .root[data-phase='hero'] .headerGlobal { grid-row: 1; grid-column: 2; }
+}
+@media (max-width: 720px) {
+  .unifiedHeader { margin: 6px 8px 0; padding: 6px 9px 0; border-radius: 15px; }
+  .headerGlobal { gap: 4px; }
+  .unifiedHeader .titleRow { align-items: flex-start; flex-wrap: wrap; }
+  .unifiedHeader .titleCluster { flex-wrap: wrap; }
+  .unifiedHeader .headerUtilities { margin: 0; }
+  .unifiedHeader .tabs { margin-top: 7px; }
 }
