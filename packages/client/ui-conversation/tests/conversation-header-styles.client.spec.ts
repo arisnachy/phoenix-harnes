@@ -6,6 +6,10 @@ const css = readFileSync(
   fileURLToPath(new URL('../src/client/skeleton/ConversationRoot.module.css', import.meta.url)),
   'utf8',
 )
+const heroCss = readFileSync(
+  fileURLToPath(new URL('../src/client/skeleton/HeroShell.module.css', import.meta.url)),
+  'utf8',
+)
 
 function declarations(selector: string): Map<string, string> | undefined {
   const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, ' ')
@@ -62,5 +66,27 @@ describe('ConversationRoot UI-2 composer', () => {
   it('keeps the active dock safe-area aware', () => {
     expect(declarations(".root[data-phase='active'] .composerSeat")?.get('padding-bottom'))
       .toBe('env(safe-area-inset-bottom)')
+  })
+})
+
+describe('Centered new-session identity', () => {
+  it('keeps the hero column symmetric even with the browser scroll rail visible', () => {
+    expect(css).toContain('scrollbar-gutter: stable both-edges;')
+    expect(css).toContain('align-items: center;')
+    expect(css).toContain('margin-inline: auto;')
+    expect(css).toContain("min-height: 100%;")
+  })
+
+  it('centers the mark, title and subtitle on the same width as the real composer', () => {
+    expect(heroCss).toContain('place-items: center;')
+    expect(heroCss).toContain('max-width: min(100%, var(--dsh-composer-card-max-width));')
+    expect(heroCss).toContain('text-wrap: balance;')
+    expect(heroCss).toContain('margin-inline: auto;')
+  })
+
+  it('does not alter the session composer dock or its keyboard and model slots', () => {
+    expect(declarations(".root[data-phase='active'] .composerSeat")?.get('position'))
+      .toBe('sticky')
+    expect(css).toContain('transform: translateX(calc(0px - var(--dsh-chat-floating-overlay-axis-shift, 0px)))')
   })
 })
