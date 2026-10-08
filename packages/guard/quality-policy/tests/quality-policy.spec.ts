@@ -7,7 +7,7 @@ import { CallId, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@phoenix-ai/dsh-session'
 import { defineContentToolFixture } from '@phoenix-ai/dsh-tools'
 import * as QualityPolicy from '@phoenix-ai/dsh-quality-policy'
-import { classifyQualityActivity, inferQualityDomains, inferQualitySignals } from '@phoenix-ai/dsh-quality-policy'
+import { classifyQualityActivity, inferQualityDomains, inferQualitySignals, isUnfinishedResearchHandoff } from '@phoenix-ai/dsh-quality-policy'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
 function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
@@ -95,6 +95,13 @@ describe('classification', () => {
     expect(inferQualitySignals('ordinary refactor')).toEqual({
       errorContract: false, scale: false, unicodeBoundary: false, zeroProgress: false, differentialOracle: false,
     })
+  })
+
+  it('detects a failed research handoff but not ordinary evidence cautions', () => {
+    expect(isUnfinishedResearchHandoff('No encontré cuotas fiables. Si compartes una captura, preparo el ticket.')).toBe(true)
+    expect(isUnfinishedResearchHandoff('I could not find archived odds. If you share the data, I can help.')).toBe(true)
+    expect(isUnfinishedResearchHandoff('No encontré cuotas exactas. Aquí está una alternativa condicional completa.')).toBe(false)
+    expect(isUnfinishedResearchHandoff('No se puede garantizar que las seis selecciones ganen.')).toBe(false)
   })
 
   it('infers supported domains and generic fallback', () => {
@@ -279,6 +286,74 @@ describe('quality-policy evidence freshness', () => {
     await waitForIdle(ctx, agent)
 
     expect(notices(agent)).toHaveLength(1)
+  })
+
+  it('nudges once on unresolved search/tool failure without a successful mutation', async () => {
+    const ctx = await harness()
+    ctx.tools.register(defineContentToolFixture({
+      name: 'web_search',
+      description: 'unavailable archived source',
+      parameters: {},
+      async execute() { throw new Error('archive unavailable') },
+    }))
+    ctx.llm.registerAdapter(['mock-recovery'], new MockAdapter([
+      toolCallResponse('s1', 'web_search', {}),
+      textResponse('gave up because an archive was missing'),
+      textResponse('recovered with clearly marked assumptions'),
+    ]))
+    const agent = ctx.agentLoop.create(SessionId('recover-search'), { provider: 'mock-recovery', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'create a simulated ticket using pregame data' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+
+    const found = notices(agent)
+    expect(found).toHaveLength(1)
+    expect(found[0]).toContain('last tool attempt failed or was blocked')
+    expect(found[0]).toContain('materially different')
+    expect(found[0]).toContain('clearly marked assumptions')
+  })
+
+  it('does not request recovery after a failed tool is followed by a successful alternate route', async () => {
+    const ctx = await harness()
+    ctx.tools.register(defineContentToolFixture({
+      name: 'web_search',
+      description: 'unavailable source',
+      parameters: {},
+      async execute() { throw new Error('source missing') },
+    }))
+    ctx.llm.registerAdapter(['mock-alternate'], new MockAdapter([
+      toolCallResponse('s1', 'web_search', {}),
+      toolCallResponse('r1', 'read', { path: 'pregame-notes.md' }),
+      textResponse('used another source'),
+    ]))
+    const agent = ctx.agentLoop.create(SessionId('recovered-search'), { provider: 'mock-alternate', model: 'mock' })
+    agent.followup(createUserMessage({ content: [{ type: 'text', text: 'find archived pregame notes' }], source: { kind: 'user' } }))
+    await waitForIdle(ctx, agent)
+    expect(notices(agent)).toHaveLength(0)
+  })
+
+  it('rescues a premature handoff after a technically successful but irrelevant search', async () => {
+    const ctx = await harness()
+    ctx.tools.register(defineContentToolFixture({
+      name: 'web_search',
+      description: 'returns unrelated content',
+      parameters: {},
+      async execute() { return [{ type: 'text' as const, text: 'generic league home page' }] },
+    }))
+    ctx.llm.registerAdapter(['mock-handoff'], new MockAdapter([
+      toolCallResponse('s1', 'web_search', {}),
+      textResponse('No encontré cuotas prepartido fiables. Si compartes una captura, preparo las seis patas.'),
+      textResponse('Entrega condicional con seis selecciones y sin resultados posteriores.'),
+    ]))
+    const agent = ctx.agentLoop.create(SessionId('research-handoff'), { provider: 'mock-handoff', model: 'mock' })
+    agent.followup(createUserMessage({
+      content: [{ type: 'text', text: 'Crea un ticket de seis patas con datos disponibles antes de las 8:58' }],
+      source: { kind: 'user' },
+    }))
+    await waitForIdle(ctx, agent)
+    const found = notices(agent)
+    expect(found).toHaveLength(1)
+    expect(found[0]).toContain('That is not completion')
+    expect(found[0]).toContain('conditional or hypothetical deliverable')
   })
 
   it('leaves a text-only task untouched when no mutation ledger exists', async () => {
