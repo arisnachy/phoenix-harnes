@@ -372,6 +372,36 @@ describe('Codex automatic live catalog policy', () => {
     await expect(catalog.refresh(CODEX_PROVIDER, {}, true)).resolves.toBeUndefined()
   })
 
+  it('paces failed Codex refreshes without losing the last valid model list', async () => {
+    let now = 0
+    let fail = false
+    const list = vi.fn(async () => {
+      if (fail) throw new Error('upstream timed out')
+      return [{ id: 'known-good' }]
+    })
+    const catalog = new CodexLiveCatalog({
+      transport: { list },
+      now: () => now,
+      refreshIntervalMs: 100,
+      failureCooldownMs: 1_000,
+      installedModelIds: () => [],
+    })
+    expect(await catalog.refresh(CODEX_PROVIDER, {})).toEqual(['known-good'])
+    now = 101
+    fail = true
+    expect(await catalog.refresh(CODEX_PROVIDER, {})).toEqual(['known-good'])
+    expect(list).toHaveBeenCalledTimes(2)
+    now = 400
+    expect(await catalog.refresh(CODEX_PROVIDER, {})).toEqual(['known-good'])
+    expect(list).toHaveBeenCalledTimes(2)
+    now = 1_102
+    expect(await catalog.refresh(CODEX_PROVIDER, {})).toEqual(['known-good'])
+    expect(list).toHaveBeenCalledTimes(3)
+    now = 1_103
+    await catalog.refresh(CODEX_PROVIDER, {}, true)
+    expect(list).toHaveBeenCalledTimes(4)
+  })
+
   it('supports production defaults without requiring them in tests', async () => {
     expect(new CodexLiveCatalog().revision).toBe(0)
 
