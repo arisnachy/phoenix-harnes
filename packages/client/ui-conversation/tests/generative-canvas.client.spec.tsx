@@ -141,11 +141,9 @@ describe('Phoenix intelligent UI canvas', () => {
   })
 
   it('shows a clean notice instead of exposing malformed canvas JSON', () => {
-    const malformed = '{
-  "component": "ui_canvas",
-  "version": 1,
-  "props": {"title": "Unsafe", "children": [{"type":"button", "label":"Run", "prompt":"x", "onclick":"evil"}]}
-}'
+    const malformed = JSON.stringify({ component: 'ui_canvas', version: 1, props: {
+      title: 'Unsafe', children: [{ type: 'button', label: 'Run', prompt: 'x', onclick: 'evil' }],
+    } }, null, 2)
     const segments = splitGenerativeUiText(malformed)
     expect(segments.map(item => item.kind)).toEqual(['notice'])
     expect(JSON.stringify(segments)).not.toContain('onclick')
