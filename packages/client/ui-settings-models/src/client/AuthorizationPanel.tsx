@@ -1358,8 +1358,8 @@ export function ConnectorsSettingsSection({ api,
     for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
       if (delayMs > 0) await new Promise<void>(resolve => { globalThis.setTimeout(resolve, delayMs) })
       const [snapshot, allEntries] = await Promise.all([
-        mcpRegistry.state(),
-        readAuthorizationEntries(api),
+        readConnectorRemoteWithRetry(() => mcpRegistry.state(), () => false),
+        readConnectorRemoteWithRetry(() => readAuthorizationEntries(api), () => false),
       ])
       setMcpHub(snapshot)
       setEntries(allEntries)
