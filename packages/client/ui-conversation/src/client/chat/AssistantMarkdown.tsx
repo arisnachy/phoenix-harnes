@@ -12,6 +12,8 @@ import { JsonBlock, MarkdownText } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { MarkdownFileMentions } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { ChatNodeOwnerProps, ChatViewSlotProps } from '../contract/slots.ts'
 import css from './AssistantMarkdown.module.css'
+import { GenerativeUi, splitGenerativeUiText } from './GenerativeUi.tsx'
+import type { CanvasAction } from './GenerativeCanvas.tsx'
 
 export interface AssistantMarkdownProps {
   blocks: readonly AssistantBlock[]
@@ -24,11 +26,13 @@ export interface AssistantMarkdownProps {
   mentions?: MarkdownFileMentions | undefined
   /** The owning view's locale seat, passed down as a plain prop. */
   t: ChatViewSlotProps['t']
+  /** User-clicked generative controls route through the session composer. */
+  onUiAction?: CanvasAction | undefined
 }
 
 /** User-facing assistant prose/media; technical reasoning is owned by ToolActivityFlow. */
 export const AssistantMarkdown = memo(function AssistantMarkdown({
-  blocks, streaming, interrupted, renderMessageImages, mentions, t,
+  blocks, streaming, interrupted, renderMessageImages, mentions, t, onUiAction,
 }: AssistantMarkdownProps) {
   // Stable per locale revision (t identity changes on switch): a fresh object
   // per render would rebuild MarkdownText's component table every chunk.
@@ -44,17 +48,21 @@ export const AssistantMarkdown = memo(function AssistantMarkdown({
     const block = blocks[i]
     if (block === undefined) continue
     switch (block.kind) {
-      case 'text':
-        rendered.push(
-          <MarkdownText
-            key={i}
-            text={block.text}
-            streaming={streaming}
-            codeLabels={codeLabels}
-            fileMentions={mentions}
-          />,
-        )
+      case 'text': {
+        // Render declarative UI inline, preserving the surrounding prose and
+        // transcript order. Incomplete streaming fences remain hidden.
+        const segments = splitGenerativeUiText(block.text, { streaming })
+        rendered.push(...segments.map((segment, index) => segment.kind === 'ui'
+          ? <GenerativeUi key={`${i}:ui:${index}`} block={segment.block} onAction={onUiAction} />
+          : <MarkdownText
+              key={`${i}:markdown:${index}`}
+              text={segment.text}
+              streaming={streaming}
+              codeLabels={codeLabels}
+              fileMentions={mentions}
+            />))
         break
+      }
       // Reasoning is represented once inside the compact Tools disclosure.
       case 'reasoning':
         break
