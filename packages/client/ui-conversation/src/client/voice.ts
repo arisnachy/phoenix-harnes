@@ -589,7 +589,7 @@ function updateCodexRealtimePhase(payload: string): void {
     return
   }
   if (type === 'response.done') {
-    session.activeUtterance = undefined
+    delete session.activeUtterance
     publishVoiceIdle()
     // Serialize speech until the preceding audio response really finished.
     flushCodexRealtimeUtterances(session)
@@ -742,7 +742,7 @@ export function interruptVoiceAssistantSpeech(): boolean {
     try { realtime.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* peer cleanup owns closure */ }
   }
   if (realtime !== undefined) {
-    realtime.activeUtterance = undefined
+    delete realtime.activeUtterance
     if (hadPendingRealtimeSpeech) discardCodexRealtimeUtterances(realtime.key)
   }
   voiceAssistantSpeech?.dispose()
