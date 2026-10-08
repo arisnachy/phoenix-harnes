@@ -3,6 +3,7 @@
  * authenticates and authorizes senders before executing any email instructions.
  */
 import { createHash } from 'node:crypto'
+import type { JsonValue } from '@phoenix-ai/dsh-session'
 import { agentMailRequest } from './assistant-mail-agentmail.ts'
 import { mailAddress, mailRecord, mailString } from './assistant-mail-store.ts'
 import type { MailAccount, MailJob } from './assistant-mail-types.ts'
@@ -62,7 +63,7 @@ function labelValue(value: string | undefined): string {
   }
   return label
 }
-function messageProjection(raw: unknown, authorized: ReadonlySet<string>, full = false): Record<string, unknown> {
+function messageProjection(raw: unknown, authorized: ReadonlySet<string>, full = false): Record<string, JsonValue> {
   const v = mailRecord(raw)
   const labels = Array.isArray(v.labels) ? v.labels.filter((x): x is string => typeof x === 'string').slice(0, 30) : []
   const from = typeof v.from === 'string' ? v.from.slice(0, 320) : ''
@@ -91,7 +92,7 @@ function messageProjection(raw: unknown, authorized: ReadonlySet<string>, full =
     ...(full ? { text: body.slice(0, 16_000) } : {}),
   }
 }
-function threadProjection(raw: unknown, authorized: ReadonlySet<string>, full = false): Record<string, unknown> {
+function threadProjection(raw: unknown, authorized: ReadonlySet<string>, full = false): Record<string, JsonValue> {
   const v = mailRecord(raw)
   const messages = Array.isArray(v.messages) ? v.messages.slice(0, 50)
     .filter((row) => {
@@ -109,7 +110,7 @@ function threadProjection(raw: unknown, authorized: ReadonlySet<string>, full = 
     untrustedContent: true,
   }
 }
-function draftProjection(raw: unknown, full = false): Record<string, unknown> {
+function draftProjection(raw: unknown, full = false): Record<string, JsonValue> {
   const v = mailRecord(raw)
   return {
     draftId: typeof v.draft_id === 'string' ? v.draft_id : '',
@@ -117,8 +118,8 @@ function draftProjection(raw: unknown, full = false): Record<string, unknown> {
     subject: typeof v.subject === 'string' ? v.subject.slice(0, 1024) : '',
     preview: typeof v.preview === 'string' ? v.preview.slice(0, 300) : '',
     ...(full && typeof v.text === 'string' ? { text: v.text.slice(0, 16_000) } : {}),
-    sendAt: typeof v.send_at === 'string' ? v.send_at : undefined,
-    sendStatus: typeof v.send_status === 'string' ? v.send_status : undefined,
+    ...(typeof v.send_at === 'string' ? { sendAt: v.send_at } : {}),
+    ...(typeof v.send_status === 'string' ? { sendStatus: v.send_status } : {}),
   }
 }
 
@@ -128,7 +129,7 @@ function draftProjection(raw: unknown, full = false): Record<string, unknown> {
  * @returns Bounded provider-confirmed action result.
  */
 export async function operateKiraMail(config: KiraMailManagementConfig,
-  input: KiraMailOperationInput): Promise<Record<string, unknown>> {
+  input: KiraMailOperationInput): Promise<Record<string, JsonValue>> {
   const account = await config.account()
   if (account.state !== 'ready' || account.inboxId === undefined) throw new Error('Kira mailbox must be connected and verified')
   const key = await config.key()
@@ -281,10 +282,10 @@ export async function operateKiraMail(config: KiraMailManagementConfig,
     if (parsed.protocol !== 'https:') throw new Error('AgentMail attachment URL must use HTTPS')
     return {
       action: 'attachment', attachmentId, messageId: id, downloadUrl,
-      expiresAt: typeof data.expires_at === 'string' ? data.expires_at : undefined,
-      filename: typeof data.filename === 'string' ? data.filename.slice(0, 255) : undefined,
-      contentType: typeof data.content_type === 'string' ? data.content_type : undefined,
-      size: typeof data.size === 'number' ? data.size : undefined,
+      ...(typeof data.expires_at === 'string' ? { expiresAt: data.expires_at } : {}),
+      ...(typeof data.filename === 'string' ? { filename: data.filename.slice(0, 255) } : {}),
+      ...(typeof data.content_type === 'string' ? { contentType: data.content_type } : {}),
+      ...(typeof data.size === 'number' ? { size: data.size } : {}),
       transientPrivateUrl: true,
     }
   }
@@ -336,7 +337,8 @@ export async function operateKiraMail(config: KiraMailManagementConfig,
     if (input.action === 'thread_trash') await guardThread(id)
     const data = mailRecord(await request(`/threads/${pathId(id)}`, 'PATCH',
       input.action === 'thread_trash' ? { add_labels: ['trash'] } : { remove_labels: ['trash'] }))
-    return { action: input.action, threadId: id, labels: data.labels }
+    return { action: input.action, threadId: id,
+      labels: Array.isArray(data.labels) ? data.labels.filter((label): label is string => typeof label === 'string') : [] }
   }
   const id = boundedId(msgId, 'message_id')
   if (input.action === 'delete') {
@@ -358,5 +360,6 @@ export async function operateKiraMail(config: KiraMailManagementConfig,
       : {}
   if (Object.keys(patch).length === 0) throw new Error('Unsupported AgentMail management action')
   const changed = mailRecord(await request(`/messages/${pathId(id)}`, 'PATCH', patch))
-  return { action: input.action, messageId: id, labels: changed.labels }
+  return { action: input.action, messageId: id,
+    labels: Array.isArray(changed.labels) ? changed.labels.filter((label): label is string => typeof label === 'string') : [] }
 }
