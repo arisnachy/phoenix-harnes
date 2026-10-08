@@ -70,7 +70,6 @@ export function ConversationRoot({
   const openWorkspaceSearch = useCallback((): void => {
     window.dispatchEvent(new Event('phoenix:open-workspace-search'))
   }, [])
-  const deferredStarter = useRef<string | null>(null)
 
   const selectAttention = useCallback((item: (typeof proactiveAttention)[number]): void => {
     if (inputActions === undefined) return
@@ -166,7 +165,7 @@ export function ConversationRoot({
             setPendingWorkspaceId(current => current === workspaceId ? undefined : current)
           })
         },
-        onClose: () => { deferredStarter.current = null; setPickerOpen(false) },
+        onClose: () => { setPickerOpen(false) },
       })}
       {renderSlot('conversation.hero.agentPreset', {})}
     </div>
@@ -182,25 +181,6 @@ export function ConversationRoot({
   // one disabled textarea, never a second tree. The no-workspace state wins
   // when both hold — picking a workspace is the earlier prerequisite.
   const blocked = !inert && composerBlock !== undefined
-  // Quick actions create drafts in the resident InputBar, not extra messages
-  // or a second input. If no workspace exists yet, defer until it is selected.
-  useEffect(() => {
-    if (inert || inputActions === undefined || deferredStarter.current === null) return
-    const prompt = deferredStarter.current
-    deferredStarter.current = null
-    inputActions.setDraft(prompt)
-    rootRef.current?.querySelector('textarea')?.focus()
-  }, [inert, inputActions])
-  const startFromHero = useCallback((prompt: string): void => {
-    if (inert || inputActions === undefined) {
-      deferredStarter.current = prompt
-      setPickerOpen(true)
-      return
-    }
-    deferredStarter.current = null
-    inputActions.setDraft(prompt)
-    rootRef.current?.querySelector('textarea')?.focus()
-  }, [inert, inputActions])
   const inputBar = renderSlot('conversation.composer.bar', {
     variant: hero ? 'hero' : 'composer',
     ...(inert
@@ -227,7 +207,7 @@ export function ConversationRoot({
   const composerBar = (
     <div className={clsx(css.composerStack, hero && css.composerHero)}>
       {hero && <HeroGlow className={css.heroGlow} />}
-      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} onStarter={startFromHero} />}
+      {hero && <HeroShell t={t} renderSlot={renderSlot} preferredName={preferredName} />}
       {hero && heroWorkspaceRow}
       {zone !== undefined && renderSlot('conversation.input.dock', zone)}
       {inputBar}
