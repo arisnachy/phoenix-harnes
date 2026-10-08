@@ -94,11 +94,11 @@ const example = 'Para una línea: {"visualType":"chart","chartType":"line","xKey
  * Other visual types are returned untouched; existing MCP truth checks stay intact.
  */
 export function admitVisualChart(spec: Visual): VisualChartAdmission {
-  if (spec.visualType !== 'chart') return { spec }
+  if (spec.visualType !== 'chart' && !(spec.visualType === 'visual' && nonempty(spec.chartType))) return { spec }
   const raw = nonempty(spec.chartType) ? spec.chartType.toLowerCase().trim() : 'bar'
   const chartType = aliases[raw] ?? raw
   if (!allowed.has(chartType)) return { error: `Tipo de gráfica no admitido: ${raw}. ${example}` }
-  if (chartType === 'candlestick') return { spec: { ...spec, chartType } }
+  if (chartType === 'candlestick') return { spec: { ...spec, chartType, visualType: 'chart' } }
   const hasData = (Array.isArray(spec.data) && spec.data.length > 0)
     || Array.isArray(spec.rows) && spec.rows.length > 0
     || Array.isArray(spec.labels) && spec.labels.length > 0
