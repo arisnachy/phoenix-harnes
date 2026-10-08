@@ -441,8 +441,7 @@ describe('browser voice adapter', () => {
       streamVoiceAssistantResponse('assistant:unfinished', growing.trim() + '.', started, true)
       await Promise.resolve()
       expect(speak).toHaveBeenCalled()
-      const spokenSegments = speak.mock.calls.map(([request]) => request)
-      expect(spokenSegments.length).toBeGreaterThan(0)
+      expect(speak.mock.calls.length).toBeGreaterThan(0)
     } finally {
       setVoiceAssistantActive(false)
       dispose()
