@@ -1,4 +1,4 @@
-import { SessionId } from '@phoenix-ai/dsh-session'
+import { SessionId, type JsonValue } from '@phoenix-ai/dsh-session'
 import { existsSync } from 'node:fs'
 import type {} from '@phoenix-ai/dsh-subprocess'
 import { ProactivityDeferredError } from './proactivity-engine.ts'
@@ -106,7 +106,7 @@ export interface AssistantMailControl {
   /** Read the durable mail mission history independently of the email connection. */
   listMailJobs(): Promise<Array<{ id: string; subject: string; from: string; state: string; summary?: string; error?: string }>>
   /** Manage verified Kira mailbox resources using the official AgentMail v0 API. */
-  manageMail(input: KiraMailOperationInput): Promise<Record<string, unknown>>
+  manageMail(input: KiraMailOperationInput): Promise<Record<string, JsonValue>>
 }
 
 class AssistantMailControlService extends Service implements AssistantMailControl {
