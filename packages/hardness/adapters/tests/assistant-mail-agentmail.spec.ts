@@ -1,6 +1,6 @@
 import { MailMessageId } from '../src/assistant-mail-types.ts'
 import { describe, expect, it, vi } from 'vitest'
-import { AgentMailHttpError, AgentMailTransport, agentMailDeleteInbox, agentMailRequest } from '../src/assistant-mail-agentmail.ts'
+import { AgentMailHttpError, AgentMailTransport, agentMailDeleteInbox, agentMailRequest, agentMailIdempotencyKey } from '../src/assistant-mail-agentmail.ts'
 
 describe('AgentMail transport', () => {
   it('uses authenticated-only listing and idempotent reply pinned to the verified sender', async () => {
@@ -237,4 +237,60 @@ it('deletes a stale inbox with the authenticated DELETE endpoint and treats miss
     { url: 'https://api.agentmail.to/v0/inboxes/old%40agentmail.to', method: 'DELETE' },
     { url: 'https://api.agentmail.to/v0/inboxes/old%40agentmail.to', method: 'DELETE' },
   ])
+})
+
+describe('AgentMail 400 validation regression: provider-safe idempotency', () => {
+  it('keeps stable valid keys and normalizes nested chat and scheduled-task keys deterministically', () => {
+    expect(agentMailIdempotencyKey('safe_key.~2026')).toBe('safe_key.~2026')
+    const nested = 'phoenix-chat-mail-lead-outer:code:1'
+    const scheduled = 'task-123:deliver:2026-10-07T20:13:00.000Z'
+    for (const raw of [nested, scheduled, 'x'.repeat(400)]) {
+      const first = agentMailIdempotencyKey(raw)
+      expect(first).toMatch(/^[A-Za-z0-9._~-]{1,256}$/u)
+      expect(first).toBe(agentMailIdempotencyKey(raw))
+      expect(first).not.toBe(raw)
+    }
+    expect(agentMailIdempotencyKey(nested)).not.toBe(agentMailIdempotencyKey('phoenix-chat-mail-lead-outer:code:2'))
+  })
+
+  it('sends and replies with a valid deduplication header even for colon-delimited internal IDs', async () => {
+    const observed: string[] = []
+    const provider = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      const headers = new Headers(init?.headers)
+      const dedupe = headers.get('Idempotency-Key') ?? ''
+      if (!/^[A-Za-z0-9._~-]{1,256}$/u.test(dedupe)) {
+        return Response.json({
+          code: 'validation_error', errors: [{ path: ['headers', 'Idempotency-Key'], message: 'Invalid characters' }],
+        }, { status: 400 })
+      }
+      observed.push(dedupe)
+      return Response.json({ message_id: 'agentmail-confirmed', thread_id: 'thread-id' })
+    }
+    const transport = new AgentMailTransport(async () => 'private-key', 'kira@agentmail.to', 1000, provider)
+    const scheduled = 'task-123:deliver:2026-10-07T20:13:00.000Z'
+    const sent = await transport.send('owner@example.com', 'Informe', 'Listo', scheduled)
+    expect(sent.messageId).toBe('agentmail-confirmed')
+    await transport.send('owner@example.com', 'Informe', 'Listo', scheduled)
+    await transport.reply({
+      inboxId: 'kira@agentmail.to', messageId: MailMessageId('message-id'),
+      to: 'owner@example.com', text: 'Hecho', idempotencyKey: 'phoenix-mail-job:reply:1',
+    })
+    expect(observed).toHaveLength(3)
+    expect(observed[0]).toBe(observed[1])
+    expect(observed[2]).not.toBe(observed[0])
+  })
+
+  it('reports the exact validation field when the provider returns a path array, redacting credential values', async () => {
+    const error = await agentMailRequest('/inboxes/test/messages/send', 'private-key', 1000, async () =>
+      Response.json({
+        code: 'validation_error',
+        errors: [{ path: ['headers', 'Idempotency-Key'], message: 'invalid token am_super_secret' }],
+      }, { status: 400 }), { subject: 'Test', text: 'Hello', to: ['owner@example.com'] }, 'valid-key')
+      .catch((value: unknown) => value)
+    expect(error).toMatchObject({
+      status: 400, code: 'validation_error', validation: 'headers.Idempotency-Key: invalid token am_[redacted]',
+    })
+    expect((error as Error).message).toContain('Idempotency-Key')
+    expect((error as Error).message).not.toContain('am_super_secret')
+  })
 })
