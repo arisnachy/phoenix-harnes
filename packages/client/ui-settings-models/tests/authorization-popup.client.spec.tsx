@@ -239,6 +239,37 @@ describe('authorization consent window', () => {
     } finally { open.mockRestore() }
   })
 
+  it('polls consent status on the foreground popup clock while PHOENIX is backgrounded', async () => {
+    const reserved = reservedWindow()
+    const callbacks = new Map<number, () => void>()
+    let nextTimerId = 0
+    const popupWithClock = Object.assign(reserved, {
+      setTimeout: vi.fn((callback: () => void, delay: number) => {
+        const id = ++nextTimerId
+        if (delay === 650) callbacks.set(id, callback)
+        return id
+      }),
+      clearTimeout: vi.fn((id: number) => { callbacks.delete(id) }),
+    })
+    const open = vi.spyOn(window, 'open').mockReturnValue(popupWithClock as unknown as Window)
+    const api = panelApi(consentNotice)
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => {
+        expect(popupWithClock.setTimeout).toHaveBeenCalledWith(expect.any(Function), 650)
+      })
+      const foregroundPoll = [...callbacks.values()][0]
+      expect(foregroundPoll).toBeDefined()
+      await act(async () => { foregroundPoll?.() })
+      await waitFor(() => {
+        expect(api.status).toHaveBeenCalledWith({ attemptId: 'attempt-1', after: 0 })
+        expect(reserved.location.replace).toHaveBeenCalledWith(CONSENT_URL)
+      })
+      expect(open).toHaveBeenCalledTimes(1)
+    } finally { open.mockRestore() }
+  })
+
   it('navigates the reserved window once the backend publishes the consent URL', async () => {
     const reserved = reservedWindow()
     const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
