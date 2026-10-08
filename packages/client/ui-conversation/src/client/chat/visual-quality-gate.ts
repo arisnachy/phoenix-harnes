@@ -141,6 +141,41 @@ function validateCollection(
   if (!Array.isArray(collection) || collection.length === 0) issues.push(issue)
 }
 
+/** Resolve both common table encodings without losing object-shaped row cells. */
+export function projectVisualTable(spec: JsonRecord): {
+  readonly columns: readonly string[]
+  readonly rows: readonly (readonly unknown[])[]
+} | undefined {
+  const source = Array.isArray(spec.rows) ? spec.rows : Array.isArray(spec.data) ? spec.data : undefined
+  if (source === undefined) return undefined
+  const first = source.find(isRecord)
+  const columns = Array.isArray(spec.columns)
+    && spec.columns.every(column => typeof column === 'string' && column.trim().length > 0)
+    ? spec.columns as string[]
+    : first === undefined ? [] : Object.keys(first).slice(0, 12)
+  if (columns.length === 0) return undefined
+  const normalize = (key: string): string => key.normalize('NFKD')
+    .replace(/[\u0300-\u036f]/gu, '').trim().toLowerCase().replace(/[^a-z0-9]+/gu, '')
+  const rows = source.map((entry): readonly unknown[] => {
+    if (Array.isArray(entry)) return columns.map((_, index) => entry[index])
+    if (!isRecord(entry)) return columns.map(() => undefined)
+    const keys = Object.keys(entry)
+    return columns.map(column => {
+      if (Object.hasOwn(entry, column)) return entry[column]
+      const key = keys.find(candidate => normalize(candidate) === normalize(column))
+      return key === undefined ? undefined : entry[key]
+    })
+  })
+  return { columns, rows }
+}
+
+/** Only meaningful cells count as actual table data; blank placeholders are not results. */
+export function populatedVisualTableRows(spec: JsonRecord): readonly (readonly unknown[])[] {
+  const table = projectVisualTable(spec)
+  return table?.rows.filter(row => row.some(cell =>
+    cell !== null && cell !== undefined && (typeof cell !== 'string' || cell.trim().length > 0))) ?? []
+}
+
 /**
  * Validate a declarative Phoenix visual before allowing it into the renderer.
  * The check is intentionally deterministic and never calls a model.
@@ -156,8 +191,11 @@ export function preflightVisualSpec(spec: JsonRecord): VisualQaPreflight {
     if (!SUPPORTED_CHART_TYPES.has(requested)) issues.push(`unsupported-chart-type:${requested}`)
     if (requested === 'candlestick') validateCandlesticks(spec, issues)
     else validateGenericChart(spec, issues)
-  } else if (kind === 'table') {
-    if (!Array.isArray(spec.rows) && !Array.isArray(spec.data)) issues.push('table-no-rows')
+  } else if (kind === 'table' || (kind === 'visual' && Array.isArray(spec.columns)
+    && (Array.isArray(spec.rows) || Array.isArray(spec.data)))) {
+    const table = projectVisualTable(spec)
+    if (table === undefined) issues.push('table-no-rows')
+    else if (populatedVisualTableRows(spec).length === 0) issues.push('table-empty-data')
   } else if (kind === 'metrics') {
     validateCollection(spec, ['metrics', 'data'], 'metrics-no-data', issues)
   } else if (kind === 'timeline') {
@@ -351,6 +389,18 @@ export function auditRenderedVisual(
   if (invalidCoordinates > 0) issues.push('invalid-render-coordinates')
   if (expectedMarks > 0 && renderedMarks !== expectedMarks) {
     issues.push(`mark-count-mismatch:${renderedMarks}/${expectedMarks}`)
+  }
+
+  if ((kind === 'table' || (kind === 'visual' && Array.isArray(spec.columns)))
+    && section !== null && section.dataset.phoenixVisualKind === 'table') {
+    const expectedRows = populatedVisualTableRows(spec).length
+    const renderedRows = section.querySelectorAll('tbody tr').length
+    if (expectedRows === 0) issues.push('table-empty-data')
+    if (renderedRows !== expectedRows) issues.push(`table-row-count-mismatch:${renderedRows}/${expectedRows}`)
+    if (Array.from(section.querySelectorAll('tbody tr')).some(row =>
+      !Array.from(row.querySelectorAll('td')).some(cell => (cell.textContent ?? '').trim().length > 0))) {
+      issues.push('table-blank-rendered-row')
+    }
   }
 
   if (kind === 'chart' && section !== null) {
