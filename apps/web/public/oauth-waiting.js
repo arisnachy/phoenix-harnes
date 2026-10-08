@@ -1,5 +1,5 @@
-// Backward-compatible handoff for already-open Phoenix tabs that still
-// request /oauth-waiting.html?v=20261007-1. New Phoenix code uses about:blank.
+// OAuth handoff page opened synchronously from the connector click. It remains
+// same-origin until PHOENIX receives and validates the real provider URL.
 // This page never learns or stores tokens and accepts messages only from its
 // same-origin opener. Provider URLs must be HTTPS or HTTP loopback.
 (() => {
