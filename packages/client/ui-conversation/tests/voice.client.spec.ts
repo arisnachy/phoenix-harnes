@@ -223,11 +223,18 @@ describe('browser voice adapter', () => {
       // keep the answer queued for Codex instead of falling back to system TTS.
       if (channel !== undefined) channel.readyState = 'connecting'
       const activatedAt = getVoiceAssistantSnapshot().activatedAt
+      // A settled step can precede a browser tool; Live must wait for
+      // the actual completed Turn, never narrate premature progress.
       streamVoiceAssistantResponse(
+        'assistant:harness:interim',
+        'Sigo en ello.',
+        activatedAt,
+        true,
+      )
+      speakVoiceAssistantResponse(
         'assistant:harness:1',
         'La tarea terminó correctamente.',
         activatedAt,
-        true,
       )
       expect(channel?.send).toHaveBeenCalledTimes(1)
 
@@ -243,10 +250,14 @@ describe('browser voice adapter', () => {
       expect(spoken.type).toBe('response.create')
       expect(spoken.response.instructions).toContain('La tarea terminó correctamente.')
 
+      // A second spoken event queues until the real completion of the
+      // first response; Realtime rejects overlapping response.create calls.
       expect(speakVoiceAssistantAttention(
         'Aprobación 550e8400-e29b-41d4-a716-446655440000',
         'Revisa la acción antes de continuar; referencia 123456789 needs attention.',
       )).toBe(true)
+      expect(channel?.send).toHaveBeenCalledTimes(2)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
       const attention = JSON.parse(String(channel?.send.mock.calls[2]?.[0])) as {
         type: string
         response: { instructions: string }
@@ -258,6 +269,11 @@ describe('browser voice adapter', () => {
 
       expect(interruptVoiceAssistantSpeech()).toBe(true)
       expect(JSON.parse(String(channel?.send.mock.calls[3]?.[0]))).toEqual({ type: 'response.cancel' })
+
+      // The Realtime model must not autonomously claim a tool is running:
+      // no harness-final request is active, so abort unsolicited responses.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
+      expect(JSON.parse(String(channel?.send.mock.calls[4]?.[0]))).toEqual({ type: 'response.cancel' })
     } finally {
       await stopCodexRealtimeVoice()
       disposeRemote()

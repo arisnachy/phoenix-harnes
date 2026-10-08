@@ -597,7 +597,8 @@ function realtimeIdentityInstructions(
     grammar,
     'Speak naturally, warmly, and concisely in the user\'s language. This is a continuation of the compact Phoenix conversation history; do not repeat that history.',
     'PHOENIX\'s normal harness is the only planner and executor. This realtime thread is voice transport: transcribe the human faithfully and do not claim tool use, file changes, plans, or completed actions on its own.',
-    'When PHOENIX supplies an explicit response to speak, render that response naturally without inventing extra work or results.',
+    'Never generate your own spoken answers or progress acknowledgements in response to user audio. Input audio is transcription only.',
+    'Only an explicit response.create from the PHOENIX client authorizes speech. Read the already-completed harness answer faithfully, without adding claims, waiting updates, tool status or speculation.',
   ].join(' ')
 }
 
