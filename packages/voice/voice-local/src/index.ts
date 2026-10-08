@@ -115,7 +115,7 @@ export function createSystemTextToSpeechProvider(options: SystemTtsProviderOptio
       assertSuccessful(await run({
         command,
         args,
-        stdin: request.text,
+        stdin: platform === 'win32' ? `${request.language}\\n${request.text}` : request.text,
         ...request.signal === undefined ? {} : { signal: request.signal },
       }))
     },
@@ -311,7 +311,17 @@ function defaultSystemArgs(platform: NodeJS.Platform): readonly string[] {
   if (platform === 'win32') {
     return [
       '-NoLogo', '-NoProfile', '-NonInteractive', '-Command',
-      '$text = [Console]::In.ReadToEnd(); Add-Type -AssemblyName System.Speech; $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; $speaker.Speak($text)',
+      '$payload = [Console]::In.ReadToEnd(); $line = $payload.IndexOf([char]10); if ($line -lt 1) { exit 2 }; ' +
+      '$lang = $payload.Substring(0, $line).Trim(); $text = $payload.Substring($line + 1); ' +
+      'Add-Type -AssemblyName System.Speech; $speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer; ' +
+      '$base = ($lang -split \'-\')[0]; ' +
+      '$voices = @($speaker.GetInstalledVoices() | Where-Object { $_.Enabled -and $_.VoiceInfo.Culture.TwoLetterISOLanguageName -eq $base }); ' +
+      'if ($voices.Count -eq 0) { [Console]::Error.WriteLine(\'No installed speech voice for language \' + $lang); exit 3 }; ' +
+      '$exact = @($voices | Where-Object { $_.VoiceInfo.Culture.Name -ieq $lang }); ' +
+      '$eligible = if ($exact.Count -gt 0) { $exact } else { $voices }; ' +
+      '$female = @($eligible | Where-Object { $_.VoiceInfo.Gender -eq \'Female\' }); ' +
+      '$selected = if ($female.Count -gt 0) { $female[0] } else { $eligible[0] }; ' +
+      '$speaker.SelectVoice($selected.VoiceInfo.Name); $speaker.Speak($text)',
     ]
   }
   if (platform === 'darwin') return ['-f', '-']
