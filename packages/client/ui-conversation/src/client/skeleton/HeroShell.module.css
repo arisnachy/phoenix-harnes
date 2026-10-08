@@ -329,24 +329,59 @@
   background: var(--dsw-alias-background-secondary);
 }
 
-/* Quiet welcome: no grid, cards or suggestion chips. The hero occupies the
-   middle of the available space while the real composer remains docked below. */
+/* Center identity over the actual available space above the unchanged input.
+   The same composer width variable drives the logo, title and subtitle axis. */
 .root {
-  flex: 1 1 auto;
-  min-height: 220px;
-  padding: clamp(18px, 4vh, 42px) 24px;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  min-height: clamp(170px, 30vh, 400px);
+  padding: clamp(12px, 3vh, 28px) clamp(12px, 3vw, 28px);
 }
-.stack { max-width: 900px; }
+.stack {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: min(100%, var(--dsh-composer-card-max-width));
+  margin-inline: auto;
+  text-align: center;
+}
 .fishHitbox {
   width: 114px;
   height: 114px;
+  margin-inline: auto;
   margin-bottom: 16px;
 }
-.fish { width: 102px; height: 102px; }
-.headline { font-size: clamp(30px, 2.8vw, 46px); }
-.subtitle { margin-top: 12px; font-size: clamp(16px, 1.45vw, 20px); }
+.fish {
+  width: 102px;
+  height: 102px;
+  margin-inline: auto;
+  object-position: center;
+}
+.headline {
+  width: 100%;
+  max-width: 100%;
+  font-size: clamp(30px, 2.8vw, 46px);
+  text-align: center;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.subtitle {
+  max-width: 100%;
+  margin-top: 12px;
+  font-size: clamp(16px, 1.45vw, 20px);
+  text-align: center;
+  text-wrap: balance;
+}
+@media (max-height: 650px) {
+  .root { min-height: 155px; padding-block: 10px; }
+  .fishHitbox { width: 78px; height: 78px; margin-bottom: 9px; }
+  .fish { width: 70px; height: 70px; }
+}
 @media (max-width: 720px) {
-  .root { min-height: 185px; padding: 24px 12px; }
+  .root { min-height: 185px; padding: 18px 12px; }
   .fishHitbox { width: 78px; height: 78px; margin-bottom: 10px; }
   .fish { width: 72px; height: 72px; }
   .headline { font-size: clamp(27px, 6vw, 36px); }
