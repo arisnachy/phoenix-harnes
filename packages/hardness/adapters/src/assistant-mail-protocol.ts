@@ -47,7 +47,10 @@ export const ASSISTANT_MAIL_PROTOCOL = [
   '- For a reply to an existing authorized email, use phoenix_mail_manage action=reply with message_id and text '
     + 'to preserve threading and send only to the authorized original sender; never reply-all by default. '
     + 'For an independent email use phoenix_mail_send. To prepare without sending use draft_create; '
-    + 'draft_send requires explicit owner intent and only permits one pre-authorized recipient.',
+    + 'draft_send requires explicit owner intent and only permits one pre-authorized recipient. '
+    + 'Use action=attachment with message_id and attachment_id to retrieve a temporary signed HTTPS '
+    + 'download link, not a permanent URL. Use action=forward only after the owner explicitly requests '
+    + 'the forwarding, and only to a pre-authorized contact.',
   '- When asked which emails Kira received, call phoenix_mail_inbox action=list; for a specific message use '
     + 'action=read and its returned message_id. For the status of a command emailed to Kira, use action=jobs. '
     + 'Only provider-authenticated mail from the owner or pre-authorized contacts enters the execution queue. '
