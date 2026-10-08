@@ -84,6 +84,64 @@ describe('phoenix_visualize tool', () => {
     }, execution())).resolves.toMatchObject({ artifactId: 'phoenix-visual:visual-1' })
   })
 
+  it('creates a populated simulated line chart in one tool call without model repair', async () => {
+    const tool = createPhoenixVisualizerTool()
+    const args = {
+      title: 'Tendencia ficticia',
+      visual: { visualType: 'chart', chartType: 'line', demo: true },
+    }
+    const value = await tool.execute(args, execution()) as {
+      artifactId: string
+      title: string
+      visual: { visualType: string; chartType: string; description: string; data: unknown[]; series: unknown[] }
+    }
+    expect(value.artifactId).toBe('phoenix-visual:visual-1')
+    expect(value.visual.chartType).toBe('line')
+    expect(value.visual.description).toContain('ficticios')
+    expect(value.visual.data).toHaveLength(7)
+    expect(value.visual.series).toHaveLength(1)
+    expect(tool.output.presentationMeta?.(args, value as never)).toMatchObject({
+      artifact: { data: { visualType: 'chart', chartType: 'line', simulated: true } },
+    })
+    expect(args.visual).toEqual({ visualType: 'chart', chartType: 'line', demo: true })
+  })
+
+  it('normalizes legacy chart shapes to populated, accurately typed line series', async () => {
+    const tool = createPhoenixVisualizerTool()
+    const list = [
+      { visualType: 'chart', chartType: 'line', labels: ['Ene','Feb'], values: [10,18] },
+      { visualType: 'visual', chartType: 'line', data: [['Ene',10],['Feb',18]] },
+      { visualType: 'chart', chartType: 'line', data: { labels: ['Ene','Feb'],
+        datasets: [{ label: 'Incidencia', data: [10,18] }] } },
+      { visualType: 'chart', chartType: 'spline', xKey: 'mes',
+        series: [{ dataKey: 'valor', label: 'Valor' }],
+        data: [{ mes: 'Ene', valor: 10 }, { mes: 'Feb', valor: 18 }] },
+    ]
+    for (const visual of list) {
+      const result = await tool.execute({ title: 'Serie histórica', visual }, execution()) as {
+        visual: { chartType: string; visualType: string; data: Array<Record<string,unknown>> }
+      }
+      expect(result.visual.chartType).toBe('line')
+      expect(result.visual.visualType).toBe('chart')
+      expect(result.visual.data).toHaveLength(2)
+    }
+  })
+
+  it('rejects empty or malformed real charts without publishing misleading artifacts', async () => {
+    const tool = createPhoenixVisualizerTool()
+    const list = [
+      { visualType: 'chart', chartType: 'line' },
+      { visualType: 'chart', chartType: 'line', data: [{ label: 'Ene', value: 5 }] },
+      { visualType: 'chart', chartType: 'line', data: [{ label: 'Ene', value: 'invalid' },{ label: 'Feb', value: 20 }] },
+      { visualType: 'chart', chartType: 'line', data: { labels: ['Ene'], datasets: [] } },
+      { visualType: 'chart', chartType: 'unknown', demo: true },
+    ]
+    for (const visual of list) {
+      await expect(tool.execute({ title: 'Datos reales', visual }, execution()))
+        .rejects.toThrow()
+    }
+  })
+
   it('describes the visual surface clearly to the model', () => {
     const tool = createPhoenixVisualizerTool()
     expect(tool.name).toBe('phoenix_visualize')
