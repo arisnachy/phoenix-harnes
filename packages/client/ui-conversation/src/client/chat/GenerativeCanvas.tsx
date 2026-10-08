@@ -162,7 +162,7 @@ interface RendererProps {
   node: CanvasNode
   values: Values
   setValue: (id: string, value: string | number | boolean) => void
-  onAction?: CanvasAction
+  onAction?: CanvasAction | undefined
 }
 
 function expandPrompt(prompt: string, values: Values): string {
@@ -174,7 +174,7 @@ function Tabs({ tabs, values, setValue, onAction }: {
   tabs: Extract<CanvasNode,{type:'tabs'}>['tabs']
   values: Values
   setValue: RendererProps['setValue']
-  onAction?: CanvasAction
+  onAction?: CanvasAction | undefined
 }): ReactNode {
   const [active, setActive] = useState(0)
   return (
@@ -252,7 +252,7 @@ function Node({ node, values, setValue, onAction }: RendererProps): ReactNode {
 }
 
 /** Self-contained local state: no model roundtrip for sliders, tabs or filters. */
-export function GenerativeCanvas({ spec, onAction }: { spec: CanvasSpec; onAction?: CanvasAction }): ReactNode {
+export function GenerativeCanvas({ spec, onAction }: { spec: CanvasSpec; onAction?: CanvasAction | undefined }): ReactNode {
   const [values, setValues] = useState<Values>(() => initialValues(spec.props.children))
   const setValue = (key: string, value: string | number | boolean): void =>
     setValues(current => ({ ...current, [key]: value }))
