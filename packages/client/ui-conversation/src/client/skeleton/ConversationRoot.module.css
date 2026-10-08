@@ -426,18 +426,30 @@
 .root[data-phase='hero'] .scrollBody {
   justify-content: flex-start;
   padding: 12px 0 clamp(12px, 3vh, 32px);
+  /* The chat rail must not pull the identity to the left of the compositor. */
+  scrollbar-gutter: stable both-edges;
 }
 .root[data-phase='hero'] .composerSeat {
+  box-sizing: border-box;
   flex: 1 0 auto;
+  align-items: center;
   width: 100%;
+  min-height: 100%;
   transform: none;
 }
 .root[data-phase='hero'] .composerHero {
+  box-sizing: border-box;
   flex: 1 0 auto;
   gap: 10px;
+  width: min(calc(var(--dsh-composer-card-max-width) + 2 * var(--dsh-composer-side-clearance)), 100%);
+  max-width: 100%;
+  min-height: 100%;
+  margin-inline: auto;
   padding-bottom: 0;
 }
 .root[data-phase='hero'] .heroWorkspaceRow {
+  box-sizing: border-box;
+  width: 100%;
   margin-top: 0;
   margin-bottom: 4px;
 }
