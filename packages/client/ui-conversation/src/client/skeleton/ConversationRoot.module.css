@@ -484,3 +484,40 @@
   .heroTopIcon { width: 30px; }
   .heroTopModel { min-width: 110px; }
 }
+
+/* Card-free 2026 landing: the center is breathing space; the original
+   workspace, team, permission, model, voice and input controls stay mounted. */
+.root[data-phase='hero'] {
+  background:
+    radial-gradient(ellipse 43% 36% at 52% 51%, rgba(233, 130, 55, 0.065), transparent 98%),
+    var(--dsw-alias-bg-base);
+}
+.root[data-phase='hero'] .scrollBody {
+  justify-content: flex-start;
+  padding: 12px 0 clamp(12px, 3vh, 32px);
+}
+.root[data-phase='hero'] .composerSeat {
+  flex: 1 0 auto;
+  width: 100%;
+  transform: none;
+}
+.root[data-phase='hero'] .composerHero {
+  flex: 1 0 auto;
+  gap: 10px;
+  padding-bottom: 0;
+}
+.root[data-phase='hero'] .heroWorkspaceRow {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+.heroTopbar {
+  border-bottom-color: color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
+}
+.root[data-phase='hero'] :global([data-composer-card]) {
+  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 84%, transparent);
+  box-shadow: 0 12px 34px rgba(65, 45, 31, 0.055);
+}
+@media (max-width: 720px) {
+  .root[data-phase='hero'] .scrollBody { padding-block: 8px 14px; }
+  .root[data-phase='hero'] .heroWorkspaceRow { padding-left: 12px; }
+}
