@@ -284,9 +284,9 @@ const EVENT_COPY: Record<string, Record<VoiceEventKind, string>> = {
 export function localizedImportantSpeech(event: VoiceImportantEvent, language: string): string {
   const locale = language.toLowerCase().split('-')[0] ?? 'es'
   const text = displayOutputToVoiceText(event.displayOutput)
-  const containsHan = /[\\p{Script=Han}]/u.test(text)
-  const english = /\\b(?:everything|all is ready|ready|the task|task is|completed|finished|approval|i need|before i|continue|found|successfully|waiting for)\\b/i.test(text)
-  const spanish = /\\b(?:la tarea|está lista|terminad[oa]|completad[oa]|necesito|autorización|continuar|encontré|revisión|aprobación)\\b/i.test(text)
+  const containsHan = /[\p{Script=Han}]/u.test(text)
+  const english = /\b(?:everything|all is ready|ready|the task|task is|completed|finished|approval|i need|before i|continue|found|successfully|waiting for)\b/i.test(text)
+  const spanish = /\b(?:la tarea|está lista|terminad[oa]|completad[oa]|necesito|autorización|continuar|encontré|revisión|aprobación)\b/i.test(text)
   const incompatible = locale === 'zh' ? !containsHan
     : containsHan || (locale === 'es' ? english && !spanish : spanish && !english)
   return incompatible ? (EVENT_COPY[locale] ?? EVENT_COPY.es)![event.kind] : text
