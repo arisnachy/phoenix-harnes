@@ -11,6 +11,18 @@ const build = readFileSync(resolve('scripts/build.ts'), 'utf8')
 const stableWorkflow = readFileSync(resolve('.github/workflows/phoenix-stable-update-channel.yml'), 'utf8')
 
 describe('PHOENIX supervised updater runtime isolation', () => {
+  it('limits offline watcher fetch latency while preserving manual refresh and live Host', () => {
+    expect(updater).toContain('const WATCH_FETCH_TIMEOUT_MS = 9_000')
+    expect(updater).toContain('timeout: options.timeoutMs')
+    expect(updater).toContain('fetchTimeoutMs: WATCH_FETCH_TIMEOUT_MS')
+    expect(updater).toContain('const MAX_NETWORK_BACKOFF_MS = 15 * 60 * 1000')
+    expect(updater).toContain('const NETWORK_WARNING_INTERVAL_MS = 15 * 60 * 1000')
+    expect(updater).toContain('now - lastNetworkWarningAt >= NETWORK_WARNING_INTERVAL_MS')
+    expect(updater).toContain('await waitForPollOrParentExit(root, parentPid, retryMs)')
+    expect(updater).toContain('status: \'checking\',')
+    expect(updater).not.toContain('throw new Error(\'PHOENIX shutdown due to offline')
+  })
+
   it('promotes each green current main SHA to the stable release pointer', () => {
     expect(stableWorkflow).toContain('Promote stable release pointer')
     expect(stableWorkflow).toContain('"$TARGET_SHA:refs/heads/stable"')
