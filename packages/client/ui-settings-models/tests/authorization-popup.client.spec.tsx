@@ -41,6 +41,7 @@ function reservedWindow(): ReservedWindow {
 const KEY = 'mcp-client/linear-linear'
 const LABEL = 'MCP linear-linear'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
+const WAITING_URL = new URL('/oauth-waiting.html?v=20261008-gesture', window.location.href).href
 function panelApi(statusResult: () => Promise<RpcResponse<unknown>>) {
   return {
     list: vi.fn(() => Promise.resolve(ok({
@@ -154,7 +155,7 @@ describe('authorization consent window', () => {
     await clickAuthorize()
 
     // Same tick as the gesture: this is what the popup blocker checks.
-    expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(open).toHaveBeenCalledWith(WAITING_URL, '_blank')
     expect(begin).toHaveBeenCalledWith({ key: KEY, method: 'oauth' })
     open.mockRestore()
   })
@@ -405,7 +406,7 @@ describe('authorization popup isolation and pre-consent prompts', () => {
       fireEvent.click(screen.getByRole('button', { name: en.continueAuthorization }))
       await waitFor(() => { expect(api.answer).toHaveBeenCalled() })
       expect(open).toHaveBeenCalledTimes(2)
-      expect(open).toHaveBeenLastCalledWith('about:blank', '_blank')
+      expect(open).toHaveBeenLastCalledWith(WAITING_URL, '_blank')
       await waitFor(() => { expect(reopened.location.replace).toHaveBeenCalledWith(CONSENT_URL) }, { timeout: 4000 })
     } finally { open.mockRestore() }
   })
@@ -441,7 +442,7 @@ it.each([
   try {
     renderPanel(api)
     await clickAuthorize()
-    expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(open).toHaveBeenCalledWith(WAITING_URL, '_blank')
     expect(api.begin).toHaveBeenCalledWith({ key, method: 'oauth' })
     if (allowed) {
       expect(open).toHaveBeenCalledTimes(1)
