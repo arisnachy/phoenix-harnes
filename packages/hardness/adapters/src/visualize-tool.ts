@@ -1,4 +1,4 @@
-import { defineTool, ToolArgsError, type ToolDefinition } from '@phoenix-ai/dsh-tools'
+import { defineTool, ToolArgsError, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { admitVisualChart } from './visual-chart-contract.ts'
 
 const VISUAL_TYPES = ['chart', 'table', 'metrics', 'timeline', 'cards', 'progress', 'visual'] as const
@@ -101,7 +101,7 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
       return {
         artifactId: `phoenix-visual:${String(exec.callId)}`,
         title,
-        ...(spec === args.visual ? {} : { visual: spec }),
+        ...(spec === args.visual ? {} : { visual: spec as JsonValue }),
       }
     },
     presentCall(args) {
