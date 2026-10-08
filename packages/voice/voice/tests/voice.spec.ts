@@ -3,7 +3,9 @@ import { Context } from '@phoenix-ai/cordis'
 import VoiceRuntime, {
   displayOutputToVoiceText,
   phoenixMessagesToCodexRealtimeInitialItems,
+  localizedImportantSpeech,
   sessionEventToVoiceEvent,
+  voiceLanguageForPanel,
   type VoiceImportantEvent,
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
@@ -451,6 +453,51 @@ describe('Codex realtime safety gate', () => {
       key: '',
       offerSdp: 'v=0',
     })).resolves.toEqual({ accepted: false, reason: 'invalid' })
+  })
+})
+
+describe('locale-aligned notification speech', () => {
+  it('uses the PHOENIX panel locale instead of the system default', () => {
+    expect(voiceLanguageForPanel('es')).toBe('es-DO')
+    expect(voiceLanguageForPanel('en')).toBe('en-US')
+    expect(voiceLanguageForPanel('zh')).toBe('zh-CN')
+    expect(voiceLanguageForPanel(undefined)).toBe('es-DO')
+  })
+
+  it('localizes deterministic completion and approval notices', () => {
+    expect(sessionEventToVoiceEvent({
+      type: 'goal/judge', data: { goalId: 'done', verdict: 'pass' },
+    })?.displayOutput).toBe('La tarea está lista y ha pasado la revisión.')
+    expect(sessionEventToVoiceEvent({
+      type: 'approval/asked', data: { id: 'step' },
+    }, 'en-US')?.displayOutput).toBe('I need your approval before I can continue.')
+    expect(sessionEventToVoiceEvent({
+      type: 'goal/supervisor', data: { status: 'blocked' },
+    }, 'zh-CN')?.displayOutput).toBe('我需要你的帮助才能继续执行任务。')
+  })
+
+  it('never reads untagged English summaries as Spanish notifications', () => {
+    const event = sessionEventToVoiceEvent({
+      type: 'goal/judge',
+      data: { goalId: 'mission', verdict: 'pass', summary: 'Everything is ready.' },
+    }, 'es-DO')
+    expect(event?.displayOutput).toBe('La tarea está lista y ha pasado la revisión.')
+    expect(localizedImportantSpeech({
+      kind: 'mission-completed', displayOutput: 'Everything is ready.',
+    }, 'es-DO')).toBe('La tarea está lista y ha pasado la revisión.')
+    expect(localizedImportantSpeech({
+      kind: 'discovery', displayOutput: 'Encontré la causa.',
+    }, 'es-DO')).toBe('Encontré la causa.')
+  })
+
+  it('keeps explicitly language-tagged summaries only when they match the panel', () => {
+    const event = sessionEventToVoiceEvent({
+      type: 'goal/judge', data: {
+        goalId: 'mission', verdict: 'pass', summary: 'La tarea está terminada.',
+        language: 'es',
+      },
+    }, 'es-DO')
+    expect(event?.displayOutput).toBe('La tarea está terminada.')
   })
 })
 
