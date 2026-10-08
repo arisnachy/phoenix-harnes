@@ -440,7 +440,7 @@ export function startConnection(
     }
     failedAttempts = 0
     publishStatus?.('starting')
-    settling = connectGeneration(false)
+    settling = connectGeneration()
   }
 
   return {
