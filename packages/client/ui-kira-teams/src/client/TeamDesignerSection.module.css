@@ -272,6 +272,7 @@
 }
 
 .teamName {
+  box-sizing: border-box;
   width: min(360px, 100%);
   border: 1px solid transparent;
   border-radius: 8px;
@@ -546,8 +547,13 @@
 }
 
 @container (max-width: 460px) {
+  .aiTitle { flex-wrap: wrap; }
+  .aiTitle > div { min-width: 0; }
+  .safeLabel { max-width: 100%; white-space: normal; }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .avatarPicker { grid-template-columns: repeat(5, 1fr); }
+  .avatarPicker { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .preview { min-width: 0; }
+  .preview > div:last-child { min-width: 0; overflow-wrap: anywhere; }
 }
 
 @media (prefers-reduced-motion: reduce) {
