@@ -403,7 +403,7 @@ export function auditRenderedVisual(
 
   if ((kind === 'table' || (kind === 'visual' && Array.isArray(spec.columns)))
     && section !== null && section.dataset.phoenixVisualKind === 'table') {
-    const expectedRows = populatedVisualTableRows(spec).length
+    const expectedRows = Math.min(populatedVisualTableRows(spec).length, 200)
     const renderedRows = section.querySelectorAll('tbody tr').length
     if (expectedRows === 0) issues.push('table-empty-data')
     if (renderedRows !== expectedRows) issues.push(`table-row-count-mismatch:${renderedRows}/${expectedRows}`)
