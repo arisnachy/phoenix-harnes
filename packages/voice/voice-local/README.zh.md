@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-为 [`@phoenix-ai/dsh-voice`](../voice/) 提供本地进程 provider。该包不会在启动期间下载模型或启动进程。
+为 [`@phoenix-ai/dsh-voice`](../voice/) 提供本地语音进程。Windows 上的后台安装脚本 `install-kokoro.ps1` 将 Kokoro ONNX 模型与独立 Python 环境放在 `%LOCALAPPDATA%\\Phoenix\\voice\\kokoro`，而非临时 Git worktree。安装完成前原生语音仍可使用。设置 `PHOENIX_KOKORO_AUTO_INSTALL=0` 可关闭自动安装。
 
 ## 配置
 
@@ -12,18 +12,21 @@
   config:
     kokoroCommand: null
     kokoroArgs: []
+    kokoroPrewarm: false
     sttCommand: null
     sttArgs: []
     systemTts: true
 ```
 
-配置 `kokoroCommand` 后，`kokoro` provider 会通过 stdin 接收规范化的 UTF-8 文本，并优先于系统 provider。`sttCommand` 通过 stdin 接收音频字节，并必须将一个转写结果写入 stdout。系统 provider 在 Windows 使用 PowerShell `System.Speech`，在 macOS 使用 `say`，在 Linux 使用 `espeak-ng`。
+显式设置 `kokoroCommand` 时会使用该命令；否则自动探测已安装的 Windows Kokoro 常驻守护进程，安装完成后运行时也会自动连接。客户端逐句发送文本语言；旧客户端在 Host 上默认使用 `es-DO`。不受 Kokoro v1.0 支持的语言不会被当作英语合成，明显过长的模型音频也会被拒绝。Windows 系统语音仅使用与指定语言匹配的已安装声音，避免错误地使用英语默认声音。
 
-命令使用 `shell: false`、明确参数、隐藏的 Windows 窗口、有界 stdin/stdout 管道和取消处理运行。该包不会把 secret 放入命令参数或日志。
+西班牙语女性助手使用 `ef_dora`，男性助手使用 `em_alex`；英语使用 `af_heart` 和 `am_michael`。Kokoro 通过隔离环境内的 eSpeak NG 实现西班牙语音素转换。对话的优先级为 Codex Realtime、Kokoro、平台语音，然后客户端浏览器语音回退。
+
+进程通过 `shell: false` 启动，并通过 stdin/stdout 传递文本或语音请求。系统 TTS 在 Windows 使用 `System.Speech`，macOS 使用 `say`，Linux 使用 `espeak-ng`。
 
 ## 扩展点
 
-在测试或 host wrapper 中注入 `VoiceCommandRunner`。部署可以提供由官方本地 pipeline 支持的 Kokoro 命令；该包有意不选择模型权重、下载策略或 shell 脚本。
+`VoiceCommandRunner` 可以在测试或宿主适配器中注入。部署也可提供自定义 Kokoro 或 STT 命令。
 
 ## Model Experience
 
@@ -31,17 +34,18 @@
 
 #### What the model sees
 
-该包只运行在 host 端。它不会提供模型可见工具或上下文，也不会决定任务完成；`VoiceCommandRunner` 保持为 host 扩展点。
+该服务运行于 Host，不向模型添加工具或上下文，也不负责判定任务完成。
 
 #### Token effect
 
-本地 provider 不增加模型 token；它们在面向模型的工作完成后，通过主机管道接收文本或音频。
+本地语音合成不会增加模型 token，模型生成完成后才通过进程管道处理文本。
 
 #### KV Cache effect
 
-没有缓存影响，因为命令执行和音频播放保持在提示组装之外。
+音频生成不参与提示词组装，因此不影响 KV 缓存。
 
 ## 已知限制与暂缓事项
 
-- 可用性检查只检查配置；命令安装状态会在第一次请求时验证。
-- STT 格式转换、麦克风采集和音频播放策略属于 client 或部署适配器。
+- 内置 Kokoro 安装与探测目前针对 Windows；首次安装需要 Python 3.12、足够磁盘空间与模型下载。
+- 自定义命令的可用性检测不等于模型已安装；若运行失败会尝试其他可用语音。
+- 不支持的 Kokoro 语言、STT 音频格式转换以及系统语音包的安装由对应平台处理。

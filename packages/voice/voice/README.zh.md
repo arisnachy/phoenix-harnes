@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-与 provider 无关的 PHOENIX 异步语音服务。该服务只接受明确的重要事件：已验证的任务完成、相关发现、真实阻塞、帮助请求和授权请求。普通轮次、工具和进度保持静默。
+PHOENIX 的 provider 中立异步语音服务。只有经确认的任务完成、重要发现、真实阻塞、帮助请求和授权请求才会触发旁路语音，普通工具事件与进度保持静默。
 
 ## 配置
 
@@ -17,13 +17,13 @@
     ttsProvider: kokoro
 ```
 
-`announce()` 会立即返回 receipt，并异步排空音频。队列有界，重复 key 会被抑制，`cancel()` 或 `stop()` 可以取消进行中和等待中的语音。provider 失败会被隔离，不会拒绝执行循环。`transcribe()` 使用选定的 STT provider，但不会进入 TTS 队列。
+`announce()` 立即返回 receipt，有限队列在后台完成语音输出。重复事件受到抑制，`cancel()` 与 `stop()` 取消活动任务。provider 出错不会终止 Phoenix 的任务执行。
 
-`displayOutputToVoiceText()` 是 `display_output` 与 `voice_output` 的分离点。它在合成前移除代码块、Markdown、URL、HTML、emoji、视觉符号和疑似 secret 的值，然后应用按句子处理的长度上限。
+`displayOutputToVoiceText()` 去除 Markdown、代码、URL、HTML、emoji 和疑似密钥，并按照句子截断。
 
 ## Provider
 
-Provider 实现 `VoiceTextToSpeechProvider` 或 `VoiceSpeechToTextProvider`，并通过服务注册。配置的 provider id 在可用时优先；否则选择优先级最高的可用 provider。本地 provider 包在配置 `PHOENIX_KOKORO_COMMAND` 时注册 Kokoro，并可注册平台语音 fallback。
+实现 `VoiceTextToSpeechProvider` 或 `VoiceSpeechToTextProvider` 后即可注册 provider。对话首选原生 OpenAI/Codex Realtime，其次是本地 Kokoro，最后是平台语音。新客户端从实际文本和界面语言决定 BCP 47 标签并逐段传递；旧客户端的 Host 默认语言为 `es-DO`。助手资料中的女性或男性呈现方式逐段传递给语音提供方，保证其身份一致。
 
 ## Model Experience
 
@@ -31,18 +31,18 @@ Provider 实现 `VoiceTextToSpeechProvider` 或 `VoiceSpeechToTextProvider`，�
 
 #### What the model sees
 
-模型看不到自动语音上下文。明确的 consumer 可以使用 `VoiceImportantEvent` 发出 `voice/important`；音频不会加入提示上下文。
+语音不会自动添加模型上下文。只有显式事件 `voice/important` 可以请求语音播放，音频不进入提示词上下文。
 
 #### Token effect
 
-语音不会增加模型 token，因为规范化、事件筛选和播放都在循环之外运行。
+语音输出由 Host 后台处理，不产生额外模型 token。
 
 #### KV Cache effect
 
-没有缓存影响；队列状态和 provider 可用性属于模型请求之外的主机运行时状态。
+队列状态、语言选择与音频播放均在提示词组装之外，不影响 KV 缓存。
 
 ## 已知限制与暂缓事项
 
-- 服务不提供模型权重或通用 Kokoro 命令；部署必须提供本地命令及其参数。
-- 浏览器麦克风采集仍是独立的 client 适配器；配置本地命令后才提供 host STT。
-- 语音是 AI 生成的音频，启用它的产品界面必须进行披露。
+- Kokoro 模型在 Windows 单独安装，不能保证每个语言都有模型声音。
+- 浏览器麦克风采集与 Host STT 是独立适配器，需要相应权限或命令。
+- AI 生成的音频应由启用该功能的产品界面作出披露。
