@@ -379,10 +379,17 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(updateWatchSource).toContain('garbage collection is owned by the external')
   })
 
-  it('runs runtime garbage collection at startup and after safe runtime handoff paths', () => {
-    expect(source).toContain('restoreActiveRuntime()\nrepairDesktopShortcut()\ncleanupObsoleteRuntimes()')
-    expect(source).toContain("if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()")
-    expect(source).toContain('clearActiveRuntime()\n    cleanupObsoleteRuntimes()')
+  it('keeps heavy cleanup off the Host startup and update-handoff paths', () => {
+    const boot = source.slice(
+      source.indexOf('recoverStaleStagingIndexLock()\\nrestoreActiveRuntime()'),
+      source.indexOf('let watcherSupervisor = superviseWatcher()'),
+    )
+    expect(boot).not.toContain('cleanupObsoleteRuntimes()')
+    expect(source).not.toContain("if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()")
+    expect(source).not.toContain('clearActiveRuntime()\\n    cleanupObsoleteRuntimes()')
+    expect(source).toContain('if (Date.now() >= nextStorageSweepAt) {\\n      cleanupObsoleteRuntimes()')
+    expect(source).toContain('cleanupObsoleteRuntimes([runtimeRoot])')
+    expect(source).toContain("PHOENIX_MCP_BACKGROUND_STARTUP: process.env.PHOENIX_MCP_BACKGROUND_STARTUP ?? '1'")
   })
 
 })
