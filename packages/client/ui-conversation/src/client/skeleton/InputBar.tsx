@@ -1000,12 +1000,13 @@ export function InputBar({
             <div className={css.modes}>
               {accessSelect}
               {renderSlot('conversation.input.plan', { locked })}
+              {variant === 'hero' && renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             </div>
             {leftItems}
           </div>
           <div className={css.trailing}>
             {rightItems}
-            {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
+            {variant !== 'hero' && renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
             {voiceState !== 'unsupported' && (
               <Tooltip
