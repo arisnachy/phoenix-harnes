@@ -47,7 +47,8 @@ describe('phoenix_canvas tool', () => {
     const tool = createPhoenixCanvasTool()
     expect(tool.name).toBe('phoenix_canvas')
     expect(tool.description).toContain('directly inside Phoenix')
-    expect(tool.description).toContain('visual side workspace')
+    expect(tool.description).toContain('inside the chat conversation')
+    expect(tool.description).toContain('NEVER use phoenix_canvas for an ordinary chart')
     expect(tool.description).toContain('.canvas.tsx')
     expect(tool.parameters).toEqual(expect.objectContaining({
       type: 'object',
