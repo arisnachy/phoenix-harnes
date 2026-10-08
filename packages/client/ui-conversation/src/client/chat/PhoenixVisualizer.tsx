@@ -356,7 +356,7 @@ function color(index: number): string {
 }
 
 function Legend({ series }: { readonly series: readonly VisualSeries[] }) {
-  if (series.length <= 1) return null
+  if (series.length === 0) return null
   return (
     <div className={css.legend} aria-label="Chart legend">
       {series.map((item, index) => (
