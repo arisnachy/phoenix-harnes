@@ -41,6 +41,7 @@ function reservedWindow(): ReservedWindow {
 const KEY = 'mcp-client/linear-linear'
 const LABEL = 'MCP linear-linear'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
+const WAITING_URL = new URL('/oauth-waiting.html?v=20261008-gesture', window.location.href).href
 function panelApi(statusResult: () => Promise<RpcResponse<unknown>>) {
   return {
     list: vi.fn(() => Promise.resolve(ok({
@@ -154,7 +155,7 @@ describe('authorization consent window', () => {
     await clickAuthorize()
 
     // Same tick as the gesture: this is what the popup blocker checks.
-    expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(open).toHaveBeenCalledWith(WAITING_URL, '_blank')
     expect(begin).toHaveBeenCalledWith({ key: KEY, method: 'oauth' })
     open.mockRestore()
   })
@@ -187,6 +188,30 @@ describe('authorization consent window', () => {
       expect(reserved.document.body.textContent).toContain('El servidor no proporcionó una URL de autorización válida')
       expect(screen.getByText('Error: connector unavailable')).toBeTruthy()
       expect(reserved.close).not.toHaveBeenCalled()
+    } finally { open.mockRestore() }
+  })
+
+  it('replays an early failed authorization after the waiting page becomes ready', async () => {
+    const reserved = reservedWindow()
+    const open = vi.spyOn(window, 'open').mockReturnValue(reserved as unknown as Window)
+    const api = panelApi(pendingForever)
+    api.begin = vi.fn(() => Promise.reject(new Error('connector unavailable')))
+    try {
+      renderPanel(api)
+      await clickAuthorize()
+      await waitFor(() => {
+        expect(reserved.document.title).toContain('Autorización no iniciada')
+      })
+      window.dispatchEvent(new MessageEvent('message', {
+        origin: window.location.origin,
+        source: reserved as unknown as MessageEventSource,
+        data: { type: 'phoenix/oauth-ready' },
+      }))
+      expect(reserved.postMessage).toHaveBeenCalledWith({
+        type: 'phoenix/oauth-status',
+        message: 'El servidor no proporcionó una URL de autorización válida. Regresa a PHOENIX para consultar el error y reintentar.',
+        state: 'error',
+      }, window.location.origin)
     } finally { open.mockRestore() }
   })
 
@@ -233,7 +258,7 @@ describe('authorization consent window', () => {
       expect(popupWithClock.setTimeout).toHaveBeenCalledWith(expect.any(Function), 45_000)
       await act(async () => { timers[0]?.() })
       expect(reserved.document.body.textContent).toContain('No se pudo abrir la autorización')
-      expect(reserved.document.body.textContent).toContain('servidor no proporcionó una URL')
+      expect(reserved.document.body.textContent).toContain('agotó el tiempo de preparación')
       await waitFor(() => { expect(api.cancel).toHaveBeenCalledWith({ attemptId: 'attempt-1' }) })
       expect(reserved.close).not.toHaveBeenCalled()
     } finally { open.mockRestore() }
@@ -405,7 +430,7 @@ describe('authorization popup isolation and pre-consent prompts', () => {
       fireEvent.click(screen.getByRole('button', { name: en.continueAuthorization }))
       await waitFor(() => { expect(api.answer).toHaveBeenCalled() })
       expect(open).toHaveBeenCalledTimes(2)
-      expect(open).toHaveBeenLastCalledWith('about:blank', '_blank')
+      expect(open).toHaveBeenLastCalledWith(WAITING_URL, '_blank')
       await waitFor(() => { expect(reopened.location.replace).toHaveBeenCalledWith(CONSENT_URL) }, { timeout: 4000 })
     } finally { open.mockRestore() }
   })
@@ -441,7 +466,7 @@ it.each([
   try {
     renderPanel(api)
     await clickAuthorize()
-    expect(open).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(open).toHaveBeenCalledWith(WAITING_URL, '_blank')
     expect(api.begin).toHaveBeenCalledWith({ key, method: 'oauth' })
     if (allowed) {
       expect(open).toHaveBeenCalledTimes(1)
