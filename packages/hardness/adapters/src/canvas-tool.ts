@@ -1,6 +1,6 @@
 import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
-/** Dedicated MIME used to route Phoenix canvases into the visual workspace. */
+/** Dedicated MIME used to route Phoenix canvases into the chat conversation. */
 export const PHOENIX_CANVAS_MIME = 'application/vnd.phoenix.canvas+html'
 
 /**
@@ -9,11 +9,12 @@ export const PHOENIX_CANVAS_MIME = 'application/vnd.phoenix.canvas+html'
  * A Phoenix canvas is an HTML mini-app or visual composition that must be
  * presented inside Phoenix itself. It is deliberately distinct from editor-
  * specific ".canvas.tsx" files or Cursor/Codex canvas folders.
+ * @returns Tool definition for self-contained, in-chat HTML experiences.
  */
 export function createPhoenixCanvasTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_canvas',
-    description: 'Create and present an interactive canvas directly inside Phoenix when the user asks for a canvas, mini-app, interactive visual, HTML experience, mockup, or generative UI that should be visible in the app. The result opens in Phoenix\'s visual side workspace beside the chat. Do not create a Cursor/Codex .canvas.tsx file or tell the user to open an IDE unless they explicitly requested an editor file.',
+    description: 'Create an inline HTML mini-app only when the user explicitly requests an HTML experience, an interactive app, web page, canvas application or mockup. NEVER use phoenix_canvas for an ordinary chart (line, bar, pie, time series) or data dashboard: prefer phoenix_visualize for structured charts, because external JS/CSS CDNs are blocked by the iframe security policy and may show an empty screen. A simple fictional chart is one phoenix_visualize call with chartType:line and demo:true. The canvas renders directly inside Phoenix, inside the chat conversation with automatic height; do not open a side workspace or editor file and do not create a Cursor/Codex .canvas.tsx file.',
     parameters: {
       title: {
         type: 'string',
@@ -41,11 +42,11 @@ export function createPhoenixCanvasTool(): ToolDefinition {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Canvas ready in Phoenix: ${String(value.title)}`,
+        text: `Canvas ready in Phoenix: ${value.title}`,
       }],
       presentationMeta: (args, value) => ({
         artifact: {
-          id: String(value.artifactId),
+          id: value.artifactId,
           mime: PHOENIX_CANVAS_MIME,
           title: String(value.title),
           data: args.html,
@@ -53,21 +54,21 @@ export function createPhoenixCanvasTool(): ToolDefinition {
         },
       }),
     },
-    async execute(args, exec) {
+    execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0) throw new Error('title must be a non-empty string')
       if (args.html.trim().length === 0) throw new Error('html must be a non-empty string')
-      return {
+      return Promise.resolve({
         artifactId: `phoenix-canvas:${String(exec.callId)}`,
         title,
-      }
+      })
     },
     presentCall(args) {
       return {
         card: 'generic',
         title: `Canvas · ${args.title}`,
         kind: 'read',
-        rawInput: 'Phoenix visual workspace',
+        rawInput: 'Phoenix inline chat canvas',
       }
     },
   })

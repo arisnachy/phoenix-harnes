@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { HardnessArtifactNodeView } from '../src/client/chat/HardnessArtifactNodeView.tsx'
 
 function props(data: {
@@ -32,6 +32,7 @@ function props(data: {
 }
 
 describe('HARDNESS inline artifact renderer', () => {
+  afterEach(() => { cleanup() })
   it('renders a compact card and expands in place', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'table-1',
@@ -157,6 +158,31 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.queryByText(/"candles"/)).toBeNull()
   })
 
+  it('renders a simple fictional line chart successfully on the first pass', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'synthetic-line-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'Tendencia ficticia',
+      data: {
+        visualType: 'chart',
+        chartType: 'line',
+        description: 'Datos ficticios · ejemplo demostrativo, no mediciones reales',
+        xKey: 'label',
+        series: [{ dataKey: 'value', label: 'Valor ficticio' }],
+        data: [
+          { label: 'Lun', value: 38 },
+          { label: 'Mar', value: 51 },
+          { label: 'Mié', value: 47 },
+          { label: 'Jue', value: 65 },
+        ],
+      },
+    })} />)
+    expect(screen.getByRole('img',{ name:'line chart' })).toBeTruthy()
+    expect(document.querySelectorAll('[data-phoenix-visual-mark="line-point"]')).toHaveLength(4)
+    expect(document.querySelector('[data-phoenix-visual-qa="fail"]')).toBeNull()
+    expect(screen.getByText(/Datos ficticios/)).toBeTruthy()
+  })
+
   it('blocks malformed charts instead of exposing raw visualization JSON', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'broken-candles-1',
@@ -172,7 +198,7 @@ describe('HARDNESS inline artifact renderer', () => {
     })} />)
 
     expect(document.querySelector('[data-phoenix-visual-qa="fail"]')).toBeTruthy()
-    expect(screen.getByText(/blocked a visual that did not pass render quality checks/i)).toBeTruthy()
+    expect(screen.getByText(/No se pudo representar esta gráfica/)).toBeTruthy()
     expect(screen.queryByText(/"chartType"/)).toBeNull()
     expect(screen.queryByText(/"candles"/)).toBeNull()
   })
@@ -298,6 +324,29 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
     expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")
     expect(screen.queryByRole('button', { name: /sandboxed interaction/i })).toBeNull()
+  })
+
+  it('explains blocked remote Chart.js dependencies instead of silently showing an empty canvas', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'external-chart-1', mime: 'text/html', title: 'grafica.html',
+      data: '<h1>Gráfica ficticia</h1><canvas id="chart"></canvas>'
+        + '<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>'
+        + '<script>new Chart(document.getElementById("chart"),{});</script>',
+    })} />)
+    const frame = screen.getByTitle('grafica.html') as HTMLIFrameElement
+    expect(frame.getAttribute('srcdoc')).toContain('biblioteca externa bloqueada')
+    expect(frame.getAttribute('srcdoc')).toContain('phoenix_visualize')
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")
+  })
+
+  it('does not warn for fully self-contained HTML charts', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'inline-chart-1', mime: 'text/html', title: 'grafica-autonoma.html',
+      data: '<h1>Gráfica ficticia</h1><canvas id="chart"></canvas><script>document.body.dataset.ok="1"</script>',
+    })} />)
+    const frame = screen.getByTitle('grafica-autonoma.html') as HTMLIFrameElement
+    expect(frame.getAttribute('srcdoc')).not.toContain('biblioteca externa bloqueada')
   })
 
   it('preserves an explicit static HTML opt-out with scripts disabled', () => {

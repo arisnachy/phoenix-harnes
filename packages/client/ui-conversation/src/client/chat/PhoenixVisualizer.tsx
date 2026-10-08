@@ -356,7 +356,7 @@ function color(index: number): string {
 }
 
 function Legend({ series }: { readonly series: readonly VisualSeries[] }) {
-  if (series.length <= 1) return null
+  if (series.length === 0) return null
   return (
     <div className={css.legend} aria-label="Chart legend">
       {series.map((item, index) => (
@@ -935,9 +935,9 @@ function prepareVisualSpec(spec: JsonRecord): {
   let attempts = 0
   for (const attempt of [1, 2] as const) {
     if (preflight.valid) break
-    attempts = attempt
     const repaired = repairVisualSpec(current, attempt)
     if (!repaired.changed) continue
+    attempts = attempt
     current = repaired.spec
     preflight = preflightVisualSpec(current)
   }
@@ -1042,7 +1042,7 @@ export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
         <div className={css.empty}>
           {active.preflight.issues.includes('table-empty-data') || active.preflight.issues.includes('table-no-rows')
             ? 'La tabla no contiene datos verificables. Consulta el inventario real de conectores y vuelve a generarla.'
-            : `Phoenix blocked a visual that did not pass render quality checks after ${active.attempts} repair attempt${active.attempts === 1 ? '' : 's'}.`}
+            : 'No se pudo representar esta gráfica con los datos recibidos. Verifica que las series tengan valores numéricos y vuelve a intentarlo.'}
         </div>
       </section>
     )
