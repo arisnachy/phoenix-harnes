@@ -23,6 +23,10 @@ describe('visual quality gate', () => {
       ['Requiere autorización', 'Canva', 1],
     ])
     expect(preflightVisualSpec(spec).valid).toBe(true)
+    expect(projectVisualTable({
+      visualType: 'table', columns: ['Estado', 'Conectores', 'Cantidad'],
+      rows: [{ status: 'ready', connectors: 'GitHub', count: 1 }],
+    })?.rows).toEqual([['ready', 'GitHub', 1]])
   })
 
   it('rejects placeholder tables that contain headers but no cell values', () => {
