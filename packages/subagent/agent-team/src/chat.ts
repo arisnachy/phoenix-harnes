@@ -206,7 +206,339 @@ export class TeamChat {
     const turn = events.findLast(event => event.type === 'turn/start')
     const cutoff = Math.max(header.seedLength ?? 0, turn?.seq ?? 0)
     const calls = new Map<string, { name: string; seq: number; time: number; outcome?: 'ok' | 'error' }>()
-    const coordination = /^(?:spawn_teammate|send_message|followup_task|team_.+|list_agents|wait_agent|interrupt_agent|subagent(?:_fork)?|todo_write|ask_user_question|report)$/u
+    const coordination = new RegExp(
+      '^(?:spawn_teammate|send_message|followup_task|team_.+|list_agents|wait_agent'
+        + '|interrupt_agent|subagent(?:_fork)?|todo_write|ask_user_question|report)
+    for (const event of events) {
+      if (event.seq < cutoff) continue
+      if (event.type === 'tool/call') {
+        if (coordination.test(event.data.name)) continue
+        calls.set(String(event.data.callId), { name: event.data.name, seq: event.seq, time: event.time })
+      } else if (event.type === 'tool/result') {
+        const call = calls.get(String(event.data.message.source.callId))
+        if (call !== undefined) {
+          call.outcome = event.data.error !== undefined || event.data.message.content[0].isError === true
+            ? 'error' : 'ok'
+        }
+      }
+    }
+    const observed = [...calls.values()]
+    if (observed.length === 0) return
+    const finished = observed.filter(call => call.outcome === 'ok').length
+    const failed = observed.filter(call => call.outcome === 'error').length
+    const inFlight = observed.length - finished - failed
+    const last = observed[observed.length - 1] as (typeof observed)[number]
+    // Only a bounded tool identifier is surfaced; never print arguments, output, or credentials.
+    const toolName = last.name.replace(/[^a-zA-Z0-9_./:-]/gu, '').slice(0, 72)
+    const lastStatus = last.outcome === 'ok' ? 'respondió sin error'
+      : last.outcome === 'error' ? 'devolvió un error' : 'en ejecución'
+    const summary = `**Actividad real** · ${finished} respuesta(s) sin error, ${failed}`
+      + ` error(es), ${inFlight} en curso.\nÚltima herramienta: ${toolName} (${lastStatus}).`
+    const text = boundedTranscriptText(summary, this.maxBytes)
+    const id = header.id + ':activity:' + String(turn?.seq ?? cutoff)
+    const previous = existing.find(row => row.id === id)
+    if (previous?.text === text) return
+    const first = observed[0] as (typeof observed)[number]
+    root.append('team/chat-message', { version: 1, ...(previous === undefined ? {} : { update: true }),
+      message: { id, senderId: header.id, senderName: person.name, senderKind: 'agent', avatar: person.avatar,
+        role: person.role, missionId: root.id, text, time: previous?.time ?? first.time,
+        sourceSeq: previous?.sourceSeq ?? first.seq, mentions: [], reactions: [] } })
+  }
+
+  /** Publish one actual child response; inherited fork messages and private reasoning are excluded.
+   * @param root - owning root journal.
+   * @param header - actual child identity and seed boundary.
+   * @param events - durable child events to inspect.
+   */
+  async capture(root: Session, header: SessionHeader, events: readonly SessionEvent[]): Promise<void> {
+    if (header.parentSession !== root.id || (header.origin !== 'subagent' && foldSubagentDescriptor(events.slice(header.seedLength ?? 0)) === undefined)) return
+    await this.journal.transact(root.id, async () => {
+      this.assertLive(root)
+      const existing = this.messages(root)
+      const known = new Set(existing.map(row => row.id))
+      const end = events.findLast(event => event.type === 'turn/start' || event.type === 'turn/end')
+      const prior = this.participants(root).get(header.id)
+      const status = end?.type === 'turn/end' ? end.data.reason.kind === 'error' ? 'failed' : 'done'
+        : end?.type === 'turn/start' ? 'working' : prior !== undefined ? prior.status : 'working'
+      const person = this.participant(root, header, events, status)
+      for (const event of events) {
+        if (event.seq < (header.seedLength ?? 0) || event.type !== 'assistant/message' || !isAppendSurfaceEvent(event)) continue
+        const id = `${header.id}:${event.data.message.id}`
+        const text = textOf(event.data.message.content)
+        if (known.has(id) || text.trim() === '') continue
+        const proof = teamExecutionProof(events, { upToSeq: event.seq })
+        // Genuine work-in-progress and blockers belong in the shared chat even
+        // before a tool succeeds. Completion claims remain receipt-gated:
+        // a teammate cannot report an effect as finished based on prose alone.
+        if (proof.requirement !== 'none' && !proof.satisfied && answerNeedsEvidence(text)) continue
+        const visibleText = proof.requirement === 'none' || proof.tools.length === 0
+          ? text
+          : `${text}\n\n✓ Evidencia ejecutada: ${proof.tools.join(', ')}`
+        // Bound copied text by the same configured mailbox limit, without splitting a Unicode scalar.
+        const bounded = boundedTranscriptText(visibleText, this.maxBytes)
+        root.append('team/chat-message', { version: 1, message: { id, senderId: header.id,
+          senderName: person.name, senderKind: 'agent', avatar: person.avatar, role: person.role, missionId: root.id, text: bounded,
+          time: event.time, sourceSeq: event.seq, mentions: [], reactions: [] } })
+        known.add(id)
+      }
+      this.publishToolActivity(root, header, events, person, existing)
+      await this.ctx.sessions.flush(root)
+    })
+  }
+
+  /** Backfill existing direct children without starting or resuming any model.
+   * @param sessionId - owning root identity.
+   * @param limit - bounded message count.
+   * @returns detached transcript and participant identities.
+   */
+  async read(sessionId: string, limit = 100): Promise<TeamChatReadResult> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new Error('chat limit must be between 1 and 200')
+    const root = this.root(sessionId)
+    if (!this.backfilled.has(root)) {
+      for (const child of this.ctx.sessions.list()) {
+        if (child.header.parentSession === root.id) await this.capture(root, child.header, child.events)
+      }
+      const catalog = await this.ctx.subagents.listChildren(root.id, this.signal)
+      const cold: TeamChatParticipant[] = []
+      for (const child of catalog) {
+        if (child.kind !== 'child') continue
+        cold.push({ id: child.id, name: child.id, role: child.label ?? 'Team', status: child.activity })
+        if (this.ctx.sessions.get(child.id) !== undefined) continue
+        const saved = await this.ctx.sessionPersistence.inspect(child.id)
+        await this.capture(root, saved.meta, saved.events)
+      }
+      this.coldParticipants.set(root, cold)
+      this.backfilled.add(root)
+    }
+    return await this.journal.transact(root.id, () => {
+      this.assertLive(root)
+      const members = foldTeam(root.id, root.events).members
+      const participants: TeamChatParticipant[] = [...members.values()].map(member => ({
+        id: member.id, name: member.name, role: member.description, status: member.phase,
+      }))
+      for (const value of this.participants(root).values()) {
+        const prior = participants.findIndex(person => person.id === value.id)
+        if (prior < 0) participants.push(value)
+        else participants[prior] = value
+      }
+      for (const child of this.ctx.sessions.list()) {
+        if (child.header.parentSession === root.id && !participants.some(person => person.id === child.id)) participants.push({ id: child.id, name: child.id, role: 'Team', status: this.ctx.agents.get(child.id)?.status ?? 'inactive' })
+      }
+      // The cache is set before this root is marked backfilled.
+      for (const child of this.coldParticipants.get(root) as TeamChatParticipant[]) {
+        if (!participants.some(person => person.id === child.id)) participants.push(child)
+      }
+      const messages = this.messages(root)
+      for (const message of messages) {
+        if (message.senderKind === 'agent' && !participants.some(person => person.id === message.senderId)) participants.push({ id: message.senderId, name: message.senderName, role: 'Team', status: 'done' })
+      }
+      return Promise.resolve({ messages: messages.slice(-limit), participants })
+    })
+  }
+
+  /** Bounded model-facing read; a whole read consumes at most one configured message budget.
+   * @param actor - exact live calling Agent.
+   * @param limit - bounded message count.
+   * @returns the actor’s authorized transcript.
+   */
+  async readFor(actor: Agent, limit: number): Promise<TeamChatReadResult> {
+    if (this.ctx.agents.get(actor.id) !== actor) throw new Error('stale team actor')
+    const rootId = actor.session.header.origin === 'subagent' ? actor.session.header.parentSession : actor.id
+    if (rootId === undefined) throw new Error('team root not found')
+    const result = await this.read(rootId, limit)
+    let remaining = this.maxBytes
+    const messages: TeamChatMessage[] = []
+    for (const row of result.messages.toReversed()) {
+      let text = ''
+      for (const char of row.text) {
+        const bytes = Buffer.byteLength(char)
+        if (bytes > remaining) break
+        text += char
+        remaining -= bytes
+      }
+      messages.unshift({ ...row, text })
+      if (remaining === 0) break
+    }
+    return { ...result, messages }
+  }
+
+  /** Publish one answer to an accepted conversational user request without completing the mission.
+   * @param actor - Exact live addressed child.
+   * @param request - Durable human request identity and answer text.
+   * @returns Stable answer identity, reused for exact retries.
+   */
+  async answer(actor: Agent, request: { readonly messageId: string; readonly text: string }): Promise<{ messageId: string }> {
+    if (this.ctx.agents.get(actor.id) !== actor || actor.session.header.origin !== 'subagent') throw new Error('stale or non-child team actor')
+    const rootId = actor.session.header.parentSession
+    if (rootId === undefined) throw new Error('team root not found')
+    const root = this.root(rootId)
+    if (typeof request.text !== 'string' || request.text.trim() === '' || Buffer.byteLength(request.text) > this.maxBytes) throw new Error('invalid or oversized team answer')
+    const id = `${actor.id}:answer:${request.messageId}`
+    await this.journal.transact(root.id, async () => {
+      this.assertLive(root)
+      if (this.ctx.agents.get(actor.id) !== actor || this.ctx.sessions.get(actor.id) !== actor.session) throw new Error('stale team actor')
+      const rows = this.messages(root)
+      const addressed = rows.find(row => row.id === request.messageId)
+      if (addressed === undefined || addressed.senderKind !== 'user' || addressed.missionId !== root.id
+        || !addressed.deliveries?.some(item => item.targetId === actor.id && item.accepted)) throw new Error('user request was not accepted by this actor')
+      if (!isConversationalTeamUserRequest(addressed.text)) throw new Error('operational requests require execution evidence, not a conversational answer')
+      if (answerNeedsEvidence(request.text)) {
+        const original = teamExecutionProof(actor.session.events)
+        const proof = original.requirement === 'none'
+          ? teamExecutionProof(actor.session.events, { requirement: 'effect', assignmentText: request.text }) : original
+        const answerProof = teamExecutionProof(actor.session.events, {
+          requirement: proof.requirement, assignmentText: request.text,
+        })
+        if (!proof.satisfied || !answerProof.satisfied) throw new Error('operational answer requires matching execution evidence')
+      }
+      const marker = `[Team user message ${addressed.id}]`
+      const delivered = actor.session.events.slice(actor.session.header.seedLength ?? 0).find(event => event.type === 'user/message'
+        && event.data.source.kind === 'user' && textOf(event.data.content).startsWith(marker))
+      if (delivered === undefined) throw new Error('user request has not reached this actor')
+      const prior = rows.find(row => row.id === id)
+      if (prior !== undefined) {
+        if (prior.text !== request.text) throw new Error('answer identity conflicts')
+        return
+      }
+      const person = this.participant(root, actor.session.header, actor.session.events, 'working')
+      root.append('team/chat-message', { version: 1, message: { id, senderId: actor.id,
+        senderName: person.name, senderKind: 'agent', avatar: person.avatar, role: person.role,
+        missionId: root.id, text: request.text, time: Date.now(), sourceSeq: delivered.seq,
+        replyTo: addressed.id, replyQuote: `User: ${addressed.text}`, mentions: [], reactions: [] } })
+      await this.ctx.sessions.flush(root)
+    })
+    return { messageId: id }
+  }
+
+  /** Persist an idempotent reaction set/remove after validating the actual message and actor.
+   * @param request - message and Unicode reaction mutation.
+   * @param actor - exact live agent, or the human when absent.
+   */
+  async react(request: TeamChatReactRequest, actor?: Agent): Promise<void> {
+    if (typeof request.emoji !== 'string' || request.emoji.length > 128 || !EMOJI.test(request.emoji)) throw new Error('invalid emoji')
+    if (typeof request.active !== 'boolean') throw new Error('reaction active must be boolean')
+    const root = this.root(request.sessionId)
+    if (actor !== undefined && (this.ctx.agents.get(actor.id) !== actor
+      || (actor.id !== root.id && (actor.session.header.parentSession !== root.id || actor.session.header.origin !== 'subagent')))) throw new Error('actor does not belong to this team')
+    await this.journal.transact(root.id, async () => {
+      this.assertLive(root)
+      const message = this.messages(root).find(row => row.id === request.messageId)
+      if (message === undefined) throw new Error('team chat message not found')
+      if (message.missionId !== undefined && message.missionId !== root.id) throw new Error('message belongs to another mission')
+      const actorId = actor?.id ?? 'user'
+      const existing = message.reactions.find(row => row.reactorId === actorId && row.emoji === request.emoji)
+      if ((existing !== undefined) === request.active) return
+      const reaction: TeamChatReaction = existing ?? { id: randomUUID(), messageId: message.id, reactorId: actorId,
+        reactorName: actor === undefined ? 'User' : actor.id === root.id ? 'Kira' : this.participant(root, actor.session.header, actor.session.events, 'working').name,
+        reactorKind: actor === undefined ? 'user' : actor.id === root.id ? 'kira' : 'agent', emoji: request.emoji, createdAt: Date.now() }
+      root.append('team/chat-reaction', { version: 1, reaction, active: request.active })
+      await this.ctx.sessions.flush(root)
+    })
+  }
+
+  /** Retry only previously admitted human requests when their root is resumed.
+   * @param agent - exact resumed root Agent.
+   */
+  async recover(agent: Agent): Promise<void> {
+    if (agent.session.header.origin === 'subagent') return
+    for (const row of this.messages(agent.session)) {
+      if (row.missionId !== agent.id || row.senderKind !== 'user' || (row.deliveries?.some(item => !item.accepted) !== true && row.supervised === true) || row.targetId === undefined) continue
+      await this.reply({ sessionId: agent.id, requestId: row.id, targetId: row.targetId,
+        targetIds: row.mentions, text: row.text, ...(row.replyTo === undefined ? {} : { replyTo: row.replyTo }) })
+    }
+  }
+
+  /** Deliver a human reply only to an existing direct child, preserving root supervision.
+   * @param request - retry-stable human intervention.
+   * @returns message identity and pending-delivery state.
+   */
+  async reply(request: TeamChatReplyRequest): Promise<{ messageId: string; queued: boolean }> {
+    const root = this.root(request.sessionId)
+    const lead = this.ctx.agents.get(root.id)
+    if (lead === undefined) throw new Error('team lead is not active')
+    const targets = [...new Set([request.targetId, ...(request.targetIds ?? [])])].map(SessionId)
+    if (targets.length > this.maxTargets) throw new Error('too many addressed agents')
+    for (const target of targets) {
+      const live = this.ctx.sessions.get(target)
+      const header = live?.header ?? (await this.ctx.sessionPersistence.inspect(target)).meta
+      if (header.origin !== 'subagent' || header.parentSession !== root.id) throw new Error('target does not belong to this team as a direct child')
+    }
+    if (typeof request.text !== 'string' || request.text.trim() === '' || Buffer.byteLength(request.text) > this.maxBytes) throw new Error('invalid or oversized team reply')
+    const previous = request.replyTo === undefined ? undefined : this.messages(root).find(row => row.id === request.replyTo)
+    if (request.replyTo !== undefined && previous === undefined) throw new Error('reply message not found')
+    const text = previous === undefined ? request.text : `Reply to ${previous.senderName} (${previous.id}):\n${previous.text}\n\n${request.text}`
+    if (typeof request.requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/u.test(request.requestId)) throw new Error('invalid reply request identity')
+    const messageId = request.requestId
+    await this.journal.transact(root.id, async () => {
+      this.assertLive(root)
+      if (this.ctx.sessions.get(root.id) !== root || this.ctx.agents.get(root.id) !== lead) throw new Error('team lead session changed')
+      let row = this.messages(root).find(item => item.id === messageId)
+      if (row !== undefined && (row.senderKind !== 'user' || row.text !== request.text
+        || row.replyTo !== request.replyTo || JSON.stringify(row.mentions) !== JSON.stringify(targets))) throw new Error('reply request identity conflicts')
+      if (row === undefined) {
+        // Validate all targets before committing a visible request.
+        for (const target of targets) {
+          const child = this.ctx.sessions.get(target)
+          const saved = child === undefined
+            ? await this.ctx.sessionPersistence.inspect(target) : { meta: child.header, events: child.events }
+          const descriptor = foldSubagentDescriptor(saved.events.slice(saved.meta.seedLength ?? 0))
+          if (descriptor?.mode !== 'continuable') throw new Error('target child is not continuable')
+        }
+        row = { id: messageId, senderId: 'user', senderName: 'User', senderKind: 'user', missionId: root.id, text: request.text,
+          time: Date.now(), sourceSeq: root.events.length, targetId: request.targetId,
+          ...(previous === undefined ? {} : { replyTo: previous.id, replyQuote: `${previous.senderName}: ${previous.text}` }),
+          mentions: targets, reactions: [], deliveries: targets.map(targetId => ({ targetId, accepted: false })) }
+        root.append('team/chat-message', { version: 1, message: row })
+        await this.ctx.sessions.flush(root)
+      }
+      // Entering the delivery loop establishes a list; each update retains it.
+      let current: TeamChatMessage = row
+      for (const delivery of current.deliveries ?? []) {
+        if (delivery.accepted) continue
+        const target = SessionId(delivery.targetId)
+        const marker = `[Team user message ${messageId}]`
+        try {
+          const child = this.ctx.sessions.get(target)
+          const saved = child === undefined
+            ? await this.ctx.sessionPersistence.inspect(target) : { meta: child.header, events: child.events }
+          const already = messageAccepted(saved.events.slice(saved.meta.seedLength ?? 0), message =>
+            message.source.kind === 'user' && textOf(message.content).startsWith(marker))
+          const modelSelection = teamWorkerSelection(lead)
+          if (!already) await this.ctx.subagents.followup(lead, target, [{ type: 'text', text: `${marker}\nUser priority: answer this person at the next safe boundary; do not interrupt an in-flight action.\nThen continue your existing mission unless the user explicitly changes or cancels it. Use team_chat_answer for a conversational question; operational corrections still require execution evidence.\nUser request: ${JSON.stringify(request.text)}\nReply context:\n${text}` }],
+            { source: { kind: 'user' }, delivery: 'next-safe-step', signal: this.signal,
+              ...modelSelection === undefined ? {} : { modelSelection } })
+          const active = this.ctx.sessions.get(target)
+          if (active !== undefined) await this.ctx.sessions.flush(active)
+          current = { ...current,
+            deliveries: (current.deliveries as NonNullable<TeamChatMessage['deliveries']>).map(item => item.targetId === target ? { targetId: target, accepted: true } : item) }
+        } catch (error) {
+          current = { ...current, deliveries: (current.deliveries as NonNullable<TeamChatMessage['deliveries']>).map(item => item.targetId === target
+            ? { targetId: target, accepted: false, error: error instanceof Error ? error.message : 'Delivery failed' } : item) }
+        }
+        this.assertLive(root)
+        root.append('team/chat-message', { version: 1, update: true, message: current })
+        await this.ctx.sessions.flush(root)
+      }
+      this.assertLive(root)
+      if (current.supervised !== true) {
+        const marker = `[Team supervision ${messageId}]`
+        if (!messageAccepted(root.events, message => message.source.kind === 'plugin' && message.source.plugin === 'agent-teams'
+          && textOf(message.content).startsWith(marker))) {
+          lead.inject(createUserMessage({ content: [{ type: 'text', text: `${marker}\nUser addressed ${targets.join(', ')}: ${text}` }],
+            source: { kind: 'plugin', plugin: 'agent-teams', form: 'notice', summary: 'User intervention in the team conversation' } }))
+        }
+        await this.ctx.sessions.flush(root)
+        current = { ...current, supervised: true }
+        this.assertLive(root)
+        root.append('team/chat-message', { version: 1, update: true, message: current })
+        await this.ctx.sessions.flush(root)
+      }
+    })
+    return { messageId, queued: this.messages(root).find(row => row.id === messageId)?.deliveries?.some(item => !item.accepted) === true }
+  }
+}
+, 'u',
+    )
     for (const event of events) {
       if (event.seq < cutoff) continue
       if (event.type === 'tool/call') {
