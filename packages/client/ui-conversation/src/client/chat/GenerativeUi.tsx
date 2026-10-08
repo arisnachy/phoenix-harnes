@@ -239,7 +239,7 @@ export function splitGenerativeUiText(
       }
     }
     if (parsed === null) {
-      if (raw.startsWith('```generative-ui') && /"component"\s*:\s*"ui_canvas"/.test(body ?? ''))
+      if (/"component"\s*:\s*"ui_canvas"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
       else appendMarkdown(segments, raw)
     }
@@ -252,7 +252,10 @@ export function splitGenerativeUiText(
 
   let tail = text.slice(cursor)
   if (options.streaming === true) {
-    const unfinishedFence = Math.max(tail.lastIndexOf('```generative-ui'), tail.lastIndexOf('```json'))
+    const lastJsonFence = tail.lastIndexOf('```json')
+    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"ui_canvas"/.test(tail.slice(lastJsonFence))
+      ? lastJsonFence : -1
+    const unfinishedFence = Math.max(tail.lastIndexOf('```generative-ui'), relevantJson)
     if (unfinishedFence >= 0) tail = tail.slice(0, unfinishedFence)
   }
   appendMarkdown(segments, tail)
