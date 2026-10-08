@@ -139,6 +139,38 @@ describe('reconnect supervisor', () => {
     ctx = await mountRegistry()
   })
 
+  it('does not report ready if a live MCP cannot register its advertised tools', async () => {
+    ctx.tools.register({
+      name: 'mcp__srv__remote',
+      description: 'Pre-existing foreign tool in this MCP namespace',
+      parameters: { type: 'object' },
+      output: { schema: { type: 'string' },
+        render: (_args, value) => [{ type: 'text', text: value as string }] },
+      execute: async () => 'foreign',
+    })
+    const registration = ctx.mcpConnectors.register({
+      serverName: 'srv',
+      transport: 'stdio',
+      reconnect: () => undefined,
+    })
+    const config = stdioConfig({ enabled: false })
+    const handle = startConnection(
+      ctx, config, resolveReconnectPolicy(config.reconnect, 'mcp'),
+      registration,
+    )
+    const outcome = await handle.ready
+    expect(outcome.error).toBeInstanceOf(Error)
+    expect(ctx.mcpConnectors.list()).toEqual([
+      expect.objectContaining({
+        serverName: 'srv', status: 'failed', toolNames: [],
+        reasonCode: 'connection-failed',
+      }),
+    ])
+    expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
+    await handle.dispose()
+    registration.dispose()
+  })
+
   it('re-resolves a Bearer credential for each fresh HTTP generation', async () => {
     const resolveBearerToken = vi.fn()
       .mockResolvedValueOnce('jev-token-1')
