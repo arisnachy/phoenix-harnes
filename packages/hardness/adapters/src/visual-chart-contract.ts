@@ -71,7 +71,10 @@ function fromPairs(spec: Visual): Visual | undefined {
   return {
     ...spec, visualType: 'chart', xKey: 'label',
     series: [{ dataKey: 'value', label: 'Valor' }],
-    data: spec.data.map(row => [String(row[0]), row[1]]).map(([label,value]) => ({ label, value })),
+    data: spec.data.map(entry => {
+      const pair = entry as [string | number, number]
+      return { label: String(pair[0]), value: pair[1] }
+    }),
   }
 }
 
