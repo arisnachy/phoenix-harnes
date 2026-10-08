@@ -1,0 +1,42 @@
+name: PHOENIX connectivity regressions
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/phoenix-auto-update.mjs'
+      - 'scripts/phoenix-auto-update-runtime.spec.ts'
+      - 'packages/llm/llm-pi-ai/src/codex-live-catalog.ts'
+      - 'packages/llm/llm-pi-ai/tests/codex-auto-catalog.spec.ts'
+      - '.github/workflows/phoenix-connectivity-regressions.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/phoenix-auto-update.mjs'
+      - 'scripts/phoenix-auto-update-runtime.spec.ts'
+      - 'packages/llm/llm-pi-ai/src/codex-live-catalog.ts'
+      - 'packages/llm/llm-pi-ai/tests/codex-auto-catalog.spec.ts'
+      - '.github/workflows/phoenix-connectivity-regressions.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-resilience:
+    name: Update watcher and Codex catalog fallback
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Immutable workspace
+        run: pnpm install --frozen-lockfile
+      - name: Offline and catalog regression tests
+        run: pnpm exec vitest run scripts/phoenix-auto-update-runtime.spec.ts packages/llm/llm-pi-ai/tests/codex-auto-catalog.spec.ts
