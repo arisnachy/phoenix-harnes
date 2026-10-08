@@ -345,7 +345,7 @@ describe('createMcpOAuthProvider', () => {
     } as unknown as CredentialProvider
     const controller = new McpOAuthController(credentials, 'blocked-provider', 'https://example.test/mcp')
     await controller.ready
-    vi.mocked(auth).mockImplementationOnce(() => new Promise(() => undefined))
+    vi.mocked(auth).mockImplementationOnce(() => new Promise<'REDIRECT'>(() => undefined))
     const notify = vi.fn()
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     try {
