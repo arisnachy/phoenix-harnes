@@ -1692,9 +1692,6 @@ export function ConnectorsSettingsSection({ api,
                   openClaw={row.openClaw}
                   connected={row.connected}
                   t={connectorT}
-                  // The complete action and consent link stay in the persistent
-                  // panel above. A small, noninteractive status is repeated
-                  // locally so a user at the bottom of the catalog sees progress.
                   authorizationProgress={attempt?.key === authorizationKey && attempt.status === 'pending' ? (
                     <p role="status" className={styles['advancedHint']}>
                       {attempt.url === undefined ? 'Preparando autorización del MCP…' : 'La URL OAuth está lista. Continúa en la pestaña abierta o usa el enlace superior.'}
