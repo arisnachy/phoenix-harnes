@@ -103,7 +103,11 @@ export class TeamChat {
       }
       if (event.type === 'team/chat-message' && chatVersion(event.data.version)) {
         const parsed = chatMessageSchema.safeParse(event.data.message)
-        if (parsed.success) rows.set(parsed.data.id, parsed.data)
+        // Old Phoenix builds projected tool counters as artificial chat bubbles.
+        // Hide only those generated IDs on replay; preserve genuine teammate replies.
+        if (parsed.success && !parsed.data.id.startsWith(parsed.data.senderId + ':activity:')) {
+          rows.set(parsed.data.id, parsed.data)
+        }
       }
       if (event.type === 'team/message/queued') {
         const message = event.data.message
@@ -195,56 +199,8 @@ export class TeamChat {
     })
   }
 
-  /** Publish actual non-Team tool activity as one compact, updateable child-turn row.
-   * Tool names and outcomes come from the Session; arguments and outputs stay private.
-   * A successful tool response is not proof of delivery or mission completion.
-   */
-  private publishToolActivity(
-    root: Session, header: SessionHeader, events: readonly SessionEvent[], person: TeamChatParticipant,
-    existing: readonly TeamChatMessage[],
-  ): void {
-    const turn = events.findLast(event => event.type === 'turn/start')
-    const cutoff = Math.max(header.seedLength ?? 0, turn?.seq ?? 0)
-    const calls = new Map<string, { name: string; seq: number; time: number; outcome?: 'ok' | 'error' }>()
-    const coordination = new RegExp(
-      '^(?:spawn_teammate|send_message|followup_task|team_.+|list_agents|wait_agent'
-        + '|interrupt_agent|subagent(?:_fork)?|todo_write|ask_user_question|report)$', 'u',
-    )
-    for (const event of events) {
-      if (event.seq < cutoff) continue
-      if (event.type === 'tool/call') {
-        if (coordination.test(event.data.name)) continue
-        calls.set(String(event.data.callId), { name: event.data.name, seq: event.seq, time: event.time })
-      } else if (event.type === 'tool/result') {
-        const call = calls.get(String(event.data.message.source.callId))
-        if (call !== undefined) {
-          call.outcome = event.data.error !== undefined || event.data.message.content[0].isError === true
-            ? 'error' : 'ok'
-        }
-      }
-    }
-    const observed = [...calls.values()]
-    if (observed.length === 0) return
-    const finished = observed.filter(call => call.outcome === 'ok').length
-    const failed = observed.filter(call => call.outcome === 'error').length
-    const inFlight = observed.length - finished - failed
-    const last = observed[observed.length - 1] as (typeof observed)[number]
-    // Only a bounded tool identifier is surfaced; never print arguments, output, or credentials.
-    const toolName = last.name.replace(/[^a-zA-Z0-9_./:-]/gu, '').slice(0, 72)
-    const lastStatus = last.outcome === 'ok' ? 'respondió sin error'
-      : last.outcome === 'error' ? 'devolvió un error' : 'en ejecución'
-    const summary = `**Actividad real** · ${finished} respuesta(s) sin error, ${failed}`
-      + ` error(es), ${inFlight} en curso.\nÚltima herramienta: ${toolName} (${lastStatus}).`
-    const text = boundedTranscriptText(summary, this.maxBytes)
-    const id = header.id + ':activity:' + String(turn?.seq ?? cutoff)
-    const previous = existing.find(row => row.id === id)
-    if (previous?.text === text) return
-    const first = observed[0] as (typeof observed)[number]
-    root.append('team/chat-message', { version: 1, ...(previous === undefined ? {} : { update: true }),
-      message: { id, senderId: header.id, senderName: person.name, senderKind: 'agent', avatar: person.avatar,
-        role: person.role, missionId: root.id, text, time: previous?.time ?? first.time,
-        sourceSeq: previous?.sourceSeq ?? first.seq, mentions: [], reactions: [] } })
-  }
+  // Tool calls and receipts remain in each child Session's durable event history.
+  // They are operational telemetry, not messages spoken by a teammate.
 
   /** Publish one actual child response; inherited fork messages and private reasoning are excluded.
    * @param root - owning root journal.
@@ -272,17 +228,14 @@ export class TeamChat {
         // before a tool succeeds. Completion claims remain receipt-gated:
         // a teammate cannot report an effect as finished based on prose alone.
         if (proof.requirement !== 'none' && !proof.satisfied && answerNeedsEvidence(text)) continue
-        const visibleText = proof.requirement === 'none' || proof.tools.length === 0
-          ? text
-          : `${text}\n\n✓ Evidencia ejecutada: ${proof.tools.join(', ')}`
-        // Bound copied text by the same configured mailbox limit, without splitting a Unicode scalar.
-        const bounded = boundedTranscriptText(visibleText, this.maxBytes)
+        // Evidence is verified using child Session tool receipts, but raw internal
+        // tool names are not appended to a teammate's human-facing conversation.
+        const bounded = boundedTranscriptText(text, this.maxBytes)
         root.append('team/chat-message', { version: 1, message: { id, senderId: header.id,
           senderName: person.name, senderKind: 'agent', avatar: person.avatar, role: person.role, missionId: root.id, text: bounded,
           time: event.time, sourceSeq: event.seq, mentions: [], reactions: [] } })
         known.add(id)
       }
-      this.publishToolActivity(root, header, events, person, existing)
       await this.ctx.sessions.flush(root)
     })
   }
