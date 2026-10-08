@@ -91,11 +91,11 @@ describe('SidebarRoot shell', () => {
     window.addEventListener('phoenix:open-settings-section', onSettings)
     window.addEventListener('phoenix:open-workspace-search', onSearch)
     try {
-      fireEvent.click(screen.getByRole('button', { name: 'Inicio' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
       expect(b.startSession).toHaveBeenCalledOnce()
-      fireEvent.click(screen.getByRole('button', { name: 'Conectores' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Equipo' }))
-      fireEvent.click(screen.getByRole('button', { name: 'Biblioteca' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Connectors' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Team' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Library' }))
       expect(sections).toEqual(['connectors', 'agent-presets'])
       expect(searches).toBe(1)
     } finally {
