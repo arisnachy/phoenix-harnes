@@ -141,42 +141,35 @@ export function TeamDesignerSection(props: TeamDesignerSectionProps): ReactNode 
     })
   }
 
-  const createTeam = (): void => {
-    const id = uniqueTeamId(document, 'Nuevo equipo')
+  const addTeam = (source: TeamDesign, name: string): void => {
+    if (document.teams.length >= 12) {
+      setError('Puedes guardar hasta 12 equipos. Elimina uno antes de crear otro.')
+      return
+    }
+    const id = uniqueTeamId(document, name)
     const copy: TeamDesign = {
-      ...DEFAULT_TEAM_DESIGN,
+      ...source,
       id,
-      name: 'Nuevo equipo',
-      lead: { ...DEFAULT_TEAM_DESIGN.lead },
-      members: DEFAULT_TEAM_DESIGN.members.map(member => ({ ...member })),
+      name,
+      lead: { ...source.lead },
+      members: source.members.map(member => ({ ...member })),
     }
     setSelected('lead')
     void props.save(normalizeTeamDesignDocument({
       ...document,
       activeTeamId: id,
       teams: [...document.teams, copy],
-    })).catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)) })
+    })).catch((cause: unknown) => {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    })
+  }
+
+  const createTeam = (): void => {
+    addTeam(DEFAULT_TEAM_DESIGN, 'Nuevo equipo')
   }
 
   const duplicateTeam = (): void => {
-    if (document.teams.length >= 12) {
-      setError('Puedes guardar hasta 12 equipos. Elimina uno antes de duplicar.')
-      return
-    }
-    const id = uniqueTeamId(document, `${team.name} copia`)
-    const copy: TeamDesign = {
-      ...team,
-      id,
-      name: `${team.name} copia`,
-      lead: { ...team.lead },
-      members: team.members.map(member => ({ ...member })),
-    }
-    setSelected('lead')
-    void props.save(normalizeTeamDesignDocument({
-      ...document,
-      activeTeamId: id,
-      teams: [...document.teams, copy],
-    })).catch((cause: unknown) => { setError(cause instanceof Error ? cause.message : String(cause)) })
+    addTeam(team, `${team.name} copia`)
   }
 
   const removeTeam = (): void => {
