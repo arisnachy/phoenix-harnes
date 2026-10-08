@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import {
   createKokoroTextToSpeechProvider,
+  detectInstalledKokoro,
   createLocalSpeechToTextProvider,
   createNaturalTextToSpeechProvider,
   createSystemTextToSpeechProvider,
@@ -41,6 +45,32 @@ describe('natural voice planning', () => {
 })
 
 describe('local voice providers', () => {
+  it('activates the bundled Windows voice only after installation is complete', () => {
+    const base = mkdtempSync(join(tmpdir(), 'phoenix-kokoro-'))
+    const home = join(base, 'Phoenix', 'voice', 'kokoro')
+    const required = [
+      join(home, '.ready'),
+      join(home, '.venv', 'Scripts', 'python.exe'),
+      join(home, 'kokoro-daemon.py'),
+      join(home, 'kokoro-v1.0.onnx'),
+      join(home, 'voices-v1.0.bin'),
+    ]
+    try {
+      expect(detectInstalledKokoro(base, 'win32')).toBeUndefined()
+      for (const file of required) {
+        mkdirSync(dirname(file), { recursive: true })
+        writeFileSync(file, 'fixture')
+      }
+      expect(detectInstalledKokoro(base, 'win32')).toEqual({
+        command: required[1],
+        args: [required[2]],
+      })
+      expect(detectInstalledKokoro(base, 'linux')).toBeUndefined()
+    } finally {
+      rmSync(base, { recursive: true, force: true })
+    }
+  })
+
   it('keeps Kokoro optional and sends only normalized text to its configured command', async () => {
     const run = vi.fn<VoiceCommandRunner>(() => Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }))
     const provider = createKokoroTextToSpeechProvider({ command: 'python', args: ['kokoro-cli.py'], run })

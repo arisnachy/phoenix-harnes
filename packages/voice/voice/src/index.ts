@@ -55,6 +55,8 @@ export interface VoiceSynthesisRequest {
   readonly text: string
   /** BCP 47 language tag. */
   readonly language: string
+  /** Presentation selected in the active assistant profile. */
+  readonly gender?: 'masculine' | 'feminine' | 'neutral'
   /** Aborts queued or active provider work. */
   readonly signal?: AbortSignal
 }
@@ -901,7 +903,7 @@ export class VoiceRuntime extends TypertRemoteService {
     for (const provider of candidates) {
       if (signal.aborted) return undefined
       try {
-        await provider.speak({ text, language, signal })
+        await provider.speak({ text, language, gender: realtimeAssistantIdentity(this.ctx).gender, signal })
         return provider.id
       } catch (error) {
         lastError = error

@@ -7,6 +7,8 @@
  */
 
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { ChildProcessWithoutNullStreams } from 'node:child_process'
 import type { Context } from '@phoenix-ai/cordis'
@@ -163,7 +165,9 @@ export interface Config {
   readonly naturalRequestTimeoutMs?: number
   /** Maximum characters per semantic neural synthesis chunk. */
   readonly naturalMaxChunkChars?: number
-  /** Optional local Kokoro command; absence leaves Kokoro unavailable. */
+  /** Warm Kokoro in the background when an installed local model is detected. */
+  readonly kokoroPrewarm?: boolean
+  /** Optional local Kokoro command; absence auto-detects a completed PHOENIX install. */
   readonly kokoroCommand?: string
   /** Arguments for the Kokoro command. */
   readonly kokoroArgs?: string[]
@@ -184,12 +188,34 @@ export const Config: z<Config> = z.object({
   naturalStartupTimeoutMs: z.number().default(45_000),
   naturalRequestTimeoutMs: z.number().default(120_000),
   naturalMaxChunkChars: z.number().default(180),
+  kokoroPrewarm: z.boolean().default(false),
   kokoroCommand: z.string(),
   kokoroArgs: z.array(z.string()).default([]),
   sttCommand: z.string(),
   sttArgs: z.array(z.string()).default([]),
   systemTts: z.boolean().default(true),
 })
+
+/** Resolve the completed per-user Windows Kokoro installation.
+ * @param localAppData - Windows per-user application data directory.
+ * @param platform - Platform used to select the executable layout.
+ * @returns Persistent daemon process, or undefined until installation is complete.
+ */
+export function detectInstalledKokoro(
+  localAppData: string | undefined = process.env.LOCALAPPDATA,
+  platform: NodeJS.Platform = process.platform,
+): { readonly command: string; readonly args: readonly string[] } | undefined {
+  if (platform !== 'win32' || !localAppData?.trim()) return undefined
+  const home = join(localAppData, 'Phoenix', 'voice', 'kokoro')
+  const command = join(home, '.venv', 'Scripts', 'python.exe')
+  const daemon = join(home, 'kokoro-daemon.py')
+  const required = [
+    join(home, '.ready'), command, daemon,
+    join(home, 'kokoro-v1.0.onnx'), join(home, 'voices-v1.0.bin'),
+  ]
+  if (!required.every(file => existsSync(file))) return undefined
+  return { command, args: [daemon] }
+}
 
 /** Register configured local TTS and STT adapters into `ctx.voice`. */
 export function apply(ctx: Context, config: Config): void {
@@ -225,6 +251,23 @@ export function apply(ctx: Context, config: Config): void {
   const kokoroCommand = config.kokoroCommand?.trim()
   if (kokoroCommand !== undefined && kokoroCommand !== '') {
     voice.registerTextToSpeechProvider(createKokoroTextToSpeechProvider({ command: kokoroCommand, args: config.kokoroArgs ?? [] }))
+  } else {
+    const installed = detectInstalledKokoro()
+    if (installed !== undefined) {
+      const kokoro = createNaturalTextToSpeechProvider({
+        id: 'kokoro',
+        priority: 100,
+        command: installed.command,
+        args: installed.args,
+      })
+      voice.registerTextToSpeechProvider(kokoro)
+      ctx.effect(() => () => { kokoro.close() }, 'kokoro voice daemon teardown')
+      if (config.kokoroPrewarm === true) {
+        void kokoro.warmup().catch((error: unknown) => {
+          ctx.logger('voice-local').warn(`Kokoro warmup failed; system voice remains available: ${String(error)}`)
+        })
+      }
+    }
   }
   if (config.systemTts !== false) voice.registerTextToSpeechProvider(createSystemTextToSpeechProvider())
   const sttCommand = config.sttCommand?.trim()

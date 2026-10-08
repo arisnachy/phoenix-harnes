@@ -98,6 +98,25 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
     expect(system).not.toHaveBeenCalled()
   })
 
+  it('passes the selected feminine presentation to fallback synthesis', async () => {
+    const { voice } = await mountVoice()
+    const genders: (string | undefined)[] = []
+    voice.registerTextToSpeechProvider({
+      id: 'kokoro',
+      priority: 100,
+      available: () => true,
+      speak: async (request) => { genders.push(request.gender) },
+    })
+    await voice.conversationSpeak({
+      key: 'assistant:gender',
+      sequence: 0,
+      text: 'Ya terminé.',
+      language: 'es-DO',
+      final: true,
+    })
+    expect(genders).toEqual(['feminine'])
+  })
+
   it('uses Kokoro then the platform voice for hands-free conversation fallback', async () => {
     const { voice } = await mountVoice({ ttsProvider: 'phoenix-natural' })
     const natural = vi.fn(() => Promise.resolve())
