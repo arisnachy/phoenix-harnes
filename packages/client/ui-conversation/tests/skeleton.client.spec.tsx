@@ -306,7 +306,45 @@ describe('Hero chrome', () => {
   })
 })
 
+describe('Approved welcome chrome', () => {
+  it('shows a real welcome toolbar with live model seat and functional shortcuts', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
+    expect(b.view.getByRole('button', { name: 'Buscar sesiones' })).toBeTruthy()
+    expect(b.view.getByRole('button', { name: 'Abrir perfil' })).toBeTruthy()
+    expect(b.slotCalls).toContain('conversation.hero.model')
+    const sections: string[] = []
+    const onSettings = (event: Event) => { sections.push((event as CustomEvent<string>).detail) }
+    window.addEventListener('phoenix:open-settings-section', onSettings)
+    try {
+      fireEvent.click(b.view.getByRole('button', { name: 'Abrir perfil' }))
+      fireEvent.click(b.view.getByRole('button', { name: 'Descubrir herramientas' }))
+      expect(sections).toEqual(['profile', 'plugins'])
+    } finally {
+      window.removeEventListener('phoenix:open-settings-section', onSettings)
+    }
+  })
+})
+
 describe('ConversationRoot resident composer', () => {
+  it('puts a welcome action in the current draft without submitting a turn', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }))
+    fireEvent.click(b.view.getByRole('button', { name: 'Crear' }))
+    const box = b.view.getByRole('textbox') as HTMLTextAreaElement
+    expect(box.value).toContain('Ayúdame a crear un proyecto')
+    expect(b.sink).not.toHaveBeenCalled()
+    fireEvent.click(b.view.getByRole('button', { name: 'Dame una gráfica de datos ficticios' }))
+    expect(box.value).toContain('Crea una gráfica de líneas')
+    expect(b.sink).not.toHaveBeenCalled()
+  })
+
+  it('opens the real workspace picker when a welcome action has no workspace', () => {
+    const b = mount(conversationSnapshot({ composerPhase: 'blank', blank: true }), [], undefined, {
+      summaryBlank: true,
+    })
+    fireEvent.click(b.view.getByRole('button', { name: 'Programar' }))
+    expect((b.pickerOwner() as { open: boolean }).open).toBe(true)
+  })
+
   it('renders the composer inert with the blocker\u2019s own reason', () => {
     const b = mount(conversationSnapshot(), undefined, undefined, {
       composerBlock: { reason: 'select a model first' },

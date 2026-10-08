@@ -32,6 +32,10 @@ export type NaturalVoiceSpawn = (
 export interface NaturalVoiceProviderOptions {
   /** Executable that implements the PHOENIX NDJSON voice protocol. */
   readonly command?: string
+  /** Registered provider identity; bundled Kokoro uses `kokoro`. */
+  readonly id?: string
+  /** Provider priority, lower than PHOENIX Natural for Kokoro. */
+  readonly priority?: number
   /** Arguments passed without a shell. */
   readonly args?: readonly string[]
   /** Maximum time for the resident engine to emit its ready frame. */
@@ -146,8 +150,8 @@ export function createNaturalTextToSpeechProvider(
   })
 
   return {
-    id: 'phoenix-natural',
-    priority: 300,
+    id: options.id?.trim() || 'phoenix-natural',
+    priority: options.priority ?? 300,
     available: () => command !== '',
     warmup: () => daemon.warmup(),
     close: () => { daemon.close() },
@@ -220,6 +224,7 @@ class NaturalVoiceDaemon {
         type: 'speak',
         id,
         language: request.language,
+        gender: request.gender ?? 'feminine',
         chunks,
         style: naturalVoiceStyle(request.text),
       }

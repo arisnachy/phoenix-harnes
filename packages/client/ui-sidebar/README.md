@@ -31,3 +31,5 @@ None; this package neither assembles nor sends a provider request.
 - **Session state-dot rendering is owned by [ui-workspace](../ui-workspace/README.md)** — no done/error notification sources are available.
 - **Workspace browser behavior is composition-owned** — grouping, ordering, search, and row state belong to [ui-workspace](../ui-workspace/README.md), not this shell.
 - **"New task completed" unread marking is local viewing state** — completion-time > last-seen never reaches the host.
+
+The expanded sidebar includes a primary navigation modeled on the approved clean assistant reference. Inicio reuses New Session, Descubrir/Conectores/Equipo open existing Settings sections, and Biblioteca focuses the existing workspace search. The collapsed rail and session browser remain the same.

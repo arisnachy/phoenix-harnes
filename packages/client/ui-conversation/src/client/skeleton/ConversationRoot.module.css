@@ -347,3 +347,140 @@
     transition: none;
   }
 }
+/* A wider home surface only: ordinary chat keeps its proven 768px axis. */
+.root[data-phase='hero'] {
+  --dsh-chat-content-width: 940px;
+  --dsh-composer-card-max-width: 1000px;
+}
+.root[data-phase='hero'] .composerHero {
+  gap: 12px;
+  padding-bottom: 26px;
+}
+.root[data-phase='hero'] .heroWorkspaceRow {
+  margin-top: 6px;
+}
+@media (max-width: 720px) {
+  .root[data-phase='hero'] {
+    --dsh-chat-content-width: 100%;
+    --dsh-composer-card-max-width: calc(100% - 20px);
+  }
+}
+
+/* The approved welcome uses the actual center column, not the floating team's
+   horizontal correction (which previously shifted the entire hero left). */
+.root[data-phase='hero'] {
+  background:
+    radial-gradient(ellipse at 55% 53%, rgba(230, 115, 51, 0.035) 0%, transparent 54%),
+    var(--dsw-alias-bg-base);
+}
+.heroTopbar {
+  display: flex;
+  flex: none;
+  box-sizing: border-box;
+  align-items: center;
+  gap: 14px;
+  height: 68px;
+  padding: 0 24px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-base);
+}
+.heroTopbarSpacer { flex: 1; }
+.heroTopIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+.heroTopIcon:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.heroTopModel {
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 205px;
+  max-width: 275px;
+  height: 48px;
+  padding: 4px 15px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 28px;
+  background: var(--dsw-specific-input-major);
+}
+.heroTopModelCaption {
+  padding-left: 3px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 15px;
+}
+.heroTopModel :global(button[aria-haspopup='menu']) {
+  display: flex;
+  max-width: 240px;
+  min-height: 22px;
+  padding: 0 2px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.heroTopModel :global([role='menu']) { top: calc(100% + 8px); bottom: auto; z-index: 100; }
+.heroTopPickWorkspace {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.heroTopProfile {
+  position: relative;
+  display: grid;
+  flex: 0 0 38px;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 50%;
+  background: #ebe5dc;
+  color: #5d4839;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+.heroProfileStatus {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 9px;
+  height: 9px;
+  border: 2px solid var(--dsw-alias-bg-base);
+  border-radius: 50%;
+  background: #2ca569;
+}
+.root[data-phase='hero'] .composerSeat { transform: none; }
+.root[data-phase='hero'] .composerHero { gap: 10px; padding-bottom: 10px; }
+.root[data-phase='hero'] .scrollBody { padding-block: 16px; }
+.root[data-phase='hero'] .heroWorkspaceRow { padding-left: 28px; }
+@media (max-width: 720px) {
+  .heroTopbar { gap: 5px; height: 56px; padding-inline: 10px; }
+  .heroTopIcon { width: 34px; }
+  .heroTopModel { min-width: 125px; max-width: 160px; padding-inline: 10px; }
+  .heroTopProfile { flex-basis: 34px; width: 34px; height: 34px; }
+  .root[data-phase='hero'] .scrollBody { padding-block: 10px; justify-content: flex-start; }
+}
+@media (max-width: 380px) {
+  .heroTopIcon { width: 30px; }
+  .heroTopModel { min-width: 110px; }
+}

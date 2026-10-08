@@ -1,6 +1,6 @@
 import { defineTool, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 
-/** Dedicated MIME used to route Phoenix canvases into the visual workspace. */
+/** Dedicated MIME used to route Phoenix canvases into the chat conversation. */
 export const PHOENIX_CANVAS_MIME = 'application/vnd.phoenix.canvas+html'
 
 /**
@@ -42,11 +42,11 @@ export function createPhoenixCanvasTool(): ToolDefinition {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `Canvas ready in Phoenix: ${String(value.title)}`,
+        text: `Canvas ready in Phoenix: ${value.title}`,
       }],
       presentationMeta: (args, value) => ({
         artifact: {
-          id: String(value.artifactId),
+          id: value.artifactId,
           mime: PHOENIX_CANVAS_MIME,
           title: String(value.title),
           data: args.html,
@@ -54,21 +54,21 @@ export function createPhoenixCanvasTool(): ToolDefinition {
         },
       }),
     },
-    async execute(args, exec) {
+    execute(args, exec) {
       const title = args.title.trim()
       if (title.length === 0) throw new Error('title must be a non-empty string')
       if (args.html.trim().length === 0) throw new Error('html must be a non-empty string')
-      return {
+      return Promise.resolve({
         artifactId: `phoenix-canvas:${String(exec.callId)}`,
         title,
-      }
+      })
     },
     presentCall(args) {
       return {
         card: 'generic',
         title: `Canvas · ${args.title}`,
         kind: 'read',
-        rawInput: 'Phoenix visual workspace',
+        rawInput: 'Phoenix inline chat canvas',
       }
     },
   })

@@ -23,7 +23,7 @@ Provider-neutral asynchronous voice for PHOENIX. The service accepts only explic
 
 ## Providers
 
-Providers implement `VoiceTextToSpeechProvider` or `VoiceSpeechToTextProvider` and register through the service. A configured provider id wins when available; otherwise the highest-priority available provider wins. The local provider package registers Kokoro when `PHOENIX_KOKORO_COMMAND` is configured and a platform speech fallback when enabled.
+Providers implement `VoiceTextToSpeechProvider` or `VoiceSpeechToTextProvider` and register through the service. A configured provider id wins when available; otherwise the highest-priority available provider wins. The local provider registers Kokoro when a configured command or completed per-user Windows installation exists, and a system speech fallback when enabled. Live conversation uses OpenAI/Codex Realtime first, then Kokoro, then the platform speech engine. Kokoro's feminine/masculine synthesis is determined from the assistant profile on each segment and matches the conversation language when a matching voice exists.
 
 ## Model Experience
 

@@ -124,6 +124,21 @@ const PROFILE_REQUIRED_RUNTIME_PACKAGES = [
   '@phoenix-ai/dsh-host-plugin-inventory',
 ]
 
+function prepareKokoroFallback() {
+  if (process.platform !== 'win32' || process.env.PHOENIX_KOKORO_AUTO_INSTALL === '0') return
+  const installer = join(supervisorSourceRoot, 'install-kokoro.ps1')
+  if (!existsSync(installer)) return
+  // Never block PHOENIX startup with Python installation or model downloads.
+  const child = spawn('powershell.exe', [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', installer, '-Quiet',
+  ], { windowsHide: true, detached: true, stdio: 'ignore' })
+  child.once('error', error => {
+    console.error(`[PHOENIX VOICE] Kokoro installer could not start: ${error.message}`)
+  })
+  child.unref()
+}
+
 function repairDesktopShortcut() {
   if (process.platform !== 'win32') return
   try {
@@ -1473,6 +1488,7 @@ process.once('SIGTERM', requestShutdown)
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
 repairDesktopShortcut()
+prepareKokoroFallback()
 cleanupObsoleteRuntimes()
 recoverConfigurationBeforeFirstBoot()
 
