@@ -178,11 +178,14 @@ export function ModelSelect(
       const trigger = triggerRef.current
       if (trigger === null) return
       const rect = trigger.getBoundingClientRect()
-      const above = rect.top - 20
-      const below = window.innerHeight - rect.bottom - 20
-      const direction = above >= 180 || above >= below ? 'above' : 'below'
-      const room = direction === 'above' ? above : below
+      const scrollPort = trigger.closest('[data-conversation-scroll]')?.getBoundingClientRect()
+      const viewportTop = Math.max(12, (scrollPort?.top ?? 0) + 12)
+      const viewportBottom = Math.min(window.innerHeight - 12, (scrollPort?.bottom ?? window.innerHeight) - 12)
+      const above = rect.top - viewportTop - 8
+      const below = viewportBottom - rect.bottom - 8
       const cap = pane === 'model' ? 520 : pane === 'effort' ? 440 : 360
+      const direction = above >= Math.min(280, cap) || above >= below ? 'above' : 'below'
+      const room = direction === 'above' ? above : below
       const maxHeight = Math.min(cap, Math.max(80, Math.floor(room)))
       setMenuPlacement(previous => previous.direction === direction && previous.maxHeight === maxHeight
         ? previous
