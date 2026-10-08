@@ -300,7 +300,7 @@ export function startConnection(
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined
       publishStatus?.('starting')
-      settling = connectGeneration(false)
+      settling = connectGeneration()
     }, delayMs)
     // An armed reconnect timer must never hold the process open on its own.
     reconnectTimer.unref()
@@ -314,9 +314,8 @@ export function startConnection(
    * Every failure funnels through {@link generationDown}; success arms the
    * onclose-driven disconnect path. Never rejects.
    *
-   * @param startup - Whether this is the plugin's activation attempt.
    */
-  async function connectGeneration(startup: boolean): Promise<void> {
+  async function connectGeneration(): Promise<void> {
     const generation = new Client(
       { name: 'dsh-mcp-client', version: '0.0.1' },
       { capabilities: {} },
@@ -416,7 +415,7 @@ export function startConnection(
   }
 
   /** The in-flight (or last settled) connection attempt; dispose awaits it for quiescence. */
-  let settling = connectGeneration(true)
+  let settling = connectGeneration()
 
   // The ready promise settles when the first attempt finishes (regardless of
   // success). If the first attempt fails and reconnect is enabled, the
