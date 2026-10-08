@@ -1108,7 +1108,8 @@ async function watch(root, parentPid) {
   let pending
   let preparedTarget
   let consecutiveNetworkFailures = 0
-  cleanupUpdaterRuntimeStorage(root)
+  // Avoid a second synchronous worktree janitor during cold Web boot.
+  // updaterRuntimeStorageHasCapacity still cleans before allocating a candidate.
   recoverStaleStagingIndexLock(root)
   clearRefreshRequest(root)
   writeState(root, {

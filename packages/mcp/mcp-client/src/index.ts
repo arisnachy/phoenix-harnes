@@ -457,6 +457,18 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     }
   }, 'mcp-client.connection')
 
+  // Optional MCPs in the supervised Web profile must never delay the chat
+  // while Python/npm servers install or tool discovery/authentication runs.
+  // The connection supervisor remains alive and registers tools when ready.
+  // Explicitly strict MCPs still require initial readiness, as before.
+  if (!config.failOnStartupError && process.env.PHOENIX_MCP_BACKGROUND_STARTUP === '1') {
+    void connection.ready.catch(() => {
+      // Do not leak raw provider/credential errors in startup diagnostics.
+      ctx.logger.warn(`mcp-client(${config.serverName}): optional background connection failed`)
+    })
+    return
+  }
+
   // Wait only for the configured startup budget. Optional external servers
   // must not hold the Web UI behind package installation, authentication, or
   // an unavailable network; the supervisor continues its bounded reconnect
