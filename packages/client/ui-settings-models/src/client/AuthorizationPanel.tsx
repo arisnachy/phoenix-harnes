@@ -1692,7 +1692,7 @@ export function ConnectorsSettingsSection({ api,
                   openClaw={row.openClaw}
                   connected={row.connected}
                   t={connectorT}
-                  authorizationProgress={attempt?.key === authorizationKey && attempt.status === 'pending' ? (
+                  authorizationProgress={attempt !== undefined && attempt.key === authorizationKey && attempt.status === 'pending' ? (
                     <p role="status" className={styles['advancedHint']}>
                       {attempt.url === undefined ? 'Preparando autorización del MCP…' : 'La URL OAuth está lista. Continúa en la pestaña abierta o usa el enlace superior.'}
                     </p>
