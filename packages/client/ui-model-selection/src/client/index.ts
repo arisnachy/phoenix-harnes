@@ -127,24 +127,27 @@ export function apply(ctx: ClientContext): void {
   ctx.inject(['slots', 'modelDirectories'], (scope: ClientContext) => {
     const models = scope.modelDirectories
     const sessions = scope.sessions
-    scope.slots.inject('conversation.input.model', () => scope.slots.register({
-      name: 'conversation.input.model',
-      locale: NS,
-      inject: (sessionId): ModelSelectInjected => {
-        const directory = models.directoryFor(sessionId)
-        const available = sessions.subagentAddress(sessionId) === undefined
-        return {
-          available,
-          directory: directory.store,
-          load: () => {
-            if (available) directory.load().catch(() => { /* surfaced on the store */ })
-          },
-          select: (selection: ModelSelection) => available
-            ? directory.select(selection).then(() => true, () => false)
-            : Promise.resolve(false),
-        }
-      },
-    }, ModelSelect))
+    const injectModel = (sessionId: Parameters<typeof models.directoryFor>[0]): ModelSelectInjected => {
+      const directory = models.directoryFor(sessionId)
+      const available = sessions.subagentAddress(sessionId) === undefined
+      return {
+        available,
+        directory: directory.store,
+        load: () => {
+          if (available) directory.load().catch(() => { /* surfaced on the store */ })
+        },
+        select: (selection: ModelSelection) => available
+          ? directory.select(selection).then(() => true, () => false)
+          : Promise.resolve(false),
+      }
+    }
+    for (const seat of ['conversation.input.model', 'conversation.hero.model'] as const) {
+      scope.slots.inject(seat, () => scope.slots.register({
+        name: seat,
+        locale: NS,
+        inject: injectModel,
+      }, ModelSelect))
+    }
   })
 
   // Cross-feature composition is intentionally through the slot ledger only.

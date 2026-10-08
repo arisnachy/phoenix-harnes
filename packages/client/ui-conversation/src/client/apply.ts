@@ -305,6 +305,7 @@ export function apply(ctx: Context): void {
       'conversation.hero.brand.mark': { kind: 'single', scope: 'root' },
       'conversation.hero.workspace': { kind: 'single', scope: 'root' },
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
+      'conversation.hero.model': { kind: 'single', scope: 'session' },
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
       recordAttention: (item, state) => recordProactivityAttention(ctx.get('connection') as ConnectionHandle | undefined, proactivityAttention, item, state),

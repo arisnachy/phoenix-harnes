@@ -839,6 +839,18 @@ export function WorkspaceBrowser({
   // expand request; once the shell flips wide the input mounts and takes focus.
   const [searchOnExpand, setSearchOnExpand] = useState(false)
   useEffect(() => {
+    const openSearch = (): void => {
+      setWsPickerOpen(false)
+      setSearchExpanded(true)
+      if (!wide) {
+        setSearchOnExpand(true)
+        expandSidebar()
+      }
+    }
+    window.addEventListener('phoenix:open-workspace-search', openSearch)
+    return () => { window.removeEventListener('phoenix:open-workspace-search', openSearch) }
+  }, [wide, expandSidebar])
+  useEffect(() => {
     if (wide && searchOnExpand) {
       const timer = window.setTimeout(() => {
         searchInput.current?.focus({ preventScroll: true })

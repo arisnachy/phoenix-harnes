@@ -168,6 +168,19 @@ describe('SettingsPanel close paths', () => {
 })
 
 describe('SettingsPanel navigation', () => {
+  it('opens an existing section through Phoenix primary navigation', () => {
+    mount({ rows: [
+      { id: 'general', order: 0, label: 'General' },
+      { id: 'connectors', order: 10, label: 'Connectors' },
+    ] })
+    act(() => { window.dispatchEvent(new CustomEvent('phoenix:open-settings-section', { detail: 'connectors' })) })
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByTestId('section-connectors')).toBeTruthy()
+    act(() => { window.dispatchEvent(new CustomEvent('phoenix:open-settings-section', { detail: 42 })) })
+    expect(screen.getByTestId('section-connectors')).toBeTruthy()
+  })
+
+
   it('projects rows, marks the first active, and renders only that section', () => {
     mount()
     openPanel()

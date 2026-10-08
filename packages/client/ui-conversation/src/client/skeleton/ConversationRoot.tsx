@@ -4,6 +4,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import clsx from 'clsx'
+import { IconSearchOutline16, IconChevronDownOutline14 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { SessionId, WorkspaceId } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ConversationSlotProps, InputZone } from '../contract/slots.ts'
 import {
@@ -56,12 +57,19 @@ export function ConversationRoot({
   // send; its reason is already localized by whoever raised it.
   const composerBlock = useComposerBlock(block => block)
   const preferredName = useUserProfile(profile => profile.preferredName)
+  const profileInitials = preferredName?.trim().split(/\s+/).slice(0, 2).map(part => part[0] ?? '').join('').toUpperCase() || 'PX'
   const proactiveAttention = useProactivityAttention(items => items)
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const openSettingsSection = useCallback((id: string): void => {
+    window.dispatchEvent(new CustomEvent('phoenix:open-settings-section', { detail: id }))
+  }, [])
+  const openWorkspaceSearch = useCallback((): void => {
+    window.dispatchEvent(new Event('phoenix:open-workspace-search'))
+  }, [])
   const deferredStarter = useRef<string | null>(null)
 
   const selectAttention = useCallback((item: (typeof proactiveAttention)[number]): void => {
@@ -246,6 +254,34 @@ export function ConversationRoot({
 
   return (
     <div ref={rootRef} className={css.root} data-phase={phase}>
+      {hero && (
+        <div className={css.heroTopbar} aria-label="Herramientas de Phoenix">
+          <div className={css.heroTopbarSpacer} />
+          <button type="button" className={css.heroTopIcon} aria-label="Buscar sesiones" onClick={openWorkspaceSearch}>
+            <IconSearchOutline16 size={19} />
+          </button>
+          <button type="button" className={css.heroTopIcon} aria-label="Descubrir herramientas" onClick={() => { openSettingsSection('plugins') }}>
+            <svg viewBox="0 0 20 20" width="19" height="19" fill="currentColor" aria-hidden="true">
+              {Array.from({ length: 9 }, (_, index) => (
+                <circle key={index} cx={4 + (index % 3) * 6} cy={4 + Math.floor(index / 3) * 6} r="1.45" />
+              ))}
+            </svg>
+          </button>
+          <div className={css.heroTopModel}>
+            <span className={css.heroTopModelCaption}>Modelos</span>
+            {sessionId === undefined
+              ? (
+                <button type="button" className={css.heroTopPickWorkspace} onClick={() => { setPickerOpen(true) }}>
+                  Seleccionar modelo <IconChevronDownOutline14 size={13} />
+                </button>
+              )
+              : renderSlot('conversation.hero.model', { locked: false })}
+          </div>
+          <button type="button" className={css.heroTopProfile} aria-label="Abrir perfil" onClick={() => { openSettingsSection('profile') }}>
+            {profileInitials}
+          </button>
+        </div>
+      )}
       <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
       <div className={css.scrollBody} data-conversation-scroll="">
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />

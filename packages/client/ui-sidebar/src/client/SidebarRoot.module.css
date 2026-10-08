@@ -388,3 +388,42 @@
 .root:not(.collapsed) .newSession:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
+
+/* Primary navigation and spacing match the approved clean assistant layout. */
+.root:not(.collapsed) { padding-inline: 14px; }
+.root:not(.collapsed) .logoRow { height: 66px; margin-bottom: 10px; }
+.root:not(.collapsed) .newSession { min-height: 46px; margin-bottom: 16px; border-radius: 15px; }
+.primaryNavigation {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 22px;
+}
+.navLink {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+.navLink svg { flex: none; color: var(--dsw-alias-label-secondary); }
+.navLink:hover, .navLink:focus-visible { background: var(--dsw-alias-interactive-bg-hover); }
+.navLink:first-child { background: var(--dsw-alias-interactive-bg-hover); font-weight: 500; }
+.navLink:focus-visible { outline: 2px solid var(--dsw-specific-phoenix-accent); outline-offset: 0; }
+@media (max-height: 780px) {
+  .primaryNavigation { gap: 0; margin-bottom: 10px; }
+  .navLink { height: 34px; }
+}
+@media (prefers-reduced-motion: reduce) { .navLink { transition: none; } }

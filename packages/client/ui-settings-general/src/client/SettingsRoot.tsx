@@ -117,6 +117,14 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
     setActiveId(id)
     setOpen(true)
   }, [])
+  useEffect(() => {
+    const onNavigate = (event: Event): void => {
+      const requested = (event as CustomEvent<unknown>).detail
+      if (typeof requested === 'string') openSection(requested)
+    }
+    window.addEventListener('phoenix:open-settings-section', onNavigate)
+    return () => { window.removeEventListener('phoenix:open-settings-section', onNavigate) }
+  }, [openSection])
 
   // The ledger tick keeps the nav rows fresh: registrants re-register with
   // freshly localized text on locale change, and the trigger/header/close
