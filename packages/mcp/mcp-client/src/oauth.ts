@@ -51,6 +51,16 @@ function randomState(): string {
   return randomBytes(32).toString('base64url')
 }
 
+/** One wall-clock budget for all pre-consent OAuth discovery and DCR requests. */
+const MCP_OAUTH_PRECONSENT_TIMEOUT_MS = 38_000
+
+function preconsentTimeoutError(serverName: string): Error & { code: string } {
+  return Object.assign(
+    new Error(`MCP OAuth for ${serverName} could not obtain a provider consent URL within ${MCP_OAUTH_PRECONSENT_TIMEOUT_MS / 1000} seconds`),
+    { code: 'MCP_OAUTH_DISCOVERY_TIMEOUT' },
+  )
+}
+
 /**
  * Build the SDK OAuth provider for one MCP server. Token and registration data
  * are read and written only through the supplied host-owned store.
@@ -474,6 +484,13 @@ export class McpOAuthController {
     // `await attempt.code` (for example when discovery fails). Mark its rejection
     // as observed without changing the rejection delivered to the awaiting flow.
     void attempt.code.catch(() => undefined)
+    const preparationDeadline = new AbortController()
+    let consentUrlPublished = false
+    let preparingConsent = true
+    const timeout = setTimeout(() => {
+      preparationDeadline.abort(preconsentTimeoutError(this.serverName))
+    }, MCP_OAUTH_PRECONSENT_TIMEOUT_MS)
+    timeout.unref()
     const provider = createMcpOAuthProvider({
       serverName: this.serverName,
       redirectUrl: this.callbackServer.redirectUri,
@@ -481,6 +498,10 @@ export class McpOAuthController {
       state,
       onClientInformationSaved: () => { this.currentRedirectClientRegistered = true },
       onAuthorizationUrl: (url) => {
+        // Ignore a late redirect from an SDK request that timed out or was
+        // cancelled. The browser must not open a stale authorization attempt.
+        if (preparationDeadline.signal.aborted || session.signal.aborted) return
+        consentUrlPublished = true
         session.notify({
           message: `Continúa en tu navegador para autorizar ${this.serverName}. PHOENIX conserva los tokens solo en el Host.`,
           url: String(url),
@@ -503,18 +524,49 @@ export class McpOAuthController {
         ...init,
         signal: AbortSignal.any([
           session.signal,
+          ...(preparingConsent ? [preparationDeadline.signal] : []),
           AbortSignal.timeout(30_000),
           ...(init?.signal == null ? [] : [init.signal]),
         ]),
       })
-      const first = await auth(provider, { serverUrl: this.serverUrl, fetchFn })
-      if (first !== 'REDIRECT') return
+      // The MCP SDK may perform multiple sequential OAuth metadata requests
+      // and dynamic registration round-trips. A per-request timeout does not
+      // bound that whole phase, so race its *entire* pre-consent operation.
+      // Once the URL is published, user approval has no time limit.
+      const aborted = new Promise<never>((_resolve, reject) => {
+        preparationDeadline.signal.addEventListener('abort', () => {
+          reject(preparationDeadline.signal.reason)
+        }, { once: true })
+      })
+      const first = await Promise.race([
+        auth(provider, { serverUrl: this.serverUrl, fetchFn }),
+        aborted,
+      ])
+      preparingConsent = false
+      clearTimeout(timeout)
+      if (first !== 'REDIRECT') {
+        if (!await this.isAuthorized()) {
+          throw Object.assign(
+            new Error(`MCP OAuth for ${this.serverName} completed without a consent URL or usable token`),
+            { code: 'MCP_OAUTH_NO_CONSENT_URL' },
+          )
+        }
+        return
+      }
+      if (!consentUrlPublished) {
+        throw Object.assign(
+          new Error(`MCP OAuth for ${this.serverName} did not publish a consent URL`),
+          { code: 'MCP_OAUTH_NO_CONSENT_URL' },
+        )
+      }
       const code = await attempt.code
       const final = await auth(provider, { serverUrl: this.serverUrl, authorizationCode: code, fetchFn })
       if (final !== 'AUTHORIZED') throw new Error(`MCP OAuth did not authorize ${this.serverName}`)
     } catch (error) {
       if (!this.closed || !isExpectedMcpOAuthClose(error)) throw error
     } finally {
+      preparingConsent = false
+      clearTimeout(timeout)
       attempt.close()
     }
   }

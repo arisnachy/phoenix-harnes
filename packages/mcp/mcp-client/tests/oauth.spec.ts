@@ -217,6 +217,7 @@ describe('createMcpOAuthProvider', () => {
         expect(await provider.clientInformation()).toEqual({ client_id: 'current-runtime-client' })
         expect(provider.clientMetadata.redirect_uris).toEqual([controller.callbackServer.redirectUri])
         await provider.redirectToAuthorization(authorizationUrl)
+        await provider.saveTokens({ access_token: 'current-client-token', token_type: 'Bearer' })
         return 'AUTHORIZED'
       })
 
@@ -266,6 +267,7 @@ describe('createMcpOAuthProvider', () => {
       expect(await provider.tokens()).toBeUndefined()
       await expect(provider.codeVerifier()).rejects.toThrow(/verifier missing/i)
       expect(await provider.discoveryState?.()).toEqual({ authorizationServerUrl: 'https://auth.monday.com' })
+      await provider.saveTokens({ access_token: 'new-host-access', token_type: 'Bearer' })
       return 'AUTHORIZED'
     })
 
@@ -331,6 +333,52 @@ describe('createMcpOAuthProvider', () => {
     } finally {
       fetch.mockRestore()
       timeout.mockRestore()
+      await controller.close()
+    }
+  })
+
+  it('fails bounded OAuth discovery when the provider never publishes a consent URL', async () => {
+    const credentials = {
+      readRecord: vi.fn(async () => undefined),
+      modifyRecord: vi.fn(async (_key: unknown, mutate: (current: unknown) => Promise<unknown>) => mutate(undefined)),
+      deleteRecord: vi.fn(async () => undefined),
+    } as unknown as CredentialProvider
+    const controller = new McpOAuthController(credentials, 'blocked-provider', 'https://example.test/mcp')
+    await controller.ready
+    vi.mocked(auth).mockImplementationOnce(() => new Promise<'REDIRECT'>(() => undefined))
+    const notify = vi.fn()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const result = controller.authorize({
+        method: 'oauth', signal: new AbortController().signal, notify, prompt: vi.fn(),
+      })
+      const rejection = expect(result).rejects.toMatchObject({ code: 'MCP_OAUTH_DISCOVERY_TIMEOUT' })
+      await vi.advanceTimersByTimeAsync(38_000)
+      await rejection
+      expect(notify).toHaveBeenCalledWith({
+        message: 'Preparando autorización de blocked-provider…',
+      })
+      expect(notify.mock.calls.some(([notice]) => notice.url !== undefined)).toBe(false)
+    } finally {
+      vi.useRealTimers()
+      await controller.close()
+    }
+  })
+
+  it('refuses to report OAuth success if discovery returned no login URL or token', async () => {
+    const credentials = {
+      readRecord: vi.fn(async () => undefined),
+      modifyRecord: vi.fn(async (_key: unknown, mutate: (current: unknown) => Promise<unknown>) => mutate(undefined)),
+      deleteRecord: vi.fn(async () => undefined),
+    } as unknown as CredentialProvider
+    const controller = new McpOAuthController(credentials, 'missing-consent', 'https://example.test/mcp')
+    await controller.ready
+    vi.mocked(auth).mockResolvedValueOnce('AUTHORIZED')
+    try {
+      await expect(controller.authorize({
+        method: 'oauth', signal: new AbortController().signal, notify: vi.fn(), prompt: vi.fn(),
+      })).rejects.toMatchObject({ code: 'MCP_OAUTH_NO_CONSENT_URL' })
+    } finally {
       await controller.close()
     }
   })
