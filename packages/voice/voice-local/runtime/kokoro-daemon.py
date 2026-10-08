@@ -26,9 +26,6 @@ SPANS = {
     "en": ("af_heart", "am_michael", "en-us"),
     "pt": ("pf_dora", "pm_alex", "pt-br"),
     "it": ("if_sara", "im_nicola", "it"),
-    "ja": ("jf_alpha", "jm_kumo", "ja"),
-    "hi": ("hf_alpha", "hm_omega", "hi"),
-    "zh": ("zf_xiaobei", "zm_yunxi", "cmn"),
     "fr": ("ff_siwis", None, "fr-fr"),
 }
 ESPEAK_LANGUAGES = {"es", "pt", "it", "fr"}
@@ -41,7 +38,8 @@ jobs: queue.Queue[dict[str, Any] | None] = queue.Queue(maxsize=8)
 
 def voice_for(language: str, gender: str) -> tuple[str, str, str]:
     primary = language.strip().lower().replace("_", "-").split("-")[0]
-    primary = primary if primary in SPANS else "en"
+    if primary not in SPANS:
+        raise ValueError(f"Kokoro v1.0 cannot synthesize {primary!r}; use platform speech")
     female, male, code = SPANS[primary]
     voice = male if gender == "masculine" else female
     if not voice:
@@ -67,7 +65,7 @@ phonemizers: dict[str, Any] = {}
 
 def generate(text: str, language: str, gender: str, pace: str):
     voice, code, primary = voice_for(language, gender)
-    speed = 0.94 if pace == "calm" else 1.06 if pace == "brisk" else 1.0
+    speed = 0.98 if pace == "calm" else 1.02 if pace == "brisk" else 1.0
     with contextlib.redirect_stdout(sys.stderr):
         if primary in ESPEAK_LANGUAGES:
             if primary not in phonemizers:
@@ -80,8 +78,14 @@ def generate(text: str, language: str, gender: str, pace: str):
             phonemes, _ = phonemizers[primary](text)
             if not phonemes.strip():
                 raise ValueError("Kokoro phonemizer returned no speech")
-            return model.create(phonemes, voice=voice, speed=speed, is_phonemes=True)
-        return model.create(text, voice=voice, speed=speed, lang=code)
+            samples, rate = model.create(phonemes, voice=voice, speed=speed, is_phonemes=True)
+        else:
+            samples, rate = model.create(text, voice=voice, speed=speed, lang=code)
+    # Excessive output from a short utterance indicates a model repetition loop.
+    max_seconds = max(7.0, min(32.0, len(text) * 0.17 + 3.0))
+    if rate <= 0 or samples.size / rate > max_seconds:
+        raise RuntimeError("Kokoro returned excessive speech duration; using native fallback")
+    return samples, rate
 
 
 def play_audio(samples, sample_rate: int, request_id: str) -> None:
@@ -149,6 +153,12 @@ def main() -> int:
         assert voice_for("es-DO", "masculine")[0] == "em_alex"
         assert voice_for("en-US", "feminine")[0] == "af_heart"
         assert voice_for("en-US", "masculine")[0] == "am_michael"
+        try:
+            voice_for("zh-CN", "feminine")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Kokoro v1.0 must not read unsupported text as English")
         return 0
     try:
         model = load_model()

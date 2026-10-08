@@ -11,7 +11,7 @@ import type {
   VoiceConversationStatus,
 } from '@phoenix-ai/dsh-api-remotes/client'
 import {
-  conversationalSpeechText, createSpeechOutput, hasSpeechOutput, nextStreamingSpeechSegment,
+  conversationalSpeechText, createSpeechOutput, hasSpeechOutput, nextStreamingSpeechSegment, spokenLanguage,
   type SpeechOutput,
 } from './speech-output.ts'
 
@@ -179,6 +179,7 @@ function resetRemoteSpeech(cancel = false): void {
 
 function browserSpeech(messageKey: string, text: string, final: boolean): void {
   if (!hasSpeechOutput()) return
+  const language = spokenLanguage(text, typeof document === 'undefined' ? undefined : document.documentElement.lang)
   if (voiceAssistantSpeech === undefined || voiceAssistantSpeechKey !== messageKey) {
     voiceAssistantSpeech?.dispose()
     voiceAssistantSpeechKey = messageKey
@@ -186,7 +187,7 @@ function browserSpeech(messageKey: string, text: string, final: boolean): void {
       if (!voiceAssistantSnapshot.active || voiceAssistantSpeechKey !== messageKey) return
       if (state === 'speaking') publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
       else publishVoiceIdle()
-    })
+    }, language)
   }
   voiceAssistantSpeech.update(text, final)
 }
@@ -205,6 +206,7 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
   if (!voiceAssistantRemoteSpeech || remote === undefined) return false
   const transcript = conversationalSpeechText(text)
   if (transcript === '') return true
+  const language = spokenLanguage(transcript, typeof document === 'undefined' ? undefined : document.documentElement.lang)
 
   let state = remoteSpeech
   if (state === undefined || state.key !== messageKey || !transcript.startsWith(state.transcript)) {
@@ -227,6 +229,10 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
   while (true) {
     const planned = nextStreamingSpeechSegment(state.transcript, state.through, final)
     if (planned === undefined) break
+    // A neural TTS engine can fill an unfinished clause with unwanted syllables.
+    // Wait for punctuation instead of feeding arbitrary 180-character cuts
+    // while the model is still streaming; flush the remainder at completion.
+    if (!final && !/[.!?…;:]$/u.test(planned.text)) break
     state.through = planned.end
     const sequence = state.sequence++
     const generation = state.generation
@@ -238,6 +244,7 @@ function streamRemoteSpeech(messageKey: string, text: string, final: boolean): b
       key: messageKey,
       sequence,
       text: planned.text,
+      language,
       final: isFinalSegment,
     }).then((result) => {
       if (remoteSpeech !== state || state.generation !== generation) return

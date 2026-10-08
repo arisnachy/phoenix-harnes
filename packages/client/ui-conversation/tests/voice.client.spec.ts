@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { spokenLanguage } from '../src/client/speech-output.ts'
 import {
   configureCodexRealtimeUserTranscriptHandler,
   configureVoiceAssistantRemote,
@@ -43,6 +44,14 @@ class FakeRecognition implements VoiceRecognitionLike {
 }
 
 describe('browser voice adapter', () => {
+  it('uses Spanish for the panel and text rather than a hidden Host English default', () => {
+    expect(spokenLanguage('Completado.', 'es')).toBe('es-DO')
+    expect(spokenLanguage('He encontrado el problema. Voy a corregirlo.', 'en')).toBe('es-DO')
+    expect(spokenLanguage('The task is complete and ready.', 'es')).toBe('en-US')
+    expect(spokenLanguage('Hola, todo está listo.', 'en')).toBe('es-DO')
+    expect(spokenLanguage('您好。', 'zh-CN')).toBe('zh-CN')
+  })
+
   afterEach(() => { setVoiceAssistantActive(false) })
 
   it('reports unsupported browsers without constructing a recognizer', () => {
@@ -393,11 +402,46 @@ describe('browser voice adapter', () => {
         key: 'assistant:2:1',
         sequence: 0,
         text: 'Encontré el problema.',
+        language: 'es-DO',
       })
 
       expect(interruptVoiceAssistantSpeech()).toBe(true)
       await Promise.resolve()
       expect(cancel).toHaveBeenCalledWith({ key: 'assistant:2:1' })
+    } finally {
+      setVoiceAssistantActive(false)
+      dispose()
+    }
+  })
+
+  it('does not send unfinished clauses to neural speech where filler words can be generated', async () => {
+    const speak = vi.fn(async () => ({
+      ok: true as const,
+      value: { accepted: true, provider: 'kokoro' },
+    }))
+    const dispose = configureVoiceAssistantRemote({
+      conversationStatus: async () => ({
+        ok: true as const,
+        value: { enabled: true, natural: true, provider: 'kokoro' },
+      }),
+      conversationSpeak: speak,
+      conversationCancel: async () => ({
+        ok: true as const,
+        value: { cancelled: 0 },
+      }),
+    })
+    try {
+      await refreshVoiceAssistantRemote()
+      setVoiceAssistantActive(true)
+      const started = getVoiceAssistantSnapshot().activatedAt
+      const growing = 'Esta conversación sigue generando una explicación larga sin haber terminado todavía la frase '.repeat(3)
+      streamVoiceAssistantResponse('assistant:unfinished', growing, started)
+      await Promise.resolve()
+      expect(speak).not.toHaveBeenCalled()
+      streamVoiceAssistantResponse('assistant:unfinished', growing.trim() + '.', started, true)
+      await Promise.resolve()
+      expect(speak).toHaveBeenCalled()
+      expect(speak.mock.calls.length).toBeGreaterThan(0)
     } finally {
       setVoiceAssistantActive(false)
       dispose()
