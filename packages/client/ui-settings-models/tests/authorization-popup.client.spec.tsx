@@ -111,12 +111,21 @@ describe('inline MCP OAuth consent', () => {
   it('ends a stalled pre-consent attempt in the card, not via a popup timeout', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
     const api = panelApi(pendingForever)
+    const realSetTimeout = window.setTimeout.bind(window)
+    let watchdog: (() => void) | undefined
+    vi.spyOn(window, 'setTimeout').mockImplementation((handler, delay, ...args) => {
+      if (delay === 50_000 && typeof handler === 'function') {
+        watchdog = handler as () => void
+        return 12345
+      }
+      return realSetTimeout(handler, delay, ...args)
+    })
     renderPanel(api)
     await clickAuthorize()
     await waitFor(() => { expect(api.begin).toHaveBeenCalledTimes(1) })
     await waitFor(() => { expect(api.status).toHaveBeenCalledTimes(1) })
-    vi.useFakeTimers()
-    await act(async () => { await vi.advanceTimersByTimeAsync(50_100) })
+    expect(watchdog).toBeDefined()
+    await act(async () => { watchdog?.() })
     expect(api.cancel).toHaveBeenCalledWith({ attemptId: 'attempt-1' })
     expect(screen.getAllByText(/El MCP no entregó la URL de autorización en 50 segundos/).length).toBeGreaterThan(0)
     expect(open).not.toHaveBeenCalled()
