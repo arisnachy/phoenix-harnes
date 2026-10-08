@@ -272,7 +272,10 @@ function normalize(value: string): string {
 }
 
 const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
-const MCP_AUTH_FLOW_RETRY_MS = [0, 120, 350, 800, 1_600] as const
+// MCP plugins register their auth flow only after initialization. A plugin can
+// exceed the previous 2.87 s window (its initial startup budget is 5 s), so
+// do not declare an OAuth method absent before the registry has time to settle.
+const MCP_AUTH_FLOW_RETRY_MS = [0, 250, 500, 750, 1_000, 1_500, 2_000, 2_500, 3_000] as const
 const CURATED_OAUTH_MCP_IDS = new Set<string>([
   'devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
 ])
@@ -1273,12 +1276,24 @@ export function ConnectorsSettingsSection({ api,
     const registry = mcpRegistry
     const reconnect = registry?.reconnect?.bind(registry)
     if (registry === undefined || reconnect === undefined || reconnectingServerName !== undefined) return
-    const recoverAuthorization = runtime.status === 'auth-required'
-    // Browser popup policy requires window.open() to happen in the original
-    // click stack. The MCP authorization flow may register only after this
-    // reconnect finishes, so reserve the blank tab now and navigate it later.
-    if (recoverAuthorization) reserveOAuthPopup()
+    // An unreachable HTTP MCP can report "failed" rather than "auth-required"
+    // before OAuth discovery completes. Treat both as candidates for an auth
+    // handoff, but never force OAuth on stdio or on already-valid grants.
+    const expectedKey = `mcp-client/${runtime.serverName.toLowerCase().replaceAll('_', '-')}`
+    const knownFlow = entries.find(candidate => candidate.key === expectedKey)
+    const knownMethod = knownFlow?.methods[0]
+    const recoverAuthorization = runtime.transport === 'streamable-http'
+      && (runtime.status === 'auth-required'
+        || ((runtime.status === 'failed' || runtime.status === 'disconnected')
+          && knownFlow?.stored === undefined))
     setCatalogFailure(undefined)
+    // If the runtime already asks for auth and the flow is registered, a
+    // reconnect cannot produce consent; go directly to the Host authorization.
+    if (runtime.status === 'auth-required' && knownFlow !== undefined && knownMethod !== undefined) {
+      begin(knownFlow.key, knownMethod.id)
+      return
+    }
+    if (recoverAuthorization) reserveOAuthPopup()
     setReconnectingServerName(runtime.serverName)
     void reconnect({ serverName: runtime.serverName }).then(async (result) => {
       if (!result.accepted) {
@@ -1294,7 +1309,6 @@ export function ConnectorsSettingsSection({ api,
         return
       }
 
-      const expectedKey = `mcp-client/${runtime.serverName.toLowerCase().replaceAll('_', '-')}`
       for (const delayMs of MCP_AUTH_FLOW_RETRY_MS) {
         if (delayMs > 0) await new Promise<void>((resolve) => { globalThis.setTimeout(resolve, delayMs) })
         const [snapshot, allEntries] = await Promise.all([
@@ -1304,19 +1318,28 @@ export function ConnectorsSettingsSection({ api,
         setMcpHub(snapshot)
         setEntries(allEntries)
         const currentRuntime = snapshot.runtime.find(entry => entry.serverName === runtime.serverName)
-        if (currentRuntime?.status === 'ready') {
+        if (currentRuntime?.status === 'ready' && currentRuntime.toolNames.length > 0) {
           closeOAuthPopup()
           return
         }
         const entry = allEntries.find(candidate => candidate.key === expectedKey)
         const method = entry?.methods[0]
-        if (entry !== undefined && method !== undefined) {
+        // Start consent only if the MCP explicitly requested auth or has no
+        // stored grant. An ordinary network failure with a valid token must
+        // remain a reconnect error, not trigger unsolicited reauthorization.
+        if (entry !== undefined && method !== undefined
+          && (currentRuntime?.status === 'auth-required'
+            || ((currentRuntime?.status === 'failed' || currentRuntime?.status === 'disconnected')
+              && entry.stored === undefined && method.id === 'oauth'))) {
           begin(entry.key, method.id)
           return
         }
       }
       closeOAuthPopup()
-      setCatalogFailure(connectorT('reconnectRequiredStatus'))
+      setCatalogFailure(
+        `No se inició la autorización de ${runtime.serverName}: el MCP sigue sin exponer un método OAuth operativo. `
+        + 'Comprueba su URL, disponibilidad y si requiere API key, client ID o secret. El conector no está conectado.',
+      )
     }).catch((error: unknown) => {
       if (recoverAuthorization) closeOAuthPopup()
       setCatalogFailure(String(error))
@@ -1671,6 +1694,11 @@ export function ConnectorsSettingsSection({ api,
                   openClaw={row.openClaw}
                   connected={row.connected}
                   t={connectorT}
+                  authorizationProgress={attempt !== undefined && attempt.key === authorizationKey && attempt.status === 'pending' ? (
+                    <p role="status" className={styles['advancedHint']}>
+                      {attempt.url === undefined ? 'Preparando autorización del MCP…' : 'La URL OAuth está lista. Continúa en la pestaña abierta o usa el enlace superior.'}
+                    </p>
+                  ) : undefined}
                   pending={rowAuthorizationPending || jevBusy
                     || (disconnectingKey !== undefined && disconnectingKey === row.account?.key)}
                   installingCurated={installingCuratedId === row.definition.id}
