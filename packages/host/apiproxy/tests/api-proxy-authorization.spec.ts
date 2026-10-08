@@ -66,6 +66,32 @@ function fakeAuthorization() {
 }
 
 describe('authorization API domain', () => {
+  it.each([
+    ['MCP_OAUTH_DISCOVERY_TIMEOUT', 'no entregó una URL de autorización'],
+    ['MCP_OAUTH_NO_CONSENT_URL', 'sin una URL de autorización'],
+  ])('shows a safe actionable MCP OAuth failure for %s', async (code, hint) => {
+    const ctx = new Context()
+    const { service, key } = fakeAuthorization()
+    ctx.provide('authorization', {
+      ...service,
+      begin: async () => {
+        throw Object.assign(
+          new Error('secret=DO-NOT-SHOW&code=secret-oauth-code'),
+          { code },
+        )
+      },
+    } as AuthorizationService)
+    const api = createApiProxy(ctx, DEFAULTS)
+    const begun = ok(await api.authorization.begin(request({ key: String(key), method: 'oauth' })))
+    await Promise.resolve()
+    const state = ok(await api.authorization.status(request({ attemptId: begun.attemptId })))
+    expect(state.status).toBe('failed')
+    expect(state.error).toContain(hint)
+    expect(JSON.stringify(state)).not.toContain('DO-NOT-SHOW')
+    expect(JSON.stringify(state)).not.toContain('secret-oauth-code')
+  })
+
+
   it('keeps OAuth notices/prompt state in a background attempt and never returns the answer', async () => {
     const ctx = new Context()
     const { service, key } = fakeAuthorization()
