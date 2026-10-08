@@ -94,6 +94,7 @@ export function useAuthorizationAttempt(
   const oauthAttemptRef = useRef(false)
   const failedPopupRef = useRef(false)
   const activeAttemptIdRef = useRef<string | undefined>(undefined)
+  const popupStatusRef = useRef<{ heading: string; detail: string; failed: boolean } | undefined>(undefined)
 
   // This is an active browser tab, not an inert splash screen. Only locally
   // authored messages are written: never render raw provider URLs or secrets.
@@ -104,10 +105,21 @@ export function useAuthorizationAttempt(
   ): void => {
     const popup = popupRef.current
     if (popup === null || navigatedRef.current) return
+    popupStatusRef.current = { heading: headingText, detail: descriptionText, failed }
     try {
       if (popup.closed) return
       const doc = popup.document
       if (doc?.body === undefined || doc.body === null) return
+      // Preserve the real waiting page, including its CSP-protected message
+      // listener. Replacing the document body would detach that listener's UI.
+      const realStatus = doc.getElementById('status')
+      const realHeading = doc.querySelector('h1')
+      if (realStatus !== null && realHeading !== null) {
+        realHeading.textContent = headingText
+        realStatus.textContent = failed ? safePopupFailure(descriptionText) : descriptionText
+        doc.title = failed ? 'PHOENIX · Autorización no iniciada' : 'PHOENIX · Autorización segura'
+        return
+      }
       const heading = doc.getElementById('phoenix-oauth-heading') ?? doc.createElement('h2')
       heading.id = 'phoenix-oauth-heading'
       heading.textContent = headingText
@@ -133,6 +145,7 @@ export function useAuthorizationAttempt(
     popupRef.current = null
     navigatedRef.current = false
     failedPopupRef.current = false
+    popupStatusRef.current = undefined
     if (popup === null) return
     try {
       if (!popup.closed) popup.close()
@@ -165,6 +178,7 @@ export function useAuthorizationAttempt(
       popupTimeoutRef.current = undefined
       popupRef.current = null
       navigatedRef.current = false
+      popupStatusRef.current = undefined
     } else {
       closeReservedPopup()
     }
@@ -273,6 +287,30 @@ export function useAuthorizationAttempt(
       setFailure('No se abrió automáticamente la autorización. Pulsa “Abrir página de autorización” en PHOENIX para continuar.')
     }
   }, [failReservedPopup, offerManualPopupConsent])
+
+  useEffect(() => {
+    const onWaitingPageReady = (event: MessageEvent<unknown>): void => {
+      if (event.origin !== window.location.origin || event.source !== popupRef.current) return
+      const payload = event.data
+      if (payload === null || typeof payload !== 'object'
+        || !('type' in payload) || payload.type !== 'phoenix/oauth-ready') return
+      // The waiting page may finish loading *after* the Host already rejected
+      // OAuth. Replay the last safe status so it cannot revert to Conectando.
+      const status = popupStatusRef.current
+      if (status === undefined) return
+      const message = status.failed ? safePopupFailure(status.detail) : status.detail
+      try {
+        popupRef.current?.postMessage({
+          type: 'phoenix/oauth-status', message,
+          state: status.failed ? 'error' : 'waiting',
+        }, window.location.origin)
+      } catch {
+        // PHOENIX's in-page status remains the source of truth.
+      }
+    }
+    window.addEventListener('message', onWaitingPageReady)
+    return () => { window.removeEventListener('message', onWaitingPageReady) }
+  }, [])
 
   useEffect(() => () => {
     // Unmounting Settings must not close an already-open provider consent page.
