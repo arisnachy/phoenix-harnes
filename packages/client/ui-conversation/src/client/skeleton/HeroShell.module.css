@@ -476,3 +476,32 @@
   .starterCard, .suggestion { transition: none; }
   .starterCard:hover { transform: none; }
 }
+
+/* Reference proportions: centered emblem, breathable cards, quiet suggestion rail. */
+.starterGrid {
+  max-width: 1024px;
+  gap: 8px;
+  margin-top: 32px;
+  padding: 15px;
+  border-color: color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent);
+  border-radius: 26px;
+  box-shadow: 0 14px 40px rgba(55, 40, 20, 0.025);
+}
+.starterCard {
+  min-height: 82px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--dsw-specific-input-major) 90%, var(--dsw-alias-bg-base));
+}
+.starterIcon { flex-basis: 47px; width: 47px; height: 47px; }
+.fishHitbox { width: 95px; height: 95px; margin-bottom: 10px; }
+.fish { width: 86px; height: 86px; }
+.suggestions { margin-top: 25px; gap: 14px; }
+.suggestion { padding: 10px 16px; }
+@media (max-width: 620px) {
+  .starterGrid { margin-top: 17px; gap: 6px; padding: 8px; }
+  .starterCard { min-height: 65px; padding: 8px; }
+  .starterIcon { flex-basis: 34px; width: 34px; height: 34px; }
+  .fishHitbox { width: 66px; height: 66px; margin-bottom: 10px; }
+  .fish { width: 58px; height: 58px; }
+  .suggestions { margin-top: 14px; }
+}
