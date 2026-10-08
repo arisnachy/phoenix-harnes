@@ -1,6 +1,9 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import css from './PhoenixVisualizer.module.css'
-import { auditRenderedVisual, emitVisualQaReport, preflightVisualSpec, repairVisualSpec } from './visual-quality-gate.ts'
+import {
+  auditRenderedVisual, emitVisualQaReport, populatedVisualTableRows, preflightVisualSpec,
+  projectVisualTable, repairVisualSpec,
+} from './visual-quality-gate.ts'
 
 type JsonRecord = Readonly<Record<string, unknown>>
 
@@ -569,35 +572,23 @@ function ChartView({ spec }: { readonly spec: JsonRecord }) {
   )
 }
 
-function tableRows(spec: JsonRecord): { readonly columns: readonly string[]; readonly rows: readonly (readonly unknown[])[] } | undefined {
-  if (Array.isArray(spec.columns) && spec.columns.every(item => typeof item === 'string') && Array.isArray(spec.rows)) {
-    const rows = spec.rows.map(row => Array.isArray(row) ? row : [])
-    return { columns: spec.columns, rows }
-  }
-  if (!Array.isArray(spec.data)) return undefined
-  const records = spec.data.filter(isRecord)
-  if (records.length === 0) return undefined
-  const columns = Array.isArray(spec.columns) && spec.columns.every(item => typeof item === 'string')
-    ? spec.columns as readonly string[]
-    : Object.keys(records[0]!).slice(0, 12)
-  return { columns, rows: records.map(row => columns.map(column => row[column])) }
-}
 
 function TableView({ spec }: { readonly spec: JsonRecord }) {
-  const parsed = tableRows(spec)
+  const parsed = projectVisualTable(spec)
   if (parsed === undefined) return <Fallback spec={spec} />
+  const rows = populatedVisualTableRows(spec)
   return (
     <section className={css.section} data-phoenix-visual-kind="table">
       {header(spec)}
       <div className={css.tableWrap}>
         <table className={css.table}>
           <thead><tr>{parsed.columns.map(column => <th key={column}>{column}</th>)}</tr></thead>
-          <tbody>{parsed.rows.slice(0, 200).map((row, rowIndex) => (
+          <tbody>{rows.slice(0, 200).map((row, rowIndex) => (
             <tr key={rowIndex}>{parsed.columns.map((column, cellIndex) => <td key={column + '-' + cellIndex}>{display(row[cellIndex])}</td>)}</tr>
           ))}</tbody>
         </table>
       </div>
-      {parsed.rows.length > 200 && <div className={css.caption}>Showing 200 of {parsed.rows.length} rows.</div>}
+      {rows.length > 200 && <div className={css.caption}>Showing 200 of {rows.length} rows.</div>}
     </section>
   )
 }
@@ -1049,7 +1040,9 @@ export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
     return (
       <section className={css.section} data-phoenix-visual-qa="fail">
         <div className={css.empty}>
-          Phoenix blocked a visual that did not pass render quality checks after {active.attempts} repair attempt{active.attempts === 1 ? '' : 's'}.
+          {active.preflight.issues.includes('table-empty-data') || active.preflight.issues.includes('table-no-rows')
+            ? 'La tabla no contiene datos verificables. Consulta el inventario real de conectores y vuelve a generarla.'
+            : `Phoenix blocked a visual that did not pass render quality checks after ${active.attempts} repair attempt${active.attempts === 1 ? '' : 's'}.`}
         </div>
       </section>
     )
