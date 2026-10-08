@@ -7,27 +7,27 @@ export type AlertBoxProps = { type: 'info' | 'success' | 'warning' | 'error'; ti
 
 const ALERTS_CONFIG = {
   info: {
-    color: '#1e3a8a',
-    bg: '#eff6ff',
-    border: '#bfdbfe',
-    icon: 'ℹ️',
+    color: 'var(--dsw-alias-label-primary,#334155)',
+    bg: 'var(--dsw-alias-interactive-bg-hover,rgba(100,116,139,.06))',
+    border: 'var(--dsw-alias-border-subtle,rgba(100,116,139,.2))',
+    icon: 'ⓘ',
   },
   success: {
     color: '#065f46',
-    bg: '#ecfdf5',
-    border: '#a7f3d0',
+    bg: 'rgba(16,185,129,.065)',
+    border: 'rgba(16,185,129,.18)',
     icon: '✅',
   },
   warning: {
     color: '#92400e',
-    bg: '#fffbeb',
-    border: '#fde68a',
+    bg: 'rgba(245,158,11,.065)',
+    border: 'rgba(245,158,11,.18)',
     icon: '⚠️',
   },
   error: {
     color: '#991b1b',
-    bg: '#fef2f2',
-    border: '#fca5a5',
+    bg: 'rgba(239,68,68,.06)',
+    border: 'rgba(239,68,68,.17)',
     icon: '❌',
   },
 };
