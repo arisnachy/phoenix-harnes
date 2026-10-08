@@ -144,6 +144,7 @@ export function useAuthorizationAttempt(
   // person has unlimited time to complete their login at the external provider.
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending' || !attempt.id
+      || !attempt.key.startsWith('mcp-client/')
       || attempt.url !== undefined || attempt.prompt !== undefined) return
     const id = attempt.id
     const timer = window.setTimeout(() => {
