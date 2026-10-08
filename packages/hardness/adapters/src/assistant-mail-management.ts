@@ -13,13 +13,14 @@ export type KiraMailOperation =
   | 'label_add' | 'label_remove' | 'delete'
   | 'thread_trash' | 'thread_restore' | 'thread_delete'
   | 'drafts' | 'draft' | 'draft_create' | 'draft_update' | 'draft_delete' | 'draft_send'
-  | 'reply'
+  | 'reply' | 'forward' | 'attachment'
 
 export interface KiraMailOperationInput {
   readonly action: KiraMailOperation
   readonly messageId?: string
   readonly threadId?: string
   readonly draftId?: string
+  readonly attachmentId?: string
   readonly folder?: 'inbox' | 'sent' | 'all' | 'trash'
   readonly query?: string
   readonly pageToken?: string
@@ -68,7 +69,9 @@ function messageProjection(raw: unknown, authorized: ReadonlySet<string>, full =
   let address = ''
   try { address = mailAddress(from) } catch { /* Malformed external sender remains untrusted. */ }
   const body = typeof v.text === 'string' && v.text.trim().length > 0 ? v.text
-    : typeof v.extracted_text === 'string' ? v.extracted_text : ''
+    : typeof v.extracted_text === 'string' ? v.extracted_text
+      : typeof v.extracted_html === 'string' ? v.extracted_html.replace(/<[^>]+>/gu, ' ')
+        : typeof v.html === 'string' ? v.html.replace(/<[^>]+>/gu, ' ') : ''
   const attachments = Array.isArray(v.attachments) ? v.attachments.slice(0, 25).map((a) => {
     const item = mailRecord(a)
     return {
@@ -91,6 +94,10 @@ function messageProjection(raw: unknown, authorized: ReadonlySet<string>, full =
 function threadProjection(raw: unknown, authorized: ReadonlySet<string>, full = false): Record<string, unknown> {
   const v = mailRecord(raw)
   const messages = Array.isArray(v.messages) ? v.messages.slice(0, 50)
+    .filter((row) => {
+      const message = mailRecord(row)
+      return !Array.isArray(message.labels) || !message.labels.some(label => blockedLabels.has(String(label)))
+    })
     .map(row => messageProjection(row, authorized, full)) : []
   return {
     threadId: typeof v.thread_id === 'string' ? v.thread_id : '',
@@ -164,7 +171,11 @@ export async function operateKiraMail(config: KiraMailManagementConfig,
   }
   if (input.action === 'list' || input.action === 'search') {
     const params = listQuery()
-    if (input.action === 'search') params.set('q', mailString(boundedId(input.query, 'query'), 256))
+    if (input.action === 'search') {
+      const q = mailString(boundedId(input.query, 'query'), 256)
+      if (q.trim().length < 2) throw new Error('AgentMail search query requires at least two characters')
+      params.set('q', q)
+    }
     const path = input.action === 'search' ? '/messages/search' : '/messages'
     const data = mailRecord(await request(`${path}?${params}`))
     if (!Array.isArray(data.messages)) throw new Error('AgentMail returned invalid message listing')
@@ -183,7 +194,11 @@ export async function operateKiraMail(config: KiraMailManagementConfig,
   }
   if (input.action === 'threads' || input.action === 'search_threads') {
     const params = listQuery()
-    if (input.action === 'search_threads') params.set('q', mailString(boundedId(input.query, 'query'), 256))
+    if (input.action === 'search_threads') {
+      const q = mailString(boundedId(input.query, 'query'), 256)
+      if (q.trim().length < 2) throw new Error('AgentMail thread search requires at least two characters')
+      params.set('q', q)
+    }
     const path = input.action === 'search_threads' ? '/threads/search' : '/threads'
     const data = mailRecord(await request(`${path}?${params}`))
     if (!Array.isArray(data.threads)) throw new Error('AgentMail returned invalid threads listing')
@@ -244,6 +259,47 @@ export async function operateKiraMail(config: KiraMailManagementConfig,
     const dedupe = `phoenix-draft-${createHash('sha256').update(id).digest('hex')}`
     const delivered = mailRecord(await request(`/drafts/${pathId(id)}/send`, 'POST', {}, dedupe))
     return { action: 'draft_send', state: 'sent', to: recipients[0],
+      messageId: mailString(delivered.message_id), threadId: mailString(delivered.thread_id) }
+  }
+  if (input.action === 'attachment') {
+    const id = boundedId(input.messageId, 'message_id')
+    const attachmentId = boundedId(input.attachmentId, 'attachment_id')
+    const parent = mailRecord(await request(`/messages/${pathId(id)}`))
+    if (Array.isArray(parent.labels)
+      && parent.labels.some(label => blockedLabels.has(String(label)))) {
+      throw new Error('Attachment belongs to blocked, spam or unauthenticated mail')
+    }
+    const data = mailRecord(await request(
+      `/messages/${pathId(id)}/attachments/${pathId(attachmentId)}`))
+    const downloadUrl = mailString(data.download_url, 4096)
+    const parsed = new URL(downloadUrl)
+    if (parsed.protocol !== 'https:') throw new Error('AgentMail attachment URL must use HTTPS')
+    return {
+      action: 'attachment', attachmentId, messageId: id, downloadUrl,
+      expiresAt: typeof data.expires_at === 'string' ? data.expires_at : undefined,
+      filename: typeof data.filename === 'string' ? data.filename.slice(0, 255) : undefined,
+      contentType: typeof data.content_type === 'string' ? data.content_type : undefined,
+      size: typeof data.size === 'number' ? data.size : undefined,
+      transientPrivateUrl: true,
+    }
+  }
+  if (input.action === 'forward') {
+    const id = boundedId(input.messageId, 'message_id')
+    const recipient = mailAddress(boundedId(input.to, 'to'))
+    if (!authorized.has(recipient)) throw new Error('Forward recipient is not owner-authorized')
+    if (input.confirmation !== 'REENVIAR MENSAJE' || input.idempotencyKey === undefined) {
+      throw new Error('Forward needs explicit owner request and a stable chat call identity')
+    }
+    const original = mailRecord(await request(`/messages/${pathId(id)}`))
+    if (Array.isArray(original.labels)
+      && original.labels.some(label => blockedLabels.has(String(label)))) {
+      throw new Error('Cannot forward blocked, spam or unauthenticated messages')
+    }
+    const delivered = mailRecord(await request(`/messages/${pathId(id)}/forward`, 'POST', {
+      to: [recipient],
+      ...(input.text === undefined ? {} : { text: mailString(input.text, 64_000) }),
+    }, input.idempotencyKey))
+    return { action: 'forward', state: 'sent', to: recipient,
       messageId: mailString(delivered.message_id), threadId: mailString(delivered.thread_id) }
   }
   if (input.action === 'reply') {
