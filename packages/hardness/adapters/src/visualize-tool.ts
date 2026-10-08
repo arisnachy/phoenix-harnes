@@ -85,9 +85,9 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
         && Array.isArray(spec.columns) && (Array.isArray(spec.rows) || Array.isArray(spec.data)))
       if (table) {
         const rows = Array.isArray(spec.rows) ? spec.rows : Array.isArray(spec.data) ? spec.data : []
-        const populated = rows.some(row => {
+        const populated = rows.some((row) => {
           const values: unknown[] = Array.isArray(row) ? row
-            : typeof row === 'object' && row !== null ? Object.values(row) : []
+            : typeof row === 'object' && row !== null ? Object.values(row as Record<string,unknown>) : []
           return values.some(cell => cell !== null && cell !== undefined
             && (typeof cell !== 'string' || cell.trim().length > 0))
         })
