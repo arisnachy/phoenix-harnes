@@ -2290,7 +2290,11 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     if (/dynamic client registration|client registration|invalid_client|registration not supported/i.test(message)) {
       return 'El MCP rechazó el registro del cliente OAuth. Este proveedor puede requerir un client ID/secret registrados y una URI de retorno autorizada.'
     }
-    if (/ENOTFOUND|ECONNREFUSED|ETIMEDOUT|fetch failed|certificate|network error/i.test(message)) {
+    if (error instanceof Error && (error.name === 'TimeoutError'
+      || /ETIMEDOUT|timed out|timeout|operation was aborted due to timeout/i.test(message))) {
+      return 'El proveedor MCP agotó el tiempo de respuesta durante la preparación OAuth. Revisa la URL remota y su disponibilidad; Phoenix no recibió la página de inicio de sesión.'
+    }
+    if (/ENOTFOUND|ECONNREFUSED|fetch failed|certificate|network error/i.test(message)) {
       return 'No se pudo contactar al proveedor MCP para iniciar OAuth. Comprueba la URL, red, DNS y certificados; el navegador no recibió una URL de autorización.'
     }
     return typeof code === 'string' && /^(?:NO_FLOW|UNKNOWN_METHOD|ALREADY_IN_FLIGHT|NOT_COMMITTED)$/.test(code)
