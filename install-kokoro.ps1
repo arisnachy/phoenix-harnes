@@ -102,7 +102,7 @@ try {
     & $base.Exe @pythonArgs -m venv $venv
     if ($LASTEXITCODE -ne 0) { throw 'Python could not create the Kokoro environment.' }
   }
-  & $python -m pip install --disable-pip-version-check --no-input --prefer-binary 'kokoro-onnx' 'misaki-fork[en]' | Out-Null
+  & $python -m pip install --disable-pip-version-check --no-input --prefer-binary 'kokoro-onnx' 'misaki-fork[en]' 'phonemizer-fork' 'espeakng-loader' | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'Kokoro dependencies could not be installed.' }
   Ensure-ModelFile $model 'kokoro-v1.0.onnx' 60000000
   Ensure-ModelFile $voices 'voices-v1.0.bin' 1000000
