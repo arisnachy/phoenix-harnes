@@ -146,6 +146,11 @@ export async function operateKiraMail(config: KiraMailManagementConfig,
     if (isActive(id)) throw new Error('Cannot modify or delete a message while its Kira mail task is unfinished')
   }
   const guardThread = async (id: string): Promise<void> => {
+    // The local journal remains authoritative if AgentMail omits message details
+    // from a long or partially fetched thread.
+    if (jobs.some(job => job.message.threadId === id && unfinished.has(job.state))) {
+      throw new Error('Cannot modify a thread with unfinished Kira mail tasks')
+    }
     const row = mailRecord(await request(`/threads/${encodeURIComponent(id)}`))
     if (!Array.isArray(row.messages)) throw new Error('Cannot safely inspect thread messages before deletion')
     if (row.messages.some(message => isActive(mailString(mailRecord(message).message_id)))) {
