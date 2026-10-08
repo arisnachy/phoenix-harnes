@@ -390,16 +390,16 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('keeps heavy cleanup off the Host startup and update-handoff paths', () => {
-    const boot = source.slice(
-      source.indexOf('recoverStaleStagingIndexLock()\\nrestoreActiveRuntime()'),
-      source.indexOf('let watcherSupervisor = superviseWatcher()'),
-    )
+    const bootStart = source.indexOf('recoverStaleStagingIndexLock()\nrestoreActiveRuntime()')
+    const bootEnd = source.indexOf('let watcherSupervisor = superviseWatcher()')
+    expect(bootStart).toBeGreaterThanOrEqual(0)
+    expect(bootEnd).toBeGreaterThan(bootStart)
+    const boot = source.slice(bootStart, bootEnd)
     expect(boot).not.toContain('cleanupObsoleteRuntimes()')
     expect(source).not.toContain("if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()")
-    expect(source).not.toContain('clearActiveRuntime()\\n    cleanupObsoleteRuntimes()')
-    expect(source).toContain('if (Date.now() >= nextStorageSweepAt) {\\n      cleanupObsoleteRuntimes()')
+    expect(source).not.toContain('clearActiveRuntime()\n    cleanupObsoleteRuntimes()')
+    expect(source).toContain('if (Date.now() >= nextStorageSweepAt) {\n      cleanupObsoleteRuntimes()')
     expect(source).toContain('cleanupObsoleteRuntimes([runtimeRoot])')
     expect(source).toContain("PHOENIX_MCP_BACKGROUND_STARTUP: process.env.PHOENIX_MCP_BACKGROUND_STARTUP ?? '1'")
   })
-
 })
