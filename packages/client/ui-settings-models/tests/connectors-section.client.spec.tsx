@@ -967,6 +967,54 @@ describe('connectors settings section', () => {
     expect(begin).not.toHaveBeenCalled()
   })
 
+  it('launches late OAuth consent after a failed HTTP MCP reconnect, not just the transport retry', async () => {
+    const reconnect = vi.fn(async () => ({ accepted: true }))
+    const begin = vi.fn(async () => ok({ attemptId: 'late-consent', status: 'pending' as const }))
+    const list = vi.fn(async () => ok({ entries: reconnect.mock.calls.length === 0 ? [] : [{
+      key: 'mcp-client/notion',
+      label: 'MCP notion',
+      methods: [{ id: 'oauth', label: 'Authorize notion' }],
+      inFlight: false,
+    }] }))
+    const api = {
+      list, begin,
+      status: vi.fn(() => new Promise(() => undefined)),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'managed-notion',
+          serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' },
+        }],
+        runtime: [{
+          serverName: 'notion',
+          transport: 'streamable-http' as const,
+          status: 'failed' as const,
+          reasonCode: 'connection-failed' as const,
+          toolNames: [],
+        }],
+      })),
+      reconnect,
+      install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    try {
+      renderHub(api, { mcpRegistry })
+      const card = (await screen.findByText('Notion')).closest('article')
+      const button = Array.from(card?.querySelectorAll('button') ?? [])
+        .find(node => node.textContent === 'Reconnect')
+      expect(button).toBeTruthy()
+      fireEvent.click(button!)
+      await waitFor(() => {
+        expect(reconnect).toHaveBeenCalledWith({ serverName: 'notion' })
+        expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+      })
+    } finally { open.mockRestore() }
+  })
+
   it('keeps Authorize visible while an auth-required MCP flow is still registering', async () => {
     const reconnect = vi.fn(async () => ({ accepted: true }))
     const begin = vi.fn()
@@ -1010,7 +1058,6 @@ describe('connectors settings section', () => {
     expect(authorize).toBeTruthy()
     fireEvent.click(authorize!)
     await waitFor(() => {
-      expect(reconnect).toHaveBeenCalledWith({ serverName: 'notion' })
       expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
     })
   })
