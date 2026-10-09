@@ -15,6 +15,8 @@ export interface FreeSearchProviderOptions {
 
 const DEFAULT_ENGINES: readonly FreeSearchEngine[] = ['bing', 'duckduckgo']
 const DEFAULT_TIMEOUT_MS = 8_000
+const ENGINE_COOLDOWN_MS = 5 * 60_000
+const SEARCH_CHALLENGE = /captcha|verify (?:you are|that you're) human|unusual traffic|robot check|automated queries|prove you are human|attention required/i
 
 /** Stable provider id used by `ctx.web`. */
 export const FREE_SEARCH_PROVIDER_ID = 'free-html'
@@ -25,6 +27,7 @@ export class FreeSearchProvider implements WebSearchProvider {
   private readonly engines: readonly FreeSearchEngine[]
   private readonly timeoutMs: number
   private readonly fetcher: FreeSearchFetcher
+  private readonly blockedUntil = new Map<FreeSearchEngine, number>()
 
   constructor(options: FreeSearchProviderOptions = {}) {
     this.engines = options.engines ?? DEFAULT_ENGINES
@@ -41,10 +44,22 @@ export class FreeSearchProvider implements WebSearchProvider {
     if (signal?.aborted === true) throw signal.reason ?? new WebError('web search was aborted', 'WEB_SEARCH_ABORTED')
 
     for (const engine of this.engines) {
+      if ((this.blockedUntil.get(engine) ?? 0) > Date.now()) continue
       const response = await this.fetchEngine(engine, request.query, signal)
-      if (!response.ok) continue
-      const sources = engine === 'bing' ? parseBing(await response.text()) : parseDuckDuckGo(await response.text())
+      if (!response.ok) {
+        if ([202, 403, 429, 500, 502, 503, 504, 599].includes(response.status)) {
+          this.blockedUntil.set(engine, Date.now() + ENGINE_COOLDOWN_MS)
+        }
+        continue
+      }
+      const html = await response.text()
+      if (SEARCH_CHALLENGE.test(html)) {
+        this.blockedUntil.set(engine, Date.now() + ENGINE_COOLDOWN_MS)
+        continue
+      }
+      const sources = engine === 'bing' ? parseBing(html) : parseDuckDuckGo(html)
       if (sources.length > 0) {
+        this.blockedUntil.delete(engine)
         return {
           sources: capSources(sources, request.maxResults),
           truncated: request.maxResults !== undefined && sources.length > request.maxResults,
