@@ -434,6 +434,36 @@ describe('connectors settings section', () => {
     expect(api.begin).not.toHaveBeenCalled()
   })
 
+  it('offers GitHub PAT setup instead of an OAuth URL for a broken remote MCP', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'github-pat' }))
+    const api = { list: vi.fn(async () => ok({ entries: [{
+      key: 'mcp-client/github', label: 'MCP github', inFlight: false,
+      stored: { kind: 'grant' as const },
+      methods: [{ id: 'credentials', label: 'Configure github token' }],
+    }] })),
+      begin, status: vi.fn(async () => ok({
+        attemptId: 'github-pat', status: 'pending', nextSeq: 0, notices: [],
+      })), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [{ entryId: 'git-1',
+        serverName: 'github', url: 'https://api.githubcopilot.com/mcp/',
+        source: { kind: 'curated' as const, connectorId: 'github' },
+      }], runtime: [{ serverName: 'github', transport: 'streamable-http' as const,
+        status: 'failed' as const, toolNames: [] }] })),
+      search: vi.fn(), install: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    await waitFor(() => expect(card.textContent).toContain('Configurar token GitHub'))
+    expect(card.textContent).toContain('no admite registro OAuth dinámico')
+    const button = Array.from(card.querySelectorAll('button'))
+      .find(item => item.textContent === 'Configurar token GitHub')
+    fireEvent.click(button!)
+    await waitFor(() => expect(begin).toHaveBeenCalledWith({
+      key: 'mcp-client/github', method: 'credentials',
+    }))
+  })
+
   it('never mistakes a github-copilot runtime for the GitHub repository MCP', async () => {
     const api = {
       list: vi.fn(async () => ok({ entries: [{

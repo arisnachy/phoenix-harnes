@@ -387,6 +387,52 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     }), 'mcp-client.credential-flow')
   }
 
+  // The GitHub remote MCP (and some custom Streamable HTTP servers) does not
+  // support OAuth Dynamic Client Registration. A configured vault-backed Bearer
+  // is the supported default for a custom host. Register a real credential
+  // prompt under the same MCP identity, without creating an OAuth controller.
+  if (config.transport === 'streamable-http' && config.bearerTokenRef !== undefined
+    && authorization !== undefined && credentials !== undefined && config.oauth === false) {
+    const bearerRef = credentialRef(config.bearerTokenRef)
+    const authorizationKey = credentialKey('mcp-client',
+      config.serverName.toLowerCase().replaceAll('_', '-'))
+    ctx.effect(() => authorization.registerFlow({
+      key: authorizationKey,
+      label: `MCP ${config.serverName}`,
+      methods: [{ id: 'credentials', label: `Configure ${config.serverName} token` }],
+      inspect: async () => {
+        const stored = await credentials.describe(bearerRef)
+        const lifecycle = mcpConnectors?.list().find(entry => entry.serverName === config.serverName)
+        if (!stored.configured || lifecycle?.status === 'auth-required'
+          || lifecycle?.status === 'failed' || lifecycle?.status === 'disconnected'
+          || (lifecycle?.status === 'ready' && lifecycle.toolNames.length === 0)) return undefined
+        return { kind: 'account', provider: `MCP ${config.serverName}`, accountType: 'apiKey' }
+      },
+      disconnect: async () => {
+        const stored = await credentials.describe(bearerRef)
+        if (stored.configured && stored.writable) await credentials.unset(bearerRef)
+        await credentials.deleteRecord(authorizationKey)
+        connection.reconnect()
+      },
+      run: async (session) => {
+        // Always allow replacement: the previous token may be revoked or lack
+        // scopes even when the credential record is still populated.
+        const token = (await session.prompt({
+          kind: 'secret',
+          message: config.serverName === 'github'
+            ? 'Introduce un token personal de GitHub (fine-grained PAT) con permisos para los repositorios necesarios. PHOENIX lo guarda exclusivamente en su vault local y lo usa solo con GitHub MCP.'
+            : `Introduce el token Bearer para ${config.serverName}. Se guardará únicamente en el vault local.`,
+          placeholder: String(bearerRef),
+        })).trim()
+        if (token.length === 0 || token.length > 8192) throw new Error('Invalid Bearer token')
+        await credentials.set(bearerRef, token)
+        await credentials.modifyRecord(authorizationKey,
+          () => Promise.resolve({ kind: 'api-key' as const }))
+        connection.reconnect()
+      },
+    }), 'mcp-client.bearer-credential-flow')
+  }
+
   if (oauthController !== undefined && authorization !== undefined && credentials !== undefined) {
     const controller = oauthController
     ctx.effect(() => authorization.registerFlow({
