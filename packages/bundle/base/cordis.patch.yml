@@ -627,8 +627,10 @@
     - id: web
       name: '@phoenix-ai/dsh-web'
       config:
-        searchProvider: openrouter
-        searchFallbackProviders: [free-html]
+        # Keyless first: never spend paid OpenRouter credits on unattended research.
+        # OpenRouter remains available for explicit user selection when configured.
+        searchProvider: free-html
+        searchFallbackProviders: []
         fetchProvider: http
 
     - id: web-search-openrouter
@@ -636,8 +638,8 @@
       config:
         apiKeyEnv: OPENROUTER_API_KEY
 
-    # Keyless fallback: uses public HTML search endpoints when the paid route
-    # fails recoverably (quota, credits, rate limit, auth, timeout, or outage).
+    # Default keyless search: blocked engines cool down instead of retrying.
+    # Direct official-source fetch remains available during outages.
     - id: web-search-free
       name: '@phoenix-ai/dsh-web-search-free'
       config:
