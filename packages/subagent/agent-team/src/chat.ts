@@ -407,7 +407,7 @@ export class TeamChat {
       const rows = this.messages(root)
       const addressed = rows.find(row => row.id === request.messageId)
       if (addressed === undefined || addressed.senderKind !== 'user' || addressed.missionId !== root.id
-        || !addressed.deliveries?.some(item => item.targetId === actor.id && item.accepted)) throw new Error('user request was not accepted by this actor')
+        || !addressed.deliveries?.some(item => item.targetId === actor.id && item.accepted)) throw new Error('team_chat_answer requires an accepted, user-authored directed question. To send evidence or a review to Kira, use send_message target=lead purpose=review/result or blocker; do not retry team_chat_answer for a peer handoff.')
       if (!isConversationalTeamUserRequest(addressed.text)) throw new Error('operational requests require execution evidence, not a conversational answer')
       if (answerNeedsEvidence(request.text)) {
         const original = teamExecutionProof(actor.session.events)

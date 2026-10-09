@@ -17,6 +17,7 @@ export type McpConnectorStatus = 'starting' | 'ready' | 'disconnected' | 'failed
 /** Stable reason codes for an MCP lifecycle state. */
 export type McpConnectorReasonCode =
   | 'connection-failed'
+  | 'endpoint-not-found'
   | 'connection-lost'
   | 'authorization-required'
   | 'retry-exhausted'

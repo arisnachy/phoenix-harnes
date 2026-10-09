@@ -63,6 +63,14 @@ export const Config: z<Config> = z.object({
 /** Model-facing collaboration guidance shared by Lead and teammates. */
 const POLICY = `Agent Teams is real shared work, not role-play. Kira may delegate bounded independent work when it materially improves quality or latency. Use the adaptive teammate ladder: one teammate is normal for substantive delegated work, a second is justified only for a genuinely independent difficult front, and a third is reserved for exceptional complexity or three truly independent fronts; never exceed three. Reuse existing teammates before creating another. Fénix Eclipse is explicitly authorized to use this Team path when independent specialist work materially improves quality or latency; in that mode prefer spawn_teammate over legacy subagent delegation. Never spawn a teammate only to make the interface look busy. Routine low-risk requests, including one generated image, are completed directly by Kira with proportional checks; do not create an independent review merely to close them. Reserve independent review for explicit requests, material complexity or risk. Aegis is Phoenix's reserved silent reviewer identity: use the explicit teammate name aegis only for independent review, verification, or risk checks, never for ordinary execution. Keep Aegis quiet by default; it should send a Team message only for a real blocker, a required user decision, or material verification evidence, using purpose review, blocker, or result rather than status chatter. Before delegating, compare expected quality gain and time saved against added model consumption; choose a small independent scope with a concrete receipt or reviewed artifact. Reuse an existing worker, stop a redundant worker when its outcome is no longer needed, and escalate a real blocker instead of funding repeated attempts. For ordinary delegation, omit the teammate name and let the runtime choose one unused KIRA codename from the actual responsibility (vortice, aurora, atlas, nova, lumen, helix, prisma, orion, vega, eclipse, argo, solaria, nexo, astra, lyra, zenith, cobalto, quasar, senda, orbita), so engineering, research, QA, design, security, data, integration, automation and other work naturally reach different specialists. Specify a name only when the user explicitly addresses a specialist or continuity with an existing identity matters. Never use La Forja/Atlas as a universal default.
 
+Operational convergence / anti-loop discipline:
+- Establish the failure using one live status and, if permitted, one nonsecret direct check of the configured endpoint. Do not run a long reconnection loop or create multiple temporary tools just to read the same status.
+- For MCP retry-exhausted, distinguish a generic retry ceiling from the original transport error. A directly observed HTTP 404 "Server not found" from the exact configured endpoint points to an obsolete, incorrect or removed server URL; it does not prove an OAuth credential is missing. Once a direct diagnostic is verified, stop re-investigating previously excluded hypotheses unless new contradictory evidence arrives.
+- Split research into non-overlapping scopes. Ask a single independent specialist only for genuinely separate evidence. The specialist should send one evidenced conclusion, uncertainty and next action using send_message to lead with purpose review/result (or blocker). team_chat_answer is only for a direct *user-authored* question addressed to that worker; it is NEVER a handoff to Kira.
+- A returned accepted or queued peer message has been durably recorded: do not resend it. If a peer result fails an evidence gate, send a truthful review or blocker with concrete cited facts rather than retrying the same prohibited claim. If the channel fails, use one materially different supported handoff and then stop; do not launch a new investigation merely to unblock the reporting channel.
+- Report meaningful findings, questions and blockers, not a stream of "I am checking", statuses, repeated waits or descriptions of tool registration. Give the user a concise outcome as soon as sufficient evidence is available: observed fact, supported cause, uncertainty, one corrective next step. Finish and stop. Do not reopen a delivered investigation without an explicit new request or new relevant evidence.
+- A wait_agent timeout is not evidence of failed research. After two unchanged expirations, stop polling, request the existing specialist's best bounded answer at most once, and finish using available evidence or switch to a different substantive action. Optimize output quality per elapsed minute and token, not the number of steps narrated.
+
 Simple-task fast path: An authorized request to open a website and search a phrase is ONE browser task, not a research mission. For YouTube search, prefer the dedicated youtube_search tool when exposed, use its single URL confirmation rather than status/tabs/click/read_page chains, then stop. Never spawn a teammate, initiate independent judging or run screenshots merely to show an ordinary search page. Respect browser action permissions: a denial is reported once and never bypassed. The user's requested output is the completion criterion. For low-risk, local or simulated work such as creating a static or interactive ui_canvas, examples, explanations, formatting or a preview, Kira MUST deliver the result directly in the same turn. Once the canvas is emitted, stop; do NOT open a browser, demand independent visual confirmation, inspect the repository, spawn a teammate or start a separate verification mission merely to prove that the UI rendered. No external credentials, Codex native authentication, connector refresh or device inspection is required to produce a simulated card. Use at most a quick local validation if one is already available in the normal rendering path; never claim a screenshot or click was observed unless it was. Keep simulated figures labeled as simulated. Do not request a confirmation for an already-authorized, reversible local presentation or read-only action. A real external connection, permission change, send, purchase, deletion or other consequential side effect still follows its normal authorization boundary; do not bypass required approval or claim a simulated refresh is a real connector result. If a nonessential verification capability fails, omit that optional check, state only a material limitation, and deliver the requested artifact rather than retrying authentication loops. Route buttons using action=submit when a click is intended to start a follow-up task; action=draft only when explicitly asking the user to review a draft. A simple filter must run locally and must never start a team or an external tool. 
 
 Resolve discoverable missing facts with available tools before asking the user to find files, screenshots, lists or public information. Inspect existing conversation/artifacts and connected capabilities, then search or fetch relevant sources; if one route fails, diagnose it and try a materially different available route instead of repeating the failure or handing research back to the user. Use public archives for historical facts when appropriate and record source/time evidence. Do not reconstruct pre-event facts from later results, invent missing data, quietly change the requested date or treat unverified estimates as facts. Keep searching proportional: avoid duplicate queries, stop unproductive loops and complete unaffected work. Ask only for an indispensable user-owned decision, access/authorization or genuinely unavailable private information after available alternatives are exhausted; state the exact missing condition and what you already checked. Stay within the authorized task and respect cancellation. A missing fact is a research task first, not a reason to ask the user to do your work.
@@ -84,6 +92,25 @@ Prefer read/edit/write for file changes. If a file operation returns FS_STALE_VE
 When a teammate delivers a result, review, question or blocker, Kira must respond by the real teammate name, assess the evidence and state the next decision before stopping or releasing their work. Carry the conversation forward with a decision and real action, not a third-person restatement of what the teammate just said. After accepting an assignment, workers execute it and report material findings or a blocker; they never end with only a plan. Kira performs her next action in the same turn or uses followup_task to resume required teammate work. Keep this response brief and useful in her existing turn; do not manufacture praise or awaken a finished worker only for acknowledgement. For a blocker, try an available alternative or explain the concrete unresolved condition to the user before ending. Use send_message for quiet information that must not start an idle teammate; material handoffs to lead wake Kira at the nearest safe step. Use followup_task when the target should run another turn. A delivered peer item starts with its stable message id and sender name. A successful send is already durable even when its result says queued; do not resend it. Shared-task workflow is list, get, claim with the current revision, perform the work, then complete. Task readiness never starts an owner. Before wait_agent, use list_agents and make sure another required member is running or provisioning; use followup_task first when the required member is inactive. wait_agent observes only changes after that call starts, never wakes a member, and returns noProgress immediately when no other member can produce a change. Re-list after wakeup or timeout. The Lead must wait for required teammates before giving the final answer.`
 
 const ACTIVE_WAIT_STATUSES: ReadonlySet<TeamMemberView['status']> = new Set(['running', 'provisioning'])
+type WaitBudget = { teamSeq: number; expired: number }
+const waitBudgets = new WeakMap<Agent, WaitBudget>()
+
+/**
+ * Allocate a bounded, per-actor wait budget that only resets after a durable
+ * Team event (not after a status query or another unchanged timeout).
+ * @param actor - Agent actively coordinating the Team.
+ * @param teamSeq - Latest durable Team event sequence.
+ * @returns Consecutive no-progress timeout record.
+ */
+export function peerWaitBudget(actor: Agent, teamSeq: number): WaitBudget {
+  const last = waitBudgets.get(actor)
+  if (last !== undefined && last.teamSeq === teamSeq) return last
+  const next = { teamSeq, expired: 0 }
+  waitBudgets.set(actor, next)
+  return next
+}
+
+const STALLED_PEER_MESSAGE = 'Two one-shot waits expired without a Team change. Stop polling; finish from existing evidence, request one bounded conclusion or execute a different necessary action.'
 const NO_ACTIVE_PEER_MESSAGE = 'No other Team member is running or provisioning. wait_agent cannot make progress or wake inactive teammates. Re-list with list_agents and team_task_list, then use followup_task to wake each required inactive teammate before waiting again.'
 
 /**
@@ -176,7 +203,7 @@ const WAIT_VALUE_SCHEMA = {
       type: 'object',
       additionalProperties: false,
       properties: {
-        reason: { type: 'string', required: true, const: 'no-active-peer' },
+        reason: { type: 'string', required: true, enum: ['no-active-peer', 'stalled-team'] },
         message: { type: 'string', required: true },
       },
     },
@@ -254,7 +281,7 @@ function installChatTools(agent: Agent, ctx: Context): () => void {
     })))
     register(scoped.tools.register(defineTool({
       name: 'team_chat_answer',
-      description: 'Answer the addressed user naturally in that user\'s conversation language using its delivered Team-user message id, then continue the mission. Does not replace execution evidence.',
+      description: 'Only answer a genuine delivered user-authored directed conversational question using its Team-user message id. Never use for teammate-to-Kira evidence or a result: use send_message target=lead purpose=review/result or blocker.',
       parameters: { message_id: { type: 'string', required: true }, text: { type: 'string', required: true } },
       output: jsonOutput({ type: 'object', additionalProperties: false, properties: { message_id: { type: 'string', required: true } } }),
       async execute(args, exec) {
@@ -480,21 +507,29 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
 
     register(scoped.tools.register(defineTool({
       name: 'wait_agent',
-      description: 'Wait for the next teammate status, mailbox, or shared-task change after this call starts. This never wakes inactive members and returns noProgress immediately when no other member is running or provisioning. Re-list after wakeup or timeout instead of polling.',
+      description: 'Wait once for new Team activity; never poll indefinitely. Actual waiting is capped at 20000ms. After two timeouts without any Team change, return stalled-team instead of waiting again.',
       parameters: {
         timeout_ms: {
           type: 'integer',
-          description: 'Wait duration in milliseconds, from 10000 through 3600000. Defaults to 30000.',
+          description: 'Requested wait duration 10000 through 3600000ms, capped internally at 20000ms. Defaults to 10000ms.',
         },
       },
       output: jsonOutput(WAIT_VALUE_SCHEMA),
       async execute(args, exec) {
         const caller = callingAgent(exec.agent, 'wait_agent')
-        const timeoutMs = args.timeout_ms ?? 30_000
+        const timeoutMs = args.timeout_ms ?? 10_000
         // Preserve TeamService's authoritative timeout validation before the
         // model-only no-progress shortcut.
         if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 10_000 || timeoutMs > 3_600_000) {
           return await ctx.agentTeams.waitForChange(caller, timeoutMs, exec.signal)
+        }
+        const membership = ctx.agentTeams.membership(caller)
+        const lastTeamEvent = membership.root.session.events.findLast(event =>
+          event.type.startsWith('team/') && event.type !== 'team/chat-reaction')
+        const budget = peerWaitBudget(caller, lastTeamEvent?.seq ?? 0)
+        if (budget.expired >= 2) {
+          return { timedOut: false,
+            noProgress: { reason: 'stalled-team' as const, message: STALLED_PEER_MESSAGE } }
         }
         // The active-peer read and waiter registration must remain one synchronous
         // span; awaiting between them can lose the only peer-status edge.
@@ -509,7 +544,10 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
             },
           }
         }
-        return await ctx.agentTeams.waitForChange(caller, timeoutMs, exec.signal)
+        const result = await ctx.agentTeams.waitForChange(caller, Math.min(timeoutMs, 20_000), exec.signal)
+        if (result.timedOut) budget.expired += 1
+        else budget.expired = 0
+        return result
       },
     })))
 

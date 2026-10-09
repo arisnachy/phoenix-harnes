@@ -81,8 +81,15 @@ function httpStatus(error: unknown): number | undefined {
 }
 
 function failureStatus(error: unknown): { status: McpConnectorStatus; reasonCode: McpConnectorReasonCode } {
-  if (error instanceof UnauthorizedError || httpStatus(error) === 401 || httpStatus(error) === 403) {
+  const statusCode = httpStatus(error)
+  if (error instanceof UnauthorizedError || statusCode === 401 || statusCode === 403) {
     return { status: 'auth-required', reasonCode: 'authorization-required' }
+  }
+  // An existing endpoint responding 404/410 is not a transient network
+  // failure. Preserve this safe diagnostic code instead of spending the full
+  // exponential retry budget and obscuring the root cause.
+  if (statusCode === 404 || statusCode === 410) {
+    return { status: 'failed', reasonCode: 'endpoint-not-found' }
   }
   return { status: 'failed', reasonCode: 'connection-failed' }
 }
@@ -234,7 +241,19 @@ export function startConnection(
     // the actionable `auth-required` state with `retry-exhausted` and hide the
     // reason the connector is down. Committing a grant calls reconnect(), which
     // is the only transition that can succeed from here.
-    if (status?.status === 'auth-required') return
+    if (status?.status === 'auth-required' || status?.reasonCode === 'endpoint-not-found') {
+      // A resolved 404/410 endpoint cannot be repaired by repeated reconnects;
+      // also unregister any tools left from a previously healthy generation.
+      if (status.reasonCode === 'endpoint-not-found') {
+        syncChain = syncChain.then(() => {
+          for (const dispose of disposers.values()) dispose()
+          disposers = new Map()
+          publishTools?.([])
+        })
+        ctx.logger.warn(`${label}: configured MCP endpoint responded 404/410; verify its URL or hosted server before retrying`)
+      }
+      return
+    }
     scheduleReconnect()
   }
 
