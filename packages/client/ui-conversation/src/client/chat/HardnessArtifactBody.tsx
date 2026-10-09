@@ -5,6 +5,7 @@ import type { RenderMessageImages } from '../contract/slots.ts'
 import styles from './HardnessArtifactNodeView.module.css'
 import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.tsx'
 import { Scene3DView } from './Scene3DView.tsx'
+import { auditGameHtml } from './game-studio-quality.ts'
 
 interface ArtifactBodyProps {
   readonly mime: string
@@ -393,6 +394,22 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
   return <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
 }
 
+function GameStudioPreview({ html, title }: { readonly html: string; readonly title: string }) {
+  const audit = useMemo(() => auditGameHtml(html), [html])
+  return (
+    <div className={styles.stack} data-phoenix-game-studio="true"
+      data-game-preflight={audit.valid ? 'pass' : 'needs-repair'}>
+      <div role="status" aria-label="Game Studio audit">
+        <strong>Game Studio · {audit.valid ? 'structural preflight passed' : 'review required'}</strong>
+        <p className={styles.note}>{audit.summary}. Not a gameplay test.</p>
+        {audit.issues.length > 0 && <p className={styles.note}>Issues: {audit.issues.join(', ')}</p>}
+        {audit.warnings.length > 0 && <p className={styles.note}>Review: {audit.warnings.join(', ')}</p>}
+      </div>
+      <MiniApp html={html} title={title} executable />
+    </div>
+  )
+}
+
 function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
   readonly record: JsonRecord
   readonly mime: string
@@ -444,9 +461,11 @@ export function HardnessArtifactBody({ mime, data, expanded, title, executable =
       return url === undefined ? <p className={styles.note}>Page preview URL was rejected.</p> : <WebPagePreview url={url} title={title} />
     }
     if (mime === 'text/html'
+      || mime === 'application/vnd.phoenix.game+html'
       || mime === 'application/vnd.hardness.app+html'
       || mime === 'application/vnd.phoenix.canvas+html') {
       const pageUrl = safeWebPreviewUrl(data)
+      if (mime === 'application/vnd.phoenix.game+html') return <GameStudioPreview html={data} title={title} />
       if (pageUrl !== undefined && !data.includes('<')) return <WebPagePreview url={pageUrl} title={title} />
       return <MiniApp html={data} title={title} executable={executable} />
     }
