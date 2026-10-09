@@ -173,16 +173,16 @@ describe('installModelSelection()', () => {
     const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
 
     const autoAssembly = await ctx.systemPrompt.assemble()
-    expect(autoAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate', 'codex_auto_review'])
+    expect(autoAssembly.tools.map(tool => tool.name).sort()).toEqual(['codex_auto_review', 'read', 'spawn_teammate'])
     expect(selection.assembledToolCount).toBe(3)
 
     selection.current = { provider: 'openai-codex', model: 'gpt-6-luna' }
     const explicitAssembly = await ctx.systemPrompt.assemble()
-    expect(explicitAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate', 'codex_auto_review'])
+    expect(explicitAssembly.tools.map(tool => tool.name).sort()).toEqual(['codex_auto_review', 'read', 'spawn_teammate'])
 
     selection.current = { provider: 'deepseek', model: 'deepseek-v4-pro' }
     const nonCodexAssembly = await ctx.systemPrompt.assemble()
-    expect(nonCodexAssembly.tools.map(tool => tool.name)).toEqual(['read', 'spawn_teammate'])
+    expect(nonCodexAssembly.tools.map(tool => tool.name).sort()).toEqual(['read', 'spawn_teammate'])
 
     dispose()
     await ctx.fiber.dispose()
