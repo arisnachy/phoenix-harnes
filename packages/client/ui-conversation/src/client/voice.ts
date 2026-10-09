@@ -92,6 +92,8 @@ interface CodexRealtimeVoiceSession {
   readonly audio: HTMLAudioElement
   /** Single authorized harness-owned speech request currently in flight. */
   activeUtterance?: PendingCodexRealtimeUtterance
+  /** Recent distinct human transcripts for this WebRTC call, not per render. */
+  readonly recentTranscripts: Map<string, number>
 }
 
 interface PendingCodexRealtimeUtterance {
@@ -408,6 +410,8 @@ export async function tryStartCodexRealtimeVoice(
     events = peer.createDataChannel('oai-events', { ordered: true })
     audio = document.createElement('audio')
     audio.autoplay = true
+    // Realtime's VAD can emit speech without a harness request. Do not play it.
+    audio.muted = true
     audio.dataset.phoenixCodexVoice = 'true'
     audio.style.display = 'none'
     document.body.append(audio)
@@ -468,7 +472,7 @@ export async function tryStartCodexRealtimeVoice(
     await peer.setRemoteDescription({ type: 'answer', sdp: result.value.answerSdp })
     if (generation !== codexRealtimeVoiceGeneration) throw new Error('start-superseded')
 
-    codexRealtimeVoiceSession = { key: sessionKey, peer, microphone, events, audio }
+    codexRealtimeVoiceSession = { key: sessionKey, peer, microphone, events, audio, recentTranscripts: new Map() }
     setVoiceAssistantActive(true)
     setVoiceAssistantListening(true)
 
@@ -567,6 +571,20 @@ function forwardCodexRealtimeUserTranscript(payload: string): void {
 
   const text = transcript?.trim()
   if (text === undefined || text === '') return
+  const session = codexRealtimeVoiceSession
+  if (session === undefined) return
+  // One VAD utterance can appear as both turn.done and transcription.completed.
+  // Deduplicate across protocols and React remounts without suppressing an
+  // intentionally repeated human command after a natural pause.
+  const normalized = normalizeEchoText(text)
+  if (normalized === '') return
+  const now = Date.now()
+  for (const [key, seenAt] of session.recentTranscripts) {
+    if (now - seenAt > 7_000) session.recentTranscripts.delete(key)
+  }
+  if (session.recentTranscripts.has(normalized)) return
+  if (isLikelyVoiceAssistantEcho(text)) return
+  session.recentTranscripts.set(normalized, now)
   handler(text)
 }
 
@@ -581,6 +599,7 @@ function updateCodexRealtimePhase(payload: string): void {
     return
   }
   if (type === 'response.created' && session.activeUtterance === undefined) {
+    session.audio.muted = true
     // Some realtime transports can start autonomous VAD replies even with
     // create_response:false. Suppress unverified "sigo en ello" narration.
     if (session.events.readyState === 'open') {
@@ -588,7 +607,13 @@ function updateCodexRealtimePhase(payload: string): void {
     }
     return
   }
+  if (type === 'response.created' && session.activeUtterance !== undefined) {
+    session.audio.muted = false
+    publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
+    return
+  }
   if (type === 'response.done') {
+    session.audio.muted = true
     delete session.activeUtterance
     publishVoiceIdle()
     // Serialize speech until the preceding audio response really finished.
@@ -742,6 +767,7 @@ export function interruptVoiceAssistantSpeech(): boolean {
     try { realtime.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* peer cleanup owns closure */ }
   }
   if (realtime !== undefined) {
+    realtime.audio.muted = true
     delete realtime.activeUtterance
     if (hadPendingRealtimeSpeech) discardCodexRealtimeUtterances(realtime.key)
   }

@@ -328,8 +328,11 @@ export function InputBar({
     if (input.phase !== 'plain' || input.draft.trim() === '') return
     voiceSubmitPendingRef.current = false
     voiceRef.current?.stop()
-    keyboard.submit('queue')
-  }, [input?.draft, input?.phase, keyboard])
+    // New spoken instructions during a running ordinary turn steer the
+    // existing harness rather than becoming another deferred queue entry.
+    // Typed messages keep their separate explicit Queue/Steer preference.
+    keyboard.submit(running && subagent === null ? 'steer' : 'queue')
+  }, [input?.draft, input?.phase, keyboard, running, subagent])
 
   // Chrome/WebKit can end a recognition segment after a response or due to a
   // browser timeout. Restart only while the user explicitly enabled hands-free

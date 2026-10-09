@@ -180,6 +180,8 @@ describe('browser voice adapter', () => {
       await expect(tryStartCodexRealtimeVoice('session-harness')).resolves.toEqual({ kind: 'started' })
       const channel = FakeDataChannel.instance
       expect(channel).toBeDefined()
+      const audio = document.querySelector<HTMLAudioElement>('[data-phoenix-codex-voice]')
+      expect(audio?.muted).toBe(true)
       channel?.onopen?.()
       const sessionUpdate = JSON.parse(String(channel?.send.mock.calls[0]?.[0])) as {
         type: string
@@ -194,6 +196,12 @@ describe('browser voice adapter', () => {
         data: JSON.stringify({
           type: 'turn.done',
           turn: { role: 'user', transcript: '  usa el harness y escribe en el chat  ' },
+        }),
+      })
+      channel?.onmessage?.({
+        data: JSON.stringify({
+          type: 'conversation.item.input_audio_transcription.completed',
+          transcript: 'usa el harness y escribe en el chat',
         }),
       })
       channel?.onmessage?.({
@@ -249,6 +257,9 @@ describe('browser voice adapter', () => {
       }
       expect(spoken.type).toBe('response.create')
       expect(spoken.response.instructions).toContain('La tarea terminó correctamente.')
+      expect(audio?.muted).toBe(true)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
+      expect(audio?.muted).toBe(false)
 
       // A second spoken event queues until the real completion of the
       // first response; Realtime rejects overlapping response.create calls.
@@ -258,6 +269,7 @@ describe('browser voice adapter', () => {
       )).toBe(true)
       expect(channel?.send).toHaveBeenCalledTimes(2)
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      expect(audio?.muted).toBe(true)
       const attention = JSON.parse(String(channel?.send.mock.calls[2]?.[0])) as {
         type: string
         response: { instructions: string }
@@ -274,6 +286,7 @@ describe('browser voice adapter', () => {
       // no harness-final request is active, so abort unsolicited responses.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
       expect(JSON.parse(String(channel?.send.mock.calls[4]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(audio?.muted).toBe(true)
     } finally {
       await stopCodexRealtimeVoice()
       disposeRemote()
