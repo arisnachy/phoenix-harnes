@@ -66,6 +66,13 @@ const SILENT_TOOL_PROGRESS_REMINDER = 'Before calling more tools, send the user 
 const AUTOMATIC_CONTINUATION_PROMPT = 'Continue the current task from the latest tool result without waiting for a new user prompt. Keep working until the task is complete. Before more tool calls, give the user a brief progress update if you have not done so recently; do not reveal hidden chain-of-thought.'
 const USER_STEER_RESUME_PROMPT = 'A human message interrupted active work. First address and resolve the latest human request promptly. Then resume the task that was in progress from the existing conversation, goal, and tool context unless the human explicitly changed, replaced, paused, or cancelled that task. Do not ask for permission merely to resume.'
 
+/** Recognize an unambiguous stop command without intercepting ordinary task changes. */
+function isExplicitUserStop(message: UserMessage): boolean {
+  if (message.source.kind !== 'user' || message.content.some(block => block.type !== 'text')) return false
+  const text = message.content.map(block => block.type === 'text' ? block.text : '').join(' ').trim()
+  return /^(?:(?:ya|por favor)\s+)?(?:det[eé]n(?:lo|la|los|las)?|detener(?:lo|la)?|para(?:lo|la)?|parar(?:lo|la)?|cancela(?:r|lo|la)?|cancel(?: it)?|stop(?: it)?)(?:\s+(?:ya|por favor|ahora|esa tarea|la revisi[oó]n))?[.!]*$/iu.test(text)
+}
+
 type PreparedStep =
   | { kind: 'reject' }
   | { kind: 'enter'; messages: UserMessage[]; assembly: PromptAssembly; fastConversation: boolean }
@@ -170,6 +177,13 @@ export class ReactLoopAgent implements Agent {
   }
 
   steer(input: UserMessage): void {
+    if (isExplicitUserStop(input)) {
+      // Hard cancellation owns the current mission; do not enqueue the generic
+      // steering prompt that would otherwise resurrect it after interruption.
+      this.cancel({ kind: 'user' })
+      this.send(input, 'next-turn', true)
+      return
+    }
     const shouldInterruptActiveWork = this.phase.kind === 'running'
       && (this.modelBoundaryActive || this.toolBoundaryActive)
       && !this.phase.abort.signal.aborted

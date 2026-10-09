@@ -920,6 +920,28 @@ describe('Agent.cancel()', () => {
     expect(turnEnd?.type === 'turn/end' && turnEnd.data.reason).toEqual({ kind: 'aborted', reason: { kind: 'user' } })
   })
 
+  it('a direct stop command cancels work without instructing the model to resume it', async () => {
+    const adapter = new MockAdapter(['hang', textResponse('Detenido.')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('user-stop-no-resume'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'start slow review')
+    await expect.poll(() => adapter.requests.length).toBe(1)
+    const runningSignal = adapter.requests[0]?.signal
+    agent.steer(createUserMessage({
+      content: [{ type: 'text', text: 'ya detenlo' }],
+      source: { kind: 'user' },
+    }))
+    await agent.whenIdle()
+
+    expect(runningSignal?.aborted).toBe(true)
+    expect(adapter.requests).toHaveLength(2)
+    expect(JSON.stringify(adapter.requests[1]?.messages)).toContain('ya detenlo')
+    expect(JSON.stringify(adapter.requests[1]?.messages)).not.toContain('resume the task that was in progress')
+    expect(userTexts(agent)).toEqual(['start slow review', 'ya detenlo'])
+    expect(agent.inbox.nextStep).toHaveLength(0)
+  })
+
   it('steer interrupts an active model stream and immediately replays the steering input', async () => {
     const adapter = new MockAdapter([
       'hang',
