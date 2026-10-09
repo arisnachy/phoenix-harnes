@@ -453,20 +453,33 @@ export function filterProceduralSearchHits(hits: readonly CognitiveMemoryHit[]):
  * @returns Safe action and canonical origin, or undefined for unrelated work.
  */
 export function reusableBrowserWorkStep(toolName: string, raw: unknown): string | undefined {
-  if (toolName !== 'computer') return undefined
+  const fromComputer = toolName === 'computer'
+  // Independent Chrome MCP agents and the in-chat MiniBrowser share one CDP
+  // session. Treat their real tool results as site experience as well.
+  const fromChrome = /(?:^|__)(?:chrome|phoenix_browser|chrome_connector)(?:__|$)/i.test(toolName)
+  if (!fromComputer && !fromChrome) return undefined
   let args: unknown = raw
   if (typeof raw === 'string') {
     try { args = JSON.parse(raw) } catch { return undefined }
   }
-  if (!isRecord(args) || typeof args.action !== 'string') return undefined
+  if (!isRecord(args)) return undefined
+  const action = fromComputer
+    ? (typeof args.action === 'string' ? args.action : '')
+    : toolName.split('__').at(-1) ?? ''
   const actions: Record<string, string> = {
+    navigate: 'Open target website',
+    read_page: 'Read live website state',
+    inspect_form: 'Inspect live navigation and form fields',
+    fill_form: 'Re-inspect and fill nonsecret form fields',
+    click_text: 'Navigate using current visible page controls',
+    secure_login: 'Authenticate through origin-bound protected vault',
     browser_open: 'Open target website',
     browser_inspect: 'Inspect live navigation and form fields',
     browser_login: 'Authenticate through origin-bound protected vault',
     browser_click_text: 'Navigate using current visible page controls',
     browser_fill_form: 'Re-inspect and fill nonsecret form fields',
   }
-  const step = actions[args.action]
+  const step = actions[action]
   if (step === undefined) return undefined
   const rawOrigin = typeof args.origin === 'string' ? args.origin
     : typeof args.url === 'string' ? args.url : undefined

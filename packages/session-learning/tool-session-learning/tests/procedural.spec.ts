@@ -70,6 +70,17 @@ describe('browser learn-by-doing without sensitive payloads', () => {
     expect(steps).toHaveLength(5)
     expect(steps[0]).toContain('https://surveys.example')
     expect(steps.join(' ')).not.toMatch(/never-save-me|private-value|private opinion|session=|Available surveys|field: 4/i)
+    expect(reusableBrowserWorkStep('mcp__phoenix_browser__navigate', {
+      url: 'https://surveys.example/offers?account=private',
+    })).toBe('Open target website on https://surveys.example')
+    expect(reusableBrowserWorkStep('mcp__chrome__fill_form', {
+      origin: 'https://surveys.example',
+      fields: [{ field: 0, value: 'private personal answer' }],
+    })).toBe('Re-inspect and fill nonsecret form fields on https://surveys.example')
+    expect(reusableBrowserWorkStep('mcp__phoenix_browser__secure_login', {
+      origin: 'https://surveys.example',
+    })).toBe('Authenticate through origin-bound protected vault on https://surveys.example')
+    expect(reusableBrowserWorkStep('unrelated_navigation', { url: 'https://surveys.example' })).toBeUndefined()
     expect(reusableBrowserWorkStep('computer', '{"action":"browser_forget_login"}')).toBeUndefined()
     expect(reusableBrowserWorkStep('computer', '{bad json')).toBeUndefined()
     expect(reusableBrowserWorkStep('other-tool', '{"action":"browser_open"}')).toBeUndefined()
