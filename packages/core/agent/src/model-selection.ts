@@ -239,6 +239,34 @@ const AUTO_TEAM_ADMISSION_CONTINUATION =
   'Keep the critical path and supervision with Kira, communicate through Team tools, wait for a real teammate result or blocker, ' +
   'inspect its evidence, integrate it, and verify the final result. Do not create filler work merely to satisfy this gate.'
 
+const AUTO_VISIBLE_PLAN_POLICY =
+  'Phoenix Auto is a real two-stage workflow, not hidden role-play. ' +
+  'For an actionable multi-step user request, you are Kira planning with Sol in this FIRST step. ' +
+  'Write a SHORT, natural user-visible message beginning exactly with "**Plan:**", followed by 2–4 specific ' +
+  'actions in the user\'s language, the expected deliverable and how it will be verified. ' +
+  'Be proportionate: a tiny team demonstration deserves a tiny plan, not a technical audit. ' +
+  'Show decisions, not private chain-of-thought, model names, ceremonial talk or fabricated completion. ' +
+  'Do not execute tools or assign coworkers in this first planning step; stop after displaying the plan. ' +
+  'Kira will continue on the very next step and execute this exact plan without asking for routine approval. ' +
+  'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
+
+const AUTO_LUNA_EXECUTION_POLICY =
+  'You are Kira executing on Luna. If a user-visible **Plan:** was written earlier in THIS turn, ' +
+  'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
+  'Start the first permitted real action promptly, supervise the critical path and choose a genuine teammate ' +
+  'only when requested or materially helpful. Address teammates naturally by name, accept their real evidence, ' +
+  'and speak to the user in concise, warm Spanish when that is their language. ' +
+  'Never simulate coworker messages or claim a tool ran before its real result. ' +
+  'Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
+
+const AUTO_VISIBLE_PLAN_HANDOFF =
+  'The visible **Plan:** from the immediately preceding Sol step is Kira\'s authoritative execution plan. ' +
+  'Continue the current user request as Kira on Luna Max; execute the next concrete action now, ' +
+  'without re-planning, re-reading the same brief or asking permission for already authorized safe work. ' +
+  'If this is a requested team demonstration, call spawn_teammate once with a small verifiable assignment, ' +
+  'wait for genuine evidence and complete the demonstration. The actual Team conversation must be real, ' +
+  'natural, concise and useful, not a scripted imitation.'
+
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
 const FAST_SOCIAL_OPEN = /^(?:cu[eé]ntame\s+algo(?:\s+bueno)?|dime\s+algo\s+bueno|sorpr[eé]ndeme|tell\s+me\s+something(?:\s+good)?)$/iu
@@ -577,11 +605,43 @@ function phoenixAutoHasInlineVisualReceiptForTurn(
   return false
 }
 
+/** A tiny requested Team showcase still gets a real Sol plan, but never pays xhigh effort. */
+export function isBriefTeamDemonstration(text: string): boolean {
+  const request = text.normalize('NFKD').replace(/[\\u0300-\\u036f]/gu, '').toLowerCase().trim()
+  if (request.length < 8 || request.length > 240 || request.includes('\\n')) return false
+  if (!/\\b(?:equipo|team|teammates|companeros|agentes)\\b/u.test(request)) return false
+  if (!/\\b(?:demo|demostracion|prueba|ejemplo|accion|action|showcase|show)\\b/u.test(request)) return false
+  // Real work, coding, remote side effects and specific external sources keep
+  // their deliberate xhigh planning route even if called a "test".
+  return !/(?:https?:\\/\\/|[a-z]:\\\\|\\b(?:github|repo|codigo|script|archivo|archivo\\w*|implementa|despliega|production|produccion|email|correo|compra|borra|elimina|contrato|paciente|sql|api|web|sitio|site|investigacion|research)\\b)/u.test(request)
+}
+
 function phoenixAutoTaskRequest(text: string): boolean {
   const candidate = text.trim()
   return CONTEXTUAL_CONTINUATION.test(candidate)
     || isToolAcquisitionRequest(candidate)
     || AUTO_TASK_ACTION.test(candidate)
+}
+
+/** Look at the live turn boundary: assembly happens before step/start is logged. */
+function nextPhoenixAutoAssemblyStep(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+): number | undefined {
+  const events = agent.session.events
+  const start = events.findLastIndex(event => event.type === 'turn/start')
+  if (start < 0) return undefined
+  const turn = (events[start]?.data as { readonly turn?: number } | undefined)?.turn
+  if (typeof turn !== 'number') return undefined
+  const steps = events.slice(start + 1)
+    .filter(event => event.type === 'step/start'
+      && (event.data as { readonly turn?: number }).turn === turn)
+  const last = steps.at(-1)
+  return last === undefined ? 1 : ((last.data as { readonly step: number }).step + 1)
+}
+
+/** A plan is evidence only if Sol actually published text, not if it thought privately. */
+function hasVisibleSolPlan(text: string): boolean {
+  return /^(?:#{1,3}\\s*)?(?:\\*\\*)?plan(?:\\s+de\\s+trabajo)?(?:\\*\\*)?\\s*:/iu.test(text.trim())
 }
 
 interface PhoenixAutoRouterState {
@@ -673,6 +733,13 @@ function phoenixAutoRoute(
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
         reasoningEffort: ReasoningEffortId('low'),
+      }
+    }
+    if (isBriefTeamDemonstration(directText)) {
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+        reasoningEffort: ReasoningEffortId('medium'),
       }
     }
     if (phoenixAutoTaskRequest(directText)) {
@@ -789,8 +856,16 @@ export function installModelSelection(
       : providerTools
     selection.assembledToolCount = tools.length
     if (selected === undefined) return assembled
+    const autoStep = isPhoenixCodexAutoSelection(selected) && scopedAgent !== undefined
+      ? nextPhoenixAutoAssemblyStep(scopedAgent)
+      : undefined
+    const autoPolicy = autoStep === 1 ? AUTO_VISIBLE_PLAN_POLICY
+      : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_EXECUTION_POLICY : undefined
     return {
       ...assembled,
+      ...autoPolicy === undefined ? {} : {
+        sections: [...assembled.sections, { name: 'phoenix:auto-visible-handoff', text: autoPolicy }],
+      },
       tools,
       variables: {
         ...assembled.variables,
@@ -888,6 +963,27 @@ export function installModelSelection(
     const latest = latestPhoenixAutoAssistantStop(agent, turn)
     if (latest === undefined) return
 
+    const events = turnEvents(agent, turn)
+    const latestStepHasToolActivity = events.some((event) => {
+      if (event.type !== 'tool/call' && event.type !== 'tool/result') return false
+      return (event.data as { readonly step?: number }).step === latest.step
+    })
+    // The actual visible assistant text is the Sol->Luna handoff. Never invent
+    // a hidden plan or wait for a second planning call to repeat it.
+    if (latest.step === 1 && !latestStepHasToolActivity && hasVisibleSolPlan(latest.text)
+      && phoenixAutoState.lastContinuationStep !== latest.step) {
+      phoenixAutoState.continuationCount += 1
+      phoenixAutoState.lastContinuationStep = latest.step
+      agent.steer(createUserMessage({
+        content: [{ type: 'text', text: AUTO_VISIBLE_PLAN_HANDOFF }],
+        source: {
+          kind: 'plugin', plugin: 'model-selection', form: 'notice',
+          summary: 'Phoenix Auto visible Sol to Luna handoff',
+        },
+      }))
+      return
+    }
+
     if (phoenixAutoTeamAvailable && !phoenixAutoHasTeamOutcomeForTurn(agent, turn)
       && phoenixAutoState.lastTeamAdmissionStep !== latest.step) {
       phoenixAutoState.teamAdmissionCount += 1
@@ -908,11 +1004,6 @@ export function installModelSelection(
     }
 
     if (phoenixAutoState.lastContinuationStep === latest.step) return
-    const events = turnEvents(agent, turn)
-    const latestStepHasToolActivity = events.some((event) => {
-      if (event.type !== 'tool/call' && event.type !== 'tool/result') return false
-      return (event.data as { readonly step?: number }).step === latest.step
-    })
     const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
     const announcedNextAction = !latestStepHasToolActivity
       && latest.text.length > 0
