@@ -6,7 +6,7 @@ export function choosePhoenixDesignMedium(request:string):DesignMedium{
   const interactive=/\b(?:interactiv\w*|manipul\w*|rotar|girar|orbitar|zoom|explorar|recorrido|configurador|viewer|glb|gltf|importar|exportar|modelo\s+3d)\b/u.test(text)
   const app=/\b(?:app|aplicacion|videojuego|juego|sitio|web|catalogo|tienda|producto|escaparate|simulador|editor)\b/u.test(text)
   const appSpatial=/\b(?:showroom|configurador|recorrido|inmueble|arquitectura|muebl\w*|pieza|vehiculo|avatar|escena|motor|habitacion|producto\s+3d|modelo\s+3d)\b/u.test(text)
-  const staticImage=/\b(?:png|jpg|jpeg|fotograf\w*|poster|flyer|banner|portada|imagen|render|ilustracion)\b/u.test(text)
+  const staticImage=/\b(?:png|jpg|jpeg|fotograf\w*|foto|poster|flyer|banner|portada|imagen|render|ilustracion)\b/u.test(text)
   const data=/\b(?:grafic\w*|grafica|dashboard|analitic\w*|estadistic\w*|diagrama\s+de\s+barras|velas|pie\s+chart)\b/u.test(text)
   const ui=/\b(?:formulario|login|tabla|panel\s+de\s+control|botones|pagina\s+web|pagina\s+de\s+inicio)\b/u.test(text)
   // The explicit data/UI intent wins over incidental "3D" unless a spatial model is requested.
