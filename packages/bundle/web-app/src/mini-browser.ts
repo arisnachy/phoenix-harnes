@@ -208,19 +208,45 @@ async function state(): Promise<Record<string, unknown>> {
   const selectedTab = await selected(base)
   return { available: true, tabId: selectedTab.id, url: selectedTab.url, title: selectedTab.title, tabs: tabs.map(({ id, url, title }) => ({ id, url, title })) }
 }
+/**
+ * Chromium versions, headless settings and shared DevTools targets do not
+ * implement every capture option equally. Try one tightly cropped frame,
+ * then the visible viewport, then the software surface, without navigating or
+ * replacing the browser/tab. Never fake a successful screenshot.
+ */
+export async function captureBrowserFrameWithFallback(
+  capture: (params: Record<string, unknown>) => Promise<{ data: string }>,
+): Promise<Buffer> {
+  const attempts: Record<string, unknown>[] = [
+    {
+      format: 'jpeg', quality: 65, captureBeyondViewport: true, fromSurface: true,
+      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height, scale: 1 },
+    },
+    { format: 'jpeg', quality: 65, captureBeyondViewport: false, fromSurface: true },
+    { format: 'jpeg', quality: 60, captureBeyondViewport: false, fromSurface: false },
+  ]
+  const failures: string[] = []
+  for (const [index, options] of attempts.entries()) {
+    try {
+      const reply = await capture(options)
+      if (typeof reply.data !== 'string' || reply.data.length < 16 || reply.data.length > 6_000_000) {
+        throw new Error('Chromium devolvió una imagen vacía o demasiado grande')
+      }
+      const jpeg = Buffer.from(reply.data, 'base64')
+      if (jpeg.length < 4 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) throw new Error('El fotograma no es JPEG')
+      return jpeg
+    } catch (error) {
+      failures.push('estrategia ' + (index + 1) + ': ' + (error instanceof Error ? error.message : String(error)))
+    }
+  }
+  throw new Error('CDP_CAPTURE_FAILED: no se pudo obtener un fotograma real. ' + failures.join(' | '))
+}
 async function frame(): Promise<Buffer> {
   const base = await endpoint(false)
   if (!base) throw new Error('El navegador no está iniciado.')
   const tab = await selected(base)
-  // An explicit 16:9 clip keeps the displayed image and CDP input coordinates
-  // in sync. Emulation overrides are session-scoped; separate short-lived CDP
-  // sockets must not rely on an override surviving socket closure.
-  const response = await cdp<{ data: string }>(tab, 'Page.captureScreenshot', {
-    format: 'jpeg', quality: 63, captureBeyondViewport: true, fromSurface: true,
-    clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height, scale: 1 },
-  })
-  if (typeof response.data !== 'string' || response.data.length > 6_000_000) throw new Error('Fotograma inválido.')
-  return Buffer.from(response.data, 'base64')
+  return await captureBrowserFrameWithFallback(async params =>
+    await cdp<{ data: string }>(tab, 'Page.captureScreenshot', params))
 }
 async function action(input: Action): Promise<Record<string, unknown>> {
   const type = input.type
