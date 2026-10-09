@@ -287,6 +287,17 @@ describe('AppFrame', () => {
     expect(tracks(frame)).toEqual([SIDEBAR_DEFAULT, 360])
   })
 
+  it('snaps viewport resize geometry without changing manual panel preferences', () => {
+    const { frame, instance, rerenderFrame } = mountFrame()
+    const before = instance.getSnapshot().sidebar
+    frameWidth = 1600
+    act(() => { fireResize?.(); vi.advanceTimersByTime(20) })
+    expect(frame.hasAttribute('data-viewport-resizing')).toBe(true)
+    expect(instance.getSnapshot().sidebar).toBe(before)
+    act(() => { rerenderFrame() })
+    expect(frame.hasAttribute('data-viewport-resizing')).toBe(false)
+  })
+
   it('viewport shrink triggers the concession chain via ResizeObserver', () => {
     const { frame, instance } = mountFrame()
     act(() => { instance.actions.openDetails() })
