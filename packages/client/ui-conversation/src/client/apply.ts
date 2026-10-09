@@ -307,6 +307,7 @@ export function apply(ctx: Context): void {
       'conversation.hero.agentPreset': { kind: 'single', scope: 'root' },
     },
     inject: (sessionId: SessionId | undefined): ConversationInjected => ({
+      setSidebarFocus: layout.setSidebarFocus,
       recordAttention: (item, state) => recordProactivityAttention(ctx.get('connection') as ConnectionHandle | undefined, proactivityAttention, item, state),
       hooks: {
         composerBlock: sessionId === undefined ? ABSENT_BLOCK : composerBlocks.storeFor(sessionId),
