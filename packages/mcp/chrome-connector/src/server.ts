@@ -30,8 +30,9 @@ function sharedSession(): SharedSession | undefined {
   } catch { return undefined }
 }
 function announceSession(base: string, tabId?: string): void {
-  const pid = managedBrowser?.pid ?? sharedSession()?.pid
-  if (!pid) return
+  // External Chrome/Edge CDP sessions have no managed browser child PID.
+  // The live MCP connector owns their shared tab descriptor until shutdown.
+  const pid = managedBrowser?.pid ?? sharedSession()?.pid ?? process.pid
   try {
     writeFileSync(SHARED_BROWSER, JSON.stringify({
       pid, endpoint: base.replace(/\/$/, '') + '/',
@@ -39,6 +40,12 @@ function announceSession(base: string, tabId?: string): void {
     }), { mode: 0o600 })
   } catch { /* An inaccessible descriptor must never block browser tools. */ }
 }
+process.once('exit', () => {
+  // Do not leave a stale pointer to an external Chrome tab when this MCP dies.
+  if (sharedSession()?.pid === process.pid) {
+    try { rmSync(SHARED_BROWSER, { force: true }) } catch { /* best effort */ }
+  }
+})
 const CDP_READY_TIMEOUT_MS = 6_000
 let managedBrowser: ChildProcess | undefined
 let managedProfileDir: string | undefined
@@ -181,12 +188,12 @@ async function launchDedicatedBrowser(): Promise<string> {
   managedLaunch = (async () => {
     const executable = browserExecutable()
     const profileDir = mkdtempSync(join(tmpdir(), 'phoenix-browser-'))
-    // A requested browser is visible in the conversation by default; avoid a second OS window.
-    const headless = process.env.PHOENIX_BROWSER_HEADLESS !== 'false'
-      && process.env.DSH_CHROME_HEADLESS !== 'false'
-    const child = spawn(executable, buildDedicatedBrowserArgs(profileDir, headless), {
+    // Agent navigation uses a private headless Chromium target regardless of
+    // stale HEADLESS=false settings. Only the explicit user MiniBrowser footer
+    // action may open a visible desktop Chrome window.
+    const child = spawn(executable, buildDedicatedBrowserArgs(profileDir, true), {
       stdio: 'ignore',
-      windowsHide: false,
+      windowsHide: true,
     })
     managedBrowser = child
     managedProfileDir = profileDir
@@ -212,7 +219,10 @@ async function launchDedicatedBrowser(): Promise<string> {
 }
 
 async function endpoint(): Promise<string> {
-  const configured = cdpBase()
+  // A visible personal Chrome profile must never become the default target of
+  // agent navigation. External CDP attachment requires an explicit opt-in.
+  const allowVisible = process.env.PHOENIX_BROWSER_ALLOW_VISIBLE_CDP === 'true'
+  const configured = allowVisible ? cdpBase() : ''
   if (configured) {
     await json(`${configured}/json/version`)
     return configured
@@ -222,7 +232,7 @@ async function endpoint(): Promise<string> {
     const base = shared.endpoint.replace(/\/$/, '')
     try { await json(`${base}/json/version`); return base } catch { /* stale peer */ }
   }
-  const discovered = await Promise.all(DEFAULT_PORTS.map(async (port) => {
+  const discovered = await Promise.all((allowVisible ? DEFAULT_PORTS : []).map(async (port) => {
     const candidate = `http://127.0.0.1:${port}`
     try {
       await json(`${candidate}/json/version`)
@@ -244,6 +254,23 @@ async function endpoint(): Promise<string> {
 
 async function tabs(): Promise<Tab[]> {
   return (await json<Tab[]>(`${await endpoint()}/json/list`)).filter(tab => tab.type === 'page' || tab.type === undefined)
+}
+
+/**
+ * A new user navigation owns its own CDP tab; this keeps earlier MiniBrowser
+ * cards tied to their original pages when later chat turns open new sites.
+ * Explicit tabId still navigates the supplied tab for deliberate reuse.
+ */
+async function newBrowserTab(url: string): Promise<Tab> {
+  const base = await endpoint()
+  const result = await fetch(base + '/json/new?' + encodeURIComponent(url), {
+    method: 'PUT', signal: AbortSignal.timeout(5000),
+  })
+  if (!result.ok) throw new Error('No se pudo abrir una pestaña Chromium nueva: HTTP ' + String(result.status))
+  const tab = await result.json() as Tab
+  if (!tab.id || !tab.webSocketDebuggerUrl) throw new Error('Chrome no devolvió un identificador válido')
+  announceSession(base, tab.id)
+  return tab
 }
 
 async function selectedTab(id?: string): Promise<Tab> {
@@ -323,8 +350,10 @@ server.registerTool('navigate', {
   if (!actionsAllowed()) throw new Error('Navegación bloqueada por la política de permisos del navegador (modo read-only o PHOENIX_BROWSER_ALLOW_ACTIONS=false).')
   const parsed = new URL(url)
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Solo se permiten URLs HTTP(S)')
-  const tab = await selectedTab(tabId)
-  await cdp(tab, 'Page.navigate', { url })
+  const tab = tabId === undefined ? await newBrowserTab(url) : await selectedTab(tabId)
+  // /json/new already navigates the new page, while an explicit tabId must
+  // navigate the user's chosen existing tab.
+  if (tabId !== undefined) await cdp(tab, 'Page.navigate', { url })
   return { content: [{ type: 'text', text: `Navegación iniciada en ${url} (pestaña ${tab.id})` }] }
 })
 
@@ -338,9 +367,12 @@ server.registerTool('youtube_search', {
   }
   let tab: Tab
   try {
-    tab = await selectedTab(tabId)
-    const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
-    if (navigation.errorText) throw new Error(navigation.errorText)
+    tab = tabId === undefined ? await newBrowserTab(url) : await selectedTab(tabId)
+    // Opening a new request cannot replace the website shown by an older card.
+    if (tabId !== undefined) {
+      const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
+      if (navigation.errorText) throw new Error(navigation.errorText)
+    }
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: `No se pudo abrir YouTube en Chrome/Edge: ${String(error)}. Enlace directo para el usuario: ${url}. No reintentes automáticamente sin una causa nueva.` }] }
   }

@@ -9,6 +9,7 @@ import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
+import { MiniBrowser } from './MiniBrowser.tsx'
 import type { TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
@@ -49,6 +50,7 @@ type ActivityItem =
   }
 
 type FlowItem =
+  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string }
   | { readonly kind: 'node'; readonly key: string }
   | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
@@ -124,6 +126,28 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
     if (block.kind === 'text') return block.text.trim() !== ''
     return true
   })
+}
+
+/**
+ * Detect a user request to navigate the web.
+ * @param text - Plain text from a durable or optimistic user message.
+ * @returns Whether the message requests browser navigation.
+ */
+export function isBrowserPrompt(text: string): boolean {
+  const verb = /\b(?:abre|abrir|abreme|abrirme|navega|navegar|entra|entrar|visita|visitar|accede|acceder|open|browse)\b/iu
+  const target = /\b(?:ir a|ve a|busca en)\b|https?:\/\//iu
+  return verb.test(text) || target.test(text)
+}
+function isBrowserRequest(node: OrderedChatNode): boolean {
+  if (node.kind !== 'user' && node.kind !== 'steering') return false
+  const payload = node.data as { content?: unknown }
+  if (!Array.isArray(payload.content)) return false
+  const text = payload.content.map((value: unknown) => {
+    if (value === null || typeof value !== 'object') return ''
+    const block = value as { type?: unknown; text?: unknown }
+    return block.type === 'text' && typeof block.text === 'string' ? block.text : ''
+  }).join('')
+  return isBrowserPrompt(text)
 }
 
 function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
@@ -213,6 +237,43 @@ function buildAnchoredFlow(
     },
     ...buildFlow(nodes.slice(splitAt)),
   ]
+}
+
+/**
+ * Insert independently keyed browser cards at stable transcript boundaries.
+ * @param flow - Ordered render items, including optimistic messages.
+ * @param nodes - Durable messages used to recognize navigation requests.
+ * @returns The chat flow with browser cards after each relevant turn.
+ */
+export function addBrowserCards(
+  flow: FlowItem[],
+  nodes: readonly OrderedChatNode[],
+): FlowItem[] {
+  const requests = nodes.filter(isBrowserRequest)
+  if (requests.length === 0 && !flow.some(item => item.kind === 'optimistic' && isBrowserPrompt(item.text))) return flow
+  const result: FlowItem[] = []
+  let pendingUserKey: string | undefined
+  const byKey = new Set(requests.map(n => n.key))
+  const userKeys = new Set(nodes.filter(n => n.kind === 'user' || n.kind === 'steering').map(n => n.key))
+  const finish = (): void => {
+    if (pendingUserKey !== undefined) {
+      result.push({ kind: 'browser', key: 'browser:' + pendingUserKey, userKey: pendingUserKey })
+      pendingUserKey = undefined
+    }
+  }
+  for (const item of flow) {
+    // A new user turn begins after all content from the preceding turn.
+    if (item.kind === 'node' && userKeys.has(item.key)) {
+      finish()
+      if (byKey.has(item.key)) pendingUserKey = item.key
+    } else if (item.kind === 'optimistic') {
+      finish()
+      if (isBrowserPrompt(item.text)) pendingUserKey = item.key
+    }
+    result.push(item)
+  }
+  finish()
+  return result
 }
 
 function ToolActivityIcon() {
@@ -388,7 +449,18 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
  * @returns The grouped transcript flow.
  */
 export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
-  const flow = useMemo(() => buildAnchoredFlow(nodes, optimisticSubmit), [nodes, optimisticSubmit])
+  const flow = useMemo(() => addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), [nodes, optimisticSubmit])
+  const browserKeys = flow.filter(item => item.kind === 'browser').map(item => item.userKey)
+  const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
+  const newestBrowserKey = browserKeys.at(-1)
+  const [lastBrowserKey, setLastBrowserKey] = useState<string | undefined>()
+  useEffect(() => {
+    if (newestBrowserKey !== lastBrowserKey) {
+      setLastBrowserKey(newestBrowserKey)
+      setSelectedBrowserKey(newestBrowserKey)
+    }
+  }, [newestBrowserKey, lastBrowserKey])
+  const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
   const statusBeforeIndex = turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
     ? -1
     : flow.length - 1
@@ -404,29 +476,35 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
               t={seatProps.t}
             />
           )}
-          {item.kind === 'node'
-            ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
-            : item.kind === 'optimistic'
-              ? (
-                <PendingSteeringBubble
-                  content={[{ type: 'text', text: item.text }]}
-                  renderMessageImages={seatProps.renderMessageImages}
-                  t={seatProps.t}
-                />
-              )
-              : item.kind === 'images'
+          {item.kind === 'browser'
+            ? <MiniBrowser
+              requested
+              active={item.userKey === activeBrowserKey}
+              onActivate={() => { setSelectedBrowserKey(item.userKey) }}
+            />
+            : item.kind === 'node'
+              ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
+              : item.kind === 'optimistic'
                 ? (
-                  <div data-chat-flow-kind="generated-image">
-                    {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
-                  </div>
-                )
-                : (
-                  <ToolActivityGroup
-                    items={item.items}
-                    anchorKey={item.anchorKey}
-                    {...seatProps}
+                  <PendingSteeringBubble
+                    content={[{ type: 'text', text: item.text }]}
+                    renderMessageImages={seatProps.renderMessageImages}
+                    t={seatProps.t}
                   />
-                )}
+                )
+                : item.kind === 'images'
+                  ? (
+                    <div data-chat-flow-kind="generated-image">
+                      {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+                    </div>
+                  )
+                  : (
+                    <ToolActivityGroup
+                      items={item.items}
+                      anchorKey={item.anchorKey}
+                      {...seatProps}
+                    />
+                  )}
         </Fragment>
       ))}
       {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (

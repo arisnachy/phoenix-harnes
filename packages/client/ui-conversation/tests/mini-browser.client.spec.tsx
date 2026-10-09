@@ -24,12 +24,12 @@ const state = {
 function installBrowserMock(current: typeof state = state) {
   const calls: Array<{ type: string; url?: string }> = []
   vi.stubGlobal('fetch', vi.fn(async (input: string, options?: { body?: string }) => {
-    if (String(input).endsWith('/frame')) {
+    if (input.endsWith('/frame')) {
       return new Response(new Uint8Array([255, 216, 255, 217]), {
         status: 200, headers: { 'content-type': 'image/jpeg' },
       })
     }
-    if (String(input).endsWith('/action') && options?.body) {
+    if (input.endsWith('/action') && options?.body) {
       calls.push(JSON.parse(options.body) as { type: string; url?: string })
     }
     return new Response(JSON.stringify(current), {
@@ -46,6 +46,64 @@ function installBrowserMock(current: typeof state = state) {
 }
 
 describe('MiniBrowser in Phoenix conversation', () => {
+  it('does not show a global Abrir navegador button in an unrelated chat', async () => {
+    const calls = installBrowserMock({ ...state, available: false, url: 'about:blank', tabs: [] })
+    render(<MiniBrowser />)
+    await waitFor(() => { expect(vi.mocked(fetch)).toHaveBeenCalled() })
+    expect(screen.queryByText(/Abrir navegador/)).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('only opens desktop Chrome when the user presses the footer button', async () => {
+    const calls = installBrowserMock()
+    render(<MiniBrowser />)
+    await screen.findByRole('region', { name: 'Navegador de Kira' })
+    expect(calls).toHaveLength(0)
+    expect(screen.queryByText('◉ Abrir navegador')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Abrir navegador completo/ }))
+    await waitFor(() => {
+      expect(calls).toContainEqual({ type: 'open-external' })
+    })
+  })
+
+  it('shows a browser card for a browsing request even when the host screenshot service is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: 'El host todavía no pudo conectar con Chromium.',
+    }), { status: 503, headers: { 'content-type': 'application/json' } })))
+    render(<MiniBrowser requested />)
+    expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByRole('status').textContent).toContain('Conexión del navegador')
+    })
+    expect(screen.getByRole('button', { name: 'Conectar navegador' })).toBeTruthy()
+  })
+
+  it('closing one card does not prevent a later browser card from opening', async () => {
+    installBrowserMock()
+    const view = render(<><MiniBrowser key="previous" requested active={false} /></>)
+    expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar microventana' }))
+    expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
+    view.rerender(<>
+      <MiniBrowser key="previous" requested active={false} />
+      <MiniBrowser key="new-request" requested active />
+    </>)
+    expect(screen.getAllByRole('region', { name: 'Navegador de Kira' })).toHaveLength(1)
+    expect(await screen.findByRole('button', { name: /Abrir navegador completo/ })).toBeTruthy()
+  })
+
+  it('keeps a previous MiniBrowser card visible alongside a new request', async () => {
+    installBrowserMock()
+    const view = render(<>
+      <MiniBrowser key="first-request" requested active={false} />
+      <MiniBrowser key="second-request" requested active />
+    </>)
+    expect(screen.getAllByRole('region', { name: 'Navegador de Kira' })).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Reactivar esta página' })).toBeTruthy()
+    view.unmount()
+  })
+
   it('shows the actual CDP tab and expands without reopening the browser', async () => {
     const calls = installBrowserMock()
     render(<MiniBrowser />)

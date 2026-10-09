@@ -152,6 +152,9 @@ function webSurfacePrompt(webUrl: string): string {
     + 'Use one direct browser action for simple navigation and report only the verified outcome. '
     + 'Do not open an unrelated OS tab when a working local browser connector is available, '
     + 'and never bypass its configured action permissions. '
+    + 'Distinguish a verified page navigation from an in-chat screenshot: if a frame or MiniBrowser view fails, '
+    + 'explicitly report that the page may be open in Chromium but is NOT yet visible in the conversation. '
+    + 'Never claim the user can see the page inside Phoenix until the MiniBrowser display confirms it. '
     + updateContract
     + 'Starting another server does not update this GUI. '
     + 'The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. '
