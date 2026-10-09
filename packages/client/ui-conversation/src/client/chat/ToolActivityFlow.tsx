@@ -134,9 +134,17 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
  * @returns Whether the message requests browser navigation.
  */
 export function isBrowserPrompt(text: string): boolean {
-  const verb = /\b(?:abre|abrir|abreme|abrirme|navega|navegar|entra|entrar|visita|visitar|accede|acceder|open|browse)\b/iu
-  const target = /\b(?:ir a|ve a|busca en)\b|https?:\/\//iu
-  return verb.test(text) || target.test(text)
+  // Natural requests may include accents, conjugations and small typos:
+  // "puedes entras a la pagina..." must open the same in-chat browser
+  // that Kira controls, rather than silently omitting its card.
+  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  const verb = /\b(?:abre|abres|abrir|abreme|abrirme|navega|navegas|navegar|entra|entras|entrar|ingresa|ingresas|ingresar|visita|visitas|visitar|accede|accedes|acceder|open|browse|visit)\b/u
+  const target = /\b(?:ir a|ve a|busca en|buscar en)\b|https?:\/\//u
+  const webContext = /\b(?:pagina|web|sitio|portal|navegador|website|internet|url|enlace)\b|https?:\/\//u
+  // "abre el archivo" is not browser navigation; a web context overrides it.
+  const localObject = /\b(?:archivo|carpeta|documento|pdf|chat|conversacion|configuracion|terminal|proyecto|aplicacion|app)\b/u
+  if (/\b(?:no|nunca)\s+(?:abras|abres|abrir|entres|entrar|navegues|navegar|visites|visitar)\b/u.test(normalized)) return false
+  return target.test(normalized) || (verb.test(normalized) && (webContext.test(normalized) || !localObject.test(normalized)))
 }
 function isBrowserRequest(node: OrderedChatNode): boolean {
   if (node.kind !== 'user' && node.kind !== 'steering') return false
