@@ -13,7 +13,7 @@ const VERIFY = /(?:^|__)(?:wait_for|read_page|verify|check|test|typecheck|build|
  * A completed or aborted real turn is authoritative. While the turn is still
  * running, an explicit final "no work remaining" statement is accepted only
  * if distinct real successful action AND confirmation tools preceded it.
- * A new human request/turn reopens work; peer handoffs and narration do not.
+ * Only a new authentic human request reopens work, not an automatic follow-up turn.
  * @param events - Current Lead Session event log.
  * @returns Whether late reviewer spawn and queued wakeup must be refused.
  */
@@ -24,11 +24,10 @@ export function teamMissionClosed(events: readonly SessionEvent[]): boolean {
       return event.data.reason.kind === 'completed' || event.data.reason.kind === 'aborted'
     }
     if (event?.type === 'user/message' && event.data.source.kind === 'user') break
-    if (event?.type === 'turn/start') break
   }
 
   const boundary = events.findLastIndex(event =>
-    event.type === 'turn/start' || (event.type === 'user/message' && event.data.source.kind === 'user'))
+    event.type === 'user/message' && event.data.source.kind === 'user')
   const current = events.slice(boundary + 1)
   const calls = new Map<string, string>()
   let action = false
