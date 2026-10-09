@@ -9,6 +9,7 @@ import z from '@phoenix-ai/schemastery'
 import { AnonymousEntries, NamedEntries, ScopedLayers, scopeTarget } from '@phoenix-ai/dsh-scope'
 import type { ScopeKey, ScopeLayer, Scoped } from '@phoenix-ai/dsh-scope'
 import type { ContextSnapshotSection, ToolSchema } from '@phoenix-ai/dsh-llm'
+import { startWindowsCapabilityDiscovery } from './windows-free-runtime.ts'
 
 declare module '@phoenix-ai/cordis' {
   interface Context {
@@ -390,6 +391,14 @@ export class SystemPrompt extends Service {
       text: config.persona ?? '',
     })
     if (!(config.includeRuntimeContext ?? true)) this.suppressRuntimeContext()
+    // The supervised Windows Host discovers free local prerequisites once in the
+    // background. Runtime-context assembly logs the snapshot like other inputs.
+    if ((config.includeRuntimeContext ?? true)
+      && process.platform === 'win32'
+      && process.env.PHOENIX_UPDATE_SUPERVISED === '1') {
+      const read = startWindowsCapabilityDiscovery(() => this.ctx.emit('system-prompt/change'))
+      this.context({ name: 'windows:free-capabilities', order: 40, text: read })
+    }
   }
 
   /**
