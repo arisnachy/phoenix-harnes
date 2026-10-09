@@ -2457,7 +2457,7 @@ describe('visible team conversation', () => {
       .join('\n') ?? ''
     expect(promptText).toContain(`Visible Kira assignment reaction target: team-member:${started.member.id}`)
     expect(promptText).toContain('team_chat_react')
-    expect(promptText).toContain('In your first normal work step')
+    expect(promptText).toContain('Execute the real work before sending an update')
     expect(promptText).toContain('do NOT call send_message just to acknowledge')
     expect(promptText).toContain('Do not end after announcing your plan')
     expect(promptText).toContain('send_message to lead with purpose result or blocker')
