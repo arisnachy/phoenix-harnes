@@ -39,6 +39,8 @@ export const zh = {
   updateAutoRetry: '将自动重试',
   updateErrorHint: '将保留上一稳定版本并自动重试',
   updatePausedHint: '满足更新条件后将重新检查',
+  updateShowDetails: '展开更新详情',
+  updateHideDetails: '收起更新详情',
 } satisfies Record<string, string>
 
 /** Plugin inventory locale key union. */
@@ -83,6 +85,8 @@ export const en = {
   updateAutoRetry: 'Will retry automatically',
   updateErrorHint: 'The last known-good version is kept while Phoenix retries',
   updatePausedHint: 'Phoenix will check again when this checkout is eligible',
+  updateShowDetails: 'Show update details',
+  updateHideDetails: 'Hide update details',
 } satisfies Record<PluginInventoryLocaleKey, string>
 
 /** Spanish dictionary checked against the same key set. */
@@ -124,4 +128,6 @@ export const es = {
   updateAutoRetry: 'Se reintentará automáticamente',
   updateErrorHint: 'Se conservará la última versión estable y se reintentará',
   updatePausedHint: 'Phoenix volverá a comprobar cuando este checkout sea elegible',
+  updateShowDetails: 'Mostrar detalles de actualización',
+  updateHideDetails: 'Ocultar detalles de actualización',
 } satisfies Record<PluginInventoryLocaleKey, string>
