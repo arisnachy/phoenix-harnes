@@ -428,10 +428,33 @@ describe('connectors settings section', () => {
 
     // Copilot's MODEL login is not a GitHub REPOSITORY connector.
     expect(screen.queryByText('GitHub Copilot')).toBeNull()
-    expect(githubCard?.textContent).not.toContain('GitHub Copilot')
+    expect(githubCard?.textContent).toContain('GitHub Copilot como proveedor de modelos es independiente')
     expect(document.querySelector('[data-authorization-key="authorization-openclaw/github"]')).toBeNull()
     expect(document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')).toBeNull()
     expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('shows the official token URL and least-privilege setup instructions inside GitHub card', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    await waitFor(() => expect(card.querySelector('details')).toBeTruthy())
+    const link = Array.from(card.querySelectorAll('a'))
+      .find(a => a.textContent === 'Crear token en GitHub')
+    expect(link?.getAttribute('href'))
+      .toBe('https://github.com/settings/personal-access-tokens/new')
+    expect(link?.getAttribute('rel')).toContain('noopener')
+    expect(card.textContent).toContain('Resource owner')
+    expect(card.textContent).toContain('Repository permissions')
+    expect(card.textContent).toContain('Read-only')
+    expect(card.textContent).toContain('90 días')
+    expect(card.textContent).toContain('Generate token')
+    expect(card.textContent).toContain('vault')
   })
 
   it('offers GitHub PAT setup instead of an OAuth URL for a broken remote MCP', async () => {

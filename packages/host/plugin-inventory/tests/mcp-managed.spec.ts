@@ -470,6 +470,52 @@ describe('ManagedMcpController', () => {
     }))
   })
 
+  it('reads the GitHub PAT config in row 16 without breaking the MCP catalog', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await controller.installCuratedMcp('github')
+    const official = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    const prefix = Array.from({ length: 16 }, (_, index) => ({
+      id: `oauth-${index}`,
+      name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      config: { transport: 'streamable-http', serverName: `oauth-${index}`,
+        url: `https://provider${index}.example.test/mcp`, headers: {}, oauth: true },
+      source: { kind: 'registry', name: `test/provider-${index}` },
+    }))
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{ insert: [...prefix, official] }]))
+    const before = readFileSync(patchPath, 'utf8')
+    await expect(controller.snapshot()).resolves.toHaveLength(17)
+    await expect(controller.snapshot()).resolves.toEqual(expect.arrayContaining([{
+      entryId: official.id,
+      serverName: 'github', url: 'https://api.githubcopilot.com/mcp/',
+      source: { kind: 'curated', connectorId: 'github' },
+    }]))
+    await expect(controller.installCuratedMcp('github')).resolves.toMatchObject({
+      status: 'already-installed', connector: { entryId: official.id },
+    })
+    expect(readFileSync(patchPath, 'utf8')).toBe(before)
+  })
+
+  it('accepts only the exact pinned GitHub token reference, URL and headers', async () => {
+    const patchPath = tempPatch()
+    const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([]) })
+    await controller.installCuratedMcp('github')
+    const official = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    for (const tampered of [
+      { ...official.config, bearerTokenRef: 'OTHER_TOKEN' },
+      { ...official.config, url: 'https://untrusted.example.test/mcp' },
+      { ...official.config, headers: { Authorization: 'not-allowed' } },
+      { ...official.config, oauthClientIdRef: 'UNEXPECTED_APP' },
+      { ...official.config, bearerTokenRef: undefined },
+    ]) {
+      writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...official, config: tampered }] }]))
+      await expect(controller.snapshot()).rejects.toThrow(/managed MCP patch row 0 is invalid/)
+    }
+  })
+
   it('installs official Vercel MCP over HTTPS with OAuth', async () => {
     const patchPath = tempPatch()
     const live = loader()

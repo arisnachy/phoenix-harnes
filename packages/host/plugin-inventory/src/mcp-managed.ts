@@ -445,6 +445,12 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
     return false
   }
 
+  // Host-curated credentials are admitted by exact specification only.
+  // GitHub's official MCP remote does NOT support OAuth DCR; the previous
+  // PAT migration persisted oauth:false and bearerTokenRef:GITHUB_MCP_TOKEN.
+  // Reject any other bearer ref, arbitrary URL, headers, or extra OAuth fields.
+  if (exactJson(value, githubMcpConfig())) return true
+
   // Slack is the one curated confidential OAuth client. Its references and
   // fixed callback are admitted only as one exact Host-owned configuration.
   if (exactJson(value, slackMcpConfig())) return true
@@ -521,6 +527,15 @@ function validManagedSource(value: unknown): value is ManagedMcpSource {
     && value.connectorId.trim().length > 0
 }
 
+/** Expose only the public MCP namespace for a rejected row; never log config. */
+function safeManagedRowLabel(value: unknown): string {
+  if (!isRecord(value) || !isRecord(value.config)) return ''
+  const serverName = value.config.serverName
+  return typeof serverName === 'string' && /^[A-Za-z0-9_-]{1,32}$/.test(serverName)
+    ? ` (server ${serverName})`
+    : ''
+}
+
 function parseManagedRows(raw: string): ManagedMcpRow[] {
   const document: unknown = JSON.parse(raw)
   if (!Array.isArray(document) || document.length !== 1) {
@@ -532,7 +547,7 @@ function parseManagedRows(raw: string): ManagedMcpRow[] {
   }
   return patch.insert.map((value, index) => {
     if (!isRecord(value) || typeof value.id !== 'string' || value.name !== MCP_CLIENT_PACKAGE || !validConfig(value.config)) {
-      throw new Error(`managed MCP patch row ${index} is invalid`)
+      throw new Error(`managed MCP patch row ${index} is invalid${safeManagedRowLabel(value)}`)
     }
     if (!validManagedInject(value.inject)) {
       throw new Error(`managed MCP patch row ${index} has an invalid inject dependency list`)

@@ -641,14 +641,31 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
-      {definition.id === 'github' && managed !== undefined && mcpRuntime?.status !== 'ready' ? (
-        <p className={styles['advancedHint']}>
-          GitHub MCP remoto no admite registro OAuth dinámico. Configura un token personal de GitHub
-          (PAT) con los permisos mínimos para tus repositorios; PHOENIX lo guardará en el vault.
-          {' '}<a href="https://github.com/settings/personal-access-tokens/new" target="_blank"
-            rel="noopener noreferrer">Crear token en GitHub</a>.
-          GitHub Copilot como proveedor de modelos es independiente.
-        </p>
+      {definition.id === 'github' ? (
+        <div className={styles['advancedHint']}>
+          <p>
+            GitHub MCP remoto no admite registro OAuth dinámico. Utiliza un token
+            personal (PAT); GitHub Copilot como proveedor de modelos es independiente.{' '}
+            <a href="https://github.com/settings/personal-access-tokens/new"
+              target="_blank" rel="noopener noreferrer">Crear token en GitHub</a>
+            {' '}·{' '}
+            <a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/github-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía completa</a>
+          </p>
+          <details>
+            <summary>Cómo crear el token y configurar los permisos</summary>
+            <ol>
+              <li>Inicia sesión en GitHub y abre «Crear token en GitHub».</li>
+              <li>En Token name escribe «Phoenix GitHub MCP» y elige una caducidad (por ejemplo, 90 días).</li>
+              <li>En Resource owner elige tu cuenta o la organización autorizada.</li>
+              <li>En Repository access selecciona solo los repositorios que utilizará Phoenix.</li>
+              <li>En Repository permissions concede Contents, Issues, Pull requests y Actions en Read-only según lo que necesites. Metadata es automático.</li>
+              <li>Solo si Kira debe modificar repositorios, aumenta a Read and write los permisos concretos necesarios.</li>
+              <li>Pulsa Generate token, cópialo una vez y pégalo únicamente en «Configurar token GitHub» dentro de Phoenix.</li>
+            </ol>
+            <p>No compartas el token en el chat, commits ni registros. Phoenix lo guardará en su vault local.</p>
+          </details>
+        </div>
       ) : null}
       {definition.id === 'figma' && managed?.url === 'http://127.0.0.1:3845/mcp'
         && mcpRuntime?.status !== 'ready' ? (
