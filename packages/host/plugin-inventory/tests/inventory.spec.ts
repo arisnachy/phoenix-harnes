@@ -157,7 +157,7 @@ describe('PluginInventoryGateway', () => {
     })
   })
 
-  it('keeps live MCP diagnostics available when managed persistence is corrupt', async () => {
+  it('keeps the validated MCP Remote response shape when managed persistence is corrupt', async () => {
     const { ctx, inventory } = await harness()
     ;(ctx as unknown as { provide(name: string, value: unknown): void }).provide('mcpConnectors', {
       list: () => [{
@@ -175,7 +175,6 @@ describe('PluginInventoryGateway', () => {
         toolNames: ['mcp__github__get_me'],
       }],
       managed: [],
-      managedStatus: 'degraded',
     })
   })
 
