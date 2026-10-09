@@ -314,10 +314,6 @@ export class TeamRoster {
 
     const initialPrompt = [
       ...request.prompt,
-      {
-        type: 'text' as const,
-        text: teamLanguageInstruction(root.session.events),
-      },
       name === 'aegis'
         ? {
           type: 'text' as const,
@@ -327,6 +323,11 @@ export class TeamRoster {
           type: 'text' as const,
           text: `Visible Kira assignment reaction target: team-member:${childId}. This is Kira's real direct assignment to you. In your first normal work step, address Kira briefly with your concrete first action; immediately execute it in that same turn. This natural update is already visible under your identity, so do NOT call send_message just to acknowledge or narrate a plan. On a real finding, peer dependency or blocker, proactively use send_message or followup_task with the exact target and purpose. Try a materially different safe approach to a recoverable failure rather than repeating an unchanged call. Before ending, send lead a short result with evidence or a blocker with the failed receipt and next option. Never claim completed work without execution receipts. Do not claim completed work, repeat the assignment or add an acknowledgement-only turn. team_chat_react is optional; never substitute an emoji for the useful work update.`,
         },
+      // Last instruction wins over English template examples in a fresh child.
+      {
+        type: 'text' as const,
+        text: teamLanguageInstruction(root.session.events),
+      },
     ]
     let started: ContinuableStart
     try {
