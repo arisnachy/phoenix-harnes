@@ -72,9 +72,10 @@ function report(platform, nodeVersion, payload, issue = null) {
         : 'runtime-not-detected',
       nativeNotifications: present && windows11 ? 'native-bridge-required' : 'unavailable',
       windowsAI: present && windows11 ? 'sdk-and-device-check-required' : 'unavailable',
-      mxc: present && Number.isFinite(nodeMajor) && nodeMajor >= 24
-        ? 'sdk-and-host-check-required'
-        : 'node-24-required',
+      mxc: !present ? 'unavailable'
+        : Number.isFinite(nodeMajor) && nodeMajor >= 24
+          ? 'sdk-and-host-check-required'
+          : 'node-24-required',
     },
   }
 }
