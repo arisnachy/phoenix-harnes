@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
-import type { UserMessageNode } from '@phoenix-ai/dsh-client-runtime/client'
 import { PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
@@ -129,7 +128,11 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
   })
 }
 
-/** One browser card per navigation request, anchored in the transcript. */
+/**
+ * Detect a user request to navigate the web.
+ * @param text - Plain text from a durable or optimistic user message.
+ * @returns Whether the message requests browser navigation.
+ */
 export function isBrowserPrompt(text: string): boolean {
   const verb = /\b(?:abre|abrir|abreme|abrirme|navega|navegar|entra|entrar|visita|visitar|accede|acceder|open|browse)\b/iu
   const target = /\b(?:ir a|ve a|busca en)\b|https?:\/\//iu
@@ -137,9 +140,13 @@ export function isBrowserPrompt(text: string): boolean {
 }
 function isBrowserRequest(node: OrderedChatNode): boolean {
   if (node.kind !== 'user' && node.kind !== 'steering') return false
-  const message = node.data as UserMessageNode
-  if (!Array.isArray(message.content)) return false
-  const text = message.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+  const payload = node.data as { content?: unknown }
+  if (!Array.isArray(payload.content)) return false
+  const text = payload.content.map((value: unknown) => {
+    if (value === null || typeof value !== 'object') return ''
+    const block = value as { type?: unknown; text?: unknown }
+    return block.type === 'text' && typeof block.text === 'string' ? block.text : ''
+  }).join('')
   return isBrowserPrompt(text)
 }
 
@@ -233,9 +240,10 @@ function buildAnchoredFlow(
 }
 
 /**
- * Put each MiniBrowser after the assistant/tool activity of its own request,
- * before the next user message. Later requests get independent keyed cards
- * rather than moving/reusing a global browser node at the bottom.
+ * Insert independently keyed browser cards at stable transcript boundaries.
+ * @param flow - Ordered render items, including optimistic messages.
+ * @param nodes - Durable messages used to recognize navigation requests.
+ * @returns The chat flow with browser cards after each relevant turn.
  */
 export function addBrowserCards(
   flow: FlowItem[],
@@ -476,26 +484,26 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
             />
             : item.kind === 'node'
               ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
-            : item.kind === 'optimistic'
-              ? (
-                <PendingSteeringBubble
-                  content={[{ type: 'text', text: item.text }]}
-                  renderMessageImages={seatProps.renderMessageImages}
-                  t={seatProps.t}
-                />
-              )
-              : item.kind === 'images'
+              : item.kind === 'optimistic'
                 ? (
-                  <div data-chat-flow-kind="generated-image">
-                    {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
-                  </div>
-                )
-                : (
-                  <ToolActivityGroup
-                    items={item.items}
-                    anchorKey={item.anchorKey}
-                    {...seatProps}
+                  <PendingSteeringBubble
+                    content={[{ type: 'text', text: item.text }]}
+                    renderMessageImages={seatProps.renderMessageImages}
+                    t={seatProps.t}
                   />
+                )
+                : item.kind === 'images'
+                  ? (
+                    <div data-chat-flow-kind="generated-image">
+                      {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+                    </div>
+                  )
+                  : (
+                    <ToolActivityGroup
+                      items={item.items}
+                      anchorKey={item.anchorKey}
+                      {...seatProps}
+                    />
                 )}
         </Fragment>
       ))}
