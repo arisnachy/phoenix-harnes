@@ -607,13 +607,12 @@ function phoenixAutoHasInlineVisualReceiptForTurn(
 
 /** A tiny requested Team showcase still gets a real Sol plan, but never pays xhigh effort. */
 export function isBriefTeamDemonstration(text: string): boolean {
-  const request = text.normalize('NFKD').replace(/[\\u0300-\\u036f]/gu, '').toLowerCase().trim()
-  if (request.length < 8 || request.length > 240 || request.includes('\\n')) return false
-  if (!/\\b(?:equipo|team|teammates|companeros|agentes)\\b/u.test(request)) return false
-  if (!/\\b(?:demo|demostracion|prueba|ejemplo|accion|action|showcase|show)\\b/u.test(request)) return false
-  // Real work, coding, remote side effects and specific external sources keep
-  // their deliberate xhigh planning route even if called a "test".
-  return !/(?:https?:\\/\\/|[a-z]:\\\\|\\b(?:github|repo|codigo|script|archivo|archivo\\w*|implementa|despliega|production|produccion|email|correo|compra|borra|elimina|contrato|paciente|sql|api|web|sitio|site|investigacion|research)\\b)/u.test(request)
+  const request = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
+  if (request.length < 8 || request.length > 240 || request.includes('\n')) return false
+  if (!/\b(?:equipo|team|teammates|companeros|agentes)\b/u.test(request)) return false
+  if (!/\b(?:demo|demostracion|prueba|ejemplo|accion|action|showcase|show)\b/u.test(request)) return false
+  // Real coding, research and external side effects retain deliberate xhigh planning.
+  return !/(?:https?:\/\/|[a-z]:\\|\b(?:github|repo|codigo|script|archivo\w*|implementa|despliega|production|produccion|email|correo|compra|borra|elimina|contrato|paciente|sql|api|web|sitio|site|investigacion|research)\b)/u.test(request)
 }
 
 function phoenixAutoTaskRequest(text: string): boolean {
@@ -641,7 +640,7 @@ function nextPhoenixAutoAssemblyStep(
 
 /** A plan is evidence only if Sol actually published text, not if it thought privately. */
 function hasVisibleSolPlan(text: string): boolean {
-  return /^(?:#{1,3}\\s*)?(?:\\*\\*)?plan(?:\\s+de\\s+trabajo)?(?:\\*\\*)?\\s*:/iu.test(text.trim())
+  return /^(?:#{1,3}\s*)?(?:\*\*)?plan(?:\s+de\s+trabajo)?(?:\*\*)?\s*:/iu.test(text.trim())
 }
 
 interface PhoenixAutoRouterState {
