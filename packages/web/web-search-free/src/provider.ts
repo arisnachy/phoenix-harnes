@@ -47,9 +47,13 @@ export class FreeSearchProvider implements WebSearchProvider {
       if ((this.blockedUntil.get(engine) ?? 0) > Date.now()) continue
       const response = await this.fetchEngine(engine, request.query, signal)
       if (!response.ok) {
-        if ([202, 403, 429, 500, 502, 503, 504, 599].includes(response.status)) {
+        if ([403, 429, 500, 502, 503, 504, 599].includes(response.status)) {
           this.blockedUntil.set(engine, Date.now() + ENGINE_COOLDOWN_MS)
         }
+        continue
+      }
+      if (response.status === 202) {
+        this.blockedUntil.set(engine, Date.now() + ENGINE_COOLDOWN_MS)
         continue
       }
       const html = await response.text()
@@ -76,7 +80,7 @@ export class FreeSearchProvider implements WebSearchProvider {
     const timer = setTimeout(() =>{  controller.abort(new Error('free search timeout')) }, this.timeoutMs)
     const combined = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal])
     try {
-      return await this.fetcher(url, { signal: combined, headers: { accept: 'text/html' } })
+      return await this.fetcher(url, { signal: combined, redirect: 'error', headers: { accept: 'text/html' } })
     } catch (error) {
       if (signal?.aborted === true) throw signal.reason ?? error
       return new Response('', { status: 599 })
