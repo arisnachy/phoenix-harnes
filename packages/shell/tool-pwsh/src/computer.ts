@@ -46,6 +46,7 @@ export type ComputerAction =
   | 'browser_fill_form'
   | 'browser_click_text'
   | 'browser_login'
+  | 'browser_forget_login'
   | 'move'
   | 'click'
   | 'double_click'
@@ -138,6 +139,7 @@ type EmbeddedBrowserAction =
   | 'browser_fill_form'
   | 'browser_click_text'
   | 'browser_login'
+  | 'browser_forget_login'
 
 interface DesktopBrowserCommand {
   type: string
@@ -162,6 +164,7 @@ function isEmbeddedBrowserAction(action: ComputerAction): action is EmbeddedBrow
     || action === 'browser_fill_form'
     || action === 'browser_click_text'
     || action === 'browser_login'
+    || action === 'browser_forget_login'
 }
 
 /**
@@ -235,6 +238,11 @@ export function browserCommandForAction(args: ComputerToolArgs): DesktopBrowserC
         type: 'phoenix.browser.login',
         origin: normalizeCredentialOrigin(args.origin as string),
         submit: args.submit !== false,
+      }
+    case 'browser_forget_login':
+      return {
+        type: 'phoenix.browser.forget-login',
+        origin: normalizeCredentialOrigin(args.origin as string),
       }
     default:
       throw new TypeError(`computer action "${args.action}" is not an embedded-browser action`)
@@ -585,6 +593,7 @@ export function validateComputerArgs(args: ComputerToolArgs): void {
       }
       return
     case 'browser_login':
+    case 'browser_forget_login':
       requiredCredentialOrigin(args.origin, args.action)
       return
     case 'browser_open':
@@ -1355,16 +1364,58 @@ async function runOriginBoundBrowserLogin(
     credentials.resolve(originCredentialRef(origin, 'secret')),
     credentials.resolve(originCredentialRef(origin, 'autonomous')),
   ])
-  if (grant?.value !== '1' || account === undefined || secret === undefined) {
-    throw new Error(`No unattended login is configured for ${origin}; use /secret login-set once.`)
+  // Legacy origin-bound credentials remain supported. Otherwise native Windows
+  // presents a secure form the first time; no password crosses the model or
+  // the browser-control pipe in that onboarding path.
+  if (grant?.value === '1' && account !== undefined && secret !== undefined) {
+    return await runEmbeddedBrowserAction(args, signal, {
+      account: account.value,
+      secret: secret.value,
+    })
   }
-  return await runEmbeddedBrowserAction(args, signal, {
-    account: account.value,
-    secret: secret.value,
-  })
+  const details = await runEmbeddedBrowserAction(args, signal)
+  let consent = false
+  try {
+    const result: unknown = JSON.parse(details)
+    consent = typeof result === 'object' && result !== null
+      && 'vaultConsent' in result && result.vaultConsent === true
+  } catch { /* A native result without consent must never imply authorization. */ }
+  if (consent && grant?.value !== '1') {
+    // Only native explicit opt-in authorizes future unattended work on the
+    // exact origin. A read-only provider cannot silently widen authority.
+    await credentials.set(originCredentialRef(origin, 'autonomous'), '1')
+  }
+  return details
+}
+
+
+/** Remove one origin's native encrypted login after native human confirmation. */
+async function forgetOriginBoundBrowserLogin(
+  ctx: Context,
+  args: ComputerToolArgs,
+  signal?: AbortSignal,
+): Promise<string> {
+  const origin = requiredCredentialOrigin(args.origin, args.action)
+  const result = await runEmbeddedBrowserAction(args, signal)
+  let forgotten = false
+  try {
+    const payload: unknown = JSON.parse(result)
+    forgotten = typeof payload === 'object' && payload !== null
+      && 'forgotten' in payload && payload.forgotten === true
+  } catch { /* Never revoke on an unverified native response. */ }
+  if (!forgotten) return result
+  const credentials = ctx.get('credentials')
+  if (credentials !== undefined) {
+    // Remove the autonomous grant and legacy slots after native confirmation.
+    await credentials.unset(originCredentialRef(origin, 'autonomous'))
+    await credentials.unset(originCredentialRef(origin, 'account'))
+    await credentials.unset(originCredentialRef(origin, 'secret'))
+  }
+  return result
 }
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
+  if (action === 'browser_forget_login') return { risk: 'high', reversible: false }
   if (action === 'move' || action === 'scroll' || action === 'focus' || action === 'browser_focus') return { risk: 'low', reversible: true }
   if (isEmbeddedBrowserAction(action)) return { risk: 'medium', reversible: true }
   if (action === 'click' || action === 'double_click' || action === 'drag') return { risk: 'medium', reversible: false }
@@ -1474,17 +1525,17 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. A /secret login-set grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
+    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login opens the protected Windows login form on first use or resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. An explicit origin-bound vault grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. When completing requested surveys and other recurring website tasks, inspect the live page and reuse applicable verified procedures, never stale field indexes. Use only user-provided or verified personal facts and answers; never invent opinions, identities, eligibility or consent. If relevant answers are missing, ask the user and resume. Never request a password in the model chat; the native vault form owns login. Respect site controls and submission limits, verify a real confirmation before declaring completion, and learn only reusable nonsecret steps backed by evidence. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
   })
 
   ctx.tools.register(defineTool({
     name: 'computer',
-    description: 'Control the Windows desktop with window-aware actions. For web work in Phoenix Desktop, prefer browser_inspect/browser_fill_form/browser_click_text/browser_login over coordinate typing when possible. browser_login uses the origin-bound vault internally and never exposes the stored account secret to the model; browser_inspect returns labels/indexes but never current field values. An origin configured with /secret login-set is a one-time grant for unattended open/login/form/click work on that exact origin. The other browser_* actions command Phoenix\'s embedded WebView2 pane directly through the native desktop channel and never intentionally launch the system browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
+    description: 'Control the Windows desktop with window-aware actions. For web work in Phoenix Desktop, prefer browser_inspect/browser_fill_form/browser_click_text/browser_login over coordinate typing when possible. browser_login uses the origin-bound vault internally, offers a human-only secure first-use form and never exposes the stored secret to the model; browser_forget_login confirms and deletes native/legacy credentials for one origin. browser_inspect returns labels/indexes but never current field values. An origin configured with /secret login-set is a one-time grant for unattended open/login/form/click work on that exact origin. The other browser_* actions command Phoenix\'s embedded WebView2 pane directly through the native desktop channel and never intentionally launch the system browser. Then use screenshot/click/type/key/scroll against the Phoenix window for full visual control. Before controlling any other external application, prefer windows -> focus(target) -> screenshot, then act. target may be a visible title/title substring, pid:1234, or hwnd:0x123ABC; when supplied, PHOENIX verifies that target is foreground before injecting input. A minimized target is never clicked from stale coordinates: call focus first, inspect its automatic fresh screenshot, then act. State-changing actions automatically attach a fresh post-action screenshot. Treat that screenshot as the source of truth and verify the visible outcome before the next action; status ok means the OS accepted the tool operation, not that the application-level goal succeeded. read-only is observe-only; workspace-write uses normal approval; danger-full-access is no-prompt desktop authority.',
     parameters: {
       action: {
         type: 'string',
         required: true,
-        enum: ['screenshot', 'windows', 'focus', 'browser_open', 'browser_close', 'browser_back', 'browser_forward', 'browser_reload', 'browser_focus', 'browser_inspect', 'browser_fill_form', 'browser_click_text', 'browser_login', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
+        enum: ['screenshot', 'windows', 'focus', 'browser_open', 'browser_close', 'browser_back', 'browser_forward', 'browser_reload', 'browser_focus', 'browser_inspect', 'browser_fill_form', 'browser_click_text', 'browser_login', 'browser_forget_login', 'move', 'click', 'double_click', 'drag', 'type', 'key', 'scroll'],
         description: 'Desktop operation. browser_inspect reads visible text/form metadata without values; browser_fill_form fills inspected indexes; browser_click_text clicks visible button/link text; browser_login uses the origin-bound vault. Other browser_* actions control Phoenix\'s embedded WebView2 directly.',
       },
       target: { type: 'string', description: 'Top-level window selector: title/title substring, pid:1234, or hwnd:0x123ABC. Required for focus; embedded browser actions do not need it.' },
@@ -1548,7 +1599,9 @@ export function registerComputerTool(ctx: Context): void {
 
       const output = args.action === 'browser_login'
         ? await runOriginBoundBrowserLogin(ctx, args, exec.signal)
-        : await runWindowsComputerAction(args, exec.signal)
+        : args.action === 'browser_forget_login'
+          ? await forgetOriginBoundBrowserLogin(ctx, args, exec.signal)
+          : await runWindowsComputerAction(args, exec.signal)
       let postScreenshot = false
 
       if (args.action === 'screenshot') {
