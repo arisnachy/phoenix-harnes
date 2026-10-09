@@ -27,6 +27,9 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
       baseColorFactor:expect.any(Array),roughnessFactor:.06,metallicFactor:0,
     })
     expect(json.extensionsUsed).toEqual(expect.arrayContaining(['KHR_materials_transmission','KHR_materials_clearcoat']))
+    expect(json.cameras).toHaveLength(1)
+    expect(json.extensionsUsed).toContain('KHR_lights_punctual')
+    expect(json.extensions.KHR_lights_punctual.lights[0].type).toBe('directional')
   })
   it('round trips imported glTF and GLB into actual edit-ready geometry with materials',()=>{
     const gltf=exportSceneGLTF(scene),glb=exportSceneGLB(scene)
@@ -37,6 +40,8 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
     const a=parseScene3D(importSceneGLTF(gltf)),b=parseScene3D(importSceneGLTF(glb))
     for(const item of [a,b]){
       expect(item?.nodes).toHaveLength(2)
+      expect(item?.environment).toBe('studio')
+      expect(item?.camera).toBe('isometric')
       expect(item?.nodes[0]).toMatchObject({
         type:'mesh',name:'Cristal',material:{metallic:0,roughness:.06,transmission:.8,clearcoat:.2},
       })
