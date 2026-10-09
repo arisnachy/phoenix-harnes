@@ -89,7 +89,7 @@ export interface ModelActivityAvatarProps {
   /** Compact is backward-compatible; card matches the approved board portrait scale. */
   variant?: 'compact' | 'card'
   /** Override for authored team events, never inferred from model names. */
-  emotion?: AvatarExpression
+  emotion?: AvatarExpression | undefined
   speaking?: boolean
   listening?: boolean
   motion?: AvatarMotion
