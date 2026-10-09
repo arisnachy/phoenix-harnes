@@ -12,6 +12,8 @@ Phoenix 不能假定本地 Windows 运行环境、人工智能 API 或加速器�
 
 Phoenix 提供按需运行的只读 JSON 清单命令 `pnpm run windows:capabilities`。该脚本只使用 Node 和系统自带的 Windows PowerShell，有限时地读取 Windows 版本、内存总量、显卡名称，以及 WinGet、WSL、Ollama、Foundry Local 和 PowerShell 7 命令是否存在；失败输出不会泄露错误详情。
 
+受 supervisor 管理的 Windows Web Host 还会在启动时异步运行一次检测。`SystemPrompt` 将已核实的工具信息作为记录在会话日志中的动态上下文传递给 Kira，并说明何时适合选择 WinGet、WSL 或候选本地推理运行环境，以及何时保持当前已配置的模型。检测不阻塞启动或模型请求。这只是发现功能，并非自动安装、本地推理集成或新的工具授权。
+
 Windows 原生通知、Windows AI API 和 Microsoft Execution Containers (MXC) 被明确标记为需要额外桥接、SDK 或硬件验证、或者更新运行环境。MXC 不作为强制依赖，因为它要求 Node 24 以上，而 Phoenix 仍支持 Node 22。
 
 ## Alternatives considered
