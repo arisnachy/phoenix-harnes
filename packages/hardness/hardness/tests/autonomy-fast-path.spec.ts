@@ -92,5 +92,7 @@ describe('HARDNESS autonomy fast path', () => {
     expect(guide).toContain('escalate only when new evidence adds risk, scope, failure, or another real trigger')
     expect(guide).toContain('do not reopen work for non-material noise')
     expect(guide).toContain('reviewer-infrastructure failures')
+    expect(guide).toContain('preview-only local form')
+    expect(renderCognitiveWorkflowGuide('es')).toContain('vista previa local')
   })
 })

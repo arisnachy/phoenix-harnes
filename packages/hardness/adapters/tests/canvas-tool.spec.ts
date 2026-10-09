@@ -1,9 +1,9 @@
 import { CallId } from '@phoenix-ai/dsh-llm'
 import type { ToolRunContext } from '@phoenix-ai/dsh-tools'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createPhoenixCanvasTool, PHOENIX_CANVAS_MIME } from '../src/canvas-tool.ts'
 
-function execution(): ToolRunContext {
+function execution(onConclude: () => void = () => {}): ToolRunContext {
   const callId = CallId('canvas-1')
   return {
     callId,
@@ -13,7 +13,7 @@ function execution(): ToolRunContext {
     token: Symbol('canvas-tool') as never,
     signal: new AbortController().signal,
     deferContext: () => {},
-    concludeTurn: () => {},
+    concludeTurn: onConclude,
   }
 }
 
@@ -50,10 +50,32 @@ describe('phoenix_canvas tool', () => {
     expect(tool.description).toContain('inside the chat conversation')
     expect(tool.description).toContain('NEVER use phoenix_canvas for an ordinary chart')
     expect(tool.description).toContain('.canvas.tsx')
+    expect(tool.description).toContain('delivery completes the request')
+    expect(tool.description).toContain('without model calls')
     expect(tool.parameters).toEqual(expect.objectContaining({
       type: 'object',
       required: ['title', 'html'],
     }))
+  })
+
+  it('finishes a preview turn immediately instead of launching model-side reviews', async () => {
+    const concludeTurn = vi.fn()
+    await createPhoenixCanvasTool().execute({ title: 'Demo', html: '<form><input></form>' }, execution(concludeTurn))
+    expect(concludeTurn).toHaveBeenCalledOnce()
+  })
+
+  it('continues only for explicitly requested follow-up work', async () => {
+    const concludeTurn = vi.fn()
+    await createPhoenixCanvasTool().execute({
+      title: 'Save after showing', html: '<h1>Preview</h1>', continueAfterDisplay: true,
+    }, execution(concludeTurn))
+    expect(concludeTurn).not.toHaveBeenCalled()
+  })
+
+  it('does not conclude a failed canvas validation', async () => {
+    const concludeTurn = vi.fn()
+    await expect(createPhoenixCanvasTool().execute({ title: 'Demo', html: '' }, execution(concludeTurn))).rejects.toThrow('html must be a non-empty string')
+    expect(concludeTurn).not.toHaveBeenCalled()
   })
 
   it('supports a static canvas when interaction is explicitly disabled', async () => {

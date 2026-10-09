@@ -126,6 +126,21 @@ export function ordinaryCompletionReviewBudget(input: {
   return { mode: 'fast', maxPasses: 0 }
 }
 
+/**
+ * Decide whether a previous independent review should be reconsidered.
+ * @param verdict - Prior independent judge decision.
+ * @param completedPasses - Reviews already performed for this task.
+ * @param maximumPasses - Upper bound on paid semantic review passes.
+ * @returns True only after a concrete fixable finding and within the pass budget.
+ */
+export function independentReviewNeedsFollowup(
+  verdict: 'pass' | 'needs_changes' | 'blocked',
+  completedPasses: number,
+  maximumPasses: number,
+): boolean {
+  return verdict === 'needs_changes' && completedPasses < maximumPasses
+}
+
 /** Structured outcome returned by one ordinary-task independent completion review. */
 export interface OrdinaryCompletionJudgeDecision {
   readonly verdict: 'pass' | 'needs_changes' | 'blocked'
@@ -150,6 +165,8 @@ interface BridgeState {
   playVerifiedGeneration: number
   judgedGeneration: number
   judgePasses: number
+  /** Only a concrete needs_changes verdict can authorize a further review of unchanged code. */
+  reviewNeedsFollowup: boolean
   failureCount: number
   request: string
   mutations: string[]
@@ -382,6 +399,8 @@ export async function reviewOrdinaryCompletion(input: {
     : ''
   let run: Awaited<ReturnType<JudgeRuntime['start']>> | undefined
   try {
+    // Preserve an explicit user cancellation rather than funding another independent run.
+    input.signal.throwIfAborted()
     run = await input.subagents.start(resolved.name, {
       label: 'ordinary-completion-judge',
       parent: input.parent,
@@ -396,6 +415,7 @@ export async function reviewOrdinaryCompletion(input: {
           + 'Observed verification tools: ' + JSON.stringify(input.verifications) + '\n'
           + 'Task quality contract: ' + JSON.stringify(taskQuality) + '\n\n'
           + 'Act as a fresh, read-only completion judge. Inspect the actual changed artifact and durable session evidence. '
+          + 'Optimize for quality first, then latency, then token cost: reuse concrete supplied evidence, inspect only material uncovered risks, do not repeat passing checks or initiate unrelated work, and return concise non-duplicated findings. '
           + gameReview
           + 'First derive an immutable literal checklist from the original request. Every explicitly named library, API, CLI flag, function name, format, wording, limit, and required behavior is mandatory and may not disappear during review. '
           + 'Map every explicit mandatory requirement to concrete evidence; passing tests are evidence, not blanket proof. Audit material assertions for expected-value provenance: '
@@ -481,6 +501,7 @@ export function installOrdinaryCompletionJudgeBridge(
       playVerifiedGeneration: 0,
       judgedGeneration: 0,
       judgePasses: 0,
+      reviewNeedsFollowup: false,
       failureCount: 0,
       request: requestText(message),
       mutations: [],
@@ -513,13 +534,17 @@ export function installOrdinaryCompletionJudgeBridge(
         state.assetDiscoveryObserved = true
         // Discovery can satisfy a deterministic blocker without mutating the artifact.
         // Reopen the same generation so the semantic judge still runs before completion.
-        if (state.judgedGeneration === state.generation) state.judgedGeneration = 0
+        if (state.judgedGeneration === state.generation && state.reviewNeedsFollowup) {
+          state.judgedGeneration = 0
+          state.reviewNeedsFollowup = false
+        }
       }
       if (isGameAssetProduction(exec.name, exec.arguments)) state.assetProductionObserved = true
       if (isGameAssetProvenanceMutation(exec.name, exec.arguments)) state.assetProvenanceObserved = true
     }
 
     if (isSubstantiveMutation(exec.name, exec.arguments)) {
+      state.reviewNeedsFollowup = false
       state.generation += 1
       state.mutations.push(operationName(exec.name))
       state.mutations = state.mutations.slice(-12)
@@ -530,9 +555,13 @@ export function installOrdinaryCompletionJudgeBridge(
         if (kinds.includes('technical')) state.technicalVerifiedGeneration = state.generation
         if (kinds.includes('visual')) state.visualVerifiedGeneration = state.generation
         if (kinds.includes('play')) state.playVerifiedGeneration = state.generation
-        // A judge may ask only for missing evidence. New deterministic evidence
-        // must therefore reopen this unchanged generation for a fresh review.
-        if (state.judgedGeneration === state.generation) state.judgedGeneration = 0
+        // Fresh deterministic evidence warrants another model review only when
+        // the prior judge identified a specific fixable gap in this generation.
+        // A PASS must not be re-audited because another test was run.
+        if (state.judgedGeneration === state.generation && state.reviewNeedsFollowup) {
+          state.judgedGeneration = 0
+          state.reviewNeedsFollowup = false
+        }
         state.verifications.push(kinds.join('+') + ':' + operationName(exec.name) + ':' + argumentText(exec.arguments).slice(0, 260))
         state.verifications = state.verifications.slice(-12)
       }
@@ -541,6 +570,7 @@ export function installOrdinaryCompletionJudgeBridge(
   }))
 
   disposers.push(ctx.on('agent/turn-stopping', async ({ agent, signal }) => {
+    if (signal.aborted) return
     const state = states.get(agent)
     if (state === undefined || state.generation === 0) return
     if (isGameDevelopmentNeed({ description: state.request })) {
@@ -590,7 +620,9 @@ export function installOrdinaryCompletionJudgeBridge(
       verifications: state.verifications,
       signal,
     })
+    if (signal.aborted) return
     state.judgedGeneration = state.generation
+    state.reviewNeedsFollowup = independentReviewNeedsFollowup(decision.verdict, state.judgePasses, reviewBudget.maxPasses)
     if (decision.verdict === 'needs_changes'
       || (decision.verdict === 'blocked' && !isJudgeInfrastructureBlock(decision))) {
       agent.steer(judgeNotice(decision))

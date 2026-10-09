@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import {
+  independentReviewNeedsFollowup,
   isGameAssetDiscovery,
   isGameAssetProduction,
   isGameAssetProvenanceMutation,
@@ -22,6 +23,26 @@ describe('ordinary completion judge', () => {
       mutationCount: 3,
       failureCount: 0,
     })).toEqual({ mode: 'fast', maxPasses: 0 })
+  })
+
+  it('only reopens a review when a fixable finding is followed by new evidence and budget remains', () => {
+    expect(independentReviewNeedsFollowup('pass', 1, 3)).toBe(false)
+    expect(independentReviewNeedsFollowup('blocked', 1, 3)).toBe(false)
+    expect(independentReviewNeedsFollowup('needs_changes', 1, 2)).toBe(true)
+    expect(independentReviewNeedsFollowup('needs_changes', 2, 2)).toBe(false)
+  })
+
+  it('does not finance independent review for pure previews and ordinary local work', () => {
+    const samples = [
+      'Muéstrame un formulario de demostración para verlo',
+      'Dame una escala interactiva del 1 al 10',
+      'Explícame brevemente qué hace esta función',
+    ]
+    for (const request of samples) {
+      expect(ordinaryCompletionReviewBudget({
+        request, configuredMaxPasses: 3, mutationCount: 0, failureCount: 0,
+      })).toEqual({ mode: 'fast', maxPasses: 0 })
+    }
   })
 
   it('escalates semantic review only for material scope, risk, or failed attempts', () => {
@@ -93,6 +114,8 @@ describe('ordinary completion judge', () => {
     })
     const prompt = options?.prompt?.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') ?? ''
     expect(prompt).toMatch(/passing tests are evidence, not blanket proof/i)
+    expect(prompt).toMatch(/Optimize for quality first, then latency, then token cost/)
+    expect(prompt).toMatch(/do not repeat passing checks or initiate unrelated work/)
     expect(prompt).toMatch(/superlinear time or space/i)
     expect(prompt).toMatch(/message field/i)
     expect(prompt).toMatch(/universal risk pass/i)
