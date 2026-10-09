@@ -305,6 +305,24 @@ describe('UpdateFooterAction', () => {
     expect(refreshForUpdate).toHaveBeenCalledOnce()
   })
 
+  it('keeps active updates to one line and reveals real details only when requested', async () => {
+    const target = 'c'.repeat(40)
+    render(<UpdateFooterAction {...updateProps(async () => ({
+      status: 'preparing', phase: 'build', target, detail: 'Building stable runtime',
+    }))} />)
+    const card = await screen.findByTestId('phoenix-update-card')
+    const expand = screen.getByRole('button', { name: en.updateShowDetails })
+    expect(expand.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByText('cccccccccccc')).toBeNull()
+    fireEvent.click(expand)
+    expect(screen.getByText('cccccccccccc')).toBeTruthy()
+    expect(screen.getByText(/Building stable runtime/)).toBeTruthy()
+    expect(card.querySelector('[class*="expandedDetails"]')).not.toBeNull()
+    expect(screen.getByRole('button', { name: en.updateHideDetails }).getAttribute('aria-expanded')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: en.updateHideDetails }))
+    expect(screen.queryByText('cccccccccccc')).toBeNull()
+  })
+
   it('renders a ready update as a compact restart action', async () => {
     const target = 'b'.repeat(40)
     render(<UpdateFooterAction {...updateProps(async () => ({ status: 'ready', target }))} />)
@@ -312,7 +330,8 @@ describe('UpdateFooterAction', () => {
     const card = await screen.findByTestId('phoenix-update-card')
     expect(card.getAttribute('data-update-status')).toBe('ready')
     expect(card.querySelector('[data-update-progress]')?.getAttribute('aria-valuenow')).toBe('100')
-    expect(screen.getByText('bbbbbbbbbbbb')).toBeTruthy()
+    expect(screen.getByTitle('bbbbbbbbbbbb')).toBeTruthy()
+    expect(screen.queryByText('bbbbbbbbbbbb')).toBeNull()
     expect(screen.queryByText(en.updateChannel)).toBeNull()
   })
 
