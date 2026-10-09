@@ -168,6 +168,7 @@ export function UpdateFooterAction({
 }: UpdateFooterActionProps) {
   const [snapshot, setSnapshot] = useState<PhoenixUpdateSnapshot>({ status: 'idle' })
   const [requesting, setRequesting] = useState(false)
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const requestInFlight = useRef(false)
 
   const acceptDurableSnapshot = useCallback((next: PhoenixUpdateSnapshot) => {
@@ -313,16 +314,15 @@ export function UpdateFooterAction({
   const retryable = errorState || snapshot.status === 'paused'
   const detail = retryable
     ? snapshot.detail ?? t(snapshot.status === 'paused' ? 'updatePausedHint' : 'updateErrorHint')
-    : undefined
+    : snapshot.detail
   const content = (
     <>
       <UpdateGlyph spinning={busy} />
       {wide && (
-        <span className={css.copy} title={detail}>
+        <span className={css.copy} title={detail ?? target}>
           <span className={css.title}>{label}</span>
-          {target !== undefined && <code className={css.target}>{target}</code>}
           {ready ? <span className={css.detail}>{t('updateRestart')}</span> : null}
-          {retryable ? (
+          {retryable && detailsOpen ? (
             <button
               type="button"
               className={css.retryButton}
@@ -333,6 +333,23 @@ export function UpdateFooterAction({
               {t('retry')}
             </button>
           ) : null}
+        </span>
+      )}
+      {wide && !ready && (
+        <button
+          type="button"
+          className={css.expander}
+          aria-label={t(detailsOpen ? 'updateHideDetails' : 'updateShowDetails')}
+          aria-expanded={detailsOpen}
+          onClick={() => { setDetailsOpen(open => !open) }}
+        >
+          {detailsOpen ? '⌃' : '⌄'}
+        </button>
+      )}
+      {wide && !ready && detailsOpen && (
+        <span className={css.expandedDetails}>
+          {target === undefined ? null : <code>{target}</code>}
+          {detail ?? label}
           {busy && progress > 0 ? (
             <span className={css.progressTrack} aria-hidden="true">
               <span className={css.progressValue} style={{ width: `${String(progress)}%` }} />
