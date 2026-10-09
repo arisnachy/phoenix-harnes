@@ -11,6 +11,11 @@ export interface Scene3DMaterial {
   readonly transmission?: number
   readonly clearcoat?: number
   readonly emissive?: string
+  /** Embedded PNG/JPEG only: never remote URLs or scripts. */
+  readonly baseColorTexture?: string
+  readonly normalTexture?: string
+  readonly occlusionTexture?: string
+  readonly metallicRoughnessTexture?: string
 }
 /** Primitive objects and imported triangular meshes share one portable scene. */
 export interface Scene3DNode {
@@ -69,7 +74,14 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
         (typeof sourceMaterial[key]!=='number'||!Number.isFinite(sourceMaterial[key])||(sourceMaterial[key] as number)<0||(sourceMaterial[key] as number)>1))
         || ['baseColor','emissive'].some(key=>sourceMaterial[key]!==undefined&&
           (typeof sourceMaterial[key]!=='string'||!colorPattern.test(sourceMaterial[key] as string)))) return undefined
+      const textureProps=['baseColorTexture','normalTexture','occlusionTexture','metallicRoughnessTexture'] as const
+      const embedded=/^data:image\/(?:png|jpeg);base64,[a-z0-9+/]+={0,2}$/iu
+      if(textureProps.some(key=>sourceMaterial[key]!==undefined&&
+        (typeof sourceMaterial[key]!=='string'||(sourceMaterial[key] as string).length>1_500_000||
+          !embedded.test(sourceMaterial[key] as string))))return undefined
       material={
+        ...Object.fromEntries(textureProps.filter(key=>typeof sourceMaterial[key]==='string')
+          .map(key=>[key,sourceMaterial[key]])),
         ...(typeof sourceMaterial.preset==='string'?{preset:sourceMaterial.preset.slice(0,40)}:{}),
         ...(typeof sourceMaterial.baseColor==='string'?{baseColor:sourceMaterial.baseColor}:{}),
         ...(typeof sourceMaterial.emissive==='string'?{emissive:sourceMaterial.emissive}:{}),
