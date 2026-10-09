@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Scene3DView, parseScene3D } from '../src/client/chat/Scene3DView.tsx'
 import { normalizeHardnessArtifact } from '../src/client/artifact.ts'
 import { HardnessArtifactBody } from '../src/client/chat/HardnessArtifactBody.tsx'
+import { UniversalArtifactSurface } from '../src/client/chat/UniversalArtifactSurface.tsx'
 
 const scene={
   version:1,units:'meters',name:'Casa tropical',background:'#f9f3eb',
@@ -44,6 +45,23 @@ describe('Phoenix real interactive 3D artifacts',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Pausar'}))
     fireEvent.click(screen.getByRole('button',{name:'Restablecer'}))
     expect(ctx.fillRect).toHaveBeenCalled()
+  })
+  it('opens 3D in a true expanded dialog and keeps orbit controls operational',()=>{
+    const ctx={setTransform:vi.fn(),fillRect:vi.fn(),beginPath:vi.fn(),moveTo:vi.fn(),
+      lineTo:vi.fn(),stroke:vi.fn(),closePath:vi.fn(),fill:vi.fn()} as unknown as CanvasRenderingContext2D
+    vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(ctx)
+    const artifact=normalizeHardnessArtifact({
+      id:'villa-3d',title:'Villa en 3D',mime:'application/vnd.phoenix.scene3d+json',data:scene,
+    })
+    render(<UniversalArtifactSurface artifact={artifact} />)
+    expect(screen.getByRole('button',{name:'Expand'})).toBeTruthy()
+    fireEvent.click(screen.getByRole('button',{name:'Expand'}))
+    const dialog=screen.getByRole('dialog',{name:'Vista ampliada: Villa en 3D'})
+    expect(dialog.querySelector('[data-phoenix-scene3d="interactive"]')).toBeTruthy()
+    expect(dialog.querySelector('canvas')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button',{name:'Acercar modelo 3D'}))
+    fireEvent.click(screen.getByRole('button',{name:'Collapse'}))
+    expect(screen.getByRole('button',{name:'Expand'})).toBeTruthy()
   })
   it('shows an actionable validation error rather than pretending invalid geometry is a scene',()=>{
     render(<Scene3DView spec={{version:1,units:'meters',nodes:[]}} />)
