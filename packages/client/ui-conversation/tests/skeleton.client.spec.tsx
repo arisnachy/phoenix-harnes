@@ -32,8 +32,10 @@ import type {
 import type { ViewTab } from '../src/client/contract/views.ts'
 
 /** Machine-backed wiring over a sink spy. */
-function fakeWiring() {
-  const sink = vi.fn(() => Promise.resolve({ kind: 'success' as const }))
+function fakeWiring(holdSubmit = false) {
+  const sink = vi.fn(() => holdSubmit
+    ? new Promise<{ kind: 'success' }>(() => {})
+    : Promise.resolve({ kind: 'success' as const }))
   const shell = new SessionInputShell({ actx: {} as ClientContext, defaultSink: sink, commandImages: { serialize: () => Promise.resolve([]), release: () => {}, unsupportedNotice: (token: string) => `${token.trim()} images-unsupported` } })
   return { wiring: shell, sink, shell }
 }
@@ -105,6 +107,8 @@ function mount(
     preferredName?: string
     /** Mutable view ledger used by registration-order regressions. */
     viewTabs?: ViewTab[]
+    /** Keep the local submit receipt visible until the test explicitly unmounts. */
+    holdSubmit?: boolean
   } = {},
 ) {
   const root = sid('root')
@@ -141,7 +145,7 @@ function mount(
   const useSession = bindSnapshotSelector(session)
   const chat = createChatStore().create()
   chat.actions.setDraft('ordinary draft')
-  const { wiring, sink } = fakeWiring()
+  const { wiring, sink } = fakeWiring(options.holdSubmit === true)
   const useInput = bindSnapshotSelector(wiring.state)
   const inputActions = wiring.actions
   const stop = vi.fn()
@@ -283,7 +287,7 @@ function mount(
   }
   const view = render(<ConversationRoot {...props} />)
   return {
-    view, chat, sink, retargetWorkspace, session, slotCalls, lineageOwners, seatOwners, open, focusSidebar,
+    view, chat, sink, wiring, retargetWorkspace, session, slotCalls, lineageOwners, seatOwners, open, focusSidebar,
     pickerOwner: () => pickerOwner,
     rerender: () => { act(() => { for (const listener of viewListeners) listener() }); view.rerender(<ConversationRoot {...props} />) },
   }
@@ -614,14 +618,69 @@ describe('ConversationRoot resident composer', () => {
 })
 
 describe('Contextual focus chrome', () => {
-  it('collapses the sidebar only when the user starts typing in the composer', () => {
-    const b = mount(conversationSnapshot())
+  it('does not collapse during typing, newlines, or sending an existing conversation', async () => {
+    const b = mount(conversationSnapshot(), undefined, undefined, { holdSubmit: true })
+    const textarea = b.view.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Escribiendo en Phoenix' } })
+    fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: true })
     expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
-    const textarea = b.view.container.querySelector('textarea')
-    if (textarea === null) throw new Error('resident composer textarea is required')
-    fireEvent.input(textarea, { target: { value: 'Escribiendo en Phoenix' } })
-    expect(b.focusSidebar).toHaveBeenLastCalledWith(true)
+    fireEvent.keyDown(textarea, { key: 'Enter' })
+    await act(async () => { await Promise.resolve() })
+    const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+    if (scroll === null) throw new Error('conversation scroll surface is required')
+    const flow = document.createElement('div')
+    flow.setAttribute('data-chat-flow', '')
+    flow.innerHTML = '<div data-pending-steering="true">Sent in existing chat</div>'
+    act(() => { scroll.prepend(flow) })
+    await act(async () => { await new Promise(resolve => window.setTimeout(resolve, 110)) })
+    expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
   })
+
+  it.each(['enter', 'button'] as const)(
+    'waits for first-user-bubble paint after %s before collapsing the sidebar', async method => {
+      vi.useFakeTimers()
+      vi.stubGlobal('requestAnimationFrame',
+        (callback: FrameRequestCallback) => window.setTimeout(() => { callback(0) }, 16))
+      vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id))
+      try {
+        const b = mount(
+          conversationSnapshot({ composerPhase: 'blank', blank: true }),
+          undefined, undefined, { summaryBlank: true, holdSubmit: true },
+        )
+        const textarea = b.view.getByRole('textbox')
+        fireEvent.change(textarea, { target: { value: 'Primer mensaje' } })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        if (method === 'enter') {
+          fireEvent.keyDown(textarea, { key: 'Enter' })
+        } else {
+          fireEvent.click(b.view.getByRole('button', { name: '发送消息' }))
+        }
+        await act(async () => { await Promise.resolve(); await Promise.resolve() })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+        if (scroll === null) throw new Error('conversation scroll surface is required')
+        const flow = document.createElement('div')
+        flow.setAttribute('data-chat-flow', '')
+        const bubble = document.createElement('div')
+        bubble.setAttribute('data-pending-steering', 'true')
+        bubble.textContent = 'Primer mensaje'
+        // The blank hero remains expanded while admission is pending.
+        act(() => { scroll.prepend(flow) })
+        await act(async () => { await vi.advanceTimersByTimeAsync(250) })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        act(() => { flow.append(bubble) })
+        await act(async () => { await Promise.resolve() })
+        await act(async () => { await vi.advanceTimersByTimeAsync(16) })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        await act(async () => { await vi.advanceTimersByTimeAsync(71) })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+        await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+        expect(b.focusSidebar).toHaveBeenLastCalledWith(true)
+      } finally {
+        vi.useRealTimers()
+      }
+    },
+  )
 
   it('compacts for visual output and lets an explicit header expansion win', async () => {
     const b = mount(conversationSnapshot())
