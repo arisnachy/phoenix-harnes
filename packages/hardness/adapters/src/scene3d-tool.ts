@@ -11,6 +11,16 @@ interface SceneNode {
   readonly size: readonly [number, number, number]
   readonly rotation?: readonly [number, number, number]
   readonly color: string
+  readonly material?: {
+    readonly preset?: string
+    readonly baseColor?: string
+    readonly emissive?: string
+    readonly metallic?: number
+    readonly roughness?: number
+    readonly opacity?: number
+    readonly transmission?: number
+    readonly clearcoat?: number
+  }
 }
 interface Scene {
   readonly version: 1
@@ -18,6 +28,8 @@ interface Scene {
   readonly name: string
   readonly background: string
   readonly nodes: readonly SceneNode[]
+  readonly environment?: 'studio' | 'sunset' | 'daylight'
+  readonly camera?: 'perspective' | 'isometric' | 'front' | 'top'
 }
 const hex = /^#[0-9a-f]{6}$/iu
 const validVector = (value: unknown, min: number, max: number): value is number[] =>
@@ -45,11 +57,33 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
       || typeof node.color !== 'string' || !hex.test(node.color)) {
       throw new ToolArgsError([`Objeto 3D ${index + 1}: position/size/rotation o color inválidos.`])
     }
+    const inputMaterial = node.material
+    let material:SceneNode['material']
+    if (inputMaterial !== undefined) {
+      if (typeof inputMaterial !== 'object' || inputMaterial === null || Array.isArray(inputMaterial)) {
+        throw new ToolArgsError([`Objeto 3D ${index + 1}: material inválido.`])
+      }
+      const value=inputMaterial as Record<string,unknown>
+      const props=['metallic','roughness','opacity','transmission','clearcoat'] as const
+      if (props.some(key=>value[key]!==undefined&&
+        (typeof value[key]!=='number'||!Number.isFinite(value[key])||(value[key] as number)<0||(value[key] as number)>1))
+        ||['baseColor','emissive'].some(key=>value[key]!==undefined&&
+          (typeof value[key]!=='string'||!hex.test(value[key] as string)))) {
+        throw new ToolArgsError([`Objeto 3D ${index + 1}: parámetros PBR inválidos.`])
+      }
+      material={
+        ...(typeof value.preset==='string'?{preset:value.preset.slice(0,40)}:{}),
+        ...(typeof value.baseColor==='string'?{baseColor:value.baseColor}:{}),
+        ...(typeof value.emissive==='string'?{emissive:value.emissive}:{}),
+        ...Object.fromEntries(props.filter(key=>typeof value[key]==='number').map(key=>[key,value[key]])),
+      }
+    }
     return {
       type: node.type as Primitive,
       position: [node.position[0]!, node.position[1]!, node.position[2]!],
       size: [node.size[0]!, node.size[1]!, node.size[2]!],
       color: node.color,
+      ...(material===undefined?{}:{material}),
       ...(typeof node.name === 'string' && node.name.length <= 100 ? { name: node.name } : {}),
       ...(node.rotation === undefined ? {} : { rotation: [node.rotation[0]!, node.rotation[1]!, node.rotation[2]!] }),
     }
@@ -60,6 +94,8 @@ function normalizeScene(raw: unknown, fallbackName: string): Scene {
     name: typeof data.name === 'string' && data.name.trim() !== '' ? data.name.slice(0, 140) : fallbackName,
     background: typeof data.background === 'string' && hex.test(data.background) ? data.background : '#f7f2eb',
     nodes,
+    ...(data.environment==='studio'||data.environment==='sunset'||data.environment==='daylight'?{environment:data.environment}:{}),
+    ...(data.camera==='perspective'||data.camera==='isometric'||data.camera==='front'||data.camera==='top'?{camera:data.camera}:{}),
   }
 }
 
@@ -100,7 +136,7 @@ export function tropicalVillaScene(): Scene {
 export function createPhoenix3DTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_3d',
-    description: 'Create a REAL INTERACTIVE THREE-DIMENSIONAL SCENE and show it inside Phoenix chat. For requests such as modelo 3D, casa 3D, diseño 3D, rotar, orbit, zoom, manipulable, modelo para una app, use THIS tool, not image_generation or phoenix_visualize. Output is 3D geometry (not PNG): the user can drag to rotate, use the wheel or +/- to zoom, reset the camera, and download a portable versioned JSON model reusable in Phoenix apps. For a quick fictional tropical villa concept use demo:true and no scene (local zero-model-cost geometry). For original designs provide scene:{nodes:[{type:"box"|"sphere"|"cylinder"|"cone",name?,position:[x,y,z],size:[x,y,z],rotation?:[degreesX,degreesY,degreesZ],color:"#rrggbb"}],name?,background?}. Coordinates and sizes are meters; y is vertical. Approximate reference photos as clearly labeled 3D concepts: do NOT claim exact photo-to-CAD reconstruction, survey measurements, accurate GLB or photorealistic rendering. Up to 150 nodes. No external scripts, URLs, image substitution or fake interactive buttons. A self-contained scene finishes the requested presentation; continueAfterDisplay only for additional explicitly requested work.',
+    description: 'Create a REAL INTERACTIVE THREE-DIMENSIONAL SCENE and show it inside Phoenix chat. For requests such as modelo 3D, casa 3D, diseño 3D, rotar, orbit, zoom, manipulable, modelo para una app, use THIS tool, not image_generation or phoenix_visualize. Output is 3D geometry (not PNG): the user can drag to rotate, use the wheel or +/- to zoom, reset the camera, and download a portable versioned JSON model reusable in Phoenix apps. For a quick fictional tropical villa concept use demo:true and no scene (local zero-model-cost geometry). For original designs provide scene:{environment:"sunset"|"studio"|"daylight",camera:"isometric"|"front"|"top"|"perspective",nodes:[{type:"box"|"sphere"|"cylinder"|"cone",name?,position:[x,y,z],size:[x,y,z],rotation?:[degreesX,degreesY,degreesZ],color:"#rrggbb",material?:{preset?:"glass"|"wood"|"concrete"|"metal"|"water"|"foliage",baseColor?:"#rrggbb",metallic?:number,roughness?:number,opacity?:number,transmission?:number,clearcoat?:number,emissive?:"#rrggbb"}}],name?,background?}. Coordinates and sizes are meters; y is vertical. Approximate reference photos as clearly labeled 3D concepts: do NOT claim exact photo-to-CAD reconstruction, survey measurements, exact photorealistic reconstruction; the viewer provides GLB/glTF import-export with glTF PBR material parameters and editable geometry, not CAD/BIM. Up to 150 nodes. No external scripts, URLs, image substitution or fake interactive buttons. A self-contained scene finishes the requested presentation; continueAfterDisplay only for additional explicitly requested work.',
     parameters: {
       title: { type: 'string', required: true, description: 'Human-readable title of the real 3D model.' },
       demo: { type: 'boolean', description: 'True generates a complete tropical villa concept scene in 3D without another model call.' },

@@ -22,7 +22,8 @@ export type { IConversation } from './service.ts'
 export type { DraftAttachmentId } from './input/contract.ts'
 export type { HardnessArtifactChatData, HardnessArtifactValue } from './conversation-nodes/hardness-artifact.ts'
 export { Scene3DView, parseScene3D } from './chat/Scene3DView.tsx'
-export type { Scene3D, Scene3DNode } from './chat/Scene3DView.tsx'
+export { exportSceneGLTF, exportSceneGLB, importSceneGLTF } from './chat/scene3d-formats.ts'
+export type { Scene3D, Scene3DNode, Scene3DMaterial } from './chat/Scene3DView.tsx'
 
 export type {
   CallId, ChatStoreState, SelectionTarget, ViewTab,

@@ -46,3 +46,37 @@
   .canvasLarge { height: 60vh; min-height: 330px; }
   .actions button { padding: 4px 9px; min-height: 29px; }
 }
+
+.hiddenInput { display: none; }
+.editor {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--dsw-alias-border-subtle, #dfd3c7);
+  padding: 12px;
+  background: color-mix(in srgb, var(--dsw-alias-surface-primary, #fbf7f1) 96%, #a9815e 4%);
+  color: var(--dsw-alias-label-primary, #332f2a);
+}
+.editor label { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; }
+.editor select, .editor input {
+  min-height: 28px; border-radius: 9px; padding: 3px 6px;
+  border: 1px solid var(--dsw-alias-border-subtle, #dfd3c7);
+  background: var(--dsw-alias-surface-primary, #fbf7f1);
+  color: inherit;
+}
+.editor p { margin: 0; font-size: 11px; opacity: .7; }
+
+.cameraControl {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary, #766c63);
+}
+.cameraControl select {
+  min-height: 30px;
+  border-radius: 999px;
+  border: 1px solid var(--dsw-alias-border-subtle, #dfd3c7);
+  padding: 4px 9px;
+  color: var(--dsw-alias-label-primary, #332f2a);
+  background: var(--dsw-alias-surface-primary, #fbf7f1);
+}
