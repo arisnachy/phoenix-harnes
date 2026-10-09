@@ -36,7 +36,8 @@ export function teamMissionClosed(events: readonly SessionEvent[]): boolean {
     if (event.type === 'tool/call') {
       calls.set(String(event.data.callId), event.data.name)
     } else if (event.type === 'tool/result' && event.data.error === undefined
-      && event.data.message.content.some(block => block.type === 'tool-result' && block.isError !== true)) {
+      && event.data.message.content.length > 0
+      && event.data.message.content.every(block => block.isError !== true)) {
       const tool = calls.get(String(event.data.message.source.callId))
       if (tool !== undefined) {
         action ||= EFFECT.test(tool)
