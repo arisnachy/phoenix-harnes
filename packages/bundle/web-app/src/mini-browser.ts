@@ -100,15 +100,18 @@ function chromiumExecutable(): string {
 async function startChromium(): Promise<string> {
   if (launching) return launching
   launching = (async () => {
+    const executable = chromiumExecutable()
     const profile = mkdtempSync(join(tmpdir(), 'phoenix-inline-'))
     ownedProfile = profile
-    const child = spawn(chromiumExecutable(), [
+    const child = spawn(executable, [
       '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
       '--user-data-dir=' + profile, '--headless=new', '--window-size=1280,820',
       '--force-device-scale-factor=1', '--no-first-run', '--no-default-browser-check',
       '--disable-sync', 'about:blank',
     ], { stdio: 'ignore', windowsHide: true })
     owned = child
+    let spawnFailure: Error | undefined
+    child.once('error', error => { spawnFailure = error })
     const deadline = Date.now() + LIMIT_MS
     while (Date.now() < deadline) {
       try {
@@ -122,11 +125,11 @@ async function startChromium(): Promise<string> {
           }
         }
       } catch { /* startup still in progress */ }
-      if (child.exitCode !== null) break
+      if (child.exitCode !== null || spawnFailure) break
       await new Promise(resolve => setTimeout(resolve, 100))
     }
     cleanup()
-    throw new Error('Chromium no inició su canal de control CDP.')
+    throw new Error('Chromium no inició su canal de control CDP.' + (spawnFailure ? ' ' + String(spawnFailure) : ''))
   })().finally(() => { launching = undefined })
   return launching
 }
@@ -267,8 +270,16 @@ async function action(input: Action): Promise<Record<string, unknown>> {
       && !['Enter', 'Tab', 'Backspace', 'Delete', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(key))
       throw new Error('Tecla no admitida.')
     const modifiers = Number(input.modifiers) & 15
-    await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', key, ...(key.length === 1 && modifiers === 0 ? { text: key } : {}), modifiers })
-    await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', key, modifiers })
+    const virtualKeys: Record<string, number> = {
+      Enter: 13, Tab: 9, Backspace: 8, Delete: 46, Escape: 27,
+      ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Home: 36, End: 35,
+    }
+    const virtual = virtualKeys[key] ?? (key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0)
+    const printable = key.length === 1 && modifiers === 0
+    const text = printable ? key : key === 'Enter' ? '\\r' : undefined
+    const params = { key, code: key, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual, modifiers }
+    await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', ...params, ...(text === undefined ? {} : { text }) })
+    await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', ...params })
   } else if (type === 'text') {
     const text = input.text
     if (typeof text !== 'string' || text.length > 4096) throw new Error('Texto no válido.')
