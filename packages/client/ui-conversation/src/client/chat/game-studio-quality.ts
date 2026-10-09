@@ -36,7 +36,7 @@ function missing(set: Set<string>, required: readonly string[], prefix: string, 
 type GameProfile = 'run-and-gun' | 'platformer' | 'top-down-action' | 'racing' | 'puzzle' | 'strategy' | 'rpg' | 'rhythm' | 'simulation' | '3d' | 'custom'
 
 function profileFor(manifest: RecordValue, warnings: string[], issues: string[]): GameProfile {
-  const raw = (nonempty(manifest.gameType) ? manifest.gameType : manifest.genre) as string
+  const raw = nonempty(manifest.gameType) ? manifest.gameType : nonempty(manifest.genre) ? manifest.genre : 'custom'
   const value = raw.toLowerCase().trim()
   const explicit = nonempty(manifest.gameType)
   if (/run.and.gun|contra|shooter|shoot.em.up/u.test(value)) return 'run-and-gun'
