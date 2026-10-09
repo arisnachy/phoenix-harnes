@@ -718,6 +718,45 @@ describe('connectors settings section', () => {
   })
 
 
+  it('offers independent official Meta DevTools and WhatsApp Business install actions with honest limitations', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async ({ connectorId }: { connectorId: string }) => ({
+      status: 'installed' as const,
+      connector: {
+        entryId: connectorId + '-entry',
+        serverName: connectorId,
+        url: connectorId === 'meta-devtools'
+          ? 'https://mcp.facebook.com/devtools'
+          : 'https://mcp.facebook.com/whatsapp_business_tools',
+        source: { kind: 'curated' as const, connectorId },
+      },
+    }))
+    const search = vi.fn()
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search,
+    } })
+    const devtools = document.querySelector('[data-connector-id="meta-devtools"]')!
+    const whatsapp = document.querySelector('[data-connector-id="meta-whatsapp-business"]')!
+    expect(devtools).toBeTruthy()
+    expect(whatsapp).toBeTruthy()
+    expect(devtools.textContent).toContain('No sirve para publicar')
+    expect(devtools.querySelector('a[href="https://developers.facebook.com/documentation/mcp/devtools-mcp"]'))
+      .toBeTruthy()
+    expect(whatsapp.textContent).toContain('no para WhatsApp personal')
+    expect(whatsapp.textContent).toContain('generar cargos de Meta')
+    expect(devtools.querySelector('button')?.textContent).toBeDefined()
+    const installMeta = Array.from(devtools.querySelectorAll('button')).find(b => b.textContent === 'Install')
+    expect(installMeta).toBeTruthy()
+    fireEvent.click(installMeta!)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'meta-devtools' }))
+    expect(search).not.toHaveBeenCalled()
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
   it('installs Canva directly as a Host-curated official MCP when the Host supports it', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),

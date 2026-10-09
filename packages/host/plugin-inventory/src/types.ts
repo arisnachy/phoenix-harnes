@@ -127,6 +127,8 @@ export type CuratedMcpConnectorId =
   | 'heygen'
   | 'figma'
   | 'github'
+  | 'meta-devtools'
+  | 'meta-whatsapp-business'
   | 'vercel'
   | 'notion'
   | 'linear'

@@ -102,10 +102,10 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
-type CuratedMcpConnectorId = 'github' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+type CuratedMcpConnectorId = 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
 
 const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
-  'github', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
+  'github', 'meta-devtools', 'meta-whatsapp-business', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
   'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
 ])
 
@@ -279,7 +279,7 @@ const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
 // do not declare an OAuth method absent before the registry has time to settle.
 const MCP_AUTH_FLOW_RETRY_MS = [0, 250, 500, 750, 1_000, 1_500, 2_000, 2_500, 3_000] as const
 const CURATED_OAUTH_MCP_IDS = new Set<string>([
-  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
+  'meta-devtools', 'meta-whatsapp-business', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
 ])
 const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
@@ -665,6 +665,36 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
             </ol>
             <p>No compartas el token en el chat, commits ni registros. Phoenix lo guardará en su vault local.</p>
           </details>
+        </div>
+      ) : null}
+      {definition.id === 'meta-devtools' ? (
+        <div className={styles['advancedHint']}>
+          <p>
+            MCP oficial de Meta para tus aplicaciones, permisos, App Review, uso de API y webhooks.
+            No sirve para publicar directamente en páginas de Facebook o cuentas de Instagram.
+            {' '}<a href="https://developers.facebook.com/documentation/mcp/devtools-mcp"
+              target="_blank" rel="noopener noreferrer">Documentación oficial</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/meta-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía de Phoenix</a>.
+          </p>
+          <p>OAuth de Meta requiere autorización real y puede exigir un redirect HTTPS; si Meta rechaza
+            el callback local de Phoenix, la conexión permanecerá pendiente, nunca conectada ficticiamente.</p>
+        </div>
+      ) : null}
+      {definition.id === 'meta-whatsapp-business' ? (
+        <div className={styles['advancedHint']}>
+          <p>
+            Para WhatsApp Business Cloud API, no para WhatsApp personal.
+            Necesitas permisos de administrador en Meta Business y en la app de WhatsApp,
+            además de aceptar los términos de Cloud API.
+            {' '}<a href="https://mcp.facebook.com/whatsapp_business_tools"
+              target="_blank" rel="noopener noreferrer">Servidor oficial</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/meta-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía de Phoenix</a>.
+          </p>
+          <p>Conectar y consultar no supone envíos gratuitos ilimitados. Algunos mensajes y
+            operaciones pueden generar cargos de Meta: confirma el coste y pide aprobación
+            antes de cualquier envío o cambio de facturación.</p>
         </div>
       ) : null}
       {definition.id === 'figma' && managed?.url === 'http://127.0.0.1:3845/mcp'

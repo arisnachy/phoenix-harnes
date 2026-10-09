@@ -516,6 +516,50 @@ describe('ManagedMcpController', () => {
     }
   })
 
+  it('pins Meta DevTools and WhatsApp Business to their exact official endpoints without secrets', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('meta-devtools-instance').mockResolvedValueOnce('meta-whatsapp-instance')
+    const registrySearch = registry([])
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch })
+    const devtools = await controller.installCuratedMcp('meta-devtools')
+    const whatsapp = await controller.installCuratedMcp('meta-whatsapp-business')
+    expect(devtools).toMatchObject({ status: 'installed', connector: {
+      entryId: 'meta-devtools-instance', serverName: 'meta-devtools',
+      url: 'https://mcp.facebook.com/devtools',
+      source: { kind: 'curated', connectorId: 'meta-devtools' },
+    } })
+    expect(whatsapp).toMatchObject({ status: 'installed', connector: {
+      entryId: 'meta-whatsapp-instance', serverName: 'meta-whatsapp-business',
+      url: 'https://mcp.facebook.com/whatsapp_business_tools',
+      source: { kind: 'curated', connectorId: 'meta-whatsapp-business' },
+    } })
+    expect(live.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({
+        serverName: 'meta-devtools', transport: 'streamable-http',
+        url: 'https://mcp.facebook.com/devtools', headers: {}, oauth: true,
+      }),
+    }))
+    expect(live.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({
+        serverName: 'meta-whatsapp-business', transport: 'streamable-http',
+        url: 'https://mcp.facebook.com/whatsapp_business_tools', headers: {}, oauth: true,
+      }),
+    }))
+    expect(registrySearch).not.toHaveBeenCalled()
+    await expect(controller.snapshot()).resolves.toHaveLength(2)
+    expect(await controller.installCuratedMcp('meta-devtools')).toMatchObject({
+      status: 'already-installed', connector: { entryId: 'meta-devtools-instance' },
+    })
+    expect(await controller.installCuratedMcp('meta-whatsapp-business')).toMatchObject({
+      status: 'already-installed', connector: { entryId: 'meta-whatsapp-instance' },
+    })
+    expect(readFileSync(patchPath, 'utf8')).not.toContain('access_token')
+    expect(readFileSync(patchPath, 'utf8')).not.toContain('client_secret')
+  })
+
   it('installs official Vercel MCP over HTTPS with OAuth', async () => {
     const patchPath = tempPatch()
     const live = loader()
