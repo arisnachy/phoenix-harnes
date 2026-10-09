@@ -1,5 +1,5 @@
 import { AssistantMailPanel, type AssistantMailClient } from './AssistantMailPanel.tsx'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
 import type { en } from './locales.ts'
@@ -218,6 +218,8 @@ export interface AuthorizationPanelProps {
 }
 
 export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps {
+  /** Direct-launch mode from the main Phoenix navigation. */
+  launchContext?: 'discover' | 'connectors' | 'team'
   assistantMail?: AssistantMailClient
   connectorT: (key: ConnectorKey) => string
   chatGptWeb?: ChatGptWebBridgeClient
@@ -941,6 +943,7 @@ export function ConnectorsSettingsSection({ api,
   settings,
   mcpRegistry,
   assistantMail,
+  launchContext,
   onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
   const [entries, setEntries] = useState<Entry[]>([])
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
@@ -948,6 +951,15 @@ export function ConnectorsSettingsSection({ api,
   const [refresh, setRefresh] = useState(0)
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<ConnectorFilter>('all')
+  const catalogSearch = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (launchContext === 'discover') {
+      setFilter('available')
+      catalogSearch.current?.focus({ preventScroll: true })
+    } else if (launchContext === 'connectors') {
+      setFilter('all')
+    }
+  }, [launchContext])
   const [registrySnapshot, setRegistrySnapshot] = useState<McpRegistrySearchSnapshot | undefined>()
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryFailure, setRegistryFailure] = useState(false)
@@ -1664,7 +1676,7 @@ export function ConnectorsSettingsSection({ api,
           <p>{connectorT('catalogHint')}</p>
         </div>
         <div className={hubStyles['toolbar']}>
-          <input className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('searchRegistry')} value={query} onChange={(event) => { setQuery(event.target.value) }} />
+          <input ref={catalogSearch} className={hubStyles['search']} type="search" aria-label={connectorT('search')} placeholder={connectorT('searchRegistry')} value={query} onChange={(event) => { setQuery(event.target.value) }} />
           <div className={hubStyles['filters']}>
             {(['all', 'connected', 'available'] as const).map(value => (
               <button key={value} type="button" aria-pressed={filter === value} className={filter === value ? hubStyles['filterActive'] : undefined} onClick={() => { setFilter(value) }}>
