@@ -329,17 +329,17 @@
   background: var(--dsw-alias-background-secondary);
 }
 
-/* Center identity over the actual available space above the unchanged input.
-   The same composer width variable drives the logo, title and subtitle axis. */
+/* The welcome identity and composer read as one balanced unit instead
+   of being pulled apart by an expanding greeting area. */
 .root {
   box-sizing: border-box;
   display: grid;
   place-items: center;
-  flex: 1 1 0;
+  flex: 0 0 auto;
   width: 100%;
   min-width: 0;
-  min-height: clamp(170px, 30vh, 400px);
-  padding: clamp(12px, 3vh, 28px) clamp(12px, 3vw, 28px);
+  min-height: 0;
+  padding: clamp(8px, 1.8vh, 18px) clamp(12px, 3vw, 28px);
 }
 .stack {
   box-sizing: border-box;
