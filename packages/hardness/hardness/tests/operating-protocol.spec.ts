@@ -121,6 +121,8 @@ describe('HARDNESS model operating protocol', () => {
     expect(rendered).toContain('mcp__phoenix_browser__youtube_search')
     expect(spanish).toContain('Navegación sencilla autorizada es FAST')
     expect(rendered).toContain('needs no auditor, teammate, exhaustive tests')
+    expect(rendered).toContain('An automatic follow-up turn cannot reopen the mission')
+    expect(spanish).toContain('Tras declarar que no queda trabajo pendiente')
     expect(rendered).toContain('An explicit user stop, pause, or cancel')
     expect(spanish).toContain('Excepción prioritaria para vistas previas')
     expect(spanish).toContain('Una orden explícita del usuario de detener')

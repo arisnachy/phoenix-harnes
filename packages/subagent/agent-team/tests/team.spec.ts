@@ -1257,6 +1257,28 @@ describe('Team mailbox and waiting', () => {
     await waitNoAgent(ctx, worker.id)
   })
 
+  it('blocks a late Aegis reviewer after Kira completed the Selenium browser mission', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    lead.session.append('turn/start', { turn: 1 })
+    lead.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+
+    // A second Aegis after the Lead's verified delivery is not a new task.
+    await expect(spawn(ctx, lead, 'aegis')).rejects.toMatchObject({ code: 'TEAM_MISSION_CLOSED' })
+    expect(durable(lead).members).toHaveLength(0)
+
+    // A new programmatic turn cannot revive closed work; only human input can.
+    lead.session.append('turn/start', { turn: 2 })
+    await expect(spawn(ctx, lead, 'aegis')).rejects.toMatchObject({ code: 'TEAM_MISSION_CLOSED' })
+    lead.session.append('user/message', createUserMessage({
+      content: content('Kira, revisa una tarea nueva.'), source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    lead.session.append('turn/start', { turn: 3 })
+    const started = await spawn(ctx, lead, 'aegis')
+    expect(started.member.name).toBe('aegis')
+    ctx.agentTeams.interrupt(lead, 'aegis')
+    await waitNoAgent(ctx, started.member.id)
+  })
+
   it('does not wake Kira for a quiet handoff after explicit user cancellation', async () => {
     const { ctx, lead } = await setup(['hang'])
     const started = await spawn(ctx, lead, 'argo')
@@ -1264,10 +1286,9 @@ describe('Team mailbox and waiting', () => {
     lead.session.append('turn/start', { turn: 1 })
     lead.session.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
     const steer = vi.spyOn(lead, 'steer')
-    const sent = await ctx.agentTeams.sendMessage(worker, {
+    await expect(ctx.agentTeams.sendMessage(worker, {
       target: 'lead', purpose: 'blocker', content: content('No hay fuentes.'), delivery: 'quiet', signal: SIGNAL,
-    })
-    expect(sent.status).toBe('accepted')
+    })).rejects.toMatchObject({ code: 'TEAM_MISSION_CLOSED' })
     expect(steer).not.toHaveBeenCalled()
     ctx.agentTeams.interrupt(lead, 'argo')
     await waitNoAgent(ctx, worker.id)

@@ -143,10 +143,12 @@ export class TeamService extends TypertRemoteService {
 
     ctx.on('session/event', (session, event) => {
       if (this.lifecycle.disposed) return
-      // A human stopping Kira also stops the live Team mission; otherwise
-      // children keep speaking after the UI reports that the turn stopped.
+      // Kira finishing a turn is terminal for its current Team mission as well.
+      // Late Aegis reviews and handoffs must not keep children working after DONE.
+      // The same teardown applies to explicit user cancellation.
       if (session.header.origin !== 'subagent' && event.type === 'turn/end'
-        && event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user') {
+        && (event.data.reason.kind === 'completed'
+          || (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user'))) {
         const lead = ctx.agents.get(session.id)
         if (lead?.session === session) {
           for (const childId of this.roster.liveChildrenByRoot().get(lead) ?? []) {

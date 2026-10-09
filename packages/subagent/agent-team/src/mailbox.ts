@@ -14,6 +14,7 @@ import type { TeamRuntimeLifecycle } from './lifecycle.ts'
 import type { TeamRoster } from './roster.ts'
 import { resolveActiveMember } from './roster.ts'
 import { messageAccepted } from './session-message.ts'
+import { teamMissionClosed } from './mission-closure.ts'
 import { TeamId, TeamMessageId } from './types.ts'
 import type {
   SendTeamMessageRequest,
@@ -117,12 +118,10 @@ export class TeamMailbox {
     const content = structuredClone(request.content)
     const queued = await this.journal.transact(root.id, async () => {
       request.signal.throwIfAborted()
-      // A cancelled root mission must not accept late child result mail. A new
-      // user turn restores admission without losing earlier durable evidence.
-      const boundary = root.session.events.findLast(event => event.type === 'turn/start' || event.type === 'turn/end')
-      if (membership.role === 'teammate' && boundary?.type === 'turn/end'
-        && boundary.data.reason.kind === 'aborted' && boundary.data.reason.reason.kind === 'user') {
-        throw new TeamError('User stopped this Team mission', 'TEAM_USER_CANCELLED')
+      // No late results or reviews may wake a completed/cancelled mission.
+      // Real human input (not another agent's queued message) reopens admission.
+      if (membership.role === 'teammate' && teamMissionClosed(root.session.events)) {
+        throw new TeamError('Kira already closed this Team mission', 'TEAM_MISSION_CLOSED')
       }
       const state = this.journal.state(root)
       const target = resolveActiveMember(root, state, request.target)
@@ -237,6 +236,8 @@ export class TeamMailbox {
   /** Attempt one queued delivery after target-local ordering admits it. */
   private async dispatchOnce(root: Agent, message: TeamMessageSnapshot, signal: AbortSignal): Promise<boolean> {
     try {
+      // Check at actual dispatch time too: completion can race the queue.
+      if (teamMissionClosed(root.session.events)) return false
       const target = message.targetId === root.id ? root : this.ctx.agents.get(message.targetId)
       if (target !== undefined && this.targetRecorded(target.session, message.id)) {
         return await this.checkpointDelivered(root, target.session, message.id)
