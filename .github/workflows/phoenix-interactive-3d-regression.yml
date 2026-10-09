@@ -7,6 +7,7 @@ on:
       - 'packages/hardness/adapters/src/scene3d-tool.ts'
       - 'packages/hardness/adapters/src/index.ts'
       - 'packages/hardness/adapters/tests/scene3d-tool.spec.ts'
+      - 'packages/hardness/adapters/tests/adapters.spec.ts'
       - 'packages/client/ui-conversation/src/client/chat/Scene3DView.tsx'
       - 'packages/client/ui-conversation/src/client/chat/Scene3DView.module.css'
       - 'packages/client/ui-conversation/src/client/chat/HardnessArtifactBody.tsx'
@@ -39,6 +40,7 @@ jobs:
         run: |
           pnpm exec vitest run \
             packages/hardness/adapters/tests/scene3d-tool.spec.ts \
+            packages/hardness/adapters/tests/adapters.spec.ts \
             packages/client/ui-conversation/tests/scene3d-view.client.spec.tsx \
             packages/client/ui-conversation/tests/hardness-artifact-renderer.client.spec.tsx \
             packages/client/ui-conversation/tests/universal-artifact-surface.client.spec.tsx
