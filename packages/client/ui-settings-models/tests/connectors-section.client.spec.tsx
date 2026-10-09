@@ -804,7 +804,7 @@ describe('connectors settings section', () => {
       expect(install).toBeTruthy()
       expect(install.disabled).toBe(true)
       expect(checkbox.checked).toBe(false)
-      expect(card.textContent).toContain('puede')
+      expect(card.textContent).toContain('Comprendo que debo autorizar los costes')
       fireEvent.click(checkbox)
       expect(checkbox.checked).toBe(true)
       expect(install.disabled).toBe(false)
