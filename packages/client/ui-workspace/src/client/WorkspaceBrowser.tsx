@@ -759,11 +759,14 @@ function WorkspaceLibraryModal({
   const sessionsFor = (ids: readonly SessionId[]): SessionId[] => ids.filter(id =>
     byId[id] !== undefined && !archived.has(id)
     && (search === '' || labelOf(id).toLocaleLowerCase().includes(search)))
-  const visibleWorkspaces = workspaces.map(workspace => ({
-    workspace,
-    sessions: sessionsFor(workspace.sessionIds),
-  })).filter(({ workspace, sessions }) =>
-    search === '' || workspace.title.toLocaleLowerCase().includes(search) || sessions.length > 0)
+  const visibleWorkspaces = workspaces.map(workspace => {
+    const nameMatches = workspace.title.toLocaleLowerCase().includes(search)
+    return {
+      workspace,
+      sessions: nameMatches ? workspace.sessionIds.filter(id => byId[id] !== undefined && !archived.has(id)) : sessionsFor(workspace.sessionIds),
+      nameMatches,
+    }
+  }).filter(({ nameMatches, sessions }) => nameMatches || sessions.length > 0)
   const looseSessions = sessionsFor(Object.keys(byId).filter(id =>
     !allGrouped.has(id as SessionId)) as SessionId[])
   const showUngrouped = looseSessions.length > 0
