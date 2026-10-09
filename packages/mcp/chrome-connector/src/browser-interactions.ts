@@ -220,6 +220,16 @@ export function executeBrowserInteraction(input: BrowserInteraction): BrowserInt
   }
 }
 
+/** Execute several fields in one CDP round-trip, stopping at the first mismatch. */
+export function browserBatchExpression(inputs: BrowserInteraction[]): string {
+  if (inputs.length === 0 || inputs.length > 30) throw new Error('Expected 1–30 bounded browser actions')
+  return '(() => { const run = (' + executeBrowserInteraction.toString() + '); '
+    + 'const actions = ' + JSON.stringify(inputs) + '; const results = []; '
+    + 'for (const action of actions) { const result = run(action); results.push(result); '
+    + 'if (!result.ok) return {ok:false,completed:results.length-1,results}; } '
+    + 'return {ok:true,completed:results.length,results}; })()'
+}
+
 /** Accepts typed, bounded action input only, never model-supplied JavaScript. */
 export function browserInteractionExpression(input: BrowserInteraction): string {
   return '(' + executeBrowserInteraction.toString() + ')(' + JSON.stringify(input) + ')'
