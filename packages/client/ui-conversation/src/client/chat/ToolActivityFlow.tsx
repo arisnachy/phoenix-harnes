@@ -138,6 +138,7 @@ export function isBrowserPrompt(text: string): boolean {
 function isBrowserRequest(node: OrderedChatNode): boolean {
   if (node.kind !== 'user' && node.kind !== 'steering') return false
   const message = node.data as UserMessageNode
+  if (!Array.isArray(message.content)) return false
   const text = message.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
   return isBrowserPrompt(text)
 }
@@ -245,6 +246,7 @@ export function addBrowserCards(
   const result: FlowItem[] = []
   let pendingUserKey: string | undefined
   const byKey = new Set(requests.map(n => n.key))
+  const userKeys = new Set(nodes.filter(n => n.kind === 'user' || n.kind === 'steering').map(n => n.key))
   const finish = (): void => {
     if (pendingUserKey !== undefined) {
       result.push({ kind: 'browser', key: 'browser:' + pendingUserKey, userKey: pendingUserKey })
@@ -253,11 +255,12 @@ export function addBrowserCards(
   }
   for (const item of flow) {
     // A new user turn begins after all content from the preceding turn.
-    if (item.kind === 'node' && nodes.some(n => n.key === item.key && (n.kind === 'user' || n.kind === 'steering'))) {
+    if (item.kind === 'node' && userKeys.has(item.key)) {
       finish()
       if (byKey.has(item.key)) pendingUserKey = item.key
     } else if (item.kind === 'optimistic') {
       finish()
+      if (isBrowserPrompt(item.text)) pendingUserKey = item.key
     }
     result.push(item)
   }
