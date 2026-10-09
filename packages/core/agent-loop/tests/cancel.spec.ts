@@ -969,6 +969,47 @@ describe('Agent.cancel()', () => {
     expect(agent.session.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
   })
 
+  it('a stop during a form automation tool aborts the tool and never continues the mission', async () => {
+    const adapter = new MockAdapter([
+      toolCallResponse('fill-form', 'fill-form', {}),
+      textResponse('should never continue'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('stop-active-form-tool'), { provider: 'mock', model: 'mock' })
+    const toolStarted = Promise.withResolvers<void>()
+    let toolAborted = false
+    ctx.tools.register(defineContentToolFixture({
+      name: 'fill-form',
+      description: 'Simulate a cooperatively cancellable browser form operation',
+      parameters: {},
+      execute: async (_args, exec) => {
+        toolStarted.resolve()
+        if (!exec.signal.aborted) {
+          await new Promise<void>((resolve) => {
+            exec.signal.addEventListener('abort', () => { toolAborted = true; resolve() }, { once: true })
+          })
+        }
+        return [{ type: 'text', text: 'tool stopped' }]
+      },
+    }))
+
+    send(agent, 'complete the Selenium practice form')
+    await toolStarted.promise
+    agent.steer(createUserMessage({
+      content: [{ type: 'text', text: 'Kira, para la prueba' }],
+      source: { kind: 'user' },
+    }))
+    await agent.whenIdle()
+
+    expect(toolAborted).toBe(true)
+    expect(adapter.requests).toHaveLength(1)
+    expect(agent.inbox.nextTurn).toHaveLength(0)
+    expect(agent.inbox.nextStep).toHaveLength(0)
+    expect(agent.session.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+    expect(agent.session.events.findLast(event => event.type === 'turn/end')?.data.reason)
+      .toEqual({ kind: 'aborted', reason: { kind: 'user' } })
+  })
+
   it('steer interrupts an active model stream and immediately replays the steering input', async () => {
     const adapter = new MockAdapter([
       'hang',
