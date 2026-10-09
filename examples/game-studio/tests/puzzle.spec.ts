@@ -55,6 +55,25 @@ describe('Lumen Circuit independent playable puzzle genre', () => {
     key({ code: 'Enter', preventDefault: noop })
     pointer({ clientX: 200, clientY: 110 })
     expect(status.textContent).toContain('Movimientos: 2')
+    const solution = [[0, 2], [1, 2], [1, 1], [2, 1], [2, 2], [3, 2], [3, 3], [4, 3], [4, 2]]
+    let seed = 36
+    const random = (): number => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0
+      return seed / 4294967296
+    }
+    const initialRotations: Record<string, number> = {}
+    for (let y = 0; y < 5; y++) for (let x = 0; x < 5; x++) {
+      if (!solution.some(([a, b]) => a === x && b === y)) { random(); random() }
+      initialRotations[x + ',' + y] = Math.floor(random() * 4)
+    }
+    for (const [x, y] of solution) {
+      if (x === undefined || y === undefined) continue
+      const rotation = ((initialRotations[x + ',' + y] ?? 0) + (x === 1 && y === 2 ? 1 : 0)) % 4
+      for (let n = 0; n < (4 - rotation) % 4; n++) {
+        pointer({ clientX: 152 + x * 91 + 45, clientY: 62 + y * 91 + 45 })
+      }
+    }
+    expect(status.textContent).toContain('¡Circuito conectado')
     expect(fills).toBeGreaterThan(2500)
     expect(frames.length).toBe(61)
   })
