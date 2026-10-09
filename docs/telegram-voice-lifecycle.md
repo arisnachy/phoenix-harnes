@@ -16,6 +16,7 @@ It does not claim that the Telegram bot or a telephone-call transport exists yet
 - The voice session must not silently restart on a Telegram message, delayed
   network callback, agent completion, or proactive notification. Subsequent
   notifications use text unless the user explicitly opens a new call.
+- The Host expires orphaned remote Codex calls after 60 minutes even if a browser disappears silently. This is a hard safety ceiling, not a reason to cancel a harness job.
 - Remote stop is best effort and must never hold the local UI in voice mode.
   Run cleanup synchronously before awaiting network calls.
 - Deduplicate incoming Telegram updates and require an allowlisted Telegram
