@@ -117,6 +117,13 @@ export class TeamMailbox {
     const content = structuredClone(request.content)
     const queued = await this.journal.transact(root.id, async () => {
       request.signal.throwIfAborted()
+      // A cancelled root mission must not accept late child result mail. A new
+      // user turn restores admission without losing earlier durable evidence.
+      const boundary = root.session.events.findLast(event => event.type === 'turn/start' || event.type === 'turn/end')
+      if (membership.role === 'teammate' && boundary?.type === 'turn/end'
+        && boundary.data.reason.kind === 'aborted' && boundary.data.reason.reason.kind === 'user') {
+        throw new TeamError('User stopped this Team mission', 'TEAM_USER_CANCELLED')
+      }
       const state = this.journal.state(root)
       const target = resolveActiveMember(root, state, request.target)
       if (target.id === caller.id) throw new TeamError('a Team member cannot message itself', 'TEAM_SELF_MESSAGE')
