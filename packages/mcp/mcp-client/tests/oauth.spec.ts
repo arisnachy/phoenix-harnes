@@ -337,6 +337,38 @@ describe('createMcpOAuthProvider', () => {
     }
   })
 
+  it('reports sanitized OAuth metadata, registration, and HTTP failure stages', async () => {
+    const credentials = {
+      readRecord: vi.fn(async () => undefined),
+      modifyRecord: vi.fn(async (_key: unknown, mutate: (current: unknown) => Promise<unknown>) => mutate(undefined)),
+      deleteRecord: vi.fn(async () => undefined),
+    } as unknown as CredentialProvider
+    const controller = new McpOAuthController(credentials, 'notion', 'https://mcp.notion.com/mcp')
+    await controller.ready
+    const notify = vi.fn()
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('denied', { status: 403 }))
+    vi.mocked(auth).mockImplementationOnce(async (_provider, options) => {
+      if (options.fetchFn === undefined) throw new Error('missing bounded fetch')
+      await options.fetchFn('https://mcp.notion.com/.well-known/oauth-authorization-server?client_secret=SHOULD_NOT_LEAK')
+      await options.fetchFn('https://mcp.notion.com/register?access_token=SHOULD_NOT_LEAK')
+      throw new Error('invalid_client')
+    })
+    try {
+      await expect(controller.authorize({
+        method: 'oauth', signal: new AbortController().signal, notify, prompt: vi.fn(),
+      })).rejects.toThrow('invalid_client')
+      const messages = notify.mock.calls.map(([notice]) => notice.message as string)
+      expect(messages.some(message => message.includes('descubriendo los metadatos OAuth'))).toBe(true)
+      expect(messages.some(message => message.includes('registrando el cliente OAuth'))).toBe(true)
+      expect(messages.some(message => message.includes('última respuesta HTTP 403'))).toBe(true)
+      expect(messages.join(' ')).not.toContain('SHOULD_NOT_LEAK')
+      expect(notify.mock.calls.some(([notice]) => notice.url !== undefined)).toBe(false)
+    } finally {
+      fetch.mockRestore()
+      await controller.close()
+    }
+  })
+
   it('fails bounded OAuth discovery when the provider never publishes a consent URL', async () => {
     const credentials = {
       readRecord: vi.fn(async () => undefined),

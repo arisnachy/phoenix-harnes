@@ -517,18 +517,43 @@ export class McpOAuthController {
     session.notify({
       message: `Preparando autorización de ${this.serverName}…`,
     })
+    let lastStage = 'contactando al servidor MCP'
+    let lastHttpStatus: number | undefined
     try {
-      // Bound discovery, registration and token HTTP calls; user consent itself
-      // remains pending until its callback or explicit cancellation.
-      const fetchFn: typeof globalThis.fetch = (input, init) => globalThis.fetch(input, {
-        ...init,
-        signal: AbortSignal.any([
-          session.signal,
-          ...(preparingConsent ? [preparationDeadline.signal] : []),
-          AbortSignal.timeout(30_000),
-          ...(init?.signal == null ? [] : [init.signal]),
-        ]),
-      })
+      // The Host (not the browser) owns discovery/DCR. Publish only coarse,
+      // secret-free stages so users can see *why* no consent URL was returned.
+      // Ignore exact URLs, query strings, state, tokens and client credentials.
+      const fetchFn: typeof globalThis.fetch = (input, init) => {
+        let stage = 'comprobando el endpoint OAuth'
+        try {
+          const raw = typeof input === 'string' ? input
+            : input instanceof URL ? input.href : input.url
+          const pathname = new URL(raw).pathname.toLowerCase()
+          if (pathname.includes('/.well-known/')) stage = 'descubriendo los metadatos OAuth'
+          else if (pathname.includes('/register')) stage = 'registrando el cliente OAuth'
+          else if (pathname.includes('/token')) stage = 'validando el token OAuth'
+        } catch {
+          // No externally supplied URL or query parameter is shown to users.
+        }
+        if (stage !== lastStage) {
+          lastStage = stage
+          session.notify({ message: `MCP ${this.serverName}: ${stage}…` })
+        }
+        return globalThis.fetch(input, {
+          ...init,
+          signal: AbortSignal.any([
+            session.signal,
+            ...(preparingConsent ? [preparationDeadline.signal] : []),
+            AbortSignal.timeout(30_000),
+            ...(init?.signal == null ? [] : [init.signal]),
+          ]),
+        }).then(response => {
+          // 4xx from optional well-known documents may be normal SDK fallback.
+          // Keep it only for diagnosis if the entire OAuth flow fails.
+          if (!response.ok) lastHttpStatus = response.status
+          return response
+        })
+      }
       // The MCP SDK may perform multiple sequential OAuth metadata requests
       // and dynamic registration round-trips. A per-request timeout does not
       // bound that whole phase, so race its *entire* pre-consent operation.
@@ -563,6 +588,11 @@ export class McpOAuthController {
       const final = await auth(provider, { serverUrl: this.serverUrl, authorizationCode: code, fetchFn })
       if (final !== 'AUTHORIZED') throw new Error(`MCP OAuth did not authorize ${this.serverName}`)
     } catch (error) {
+      if (!session.signal.aborted && !consentUrlPublished) {
+        session.notify({
+          message: `No se obtuvo la página OAuth de ${this.serverName}. Última etapa: ${lastStage}${lastHttpStatus === undefined ? '' : ` (última respuesta HTTP ${lastHttpStatus})`}. Revisa el error del conector en PHOENIX.`,
+        })
+      }
       if (!this.closed || !isExpectedMcpOAuthClose(error)) throw error
     } finally {
       preparingConsent = false
