@@ -23,7 +23,7 @@ const BOTFATHER = 'https://t.me/BotFather'
 const GUIDE = 'https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/telegram.md'
 const STATUS: Record<TelegramBotSnapshot['phase'], string> = {
   unconfigured: 'Sin configurar',
-  verified: 'Bot verificado · receptor pendiente',
+  verified: 'Bot verificado',
   'invalid-token': 'Token guardado no válido',
   unreachable: 'Telegram no respondió · comprueba conexión',
   'credentials-unavailable': 'Vault de Phoenix no disponible',
