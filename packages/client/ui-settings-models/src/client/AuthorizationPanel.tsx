@@ -644,8 +644,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
       {definition.id === 'github' ? (
         <div className={styles['advancedHint']}>
           <p>
-            GitHub MCP se conecta con un token personal (PAT), no con OAuth dinámico ni
-            con GitHub Copilot.{' '}
+            GitHub MCP remoto no admite registro OAuth dinámico. Utiliza un token
+            personal (PAT); GitHub Copilot como proveedor de modelos es independiente.{' '}
             <a href="https://github.com/settings/personal-access-tokens/new"
               target="_blank" rel="noopener noreferrer">Crear token en GitHub</a>
             {' '}·{' '}
