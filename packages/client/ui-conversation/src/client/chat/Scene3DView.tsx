@@ -34,7 +34,7 @@ export interface Scene3D {
   readonly camera?: 'perspective' | 'isometric' | 'front' | 'top'
 }
 type Vec3 = [number,number,number]
-type Face = { readonly vertices: readonly Vec3[]; readonly color: string; readonly alpha: number }
+type Face = { readonly vertices: readonly Vec3[]; readonly color: string; readonly alpha: number; readonly material?: Scene3DMaterial }
 type Projected = { readonly points: readonly [number, number][]; readonly depth: number; readonly color: string; readonly alpha: number; readonly light: number }
 
 const colorPattern = /^#[0-9a-f]{6}$/iu
@@ -158,16 +158,21 @@ function mesh(node: Scene3DNode): Face[] {
   return faces.map(vertices => ({
     vertices: vertices.map(point => transform(point,node)), color:node.material?.baseColor??node.color,
     alpha: node.material?.opacity??(/cristal|acristalad|glass|window/iu.test(node.name ?? '') ? .77 : 1),
+    ...(node.material===undefined?{}:{material:node.material}),
   }))
 }
 const cross=(a:Vec3,b:Vec3):Vec3=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
-function lighting(vertices: readonly Vec3[]): number {
+function lighting(vertices: readonly Vec3[],material:Scene3DMaterial|undefined,environment:Scene3D['environment']): number {
   const [a,b,c]=vertices
   if(a===undefined||b===undefined||c===undefined)return 1
   const n=cross([b[0]-a[0],b[1]-a[1],b[2]-a[2]],[c[0]-a[0],c[1]-a[1],c[2]-a[2]])
   const len=Math.hypot(...n)||1
-  const d=(n[0]*-.35+n[1]*.84+n[2]*.40)/len
-  return .58+Math.max(0,d)*.42
+  const sun=environment==='sunset'?[-.72,.51,.47]:environment==='daylight'?[.15,.95,.3]:[-.35,.84,.4]
+  const d=(n[0]*sun[0]!+n[1]*sun[1]!+n[2]*sun[2]!)/len
+  const light=Math.max(0,d)
+  const roughness=material?.roughness??.75
+  const specular=Math.pow(light,2+18*(1-roughness))*(.12+(material?.metallic??0)*.24+(material?.clearcoat??0)*.16)
+  return Math.max(.25,Math.min(1.35,(environment==='sunset'?.45:.56)+light*.38+specular))
 }
 function shade(value:string, factor:number):string {
   const channels=[1,3,5].map(i=>Math.min(255,Math.max(0,Math.round(parseInt(value.slice(i,i+2),16)*factor))))
@@ -221,7 +226,7 @@ function paint(canvas:HTMLCanvasElement,scene:Scene3D,faces:readonly Face[],
   const projected:Projected[]=faces.map(face=>{
     const v=face.vertices.map(project)
     return {points:v.map(p=>[p[0],p[1]]),depth:v.reduce((sum,p)=>sum+p[2],0)/v.length,
-      color:face.color,alpha:face.alpha,light:lighting(face.vertices)}
+      color:face.color,alpha:face.alpha,light:lighting(face.vertices,face.material,scene.environment)}
   })
   projected.sort((a,b)=>a.depth-b.depth)
   for(const face of projected){
@@ -243,7 +248,13 @@ function paint(canvas:HTMLCanvasElement,scene:Scene3D,faces:readonly Face[],
 /** Native interactive 3D scene canvas; no CDN, fake PNG interaction, or network. */
 export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown; readonly expanded?: boolean }) {
   const [scene,setScene]=useState<Scene3D|undefined>(()=>parseScene3D(spec))
-  useEffect(()=>setScene(parseScene3D(spec)),[spec])
+  useEffect(()=>{
+    const next=parseScene3D(spec)
+    setScene(next)
+    if(next?.camera==='front'){angle.current.yaw=0;angle.current.pitch=0}
+    if(next?.camera==='top'){angle.current.yaw=0;angle.current.pitch=1.48}
+    if(next?.camera==='isometric'){angle.current.yaw=-.785;angle.current.pitch=.615}
+  },[spec])
   const canvas=useRef<HTMLCanvasElement>(null)
   const drag=useRef<{x:number;y:number;button:number}|null>(null)
   const angle=useRef({yaw:-.65,pitch:.38,zoom:1,pan:[0,0] as [number,number]})
@@ -330,6 +341,10 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
         <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=0;angle.current.pan=[0,0]})}>Frente</button>
         <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=1.48;angle.current.pan=[0,0]})}>Planta</button>
         <button type="button" onClick={()=>update(()=>{angle.current.yaw=-.785;angle.current.pitch=.615})}>Isométrica</button>
+        <label className={css.cameraControl}>Luz <select aria-label="Iluminación del modelo 3D" value={scene.environment??'studio'}
+          onChange={event=>setScene(current=>current===undefined?current:{...current,environment:event.target.value as 'studio'|'sunset'|'daylight'})}>
+          <option value="studio">Estudio</option><option value="sunset">Atardecer</option><option value="daylight">Día</option>
+        </select></label>
         <button type="button" aria-pressed={editOpen} onClick={()=>setEditOpen(value=>!value)}>Editar</button>
       </div>
     </div>
