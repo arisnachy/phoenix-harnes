@@ -301,14 +301,20 @@ describe('ManagedMcpController', () => {
     const restored = await controller.ensureCoreMcpPack()
     expect(restored.failed).toEqual([])
     expect(restored.installed).toEqual(expect.arrayContaining([
-      'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
+      'microsoft-learn', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
       'brave-search', 'filesystem', 'memory', 'fetch',
     ]))
     expect(restored.installed).not.toContain('devpost')
+    expect(restored.installed).not.toContain('microsoft-workiq')
+    expect(restored.installed).not.toContain('microsoft-azure')
 
     expect(created.every(options =>
       JSON.stringify(options.inject) === JSON.stringify(MANAGED_MCP_INJECT))).toBe(true)
     const configs = new Map(created.map(({ config }) => [config.serverName, config]))
+    expect(configs.get('microsoft-learn')).toMatchObject({
+      transport: 'streamable-http', serverName: 'microsoft-learn',
+      url: 'https://learn.microsoft.com/api/mcp', oauth: false, headers: {},
+    })
     expect(configs.get('supabase')).toMatchObject({
       transport: 'streamable-http',
       serverName: 'supabase',
