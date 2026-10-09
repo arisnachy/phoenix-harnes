@@ -1,0 +1,73 @@
+/* Inline real Chromium stream — neutral Phoenix palette, no animated decoration. */
+.inline { width: 100%; min-width: 0; }
+.launch {
+  display: inline-flex; align-items: center; gap: 8px;
+  color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 12px;
+  padding: 10px 14px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.launch:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.browser {
+  display: flex; flex-direction: column; gap: 0; width: 100%; min-width: 0;
+  overflow: hidden; border: 1px solid var(--dsw-alias-border-l2); border-radius: 18px;
+  background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 5%);
+}
+.titlebar, .toolbar, .tabs, .typeRow {
+  display: flex; align-items: center; min-width: 0; gap: 6px;
+  padding: 8px 10px;
+}
+.titlebar { gap: 12px; border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.brand { font-weight: 650; font-size: 13px; white-space: nowrap; }
+.status { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }
+.grow { flex: 1; }
+.titlebar button, .tabs button, .toolbar button, .typeRow button, .empty button {
+  flex: none; border: 0; background: transparent; color: var(--dsw-alias-label-primary);
+  border-radius: 9px; padding: 7px 9px; cursor: pointer; font: inherit; font-size: 13px;
+}
+.titlebar button:hover, .tabs button:hover, .toolbar button:hover,
+.typeRow button:hover, .empty button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.titlebar button:focus-visible, .tabs button:focus-visible, .toolbar button:focus-visible,
+.screen:focus-visible, .typeRow button:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
+.tabs { gap: 3px; overflow-x: auto; padding-bottom: 4px; background: var(--dsw-alias-bg-layer-1); }
+.tabWrap { display: inline-flex; align-items: center; flex: 0 1 190px; min-width: 90px; border-radius: 10px; border: 1px solid transparent; }
+.tabWrap:has(.activeTab) { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l2); }
+.tabWrap button[role='tab'] { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
+.tabWrap .tabClose { padding-inline: 6px; }
+.toolbar { border-bottom: 1px solid var(--dsw-alias-border-l2); }
+.toolbar input, .typeRow input {
+  min-width: 0; flex: 1; border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px; height: 34px; padding: 6px 10px;
+  color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-1);
+  font: inherit; font-size: 12px; outline: none;
+}
+.toolbar input:focus, .typeRow input:focus { border-color: var(--dsw-alias-brand-primary); }
+.viewport { position: relative; background: #e9e9e9; overflow: hidden; }
+.screen { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: contain; cursor: crosshair; outline-offset: -2px; }
+.loading { display: grid; place-items: center; aspect-ratio: 16 / 9; color: #4f4f4f; font-size: 13px; }
+.typeRow { border-top: 1px solid var(--dsw-alias-border-l2); }
+.typeRow button:disabled { opacity: .45; cursor: not-allowed; }
+.error { margin: 0; padding: 8px 12px; color: var(--dsw-alias-state-error-primary); font-size: 12px; }
+.hint { margin: 0; padding: 4px 10px 10px; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.empty { min-height: 200px; display: grid; justify-content: center; place-content: center; gap: 12px; text-align: center; font-size: 13px; padding: 20px; }
+.empty p { color: var(--dsw-alias-label-secondary); max-width: 400px; margin: 0; }
+.empty button { background: var(--dsw-alias-interactive-bg-hover); border: 1px solid var(--dsw-alias-border-l2); }
+.overlay {
+  position: fixed; z-index: 2147480000; inset: 0;
+  display: grid; place-items: center; padding: 14px;
+  background: rgb(20 20 20 / 64%); backdrop-filter: blur(5px);
+}
+.overlay .browser {
+  max-width: 1600px; width: 100%; height: min(100%, 1000px);
+  border-radius: 18px; box-shadow: 0 20px 70px rgb(0 0 0 / 25%);
+}
+.overlay .viewport { min-height: 0; flex: 1; display: grid; place-items: center; }
+.overlay .screen { width: 100%; height: 100%; min-height: 0; max-height: 100%; object-fit: contain; }
+.overlay .loading { width: 100%; height: 100%; aspect-ratio: auto; }
+@media (max-width: 640px) {
+  .titlebar { gap: 5px; } .status { display: none; }
+  .titlebar button { padding: 6px; } .typeRow button { padding: 7px 5px; }
+  .brand { font-size: 12px; } .overlay { padding: 0; }
+  .overlay .browser { border-radius: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .overlay { backdrop-filter: none; } }
