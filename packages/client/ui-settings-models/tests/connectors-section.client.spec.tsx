@@ -434,6 +434,75 @@ describe('connectors settings section', () => {
     expect(api.begin).not.toHaveBeenCalled()
   })
 
+  it('installs official GitHub MCP even if gh CLI is authenticated', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: { entryId: 'github-mcp', serverName: 'github',
+        url: 'https://api.githubcopilot.com/mcp/',
+        source: { kind: 'curated' as const, connectorId: 'github' },
+      },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      openClawState: vi.fn(async () => ({ connectors: [{
+        id: 'github' as const, skillAlias: 'openclaw-github' as const,
+        skillInstalled: true, runtimeAvailable: true, connected: true, phase: 'ready' as const,
+      }] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    const button = Array.from(card.querySelectorAll('button'))
+      .find(item => item.textContent === 'Instalar MCP GitHub')
+    expect(button).toBeTruthy()
+    fireEvent.click(button!)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'github' }))
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('does not report GitHub connected from gh CLI when its official MCP needs authorization', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'github-mcp-auth' }))
+    const api = { list: vi.fn(async () => ok({ entries: [{
+      key: 'mcp-client/github', label: 'MCP github',
+      methods: [{ id: 'oauth', label: 'Authorize GitHub MCP' }], inFlight: false,
+    }, {
+      key: 'llm-pi-ai/github-copilot', label: 'GitHub Copilot',
+      methods: [{ id: 'oauth', label: 'Authorize Copilot' }], inFlight: false,
+    }] })),
+      begin, status: vi.fn(async () => ok({
+        attemptId: 'github-mcp-auth', status: 'pending', nextSeq: 0, notices: [],
+      })), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({
+        managed: [{ entryId: 'github-mcp', serverName: 'github',
+          url: 'https://api.githubcopilot.com/mcp/',
+          source: { kind: 'curated' as const, connectorId: 'github' } }],
+        runtime: [{ serverName: 'github', transport: 'streamable-http' as const,
+          status: 'auth-required' as const, toolNames: [] }],
+      })),
+      openClawState: vi.fn(async () => ({ connectors: [{
+        id: 'github' as const, skillAlias: 'openclaw-github' as const,
+        skillInstalled: true, runtimeAvailable: true, connected: true, phase: 'ready' as const,
+      }] })),
+      install: vi.fn(), search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    await waitFor(() => expect(card.textContent).toContain('Authorization required'))
+    expect(card.textContent).not.toContain('Connected · OpenClaw')
+    const button = Array.from(card.querySelectorAll('button')).find(item => item.textContent === 'Authorize')
+    expect(button).toBeTruthy()
+    fireEvent.click(button!)
+    await waitFor(() => expect(begin).toHaveBeenCalledWith({
+      key: 'mcp-client/github', method: 'oauth',
+    }))
+    expect(begin).not.toHaveBeenCalledWith({
+      key: 'llm-pi-ai/github-copilot', method: 'oauth',
+    })
+  })
+
   it('offers the official GitHub MCP instead of a dead Authorize action when gh is missing', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
