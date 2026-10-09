@@ -493,7 +493,7 @@ describe('dsh-tool-team', () => {
     await waitNoAgent(activeSetup.ctx, activeId)
   })
 
-  it('gives repeated idle waits a finite team-progress budget', async () => {
+  it('stops a real series of expired waits and preserves the user delivery channel', async () => {
     const { ctx, lead } = await setup(['hang'])
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
       name: 'bounded-worker', description: 'Read-only independent review',
@@ -502,26 +502,42 @@ describe('dsh-tool-team', () => {
     const child = await waitRunning(ctx, spawnedChildId(spawned))
     const currentSeq = lead.session.events.findLast(event =>
       event.type.startsWith('team/') && event.type !== 'team/chat-reaction')?.seq ?? 0
-    const budget = toolTeam.peerWaitBudget(lead, currentSeq)
-    budget.expired = 2
-    expect(toolTeam.peerWaitBudget(lead, currentSeq)).toBe(budget)
-    const skipped = await execute(ctx, lead, 'wait_agent', { timeout_ms: 3_600_000 })
-    expect(skipped.isError).toBe(false)
-    expect(JSON.parse(text(skipped))).toMatchObject({
-      timedOut: false,
-      noProgress: { reason: 'stalled-team' },
-    })
-    expect(text(skipped)).toContain('Stop polling')
-    const reset = toolTeam.peerWaitBudget(lead, currentSeq + 1)
-    expect(reset.expired).toBe(0)
-    expect(reset).not.toBe(budget)
-    const wrongChannel = await execute(ctx, child, 'team_chat_answer', {
-      message_id: 'team-message-not-from-user', text: 'Aquí están mis hallazgos.',
-    })
-    expect(wrongChannel.isError).toBe(true)
-    expect(text(wrongChannel)).toContain('use send_message target=lead')
-    await execute(ctx, lead, 'interrupt_agent', { target: 'bounded-worker' })
-    await waitNoAgent(ctx, child.id)
+    const wait = vi.spyOn(ctx.agentTeams, 'waitForChange')
+      .mockResolvedValue({ timedOut: true })
+    try {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const response = await execute(ctx, lead, 'wait_agent', { timeout_ms: 3_600_000 })
+        expect(response.isError).toBe(false)
+        expect(JSON.parse(text(response))).toEqual({ timedOut: true })
+      }
+      expect(wait).toHaveBeenCalledTimes(2)
+      expect(wait.mock.calls.every(call => call[1] === 20_000)).toBe(true)
+
+      const stalled = await execute(ctx, lead, 'wait_agent', { timeout_ms: 10_000 })
+      expect(stalled.isError).toBe(false)
+      expect(JSON.parse(text(stalled))).toMatchObject({
+        timedOut: false,
+        noProgress: { reason: 'stalled-team' },
+      })
+      expect(text(stalled)).toContain('Stop polling')
+      expect(wait).toHaveBeenCalledTimes(2)
+
+      const unchanged = toolTeam.peerWaitBudget(lead, currentSeq)
+      expect(unchanged.expired).toBe(2)
+      const reset = toolTeam.peerWaitBudget(lead, currentSeq + 1)
+      expect(reset.expired).toBe(0)
+      expect(reset).not.toBe(unchanged)
+
+      const wrongChannel = await execute(ctx, child, 'team_chat_answer', {
+        message_id: 'team-message-not-from-user', text: 'Aquí están mis hallazgos.',
+      })
+      expect(wrongChannel.isError).toBe(true)
+      expect(text(wrongChannel)).toContain('use send_message target=lead')
+    } finally {
+      wait.mockRestore()
+      await execute(ctx, lead, 'interrupt_agent', { target: 'bounded-worker' })
+      await waitNoAgent(ctx, child.id)
+    }
   })
 
   it('rejects a teammate result claim until the assigned external action has a real receipt', async () => {
