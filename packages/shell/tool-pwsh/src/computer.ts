@@ -1415,6 +1415,7 @@ async function forgetOriginBoundBrowserLogin(
 }
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
+  if (action === 'browser_forget_login') return { risk: 'high', reversible: false }
   if (action === 'move' || action === 'scroll' || action === 'focus' || action === 'browser_focus') return { risk: 'low', reversible: true }
   if (isEmbeddedBrowserAction(action)) return { risk: 'medium', reversible: true }
   if (action === 'click' || action === 'double_click' || action === 'drag') return { risk: 'medium', reversible: false }
@@ -1524,7 +1525,7 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login opens the protected Windows login form on first use or resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. An explicit origin-bound vault grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
+    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login opens the protected Windows login form on first use or resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. An explicit origin-bound vault grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. When completing requested surveys and other recurring website tasks, inspect the live page and reuse applicable verified procedures, never stale field indexes. Use only user-provided or verified personal facts and answers; never invent opinions, identities, eligibility or consent. If relevant answers are missing, ask the user and resume. Never request a password in the model chat; the native vault form owns login. Respect site controls and submission limits, verify a real confirmation before declaring completion, and learn only reusable nonsecret steps backed by evidence. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
   })
 
   ctx.tools.register(defineTool({
