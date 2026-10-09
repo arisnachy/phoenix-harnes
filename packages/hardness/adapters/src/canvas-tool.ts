@@ -52,7 +52,7 @@ export function createPhoenixCanvasTool(): ToolDefinition {
         artifact: {
           id: value.artifactId,
           mime: PHOENIX_CANVAS_MIME,
-          title: String(value.title),
+          title: value.title,
           data: args.html,
           executable: args.interactive !== false,
         },

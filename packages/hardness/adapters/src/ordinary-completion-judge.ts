@@ -126,7 +126,13 @@ export function ordinaryCompletionReviewBudget(input: {
   return { mode: 'fast', maxPasses: 0 }
 }
 
-/** Only a concrete fixable finding plus remaining allowance warrants another LLM review. */
+/**
+ * Decide whether a previous independent review should be reconsidered.
+ * @param verdict - Prior independent judge decision.
+ * @param completedPasses - Reviews already performed for this task.
+ * @param maximumPasses - Upper bound on paid semantic review passes.
+ * @returns True only after a concrete fixable finding and within the pass budget.
+ */
 export function independentReviewNeedsFollowup(
   verdict: 'pass' | 'needs_changes' | 'blocked',
   completedPasses: number,

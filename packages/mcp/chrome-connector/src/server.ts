@@ -238,7 +238,11 @@ async function cdp<T = unknown>(tab: Tab, method: string, params: Record<string,
   })
 }
 
-/** Produce a canonical YouTube search URL without HTML interaction or extra model calls. */
+/**
+ * Produce a canonical YouTube search URL without extra model calls.
+ * @param query - Exact user search phrase, including accented text.
+ * @returns Encoded YouTube results URL.
+ */
 export function youtubeSearchUrl(query: string): string {
   const term = query.trim()
   if (term.length === 0 || term.length > 256) throw new Error('La búsqueda debe tener entre 1 y 256 caracteres')
