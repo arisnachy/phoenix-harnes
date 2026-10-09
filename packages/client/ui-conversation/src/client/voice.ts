@@ -94,6 +94,12 @@ interface CodexRealtimeVoiceSession {
   activeUtterance?: PendingCodexRealtimeUtterance
   /** Recent distinct human transcripts for this WebRTC call, not per render. */
   readonly recentTranscripts: Map<string, number>
+  /** Drop an unrecovered network disconnect instead of leaving voice stuck. */
+  disconnectTimer?: number
+  /** Silence ends only audio, never the owning Phoenix task. */
+  inactivityTimer?: number
+  /** Browser/tab termination releases live voice ownership. */
+  readonly onPageHide: () => void
 }
 
 interface PendingCodexRealtimeUtterance {
@@ -108,7 +114,26 @@ let voiceModelRouteResolver: VoiceModelRouteResolver | undefined
 let codexRealtimeUserTranscriptHandler: CodexRealtimeUserTranscriptHandler | undefined
 let codexRealtimeVoiceSession: CodexRealtimeVoiceSession | undefined
 let codexRealtimeVoiceGeneration = 0
+let codexRealtimeVoiceStarting = false
+const CODEX_VOICE_DISCONNECT_GRACE_MS = 30_000
+const CODEX_VOICE_INACTIVITY_MS = 5 * 60_000
 const pendingCodexRealtimeUtterances: PendingCodexRealtimeUtterance[] = []
+
+/** A voice call owns bounded resources; it never owns the harness task. */
+function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
+  if (session.disconnectTimer !== undefined) window.clearTimeout(session.disconnectTimer)
+  if (session.inactivityTimer !== undefined) window.clearTimeout(session.inactivityTimer)
+  delete session.disconnectTimer
+  delete session.inactivityTimer
+}
+
+function refreshCodexRealtimeActivity(session: CodexRealtimeVoiceSession): void {
+  if (codexRealtimeVoiceSession !== session) return
+  if (session.inactivityTimer !== undefined) window.clearTimeout(session.inactivityTimer)
+  session.inactivityTimer = window.setTimeout(() => {
+    if (codexRealtimeVoiceSession === session) void stopCodexRealtimeVoice()
+  }, CODEX_VOICE_INACTIVITY_MS)
+}
 
 function publishVoiceAssistant(next: VoiceAssistantSnapshot): void {
   voiceAssistantSnapshot = next
@@ -356,6 +381,9 @@ export type CodexRealtimeVoiceStartResult =
 export async function tryStartCodexRealtimeVoice(
   sessionKey: string,
 ): Promise<CodexRealtimeVoiceStartResult> {
+  // The user may close a call while the route/capability probe is in flight.
+  // A late probe must not reacquire the microphone and resurrect voice mode.
+  const startFence = codexRealtimeVoiceGeneration
   const resolveRoute = voiceModelRouteResolver
   if (resolveRoute === undefined) return { kind: 'failed', reason: 'route-unavailable' }
 
@@ -389,7 +417,13 @@ export async function tryStartCodexRealtimeVoice(
     return { kind: 'failed', reason: 'capability-probe-failed' }
   }
 
+  if (startFence !== codexRealtimeVoiceGeneration) {
+    return { kind: 'failed', reason: 'start-superseded' }
+  }
+  // Do not leak an earlier live call if the user explicitly starts a new one.
+  if (codexRealtimeVoiceSession !== undefined) await stopCodexRealtimeVoice()
   const generation = ++codexRealtimeVoiceGeneration
+  codexRealtimeVoiceStarting = true
   let microphone: MediaStream | undefined
   let peer: RTCPeerConnection | undefined
   let events: RTCDataChannel | undefined
@@ -426,6 +460,8 @@ export async function tryStartCodexRealtimeVoice(
     }
     events.onmessage = (event) => {
       if (codexRealtimeVoiceGeneration !== generation || typeof event.data !== 'string') return
+      const liveSession = codexRealtimeVoiceSession
+      if (liveSession !== undefined && liveSession.events === events) refreshCodexRealtimeActivity(liveSession)
       forwardCodexRealtimeUserTranscript(event.data)
       updateCodexRealtimePhase(event.data)
     }
@@ -473,7 +509,21 @@ export async function tryStartCodexRealtimeVoice(
     await peer.setRemoteDescription({ type: 'answer', sdp: result.value.answerSdp })
     if (generation !== codexRealtimeVoiceGeneration) throw new Error('start-superseded')
 
-    codexRealtimeVoiceSession = { key: sessionKey, peer, microphone, events, audio, recentTranscripts: new Map() }
+    const liveSession: CodexRealtimeVoiceSession = {
+      key: sessionKey, peer, microphone, events, audio, recentTranscripts: new Map(),
+      onPageHide: () => { void stopCodexRealtimeVoice() },
+    }
+    codexRealtimeVoiceSession = liveSession
+    window.addEventListener('pagehide', liveSession.onPageHide)
+    refreshCodexRealtimeActivity(liveSession)
+    // Closing/revoking the mic must end this voice call, not the harness task.
+    for (const track of microphone.getTracks()) {
+      if (typeof track.addEventListener === 'function') {
+        track.addEventListener('ended', () => {
+          if (codexRealtimeVoiceSession === liveSession) void stopCodexRealtimeVoice()
+        }, { once: true })
+      }
+    }
     setVoiceAssistantActive(true)
     setVoiceAssistantListening(true)
 
@@ -481,20 +531,28 @@ export async function tryStartCodexRealtimeVoice(
       const liveSession = codexRealtimeVoiceSession
       if (liveSession === undefined || liveSession.peer !== peer) return
       if (peer?.connectionState === 'connected') {
-        // WebRTC "disconnected" is explicitly transient. A long Hardness/tool
-        // turn can pass through it and reconnect without renegotiating voice.
+        // A brief disconnect must not switch voices or interrupt the harness.
+        if (liveSession.disconnectTimer !== undefined) {
+          window.clearTimeout(liveSession.disconnectTimer)
+          delete liveSession.disconnectTimer
+        }
+        refreshCodexRealtimeActivity(liveSession)
         flushCodexRealtimeUtterances(liveSession)
         return
       }
+      if (peer?.connectionState === 'disconnected') {
+        // A dropped Telegram Mini App/browser call cannot leave the mic active forever.
+        liveSession.disconnectTimer ??= window.setTimeout(() => {
+          if (codexRealtimeVoiceSession === liveSession && peer.connectionState === 'disconnected') {
+            void stopCodexRealtimeVoice()
+          }
+        }, CODEX_VOICE_DISCONNECT_GRACE_MS)
+        return
+      }
       if (peer?.connectionState === 'failed' || peer?.connectionState === 'closed') {
-        // Native Live lost ownership. Keep the explicit hands-free mode active:
-        // InputBar observes the published idle state and attaches browser
-        // recognition, while assistant output falls through Host TTS in the
-        // strict Kokoro -> platform order. The PHOENIX task itself keeps running.
-        discardCodexRealtimeUtterances(liveSession.key)
-        void stopCodexRealtimeVoice().finally(() => {
-          if (voiceAssistantSnapshot.active) publishVoiceIdle()
-        })
+        // End voice completely; do not silently re-enable browser recognition.
+        // The Phoenix harness and its pending tasks are deliberately unaffected.
+        void stopCodexRealtimeVoice()
       }
     }
     return { kind: 'started' }
@@ -509,13 +567,16 @@ export async function tryStartCodexRealtimeVoice(
       audio.remove()
     }
     if (events !== undefined && events.readyState !== 'closed') events.close()
-    if (generation === codexRealtimeVoiceGeneration) {
+    if (codexRealtimeVoiceSession?.key !== sessionKey) {
+      // Even a superseded negotiation may have created a remote thread.
       void remote.conversationRealtimeStop?.({ key: sessionKey }).catch(() => {})
     }
     return {
       kind: 'failed',
       reason: error instanceof Error && error.message !== '' ? error.message : 'realtime-start-failed',
     }
+  } finally {
+    if (generation === codexRealtimeVoiceGeneration) codexRealtimeVoiceStarting = false
   }
 }
 
@@ -524,10 +585,14 @@ export async function tryStartCodexRealtimeVoice(
  */
 export async function stopCodexRealtimeVoice(): Promise<boolean> {
   const session = codexRealtimeVoiceSession
+  const starting = codexRealtimeVoiceStarting
   codexRealtimeVoiceGeneration += 1
+  codexRealtimeVoiceStarting = false
   codexRealtimeVoiceSession = undefined
-  if (session === undefined) return false
+  if (session === undefined) return starting
 
+  clearCodexRealtimeTimers(session)
+  window.removeEventListener('pagehide', session.onPageHide)
   setVoiceAssistantListening(false)
   discardCodexRealtimeUtterances(session.key)
   session.events.close()
@@ -536,6 +601,9 @@ export async function stopCodexRealtimeVoice(): Promise<boolean> {
   session.audio.pause()
   session.audio.srcObject = null
   session.audio.remove()
+  // Make voice an explicitly terminated activity, not a sticky global mode.
+  // Do this BEFORE awaiting the remote stop, which may be slow or unavailable.
+  if (voiceAssistantSnapshot.active) setVoiceAssistantActive(false)
 
   const remote = voiceAssistantRemote
   if (remote !== undefined) {
@@ -721,7 +789,7 @@ export function getVoiceAssistantSnapshot(): VoiceAssistantSnapshot {
  */
 export function setVoiceAssistantActive(active: boolean): void {
   if (!active) {
-    if (codexRealtimeVoiceSession !== undefined) void stopCodexRealtimeVoice()
+    if (codexRealtimeVoiceSession !== undefined || codexRealtimeVoiceStarting) void stopCodexRealtimeVoice()
     voiceAssistantSpeech?.dispose()
     voiceAssistantSpeech = undefined
     voiceAssistantSpeechKey = undefined
