@@ -80,3 +80,52 @@ describe('Phoenix Game Studio 2D artifact quality', () => {
     expect(frame.getAttribute('srcdoc')).toContain('phoenix-game-manifest')
   })
 })
+
+
+describe('Phoenix Game Studio cross-genre contracts', () => {
+  const scene = { layers: [{ id: 'board', scrollFactor: 0 }] }
+  const assets = [{ path: 'game.html', license: 'original' }]
+
+  it('allows a logic puzzle without fake shooter controls, bosses or player animations', () => {
+    const audit = auditGameManifest({
+      schemaVersion: 1, title: 'Logic Garden', genre: 'puzzle', gameType: 'puzzle',
+      level: { ...scene, puzzles: [{ id: 'first', goal: 'align tiles' }] },
+      controls: { interact: 'Click/Enter' }, audio: { cues: ['solve'], music: 'adaptive ambient' }, sources: assets,
+    })
+    expect(audit.valid).toBe(true)
+    expect(audit.issues).toEqual([])
+    expect(audit.issues).not.toContain('missing-boss')
+  })
+
+  it('checks a driving game track, steering and engine rather than run-and-gun requirements', () => {
+    const base = {
+      schemaVersion: 1, title: 'Circuit Vela', genre: 'racing', gameType: 'racing',
+      level: { ...scene, track: { waypoints: [0, 1, 2] } },
+      player: { states: ['idle', 'drive', 'turn', 'crash'], animations: { idle: 1, drive: 8, turn: 4, crash: 4 } },
+      controls: { steer: 'Arrows', accelerate: 'W', brake: 'S' },
+      audio: { cues: ['engine', 'collision'], music: 'procedural' }, sources: assets,
+    }
+    expect(auditGameManifest(base).valid).toBe(true)
+    expect(auditGameManifest({ ...base, level: scene }).issues).toContain('missing-race-track')
+    expect(auditGameManifest({ ...base, controls: { accelerate: 'W' } }).issues).toContain('control:steer')
+  })
+
+  it('supports platforming without requiring guns, and identifies missing platform geometry', () => {
+    const value = {
+      schemaVersion: 1, title: 'Moon Hopper', genre: 'platformer', gameType: 'platformer',
+      player: { states: ['idle', 'run', 'jump', 'fall'], animations: { idle: 2, run: 6, jump: 2, fall: 2 } },
+      level: { layers: [{ id: 'sky', scrollFactor: 0 }, { id: 'trees', scrollFactor: .4 }], platforms: [{ x: 0, y: 400, width: 800 }] },
+      controls: { move: 'A/D', jump: 'Space' }, audio: { cues: ['jump'], music: 'original' }, sources: assets,
+    }
+    expect(auditGameManifest(value).valid).toBe(true)
+    expect(auditGameManifest({ ...value, level: { ...value.level, platforms: [] } }).issues).toContain('missing-playable-platforms')
+  })
+
+  it('fails safely on an absent genre or unknown explicit profile', () => {
+    const base = { schemaVersion: 1, title: 'Unknown', level: scene, controls: { interact: 'Click' },
+      mechanics: ['choose action'], audio: { cues: [] }, sources: assets }
+    expect(auditGameManifest(base).issues).toContain('missing-genre')
+    expect(auditGameManifest({ ...base, genre: 'avant-garde', gameType: 'unsupported-type' }).issues)
+      .toContain('unsupported-game-type')
+  })
+})

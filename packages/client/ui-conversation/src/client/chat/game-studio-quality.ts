@@ -33,9 +33,62 @@ function missing(set: Set<string>, required: readonly string[], prefix: string, 
   for (const name of required) if (!set.has(name)) issues.push(prefix + ':' + name)
 }
 
-/** Audit the contract Kira's game-generation team must deliver before visual QA.
+type GameProfile = 'run-and-gun' | 'platformer' | 'top-down-action' | 'racing' | 'puzzle' | 'strategy' | 'rpg' | 'rhythm' | 'simulation' | '3d' | 'custom'
+
+function profileFor(manifest: RecordValue, warnings: string[], issues: string[]): GameProfile {
+  const raw = nonempty(manifest.gameType) ? manifest.gameType : nonempty(manifest.genre) ? manifest.genre : 'custom'
+  const value = raw.toLowerCase().trim()
+  const explicit = nonempty(manifest.gameType)
+  if (/run.and.gun|contra|shooter|shoot.em.up/u.test(value)) return 'run-and-gun'
+  if (/platform|metroidvania/u.test(value)) return 'platformer'
+  if (/top.down|twin.stick|arena.action/u.test(value)) return 'top-down-action'
+  if (/rac(e|er|ing)|kart|driving/u.test(value)) return 'racing'
+  if (/puzzle|match.3|logic|word.game/u.test(value)) return 'puzzle'
+  if (/strategy|tower.defen|tactics|real.time.strategy/u.test(value)) return 'strategy'
+  if (/\brpg\b|role.play|adventure/u.test(value)) return 'rpg'
+  if (/rhythm|music.game/u.test(value)) return 'rhythm'
+  if (/simulation|sandbox|management|builder/u.test(value)) return 'simulation'
+  if (/\b3d\b|first.person|third.person|webgl/u.test(value)) return '3d'
+  if (value === 'custom') return 'custom'
+  if (explicit) issues.push('unsupported-game-type')
+  else warnings.push('unknown-genre-use-explicit-game-type')
+  return 'custom'
+}
+
+function animationStates(player: RecordValue | undefined, required: readonly string[], issues: string[]): void {
+  if (player === undefined) { issues.push('missing-player'); return }
+  missing(stringSet(player.states), required, 'player-state', issues)
+  if (!object(player.animations)) { issues.push('missing-player-animations'); return }
+  for (const state of required) {
+    const frames = player.animations[state]
+    if (typeof frames !== 'number' || !Number.isInteger(frames) || frames < 1 || frames > 240) {
+      issues.push('animation-frames:' + state)
+    }
+  }
+}
+
+function enemiesAndBosses(manifest: RecordValue, requireEnemies: boolean, requireBoss: boolean, issues: string[]): void {
+  if ((!Array.isArray(manifest.enemies) || manifest.enemies.length === 0) && requireEnemies) issues.push('missing-enemies')
+  if (Array.isArray(manifest.enemies) && manifest.enemies.length > 0) {
+    const ids = namedSet(manifest.enemies)
+    if (ids.size !== manifest.enemies.length) issues.push('duplicate-or-unnamed-enemy')
+    for (const enemy of manifest.enemies) {
+      if (!object(enemy)) { issues.push('invalid-enemy'); continue }
+      missing(stringSet(enemy.states), ['move', 'attack', 'hurt', 'death'], 'enemy-state', issues)
+    }
+  }
+  if ((!Array.isArray(manifest.bosses) || manifest.bosses.length === 0) && requireBoss) issues.push('missing-boss')
+  if (Array.isArray(manifest.bosses)) for (const boss of manifest.bosses) {
+    if (!object(boss) || !nonempty(boss.id) || !Array.isArray(boss.phases)
+      || boss.phases.length < 2 || boss.phases.some(phase => !nonempty(phase))) {
+      issues.push('boss-requires-two-phases')
+    }
+  }
+}
+
+/** Audit a genre-specific game contract, without claiming that the declared mechanics actually work.
  * @param value - Untrusted game manifest supplied with the artifact.
- * @returns Structural issues and evidence limitations, never a gameplay verdict.
+ * @returns Structural issues and verification limits, not a gameplay verdict.
  */
 export function auditGameManifest(value: unknown): GameStudioAudit {
   const issues: string[] = []
@@ -44,48 +97,65 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
   if (value.schemaVersion !== 1) issues.push('unsupported-schema-version')
   if (!nonempty(value.title)) issues.push('missing-title')
   if (!nonempty(value.genre)) issues.push('missing-genre')
-  if (!object(value.player)) issues.push('missing-player')
-  else {
-    missing(stringSet(value.player.states), ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death'], 'player-state', issues)
-    if (!object(value.player.animations)) issues.push('missing-player-animations')
-    else for (const state of ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death']) {
-      const frames = value.player.animations[state]
-      if (typeof frames !== 'number' || !Number.isInteger(frames) || frames < 1 || frames > 240) {
-        issues.push('animation-frames:' + state)
-      }
-    }
+  const profile = profileFor(value, warnings, issues)
+  const player = object(value.player) ? value.player : undefined
+  const requiredMotion: Readonly<Partial<Record<GameProfile, readonly string[]>>> = {
+    'run-and-gun': ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death'],
+    platformer: ['idle', 'run', 'jump', 'fall'],
+    'top-down-action': ['idle', 'move', 'attack', 'hurt', 'death'],
+    racing: ['idle', 'drive', 'turn', 'crash'],
   }
-  if (!Array.isArray(value.enemies) || value.enemies.length === 0) issues.push('missing-enemies')
-  else {
-    const ids = namedSet(value.enemies)
-    if (ids.size !== value.enemies.length) issues.push('duplicate-or-unnamed-enemy')
-    for (const enemy of value.enemies) {
-      if (!object(enemy)) { issues.push('invalid-enemy'); continue }
-      missing(stringSet(enemy.states), ['move', 'attack', 'hurt', 'death'], 'enemy-state', issues)
-    }
-  }
-  if (!Array.isArray(value.bosses) || value.bosses.length === 0) issues.push('missing-boss')
-  else for (const boss of value.bosses) {
-    if (!object(boss) || !nonempty(boss.id) || !Array.isArray(boss.phases)
-      || boss.phases.length < 2 || boss.phases.some(phase => !nonempty(phase))) {
-      issues.push('boss-requires-two-phases')
-    }
-  }
+  const motion = requiredMotion[profile]
+  if (motion !== undefined) animationStates(player, motion, issues)
+  else if (player !== undefined && (!Array.isArray(player.states) || player.states.length === 0)) warnings.push('player-states-not-declared')
+  enemiesAndBosses(value, profile === 'run-and-gun' || profile === 'top-down-action', profile === 'run-and-gun', issues)
   if (!object(value.level)) issues.push('missing-level')
   else {
-    if (!Array.isArray(value.level.layers) || value.level.layers.length < 3) issues.push('level-requires-parallax-layers')
-    else if (value.level.layers.some(layer => !object(layer) || !nonempty(layer.id)
+    const level = value.level
+    const layers = level.layers
+    const requiredLayers = profile === 'run-and-gun' ? 3 : profile === 'platformer' ? 2 : 1
+    if (!Array.isArray(layers) || layers.length < requiredLayers) issues.push('level-requires-' + (requiredLayers === 3 ? 'parallax-layers' : 'scene-layers'))
+    else if (layers.some(layer => !object(layer) || !nonempty(layer.id)
       || typeof layer.scrollFactor !== 'number' || !Number.isFinite(layer.scrollFactor)
       || layer.scrollFactor < 0 || layer.scrollFactor > 1)) issues.push('invalid-parallax-layer')
-    if (!Array.isArray(value.level.platforms) || value.level.platforms.length === 0) issues.push('missing-playable-platforms')
+    if ((profile === 'run-and-gun' || profile === 'platformer')
+      && (!Array.isArray(level.platforms) || level.platforms.length === 0)) issues.push('missing-playable-platforms')
+    if (profile === 'racing' && !object(level.track)) issues.push('missing-race-track')
+    if (profile === 'puzzle' && !Array.isArray(level.puzzles)) issues.push('missing-puzzle-definitions')
+    if (profile === 'strategy' && !Array.isArray(level.units)) issues.push('missing-strategy-units')
+    if (profile === 'rhythm' && !Array.isArray(level.notes)) issues.push('missing-rhythm-chart')
+    if (profile === 'simulation' && !Array.isArray(level.systems)) issues.push('missing-simulation-systems')
   }
-  if (!object(value.controls)) issues.push('missing-controls')
+  const controlRequirements: Record<GameProfile, readonly string[]> = {
+    'run-and-gun': ['move', 'jump', 'shoot'],
+    platformer: ['move', 'jump'],
+    'top-down-action': ['move', 'action'],
+    racing: ['steer', 'accelerate', 'brake'],
+    puzzle: ['interact'],
+    strategy: ['select', 'command'],
+    rpg: ['move', 'interact'],
+    rhythm: ['play'],
+    simulation: ['interact'],
+    '3d': ['move'],
+    custom: [],
+  }
+  if (!object(value.controls) || Object.values(value.controls).every(v => !nonempty(v))) issues.push('missing-controls')
   else missing(new Set(Object.entries(value.controls).filter(([, v]) => nonempty(v)).map(([k]) => k)),
-    ['move', 'jump', 'shoot'], 'control', issues)
+    controlRequirements[profile], 'control', issues)
+  if (profile === 'custom' && (!Array.isArray(value.mechanics) || value.mechanics.length === 0)) issues.push('missing-custom-mechanics')
   if (!object(value.audio)) issues.push('missing-audio')
   else {
-    missing(stringSet(value.audio.cues), ['jump', 'shoot', 'hit', 'explosion', 'boss'], 'audio-cue', issues)
+    const cues = profile === 'run-and-gun' ? ['jump', 'shoot', 'hit', 'explosion', 'boss']
+      : profile === 'racing' ? ['engine', 'collision']
+        : profile === 'rhythm' ? ['beat'] : []
+    missing(stringSet(value.audio.cues), cues, 'audio-cue', issues)
+    if (!Array.isArray(value.audio.cues) || value.audio.cues.length === 0) warnings.push('audio-cues-not-declared')
     if (!nonempty(value.audio.music)) warnings.push('missing-music-plan')
+  }
+  if (profile === 'run-and-gun') {
+    if (!object(value.motion) || !object(value.motion.rig)) warnings.push('articulated-character-rig-not-declared')
+    if (!object(value.motion) || !Array.isArray(value.motion.aimDirections)
+      || value.motion.aimDirections.length < 3) warnings.push('multi-directional-aim-not-declared')
   }
   if (!Array.isArray(value.sources) || value.sources.length === 0) {
     warnings.push('asset-provenance-not-declared')
