@@ -21,7 +21,7 @@ const state = {
   title: 'YouTube',
   tabs: [{ id: 'shared-tab', title: 'YouTube', url: 'https://www.youtube.com/' }],
 }
-function installBrowserMock() {
+function installBrowserMock(current: typeof state = state) {
   const calls: Array<{ type: string; url?: string }> = []
   vi.stubGlobal('fetch', vi.fn(async (input: string, options?: { body?: string }) => {
     if (String(input).endsWith('/frame')) {
@@ -32,7 +32,7 @@ function installBrowserMock() {
     if (String(input).endsWith('/action') && options?.body) {
       calls.push(JSON.parse(options.body) as { type: string; url?: string })
     }
-    return new Response(JSON.stringify(state), {
+    return new Response(JSON.stringify(current), {
       status: 200, headers: { 'content-type': 'application/json' },
     })
   }))
@@ -69,6 +69,19 @@ describe('MiniBrowser in Phoenix conversation', () => {
     await waitFor(() => {
       expect(calls).toContainEqual({ type: 'open', url: 'https://example.org' })
     })
+  })
+  it('plays a YouTube watch URL with sound without replacing Kira\'s CDP tab', async () => {
+    installBrowserMock({
+      ...state,
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+    })
+    render(<MiniBrowser />)
+    await screen.findByRole('region', { name: 'Navegador de Kira' })
+    fireEvent.click(screen.getByRole('button', { name: /Reproducir con audio/ }))
+    expect(screen.getByTitle('Reproductor YouTube').getAttribute('src'))
+      .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1')
+    fireEvent.click(screen.getByRole('button', { name: /Volver al navegador/ }))
+    expect(screen.queryByTitle('Reproductor YouTube')).toBeNull()
   })
   it('does not embed external websites in an iframe', async () => {
     installBrowserMock()
