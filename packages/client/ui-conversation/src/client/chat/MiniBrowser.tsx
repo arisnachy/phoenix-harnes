@@ -57,18 +57,18 @@ export function MiniBrowser() {
   const [enabled, setEnabled] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
+  const [dismissed, setDismissed] = useState(false)
   const [address, setAddress] = useState('')
   const [typed, setTyped] = useState('')
   const [frame, setFrame] = useState<string>()
   const [error, setError] = useState<string>()
   const [supported, setSupported] = useState(false)
-  const imageRef = useRef<HTMLImageElement>(null)
   const focusRef = useRef<HTMLImageElement>(null)
   const currentTab = useRef<string>()
   const busy = useRef(false)
   const mounted = useRef(true)
   const frameRef = useRef<string>()
-  const show = enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank')
+  const show = !dismissed && (enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
 
   const run = useCallback(async (request: Command): Promise<void> => {
     try {
@@ -177,7 +177,7 @@ export function MiniBrowser() {
           {expanded ? '↙ Volver al chat' : '⛶ Ampliar'}
         </button>
         {!expanded && <button type="button" title={collapsed ? 'Mostrar navegador' : 'Contraer navegador'} onClick={() => { setCollapsed(value => !value) }}>{collapsed ? '▢' : '−'}</button>}
-        <button type="button" title="Ocultar microventana" onClick={() => { setEnabled(false); setCollapsed(true); setExpanded(false) }}>×</button>
+        <button type="button" title="Ocultar microventana" onClick={() => { setDismissed(true); setEnabled(false); setCollapsed(true); setExpanded(false) }}>×</button>
       </div>
       {!collapsed && <>
         <div className={css.tabs} role="tablist" aria-label="Pestañas">
@@ -203,7 +203,7 @@ export function MiniBrowser() {
         </form>
         {snapshot.available ? (
           <div className={css.viewport}>
-            {frame ? <img ref={imageRef} src={frame} alt={'Página actual: ' + (snapshot.title || snapshot.url || '')}
+            {frame ? <img ref={focusRef} src={frame} alt={'Página actual: ' + (snapshot.title || snapshot.url || '')}
               role="button" aria-label="Controlar página con el ratón y el teclado"
               tabIndex={0} draggable={false} onClick={click} onWheel={wheel} onKeyDown={keyboard}
               className={css.screen} /> : <div className={css.loading}>Conectando imagen del navegador…</div>}
@@ -227,7 +227,7 @@ export function MiniBrowser() {
   )
   return <>
     {!expanded && <div className={css.inline}>{show ? viewer : (
-      <button type="button" className={css.launch} onClick={() => { setEnabled(true); void run({ type: 'open', url: 'https://www.google.com' }) }}>
+      <button type="button" className={css.launch} onClick={() => { setDismissed(false); setCollapsed(false); setEnabled(true); void run({ type: 'open', url: 'https://www.google.com' }) }}>
         ◉ Abrir navegador
       </button>
     )}</div>}
