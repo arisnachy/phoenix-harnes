@@ -1,0 +1,70 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MiniBrowser } from '../src/client/chat/MiniBrowser.tsx'
+
+afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+
+const state = {
+  available: true,
+  tabId: 'shared-tab',
+  url: 'https://www.youtube.com/',
+  title: 'YouTube',
+  tabs: [{ id: 'shared-tab', title: 'YouTube', url: 'https://www.youtube.com/' }],
+}
+function installBrowserMock() {
+  const calls: Array<{ type: string; url?: string }> = []
+  vi.stubGlobal('fetch', vi.fn(async (input: string, options?: { body?: string }) => {
+    if (String(input).endsWith('/frame')) {
+      return new Response(new Uint8Array([255, 216, 255, 217]), {
+        status: 200, headers: { 'content-type': 'image/jpeg' },
+      })
+    }
+    if (String(input).endsWith('/action') && options?.body) {
+      calls.push(JSON.parse(options.body) as { type: string; url?: string })
+    }
+    return new Response(JSON.stringify(state), {
+      status: 200, headers: { 'content-type': 'application/json' },
+    })
+  }))
+  Object.defineProperty(URL, 'createObjectURL', {
+    configurable: true, value: vi.fn(() => 'blob:phoenix-browser-test'),
+  })
+  Object.defineProperty(URL, 'revokeObjectURL', {
+    configurable: true, value: vi.fn(),
+  })
+  return calls
+}
+
+describe('MiniBrowser in Phoenix conversation', () => {
+  it('shows the actual CDP tab and expands without reopening the browser', async () => {
+    const calls = installBrowserMock()
+    render(<MiniBrowser />)
+    expect(await screen.findByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
+    expect(screen.getByRole('tab', { name: 'YouTube' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Ampliar/ }))
+    const expanded = screen.getByRole('region', { name: 'Navegador de Kira' })
+    expect(expanded.getAttribute('data-expanded')).toBe('true')
+    expect(screen.getByRole('tab', { name: 'YouTube' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Volver al chat/ }))
+    expect(screen.getByRole('region', { name: 'Navegador de Kira' }).getAttribute('data-expanded')).toBeNull()
+    // Expansion is presentation-only; it must never reset Chromium or create another tab.
+    expect(calls).toEqual([])
+  })
+  it('sends human URL navigation through the local browser action route', async () => {
+    const calls = installBrowserMock()
+    render(<MiniBrowser />)
+    const address = await screen.findByRole('textbox', { name: 'Dirección web' })
+    fireEvent.change(address, { target: { value: 'https://example.org' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Ir' }))
+    await waitFor(() => {
+      expect(calls).toContainEqual({ type: 'open', url: 'https://example.org' })
+    })
+  })
+  it('does not embed external websites in an iframe', async () => {
+    installBrowserMock()
+    const view = render(<MiniBrowser />)
+    await screen.findByRole('region', { name: 'Navegador de Kira' })
+    expect(view.container.querySelector('iframe')).toBeNull()
+  })
+})
