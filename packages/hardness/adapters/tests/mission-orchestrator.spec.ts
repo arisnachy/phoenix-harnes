@@ -27,6 +27,55 @@ function passingJudge(): HardnessMissionJudge {
 }
 
 describe('HARDNESS mission orchestrator', () => {
+  it('does not start an already-cancelled mission regardless of capability kind', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const acquisition = new AcquisitionRegistry(hardness)
+    const execute = vi.fn<ToolRuntime['execute']>()
+    const controller = new AbortController()
+    controller.abort(new Error('Kira stopped this task'))
+    try {
+      await expect(runHardnessMission({
+        hardness, acquisition, tools: { execute },
+        approval: { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) },
+        artifacts: new ArtifactRuntime(),
+        need: { kind: 'report' }, args: {},
+        context: { callId: 'mission-stopped' as never, signal: controller.signal },
+      })).rejects.toThrow('Kira stopped this task')
+      expect(execute).not.toHaveBeenCalled()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('does not re-run an alternate provider after cancellation inside a failing tool', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const hardness = ctx.get('hardness') as HardnessService
+    const acquisition = new AcquisitionRegistry(hardness)
+    acquisition.register(async need => need.kind === 'weather' ? descriptor : undefined)
+    const controller = new AbortController()
+    const execute = vi.fn<ToolRuntime['execute']>(async () => {
+      controller.abort(new Error('Kira ended the turn'))
+      return { isError: true as const, error: { message: 'transient provider failure' }, content: [] }
+    })
+    try {
+      await expect(runHardnessMission({
+        hardness, acquisition, tools: { execute },
+        approval: { request: vi.fn(async () => ({ kind: 'approved' as const, grants: [] })) },
+        artifacts: new ArtifactRuntime(),
+        need: { kind: 'weather', inputs: ['city'], outputs: ['forecast'] },
+        args: { city: 'Madrid' },
+        context: { callId: 'mission-cancel-during-tool' as never, signal: controller.signal },
+      })).rejects.toThrow('Kira ended the turn')
+      expect(execute).toHaveBeenCalledTimes(1)
+      expect(hardness.get(descriptor.id)?.status).not.toBe('verified')
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('promotes a prepared capability only after successful execution and artifact verification', async () => {
     const ctx = new Context()
     await ctx.plugin(HardnessRegistry)

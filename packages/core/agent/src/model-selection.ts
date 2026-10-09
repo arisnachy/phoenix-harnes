@@ -224,22 +224,19 @@ const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|d
 /** A stopped operational reply that still announces the next action rather than performing it. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual unfinished-action matcher auditable as one literal.
 const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate))/isu
+/** Short explicit promises are not final answers either. */
+const AUTO_SHORT_PENDING_PROMISE = /\b(?:lo|la)\s+(?:har[eé]|revisar[eé]|probar[eé]|verificar[eé])\s+(?:ahora|enseguida)\b/iu
+function phoenixAutoUnfinishedAction(text: string): boolean {
+  return AUTO_UNFINISHED_ACTION.test(text) || AUTO_SHORT_PENDING_PROMISE.test(text)
+}
+
 /** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
 const AUTO_CONTINUATION_LIMIT = 4
-/** One Team-admission prompt is enough; repeating it is never additional work. */
-const AUTO_TEAM_ADMISSION_LIMIT = 1
 const AUTO_EXECUTION_CONTINUATION =
   'Planning or describing the next action is not task completion. ' +
   'Continue the current user request now with the available tools. ' +
   'Execute the next concrete action instead of only saying what you will do, ' +
   'and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
-
-const AUTO_TEAM_ADMISSION_CONTINUATION =
-  'Phoenix Auto substantive unfinished work may require real Kira Team participation, but successful one-shot graphs and other completed previews NEVER do. ' +
-  'Continue as Kira on Luna Max and delegate one bounded responsibility from the Sol plan with spawn_teammate, ' +
-  'or wake an existing appropriate teammate. Add a second teammate only when a genuinely independent front shortens the critical path. ' +
-  'Keep the critical path and supervision with Kira, communicate through Team tools, wait for a real teammate result or blocker, ' +
-  'inspect its evidence, integrate it, and verify the final result. Do not create filler work merely to satisfy this gate.'
 
 const AUTO_VISIBLE_PLAN_POLICY =
   'Phoenix Auto is a real two-stage workflow, not hidden role-play. ' +
@@ -431,21 +428,6 @@ function phoenixAutoTeamSignalForTurn(
   return undefined
 }
 
-/** Whether the current actionable turn already contains a material teammate outcome. */
-function phoenixAutoHasTeamOutcomeForTurn(
-  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
-  turn: number,
-): boolean {
-  return turnEvents(agent, turn).some((event) => {
-    if (event.type !== 'user/message') return false
-    const data = event.data as {
-      readonly source?: { readonly kind?: string; readonly purpose?: string }
-    }
-    return data.source?.kind === 'team-message'
-      && (data.source.purpose === 'result' || data.source.purpose === 'blocker')
-  })
-}
-
 function stableFingerprint(value: string): string {
   return JSON.stringify(value)
     .toLocaleLowerCase()
@@ -609,53 +591,13 @@ function phoenixAutoHasInlineVisualReceiptForTurn(
   return false
 }
 
-/**
- * A read-only MCP connection probe is a one-tool task, not a Team mission.
- * Require the matching successful tool receipt AND a conclusive user-facing
- * response in this turn. Never trust Kira's prose alone or a previous turn.
- */
-function phoenixAutoCompletedReadOnlyConnectorProbe(
-  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
-  turn: number,
-  request: string,
-  closingText: string,
-): boolean {
-  const direct = request.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
-  if (!/\b(?:github|mcp)\b/u.test(direct)
-    || !/\b(?:prueb\p{L}*|prob\p{L}*|verific\p{L}*|comprueb\p{L}*|comprob\p{L}*|funciona|conexion|conectad\p{L}*|check|test|verify|connected)\b/iu.test(direct)
-    || /\b(?:crea\p{L}*|edit\p{L}*|modific\p{L}*|elimin\p{L}*|borra\p{L}*|escrib\p{L}*|actualiz\p{L}*|commit|push|merge|issue|pull\s+request|envia\p{L}*|send|delete|create|update|write)\b/iu.test(direct)) return false
-  const closing = closingText.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
-  if (!/\b(?:funciona|correctamente|respondio|respondio|verificad\p{L}*|completad\p{L}*|comprobad\p{L}*|connected|works|succeeded|successfully)\b/iu.test(closing)
-    || AUTO_UNFINISHED_ACTION.test(closingText)) return false
-  const successfulCalls = new Set<string>()
-  const completed = new Set<string>()
-  for (const event of turnEvents(agent, turn)) {
-    if (event.type === 'tool/call') {
-      const data = event.data as { readonly callId?: string; readonly name?: string }
-      // A successful get_me receipt proves the connected GitHub identity; a
-      // tool registration, plan, or unrelated web search does not.
-      if (typeof data.callId === 'string'
-        && /^(?:mcp__)?github(?:__|[./:])get_me$/iu.test(data.name ?? '')) successfulCalls.add(data.callId)
-    }
-    if (event.type !== 'tool/result') continue
-    const data = event.data as {
-      readonly error?: unknown
-      readonly message?: {
-        readonly source?: { readonly kind?: string; readonly callId?: string }
-        readonly content?: readonly {
-          readonly type?: string; readonly toolCallId?: string; readonly isError?: boolean
-        }[]
-      }
-    }
-    const callId = data.message?.source?.callId
-    if (data.error !== undefined || data.message?.source?.kind !== 'tool'
-      || typeof callId !== 'string' || !successfulCalls.has(callId)) continue
-    if (data.message.content?.some(block =>
-      block.type === 'tool-result' && block.toolCallId === callId && block.isError === false)) {
-      completed.add(callId)
-    }
-  }
-  return completed.size > 0
+/** A final response is a stop, not a new implicit delegation request. */
+function phoenixAutoExplicitlyClosed(text: string): boolean {
+  const normalized = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  // This protects finished first-step answers without treating generic
+  // progress such as "tests completed; now deploy" as terminal.
+  if (phoenixAutoUnfinishedAction(text)) return false
+  return /\b(?:tarea\s+(?:ya\s+)?(?:terminada|completada|finalizada)|(?:ya\s+)?(?:termine|finalice|complete|terminado|completado|finalizado)|no\s+(?:queda|hay)\s+(?:trabajo|nada|tareas?)\s+pendiente|sin\s+(?:trabajo|tareas?)\s+pendientes?|done|finished|completed|nothing\s+(?:else\s+)?(?:left|pending))\b/u.test(normalized)
 }
 
 /** Once a human stops the turn, no continuation or Team gate may revive it. */
@@ -716,8 +658,6 @@ interface PhoenixAutoRouterState {
   rescueCount: number
   continuationCount: number
   lastContinuationStep: number
-  teamAdmissionCount: number
-  lastTeamAdmissionStep: number
   forcePlannerNext: boolean
   lastTeamEscalationMessageId: string | undefined
 }
@@ -729,8 +669,6 @@ function resetPhoenixAutoTurnState(state: PhoenixAutoRouterState, turn: number):
   state.rescueCount = 0
   state.continuationCount = 0
   state.lastContinuationStep = 0
-  state.teamAdmissionCount = 0
-  state.lastTeamAdmissionStep = 0
   state.forcePlannerNext = false
   state.lastTeamEscalationMessageId = undefined
 }
@@ -873,15 +811,12 @@ export function installModelSelection(
   selection: ModelSelectionRef,
   handoff?: ModelSelectionHandoff | ModelSelectionHandoffResolver,
 ): () => void {
-  let phoenixAutoTeamAvailable = false
   const phoenixAutoState: PhoenixAutoRouterState = {
     turn: 0,
     lastRescueStep: 0,
     rescueCount: 0,
     continuationCount: 0,
     lastContinuationStep: 0,
-    teamAdmissionCount: 0,
-    lastTeamAdmissionStep: 0,
     forcePlannerNext: false,
     lastTeamEscalationMessageId: undefined,
   }
@@ -913,7 +848,6 @@ export function installModelSelection(
       ? assembled.tools
       : assembled.tools.filter(tool => tool.name !== PHOENIX_CODEX_AUTO_REVIEW_TOOL)
     const hasKiraTeam = providerTools.some(tool => tool.name === 'spawn_teammate')
-    phoenixAutoTeamAvailable = hasKiraTeam
     // Agent Teams is Phoenix's single visible delegation path. Keeping legacy
     // subagent tools beside it lets provider models bypass Kira identities,
     // shared chat, reactions and lifecycle state unpredictably.
@@ -1028,9 +962,6 @@ export function installModelSelection(
 
     const latest = latestPhoenixAutoAssistantStop(agent, turn)
     if (latest === undefined) return
-    // A verified, single read-only MCP identity check is already the requested
-    // result. In particular, never force a teammate after get_me succeeded.
-    if (phoenixAutoCompletedReadOnlyConnectorProbe(agent, turn, directText, latest.text)) return
 
     const events = turnEvents(agent, turn)
     const latestStepHasToolActivity = events.some((event) => {
@@ -1056,30 +987,16 @@ export function installModelSelection(
       return
     }
 
-    if (phoenixAutoTeamAvailable && !phoenixAutoHasTeamOutcomeForTurn(agent, turn)
-      && phoenixAutoState.teamAdmissionCount < AUTO_TEAM_ADMISSION_LIMIT
-      && phoenixAutoState.lastTeamAdmissionStep !== latest.step) {
-      phoenixAutoState.teamAdmissionCount += 1
-      phoenixAutoState.lastTeamAdmissionStep = latest.step
-      // One explicit admission reminder is the full budget. Never manufacture
-      // an endless series of context injections or invoke Sol as a side effect.
-      agent.steer(createUserMessage({
-        content: [{ type: 'text', text: AUTO_TEAM_ADMISSION_CONTINUATION }],
-        source: {
-          kind: 'plugin',
-          plugin: 'model-selection',
-          form: 'notice',
-          summary: 'Phoenix Auto team admission',
-        },
-      }))
-      return
-    }
-
     if (phoenixAutoState.lastContinuationStep === latest.step) return
+    // Kira's normal final answer is terminal. Team availability is never
+    // evidence of unfinished work. Only a visible, unexecuted action or the
+    // explicitly visible Sol planning handoff can request another step.
     const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
+      && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
+      && !phoenixAutoExplicitlyClosed(latest.text)
     const announcedNextAction = !latestStepHasToolActivity
       && latest.text.length > 0
-      && AUTO_UNFINISHED_ACTION.test(latest.text)
+      && phoenixAutoUnfinishedAction(latest.text)
     if (!plannerStoppedBeforeActing && !announcedNextAction) return
     if (phoenixAutoState.continuationCount >= AUTO_CONTINUATION_LIMIT) return
 
