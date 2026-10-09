@@ -435,3 +435,8 @@
 .avatar[data-avatar-visible='false'] .portraitAtlas,
 .avatar[data-avatar-motion='off'] .portraitAtlas {animation-play-state:paused!important}
 @media(prefers-reduced-motion:reduce) { .portraitAtlas{animation:none!important} }
+
+/* Preserve a calm face when the user prefers reduced animation. */
+@media (prefers-reduced-motion:reduce) {
+  .avatar .portraitAtlas,.avatar .portraitImage {animation:none!important; transition:none!important}
+}
