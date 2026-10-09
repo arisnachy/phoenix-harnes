@@ -513,9 +513,15 @@ export abstract class AbstractApiClient implements IApiClient {
 
   readonly authorization: IApiClient['authorization'] = {
     list: (payload, signal) => this.callUnary('authorization.list', payload, signal),
-    // The Host immediately returns an attemptId; user-paced consent and prompts
-    // take place through subsequent status/answer RPCs. Bound this startup POST.
-    begin: (payload, signal) => this.callUnary('authorization.begin', payload, signal),
+    // Host creates an attempt immediately. Consent and prompting take place
+    // later through status/answer, so the begin HTTP POST must be bounded
+    // even when the caller never supplies an AbortSignal.
+    begin: (payload, signal) => this.callUnary(
+      'authorization.begin', payload,
+      signal === undefined
+        ? AbortSignal.timeout(12_000)
+        : AbortSignal.any([signal, AbortSignal.timeout(12_000)]),
+    ),
     status: (payload, signal) => this.callUnary('authorization.status', payload, signal),
     answer: (payload, signal) => this.callUnary('authorization.answer', payload, signal),
     cancel: (payload, signal) => this.callUnary('authorization.cancel', payload, signal),
