@@ -67,7 +67,9 @@ describe('Kira browser structured controls', () => {
   it('requires a unique form selector and provides a verifiable wait result', () => {
     const button = document.querySelector('button') as HTMLButtonElement
     button.addEventListener('click', event => { event.preventDefault(); document.querySelector('#success')?.removeAttribute('hidden') })
-    expect(executeBrowserInteraction({ operation: 'click', selector: 'button[type="submit"]' }).ok).toBe(true)
+    expect(executeBrowserInteraction({ operation: 'click', selector: 'button[type="submit"]' }).reason)
+      .toBe('USE_EXPLICIT_SUBMIT_FORM_CONFIRMATION')
+    expect(executeBrowserInteraction({ operation: 'submit', selector: 'button[type="submit"]' }).ok).toBe(true)
     expect(executeBrowserInteraction({ operation: 'wait', expectedText: 'Received!' }).ok).toBe(true)
     expect(executeBrowserInteraction({ operation: 'wait', expectedText: 'Absent answer' }).ok).toBe(false)
   })
