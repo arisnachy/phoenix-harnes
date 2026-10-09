@@ -55,7 +55,7 @@ export async function assertPublicFetchTarget(url: URL): Promise<void> {
     throw new WebError(`private or reserved network target is blocked: ${url.hostname}`, 'WEB_BLOCKED_URL')
   }
   if (isIP(url.hostname) !== 0) return
-  let addresses: Array<{ address: string }>
+  let addresses: Array<{ address: string; family: number }>
   try {
     addresses = await lookup(url.hostname, { all: true, order: 'verbatim' })
   } catch (error: unknown) {
