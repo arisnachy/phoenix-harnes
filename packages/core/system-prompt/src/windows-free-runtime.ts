@@ -10,7 +10,7 @@ type ProbeExecutor = (binary: string, args: string[], options: {
   maxBuffer: number
 }, callback: (error: Error | null, stdout: string) => void) => unknown
 
-export interface WindowsProbeOptions {
+interface WindowsProbeOptions {
   readonly platform?: string
   readonly supervised?: boolean
   readonly runtimeRoot?: string
