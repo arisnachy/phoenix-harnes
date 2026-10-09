@@ -586,9 +586,6 @@ describe('ManagedMcpController', () => {
       { ...row.config, oauth: true },
     ]) {
       writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...row, config: changed }] }]))
-      // OAuth=true at the pinned endpoint must not be mislabeled free public
-      // auth, even if the generic remote parser historically permits OAuth.
-      if (changed.oauth === true) continue
       await expect(ctl.snapshot()).rejects.toThrow(/managed MCP patch row/)
     }
   })
