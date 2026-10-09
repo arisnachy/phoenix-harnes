@@ -596,15 +596,20 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     && openClaw?.connected !== true
     && !openClawRuntimeMissing
     && (authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required')
+  const missingOAuthFlow = managed !== undefined && mcpRuntime?.status === 'auth-required'
+    && authorizationAccount === undefined
+  const canRepair = managed !== undefined && managed.source !== undefined && onRepair !== undefined
+    && (mcpRuntime === undefined || mcpRuntime.status === 'failed'
+      || mcpRuntime.status === 'disconnected'
+      || (mcpRuntime.status === 'ready' && mcpRuntime.toolNames.length === 0)
+      || missingOAuthFlow)
+  // Reconnecting an auth-required MCP with no registered flow cannot produce
+  // consent. Offer the source-aware Repair action instead of looping forever.
   const canReconnect = mcpRuntime !== undefined
     && (mcpRuntime.status === 'failed'
       || mcpRuntime.status === 'disconnected'
-      || (mcpRuntime.status === 'auth-required' && authorizationAccount === undefined))
+      || (missingOAuthFlow && !canRepair))
     && onReconnect !== undefined
-  const brokenManaged = managed !== undefined && (mcpRuntime === undefined
-    || mcpRuntime.status === 'failed' || mcpRuntime.status === 'disconnected'
-    || (mcpRuntime.status === 'ready' && mcpRuntime.toolNames.length === 0))
-  const canRepair = brokenManaged && managed.source !== undefined && onRepair !== undefined
   return (
     <article className={connectorStyles['connectorCard']} data-connector-id={definition.id}>
       <div className={connectorStyles['connectorTop']}>
@@ -625,6 +630,12 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {missingOAuthFlow ? (
+        <p role="alert" className={styles['advancedHint']}>
+          El Host solicita autorización, pero el plugin MCP no registró su método OAuth.
+          Usa Reparar para reconstruir el conector desde su origen oficial, sin eliminar las credenciales existentes.
+        </p>
+      ) : null}
       {openClaw?.connected !== true ? null : (
         <p className={styles['advancedHint']}>
           {openClaw.account === undefined ? openClaw.skillAlias : `${openClaw.skillAlias} · ${openClaw.account}`}
