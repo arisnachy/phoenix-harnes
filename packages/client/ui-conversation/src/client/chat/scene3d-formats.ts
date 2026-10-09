@@ -136,7 +136,7 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
   const cameraName=scene.camera??'perspective'
   const cameraTranslation=cameraName==='top'?[0,40,0]:cameraName==='front'?[0,8,40]:[25,19,28]
   nodes.push({name:'Phoenix Camera',camera:0,translation:cameraTranslation,
-    rotation:cameraName==='top'?quaternion([-90,0,0]):cameraName==='isometric'?quaternion([-24,38,0]):quaternion([0,0,0])})
+    rotation:cameraName==='top'?quaternion([-90,0,0]):cameraName==='front'?quaternion([-12,0,0]):quaternion([-24,38,0])})
   const lightIndex=nodes.length
   nodes.push({name:'Phoenix Directional Light',translation:[10,25,14],
     rotation:quaternion([-35,22,0]),extensions:{KHR_lights_punctual:{light:0}}})
@@ -229,14 +229,16 @@ function translate(m:number[],p:V3):V3{
 function accessorValues(index:number,json:R,binary:Uint8Array):number[]{
   const accessors=Array.isArray(json.accessors)?json.accessors:[],views=Array.isArray(json.bufferViews)?json.bufferViews:[]
   const a=accessors[index],v=obj(a)?views[Number(a.bufferView)]:undefined
-  if(!obj(a)||!obj(v)||a.sparse!==undefined)throw Error('Accessor glTF no compatible.')
+  if(!obj(a)||!obj(v)||a.sparse!==undefined||v.buffer!==0)throw Error('Accessor glTF no compatible.')
   const n=Number(a.count),kind=String(a.type),component=Number(a.componentType)
   const count=kind==='VEC3'?3:kind==='SCALAR'?1:0
   const bytes=component===5126||component===5125?4:component===5123?2:component===5121?1:0
   if(count===0||bytes===0||!Number.isSafeInteger(n)||n<1||n>MAX_TRIANGLES*3)throw Error('Accessor glTF excesivo o no compatible.')
   const stride=Number(v.byteStride??count*bytes),offset=Number(v.byteOffset??0)+Number(a.byteOffset??0)
   if(!Number.isSafeInteger(offset)||!Number.isSafeInteger(stride)||stride<count*bytes
-    ||offset<0||offset+(n-1)*stride+count*bytes>binary.byteLength)throw Error('Buffer glTF fuera de límites.')
+    ||offset<0||offset+(n-1)*stride+count*bytes>binary.byteLength
+    ||offset+(n-1)*stride+count*bytes>Number(v.byteOffset??0)+Number(v.byteLength))
+    throw Error('Buffer glTF fuera de límites.')
   const dv=new DataView(binary.buffer,binary.byteOffset,binary.byteLength),values:number[]=[]
   for(let i=0;i<n;i++)for(let j=0;j<count;j++){
     const at=offset+i*stride+j*bytes
