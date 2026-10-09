@@ -223,7 +223,9 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
     void run({ type: 'key', key: event.key, modifiers })
   }
 
-  if (!supported && !requested && !enabled) return null
+  // No browser chrome in ordinary greetings or unrelated conversations.
+  // A deliberate request or an existing real Chromium tab is required.
+  if (!show) return null
   const viewer = (
     <section className={css.browser} data-mini-browser data-expanded={expanded ? 'true' : undefined} aria-label="Navegador de Kira">
       <div className={css.titlebar}>
@@ -301,14 +303,15 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
         {error && <p className={css.error} role="alert">{error}</p>}
         <p className={css.hint}>Haz clic en la imagen para interactuar. «Ampliar» conserva la pestaña y la sesión.</p>
       </>}
+      {snapshot.available && <div className={css.externalActions}>
+        <button type="button" title="Abrir esta página en Chrome completo" onClick={() => { void run({ type: 'open-external' }) }}>
+          ↗ Abrir navegador completo
+        </button>
+      </div>}
     </section>
   )
   return <>
-    {!expanded && <div ref={inlineRef} className={css.inline}>{show ? viewer : (
-      <button type="button" className={css.launch} onClick={() => { setDismissed(false); setCollapsed(false); setEnabled(true); void run({ type: 'open', url: 'https://www.google.com' }) }}>
-        ◉ Abrir navegador
-      </button>
-    )}</div>}
+    {!expanded && <div ref={inlineRef} className={css.inline}>{viewer}</div>}
     {expanded && <Modal open headless className={css.expandedDialog ?? ''} title="Navegador de Kira" onClose={() => { setExpanded(false) }}>{viewer}</Modal>}
   </>
 }
