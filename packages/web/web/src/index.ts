@@ -85,6 +85,8 @@ export class WebRuntime extends Service {
     fetchProvider: z.string(),
   })
 
+  private readonly searchCooldownUntil = new Map<string, number>()
+  private static readonly SEARCH_COOLDOWN_MS = 60_000
   private searchProviders = new Map<string, WebSearchProvider>()
   private fetchProviders = new Map<string, WebFetchProvider>()
   private readonly searchProviderId: string | undefined
