@@ -169,6 +169,15 @@ switch (invocation.mode) {
     const managedMcpPatch = dshHomePath('mcp', 'managed.patch.yml')
     if ((process.env.PHOENIX_MANAGED_MCP ?? 'on').trim().toLowerCase() !== 'off'
       && existsSync(managedMcpPatch) && !patches.includes(managedMcpPatch)) {
+      // Legacy patches (including old Notion, Canva and Supabase installs)
+      // lacked loader inject. Repair BEFORE Cordis loads them: migrating in
+      // pluginInventory's async startup effect happens after activation and
+      // cannot recover providers that already missed the authorization service.
+      const { repairManagedMcpDependenciesBeforeBoot } = await import('./managed-mcp-preboot.ts')
+      const repaired = await repairManagedMcpDependenciesBeforeBoot(managedMcpPatch)
+      if (repaired > 0) {
+        console.info(`[PHOENIX MCP] restored authorization dependencies for ${repaired} legacy connector(s) before boot`)
+      }
       patches.push(managedMcpPatch)
     }
 
