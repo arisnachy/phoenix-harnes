@@ -76,7 +76,7 @@ describe('OAuth without a placeholder page', () => {
     await clickAuthorize()
     expect(api.begin).toHaveBeenCalledWith({ key: KEY, method: 'oauth' })
     expect(open).not.toHaveBeenCalled()
-    expect(await screen.findByText(/Iniciando autorización con el Host|signing in/i)).toBeTruthy()
+    await waitFor(() => { expect(api.status).toHaveBeenCalledTimes(1) }, { timeout: 2_000 })
   })
 
   it('opens only the official provider URL once Host publishes consent', async () => {
