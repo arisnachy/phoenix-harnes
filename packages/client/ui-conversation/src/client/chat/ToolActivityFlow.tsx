@@ -172,7 +172,7 @@ function browserNavigationTab(node: OrderedChatNode): string | undefined {
     || !/(?:chrome|browser)/u.test(name)) return undefined
   const output = root.content.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ')
   if (!/(?:Navegación iniciada en|Búsqueda abierta en YouTube:|Navegación a la búsqueda de YouTube iniciada:)/iu.test(output)) return undefined
-  return /\\bpestaña\\s+([a-zA-Z0-9_-]{3,128})/iu.exec(output)?.[1]
+  return /\bpestaña\s+([a-zA-Z0-9_-]{3,128})/iu.exec(output)?.[1]
 }
 
 function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
