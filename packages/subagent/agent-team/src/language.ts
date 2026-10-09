@@ -54,6 +54,7 @@ export function classifyTeamUserLanguage(text: string): TeamUserLanguage {
 export function teamUserLanguage(events: readonly SessionEvent[]): TeamUserLanguage {
   for (let i = events.length - 1; i >= 0; i--) {
     const event = events[i]
+    if (event === undefined) continue
     let text: string | undefined
     if (event.type === 'user/message' && event.data.source.kind === 'user') {
       text = event.data.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n')
