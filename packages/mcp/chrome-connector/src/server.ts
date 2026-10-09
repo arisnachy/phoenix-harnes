@@ -590,7 +590,7 @@ server.registerTool('click_text', {
   if (!actionsAllowed()) throw new Error('Acción bloqueada por la política de permisos del navegador (modo read-only o PHOENIX_BROWSER_ALLOW_ACTIONS=false).')
   const tab = await selectedTab(tabId)
   const escaped = JSON.stringify(text)
-  const result = await evaluate(tab, `(() => { const wanted=${escaped}; const el=[...document.querySelectorAll('button,a,[role="button"],input[type="submit"]')].find(e => (e.innerText || e.value || '').trim().includes(wanted)); if (!el) return 'No encontrado'; el.click(); return 'Clic realizado'; })()`)
+  const result = await evaluate(tab, `(() => { const wanted=${escaped}; const el=[...document.querySelectorAll('button,a,[role="button"],input[type="submit"]')].find(e => (e.innerText || e.value || '').trim().includes(wanted)); if (!el) return 'No encontrado'; if (el.type === 'submit') return 'Usa submit_form con confirmación explícita'; el.click(); return 'Clic realizado'; })()`)
   return { content: [{ type: 'text', text: String(result) }] }
 })
 
