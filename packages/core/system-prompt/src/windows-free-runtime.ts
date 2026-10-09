@@ -25,8 +25,13 @@ export function windowsCapabilityGuidance(raw: unknown): string {
   const commands = raw.executables as Record<string, unknown>
   const available = ['winget', 'wsl', 'ollama', 'foundry', 'pwsh'].filter(name => commands[name] === true)
   const installed = available.length > 0 ? available.join(', ') : 'none detected'
+  const hardware = 'hardware' in raw && typeof raw.hardware === 'object' && raw.hardware !== null
+    ? raw.hardware as Record<string, unknown> : null
+  const memory = hardware?.memoryGiB
+  const memoryHint = typeof memory === 'number' && Number.isFinite(memory) && memory > 0 && memory < 2048
+    ? ' Available physical RAM: ' + memory.toFixed(1) + ' GiB (not a model benchmark).' : ''
   return [
-    'Windows free capabilities (automatically inspected, read-only): ' + installed + '.',
+    'Windows free capabilities (automatically inspected, read-only): ' + installed + '.' + memoryHint,
     'Decision policy for Kira: use existing Phoenix-approved filesystem and shell tools for ordinary Windows work. Use WinGet only to inspect packages when relevant; never silently install or upgrade anything. Use WSL only when a real Linux task benefits and it is configured. Treat Ollama/Foundry command presence as a candidate, NOT a ready model: require a configured, healthy local provider and a quality check before routing tasks; retain the selected cloud model otherwise. Never download models, enable services, modify settings, or switch providers without the applicable user authorization. Native Windows notifications, Windows AI and MXC are NOT enabled by this inventory. Prefer no action over inventing Windows API availability. Keep this inventory silent unless relevant or requested.',
   ].join('\n')
 }
