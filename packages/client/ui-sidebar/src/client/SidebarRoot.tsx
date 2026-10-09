@@ -24,9 +24,6 @@ import {
 import type { SidebarRootComponentProps } from './contract/slots.ts'
 import css from './SidebarRoot.module.css'
 
-/** Wide-content unmount delay; matches the 150ms wide-content fade-out. */
-const COLLAPSE_SETTLE_MS = 150
-
 /**
  * How long the column's scrollbars stay drawn after the pointer leaves it.
  * The bar is a pointer affordance here, and hiding it on the leave event
@@ -48,15 +45,9 @@ export function SidebarRoot({
   t,
   renderSlot,
 }: SidebarRootComponentProps) {
-  // Wide content stays mounted while the collapse animates (fading via
-  // .collapsed .wide), unmounts at settle, and remounts right away on expand.
-  const [settled, setSettled] = useState(collapsed)
-  useEffect(() => {
-    if (!collapsed) { setSettled(false); return }
-    const timer = window.setTimeout(() => { setSettled(true) }, COLLAPSE_SETTLE_MS)
-    return () => { window.clearTimeout(timer) }
-  }, [collapsed])
-  const wide = !collapsed || !settled
+  // Match rendered controls to the actual sidebar width immediately.
+  // The old 150ms settle timer blocked the rail and retained costly wide rows.
+  const wide = !collapsed
   // Navigation destinations open an actionable, focused surface — never the Settings menu.
   const openFeature = (destination: 'discover' | 'connectors' | 'team', label: string): void => {
     window.dispatchEvent(new CustomEvent('phoenix:open-feature', { detail: { destination, label } }))
@@ -64,12 +55,6 @@ export function SidebarRoot({
   const openLibrary = (): void => {
     window.dispatchEvent(new Event('phoenix:open-workspace-library'))
   }
-
-  // Freeze the content at its expanded width while it fades out (collapsed
-  // && wide): the sliding column then clips it instead of reflowing it. The
-  // rail layout (.collapsed styles) only applies once the fade settles.
-  const lastWideWidth = useRef(width)
-  if (!collapsed) lastWideWidth.current = width
 
   // Rail-in only crossfades a live collapse: a refresh straight into the
   // collapsed state renders the rail statically (no delay-hidden icons).
@@ -101,20 +86,30 @@ export function SidebarRoot({
   // here, and the bars would stay drawn over a column nobody is pointing at.
   // The element's own leave stays as the one signal geometry cannot give: a
   // pointer that leaves the window emits no further moves.
+  // Throttle layout reads to a single rAF instead of EVERY pointer event.
   useEffect(() => {
     if (!pointerInside) return
+    let frame: number | null = null
+    let x = 0
+    let y = 0
     const onMove = (event: PointerEvent): void => {
-      const rect = column.current?.getBoundingClientRect()
-      /* v8 ignore next -- the listener only exists while the column is mounted and revealed. */
-      if (rect === undefined) return
-      const inside = event.clientX >= rect.left && event.clientX < rect.right
-        && event.clientY >= rect.top && event.clientY < rect.bottom
-      if (inside) cancelLinger()
-      else armLinger()
+      x = event.clientX
+      y = event.clientY
+      if (frame !== null) return
+      frame = requestAnimationFrame(() => {
+        frame = null
+        const rect = column.current?.getBoundingClientRect()
+        if (rect === undefined) return
+        const inside = x >= rect.left && x < rect.right
+          && y >= rect.top && y < rect.bottom
+        if (inside) cancelLinger()
+        else armLinger()
+      })
     }
-    document.addEventListener('pointermove', onMove)
+    document.addEventListener('pointermove', onMove, { passive: true })
     return () => {
       document.removeEventListener('pointermove', onMove)
+      if (frame !== null) cancelAnimationFrame(frame)
       cancelLinger()
     }
   }, [pointerInside])
@@ -123,10 +118,9 @@ export function SidebarRoot({
     <div
       ref={column}
       className={clsx(
-        css.root, !wide && css.collapsed, !wide && everWide.current && css.railIn,
-        collapsed && wide && css.fading, !pointerInside && css.quietBars,
+        css.root, collapsed && css.collapsed, collapsed && everWide.current && css.railIn,
+        !pointerInside && css.quietBars,
       )}
-      style={wide ? { width: collapsed ? lastWideWidth.current : width } : undefined}
       onPointerEnter={() => {
         cancelLinger()
         setPointerInside(true)
