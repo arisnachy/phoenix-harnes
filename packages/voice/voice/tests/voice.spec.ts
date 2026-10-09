@@ -296,6 +296,27 @@ describe('Codex realtime compact context', () => {
 })
 
 describe('Codex realtime app-server notifications', () => {
+  it('expires an orphaned Codex call even if Telegram/browser never sends hangup', async () => {
+    vi.useFakeTimers()
+    const bridge = new CodexRealtimeBridge()
+    try {
+      const internal = bridge as unknown as {
+        sessions: Map<string, string>
+        armCallExpiry(key: string): void
+        callTimers: Map<string, ReturnType<typeof setTimeout>>
+      }
+      internal.sessions.set('telegram-call', 'thread-remote')
+      internal.armCallExpiry('telegram-call')
+      expect(bridge.hasActiveSession()).toBe(true)
+      await vi.advanceTimersByTimeAsync(60 * 60_000 + 1)
+      expect(bridge.hasActiveSession()).toBe(false)
+      expect(internal.callTimers.size).toBe(0)
+    } finally {
+      bridge.close()
+      vi.useRealTimers()
+    }
+  })
+
   it('reports active native realtime ownership without exposing thread details', () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as { sessions: Map<string, string> }
