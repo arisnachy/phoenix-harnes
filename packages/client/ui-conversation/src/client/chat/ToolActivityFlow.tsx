@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ComponentProps } from 'react'
 import type { ImageAttachmentRef } from '@phoenix-ai/dsh-attachment'
+import type { UserMessageNode } from '@phoenix-ai/dsh-client-runtime/client'
 import { PhoenixLogo } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { AssistantChatData, ToolChatData } from '../contract/chat-nodes.ts'
 import { isRunningTool, isSettledTool } from '../contract/chat-nodes.ts'
@@ -9,6 +10,7 @@ import { ChatNodeSeat } from './ChatNodeSeat.tsx'
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { formatRunDuration } from './message-chrome.ts'
 import { ReasoningRow } from './ReasoningRow.tsx'
+import { MiniBrowser } from './MiniBrowser.tsx'
 import type { TurnProgress } from './turn-progress.ts'
 import chatCss from './ChatView.module.css'
 import css from './ToolActivityFlow.module.css'
@@ -49,6 +51,7 @@ type ActivityItem =
   }
 
 type FlowItem =
+  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string }
   | { readonly kind: 'node'; readonly key: string }
   | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
@@ -124,6 +127,19 @@ function hasAssistantSurface(data: AssistantChatData): boolean {
     if (block.kind === 'text') return block.text.trim() !== ''
     return true
   })
+}
+
+/** One browser card per navigation request, anchored in the transcript. */
+export function isBrowserPrompt(text: string): boolean {
+  const verb = /\b(?:abre|abrir|abreme|abrirme|navega|navegar|entra|entrar|visita|visitar|accede|acceder|open|browse)\b/iu
+  const target = /\b(?:ir a|ve a|busca en)\b|https?:\/\//iu
+  return verb.test(text) || target.test(text)
+}
+function isBrowserRequest(node: OrderedChatNode): boolean {
+  if (node.kind !== 'user' && node.kind !== 'steering') return false
+  const message = node.data as UserMessageNode
+  const text = message.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('')
+  return isBrowserPrompt(text)
 }
 
 function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
@@ -213,6 +229,40 @@ function buildAnchoredFlow(
     },
     ...buildFlow(nodes.slice(splitAt)),
   ]
+}
+
+/**
+ * Put each MiniBrowser after the assistant/tool activity of its own request,
+ * before the next user message. Later requests get independent keyed cards
+ * rather than moving/reusing a global browser node at the bottom.
+ */
+export function addBrowserCards(
+  flow: FlowItem[],
+  nodes: readonly OrderedChatNode[],
+): FlowItem[] {
+  const requests = nodes.filter(isBrowserRequest)
+  if (requests.length === 0) return flow
+  const result: FlowItem[] = []
+  let pendingUserKey: string | undefined
+  const byKey = new Set(requests.map(n => n.key))
+  const finish = (): void => {
+    if (pendingUserKey !== undefined) {
+      result.push({ kind: 'browser', key: 'browser:' + pendingUserKey, userKey: pendingUserKey })
+      pendingUserKey = undefined
+    }
+  }
+  for (const item of flow) {
+    // A new user turn begins after all content from the preceding turn.
+    if (item.kind === 'node' && nodes.some(n => n.key === item.key && (n.kind === 'user' || n.kind === 'steering'))) {
+      finish()
+      if (byKey.has(item.key)) pendingUserKey = item.key
+    } else if (item.kind === 'optimistic') {
+      finish()
+    }
+    result.push(item)
+  }
+  finish()
+  return result
 }
 
 function ToolActivityIcon() {
@@ -388,7 +438,18 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
  * @returns The grouped transcript flow.
  */
 export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
-  const flow = useMemo(() => buildAnchoredFlow(nodes, optimisticSubmit), [nodes, optimisticSubmit])
+  const flow = useMemo(() => addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), [nodes, optimisticSubmit])
+  const browserKeys = flow.filter(item => item.kind === 'browser').map(item => item.userKey)
+  const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
+  const newestBrowserKey = browserKeys.at(-1)
+  const [lastBrowserKey, setLastBrowserKey] = useState<string | undefined>()
+  useEffect(() => {
+    if (newestBrowserKey !== lastBrowserKey) {
+      setLastBrowserKey(newestBrowserKey)
+      setSelectedBrowserKey(newestBrowserKey)
+    }
+  }, [newestBrowserKey, lastBrowserKey])
+  const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
   const statusBeforeIndex = turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
     ? -1
     : flow.length - 1
@@ -404,8 +465,14 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
               t={seatProps.t}
             />
           )}
-          {item.kind === 'node'
-            ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
+          {item.kind === 'browser'
+            ? <MiniBrowser
+              requested
+              active={item.userKey === activeBrowserKey}
+              onActivate={() => { setSelectedBrowserKey(item.userKey) }}
+            />
+            : item.kind === 'node'
+              ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
             : item.kind === 'optimistic'
               ? (
                 <PendingSteeringBubble
