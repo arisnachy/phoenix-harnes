@@ -141,7 +141,7 @@ function browserExecutable(): string {
 }
 
 type Tab = { id: string; title: string; url: string; webSocketDebuggerUrl?: string; type?: string }
-type CdpResponse = { id: number; result?: { result?: { value?: unknown; description?: string } }; error?: { message: string } }
+type CdpResponse = { id: number; result?: { data?: string; result?: { value?: unknown; description?: string }; exceptionDetails?: { text?: string } }; error?: { message: string } }
 
 async function json<T>(url: string): Promise<T> {
   const response = await fetch(url, { signal: AbortSignal.timeout(2500) })
@@ -293,12 +293,32 @@ async function cdp<T = unknown>(tab: Tab, method: string, params: Record<string,
   const id = Math.floor(Math.random() * 2_000_000_000)
   return await new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => { socket.close(); reject(new Error(`Tiempo agotado ejecutando ${method}`)) }, 10_000)
-    socket.addEventListener('open', () => { socket.send(JSON.stringify({ id, method, params })) })
+    // Session-local metrics must precede any screenshot/mouse coordinate action
+    // on this SAME CDP socket; an oversized clip on an 800px viewport produced
+    // the black half in Phoenix's inline browser.
+    const needsViewport = method === 'Page.captureScreenshot' || method === 'Input.dispatchMouseEvent'
+    const viewportId = id + 1
+    const sendAction = () => { socket.send(JSON.stringify({ id, method, params })) }
+    socket.addEventListener('open', () => {
+      if (!needsViewport) { sendAction(); return }
+      socket.send(JSON.stringify({
+        id: viewportId, method: 'Emulation.setDeviceMetricsOverride',
+        params: { width: 1280, height: 720, screenWidth: 1280, screenHeight: 720,
+          deviceScaleFactor: 1, mobile: false },
+      }))
+    })
     socket.addEventListener('message', (event) => {
-      const message = JSON.parse(String(event.data)) as CdpResponse
+      let message: CdpResponse
+      try { message = JSON.parse(String(event.data)) as CdpResponse } catch { return }
+      if (needsViewport && message.id === viewportId) {
+        if (message.error) { clearTimeout(timer); socket.close(); reject(new Error(message.error.message)) }
+        else sendAction()
+        return
+      }
       if (message.id !== id) return
       clearTimeout(timer); socket.close()
       if (message.error) reject(new Error(message.error.message))
+      else if (message.result?.exceptionDetails) reject(new Error(message.result.exceptionDetails.text || 'Error de ejecución del DOM'))
       else resolve((message.result?.result?.value ?? message.result) as T)
     })
     socket.addEventListener('error', () => { clearTimeout(timer); reject(new Error(`No se pudo conectar con ${tab.url}`)) })
