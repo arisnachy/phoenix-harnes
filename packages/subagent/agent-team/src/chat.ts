@@ -69,9 +69,9 @@ export function shouldPublishTeammateSpeech(message: string, alreadySpoke: boole
   const text = message.trim()
   if (!text) return false
   if (!alreadySpoke) return true
-  if (/\\?|\\b(?:bloqueo|bloqueado|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|requires approval)\\b/iu.test(text)) return true
+  if (/\?|\b(?:bloqueo|bloqueado|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|requires approval)\b/iu.test(text)) return true
   if (!newReceipt) return false
-  const stillPlanning = /^(?:(?:@?Kira)[,:!]?\\s*)?(?:ahora |luego |despu[eé]s |next |now )*(?:voy a |proceder[eé] a |har[eé] |buscar[eé] |comprobar[eé] |verificar[eé] |revisar[eé] |abrir[eé] |i(?:'ll| will) |i am going to |i'm going to )/iu
+  const stillPlanning = /^(?:(?:@?Kira)[,:!]?\s*)?(?:ahora |luego |despu[eé]s |next |now )*(?:voy a |proceder[eé] a |har[eé] |buscar[eé] |comprobar[eé] |verificar[eé] |revisar[eé] |abrir[eé] |i(?:'ll| will) |i am going to |i'm going to )/iu
   return !stillPlanning.test(text)
 }
 
@@ -238,6 +238,7 @@ export class TeamChat {
         : end?.type === 'turn/start' ? 'working' : prior !== undefined ? prior.status : 'working'
       const person = this.participant(root, header, events, status)
       const resultCallIds = new Set<string>()
+      const workCallIds = new Set<string>()
       let handedOffResult = false
       let alreadySpoke = false
       let newReceipt = false
@@ -247,6 +248,12 @@ export class TeamChat {
           handedOffResult = false
           alreadySpoke = false
           newReceipt = false
+        }
+        if (event.type === 'tool/call'
+          && event.data.name !== 'send_message' && event.data.name !== 'followup_task'
+          && event.data.name !== 'team_chat_react' && event.data.name !== 'team_task_update'
+          && event.data.name !== 'wait_agent' && event.data.name !== 'list_agents') {
+          workCallIds.add(event.data.callId)
         }
         if (event.type === 'tool/call'
           && (event.data.name === 'send_message' || event.data.name === 'followup_task')) {
@@ -264,7 +271,7 @@ export class TeamChat {
             block => block.type === 'tool-result' && block.toolCallId === callId && !block.isError,
           )
           if (resultCallIds.has(callId) && succeeded) handedOffResult = true
-          else if (succeeded) newReceipt = true
+          else if (succeeded && workCallIds.has(callId)) newReceipt = true
         }
         if (event.type !== 'assistant/message' || !isAppendSurfaceEvent(event)) continue
         // The peer result is already a real visible Astra -> Kira message.
