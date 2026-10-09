@@ -131,6 +131,15 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
     nodes.push(tr)
   }
   if(nodes.length===0)throw Error('No hay piezas visibles para exportar.')
+  // Camera and light are interoperable glTF scene nodes, not only Phoenix UI state.
+  const camIndex=nodes.length
+  const cameraName=scene.camera??'perspective'
+  const cameraTranslation=cameraName==='top'?[0,40,0]:cameraName==='front'?[0,8,40]:[25,19,28]
+  nodes.push({name:'Phoenix Camera',camera:0,translation:cameraTranslation,
+    rotation:cameraName==='top'?quaternion([-90,0,0]):cameraName==='isometric'?quaternion([-24,38,0]):quaternion([0,0,0])})
+  const lightIndex=nodes.length
+  nodes.push({name:'Phoenix Directional Light',translation:[10,25,14],
+    rotation:quaternion([-35,22,0]),extensions:{KHR_lights_punctual:{light:0}}})
   const binary=new Uint8Array(offset)
   let cursor=0
   for(const chunk of chunks){binary.set(chunk,cursor);cursor+=align(chunk.length)}
@@ -140,8 +149,13 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
   const json:R={asset:{version:'2.0',generator:'Phoenix 3D'},
     scene:0,scenes:[{name:scene.name,nodes:nodes.map((_,i)=>i)}],
     nodes,meshes,materials,accessors,bufferViews:views,buffers:[{byteLength:binary.length}],
-    ...extensions.size>0?{extensionsUsed:[...extensions]}:{},
-    extras:{phoenixSceneVersion:scene.version,units:'meters',background:scene.background}}
+    cameras:[{name:'Phoenix Camera',type:'perspective',perspective:{yfov:Math.PI/3,znear:.1,zfar:3000}}],
+    extensions:{KHR_lights_punctual:{lights:[{name:'Main Light',type:'directional',
+      color:scene.environment==='sunset'?[1,.74,.52]:[1,1,1],
+      intensity:scene.environment==='daylight'?2.4:1.8}]}},
+    extensionsUsed:[...extensions,'KHR_lights_punctual'],
+    extras:{phoenixSceneVersion:scene.version,units:'meters',background:scene.background,
+      environment:scene.environment??'studio',camera:cameraName,camIndex,lightIndex}}
   return {json,binary}
 }
 function gltfData(scene:Scene3D):string{
@@ -298,6 +312,10 @@ export function importSceneGLTF(input:string|Uint8Array):Scene3D{
   if(!output.length)throw Error('El archivo no contiene geometría triangular importable.')
   const extras=obj(json.extras)?json.extras:{}
   const background=typeof extras.background==='string'&&/^#[0-9a-f]{6}$/iu.test(extras.background)?extras.background:'#f7f2eb'
+  const environment=extras.environment==='studio'||extras.environment==='sunset'||extras.environment==='daylight'
+    ?extras.environment:'studio'
+  const camera=extras.camera==='front'||extras.camera==='top'||extras.camera==='isometric'||extras.camera==='perspective'
+    ?extras.camera:'perspective'
   return {version:1,units:'meters',name:typeof root.name==='string'?root.name:'Modelo glTF importado',
-    background,nodes:output}
+    background,nodes:output,environment,camera}
 }
