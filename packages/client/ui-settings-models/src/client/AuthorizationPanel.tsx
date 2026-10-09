@@ -102,10 +102,10 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
-type CuratedMcpConnectorId = 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+type CuratedMcpConnectorId = 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
 
 const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
-  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare',
+  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
   'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
 ])
 
@@ -279,7 +279,7 @@ const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
 // do not declare an OAuth method absent before the registry has time to settle.
 const MCP_AUTH_FLOW_RETRY_MS = [0, 250, 500, 750, 1_000, 1_500, 2_000, 2_500, 3_000] as const
 const CURATED_OAUTH_MCP_IDS = new Set<string>([
-  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
+  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
 ])
 const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
@@ -630,6 +630,19 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {definition.id === 'figma' && managed?.url === 'http://127.0.0.1:3845/mcp'
+        && mcpRuntime?.status !== 'ready' ? (
+          <p className={styles['advancedHint']}>
+            Figma Desktop no abre OAuth: inicia Figma, abre un diseño en Dev Mode y habilita el servidor MCP local.
+            Para OAuth utiliza el MCP remoto oficial de Figma.
+          </p>
+        ) : null}
+      {definition.id === 'memory' && mcpRuntime?.status === 'failed' ? (
+        <p className={styles['advancedHint']}>
+          Memory MCP es local (stdio), no requiere OAuth. Pulsa Reparar y comprueba que Node.js y npx están disponibles
+          para el proceso de PHOENIX; si continúa roto, revisa el error de arranque del Host.
+        </p>
+      ) : null}
       {missingOAuthFlow ? (
         <p role="alert" className={styles['advancedHint']}>
           El Host solicita autorización, pero el plugin MCP no registró su método OAuth.
@@ -706,9 +719,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               </button>
             ) : null}
           {managed === undefined && (authorizationAccount === undefined || openClawRuntimeMissing)
-            && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
+            && openClaw?.connected !== true && onFindOfficial !== undefined ? (
               <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
-                {t('findOfficialConnector')}
+                {definition.registryName === undefined ? t('findConnector') : t('findOfficialConnector')}
               </button>
             ) : null}
           {managed === undefined && authorizationAccount === undefined && openClaw?.connected !== true && definition.provenance === 'registry-listed' && onFindRegistry !== undefined ? (
@@ -1243,6 +1256,14 @@ export function ConnectorsSettingsSection({ api,
     !catalogDefinitions.some(definition =>
       entryMatchesDefinitionAuthorization(entry, definition))),
   [catalogDefinitions, entries])
+  // Localize each credential or OAuth dialog at the exact connector card.
+  // Keep the header only as fallback while its card is hidden by filters.
+  const activeAuthorizationKey = attempt?.key ?? preparingKey ?? lastAttemptKey
+  const authorizationHasVisibleCard = activeAuthorizationKey !== undefined
+    && (visibleAccountEntries.some(entry => entry.key === activeAuthorizationKey)
+      || visibleRows.some(row => row.account?.key === activeAuthorizationKey
+        || (row.managed !== undefined
+          && `mcp-client/${row.managed.serverName.toLowerCase().replaceAll('_', '-')}` === activeAuthorizationKey)))
 
   const toggleChatGptWeb = (enabled: boolean): void => {
     if (chatGptWeb === undefined || settings === undefined || chatGptWebBusy) return
@@ -1284,16 +1305,21 @@ export function ConnectorsSettingsSection({ api,
 
   const findOfficialConnector = (definition: ConnectorDefinition): void => {
     const registryName = definition.registryName
-    if (mcpRegistry === undefined || registryName === undefined || registryBusy) return
+    if (mcpRegistry === undefined || registryBusy || definition.mode === 'native') return
     setRegistryBusy(true)
     setRegistryFailure(false)
     setCatalogFailure(undefined)
-    void mcpRegistry.search({ query: registryName, limit: 12 }).then(
+    // For providers without a pinned registry ID, allow discovery by product
+    // name. Installation is still limited to Host-verified registry entries.
+    const lookup = registryName ?? definition.name
+    setQuery(definition.name)
+    void mcpRegistry.search({ query: lookup, limit: 12 }).then(
       (snapshot) => {
-        const exact = snapshot.candidates.filter(candidate =>
-          candidate.name === registryName && !isRetiredJevCandidate(candidate))
-        setRegistrySnapshot({ ...snapshot, candidates: exact })
-        if (exact.length === 0) setCatalogFailure(connectorT('officialConnectorMissing'))
+        const matches = snapshot.candidates.filter(candidate =>
+          !isRetiredJevCandidate(candidate)
+          && (registryName === undefined || candidate.name === registryName))
+        setRegistrySnapshot({ ...snapshot, candidates: matches })
+        if (matches.length === 0) setCatalogFailure(connectorT('officialConnectorMissing'))
       },
       () => {
         setRegistrySnapshot(undefined)
@@ -1553,9 +1579,11 @@ export function ConnectorsSettingsSection({ api,
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
-      {preparingKey === undefined ? null : <p role="status" className={styles['advancedHint']}>Contactando al servicio de autorización de PHOENIX…</p>}
-      {failure === undefined ? null : <p role="alert" className={styles['error']}>{failure}</p>}
-      {attempt === undefined ? null : (
+      {authorizationHasVisibleCard || preparingKey === undefined ? null
+        : <p role="status" className={styles['advancedHint']}>Contactando al servicio de autorización de PHOENIX…</p>}
+      {authorizationHasVisibleCard || failure === undefined ? null
+        : <p role="alert" className={styles['error']}>{failure}</p>}
+      {authorizationHasVisibleCard || attempt === undefined ? null : (
         <section className={hubStyles['block']} aria-label={t('signingIn')}>
           <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
             submitAnswer={submitAnswer} cancel={cancel} t={t} />
@@ -1701,7 +1729,15 @@ export function ConnectorsSettingsSection({ api,
                       )}
                     </div>
                   </div>
-
+                  {preparingKey !== entry.key ? null : <p role="status">Iniciando autorización…</p>}
+                  {attempt?.key !== entry.key ? null : (
+                    <div className={styles['authorizationPrompt']}>
+                      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
+                        submitAnswer={submitAnswer} cancel={cancel} t={t} />
+                    </div>
+                  )}
+                  {failure !== undefined && lastAttemptKey === entry.key
+                    ? <p role="alert" className={styles['error']}>{failure}</p> : null}
                 </article>
               )
             })}
@@ -1748,12 +1784,15 @@ export function ConnectorsSettingsSection({ api,
                   openClaw={row.openClaw}
                   connected={row.connected}
                   t={connectorT}
-                  authorizationProgress={preparingKey === authorizationKey ? (
-                    <p role="status" className={styles['advancedHint']}>Iniciando autorización con el Host…</p>
-                  ) : attempt !== undefined && attempt.key === authorizationKey && attempt.status === 'pending' ? (
-                    <p role="status" className={styles['advancedHint']}>
-                      {attempt.url === undefined ? 'Preparando autorización del MCP…' : 'La URL OAuth está lista. Continúa en la pestaña abierta o usa el enlace superior.'}
-                    </p>
+                  authorizationProgress={preparingKey !== undefined && preparingKey === authorizationKey ? (
+                    <p role="status" className={styles['advancedHint']}>Iniciando autorización…</p>
+                  ) : attempt !== undefined && attempt.key === authorizationKey ? (
+                    <div className={styles['authorizationPrompt']}>
+                      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
+                        submitAnswer={submitAnswer} cancel={cancel} t={t} />
+                      {failure !== undefined && lastAttemptKey === authorizationKey
+                        ? <p role="alert" className={styles['error']}>{failure}</p> : null}
+                    </div>
                   ) : failure !== undefined && lastAttemptKey === authorizationKey ? (
                     <p role="alert" className={styles['error']}>{failure}</p>
                   ) : reconnectFailure !== undefined && row.mcpRuntime?.serverName === reconnectFailure.serverName ? (
@@ -1773,8 +1812,9 @@ export function ConnectorsSettingsSection({ api,
                   onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
                     ? undefined
                     : () => { installCuratedConnector(row.definition) }}
-                  onFindOfficial={mcpRegistry === undefined || row.definition.registryName === undefined
-                  || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
+                  onFindOfficial={mcpRegistry?.search === undefined
+                    || row.definition.mode === 'native'
+                    || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
                     ? undefined
                     : () => { findOfficialConnector(row.definition) }}
                   onFindRegistry={mcpRegistry === undefined || row.definition.provenance !== 'registry-listed'

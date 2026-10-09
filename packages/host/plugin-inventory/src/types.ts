@@ -126,6 +126,7 @@ export type CuratedMcpConnectorId =
   | 'supabase'
   | 'heygen'
   | 'figma'
+  | 'vercel'
   | 'notion'
   | 'linear'
   | 'cloudflare'
