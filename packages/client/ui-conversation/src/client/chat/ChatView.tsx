@@ -197,15 +197,14 @@ export function ChatView({
   // A browser request must have a visible result even when CDP or screenshot
   // discovery fails. Keep this scoped to the latest user request in this chat.
   const browserRequested = useMemo(() => {
-    const browserIntent = new RegExp(
-      String.raw`\b(?:abre|abrir|abreme|abrirme|navega|navegar|entra|entrar|visita|visitar|accede|acceder|open|browse|ir a|ve a|busca en)\b|https?://`,
-      'iu',
-    )
-    if (pendingSubmit !== undefined && browserIntent.test(pendingSubmit.modelText ?? pendingSubmit.text)) return true
+    const browserVerb = /\b(?:abre|abrir|abreme|abrirme|navega|navegar|entra|entrar|visita|visitar|accede|acceder|open|browse)\b/iu
+    const browserTarget = /\b(?:ir a|ve a|busca en)\b|https?:\/\//iu
+    const browserIntent = (value: string) => browserVerb.test(value) || browserTarget.test(value)
+    if (pendingSubmit !== undefined && browserIntent(pendingSubmit.modelText ?? pendingSubmit.text)) return true
     for (let index = chatNodes.length - 1; index >= 0; index -= 1) {
       const node = chatNodes[index]
       if (node?.kind !== 'user' && node?.kind !== 'steering') continue
-      return browserIntent.test(userMessageText(node.data as UserMessageNode))
+      return browserIntent(userMessageText(node.data as UserMessageNode))
     }
     return false
   }, [chatNodes, pendingSubmit])
