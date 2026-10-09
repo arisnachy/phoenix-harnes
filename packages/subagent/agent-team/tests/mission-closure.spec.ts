@@ -9,10 +9,10 @@ const cancelled = { type: 'turn/end', data: {
 } } as unknown as SessionEvent
 const peer = { type: 'user/message', data: {
   source: { kind: 'team-message' }, content: [{ type: 'text', text: 'Review again' }],
-} } as unknown as unknown as SessionEvent
+} } as unknown as SessionEvent
 const human = { type: 'user/message', data: {
   source: { kind: 'user' }, content: [{ type: 'text', text: 'New request' }],
-} } as unknown as unknown as SessionEvent
+} } as unknown as SessionEvent
 
 const browserCall = (id: string, name: string) => ({
   type: 'tool/call', data: { callId: id, name, arguments: '{}' },
@@ -37,6 +37,7 @@ describe('Kira Team closure after verified completion', () => {
     ]
     expect(teamMissionClosed(verified)).toBe(true)
     expect(teamMissionClosed([...verified, peer])).toBe(true)
+    expect(teamMissionClosed([...verified, kiraAnswer('Haré otra revisión y delegaré a Aegis.')])).toBe(true)
     expect(teamMissionClosed([...verified, human])).toBe(false)
   })
 
