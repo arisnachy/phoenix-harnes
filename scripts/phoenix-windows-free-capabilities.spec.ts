@@ -9,6 +9,7 @@ describe('free Windows capabilities inventory', () => {
     expect(result.probe).toBe('unavailable')
     expect(result.reason).toBe('not-windows')
     expect(result.features.localInference).toBe('runtime-not-detected')
+    expect(result.features.mxc).toBe('unavailable')
   })
 
   it('recognizes detected tools without claiming local models or acceleration are functional', () => {
