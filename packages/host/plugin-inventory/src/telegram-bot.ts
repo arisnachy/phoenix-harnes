@@ -6,7 +6,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
 import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId } from '@phoenix-ai/dsh-session'
-import type { Agent, AgentHandle } from '@phoenix-ai/dsh-agent'
+import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { TelegramBotSnapshot } from './types.ts'
 
 export const TELEGRAM_BOT_TOKEN_REF = 'PHOENIX_TELEGRAM_BOT_TOKEN'
@@ -101,7 +101,7 @@ function phase(error: unknown): TelegramBotSnapshot['phase'] {
 function eligible(update: TelegramUpdate): { id: number; text: string } | undefined {
   const m = update.message
   const id = m?.chat?.id
-  if (!Number.isSafeInteger(id) || typeof id !== 'number' || id <= 0
+  if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0
     || m?.chat?.type !== 'private' || m?.from?.is_bot === true || m?.from?.id !== id) return undefined
   const text = m.text?.trim()
   return text ? { id, text: text.slice(0, MAX_TEXT) } : undefined
@@ -119,7 +119,6 @@ export class TelegramInbox {
   private pairUntil = 0
   private pairFailures = 0
   private agent?: Agent
-  private agentHandle?: AgentHandle
   private agentPromise?: Promise<Agent>
   constructor(private readonly ctx: Context) {}
 
@@ -255,7 +254,7 @@ export class TelegramInbox {
     if (this.agentPromise !== undefined) return this.agentPromise
     const task = (async () => {
       const agents = (this.ctx.get as (name: string) => unknown)('agents') as
-        | { get(id: ReturnType<typeof SessionId>): Agent | undefined; create(options: { sessionId: ReturnType<typeof SessionId> }): Promise<AgentHandle>; resume(options: { resumeSessionId: ReturnType<typeof SessionId> }): Promise<AgentHandle> }
+        | { get(id: ReturnType<typeof SessionId>): Agent | undefined; create(options: { sessionId: ReturnType<typeof SessionId> }): Promise<{ agent: Agent; dispose(): Promise<void> }>; resume(options: { resumeSessionId: ReturnType<typeof SessionId> }): Promise<AgentHandle> }
         | undefined
       if (agents === undefined) throw new Error('Phoenix Agent registry unavailable')
       const existingId = await stored(creds, SESSION_REF)
@@ -263,13 +262,11 @@ export class TelegramInbox {
         const current = agents.get(SessionId(existingId))
         if (current !== undefined) { this.agent = current; return current }
         const resumed = await agents.resume({ resumeSessionId: SessionId(existingId) })
-        this.agentHandle = resumed
         this.agent = resumed.agent
         return resumed.agent
       }
       const sessionId = SessionId(randomUUID())
       const created = await agents.create({ sessionId })
-      this.agentHandle = created
       this.agent = created.agent
       await persist(creds, SESSION_REF, String(sessionId))
       return created.agent
