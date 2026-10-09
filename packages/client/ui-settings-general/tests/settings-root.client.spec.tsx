@@ -87,7 +87,11 @@ describe('SettingsRoot trigger', () => {
     expect(trigger.hasAttribute('aria-label')).toBe(false)
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: true })
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger.trailing', { wide: true })
-    expect(trigger.contains(screen.getByTestId('settings-trailing-seat'))).toBe(false)
+    const trailing = screen.getByTestId('settings-trailing-seat')
+    // The meter sits NEXT to Settings, not on a separate full-height card.
+    expect(trigger.contains(trailing)).toBe(false)
+    expect(trigger.parentElement?.contains(trailing)).toBe(true)
+    expect(trigger.nextElementSibling?.contains(trailing)).toBe(true)
     expect(trigger.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(trigger)
     expect(screen.getByRole('dialog')).toBeTruthy()
@@ -101,6 +105,7 @@ describe('SettingsRoot trigger', () => {
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger', { wide: false })
     expect(renderSlot).toHaveBeenCalledWith('settings.trigger.trailing', { wide: false })
     expect(trigger.contains(trailing)).toBe(false)
+    expect(trigger.previousElementSibling?.contains(trailing)).toBe(true)
   })
 })
 
