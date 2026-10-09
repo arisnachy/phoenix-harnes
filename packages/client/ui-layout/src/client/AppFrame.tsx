@@ -205,6 +205,11 @@ export function AppFrame({
   const previousSidebarCollapsed = useRef(sidebarCollapsed)
   const sidebarSwitching = previousSidebarCollapsed.current !== sidebarCollapsed
   previousSidebarCollapsed.current = sidebarCollapsed
+  // Browser window resizing is also geometry, not an animation: easing
+  // successive ResizeObserver widths makes the large chat reflow repeatedly.
+  const previousViewport = useRef(viewport)
+  const viewportResizing = previousViewport.current !== viewport
+  previousViewport.current = viewport
   const sidebarPreference = sidebarCollapsed
     ? 0
     : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
@@ -253,6 +258,7 @@ export function AppFrame({
       } as CSSProperties}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
       data-sidebar-switching={sidebarSwitching || undefined}
+      data-viewport-resizing={viewportResizing || undefined}
       data-cordis-side={panels.workspaceCordis ? panels.workspaceCordisSide ?? 'right' : undefined}
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
