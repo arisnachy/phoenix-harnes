@@ -474,11 +474,12 @@
   flex: 0 0 auto;
   min-width: 0;
   margin: 10px 14px 0;
-  padding: 7px 12px 0;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 19px;
-  background: var(--dsw-specific-input-major);
-  box-shadow: 0 8px 26px rgba(59, 44, 27, 0.035);
+  padding: 8px 16px 0;
+  /* Match the chat canvas; only the delicate frame defines the header. */
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 90%, var(--dsw-static-amber-600) 10%);
+  border-radius: 24px;
+  background: var(--dsw-alias-bg-base);
+  box-shadow: 0 4px 18px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 10%, transparent);
 }
 .sessionChrome { min-width: 0; }
 .unifiedHeader .header {
