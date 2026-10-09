@@ -73,7 +73,7 @@ function quaternion(euler:readonly number[]):number[]{
   const cx=Math.cos(x!),sx=Math.sin(x!),cy=Math.cos(y!),sy=Math.sin(y!),cz=Math.cos(z!),sz=Math.sin(z!)
   return [sx*cy*cz-cx*sy*sz,cx*sy*cz+sx*cy*sz,cx*cy*sz-sx*sy*cz,cx*cy*cz+sx*sy*sz]
 }
-function objectMaterial(node:Node):R{
+function objectMaterial(node:Node,texture:(image:string)=>number):R{
   const material=node.material
   const base=material?.baseColor??node.color
   const alpha=material?.opacity??1
@@ -88,6 +88,11 @@ function objectMaterial(node:Node):R{
     alphaMode:alpha<1?'BLEND':'OPAQUE',
     emissiveFactor:material?.emissive===undefined?[0,0,0]:colorFactor(material.emissive).slice(0,3),
   }
+  const pbr=mat.pbrMetallicRoughness as R
+  if(material?.baseColorTexture)pbr.baseColorTexture={index:texture(material.baseColorTexture)}
+  if(material?.metallicRoughnessTexture)pbr.metallicRoughnessTexture={index:texture(material.metallicRoughnessTexture)}
+  if(material?.normalTexture)mat.normalTexture={index:texture(material.normalTexture)}
+  if(material?.occlusionTexture)mat.occlusionTexture={index:texture(material.occlusionTexture)}
   if((material?.transmission??0)>0){
     mat.extensions={KHR_materials_transmission:{transmissionFactor:material!.transmission}}
   }
@@ -98,14 +103,22 @@ function objectMaterial(node:Node):R{
 }
 function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
   if(scene.nodes.length>150)throw Error('Límite de 150 piezas por escena.')
-  const chunks:Uint8Array[]=[],views:R[]=[],accessors:R[]=[],meshes:R[]=[],nodes:R[]=[],materials:R[]=[]
+  const chunks:Uint8Array[]=[],views:R[]=[],accessors:R[]=[],meshes:R[]=[],nodes:R[]=[],materials:R[]=[],images:R[]=[],textures:R[]=[]
   let offset=0,verticesCount=0
-  const append=(data:Uint8Array,target:number):number=>{
+  const append=(data:Uint8Array,target?:number):number=>{
     const index=views.length
-    views.push({buffer:0,byteOffset:offset,byteLength:data.byteLength,target})
+    views.push({buffer:0,byteOffset:offset,byteLength:data.byteLength,...target===undefined?{}:{target}})
     chunks.push(data)
     offset+=align(data.length)
     return index
+  }
+  const texture=(uri:string):number=>{
+    const parsed=/^data:image\/(png|jpeg);base64,([a-z0-9+/]+={0,2})$/iu.exec(uri)
+    if(parsed===null)throw Error('Textura PBR inválida: PNG/JPEG incrustado requerido.')
+    const bytes=fromBase64(parsed[2]!)
+    if(bytes.length>1_100_000)throw Error('Textura PBR mayor de 1,1 MB.')
+    const source=images.push({bufferView:append(bytes),mimeType:'image/'+parsed[1]})-1
+    return textures.push({source})-1
   }
   const attr=(v:number[],size:3,type:'VEC3'):number=>{
     const floats=new Float32Array(v)
@@ -123,7 +136,7 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
     verticesCount+=vertices.length/3
     if(verticesCount>MAX_TRIANGLES*3)throw Error('Límite de triángulos 3D excedido.')
     const pos=attr(vertices,3,'VEC3'),norm=attr(normals(vertices),3,'VEC3')
-    const material=materials.push(objectMaterial(node))-1
+    const material=materials.push(objectMaterial(node,texture))-1
     const mesh=meshes.push({primitives:[{attributes:{POSITION:pos,NORMAL:norm},material,mode:4}]})-1
     const tr:R={mesh,name:node.name??node.type,
       translation:node.position,scale:node.size,
@@ -148,7 +161,7 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
   if(materials.some(m=>obj(m.extensions)&&'KHR_materials_clearcoat'in m.extensions))extensions.add('KHR_materials_clearcoat')
   const json:R={asset:{version:'2.0',generator:'Phoenix 3D'},
     scene:0,scenes:[{name:scene.name,nodes:nodes.map((_,i)=>i)}],
-    nodes,meshes,materials,accessors,bufferViews:views,buffers:[{byteLength:binary.length}],
+    nodes,meshes,materials,images,textures,accessors,bufferViews:views,buffers:[{byteLength:binary.length}],
     cameras:[{name:'Phoenix Camera',type:'perspective',perspective:{yfov:Math.PI/3,znear:.1,zfar:3000}}],
     extensions:{KHR_lights_punctual:{lights:[{name:'Main Light',type:'directional',
       color:scene.environment==='sunset'?[1,.74,.52]:[1,1,1],
