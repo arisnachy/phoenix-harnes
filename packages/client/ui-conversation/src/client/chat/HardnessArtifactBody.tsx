@@ -4,6 +4,7 @@ import type { HardnessArtifactValue } from '../artifact.ts'
 import type { RenderMessageImages } from '../contract/slots.ts'
 import styles from './HardnessArtifactNodeView.module.css'
 import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.tsx'
+import { Scene3DView } from './Scene3DView.tsx'
 
 interface ArtifactBodyProps {
   readonly mime: string
@@ -422,6 +423,7 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
       </div>
     )
   }
+  if (mime === 'application/vnd.phoenix.scene3d+json') return <Scene3DView spec={record} expanded={expanded} />
   if (mime === 'application/vnd.hardness.ui+json' || isRecord(record.root)) return <DeclarativeUi record={record} />
   const visual = embeddedVisual(record)
   if (mime === 'application/vnd.phoenix.visual+json'

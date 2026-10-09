@@ -90,7 +90,8 @@ describe('universal artifact surface', () => {
     expect(frame.getAttribute('srcdoc')).toContain('connect-src \'none\'')
     expect(frame.getAttribute('srcdoc')).toContain('img-src data: blob:')
     expect(frame.getAttribute('srcdoc')).not.toContain('img-src data: blob: https: http:')
-    fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
-    expect(screen.getByRole('button', { name: 'Collapse' })).toBeTruthy()
+    // Inline HTML mini-apps size themselves via their own iframe height report.
+    // A native Expand dialog is reserved for visual/3D artifacts.
+    expect(screen.queryByRole('button', { name: 'Expand' })).toBeNull()
   })
 })
