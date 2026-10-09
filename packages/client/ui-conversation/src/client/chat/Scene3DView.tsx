@@ -192,7 +192,7 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   const drag=useRef<{x:number;y:number;button:number}|null>(null)
   const angle=useRef({yaw:-.65,pitch:.38,zoom:1,pan:[0,0] as [number,number]})
   const [autoRotate,setAutoRotate]=useState(false)
-  const [revision,setRevision]=useState(0)
+  const redraw=useRef<()=>void>(()=>{})
   const [problem,setProblem]=useState('')
   const meshes=useMemo(()=>scene?.nodes.flatMap(mesh)??[],[scene])
   const bounds=useMemo(()=>scene===undefined?undefined:sceneBounds(scene),[scene])
@@ -206,6 +206,7 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
     }
     const draw=()=>paint(element,scene,meshes,bounds,angle.current.yaw,
       angle.current.pitch,angle.current.zoom,angle.current.pan)
+    redraw.current=draw
     draw()
     const observer=typeof ResizeObserver==='undefined'?undefined:new ResizeObserver(draw)
     observer?.observe(element)
@@ -214,10 +215,10 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
       const tick=()=>{angle.current.yaw+=.004;draw();frame=requestAnimationFrame(tick)}
       frame=requestAnimationFrame(tick)
     }
-    return ()=>{observer?.disconnect();cancelAnimationFrame(frame)}
-  },[scene,meshes,bounds,revision,autoRotate,expanded])
+    return ()=>{observer?.disconnect();cancelAnimationFrame(frame);redraw.current=()=>{}}
+  },[scene,meshes,bounds,autoRotate,expanded])
   if(scene===undefined)return <p role="alert" className={css.error}>La escena 3D no contiene geometría válida.</p>
-  const update=(fn:()=>void)=>{fn();setRevision(n=>n+1)}
+  const update=(fn:()=>void)=>{fn();redraw.current()}
   return <section className={css.root} data-phoenix-scene3d="interactive" data-scene-node-count={scene.nodes.length}>
     <div className={css.toolbar}>
       <span className={css.tag}>3D interactivo · {scene.nodes.length} piezas</span>
