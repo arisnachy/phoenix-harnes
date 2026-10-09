@@ -50,6 +50,11 @@ jobs:
             Write-Warning "Build tooling emitted $($timingAdvisories.Count) plugin timing advisories; compiler exit status remains authoritative."
             $timingAdvisories | Select-Object -First 5 | ForEach-Object { Write-Warning $_.Line }
           }
+      - name: Verify release, MCP recovery, and HARDNESS regressions
+        shell: pwsh
+        run: |
+          pnpm exec vitest run scripts/ci-workflow.spec.ts packages/host/plugin-inventory/tests/mcp-managed.spec.ts packages/host/plugin-inventory/tests/inventory.spec.ts packages/hardness/hardness/tests/operating-protocol.spec.ts packages/hardness/hardness/tests/resolver.spec.ts packages/hardness/hardness/tests/cognitive-workflow.spec.ts
+
       - name: Build the exact main SHA
         shell: pwsh
         run: |
