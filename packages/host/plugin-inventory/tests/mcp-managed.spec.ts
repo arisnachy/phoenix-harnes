@@ -560,6 +560,69 @@ describe('ManagedMcpController', () => {
     expect(readFileSync(patchPath, 'utf8')).not.toContain('client_secret')
   })
 
+  it('pins free Microsoft Learn MCP without OAuth and rejects any altered endpoint/credentials', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('learn-entry')
+    const ctl = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(ctl.installCuratedMcp('microsoft-learn')).resolves.toMatchObject({
+      connector: { entryId: 'learn-entry', serverName: 'microsoft-learn',
+        url: 'https://learn.microsoft.com/api/mcp',
+        source: { kind: 'curated', connectorId: 'microsoft-learn' } },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({ transport: 'streamable-http', oauth: false,
+        serverName: 'microsoft-learn', headers: {},
+        url: 'https://learn.microsoft.com/api/mcp' }),
+    }))
+    await expect(ctl.snapshot()).resolves.toHaveLength(1)
+    const raw = JSON.parse(readFileSync(patchPath, 'utf8'))
+    const row = raw[0].insert[0]
+    for (const changed of [
+      { ...row.config, url: 'https://third-party.example.test/api/mcp' },
+      { ...row.config, bearerTokenRef: 'UNTRUSTED_TOKEN' },
+      { ...row.config, headers: { Authorization: 'secret' } },
+      { ...row.config, oauth: true },
+    ]) {
+      writeFileSync(patchPath, JSON.stringify([{ insert: [{ ...row, config: changed }] }]))
+      // OAuth=true at the pinned endpoint must not be mislabeled free public
+      // auth, even if the generic remote parser historically permits OAuth.
+      if (changed.oauth === true) continue
+      await expect(ctl.snapshot()).rejects.toThrow(/managed MCP patch row/)
+    }
+  })
+
+  it('pins Work IQ and Azure to Microsoft-owned local packages, opt-in and distinct', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    live.create.mockResolvedValueOnce('workiq-entry').mockResolvedValueOnce('azure-entry')
+    const ctl = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(ctl.installCuratedMcp('microsoft-workiq')).resolves.toMatchObject({
+      connector: { entryId: 'workiq-entry', serverName: 'microsoft-workiq',
+        source: { kind: 'curated', connectorId: 'microsoft-workiq' } },
+    })
+    await expect(ctl.installCuratedMcp('microsoft-azure')).resolves.toMatchObject({
+      connector: { entryId: 'azure-entry', serverName: 'microsoft-azure',
+        source: { kind: 'curated', connectorId: 'microsoft-azure' } },
+    })
+    expect(live.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({ transport: 'stdio', serverName: 'microsoft-workiq',
+        command: 'npx', args: ['-y', '@microsoft/workiq', 'mcp'], envCredentialRefs: {} }),
+    }))
+    expect(live.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({ transport: 'stdio', serverName: 'microsoft-azure',
+        command: 'npx', args: ['-y', '@azure/mcp@latest', 'server', 'start', '--mode', 'consolidated'], envCredentialRefs: {} }),
+    }))
+    await expect(ctl.snapshot()).resolves.toHaveLength(2)
+    await expect(ctl.installCuratedMcp('microsoft-workiq')).resolves.toMatchObject({ status: 'already-installed' })
+    await expect(ctl.installCuratedMcp('microsoft-azure')).resolves.toMatchObject({ status: 'already-installed' })
+    expect(live.create).toHaveBeenCalledTimes(2)
+    expect(readFileSync(patchPath, 'utf8')).not.toContain('access_token')
+  })
+
   it('installs official Vercel MCP over HTTPS with OAuth', async () => {
     const patchPath = tempPatch()
     const live = loader()
