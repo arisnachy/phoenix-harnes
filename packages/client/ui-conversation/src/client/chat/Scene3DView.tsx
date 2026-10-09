@@ -1,13 +1,28 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import css from './Scene3DView.module.css'
+import { exportSceneGLB, exportSceneGLTF, importSceneGLTF } from './scene3d-formats.ts'
 
+export interface Scene3DMaterial {
+  readonly preset?: string
+  readonly baseColor?: string
+  readonly metallic?: number
+  readonly roughness?: number
+  readonly opacity?: number
+  readonly transmission?: number
+  readonly clearcoat?: number
+  readonly emissive?: string
+}
+/** Primitive objects and imported triangular meshes share one portable scene. */
 export interface Scene3DNode {
-  readonly type: 'box' | 'sphere' | 'cylinder' | 'cone'
+  readonly type: 'box' | 'sphere' | 'cylinder' | 'cone' | 'mesh'
   readonly name?: string
   readonly position: readonly [number,number,number]
   readonly size: readonly [number,number,number]
   readonly rotation?: readonly [number,number,number]
   readonly color: string
+  readonly vertices?: readonly number[]
+  readonly material?: Scene3DMaterial
+  readonly hidden?: boolean
 }
 export interface Scene3D {
   readonly version: 1
@@ -15,6 +30,8 @@ export interface Scene3D {
   readonly name: string
   readonly background: string
   readonly nodes: readonly Scene3DNode[]
+  readonly environment?: 'studio' | 'sunset' | 'daylight'
+  readonly camera?: 'perspective' | 'isometric' | 'front' | 'top'
 }
 type Vec3 = [number,number,number]
 type Face = { readonly vertices: readonly Vec3[]; readonly color: string; readonly alpha: number }
@@ -33,11 +50,33 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
   if (!record(value) || value.version !== 1 || value.units !== 'meters'
     || !Array.isArray(value.nodes) || value.nodes.length < 1 || value.nodes.length > 150) return undefined
   const nodes: Scene3DNode[] = []
+  let vertexCount=0
   for (const item of value.nodes as unknown[]) {
-    if (!record(item) || !['box','sphere','cylinder','cone'].includes(String(item.type))
+    if (!record(item) || !['box','sphere','cylinder','cone','mesh'].includes(String(item.type))
       || !vec(item.position,-300,300) || !vec(item.size,.001,300)
       || (item.rotation !== undefined && !vec(item.rotation,-360,360))
       || typeof item.color !== 'string' || !colorPattern.test(item.color)) return undefined
+    const vertices=item.vertices
+    if(item.type==='mesh' && (!Array.isArray(vertices)||vertices.length<9||vertices.length%9!==0
+      ||vertices.length>180_000 ||!vertices.every(n=>typeof n==='number'&&Number.isFinite(n)&&Math.abs(n)<=10000))) return undefined
+    vertexCount += item.type==='mesh'?(vertices as number[]).length:0
+    if(vertexCount>180_000) return undefined
+    const sourceMaterial=record(item.material)?item.material:undefined
+    let material:Scene3DMaterial|undefined
+    if(sourceMaterial!==undefined) {
+      const numeric=['metallic','roughness','opacity','transmission','clearcoat'] as const
+      if(numeric.some(key=>sourceMaterial[key]!==undefined&&
+        (typeof sourceMaterial[key]!=='number'||!Number.isFinite(sourceMaterial[key])||(sourceMaterial[key] as number)<0||(sourceMaterial[key] as number)>1))
+        || ['baseColor','emissive'].some(key=>sourceMaterial[key]!==undefined&&
+          (typeof sourceMaterial[key]!=='string'||!colorPattern.test(sourceMaterial[key] as string)))) return undefined
+      material={
+        ...(typeof sourceMaterial.preset==='string'?{preset:sourceMaterial.preset.slice(0,40)}:{}),
+        ...(typeof sourceMaterial.baseColor==='string'?{baseColor:sourceMaterial.baseColor}:{}),
+        ...(typeof sourceMaterial.emissive==='string'?{emissive:sourceMaterial.emissive}:{}),
+        ...Object.fromEntries(numeric.filter(key=>typeof sourceMaterial[key]==='number')
+          .map(key=>[key,sourceMaterial[key]])),
+      }
+    }
     nodes.push({
       type: item.type as Scene3DNode['type'],
       position: item.position,
@@ -45,6 +84,9 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
       color: item.color,
       ...(typeof item.name === 'string' ? { name: item.name.slice(0,100) } : {}),
       ...(item.rotation === undefined ? {} : { rotation: item.rotation as [number, number, number] }),
+      ...(item.type==='mesh'?{vertices:vertices as number[]}:{}),
+      ...(material===undefined?{}:{material}),
+      ...(item.hidden===true?{hidden:true}:{}),
     })
   }
   return {
@@ -52,6 +94,8 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
     name: typeof value.name === 'string' ? value.name.slice(0,140) : 'Escena 3D',
     background: typeof value.background === 'string' && colorPattern.test(value.background) ? value.background : '#f7f2eb',
     nodes,
+    ...(value.environment==='studio'||value.environment==='sunset'||value.environment==='daylight'?{environment:value.environment}:{}),
+    ...(value.camera==='perspective'||value.camera==='isometric'||value.camera==='front'||value.camera==='top'?{camera:value.camera}:{}),
   }
 }
 
@@ -66,7 +110,17 @@ function transform(vertex: Vec3, node: Scene3DNode): Vec3 {
   return [x*node.size[0]+node.position[0], y*node.size[1]+node.position[1], z*node.size[2]+node.position[2]]
 }
 function mesh(node: Scene3DNode): Face[] {
+  if(node.hidden===true)return []
   const faces: Vec3[][] = []
+  if(node.type==='mesh'&&node.vertices!==undefined){
+    for(let i=0;i<node.vertices.length;i+=9){
+      faces.push([
+        [node.vertices[i]!,node.vertices[i+1]!,node.vertices[i+2]!],
+        [node.vertices[i+3]!,node.vertices[i+4]!,node.vertices[i+5]!],
+        [node.vertices[i+6]!,node.vertices[i+7]!,node.vertices[i+8]!],
+      ])
+    }
+  } else
   const quad=(a: Vec3,b: Vec3,c:Vec3,d:Vec3)=>{faces.push([a,b,c,d])}
   if (node.type === 'box') {
     const v:Vec3[]=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],
@@ -101,8 +155,8 @@ function mesh(node: Scene3DNode): Face[] {
     }
   }
   return faces.map(vertices => ({
-    vertices: vertices.map(point => transform(point,node)), color:node.color,
-    alpha: /cristal|acristalad|glass|window/iu.test(node.name ?? '') ? .77 : 1,
+    vertices: vertices.map(point => transform(point,node)), color:node.material?.baseColor??node.color,
+    alpha: node.material?.opacity??(/cristal|acristalad|glass|window/iu.test(node.name ?? '') ? .77 : 1),
   }))
 }
 const cross=(a:Vec3,b:Vec3):Vec3=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]
