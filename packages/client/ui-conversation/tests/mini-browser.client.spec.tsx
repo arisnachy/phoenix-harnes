@@ -111,7 +111,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
     view.rerender(<>
       <MiniBrowser key="previous" requested active={false} />
-      <MiniBrowser key="new-request" requested active />
+      <MiniBrowser key="new-request" requested active tabId="shared-tab" />
     </>)
     expect(screen.getAllByRole('region', { name: 'Navegador de Kira' })).toHaveLength(1)
     expect(await screen.findByRole('button', { name: /Abrir navegador completo/ })).toBeTruthy()
