@@ -390,10 +390,17 @@ export function miniBrowserRequestAllowed(input: {
   if (input.fetchSite === 'cross-site') return false
   return true
 }
+/**
+ * Node's IncomingHttpHeaders admits string[], but the authorization marker
+ * must be a single exact value. Multiple occurrences are not authenticated.
+ */
+export function miniBrowserSingleHeader(value: string | string[] | undefined): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
 function authorized(req: IncomingMessage): boolean {
   return miniBrowserRequestAllowed({
     remoteAddress: req.socket.remoteAddress, host: req.headers.host, origin: req.headers.origin,
-    marker: req.headers['x-phoenix-mini-browser'],
+    marker: miniBrowserSingleHeader(req.headers['x-phoenix-mini-browser']),
     fetchSite: req.headers['sec-fetch-site'],
   })
 }
