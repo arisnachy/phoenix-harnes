@@ -422,7 +422,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
           message: config.serverName === 'github'
             ? 'Introduce un token personal de GitHub (fine-grained PAT) con permisos para los repositorios necesarios. PHOENIX lo guarda exclusivamente en su vault local y lo usa solo con GitHub MCP.'
             : `Introduce el token Bearer para ${config.serverName}. Se guardará únicamente en el vault local.`,
-          placeholder: config.bearerTokenRef,
+          placeholder: String(bearerRef),
         })).trim()
         if (token.length === 0 || token.length > 8192) throw new Error('Invalid Bearer token')
         await credentials.set(bearerRef, token)
