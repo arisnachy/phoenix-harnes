@@ -226,6 +226,7 @@ const RECOVERABLE_SEARCH_CODES = new Set([
   'WEB_PROVIDER_UNAVAILABLE',
   'WEB_PROVIDER_CONFIGURED_UNAVAILABLE',
   'WEB_PROVIDER_TRANSIENT',
+  'WEB_PROVIDER_CREDENTIAL_MISSING',
 ])
 
 /** Resolve the configured primary followed by usable, explicitly ordered fallbacks. */
