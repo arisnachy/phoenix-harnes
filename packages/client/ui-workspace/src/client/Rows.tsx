@@ -158,7 +158,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
         <span className={css.title}>{label}</span>
         {row.workspaceId !== undefined && (
           <span className={css.meta}>
-            {t(row.sessions.length === 1 ? 'sessions.count.one' : 'sessions.count.other', { n: row.sessions.length })}
+            {t(row.sessionCount === 1 ? 'sessions.count.one' : 'sessions.count.other', { n: row.sessionCount })}
           </span>
         )}
       </span>
