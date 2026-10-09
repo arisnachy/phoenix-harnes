@@ -789,7 +789,9 @@ export function getVoiceAssistantSnapshot(): VoiceAssistantSnapshot {
  */
 export function setVoiceAssistantActive(active: boolean): void {
   if (!active) {
-    if (codexRealtimeVoiceSession !== undefined || codexRealtimeVoiceStarting) void stopCodexRealtimeVoice()
+    // Always invalidate pending route/capability probes too: voice may be closed
+    // before a live WebRTC session or its startup flag exists.
+    void stopCodexRealtimeVoice()
     voiceAssistantSpeech?.dispose()
     voiceAssistantSpeech = undefined
     voiceAssistantSpeechKey = undefined
