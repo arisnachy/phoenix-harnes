@@ -212,3 +212,17 @@ export function teamExecutionProof(
     satisfied: tools.length > 0,
   }
 }
+
+/**
+ * Keep operational peer result messages grounded in the sender's own work.
+ * Coordination chatter and user questions never become proof. Non-operational
+ * explanations and honest blockers do not require a tool receipt.
+ */
+export function teamResultHasExecutionEvidence(
+  events: readonly SessionEvent[],
+  purpose?: string,
+): boolean {
+  if (purpose !== 'result') return true
+  const proof = teamExecutionProof(events)
+  return proof.requirement === 'none' || proof.satisfied
+}

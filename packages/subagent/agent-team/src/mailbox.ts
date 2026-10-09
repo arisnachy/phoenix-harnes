@@ -9,6 +9,7 @@ import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
 import { errorMessage, TeamError } from './error.ts'
+import { teamResultHasExecutionEvidence } from './execution-evidence.ts'
 import type { TeamJournal } from './journal.ts'
 import type { TeamRuntimeLifecycle } from './lifecycle.ts'
 import type { TeamRoster } from './roster.ts'
@@ -114,6 +115,11 @@ export class TeamMailbox {
     const membership = this.roster.membership(caller)
     request.signal.throwIfAborted()
     const root = membership.root
+    // Real results need real child-session receipts; blockers and questions remain
+    // deliverable immediately, so the team can still recover or seek assistance.
+    if (membership.role === 'teammate' && !teamResultHasExecutionEvidence(caller.session.events, request.purpose)) {
+      throw new TeamError('Team result requires successful execution evidence; report a blocker instead', 'TEAM_RESULT_UNVERIFIED')
+    }
     const content = structuredClone(request.content)
     const queued = await this.journal.transact(root.id, async () => {
       request.signal.throwIfAborted()

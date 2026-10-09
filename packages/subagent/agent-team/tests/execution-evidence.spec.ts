@@ -4,6 +4,7 @@ import type { SessionEvent } from '@phoenix-ai/dsh-session'
 import {
   teamExecutionProof,
   teamExecutionRequirement,
+  teamResultHasExecutionEvidence,
 } from '../src/execution-evidence.ts'
 
 function userEvent(seq: number, text: string): SessionEvent {
@@ -48,6 +49,22 @@ function toolResult(seq: number, id: string, error?: { name: string; code: strin
 }
 
 describe('Team execution evidence', () => {
+  it('does not let a teammate publish an operational result before executing the task', () => {
+    const request = userEvent(0, 'Envía un correo de prueba por Gmail.')
+    const noResult = [request, toolCall(1, 'local', 'send_message'), toolResult(2, 'local')]
+    expect(teamResultHasExecutionEvidence(noResult, 'result')).toBe(false)
+    expect(teamResultHasExecutionEvidence(noResult, 'blocker')).toBe(true)
+    expect(teamResultHasExecutionEvidence(noResult, 'question')).toBe(true)
+
+    const failed = [...noResult, toolCall(3, 'email', 'mcp__Gmail__send_email'),
+      toolResult(4, 'email', { name: 'Error', code: 'FAILED' })]
+    expect(teamResultHasExecutionEvidence(failed, 'result')).toBe(false)
+    const verified = [...noResult, toolCall(3, 'email', 'mcp__Gmail__send_email'),
+      toolResult(4, 'email')]
+    expect(teamResultHasExecutionEvidence(verified, 'result')).toBe(true)
+    expect(teamResultHasExecutionEvidence([userEvent(0, 'Explica el flujo')], 'result')).toBe(true)
+  })
+
   it('requires a real effect receipt before an email-send claim can be trusted', () => {
     const base = [
       userEvent(0, 'Envía un correo de prueba por Gmail y comprueba que salió.'),

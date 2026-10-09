@@ -2,6 +2,7 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import type { CognitiveMemoryHit, CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
+import { learningOwnerSessionId } from './team-learning-context.ts'
 import {
   decodeTaskFingerprint,
   fingerprintTask,
@@ -530,6 +531,7 @@ export function installProceduralLearning(
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
+    const learningOwnerId = learningOwnerSessionId(session)
     const eventType = String(event.type)
     const data = event.data as unknown
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
@@ -539,22 +541,23 @@ export function installProceduralLearning(
     const run = async (): Promise<void> => {
       if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
         if (data.name === 'living_act' && isRecord(data.arguments) && typeof data.arguments.action === 'string') {
-          trace.livingAction(sessionId, data.arguments.action)
+          trace.livingAction(learningOwnerId, data.arguments.action)
         } else {
-          trace.toolCall(sessionId, data.name)
+          trace.toolCall(learningOwnerId, data.name)
         }
         return
       }
       if (eventType === 'hardness/kernel' && isRecord(data)) {
         if (data.kind === 'learning-recorded' && isRecord(data.learning) && typeof data.learning.solution === 'string') {
-          trace.recovery(sessionId, data.learning.solution)
+          trace.recovery(learningOwnerId, data.learning.solution)
           return
         }
         if (data.kind === 'route-selected' && typeof data.strategy === 'string') {
-          trace.decision(sessionId, data.strategy)
+          trace.decision(learningOwnerId, data.strategy)
           return
         }
       }
+      if (eventType === 'goal/change' && session.header.origin === 'subagent') return
       if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
         trace.clear(sessionId)
         return
