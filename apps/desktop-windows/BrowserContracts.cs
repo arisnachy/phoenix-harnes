@@ -132,6 +132,7 @@ public sealed record BrowserCommand(
         "phoenix.browser.fill-form",
         "phoenix.browser.click-text",
         "phoenix.browser.login",
+        "phoenix.browser.forget-login",
         "phoenix.desktop.windows",
         "phoenix.desktop.screenshot",
     };
@@ -175,6 +176,12 @@ public sealed record BrowserCommand(
             if (!TryGetString(doc.RootElement, "origin", out var rawOrigin)) return false;
             var origin = BrowserNavigation.NormalizeCredentialOrigin(rawOrigin);
             if (origin is null) return false;
+
+            if (type == "phoenix.browser.forget-login")
+            {
+                command = new BrowserCommand(type, Origin: origin);
+                return true;
+            }
 
             if (type == "phoenix.browser.click-text")
             {

@@ -627,6 +627,8 @@ internal sealed class PhoenixDesktopWindow : Form
                 return await ClickBrowserTextAsync(command);
             case "phoenix.browser.login":
                 return await LoginBrowserAsync(command);
+            case "phoenix.browser.forget-login":
+                return ForgetBrowserLogin(command);
             default:
                 ExecuteBrowserCommand(command);
                 return null;
@@ -769,6 +771,20 @@ internal sealed class PhoenixDesktopWindow : Form
             .Replace("__TEXT__", JsonSerializer.Serialize(command.Text ?? string.Empty), StringComparison.Ordinal);
         var raw = await core.ExecuteScriptAsync(script);
         return DecodeScriptJson(raw);
+    }
+
+    private string ForgetBrowserLogin(BrowserCommand command)
+    {
+        var origin = command.Origin
+            ?? throw new InvalidOperationException("Removing credentials requires a secure origin.");
+        var answer = MessageBox.Show(this,
+            "Eliminar el acceso guardado para " + origin + "?",
+            "Phoenix · Vault", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button2);
+        if (answer != DialogResult.Yes)
+            return JsonSerializer.Serialize(new { forgotten = false });
+        browserVault.Delete(origin);
+        return JsonSerializer.Serialize(new { forgotten = true });
     }
 
     private async Task<string> LoginBrowserAsync(BrowserCommand command)

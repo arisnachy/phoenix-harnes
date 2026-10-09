@@ -164,6 +164,20 @@ finally
         Directory.Delete(vaultTestRoot, recursive: true);
 }
 
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.forget-login\",\"origin\":\"https://example.com/login\"}",
+        out var forgetLogin, allowAutomation: true),
+    "native vault removal is origin bound",
+    failures);
+Equal("https://example.com", forgetLogin.Origin, "forget origin canonicalized", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.forget-login\",\"origin\":\"https://example.com\"}",
+        out _),
+    "untrusted web surface cannot remove native vault credentials",
+    failures);
+
 // The model/runtime must control the embedded WebView through a direct current-user named pipe.
 // This prevents browser_open from falling back to global Ctrl+L/type/Enter input.
 var controlDescriptorPath = Path.Combine(Path.GetTempPath(), $"phoenix-desktop-control-{Guid.NewGuid():N}.json");
