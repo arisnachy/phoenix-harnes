@@ -1,7 +1,24 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { miniBrowserRequestAllowed, normalizeMiniBrowserAddress } from '../src/mini-browser.ts'
+import { browserVaultSupported, hasSecureBrowserLogin, secureBrowserOrigin } from '../src/mini-browser-vault.ts'
 
 afterEach(() => { /* Pure contracts: no live Chrome or network is required. */ })
+
+describe('Protected MiniBrowser vault contract', () => {
+  it('binds logins to HTTPS origin and refuses URL embedded credentials', () => {
+    expect(secureBrowserOrigin('https://Brand.Example/login?token=personal')).toBe('https://brand.example')
+    expect(secureBrowserOrigin('http://127.0.0.1:3080/login')).toBe('http://127.0.0.1:3080')
+    expect(() => secureBrowserOrigin('https://user:password@example.org')).toThrow()
+    expect(() => secureBrowserOrigin('http://example.org/login')).toThrow()
+    expect(() => secureBrowserOrigin('file:///C:/passwords')).toThrow()
+  })
+  it('fails closed without Windows DPAPI instead of writing plaintext fallbacks', () => {
+    if (process.platform !== 'win32') {
+      expect(browserVaultSupported()).toBe(false)
+      expect(hasSecureBrowserLogin('https://survey.example')).toBe(false)
+    }
+  })
+})
 
 describe('MiniBrowser origin and navigation contracts', () => {
   const allowed = {

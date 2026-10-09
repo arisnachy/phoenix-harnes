@@ -83,6 +83,35 @@ describe('MiniBrowser in Phoenix conversation', () => {
     fireEvent.click(screen.getByRole('button', { name: /Volver al navegador/ }))
     expect(screen.queryByTitle('Reproductor YouTube')).toBeNull()
   })
+  it('shows a human-only credential prompt without injecting secrets into chat messages', async () => {
+    const sends: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (input: string, options?: { body?: string }) => {
+      if (String(input).endsWith('/vault')) {
+        if (options?.body) {
+          sends.push(options.body)
+          return new Response(JSON.stringify({ phase: 'credentials-submitted', configured: true }), { status: 200 })
+        }
+        return new Response(JSON.stringify({ supported: true, origin: 'https://www.youtube.com', configured: false }), { status: 200 })
+      }
+      return new Response(JSON.stringify(state), { status: 200 })
+    }))
+    render(<MiniBrowser />)
+    const access = await screen.findByRole('button', { name: 'Acceso seguro' })
+    fireEvent.click(access)
+    const user = screen.getByRole('textbox', { name: 'Usuario o correo' })
+    fireEvent.change(user, { target: { value: 'human-account' } })
+    const password = document.querySelector('input[name="secret"]')
+    expect(password).toBeTruthy()
+    fireEvent.change(password!, { target: { value: 'human-entered-secret' } })
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: 'Conectar' }))
+    await waitFor(() => { expect(sends).toHaveLength(1) })
+    const request = JSON.parse(sends[0]!) as { origin: string; remember: boolean; secret: string }
+    expect(request).toMatchObject({
+      origin: 'https://www.youtube.com', remember: true, secret: 'human-entered-secret',
+    })
+    expect(screen.queryByText('human-entered-secret')).toBeNull()
+  })
   it('does not embed external websites in an iframe', async () => {
     installBrowserMock()
     const view = render(<MiniBrowser />)
