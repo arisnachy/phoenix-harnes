@@ -285,6 +285,7 @@ export function apply(ctx: ClientContext): void {
   const connectorT = ctx.locale.bind(CONNECTORS_NS) as ConnectorsSettingsSectionProps['connectorT']
   const localModel = localModelClient(ctx)
   const mcpRegistry = mcpRegistryClient(ctx)
+  const telegram = telegramBotClient(ctx)
   const injected = (): ModelsWithLocalSectionInjected => ({
     controller,
     hooks: { snapshot: controller.store },
@@ -381,7 +382,7 @@ export function apply(ctx: ClientContext): void {
     chatGptWeb: chatGptWebClient(ctx),
     settings: connection.api.settings,
     mcpRegistry,
-    telegram: telegramBotClient(ctx),
+    telegram,
     onAuthorized: () => { refreshIfLoaded(controller) },
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
