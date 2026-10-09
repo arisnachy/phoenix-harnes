@@ -287,7 +287,21 @@ describe('browser voice adapter', () => {
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
       expect(JSON.parse(String(channel?.send.mock.calls[4]?.[0]))).toEqual({ type: 'response.cancel' })
       expect(audio?.muted).toBe(true)
+
+      // Telegram/browser disconnection must never leave voice stuck: grant a
+      // short reconnection window, then release the mic and return to text.
+      vi.useFakeTimers()
+      if (peer !== undefined) {
+        peer.connectionState = 'disconnected'
+        peer.onconnectionstatechange?.()
+      }
+      expect(isCodexRealtimeVoiceActive()).toBe(true)
+      await vi.advanceTimersByTimeAsync(30_001)
+      expect(isCodexRealtimeVoiceActive()).toBe(false)
+      expect(getVoiceAssistantSnapshot().active).toBe(false)
+      expect(audio?.isConnected).toBe(false)
     } finally {
+      vi.useRealTimers()
       await stopCodexRealtimeVoice()
       disposeRemote()
       disposeRoute()
