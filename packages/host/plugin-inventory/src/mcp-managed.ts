@@ -97,6 +97,8 @@ export const HEYGEN_MCP_URL = 'https://mcp.heygen.com/mcp/v1/'
 export const FIGMA_MCP_URL = 'https://mcp.figma.com/mcp'
 /** Official Figma Desktop local MCP endpoint usable by a custom Phoenix client. */
 export const FIGMA_DESKTOP_MCP_URL = 'http://127.0.0.1:3845/mcp'
+/** GitHub's official remote MCP endpoint (not a Copilot model login). */
+export const GITHUB_MCP_URL = 'https://api.githubcopilot.com/mcp/'
 /** Official Vercel remote MCP endpoint. */
 export const VERCEL_MCP_URL = 'https://mcp.vercel.com'
 /** Official Notion remote MCP endpoint. */
@@ -296,6 +298,7 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   supabase: { label: 'Supabase', config: () => remoteOauthMcpConfig('supabase', SUPABASE_MCP_URL) },
   heygen: { label: 'HeyGen', config: () => remoteOauthMcpConfig('heygen', HEYGEN_MCP_URL, 120_000) },
   figma: { label: 'Figma', config: () => remoteOauthMcpConfig('figma', FIGMA_MCP_URL) },
+  github: { label: 'GitHub repositories', config: () => remoteOauthMcpConfig('github', GITHUB_MCP_URL) },
   vercel: { label: 'Vercel', config: () => remoteOauthMcpConfig('vercel', VERCEL_MCP_URL) },
   notion: { label: 'Notion', config: () => remoteOauthMcpConfig('notion', NOTION_MCP_URL) },
   linear: { label: 'Linear', config: () => remoteOauthMcpConfig('linear', LINEAR_MCP_URL) },
