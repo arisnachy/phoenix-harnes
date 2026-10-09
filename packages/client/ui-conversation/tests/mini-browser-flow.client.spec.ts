@@ -9,6 +9,11 @@ const assistant = (key: string): BrowserFlowNode => ({
   key, kind: 'assistant-step', data: {},
 })
 const flowNodes = (...keys: string[]) => keys.map(key => ({ kind: 'node' as const, key }))
+const navigation = (key: string, output: string, isError = false, name = 'mcp__chrome_connector__navigate'): BrowserFlowNode => ({
+  key, kind: 'tool-call', data: { root: {
+    kind: 'tool-result', call: { name }, isError, content: [{ type: 'text', text: output }],
+  } },
+})
 
 describe('MiniBrowser chronological conversation cards', () => {
   it('recognizes real navigation prompts but not ordinary conversation', () => {
@@ -43,6 +48,57 @@ describe('MiniBrowser chronological conversation cards', () => {
     const result = addBrowserCards(flowNodes(...nodes.map(node => node.key)), nodes)
     expect(result.filter(item => item.kind === 'browser').map(item => item.key))
       .toEqual(['browser:one', 'browser:two'])
+  })
+
+  it('opens an in-chat card for real indirect navigation with a verified tab ID', () => {
+    const nodes = [
+      user('question', 'Investiga el titular más reciente'),
+      navigation('cdp', 'Navegación iniciada en https://listindiario.com/ (pestaña CDP1234567890)'),
+      assistant('result'),
+    ]
+    const cards = addBrowserCards(flowNodes(...nodes.map(node => node.key)), nodes)
+    expect(cards.filter(item => item.kind === 'browser')).toEqual([{
+      kind: 'browser', key: 'browser:question', userKey: 'question', tabId: 'CDP1234567890',
+    }])
+  })
+
+  it('keeps the pending card without claiming a tab when the browser tool fails', () => {
+    const nodes = [
+      user('question', 'Abre Listín Diario'),
+      navigation('error', 'Navegación iniciada en https://listindiario.com/ (pestaña UNKNOWN123)', true),
+      assistant('reply'),
+    ]
+    const cards = addBrowserCards(flowNodes(...nodes.map(node => node.key)), nodes)
+    expect(cards.filter(item => item.kind === 'browser')).toEqual([{
+      kind: 'browser', key: 'browser:question', userKey: 'question',
+    }])
+  })
+
+  it('rejects unrelated tools and unverified claims from Kira', () => {
+    const nodes = [
+      user('question', '¿Qué pasó hoy?'),
+      navigation('fake', 'Navegación iniciada en https://example.org (pestaña FAKE123)', false, 'mcp__github__navigate'),
+      assistant('claims-loaded'),
+    ]
+    const cards = addBrowserCards(flowNodes(...nodes.map(node => node.key)), nodes)
+    expect(cards.filter(item => item.kind === 'browser')).toHaveLength(0)
+  })
+
+  it('pins separate navigation receipts to separate user turns', () => {
+    const nodes = [
+      user('turn-one', 'Abre YouTube'),
+      navigation('cdp-one', 'Navegación iniciada en https://youtube.com/ (pestaña FIRST123)'),
+      assistant('one'),
+      user('turn-two', 'Abre GitHub'),
+      navigation('cdp-two', 'Navegación iniciada en https://github.com/ (pestaña SECOND123)'),
+      assistant('two'),
+    ]
+    const cards = addBrowserCards(flowNodes(...nodes.map(node => node.key)), nodes)
+      .filter(item => item.kind === 'browser')
+    expect(cards).toEqual([
+      { kind: 'browser', key: 'browser:turn-one', userKey: 'turn-one', tabId: 'FIRST123' },
+      { kind: 'browser', key: 'browser:turn-two', userKey: 'turn-two', tabId: 'SECOND123' },
+    ])
   })
 
   it('reserves a browser card during optimistic message admission', () => {

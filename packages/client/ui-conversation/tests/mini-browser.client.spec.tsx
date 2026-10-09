@@ -55,6 +55,30 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('scopes state and screenshot requests to the verified CDP receipt without changing the active tab', async () => {
+    const calls = installBrowserMock()
+    render(<MiniBrowser requested tabId="shared-tab" />)
+    await screen.findByRole('region', { name: 'Navegador de Kira' })
+    await waitFor(() => {
+      const seen = vi.mocked(fetch).mock.calls.some(([path]) => String(path).endsWith('/frame'))
+      expect(seen).toBe(true)
+    })
+    for (const [path, options] of vi.mocked(fetch).mock.calls) {
+      if (!String(path).endsWith('/state') && !String(path).endsWith('/frame')) continue
+      expect((options as { headers?: Record<string, string> } | undefined)?.headers?.['x-phoenix-mini-browser-tab'])
+        .toBe('shared-tab')
+    }
+    expect(calls).toHaveLength(0)
+  })
+
+  it('does not show a stale page as successful while navigation lacks a real receipt', async () => {
+    installBrowserMock()
+    render(<MiniBrowser requested />)
+    expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
+    expect(screen.getByText(/Esperando el identificador de pestaña/)).toBeTruthy()
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
   it('only opens desktop Chrome when the user presses the footer button', async () => {
     const calls = installBrowserMock()
     render(<MiniBrowser />)
@@ -63,7 +87,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(screen.queryByText('◉ Abrir navegador')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Abrir navegador completo/ }))
     await waitFor(() => {
-      expect(calls).toContainEqual({ type: 'open-external' })
+      expect(calls).toContainEqual(expect.objectContaining({ type: 'open-external' }))
     })
   })
 
@@ -71,7 +95,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       error: 'El host todavía no pudo conectar con Chromium.',
     }), { status: 503, headers: { 'content-type': 'application/json' } })))
-    render(<MiniBrowser requested />)
+    render(<MiniBrowser requested tabId="shared-tab" />)
     expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
     await waitFor(() => {
       expect(screen.getByRole('status').textContent).toContain('Conexión del navegador')
@@ -83,11 +107,11 @@ describe('MiniBrowser in Phoenix conversation', () => {
     installBrowserMock()
     const view = render(<><MiniBrowser key="previous" requested active={false} /></>)
     expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Ocultar microventana' }))
+    fireEvent.click(screen.getByTitle('Ocultar microventana'))
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
     view.rerender(<>
       <MiniBrowser key="previous" requested active={false} />
-      <MiniBrowser key="new-request" requested active />
+      <MiniBrowser key="new-request" requested active tabId="shared-tab" />
     </>)
     expect(screen.getAllByRole('region', { name: 'Navegador de Kira' })).toHaveLength(1)
     expect(await screen.findByRole('button', { name: /Abrir navegador completo/ })).toBeTruthy()
@@ -100,7 +124,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
       <MiniBrowser key="second-request" requested active />
     </>)
     expect(screen.getAllByRole('region', { name: 'Navegador de Kira' })).toHaveLength(2)
-    expect(screen.getByRole('button', { name: 'Reactivar esta página' })).toBeTruthy()
+    expect(screen.getByTitle('Reactivar esta página')).toBeTruthy()
     view.unmount()
   })
 
@@ -125,7 +149,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     fireEvent.change(address, { target: { value: 'https://example.org' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ir' }))
     await waitFor(() => {
-      expect(calls).toContainEqual({ type: 'open', url: 'https://example.org' })
+      expect(calls).toContainEqual(expect.objectContaining({ type: 'open', url: 'https://example.org' }))
     })
   })
   it('plays a YouTube watch URL with sound without replacing Kira\'s CDP tab', async () => {
