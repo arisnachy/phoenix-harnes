@@ -9,7 +9,7 @@ import { useState } from 'react'
 import clsx from 'clsx'
 import {
   HoverCard, IconArchiveOutline20, IconBranchOutline16, IconEditOutline16,
-  IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconPlusOutline16,
+  IconEllipsisOutline16, IconFolderClose16, IconFolderOpen16, IconNewChatOutline16, IconPlusOutline16,
   IconTrashOutline16, IconTriangleRightFill14, Menu, StateDot,
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@phoenix-ai/dsh-client-ui-primitives'
@@ -132,7 +132,7 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
   ]
   const ownRow = (
     <div
-      className={clsx(css.projectRow, menuOpen && css.menuOpen)}
+      className={clsx(css.projectRow, group.containsCurrent && css.projectActive, menuOpen && css.menuOpen)}
       role="treeitem"
       aria-expanded={row.expanded}
       onClick={onToggle}
@@ -147,13 +147,20 @@ export function ProjectRowItem({ group, onToggle, onCreate, actions, drag, home,
       onDragEnd={drag?.end}
     >
       <span className={clsx(css.slot, css.folder, active && css.folderActive)}>
-        {row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />}
+        {row.workspaceId === undefined
+          ? row.expanded ? <IconFolderOpen16 /> : <IconFolderClose16 />
+          : <span className={css.projectAvatar} aria-hidden="true">{label.trim().slice(0, 1).toLocaleUpperCase() || 'P'}</span>}
       </span>
       <span className={clsx(css.slot, css.chevron)}>
         <IconTriangleRightFill14 className={clsx(css.arrow, row.expanded && css.arrowOpen)} />
       </span>
       <span className={css.projectText}>
         <span className={css.title}>{label}</span>
+        {row.workspaceId !== undefined && (
+          <span className={css.meta}>
+            {t(row.sessions.length === 1 ? 'sessions.count.one' : 'sessions.count.other', { n: row.sessions.length })}
+          </span>
+        )}
       </span>
       <span className={css.rowActions}>
         {actions !== undefined && (
@@ -435,11 +442,10 @@ export function SessionNodeItem({ node, currentId, now, onOpen, onRename, onFork
       {/* Pending interaction and own or descendant activity outrank the
           finished-but-unviewed reminder, which returns after activity stops
           and is cleared by opening the session. */}
-      {(!flat || showStatus) && (
-        <span className={css.slot}>
-          {showStatus && <SessionStatusDots statuses={statuses} />}
-        </span>
-      )}
+      <span className={clsx(css.slot, css.sessionGlyph)} aria-hidden={!showStatus}>
+        <IconNewChatOutline16 size={16} />
+        {showStatus && <span className={css.sessionStatus}><SessionStatusDots statuses={statuses} /></span>}
+      </span>
       <span className={css.title}>{title}</span>
       {/* A blank New Session row is a provisional placeholder: nothing has
           happened in it yet, so a "now" timestamp and the row verbs
