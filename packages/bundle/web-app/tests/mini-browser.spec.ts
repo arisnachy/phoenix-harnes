@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { captureBrowserFrameWithFallback, miniBrowserRequestAllowed, normalizeMiniBrowserAddress } from '../src/mini-browser.ts'
+import { captureBrowserFrameWithFallback, miniBrowserRequestAllowed, miniBrowserSingleHeader, normalizeMiniBrowserAddress } from '../src/mini-browser.ts'
 
 afterEach(() => { /* Pure contracts: no live Chrome or network is required. */ })
 
@@ -36,6 +36,17 @@ describe('MiniBrowser capture recovery', () => {
 })
 
 describe('MiniBrowser origin and navigation contracts', () => {
+  it('rejects repeated HTTP authorization headers instead of treating string arrays as strings', () => {
+    expect(miniBrowserSingleHeader('1')).toBe('1')
+    expect(miniBrowserSingleHeader(undefined)).toBeUndefined()
+    expect(miniBrowserSingleHeader(['1'])).toBeUndefined()
+    expect(miniBrowserSingleHeader(['1', '1'])).toBeUndefined()
+    expect(miniBrowserRequestAllowed({
+      remoteAddress: '127.0.0.1',
+      host: '127.0.0.1:3080',
+      marker: miniBrowserSingleHeader(['1']),
+    })).toBe(false)
+  })
   const allowed = {
     remoteAddress: '127.0.0.1',
     host: '127.0.0.1:3080',
