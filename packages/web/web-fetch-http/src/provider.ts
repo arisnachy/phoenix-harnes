@@ -59,7 +59,14 @@ export class HttpFetchProvider implements WebFetchProvider {
             records => {
               try {
                 const selected = selectPublicDialAddress(hostname, records)
-                callback(null, selected.address, selected.family)
+                if (_options.all === true) {
+                  const all = callback as unknown as (
+                    error: Error | null, addresses: readonly { address: string; family: number }[]
+                  ) => void
+                  all(null, [selected])
+                } else {
+                  callback(null, selected.address, selected.family)
+                }
               } catch (error) {
                 callback(error instanceof Error ? error : new Error(String(error)), '', 4)
               }

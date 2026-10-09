@@ -74,6 +74,21 @@ describe('policy helpers', () => {
       .toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_URL' }))
   })
 
+  it('blocks URL-canonicalized IPv4-mapped IPv6 loopback and metadata endpoints', async () => {
+    const mapped = [
+      'http://[::ffff:127.0.0.1]/',
+      'http://[::ffff:169.254.169.254]/',
+      'http://[0:0:0:0:0:ffff:10.0.0.1]/',
+      'http://[::ffff:192.168.1.1]/',
+      'http://[::7f00:1]/',
+    ]
+    for (const raw of mapped) {
+      await expect(assertPublicFetchTarget(new URL(raw))).rejects.toThrow(
+        expect.objectContaining({ code: 'WEB_BLOCKED_URL' }),
+      )
+    }
+  })
+
   it('classifies content types', () => {
     expect(classifyContentType('text/html; charset=utf-8')).toBe('html')
     expect(classifyContentType('application/xhtml+xml')).toBe('html')

@@ -84,6 +84,27 @@ export function selectPublicDialAddress(
   return { address: selected.address, family: selected.family }
 }
 
+/** Map canonical hexadecimal IPv4-in-IPv6 prefixes back into IPv4. */
+function embeddedIpv4(value: string): string | undefined {
+  if (value.startsWith('::ffff:') && isIP(value.slice(7)) === 4) return value.slice(7)
+  const pieces = value.split('::')
+  if (pieces.length > 2) return undefined
+  const left = pieces[0] ? pieces[0].split(':') : []
+  const right = pieces.length === 2 && pieces[1] ? pieces[1].split(':') : []
+  const gap = pieces.length === 2 ? 8 - left.length - right.length : 0
+  if (gap < 0) return undefined
+  const parts = [...left, ...Array.from({ length: gap }, () => '0'), ...right]
+  if (parts.length !== 8 || parts.some(p => !/^[0-9a-f]{1,4}$/u.test(p))) return undefined
+  const numbers = parts.map(p => Number.parseInt(p, 16))
+  // ::ffff:a9fe:a9fe and deprecated ::a9fe:a9fe are both IPv4 targets.
+  if (numbers.slice(0, 5).some(n => n !== 0)
+    || (numbers[5] !== 0xffff && numbers[5] !== 0)) return undefined
+  const high = numbers[6]
+  const low = numbers[7]
+  if (high === undefined || low === undefined) return undefined
+  return [high >> 8, high & 255, low >> 8, low & 255].join('.')
+}
+
 function isPrivateAddress(value: string): boolean {
   const normalized = value.toLowerCase().replace(/^\[|\]$/g, '')
   if (isIP(normalized) === 4) {
@@ -100,8 +121,8 @@ function isPrivateAddress(value: string): boolean {
       || (first === 203 && second === 0 && third === 113)
   }
   if (isIP(normalized) === 6) {
-    const compact = normalized.replace(/^0*:0*:0*:0*:0*:ffff:/, '')
-    if (isIP(compact) === 4) return isPrivateAddress(compact)
+    const mapped = embeddedIpv4(normalized)
+    if (mapped !== undefined && isPrivateAddress(mapped)) return true
     const first = Number.parseInt(normalized.split(':')[0] || '0', 16)
     return normalized === '::' || normalized === '::1' || first === 0xfc00 || (first >= 0xfc00 && first <= 0xfdff)
       || (first >= 0xfe80 && first <= 0xfebf) || first >= 0xff00 || normalized.startsWith('2001:db8:')
