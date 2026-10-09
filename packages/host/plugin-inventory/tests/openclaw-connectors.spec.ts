@@ -86,6 +86,25 @@ describe('OpenClaw connector bridge', () => {
     expect(calls.join(' ')).not.toContain('copilot')
   })
 
+  it('reports an unavailable API when GitHub CLI auth is valid but the API read fails', () => {
+    const root = home()
+    installSkill(root, 'openclaw-github')
+    const run: OpenClawCommandRunner = (_bin, args) => args[0] === 'api'
+      ? { status: 1, stdout: '', stderr: 'unavailable' }
+      : { status: 0, stdout: '', stderr: '' }
+    const state = new OpenClawConnectorBridge(run).state('github')
+    expect(state).toMatchObject({ connected: false, phase: 'api-unavailable' })
+    expect(JSON.stringify(state)).not.toContain('unavailable')
+  })
+
+  it('never labels GitHub connected when its OpenClaw skill is absent', () => {
+    home()
+    const run: OpenClawCommandRunner = () => ({ status: 0, stdout: 'example', stderr: '' })
+    expect(new OpenClawConnectorBridge(run).state('github')).toMatchObject({
+      connected: false, phase: 'missing-skill',
+    })
+  })
+
   it('reports missing runtime without claiming an OpenClaw connection', () => {
     const root = home()
     installSkill(root, 'openclaw-github')
