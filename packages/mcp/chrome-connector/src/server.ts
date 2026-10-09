@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
+import { browserBatchExpression, browserInteractionExpression, type BrowserInteraction, type BrowserInteractionResult } from './browser-interactions.ts'
 
 const DEFAULT_PORTS = [9222, 9223, 9224]
 /** User-temp discovery lets the in-chat view reuse this exact Chromium tab. */
@@ -86,6 +87,7 @@ export function buildDedicatedBrowserArgs(profileDir: string, headless = false):
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-sync',
+    '--window-size=1280,820', '--force-device-scale-factor=1',
     ...(headless ? ['--headless=new'] : []),
     'about:blank',
   ]
@@ -320,6 +322,19 @@ async function evaluate(tab: Tab, expression: string): Promise<unknown> {
   return await cdp(tab, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
 }
 
+function ensureBrowserActionPermission(): void {
+  if (!actionsAllowed()) throw new Error('Acción bloqueada por permisos del navegador; no intentar usar Computer para eludirlos.')
+}
+
+function formatBrowserResult(value: unknown): { content: Array<{ type: 'text'; text: string }>; isError?: true } {
+  if (value === undefined || value === null) return { isError: true, content: [{ type: 'text', text: 'Sin resultado verificable del DOM. No se confirma la acción.' }] }
+  const result = value as { ok?: boolean }
+  const output = JSON.stringify(value)
+  return result.ok === false ? { isError: true, content: [{ type: 'text', text: output }] }
+    : { content: [{ type: 'text', text: output }] }
+}
+
+
 const server = new McpServer(
   { name: 'phoenix-browser-connector', version: '0.3.0' },
   { capabilities: { tools: {} } },
@@ -403,6 +418,74 @@ server.registerTool('read_page', {
   const value = await evaluate(tab, 'JSON.stringify({title: document.title, url: location.href, text: document.body?.innerText || \'\'})')
   const page = JSON.parse(String(value)) as { title: string; url: string; text: string }
   return { content: [{ type: 'text', text: JSON.stringify({ ...page, text: page.text.slice(0, maxChars) }, null, 2) }] }
+})
+
+const targetSchema = {
+  selector: z.string().trim().min(1).max(500).optional(),
+  name: z.string().trim().min(1).max(150).optional(),
+  label: z.string().trim().min(1).max(150).optional(),
+  placeholder: z.string().trim().min(1).max(150).optional(),
+  text: z.string().trim().min(1).max(150).optional(),
+}
+const fieldAction = z.object({
+  ...targetSchema,
+  operation: z.enum(['fill', 'select', 'check', 'click', 'scroll']),
+  value: z.string().max(4096).optional(),
+  checked: z.boolean().optional(),
+})
+
+server.registerTool('inspect_page', {
+  description: 'Inspección rápida estructurada y de solo lectura de la pestaña real: campos, etiquetas, tipos, opciones, protegido/deshabilitado/readonly, formularios y frames. Una llamada antes de completar un formulario; no requiere escritorio ni captura de pantalla. No incluye contraseñas, cookies ni contenido de campos sensibles.',
+  inputSchema: { tabId: z.string().optional() },
+}, async ({ tabId }) => {
+  const tab = await selectedTab(tabId)
+  return formatBrowserResult(await evaluate(tab, browserInteractionExpression({ operation: 'inspect' })))
+})
+
+server.registerTool('fill_form', {
+  description: 'Completa en UNA llamada hasta 30 campos de una pestaña Chromium (textos, contraseña ficticia, fecha, textarea, select, checkbox y radio). Busca por selector CSS, nombre, label o placeholder. Rechaza controles de solo lectura, deshabilitados, ocultos, ambiguos o archivos. Emite eventos input/change y verifica cada valor sin devolver contraseñas. No envía formulario. Respeta permisos; no necesita Computer visible.',
+  inputSchema: { tabId: z.string().optional(), fields: z.array(fieldAction).min(1).max(30) },
+}, async ({ tabId, fields }) => {
+  ensureBrowserActionPermission()
+  const tab = await selectedTab(tabId)
+  return formatBrowserResult(await evaluate(tab, browserBatchExpression(fields as BrowserInteraction[])))
+})
+
+server.registerTool('interact', {
+  description: 'Control estructurado de elementos visibles en Chromium: clic, selección, desplazamiento, marcado o escritura, sin JavaScript arbitrario, con comprobación de existencia y ambigüedad. Si hay CAPTCHA, login externo, popup nativo o iframe de otro origen, informa el bloqueo y pide intervención humana.',
+  inputSchema: { tabId: z.string().optional(), ...targetSchema,
+    operation: z.enum(['fill', 'select', 'check', 'click', 'scroll']),
+    value: z.string().max(4096).optional(), checked: z.boolean().optional() },
+}, async ({ tabId, ...input }) => {
+  ensureBrowserActionPermission()
+  return formatBrowserResult(await evaluate(await selectedTab(tabId), browserInteractionExpression(input as BrowserInteraction)))
+})
+
+server.registerTool('submit_form', {
+  description: 'Envía el formulario de una pestaña SOLO si la petición del usuario autorizó explícitamente el envío. Debe inspeccionarse/completarse primero; usa selector=form o un control submit concreto. Devuelve comprobante de intento, no inventa éxito: después usa wait_for para comprobar texto y URL finales. No usar para compras, borrados, envíos de dinero ni acciones sensibles sin confirmación del usuario.',
+  inputSchema: { tabId: z.string().optional(), ...targetSchema,
+    confirmation: z.literal(true) },
+}, async ({ tabId, confirmation, ...target }) => {
+  ensureBrowserActionPermission()
+  if (!confirmation) throw new Error('Se requiere confirmación del usuario para enviar el formulario.')
+  const tab = await selectedTab(tabId)
+  return formatBrowserResult(await evaluate(tab, browserInteractionExpression({ ...target, operation: 'submit' })))
+})
+
+server.registerTool('wait_for', {
+  description: 'Espera hasta 8 segundos el texto visible de confirmación tras navegar o enviar un formulario. Consulta el DOM real con pocas comprobaciones; no repite el envío. Informa texto encontrado o timeout y URL final verificada.',
+  inputSchema: { tabId: z.string().optional(), expectedText: z.string().min(1).max(250), timeoutMs: z.number().int().min(200).max(8000).default(5000) },
+}, async ({ tabId, expectedText, timeoutMs }) => {
+  const tab = await selectedTab(tabId)
+  const deadline = Date.now() + timeoutMs
+  let last: BrowserInteractionResult | undefined
+  do {
+    last = await evaluate(tab, browserInteractionExpression({ operation: 'wait', expectedText })) as BrowserInteractionResult
+    if (last?.ok) return formatBrowserResult(last)
+    if (Date.now() >= deadline) break
+    await new Promise(resolve => setTimeout(resolve, 250))
+  } while (Date.now() < deadline)
+  return formatBrowserResult({ ok: false, reason: 'TIMEOUT_WAITING_FOR_TEXT', url: last?.url, title: last?.title, foundText: false })
 })
 
 server.registerTool('click_text', {
