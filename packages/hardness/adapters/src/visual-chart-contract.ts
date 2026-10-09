@@ -13,7 +13,7 @@ const finite = (value: unknown): value is number =>
 const allowed = new Set(['bar', 'line', 'area', 'scatter', 'pie', 'donut', 'candlestick'])
 const aliases: Record<string, string> = {
   spline: 'line', column: 'bar', columns: 'bar', doughnut: 'donut',
-  candles: 'candlestick', ohlc: 'candlestick',
+  candles: 'candlestick', candle: 'candlestick', ohlc: 'candlestick',
 }
 const sample = [38, 51, 47, 65, 58, 73, 79]
 
@@ -81,6 +81,65 @@ function fromPairs(spec: Visual): Visual | undefined {
   }
 }
 
+
+/** A deliberately fictional OHLC sample, always clearly disclosed to the reader. */
+function syntheticCandles(spec: Visual): Visual {
+  const opens = [100, 103, 101, 107, 104, 110, 108]
+  const closes = [103, 101, 107, 104, 110, 108, 114]
+  return {
+    ...spec,
+    visualType: 'chart',
+    chartType: 'candlestick',
+    simulated: true,
+    description: 'Datos ficticios · velas OHLC simuladas, no cotizaciones reales',
+    candles: opens.map((open, index) => {
+      const close = closes[index]!
+      return {
+        time: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'][index],
+        open, high: Math.max(open, close) + 2, low: Math.min(open, close) - 2, close,
+      }
+    }),
+  }
+}
+
+function candleNumber(value: unknown): number | undefined {
+  if (finite(value)) return value
+  if (typeof value !== 'string' || !/^-?(?:\d+(?:\.\d+)?|\.\d+)$/.test(value.trim())) return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+/** Accept common OHLC envelopes without guessing prices, dates, or market results. */
+function normalizeCandles(spec: Visual): VisualChartAdmission {
+  const nested = isRecord(spec.data) ? spec.data : undefined
+  const rows = [spec.candles, spec.ohlc, spec.data, spec.rows, nested?.candles, nested?.ohlc, nested?.rows]
+    .find(Array.isArray)
+  if (rows === undefined || rows.length === 0) {
+    return spec.demo === true
+      ? { spec: syntheticCandles(spec) }
+      : { error: 'Las velas necesitan datos OHLC reales (candles/data/rows) o demo:true para un ejemplo ficticio.' }
+  }
+  if (rows.length > 160 || !rows.every(isRecord)) {
+    return { error: 'Las velas requieren de 1 a 160 filas OHLC con estructura de objeto.' }
+  }
+  const candles: Record<string, unknown>[] = []
+  for (const [index, row] of rows.entries()) {
+    const open = candleNumber(row.open ?? row.Open ?? row.o)
+    const high = candleNumber(row.high ?? row.High ?? row.h)
+    const low = candleNumber(row.low ?? row.Low ?? row.l)
+    const close = candleNumber(row.close ?? row.Close ?? row.c)
+    if (open === undefined || high === undefined || low === undefined || close === undefined
+      || high < Math.max(open, close) || low > Math.min(open, close) || high < low) {
+      return { error: `Vela ${index + 1}: OHLC inválido; se requieren open, high, low y close finitos con low ≤ open/close ≤ high.` }
+    }
+    candles.push({
+      ...row, open, high, low, close,
+      time: row.time ?? row.openTime ?? row.timestamp ?? row.date ?? row.label ?? String(index + 1),
+    })
+  }
+  return { spec: { ...spec, visualType: 'chart', chartType: 'candlestick', candles } }
+}
+
 /** Validated chart data or a specific, actionable data-admission error. */
 export interface VisualChartAdmission {
   readonly spec?: Visual
@@ -100,11 +159,14 @@ const example = 'Para una línea: {"visualType":"chart","chartType":"line","xKey
  * @returns A normalized chart or an error without publishing an artifact.
  */
 export function admitVisualChart(spec: Visual): VisualChartAdmission {
-  if (spec.visualType !== 'chart' && !(spec.visualType === 'visual' && nonempty(spec.chartType))) return { spec }
-  const raw = nonempty(spec.chartType) ? spec.chartType.toLowerCase().trim() : 'bar'
+  if (spec.visualType !== 'chart' && !(spec.visualType === 'visual' && (
+    nonempty(spec.chartType) || Array.isArray(spec.candles) || Array.isArray(spec.ohlc)
+  ))) return { spec }
+  const raw = nonempty(spec.chartType) ? spec.chartType.toLowerCase().trim()
+    : Array.isArray(spec.candles) || Array.isArray(spec.ohlc) ? 'candlestick' : 'bar'
   const chartType = aliases[raw] ?? raw
   if (!allowed.has(chartType)) return { error: `Tipo de gráfica no admitido: ${raw}. ${example}` }
-  if (chartType === 'candlestick') return { spec: { ...spec, chartType, visualType: 'chart' } }
+  if (chartType === 'candlestick') return normalizeCandles(spec)
   const hasData = (Array.isArray(spec.data) && spec.data.length > 0)
     || Array.isArray(spec.rows) && spec.rows.length > 0
     || Array.isArray(spec.labels) && spec.labels.length > 0

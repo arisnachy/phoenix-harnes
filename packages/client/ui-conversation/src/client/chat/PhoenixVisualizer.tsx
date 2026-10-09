@@ -208,9 +208,9 @@ function parseChart(spec: JsonRecord): ParsedChart | undefined {
 }
 
 function candlestickSource(spec: JsonRecord): readonly unknown[] {
-  if (Array.isArray(spec.candles)) return spec.candles
-  const data = isRecord(spec.data) ? spec.data : undefined
-  return data !== undefined && Array.isArray(data.candles) ? data.candles : []
+  const nested = isRecord(spec.data) ? spec.data : undefined
+  return [spec.candles, spec.ohlc, spec.data, spec.rows, nested?.candles, nested?.ohlc, nested?.rows]
+    .find(Array.isArray) ?? []
 }
 
 function candlestickLabel(row: JsonRecord, index: number): string {
@@ -1041,8 +1041,10 @@ export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
       <section className={css.section} data-phoenix-visual-qa="fail">
         <div className={css.empty}>
           {active.preflight.issues.includes('table-empty-data') || active.preflight.issues.includes('table-no-rows')
-            ? 'La tabla no contiene datos verificables. Consulta el inventario real de conectores y vuelve a generarla.'
-            : 'No se pudo representar esta gráfica con los datos recibidos. Verifica que las series tengan valores numéricos y vuelve a intentarlo.'}
+            ? 'La tabla no contiene datos verificables. Consulta la fuente de datos y vuelve a generarla.'
+            : active.preflight.issues.some(issue => issue.startsWith('candlestick-'))
+              ? 'No se pudo representar esta gráfica: las velas necesitan OHLC válido (apertura, máximo, mínimo y cierre). Para un ejemplo ficticio usa demo:true.'
+              : 'No se pudo representar esta gráfica con los datos recibidos. Comprueba los valores numéricos de cada serie.'}
         </div>
       </section>
     )
