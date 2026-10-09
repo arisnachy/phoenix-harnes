@@ -25,7 +25,7 @@ function validSnapshot(value: unknown): value is Snapshot {
   return typeof x.available === 'boolean' && Array.isArray(x.tabs)
 }
 async function inspect(signal?: AbortSignal): Promise<Snapshot> {
-  const response = await fetch(API + '/state', { headers: HEADERS, signal, cache: 'no-store' })
+  const response = await fetch(API + '/state', { headers: HEADERS, ...(signal === undefined ? {} : { signal }), cache: 'no-store' })
   const data: unknown = await decode<unknown>(response)
   if (!validSnapshot(data)) throw new Error('Estado de Chromium no válido.')
   return data
