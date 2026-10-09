@@ -21,7 +21,7 @@ export type BrowserInteraction = BrowserTarget & {
 }
 export type BrowserInteractionResult = {
   ok: boolean
-  reason?: string
+  reason?: string | undefined
   title?: string
   url?: string
   controls?: unknown[]
