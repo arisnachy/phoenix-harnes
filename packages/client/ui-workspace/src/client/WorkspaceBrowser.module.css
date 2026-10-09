@@ -322,7 +322,7 @@
 
 /* Wide-only content fades back in on expand remount (mirrors the shell). */
 .wide {
-  animation: wide-in 200ms var(--ds-ease-in-out);
+  animation: wide-in 80ms ease-out;
 }
 
 @keyframes wide-in {
