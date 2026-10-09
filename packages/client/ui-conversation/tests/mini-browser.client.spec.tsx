@@ -24,12 +24,12 @@ const state = {
 function installBrowserMock(current: typeof state = state) {
   const calls: Array<{ type: string; url?: string }> = []
   vi.stubGlobal('fetch', vi.fn(async (input: string, options?: { body?: string }) => {
-    if (String(input).endsWith('/frame')) {
+    if (input.endsWith('/frame')) {
       return new Response(new Uint8Array([255, 216, 255, 217]), {
         status: 200, headers: { 'content-type': 'image/jpeg' },
       })
     }
-    if (String(input).endsWith('/action') && options?.body) {
+    if (input.endsWith('/action') && options?.body) {
       calls.push(JSON.parse(options.body) as { type: string; url?: string })
     }
     return new Response(JSON.stringify(current), {
