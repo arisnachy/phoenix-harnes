@@ -58,7 +58,7 @@ export function parseScene3D(value: unknown): Scene3D | undefined {
 const deg = Math.PI / 180
 function transform(vertex: Vec3, node: Scene3DNode): Vec3 {
   let [x,y,z] = vertex
-  const [rx,ry,rz] = node.rotation ?? [0,0,0]
+  const [rx,ry,rz] = node.rotation ?? [0,0,0] as const
   const ax = rx * deg, ay = ry * deg, az = rz * deg
   ;[y,z] = [y*Math.cos(ax)-z*Math.sin(ax),y*Math.sin(ax)+z*Math.cos(ax)]
   ;[x,z] = [x*Math.cos(ay)+z*Math.sin(ay),-x*Math.sin(ay)+z*Math.cos(ay)]
@@ -85,7 +85,7 @@ function mesh(node: Scene3DNode): Face[] {
           const sphere=(lat:number,lon:number):Vec3=>[Math.cos(lat)*Math.cos(lon)*.5,Math.sin(lat)*.5,Math.cos(lat)*Math.sin(lon)*.5]
           lo=sphere(lat1,a);hi=sphere(lat2,a);lo2=sphere(lat1,b);hi2=sphere(lat2,b)
         } else {
-          const bottom=node.type==='cone'?.5: .5
+          const bottom=.5
           const top=node.type==='cone'?0:.5
           lo=[Math.cos(a)*bottom,-.5,Math.sin(a)*bottom]
           lo2=[Math.cos(b)*bottom,-.5,Math.sin(b)*bottom]
