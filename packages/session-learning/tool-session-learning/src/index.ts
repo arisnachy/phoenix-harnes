@@ -11,6 +11,7 @@ import type {} from '@phoenix-ai/dsh-session-learning'
 import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
+import { isHumanTaskMessage, learningOwnerSessionId } from './team-learning-context.ts'
 import { assessHabitExperience, formatHabitGuidance } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
 import { filterProceduralSearchHits, installProceduralLearning } from './procedural.ts'
@@ -62,6 +63,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
+    const learningOwnerId = learningOwnerSessionId(session)
     const eventType = String(event.type)
     const data = event.data as unknown
     const occurredAt = typeof event.time === 'number' ? event.time : Date.now()
@@ -69,20 +71,20 @@ export function apply(ctx: Context, config: Config): void {
     const projectId = ctx.learningMemory.currentProjectId()
 
     if (eventType === 'user/message') {
+      // Delegated agent prompts are not user instructions or new human tasks.
+      if (!isHumanTaskMessage(session, data)) return
       const text = messageText(data)
       if (text === undefined) return
       tasks.observeUserMessage(sessionId, text, {
         occurredAt,
         ...projectId === undefined ? {} : { projectId },
       })
-      if (isDirectUserMessage(data)) {
-        experience.beginTask({
-          sessionId,
-          text,
-          occurredAt,
-          ...projectId === undefined ? {} : { projectId },
-        })
-      }
+      experience.beginTask({
+        sessionId,
+        text,
+        occurredAt,
+        ...projectId === undefined ? {} : { projectId },
+      })
       void curator.observeUserMessage({
         text,
         sessionId,
@@ -97,25 +99,27 @@ export function apply(ctx: Context, config: Config): void {
 
     if (eventType === 'assistant/message') {
       const usage = assistantUsage(data)
-      if (usage !== undefined) experience.observeUsage(sessionId, usage)
+      if (usage !== undefined) experience.observeUsage(learningOwnerId, usage)
       return
     }
 
     if (eventType === 'tool/call') {
-      experience.observeToolCall(sessionId)
+      experience.observeToolCall(learningOwnerId)
       return
     }
 
     if (eventType === 'tool/result') {
-      experience.observeToolResult(sessionId, toolResultFailed(data))
+      experience.observeToolResult(learningOwnerId, toolResultFailed(data))
       return
     }
 
     if (eventType === 'llm/retry-started') {
-      experience.observeRetry(sessionId)
+      experience.observeRetry(learningOwnerId)
       return
     }
 
+    // A child can finish its own turn, but cannot close or reset the parent's learning.
+    if (eventType === 'goal/change' && session.header.origin === 'subagent') return
     if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
       experience.clear(sessionId)
       return
@@ -351,10 +355,6 @@ function messageText(data: unknown): string | undefined {
   const parts = data.content.flatMap(part => isRecord(part) && typeof part.text === 'string' ? [part.text] : [])
   const text = parts.join(' ').replace(/\s+/gu, ' ').trim()
   return text === '' ? undefined : text
-}
-
-function isDirectUserMessage(data: unknown): boolean {
-  return isRecord(data) && isRecord(data.source) && data.source.kind === 'user'
 }
 
 function assistantUsage(data: unknown): {
