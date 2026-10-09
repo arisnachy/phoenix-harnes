@@ -357,10 +357,6 @@ function messageText(data: unknown): string | undefined {
   return text === '' ? undefined : text
 }
 
-function isDirectUserMessage(data: unknown): boolean {
-  return isRecord(data) && isRecord(data.source) && data.source.kind === 'user'
-}
-
 function assistantUsage(data: unknown): {
   readonly inputTokens: number
   readonly outputTokens: number
