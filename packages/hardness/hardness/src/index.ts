@@ -142,7 +142,7 @@ export class HardnessRegistry extends Service implements HardnessService {
   }
 
   resolveNeed(need: CapabilityNeed, context: CapabilityResolutionContext = {}): CapabilityResolution {
-    return resolveCapabilityNeed(this.list(), need, context)
+    return resolveCapabilityNeed(this.list(), need, context, [...this.evidence.values()])
   }
 
   route(need: CapabilityNeed, options: CapabilityRouteOptions = {}): CapabilityRouteResult {
