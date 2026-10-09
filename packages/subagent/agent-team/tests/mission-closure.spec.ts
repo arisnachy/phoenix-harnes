@@ -61,7 +61,9 @@ describe('Kira Team closure after verified completion', () => {
 
   it('admits subsequent genuine human turns without reusing the old closure', () => {
     expect(teamMissionClosed([start, finished, human])).toBe(false)
-    expect(teamMissionClosed([start, finished, { ...start, data: { turn: 2 } } as unknown as SessionEvent])).toBe(false)
+    // A model-initiated turn/start alone must never revive a closed task.
+    expect(teamMissionClosed([start, finished, { ...start, data: { turn: 2 } } as unknown as SessionEvent])).toBe(true)
+    expect(teamMissionClosed([start, finished, human, { ...start, data: { turn: 2 } } as unknown as SessionEvent])).toBe(false)
     expect(teamMissionClosed([start])).toBe(false)
     expect(teamMissionClosed([])).toBe(false)
   })
