@@ -83,6 +83,18 @@ describe('MiniBrowser in Phoenix conversation', () => {
     fireEvent.click(screen.getByRole('button', { name: /Volver al navegador/ }))
     expect(screen.queryByTitle('Reproductor YouTube')).toBeNull()
   })
+  it('automatically requests a private login form when Kira finds no saved site credentials', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      const payload = String(input).endsWith('/vault')
+        ? { supported: true, origin: 'https://www.youtube.com', configured: false, requiresUser: true }
+        : state
+      return new Response(JSON.stringify(payload), { status: 200 })
+    }))
+    render(<MiniBrowser />)
+    expect(await screen.findByText(/Solo se guardarán las credenciales de este dominio/)).toBeTruthy()
+    expect(screen.getByRole('textbox', { name: 'Usuario o correo' })).toBeTruthy()
+    expect(document.querySelector('input[name="secret"][type="password"]')).toBeTruthy()
+  })
   it('shows a human-only credential prompt without injecting secrets into chat messages', async () => {
     const sends: string[] = []
     vi.stubGlobal('fetch', vi.fn(async (input: string, options?: { body?: string }) => {
