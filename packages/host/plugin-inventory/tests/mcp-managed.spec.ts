@@ -464,7 +464,8 @@ describe('ManagedMcpController', () => {
     expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
       config: expect.objectContaining({
         transport: 'streamable-http', serverName: 'github',
-        url: 'https://api.githubcopilot.com/mcp/', oauth: true,
+        url: 'https://api.githubcopilot.com/mcp/', oauth: false,
+        bearerTokenRef: 'GITHUB_MCP_TOKEN',
       }),
     }))
   })
