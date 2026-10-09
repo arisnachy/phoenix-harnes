@@ -24,6 +24,19 @@ describe('ordinary completion judge', () => {
     })).toEqual({ mode: 'fast', maxPasses: 0 })
   })
 
+  it('does not finance independent review for pure previews and ordinary local work', () => {
+    const samples = [
+      'Muéstrame un formulario de demostración para verlo',
+      'Dame una escala interactiva del 1 al 10',
+      'Explícame brevemente qué hace esta función',
+    ]
+    for (const request of samples) {
+      expect(ordinaryCompletionReviewBudget({
+        request, configuredMaxPasses: 3, mutationCount: 0, failureCount: 0,
+      })).toEqual({ mode: 'fast', maxPasses: 0 })
+    }
+  })
+
   it('escalates semantic review only for material scope, risk, or failed attempts', () => {
     expect(ordinaryCompletionReviewBudget({
       request: 'Refactor the Phoenix router across the project without changing behavior.',
@@ -93,6 +106,8 @@ describe('ordinary completion judge', () => {
     })
     const prompt = options?.prompt?.flatMap(block => block.type === 'text' ? [block.text] : []).join('\n') ?? ''
     expect(prompt).toMatch(/passing tests are evidence, not blanket proof/i)
+    expect(prompt).toMatch(/Optimize for quality first, then latency, then token cost/)
+    expect(prompt).toMatch(/do not repeat passing checks or initiate unrelated work/)
     expect(prompt).toMatch(/superlinear time or space/i)
     expect(prompt).toMatch(/message field/i)
     expect(prompt).toMatch(/universal risk pass/i)
