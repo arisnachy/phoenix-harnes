@@ -665,6 +665,84 @@ describe('connectors settings section', () => {
     })
   })
 
+  it('keeps Brave Search API key input inside its own card, not the page header', async () => {
+    const answer = vi.fn(async () => ok({ accepted: true }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'mcp-client/brave-search', label: 'MCP brave-search',
+        methods: [{ id: 'credentials', label: 'Configure Brave Search' }], inFlight: false,
+      }] })),
+      begin: vi.fn(async () => ok({ attemptId: 'brave-secret' })),
+      status: vi.fn(async () => ok({ attemptId: 'brave-secret', status: 'pending' as const,
+        nextSeq: 1, notices: [], prompt: {
+          promptId: 'api-key', kind: 'secret' as const,
+          message: 'Introduce BRAVE_API_KEY',
+        },
+      })),
+      answer, cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({ managed: [{
+        entryId: 'brave', serverName: 'brave-search', url: 'stdio://brave-search',
+        source: { kind: 'curated' as const, connectorId: 'brave-search' },
+      }], runtime: [{ serverName: 'brave-search', transport: 'stdio' as const,
+        status: 'auth-required' as const, toolNames: [] }] })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    }
+    renderHub(api, { mcpRegistry })
+    const card = document.querySelector('[data-connector-id="brave-search"]')!
+    await waitFor(() => expect(card.querySelector('button')).toBeTruthy())
+    fireEvent.click(Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Authorize')!)
+    await waitFor(() => expect(card.textContent).toContain('Introduce BRAVE_API_KEY'), { timeout: 2500 })
+    const input = card.querySelector('input[type="password"]') as HTMLInputElement | null
+    expect(input).not.toBeNull()
+    expect(document.querySelector('.authorizationPanel input[type="password"]')).toBeNull()
+    fireEvent.change(input!, { target: { value: 'test-brave-key' } })
+    fireEvent.click(Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Continue')!)
+    await waitFor(() => expect(answer).toHaveBeenCalledWith({
+      attemptId: 'brave-secret', promptId: 'api-key', value: 'test-brave-key',
+    }))
+  })
+
+  it('provides a real curated Vercel MCP installer instead of an inert available card', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const, connector: { entryId: 'vercel',
+        serverName: 'vercel', url: 'https://mcp.vercel.com',
+        source: { kind: 'curated' as const, connectorId: 'vercel' },
+      },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="vercel"]')!
+    const button = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Install')
+    expect(button).toBeTruthy()
+    fireEvent.click(button!)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'vercel' }))
+  })
+
+  it('offers official MCP registry discovery for an uninstalled provider without a pinned id', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const search = vi.fn(async () => ({ source: 'official-mcp-registry' as const,
+      query: 'Neon', fetchedAt: '2026-10-09T00:00:00Z', stale: false, candidates: [] }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), search,
+    } })
+    const card = document.querySelector('[data-connector-id="neon"]')!
+    const button = Array.from(card.querySelectorAll('button'))
+      .find(b => b.textContent === 'Find official / install')
+    expect(button).toBeTruthy()
+    fireEvent.click(button!)
+    await waitFor(() => expect(search).toHaveBeenCalledWith({ query: 'Neon', limit: 12 }))
+  })
+
   it('lets auth-required runtime state override stale connected telemetry', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [{
