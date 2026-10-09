@@ -289,7 +289,8 @@ async function action(input: Action): Promise<Record<string, unknown>> {
 }
 /** Reject DNS rebinding and cross-origin browser requests, even on localhost. */
 export function miniBrowserRequestAllowed(input: {
-  remoteAddress?: string; host?: string; origin?: string; marker?: string; fetchSite?: string;
+  remoteAddress?: string | undefined; host?: string | undefined; origin?: string | undefined;
+  marker?: string | undefined; fetchSite?: string | undefined;
 }): boolean {
   const address = input.remoteAddress?.replace(/^::ffff:/, '')
   if (!isLoopback(address) || input.marker !== '1') return false
