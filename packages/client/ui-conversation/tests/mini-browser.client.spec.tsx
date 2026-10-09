@@ -90,7 +90,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
       <MiniBrowser key="new-request" requested active />
     </>)
     expect(screen.getAllByRole('region', { name: 'Navegador de Kira' })).toHaveLength(1)
-    expect(screen.getByRole('button', { name: /Abrir navegador completo/ })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /Abrir navegador completo/ })).toBeTruthy()
   })
 
   it('keeps a previous MiniBrowser card visible alongside a new request', async () => {
