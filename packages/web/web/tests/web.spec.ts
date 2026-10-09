@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import WebRuntime, {
   WebError,
@@ -120,6 +120,45 @@ describe('WebRuntime execution resolution', () => {
     }))
     web.registerSearchProvider(makeSearchProvider('browser', available, () => Promise.resolve(searchResult('browser'))))
     await expect(web.search({ query: 'q' })).resolves.toMatchObject({ content: 'browser' })
+  })
+
+  it('cools down both failed search providers, then automatically retries after one minute', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000)
+    try {
+      const { web } = await mountWeb({ searchProvider: 'openrouter', searchFallbackProviders: ['free-html'] })
+      let primaryCalls = 0
+      let fallbackCalls = 0
+      web.registerSearchProvider(makeSearchProvider('openrouter', available, async () => {
+        primaryCalls++
+        throw new WebError('quota exhausted', 'WEB_PROVIDER_QUOTA')
+      }))
+      web.registerSearchProvider(makeSearchProvider('free-html', available, async () => {
+        fallbackCalls++
+        if (fallbackCalls === 1) throw new WebError('search blocked', 'WEB_PROVIDER_UNAVAILABLE')
+        return searchResult('recovered')
+      }))
+      await expect(web.search({ query: 'first' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_FALLBACK_EXHAUSTED' })
+      await expect(web.search({ query: 'similar question' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_FALLBACK_EXHAUSTED' })
+      expect([primaryCalls, fallbackCalls]).toEqual([1, 1])
+      now.mockReturnValue(1_060_001)
+      await expect(web.search({ query: 'fresh question' })).resolves.toMatchObject({ content: 'recovered' })
+      expect([primaryCalls, fallbackCalls]).toEqual([2, 2])
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  it('uses a healthy fallback immediately while keeping the failed primary in cooldown', async () => {
+    const { web } = await mountWeb({ searchProvider: 'openrouter', searchFallbackProviders: ['free-html'] })
+    let primaryCalls = 0
+    web.registerSearchProvider(makeSearchProvider('openrouter', available, async () => {
+      primaryCalls++
+      throw new WebError('API key not configured', 'WEB_PROVIDER_CREDENTIAL_MISSING')
+    }))
+    web.registerSearchProvider(makeSearchProvider('free-html', available, async () => searchResult('public sources')))
+    await expect(web.search({ query: 'first' })).resolves.toMatchObject({ content: 'public sources' })
+    await expect(web.search({ query: 'second' })).resolves.toMatchObject({ content: 'public sources' })
+    expect(primaryCalls).toBe(1)
   })
 
   it('ignores unusable providers when auto-selecting', async () => {
