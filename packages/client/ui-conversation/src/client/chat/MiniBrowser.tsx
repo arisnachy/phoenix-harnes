@@ -78,6 +78,7 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
   const [connectionError, setConnectionError] = useState<string>()
   const [captureError, setCaptureError] = useState<string>()
   const focusRef = useRef<HTMLImageElement>(null)
+  const inlineRef = useRef<HTMLDivElement>(null)
   const currentTab = useRef<string | undefined>(undefined)
   const lastObservedUrl = useRef<string | undefined>(undefined)
   const busy = useRef(false)
@@ -85,6 +86,17 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
   const frameRef = useRef<string | undefined>(undefined)
   const show = !dismissed && (requested || enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
   const videoId = youtubeId(snapshot.url)
+
+  // The card is mounted after the chat flow. A late CDP connection changes
+  // its height without changing chat message IDs; bring the result into view
+  // once instead of leaving it invisibly below the last Kira bubble.
+  useEffect(() => {
+    if (!requested || !show || expanded) return
+    const element = inlineRef.current
+    if (element && typeof element.scrollIntoView === 'function') {
+      element.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+    }
+  }, [requested, show, expanded, snapshot.tabId, snapshot.url])
 
   const run = useCallback(async (request: Command): Promise<void> => {
     try {
@@ -282,7 +294,7 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
     </section>
   )
   return <>
-    {!expanded && <div className={css.inline}>{show ? viewer : (
+    {!expanded && <div ref={inlineRef} className={css.inline}>{show ? viewer : (
       <button type="button" className={css.launch} onClick={() => { setDismissed(false); setCollapsed(false); setEnabled(true); void run({ type: 'open', url: 'https://www.google.com' }) }}>
         ◉ Abrir navegador
       </button>
