@@ -77,6 +77,15 @@ export function useAuthorizationAttempt(
   const failedPopupRef = useRef(false)
   const activeAttemptIdRef = useRef<string | undefined>(undefined)
   const pendingBeginTimerRef = useRef<number | undefined>(undefined)
+  const consentDeadlineRef = useRef<number | undefined>(undefined)
+  const beginSequenceRef = useRef(0)
+
+  const clearConsentDeadline = useCallback((): void => {
+    if (consentDeadlineRef.current !== undefined) {
+      window.clearTimeout(consentDeadlineRef.current)
+      consentDeadlineRef.current = undefined
+    }
+  }, [])
 
   const closeReservedPopup = useCallback((): void => {
     popupTimeoutRef.current?.()
@@ -97,8 +106,9 @@ export function useAuthorizationAttempt(
     popupTimeoutRef.current?.()
     popupTimeoutRef.current = undefined
     failedPopupRef.current = true
+    clearConsentDeadline()
     setFailure(message)
-  }, [])
+  }, [clearConsentDeadline])
 
   // OAuth discovery, client registration and API prompts run within PHOENIX.
   // Do NOT open oauth-waiting.html or about:blank: those tabs are misleading
@@ -116,6 +126,7 @@ export function useAuthorizationAttempt(
     }
     popupTimeoutRef.current?.()
     popupTimeoutRef.current = undefined
+    clearConsentDeadline()
     // Consent URLs are opened only once they exist. Never use a placeholder.
     // Chrome can block a window.open called after an async Host response; in
     // that case navigate the current tab (permitted after async user intent).
@@ -136,14 +147,16 @@ export function useAuthorizationAttempt(
       navigatedRef.current = false
       setFailure('El navegador impidió abrir el proveedor. Pulsa «Abrir página de autorización» en PHOENIX para continuar.')
     }
-  }, [failReservedPopup])
+  }, [clearConsentDeadline, failReservedPopup])
 
 
   useEffect(() => () => {
+    if (pendingBeginTimerRef.current !== undefined) window.clearTimeout(pendingBeginTimerRef.current)
+    clearConsentDeadline()
     // Unmounting Settings must not close an already-open provider consent page.
     // Only discard the blank reservation when the user has not navigated yet.
     if (!navigatedRef.current) closeReservedPopup()
-  }, [closeReservedPopup])
+  }, [clearConsentDeadline, closeReservedPopup])
 
   useEffect(() => {
     if (api === undefined || attempt?.status !== 'pending') return
@@ -186,13 +199,16 @@ export function useAuthorizationAttempt(
           ...view.error === undefined ? {} : { error: view.error },
         })
         if (view.status === 'authorized') {
+          clearConsentDeadline()
           activeAttemptIdRef.current = undefined
           closeReservedPopup()
           onAuthorizedRef.current()
         } else if (view.status === 'cancelled') {
+          clearConsentDeadline()
           activeAttemptIdRef.current = undefined
           if (!failedPopupRef.current) closeReservedPopup()
         } else if (view.status === 'failed') {
+          clearConsentDeadline()
           activeAttemptIdRef.current = undefined
           const reason = view.error ?? 'El proveedor no pudo iniciar OAuth. Comprueba la configuración y vuelve a intentar.'
           if (!navigatedRef.current) failReservedPopup(reason)
@@ -236,14 +252,17 @@ export function useAuthorizationAttempt(
         window.clearTimeout(timer)
       }
     }
-  }, [api, attempt, closeReservedPopup, failReservedPopup, navigateOAuthPopup])
+  }, [api, attempt, clearConsentDeadline, closeReservedPopup, failReservedPopup, navigateOAuthPopup])
 
   const begin = (key: string, method = 'oauth'): void => {
     if (api === undefined) return
     setPreparingKey(key)
+    const beginSequence = ++beginSequenceRef.current
+    clearConsentDeadline()
     // A hung RPC must not leave Conectando forever before it returns an id.
     if (pendingBeginTimerRef.current !== undefined) window.clearTimeout(pendingBeginTimerRef.current)
     pendingBeginTimerRef.current = window.setTimeout(() => {
+      if (beginSequenceRef.current !== beginSequence) return
       pendingBeginTimerRef.current = undefined
       setPreparingKey(undefined)
       setFailure('PHOENIX no recibió respuesta del Host de autorización en 15 segundos. Comprueba que el Host está activo y reintenta.')
@@ -257,7 +276,10 @@ export function useAuthorizationAttempt(
     if (method === 'oauth') reserveOAuthPopup()
     else closeReservedPopup()
     void api.begin({ key, method }).then((response) => {
-      if (pendingBeginTimerRef.current === undefined) return
+      if (beginSequenceRef.current !== beginSequence || pendingBeginTimerRef.current === undefined) {
+        if (response.result.ok) void api.cancel({ attemptId: response.result.value.attemptId }).catch(() => undefined)
+        return
+      }
       window.clearTimeout(pendingBeginTimerRef.current)
       pendingBeginTimerRef.current = undefined
       setPreparingKey(undefined)
@@ -266,10 +288,23 @@ export function useAuthorizationAttempt(
         setFailure(response.result.error.message)
         return
       }
-      activeAttemptIdRef.current = response.result.value.attemptId
-      setAttempt({ id: response.result.value.attemptId, key, status: 'pending', nextSeq: 0 })
+      const attemptId = response.result.value.attemptId
+      activeAttemptIdRef.current = attemptId
+      // The Host normally returns a diagnostic after 38 s. A local deadline
+      // also covers a lost/hung status RPC, never leaving a silent spinner.
+      consentDeadlineRef.current = window.setTimeout(() => {
+        if (activeAttemptIdRef.current !== attemptId || navigatedRef.current) return
+        const message = 'El MCP no entregó una URL OAuth en 45 segundos. Comprueba el estado de conexión y los requisitos de autenticación del proveedor.'
+        activeAttemptIdRef.current = undefined
+        failReservedPopup(message)
+        setAttempt(current => current?.id === attemptId
+          ? { ...current, status: 'failed', error: message }
+          : current)
+        void api.cancel({ attemptId }).catch(() => undefined)
+      }, 45_000)
+      setAttempt({ id: attemptId, key, status: 'pending', nextSeq: 0 })
     }, (error: unknown) => {
-      if (pendingBeginTimerRef.current === undefined) return
+      if (beginSequenceRef.current !== beginSequence || pendingBeginTimerRef.current === undefined) return
       window.clearTimeout(pendingBeginTimerRef.current)
       pendingBeginTimerRef.current = undefined
       setPreparingKey(undefined)
@@ -298,6 +333,7 @@ export function useAuthorizationAttempt(
 
   const cancel = (): void => {
     if (api === undefined || attempt === undefined) return
+    clearConsentDeadline()
     setPreparingKey(undefined)
     activeAttemptIdRef.current = undefined
     closeReservedPopup()
