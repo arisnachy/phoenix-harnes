@@ -1643,6 +1643,54 @@ describe('connectors settings section', () => {
     expect(install).not.toHaveBeenCalled()
   })
 
+  it('uses the managed Notion registry identity to find hashed MCP runtime and OAuth key', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'registered-notion-oauth' }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'mcp-client/mcp-a1b2c3d',
+        label: 'MCP mcp-a1b2c3d',
+        methods: [{ id: 'oauth', label: 'Authorize Notion' }],
+        inFlight: false,
+      }] })),
+      begin, status: vi.fn(async () => ok({
+        attemptId: 'registered-notion-oauth', status: 'pending',
+        nextSeq: 0, notices: [],
+      })),
+      answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{
+          entryId: 'notion-installed',
+          serverName: 'mcp-a1b2c3d',
+          url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'registry' as const, name: 'com.notion/mcp', version: '1.0.0' },
+        }],
+        runtime: [{
+          serverName: 'mcp-a1b2c3d',
+          transport: 'streamable-http' as const,
+          status: 'auth-required' as const,
+          reasonCode: 'authorization-required' as const,
+          toolNames: [],
+        }],
+      })),
+      reconnect: vi.fn(), install: vi.fn(), search: vi.fn(),
+    }
+    renderHub(api, { mcpRegistry })
+    await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="notion"]')
+      expect(card?.textContent).toContain('Authorization required')
+      expect(card?.textContent).not.toContain('Install')
+    })
+    const card = document.querySelector('[data-connector-id="notion"]')!
+    const authorize = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Authorize')
+    expect(authorize).toBeTruthy()
+    fireEvent.click(authorize!)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/mcp-a1b2c3d', method: 'oauth' })
+    })
+  })
+
   it('offers an actual Authorize action for a registry-installed MCP that needs OAuth', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
