@@ -64,10 +64,11 @@ export function MiniBrowser() {
   const [error, setError] = useState<string>()
   const [supported, setSupported] = useState(false)
   const focusRef = useRef<HTMLImageElement>(null)
-  const currentTab = useRef<string>()
+  const currentTab = useRef<string | undefined>(undefined)
+  const lastObservedUrl = useRef<string | undefined>(undefined)
   const busy = useRef(false)
   const mounted = useRef(true)
-  const frameRef = useRef<string>()
+  const frameRef = useRef<string | undefined>(undefined)
   const show = !dismissed && (enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
 
   const run = useCallback(async (request: Command): Promise<void> => {
@@ -130,6 +131,14 @@ export function MiniBrowser() {
   useEffect(() => () => {
     if (frameRef.current) URL.revokeObjectURL(frameRef.current)
   }, [])
+
+  useEffect(() => {
+    if (snapshot.url && snapshot.url !== 'about:blank' && snapshot.url !== lastObservedUrl.current) {
+      setDismissed(false)
+      setCollapsed(false)
+    }
+    lastObservedUrl.current = snapshot.url
+  }, [snapshot.url])
 
   useEffect(() => {
     if (snapshot.tabId !== currentTab.current) {
