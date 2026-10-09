@@ -29,6 +29,17 @@ describe('qualityRequirementsForNeed', () => {
     expect(requirements.join(' ')).toMatch(/unsupported|claim|factual/i)
   })
 
+  it.each([
+    'Investiga estudios recientes de neuropsicología y revisa las fuentes',
+    'Haz una investigación profunda y cita los artículos originales',
+    'Compara la evidencia de dos informes',
+  ])('recognizes Spanish research requests and enforces original source reading: %s', description => {
+    const requirements = qualityRequirementsForNeed({ description }).join(' ')
+    expect(requirements).toContain('opening original pages')
+    expect(requirements).toContain('study design')
+    expect(requirements).toContain('identical searches')
+  })
+
   it('requires reproducibility and validation for data analysis', () => {
     const requirements = qualityRequirementsForNeed(need('analysis', { description: 'analyze a dataset' }))
     expect(requirements.join(' ')).toMatch(/reproduc/i)

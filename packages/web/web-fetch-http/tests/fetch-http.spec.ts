@@ -6,7 +6,10 @@ import WebRuntime from '@phoenix-ai/dsh-web'
 import { HttpFetchProvider, LOCAL_FETCH_PROVIDER_ID } from '@phoenix-ai/dsh-web-fetch-http'
 import type { HttpFetchLimits } from '@phoenix-ai/dsh-web-fetch-http'
 import * as fetchPlugin from '@phoenix-ai/dsh-web-fetch-http'
-import { assertPublicFetchTarget, classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from '../src/policy.ts'
+import {
+  assertPublicFetchTarget, classifyContentType, decoderForCharset,
+  isSameOrigin, parseCharset, selectPublicDialAddress, validateFetchUrl,
+} from '../src/policy.ts'
 
 const limits: HttpFetchLimits = {
   maxUrlLength: 2048,
@@ -54,6 +57,36 @@ describe('policy helpers', () => {
   it('rejects localhost resolution before any request', async () => {
     await expect(assertPublicFetchTarget(new URL('http://localhost:8080')))
       .rejects.toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_URL' }))
+  })
+
+  it('rejects any DNS-rebinding address, including mixed public and private records', () => {
+    expect(selectPublicDialAddress('public.example', [
+      { address: '93.184.216.34', family: 4 },
+    ])).toEqual({ address: '93.184.216.34', family: 4 })
+    expect(() => selectPublicDialAddress('rebind.example', [
+      { address: '93.184.216.34', family: 4 },
+      { address: '127.0.0.1', family: 4 },
+    ])).toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_URL' }))
+    expect(() => selectPublicDialAddress('private.example', [
+      { address: '169.254.169.254', family: 4 },
+    ])).toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_URL' }))
+    expect(() => selectPublicDialAddress('empty.example', []))
+      .toThrow(expect.objectContaining({ code: 'WEB_BLOCKED_URL' }))
+  })
+
+  it('blocks URL-canonicalized IPv4-mapped IPv6 loopback and metadata endpoints', async () => {
+    const mapped = [
+      'http://[::ffff:127.0.0.1]/',
+      'http://[::ffff:169.254.169.254]/',
+      'http://[0:0:0:0:0:ffff:10.0.0.1]/',
+      'http://[::ffff:192.168.1.1]/',
+      'http://[::7f00:1]/',
+    ]
+    for (const raw of mapped) {
+      await expect(assertPublicFetchTarget(new URL(raw))).rejects.toThrow(
+        expect.objectContaining({ code: 'WEB_BLOCKED_URL' }),
+      )
+    }
   })
 
   it('classifies content types', () => {

@@ -1,0 +1,29 @@
+{
+  "description": "EJEMPLO SINTÉTICO deliberadamente malo",
+  "cases": [
+    {
+      "id": "mcp-diagnosis",
+      "answer": "El 404 demuestra que faltan credenciales, todo confirmado.",
+      "observedWebFetchUrls": [],
+      "elapsedMs": 400000,
+      "promptTokens": 29000,
+      "completionTokens": 6000
+    },
+    {
+      "id": "neuro-evidence",
+      "answer": "Ya está revisado y es concluyente.",
+      "observedWebFetchUrls": [],
+      "elapsedMs": 400000,
+      "promptTokens": 29000,
+      "completionTokens": 6000
+    },
+    {
+      "id": "freshness-conflict",
+      "answer": "Ya está revisado y es concluyente.",
+      "observedWebFetchUrls": [],
+      "elapsedMs": 400000,
+      "promptTokens": 29000,
+      "completionTokens": 6000
+    }
+  ]
+}
