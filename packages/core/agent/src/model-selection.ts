@@ -224,6 +224,12 @@ const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|d
 /** A stopped operational reply that still announces the next action rather than performing it. */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual unfinished-action matcher auditable as one literal.
 const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate))/isu
+/** Short explicit promises are not final answers either. */
+const AUTO_SHORT_PENDING_PROMISE = /\b(?:lo|la)\s+(?:har[eé]|revisar[eé]|probar[eé]|verificar[eé])\s+(?:ahora|enseguida)\b/iu
+function phoenixAutoUnfinishedAction(text: string): boolean {
+  return AUTO_UNFINISHED_ACTION.test(text) || AUTO_SHORT_PENDING_PROMISE.test(text)
+}
+
 /** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
 const AUTO_CONTINUATION_LIMIT = 4
 const AUTO_EXECUTION_CONTINUATION =
@@ -590,7 +596,7 @@ function phoenixAutoExplicitlyClosed(text: string): boolean {
   const normalized = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   // This protects finished first-step answers without treating generic
   // progress such as "tests completed; now deploy" as terminal.
-  if (AUTO_UNFINISHED_ACTION.test(text)) return false
+  if (phoenixAutoUnfinishedAction(text)) return false
   return /\b(?:tarea\s+(?:ya\s+)?(?:terminada|completada|finalizada)|(?:ya\s+)?(?:termine|finalice|complete|terminado|completado|finalizado)|no\s+(?:queda|hay)\s+(?:trabajo|nada|tareas?)\s+pendiente|sin\s+(?:trabajo|tareas?)\s+pendientes?|done|finished|completed|nothing\s+(?:else\s+)?(?:left|pending))\b/u.test(normalized)
 }
 
@@ -990,7 +996,7 @@ export function installModelSelection(
       && !phoenixAutoExplicitlyClosed(latest.text)
     const announcedNextAction = !latestStepHasToolActivity
       && latest.text.length > 0
-      && AUTO_UNFINISHED_ACTION.test(latest.text)
+      && phoenixAutoUnfinishedAction(latest.text)
     if (!plannerStoppedBeforeActing && !announcedNextAction) return
     if (phoenixAutoState.continuationCount >= AUTO_CONTINUATION_LIMIT) return
 
