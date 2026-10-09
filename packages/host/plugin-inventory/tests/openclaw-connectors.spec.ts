@@ -73,14 +73,17 @@ describe('OpenClaw connector bridge', () => {
     const calls: string[] = []
     const run: OpenClawCommandRunner = (bin, args) => {
       calls.push(`${bin} ${args.join(' ')}`)
-      return { status: 0, stdout: '', stderr: '' }
+      return { status: 0, stdout: args[0] === 'api' ? 'verified-login\n' : '', stderr: '' }
     }
     expect(new OpenClawConnectorBridge(run).state('github')).toMatchObject({
       connected: true,
+      account: 'verified-login',
       phase: 'ready',
       skillAlias: 'openclaw-github',
     })
     expect(calls).toContain('gh auth status --hostname github.com')
+    expect(calls).toContain('gh api user --hostname github.com --jq .login')
+    expect(calls.join(' ')).not.toContain('copilot')
   })
 
   it('reports missing runtime without claiming an OpenClaw connection', () => {
