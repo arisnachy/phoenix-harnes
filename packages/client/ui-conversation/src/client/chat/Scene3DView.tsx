@@ -241,13 +241,18 @@ function paint(canvas:HTMLCanvasElement,scene:Scene3D,faces:readonly Face[],
 
 /** Native interactive 3D scene canvas; no CDN, fake PNG interaction, or network. */
 export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown; readonly expanded?: boolean }) {
-  const scene=useMemo(()=>parseScene3D(spec),[spec])
+  const [scene,setScene]=useState<Scene3D|undefined>(()=>parseScene3D(spec))
+  useEffect(()=>setScene(parseScene3D(spec)),[spec])
   const canvas=useRef<HTMLCanvasElement>(null)
   const drag=useRef<{x:number;y:number;button:number}|null>(null)
   const angle=useRef({yaw:-.65,pitch:.38,zoom:1,pan:[0,0] as [number,number]})
   const [autoRotate,setAutoRotate]=useState(false)
   const redraw=useRef<()=>void>(()=>{})
   const [problem,setProblem]=useState('')
+  const [selected,setSelected]=useState(0)
+  const [editOpen,setEditOpen]=useState(false)
+  const picker=useRef<HTMLInputElement>(null)
+  const selectedNode=scene?.nodes[selected]
   const meshes=useMemo(()=>scene?.nodes.flatMap(mesh)??[],[scene])
   const bounds=useMemo(()=>scene===undefined?undefined:sceneBounds(scene),[scene])
   useEffect(()=>{
@@ -273,6 +278,43 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
   },[scene,meshes,bounds,autoRotate,expanded])
   if(scene===undefined)return <p role="alert" className={css.error}>La escena 3D no contiene geometría válida.</p>
   const update=(fn:()=>void)=>{fn();redraw.current()}
+  const edit=(fn:(node:Scene3DNode)=>Scene3DNode):void=>{
+    setScene(current=>current===undefined?current:{
+      ...current,nodes:current.nodes.map((node,i)=>i===selected?fn(node):node),
+    })
+  }
+  const save=(extension:string,content:string|Uint8Array,type:string):void=>{
+    const blob=new Blob([content as BlobPart],{type})
+    const url=URL.createObjectURL(blob)
+    const anchor=document.createElement('a')
+    anchor.href=url;anchor.download=(scene.name||'phoenix-3d').replace(/[^a-z0-9_-]+/giu,'-')+extension
+    anchor.click()
+    setTimeout(()=>URL.revokeObjectURL(url),1000)
+  }
+  const importFile=async(file:File):Promise<void>=>{
+    if(file.size>12_000_000)throw Error('Máximo 12 MB por modelo.')
+    const name=file.name.toLowerCase()
+    let imported:unknown
+    if(name.endsWith('.glb'))imported=importSceneGLTF(new Uint8Array(await file.arrayBuffer()))
+    else if(name.endsWith('.gltf'))imported=importSceneGLTF(await file.text())
+    else if(name.endsWith('.json'))imported=JSON.parse(await file.text()) as unknown
+    else throw Error('Selecciona un archivo .glb, .gltf o .scene3d.json.')
+    const validated=parseScene3D(imported)
+    if(validated===undefined)throw Error('El archivo no contiene una escena 3D compatible.')
+    setScene(validated);setSelected(0);setProblem('')
+  }
+  const preset=(name:'glass'|'wood'|'concrete'|'metal'|'water'|'foliage'):void=>{
+    const presets:Record<typeof name,Scene3DMaterial>={
+      glass:{preset:'glass',baseColor:'#b5d8d6',roughness:.08,metallic:0,opacity:.55,transmission:.85},
+      wood:{preset:'wood',baseColor:'#a67a4b',roughness:.82,metallic:0},
+      concrete:{preset:'concrete',baseColor:'#d6d0c8',roughness:.9,metallic:0},
+      metal:{preset:'metal',baseColor:'#aeb8be',roughness:.22,metallic:.95,clearcoat:.55},
+      water:{preset:'water',baseColor:'#41b9b8',roughness:.08,metallic:0,opacity:.76,transmission:.35},
+      foliage:{preset:'foliage',baseColor:'#54875b',roughness:.96,metallic:0},
+    }
+    const material=presets[name]
+    edit(node=>({...node,color:material.baseColor??node.color,material}))
+  }
   return <section className={css.root} data-phoenix-scene3d="interactive" data-scene-node-count={scene.nodes.length}>
     <div className={css.toolbar}>
       <span className={css.tag}>3D interactivo · {scene.nodes.length} piezas</span>
@@ -284,6 +326,10 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
         <button type="button" onClick={()=>update(()=>{angle.current={yaw:-.65,pitch:.38,zoom:1,pan:[0,0]}})}>Restablecer</button>
         <button type="button" aria-pressed={autoRotate} onClick={()=>setAutoRotate(value=>!value)}>
           {autoRotate?'Pausar':'Girar'}</button>
+        <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=0;angle.current.pan=[0,0]})}>Frente</button>
+        <button type="button" onClick={()=>update(()=>{angle.current.yaw=0;angle.current.pitch=1.48;angle.current.pan=[0,0]})}>Planta</button>
+        <button type="button" onClick={()=>update(()=>{angle.current.yaw=-.785;angle.current.pitch=.615})}>Isométrica</button>
+        <button type="button" aria-pressed={editOpen} onClick={()=>setEditOpen(value=>!value)}>Editar</button>
       </div>
     </div>
     <canvas ref={canvas} className={expanded?css.canvasLarge:css.canvas} aria-label={`Modelo tridimensional manipulable: ${scene.name}`}
@@ -308,7 +354,45 @@ export function Scene3DView({ spec, expanded = false }: { readonly spec: unknown
       onContextMenu={event=>event.preventDefault()}
       onWheel={event=>{event.preventDefault();update(()=>{angle.current.zoom=Math.max(.2,Math.min(6,angle.current.zoom*(event.deltaY>0?.91:1.1)))})}}
     />
+    <div className={css.actions} style={{padding:'0 12px 8px',justifyContent:'flex-end'}}>
+      <button type="button" onClick={()=>save('.scene3d.json',JSON.stringify(scene,null,2),'application/json')}>JSON</button>
+      <button type="button" onClick={()=>{try{save('.gltf',exportSceneGLTF(scene),'model/gltf+json')}catch(error){setProblem(String(error))}}}>Exportar glTF</button>
+      <button type="button" onClick={()=>{try{save('.glb',exportSceneGLB(scene),'model/gltf-binary')}catch(error){setProblem(String(error))}}}>Exportar GLB</button>
+      <button type="button" onClick={()=>picker.current?.click()}>Importar 3D</button>
+      <input ref={picker} className={css.hiddenInput} type="file" accept=".glb,.gltf,.json,.scene3d.json"
+        aria-label="Importar modelo GLB glTF o JSON" onChange={event=>{
+          const file=event.currentTarget.files?.[0];event.currentTarget.value=''
+          if(file!==undefined)void importFile(file).catch(error=>setProblem(error instanceof Error?error.message:'No se pudo importar el modelo.'))
+        }}/>
+    </div>
+    {editOpen&&selectedNode!==undefined&&<div className={css.editor}>
+      <label>Pieza <select aria-label="Seleccionar pieza 3D" value={selected} onChange={e=>setSelected(Number(e.target.value))}>
+        {scene.nodes.map((node,i)=><option key={i} value={i}>{node.name??node.type} · {i+1}</option>)}
+      </select></label>
+      <label>Color <input aria-label="Color de pieza" type="color" value={selectedNode.color}
+        onChange={e=>edit(node=>({...node,color:e.target.value,material:{...node.material,baseColor:e.target.value}}))}/></label>
+      <div className={css.actions}>
+        {(['glass','wood','concrete','metal','water','foliage'] as const).map(name=>
+          <button key={name} type="button" onClick={()=>preset(name)}>{name}</button>)}
+      </div>
+      <div className={css.actions}>
+        {(['x','y','z'] as const).map((axis,i)=><button key={axis} type="button" onClick={()=>
+          edit(node=>({...node,position:node.position.map((v,j)=>j===i?Math.round((v+.5)*2)/2:v) as [number,number,number]}))}>
+          Mover {axis.toUpperCase()} +0.5</button>)}
+        <button type="button" onClick={()=>edit(node=>({...node,rotation:[
+          node.rotation?.[0]??0,((node.rotation?.[1]??0)+15)%360,node.rotation?.[2]??0,
+        ]}))}>Girar pieza 15°</button>
+        <button type="button" onClick={()=>edit(node=>({...node,hidden:node.hidden!==true}))}>
+          {selectedNode.hidden?'Mostrar':'Ocultar'}</button>
+        <button type="button" disabled={scene.nodes.length>=150} onClick={()=>setScene(current=>
+          current===undefined||current.nodes.length>=150?current:{...current,nodes:[...current.nodes,{
+            ...selectedNode,name:(selectedNode.name??'Pieza')+' copia',
+            position:[selectedNode.position[0]+1,selectedNode.position[1],selectedNode.position[2]],
+          }]})}>Duplicar</button>
+      </div>
+      <p>Edición básica · traslación con ajuste de 0,5 m · parámetros PBR exportables.</p>
+    </div>}
     {problem!==''&&<p role="alert" className={css.error}>{problem}</p>}
-    <div className={css.help}>Arrastra para girar · Rueda para zoom · Mayús + arrastrar para mover · Descarga JSON para usar en tus apps</div>
+    <div className={css.help}>Arrastra para girar · Rueda para zoom · Mayús + arrastrar para mover · Exporta GLB/glTF/JSON e importa tus modelos para reutilizarlos en apps</div>
   </section>
 }
