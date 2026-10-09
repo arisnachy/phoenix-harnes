@@ -155,6 +155,15 @@ function webSurfacePrompt(webUrl: string): string {
     + 'Distinguish a verified page navigation from an in-chat screenshot: if a frame or MiniBrowser view fails, '
     + 'explicitly report that the page may be open in Chromium but is NOT yet visible in the conversation. '
     + 'Never claim the user can see the page inside Phoenix until the MiniBrowser display confirms it. '
+    + 'For web forms and browser interaction, prefer the headless Chromium MCP tools over Computer desktop screenshots: '
+    + 'inspect_page ONCE for control labels and readonly/disabled flags, fill_form ONCE with all authorized fields, '
+    + 'submit_form ONCE only when the user explicitly requested submission, then wait_for the actual confirmation text. '
+    + 'For single controls use interact, not a new plan or a subagent. Never fill hidden, disabled, readonly, CAPTCHA '
+    + 'or file controls through workarounds. Respect browser-action permissions and do not invent a successful submission. '
+    + 'If cross-origin frames, native dialogs, OS-level windows, unexpected login, or anti-bot checks block DOM actions, '
+    + 'report the exact blocker and request the minimum human intervention; do not loop through missing desktop windows. '
+    + 'Delegate only independent substantive work; avoid unnecessary web validation subagents for simple forms. '
+
     + updateContract
     + 'Starting another server does not update this GUI. '
     + 'The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. '
