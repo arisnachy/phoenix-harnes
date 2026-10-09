@@ -242,7 +242,7 @@ export function addBrowserCards(
   nodes: readonly OrderedChatNode[],
 ): FlowItem[] {
   const requests = nodes.filter(isBrowserRequest)
-  if (requests.length === 0) return flow
+  if (requests.length === 0 && !flow.some(item => item.kind === 'optimistic' && isBrowserPrompt(item.text))) return flow
   const result: FlowItem[] = []
   let pendingUserKey: string | undefined
   const byKey = new Set(requests.map(n => n.key))
