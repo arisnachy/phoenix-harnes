@@ -135,6 +135,7 @@
     "@phoenix-ai/dsh-voice": "workspace:^",
     "@phoenix-ai/dsh-voice-local": "workspace:^",
     "@phoenix-ai/dsh-web": "workspace:^",
+    "@phoenix-ai/dsh-web-fetch-http": "workspace:^",
     "@phoenix-ai/dsh-web-search-free": "workspace:^",
     "@phoenix-ai/dsh-web-search-openrouter": "workspace:^",
     "@phoenix-ai/dsh-workflow-worker-thread": "workspace:^",

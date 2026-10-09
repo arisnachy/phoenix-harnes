@@ -618,14 +618,18 @@
 
     # Every mode enables the stable model-facing web_search tool. OpenRouter
     # search resolves the same OPENROUTER_API_KEY managed by Settings -> Models
-    # and uses the provider's current server-tool contract. Fetch stays disabled
-    # because a model-chosen URL needs a separate SSRF policy. Search is a full
-    # auxiliary model request, so the shipped route gets a 60s budget.
+    # and uses the provider's current server-tool contract. Fetch uses the
+    # anonymous, bounded HTTP(S) public-content provider, with URL / IP / DNS
+    # filtering, no cookies or credentials and strictly same-origin redirects.
+    # Restrictive egress proxies are still required for hostile DNS-rebinding
+    # deployments. The model can now inspect a cited source rather than relying
+    # on search snippets alone.
     - id: web
       name: '@phoenix-ai/dsh-web'
       config:
         searchProvider: openrouter
         searchFallbackProviders: [free-html]
+        fetchProvider: http
 
     - id: web-search-openrouter
       name: '@phoenix-ai/dsh-web-search-openrouter'
@@ -640,11 +644,27 @@
         engines: [bing, duckduckgo]
         timeoutMs: 8000
 
+    # Public anonymous source retrieval for verifiable research. Never use
+    # the browser's auth cookies/vault; never allow private networks by default.
+    - id: web-fetch-http
+      name: '@phoenix-ai/dsh-web-fetch-http'
+      config:
+        maxUrlLength: 2048
+        maxResponseBytes: 1500000
+        maxBodyChars: 80000
+        timeoutMs: 15000
+        maxRedirects: 2
+        allowPrivateNetworks: false
+
     - id: tool-web
       name: '@phoenix-ai/dsh-tool-web'
       config:
-        fetch: false
-        searchTimeoutMs: 60000
+        searchMaxQueries: 3
+        searchMaxResults: 8
+        fetch: true
+        fetchTimeoutMs: 15000
+        fetchMaxOutputChars: 50000
+        searchTimeoutMs: 45000
 
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 

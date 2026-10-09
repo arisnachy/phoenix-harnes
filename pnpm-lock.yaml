@@ -1330,6 +1330,9 @@ importers:
       '@phoenix-ai/dsh-web':
         specifier: workspace:^
         version: link:../../web/web
+      '@phoenix-ai/dsh-web-fetch-http':
+        specifier: workspace:^
+        version: link:../../web/web-fetch-http
       '@phoenix-ai/dsh-web-search-free':
         specifier: workspace:^
         version: link:../../web/web-search-free
