@@ -33,7 +33,10 @@ function missing(set: Set<string>, required: readonly string[], prefix: string, 
   for (const name of required) if (!set.has(name)) issues.push(prefix + ':' + name)
 }
 
-/** Audit the contract Kira's game-generation team must deliver before visual QA. */
+/** Audit the contract Kira's game-generation team must deliver before visual QA.
+ * @param value - Untrusted game manifest supplied with the artifact.
+ * @returns Structural issues and evidence limitations, never a gameplay verdict.
+ */
 export function auditGameManifest(value: unknown): GameStudioAudit {
   const issues: string[] = []
   const warnings: string[] = []
@@ -109,6 +112,8 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
 /**
  * Extract the embedded game contract without evaluating executable HTML.
  * Script id and type are exact to prevent confusing game logic with metadata.
+ * @param html - Self-contained candidate game document.
+ * @returns Parsed manifest or undefined if missing or malformed.
  */
 export function readGameManifest(html: string): unknown {
   const script = /<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu
@@ -121,7 +126,10 @@ export function readGameManifest(html: string): unknown {
   return undefined
 }
 
-/** Checks packaging constraints of PHOENIX's isolated, network-free game iframe. */
+/** Checks packaging constraints of PHOENIX's isolated, network-free game iframe.
+ * @param html - Candidate game document for isolated preview.
+ * @returns Issues and warnings requiring attention before publication.
+ */
 export function auditGameHtml(html: string): GameStudioAudit {
   const result = auditGameManifest(readGameManifest(html))
   const issues = [...result.issues]
