@@ -14,8 +14,9 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Atomically upgrade legacy installed MCPs without modifying their endpoint,
- * credentials, source, stable identity, or installation order.
+ * Atomically upgrade legacy managed MCP dependencies and the GitHub DCR
+ * configuration, preserving endpoints, stored credentials, stable identities,
+ * and installation order.
  * Called before runProfile sees managed.patch.yml.
  * @returns Number of rows repaired.
  */
@@ -41,6 +42,21 @@ export async function repairManagedMcpDependenciesBeforeBoot(path: string): Prom
       }
       if (!['streamable-http', 'stdio'].includes(String(rawRow.config.transport))) {
         throw new Error('managed MCP row has an invalid transport; refusing migration')
+      }
+      // Legacy curated GitHub remote MCP installs were incorrectly configured
+      // with OAuth DCR. GitHub explicitly does not support DCR on its remote
+      // server. Convert only our pinned official endpoint and curated identity,
+      // preserving all IDs, grants, other providers and credential values.
+      if (rawRow.config.transport === 'streamable-http'
+        && rawRow.config.serverName === 'github'
+        && rawRow.config.url === 'https://api.githubcopilot.com/mcp/'
+        && record(rawRow.source) && rawRow.source.kind === 'curated'
+        && rawRow.source.connectorId === 'github'
+        && (rawRow.config.oauth !== false
+          || rawRow.config.bearerTokenRef !== 'GITHUB_MCP_TOKEN')) {
+        rawRow.config.oauth = false
+        rawRow.config.bearerTokenRef = 'GITHUB_MCP_TOKEN'
+        repaired++
       }
       if (Array.isArray(rawRow.inject)
         && rawRow.inject.length === REQUIRED_INJECT.length
