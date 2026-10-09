@@ -219,7 +219,7 @@ async function cdp<T extends Record<string, unknown>>(tab: Tab, method: string, 
       try { reply = JSON.parse(String(event.data)) as RpcReply } catch { return }
       if (reply.id === viewportId && needsViewport) {
         if (reply.error && method !== 'Page.captureScreenshot') {
-          settle(new Error('No se pudo ajustar el tamaño del navegador: ' + reply.error.message))
+          settle(new Error('No se pudo ajustar el tamaño del navegador: ' + (reply.error.message ?? 'error CDP sin descripción')))
         } else sendAction()
         return
       }
@@ -245,12 +245,28 @@ export function normalizeMiniBrowserAddress(value: string): string {
   if (!['http:', 'https:'].includes(result.protocol) || result.username || result.password) throw new Error('Solo se permiten direcciones HTTP(S).')
   return result.href
 }
-async function state(): Promise<Record<string, unknown>> {
+/**
+ * Read-only tab inspection must never reselect a different conversation card.
+ * The explicit ID is authoritative; a closed tab is an error, not a silent
+ * fall-through to whichever tab Kira opened most recently.
+ */
+export function resolveMiniBrowserTab<T extends { id: string }>(tabs: readonly T[], tabId: string): T {
+  const tab = tabs.find(candidate => candidate.id === tabId)
+  if (tab === undefined) throw new Error('La pestaña de esta tarjeta ya no está disponible.')
+  return tab
+}
+async function readTab(base: string, tabId?: string): Promise<Tab> {
+  if (tabId === undefined) return await selected(base)
+  const tab = resolveMiniBrowserTab(await listTabs(base), tabId)
+  if (!tab.webSocketDebuggerUrl) throw new Error('La pestaña no permite captura CDP.')
+  return tab
+}
+async function state(tabId?: string): Promise<Record<string, unknown>> {
   const base = await endpoint(false)
   if (!base) return { available: false, tabs: [] }
   const tabs = await listTabs(base)
   if (tabs.length === 0) return { available: false, tabs: [] }
-  const selectedTab = await selected(base)
+  const selectedTab = await readTab(base, tabId)
   return {
     available: true, tabId: selectedTab.id, url: selectedTab.url, title: selectedTab.title,
     tabs: tabs.map(({ id, url, title }) => ({ id, url, title })),
@@ -290,10 +306,10 @@ export async function captureBrowserFrameWithFallback(
   }
   throw new Error('CDP_CAPTURE_FAILED: no se pudo obtener un fotograma real. ' + failures.join(' | '))
 }
-async function frame(): Promise<Buffer> {
+async function frame(tabId?: string): Promise<Buffer> {
   const base = await endpoint(false)
   if (!base) throw new Error('El navegador no está iniciado.')
-  const tab = await selected(base)
+  const tab = await readTab(base, tabId)
   return await captureBrowserFrameWithFallback(async params =>
     await cdp<{ data: string }>(tab, 'Page.captureScreenshot', params))
 }
@@ -444,6 +460,15 @@ async function readAction(req: IncomingMessage): Promise<Action> {
  * @param ctx - Active Cordis context with a bound Web server.
  */
 export function registerMiniBrowserRoutes(ctx: Context): void {
+  // The scope travels in a same-origin header, not in a new route or URL.
+  // This preserves exact-path routing and avoids leaking CDP identifiers into
+  // navigation history. Duplicated identifiers are rejected, not downgraded.
+  const scopedTab = (req: IncomingMessage): string | undefined => {
+    const value = req.headers['x-phoenix-mini-browser-tab']
+    if (Array.isArray(value)) throw new Error('Pestaña duplicada no permitida.')
+    if (value !== undefined && !/^[a-zA-Z0-9_-]{3,128}$/u.test(value)) throw new Error('Identificador de pestaña no válido.')
+    return value
+  }
   const sharedGuard = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (!authorized(req)) { reply(res, 403, { error: 'Acceso de navegador no autorizado.' }); return false }
     return true
@@ -452,13 +477,13 @@ export function registerMiniBrowserRoutes(ctx: Context): void {
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/state', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return
       if (req.method !== 'GET') { reply(res, 405, { error: 'Método no permitido.' }); return }
-      try { reply(res, 200, await state()) } catch (error) { reply(res, 503, { error: String(error) }) }
+      try { reply(res, 200, await state(scopedTab(req))) } catch (error) { reply(res, 503, { error: String(error) }) }
     } }),
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/frame', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return
       if (req.method !== 'GET') { reply(res, 405, { error: 'Método no permitido.' }); return }
       try {
-        const jpeg = await frame()
+        const jpeg = await frame(scopedTab(req))
         res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
         res.end(jpeg)
       } catch (error) { reply(res, 503, { error: String(error) }) }

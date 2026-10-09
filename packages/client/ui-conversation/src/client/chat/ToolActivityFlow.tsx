@@ -50,7 +50,7 @@ type ActivityItem =
   }
 
 type FlowItem =
-  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string }
+  | { readonly kind: 'browser'; readonly key: string; readonly userKey: string; readonly tabId?: string }
   | { readonly kind: 'node'; readonly key: string }
   | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
@@ -158,6 +158,23 @@ function isBrowserRequest(node: OrderedChatNode): boolean {
   return isBrowserPrompt(text)
 }
 
+/**
+ * A browser card is backed by a settled Chromium tool receipt, not by Kira's
+ * claim that a page opened. Only the first-party navigation tools can attach
+ * an actual CDP tab; a failed tool never promotes a browser as successful.
+ */
+function browserNavigationTab(node: OrderedChatNode): string | undefined {
+  if (node.kind !== 'tool-call') return undefined
+  const root = (node.data as ToolChatData).root
+  if (!isSettledTool(root) || root.isError) return undefined
+  const name = root.call?.name?.toLowerCase() ?? ''
+  if (!/(?:^|[^a-z])(?:navigate|youtube_search)$/u.test(name)
+    || !/(?:chrome|browser)/u.test(name)) return undefined
+  const output = root.content.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ')
+  if (!/(?:Navegación iniciada en|Búsqueda abierta en YouTube:|Navegación a la búsqueda de YouTube iniciada:)/iu.test(output)) return undefined
+  return /\bpestaña\s+([a-zA-Z0-9_-]{3,128})/iu.exec(output)?.[1]
+}
+
 function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
   const flow: FlowItem[] = []
   let pending: ActivityItem[] = []
@@ -257,23 +274,42 @@ export function addBrowserCards(
   flow: FlowItem[],
   nodes: readonly OrderedChatNode[],
 ): FlowItem[] {
-  const requests = nodes.filter(isBrowserRequest)
-  if (requests.length === 0 && !flow.some(item => item.kind === 'optimistic' && isBrowserPrompt(item.text))) return flow
-  const result: FlowItem[] = []
-  let pendingUserKey: string | undefined
-  const byKey = new Set(requests.map(n => n.key))
-  const userKeys = new Set(nodes.filter(n => n.kind === 'user' || n.kind === 'steering').map(n => n.key))
-  const finish = (): void => {
-    if (pendingUserKey !== undefined) {
-      result.push({ kind: 'browser', key: 'browser:' + pendingUserKey, userKey: pendingUserKey })
-      pendingUserKey = undefined
+  // Walk the durable transcript in order. Navigation results belong to the
+  // user turn preceding the call; successful indirect browsing (e.g. research)
+  // receives a card even if the user's sentence contains no browser verb.
+  const receipts = new Map<string, string>()
+  let ownerKey: string | undefined
+  const userKeys = new Set<string>()
+  const requestedKeys = new Set<string>()
+  for (const node of nodes) {
+    if (node.kind === 'user' || node.kind === 'steering') {
+      ownerKey = node.key
+      userKeys.add(node.key)
+      if (isBrowserRequest(node)) requestedKeys.add(node.key)
+    } else if (ownerKey !== undefined) {
+      const tabId = browserNavigationTab(node)
+      if (tabId !== undefined) receipts.set(ownerKey, tabId)
     }
   }
+  if (requestedKeys.size === 0 && receipts.size === 0
+    && !flow.some(item => item.kind === 'optimistic' && isBrowserPrompt(item.text))) return flow
+  const result: FlowItem[] = []
+  let pendingUserKey: string | undefined
+  const finish = (): void => {
+    if (pendingUserKey === undefined) return
+    const tabId = receipts.get(pendingUserKey)
+    result.push({
+      kind: 'browser',
+      key: 'browser:' + pendingUserKey,
+      userKey: pendingUserKey,
+      ...(tabId === undefined ? {} : { tabId }),
+    })
+    pendingUserKey = undefined
+  }
   for (const item of flow) {
-    // A new user turn begins after all content from the preceding turn.
     if (item.kind === 'node' && userKeys.has(item.key)) {
       finish()
-      if (byKey.has(item.key)) pendingUserKey = item.key
+      if (requestedKeys.has(item.key) || receipts.has(item.key)) pendingUserKey = item.key
     } else if (item.kind === 'optimistic') {
       finish()
       if (isBrowserPrompt(item.text)) pendingUserKey = item.key
@@ -487,6 +523,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
           {item.kind === 'browser'
             ? <MiniBrowser
               requested
+              tabId={item.tabId}
               active={item.userKey === activeBrowserKey}
               onActivate={() => { setSelectedBrowserKey(item.userKey) }}
             />
