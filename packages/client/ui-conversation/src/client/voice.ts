@@ -543,7 +543,7 @@ export async function tryStartCodexRealtimeVoice(
       if (peer?.connectionState === 'disconnected') {
         // A dropped Telegram Mini App/browser call cannot leave the mic active forever.
         liveSession.disconnectTimer ??= window.setTimeout(() => {
-          if (codexRealtimeVoiceSession === liveSession && peer.connectionState === 'disconnected') {
+          if (codexRealtimeVoiceSession === liveSession && liveSession.peer.connectionState === 'disconnected') {
             void stopCodexRealtimeVoice()
           }
         }, CODEX_VOICE_DISCONNECT_GRACE_MS)
