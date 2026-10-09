@@ -1266,8 +1266,13 @@ describe('Team mailbox and waiting', () => {
     await expect(spawn(ctx, lead, 'aegis')).rejects.toMatchObject({ code: 'TEAM_MISSION_CLOSED' })
     expect(durable(lead).members).toHaveLength(0)
 
-    // A genuinely new user turn can delegate without inheriting the old closure.
+    // A new programmatic turn cannot revive closed work; only human input can.
     lead.session.append('turn/start', { turn: 2 })
+    await expect(spawn(ctx, lead, 'aegis')).rejects.toMatchObject({ code: 'TEAM_MISSION_CLOSED' })
+    lead.session.append('user/message', createUserMessage({
+      content: content('Kira, revisa una tarea nueva.'), source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    lead.session.append('turn/start', { turn: 3 })
     const started = await spawn(ctx, lead, 'aegis')
     expect(started.member.name).toBe('aegis')
     ctx.agentTeams.interrupt(lead, 'aegis')
