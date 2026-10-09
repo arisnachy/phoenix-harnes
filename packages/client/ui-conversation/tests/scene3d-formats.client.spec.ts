@@ -50,6 +50,26 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
     }
     expect(exportSceneGLB(b!).byteLength).toBeGreaterThan(100)
   })
+  it('round-trips PBR base color, normal, AO and metallic/roughness texture maps without external fetches',()=>{
+    const tinyPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y8YyM8AAAAASUVORK5CYII='
+    const textured=parseScene3D({...model,nodes:[{
+      ...model.nodes[0],material:{...model.nodes[0].material,
+        baseColorTexture:tinyPng,normalTexture:tinyPng,occlusionTexture:tinyPng,
+        metallicRoughnessTexture:tinyPng},
+    }]})
+    expect(textured).toBeDefined()
+    const glb=exportSceneGLB(textured!)
+    const recovered=importSceneGLTF(glb)
+    const map=recovered.nodes[0]?.material
+    expect(map?.baseColorTexture).toBe(tinyPng)
+    expect(map?.normalTexture).toBe(tinyPng)
+    expect(map?.occlusionTexture).toBe(tinyPng)
+    expect(map?.metallicRoughnessTexture).toBe(tinyPng)
+    const json=JSON.parse(exportSceneGLTF(textured!))
+    expect(json.images).toHaveLength(4)
+    expect(json.materials[0].normalTexture.index).toBeTypeOf('number')
+    expect(json.materials[0].occlusionTexture.index).toBeTypeOf('number')
+  })
   it('rejects malformed GLB headers, unsupported external buffers and poisoned geometry',()=>{
     expect(()=>importSceneGLTF(new Uint8Array(20))).toThrow()
     expect(()=>importSceneGLTF(JSON.stringify({asset:{version:'2.0'},buffers:[{uri:'https://bad.example/a.bin'}]}))).toThrow()
