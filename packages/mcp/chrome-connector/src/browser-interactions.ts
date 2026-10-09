@@ -7,17 +7,17 @@
  * spoofing. The same controller works with headless Chromium in the chat.
  */
 export type BrowserTarget = {
-  selector?: string
-  name?: string
-  label?: string
-  placeholder?: string
-  text?: string
+  selector?: string | undefined
+  name?: string | undefined
+  label?: string | undefined
+  placeholder?: string | undefined
+  text?: string | undefined
 }
 export type BrowserInteraction = BrowserTarget & {
   operation: 'inspect' | 'fill' | 'select' | 'check' | 'click' | 'submit' | 'scroll' | 'wait'
-  value?: string
-  checked?: boolean
-  expectedText?: string
+  value?: string | undefined
+  checked?: boolean | undefined
+  expectedText?: string | undefined
 }
 export type BrowserInteractionResult = {
   ok: boolean
@@ -46,7 +46,7 @@ export function executeBrowserInteraction(input: BrowserInteraction): BrowserInt
   const doc = document
   const win = window
   const clean = (value: string | null | undefined) => (value || '').replace(/\s+/g, ' ').trim().slice(0, 250)
-  const lower = (value: string) => clean(value).toLocaleLowerCase()
+  const lower = (value: string | null | undefined) => clean(value).toLocaleLowerCase()
   const children = (root: Document | Element | ShadowRoot): Element[] => {
     const found: Element[] = []
     const visit = (scope: Document | Element | ShadowRoot, depth: number): void => {
