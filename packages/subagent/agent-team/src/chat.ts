@@ -260,7 +260,7 @@ export class TeamChat {
         const bounded = boundedTranscriptText(text, this.maxBytes)
         root.append('team/chat-message', { version: 1, message: { id, senderId: header.id,
           senderName: person.name, senderKind: 'agent', avatar: person.avatar, role: person.role, missionId: root.id, text: bounded,
-          .../^@?Kira[,!:]\\s/iu.test(bounded) ? { targetId: root.id, mentions: [root.id] } : { mentions: [] },
+          ...(/^@?Kira[,!:]\s/iu.test(bounded) ? { targetId: root.id, mentions: [root.id] } : { mentions: [] }),
           time: event.time, sourceSeq: event.seq, reactions: [] } })
         known.add(id)
       }
