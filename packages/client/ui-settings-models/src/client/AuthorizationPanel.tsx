@@ -102,10 +102,10 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
-type CuratedMcpConnectorId = 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+type CuratedMcpConnectorId = 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
 
 const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
-  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare',
+  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
   'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
 ])
 
@@ -279,7 +279,7 @@ const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
 // do not declare an OAuth method absent before the registry has time to settle.
 const MCP_AUTH_FLOW_RETRY_MS = [0, 250, 500, 750, 1_000, 1_500, 2_000, 2_500, 3_000] as const
 const CURATED_OAUTH_MCP_IDS = new Set<string>([
-  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'notion', 'linear', 'cloudflare', 'slack',
+  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
 ])
 const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
@@ -1243,6 +1243,14 @@ export function ConnectorsSettingsSection({ api,
     !catalogDefinitions.some(definition =>
       entryMatchesDefinitionAuthorization(entry, definition))),
   [catalogDefinitions, entries])
+  // Localize each credential or OAuth dialog at the exact connector card.
+  // Keep the header only as fallback while its card is hidden by filters.
+  const activeAuthorizationKey = attempt?.key ?? preparingKey ?? lastAttemptKey
+  const authorizationHasVisibleCard = activeAuthorizationKey !== undefined
+    && (visibleAccountEntries.some(entry => entry.key === activeAuthorizationKey)
+      || visibleRows.some(row => row.account?.key === activeAuthorizationKey
+        || (row.managed !== undefined
+          && `mcp-client/${row.managed.serverName.toLowerCase().replaceAll('_', '-')}` === activeAuthorizationKey)))
 
   const toggleChatGptWeb = (enabled: boolean): void => {
     if (chatGptWeb === undefined || settings === undefined || chatGptWebBusy) return
@@ -1553,9 +1561,11 @@ export function ConnectorsSettingsSection({ api,
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
-      {preparingKey === undefined ? null : <p role="status" className={styles['advancedHint']}>Contactando al servicio de autorización de PHOENIX…</p>}
-      {failure === undefined ? null : <p role="alert" className={styles['error']}>{failure}</p>}
-      {attempt === undefined ? null : (
+      {authorizationHasVisibleCard || preparingKey === undefined ? null
+        : <p role="status" className={styles['advancedHint']}>Contactando al servicio de autorización de PHOENIX…</p>}
+      {authorizationHasVisibleCard || failure === undefined ? null
+        : <p role="alert" className={styles['error']}>{failure}</p>}
+      {authorizationHasVisibleCard || attempt === undefined ? null : (
         <section className={hubStyles['block']} aria-label={t('signingIn')}>
           <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
             submitAnswer={submitAnswer} cancel={cancel} t={t} />
@@ -1701,7 +1711,15 @@ export function ConnectorsSettingsSection({ api,
                       )}
                     </div>
                   </div>
-
+                  {preparingKey !== entry.key ? null : <p role="status">Iniciando autorización…</p>}
+                  {attempt?.key !== entry.key ? null : (
+                    <div className={styles['authorizationPrompt']}>
+                      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
+                        submitAnswer={submitAnswer} cancel={cancel} t={t} />
+                    </div>
+                  )}
+                  {failure !== undefined && lastAttemptKey === entry.key
+                    ? <p role="alert" className={styles['error']}>{failure}</p> : null}
                 </article>
               )
             })}
@@ -1748,12 +1766,15 @@ export function ConnectorsSettingsSection({ api,
                   openClaw={row.openClaw}
                   connected={row.connected}
                   t={connectorT}
-                  authorizationProgress={preparingKey === authorizationKey ? (
-                    <p role="status" className={styles['advancedHint']}>Iniciando autorización con el Host…</p>
-                  ) : attempt !== undefined && attempt.key === authorizationKey && attempt.status === 'pending' ? (
-                    <p role="status" className={styles['advancedHint']}>
-                      {attempt.url === undefined ? 'Preparando autorización del MCP…' : 'La URL OAuth está lista. Continúa en la pestaña abierta o usa el enlace superior.'}
-                    </p>
+                  authorizationProgress={preparingKey !== undefined && preparingKey === authorizationKey ? (
+                    <p role="status" className={styles['advancedHint']}>Iniciando autorización…</p>
+                  ) : attempt !== undefined && attempt.key === authorizationKey ? (
+                    <div className={styles['authorizationPrompt']}>
+                      <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
+                        submitAnswer={submitAnswer} cancel={cancel} t={t} />
+                      {failure !== undefined && lastAttemptKey === authorizationKey
+                        ? <p role="alert" className={styles['error']}>{failure}</p> : null}
+                    </div>
                   ) : failure !== undefined && lastAttemptKey === authorizationKey ? (
                     <p role="alert" className={styles['error']}>{failure}</p>
                   ) : reconnectFailure !== undefined && row.mcpRuntime?.serverName === reconnectFailure.serverName ? (
