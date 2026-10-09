@@ -396,6 +396,14 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
 
 function GameStudioPreview({ html, title }: { readonly html: string; readonly title: string }) {
   const audit = useMemo(() => auditGameHtml(html), [html])
+  const exportGame = (): void => {
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = (title.replace(/[^a-z0-9._-]+/giu, '-').replace(/^-+|-+$/gu, '') || 'phoenix-game') + '.html'
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
   return (
     <div className={styles.stack} data-phoenix-game-studio="true"
       data-game-preflight={audit.valid ? 'pass' : 'needs-repair'}>
@@ -404,6 +412,7 @@ function GameStudioPreview({ html, title }: { readonly html: string; readonly ti
         <p className={styles.note}>{audit.summary}. Not a gameplay test.</p>
         {audit.issues.length > 0 && <p className={styles.note}>Issues: {audit.issues.join(', ')}</p>}
         {audit.warnings.length > 0 && <p className={styles.note}>Review: {audit.warnings.join(', ')}</p>}
+        <button className={styles.uiButton} type="button" onClick={exportGame}>Exportar juego (.html)</button>
       </div>
       <MiniApp html={html} title={title} executable />
     </div>
