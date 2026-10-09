@@ -2,6 +2,7 @@
 
 import type {
   CapabilityDescriptor,
+  CapabilityEvidence,
   CapabilityNeed,
   CapabilityResolution,
   CapabilityResolutionContext,
@@ -31,6 +32,37 @@ function kindMatches(descriptor: CapabilityDescriptor, need: CapabilityNeed): bo
   return need.kind === undefined || descriptor.kind === need.kind || isExactToolKind(descriptor, need)
 }
 
+
+interface MeasuredCapability {
+  readonly successRate: number
+  readonly medianPassedMs: number
+}
+
+/** Use only current-version independent verification cases, not repeated copies of one receipt. */
+function measuredCapability(
+  descriptor: CapabilityDescriptor,
+  evidence: readonly CapabilityEvidence[],
+): MeasuredCapability | undefined {
+  const cases = new Map<string, CapabilityEvidence>()
+  for (const record of evidence) {
+    if (record.capabilityId !== descriptor.id || record.descriptorVersion !== descriptor.version
+      || record.outcome === 'denied') continue
+    cases.set(record.caseId, record)
+  }
+  // Sparse or unavailable evidence must preserve deterministic baseline routing.
+  if (cases.size < 3) return undefined
+  const observations = [...cases.values()]
+  const passed = observations.filter(record => record.outcome === 'passed')
+  const times = passed.map(record => record.durationMs).sort((left, right) => left - right)
+  const middle = Math.floor(times.length / 2)
+  const medianPassedMs = times.length === 0
+    ? Number.POSITIVE_INFINITY
+    : times.length % 2 === 1
+      ? times[middle]!
+      : (times[middle - 1]! + times[middle]!) / 2
+  return { successRate: passed.length / observations.length, medianPassedMs }
+}
+
 /**
  * Resolve one need against a stable descriptor snapshot. An exact `tool:<kind>`
  * id is also a semantic provider for that kind; its JSON tool schema owns its
@@ -45,6 +77,7 @@ export function resolveCapabilityNeed(
   descriptors: readonly CapabilityDescriptor[],
   need: CapabilityNeed,
   context: CapabilityResolutionContext = {},
+  evidence: readonly CapabilityEvidence[] = [],
 ): CapabilityResolution {
   const kindKnown = need.kind === undefined || descriptors.some(descriptor => kindMatches(descriptor, need))
   if (!kindKnown) {
@@ -86,12 +119,25 @@ export function resolveCapabilityNeed(
     candidates.push(descriptor)
   }
 
-  // Prefer reliable verified adapters to earlier alphabetically sorted testing
-  // candidates; avoid additional discovery rounds when both satisfy the need.
-  candidates.sort((left, right) =>
-    (left.status === 'verified' ? 0 : 1) - (right.status === 'verified' ? 0 : 1)
-    || left.dependencies.length - right.dependencies.length
-    || left.id.localeCompare(right.id))
+  // Verification status and permissions remain authoritative. Within one status,
+  // prefer sufficiently evidenced success, then lower successful wall time.
+  const measurements = new Map(candidates.map(candidate => [
+    candidate.id, measuredCapability(candidate, evidence),
+  ] as const))
+  candidates.sort((left, right) => {
+    const status = (left.status === 'verified' ? 0 : 1) - (right.status === 'verified' ? 0 : 1)
+    if (status !== 0) return status
+    const leftEvidence = measurements.get(left.id)
+    const rightEvidence = measurements.get(right.id)
+    // Unmeasured adapters are neutral: do not invent a success-rate advantage.
+    const quality = (rightEvidence?.successRate ?? 0.5) - (leftEvidence?.successRate ?? 0.5)
+    if (quality !== 0) return quality
+    if (leftEvidence !== undefined && rightEvidence !== undefined
+      && leftEvidence.medianPassedMs !== rightEvidence.medianPassedMs) {
+      return leftEvidence.medianPassedMs - rightEvidence.medianPassedMs
+    }
+    return left.dependencies.length - right.dependencies.length || left.id.localeCompare(right.id)
+  })
   const selected = candidates[0]
   if (selected !== undefined) return { kind: 'have', capability: selected, considered: considered.map(item => item.id), reasons }
   return { kind: 'missing', considered: considered.map(item => item.id), reasons: reasons.length > 0 ? reasons : ['no usable capability matches the declared need'] }
