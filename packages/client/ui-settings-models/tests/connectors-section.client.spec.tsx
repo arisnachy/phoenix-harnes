@@ -757,6 +757,63 @@ describe('connectors settings section', () => {
     expect(api.begin).not.toHaveBeenCalled()
   })
 
+  it('makes public Microsoft Learn installable without OAuth or billing approval', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: { entryId: 'microsoft-learn-entry', serverName: 'microsoft-learn',
+        url: 'https://learn.microsoft.com/api/mcp',
+        source: { kind: 'curated' as const, connectorId: 'microsoft-learn' },
+      },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    const learn = document.querySelector('[data-connector-id="microsoft-learn"]')!
+    expect(learn.textContent).toContain('Gratuito')
+    const install = Array.from(learn.querySelectorAll('button')).find(b => b.textContent === 'Install')!
+    expect(install).toBeTruthy()
+    expect(install.disabled).toBe(false)
+    fireEvent.click(install)
+    await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: 'microsoft-learn' }))
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
+  it('requires explicit acknowledgement before optionally installing billed Microsoft MCPs', async () => {
+    const api = { list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const installCurated = vi.fn(async ({ connectorId }: { connectorId: string }) => ({
+      status: 'installed' as const,
+      connector: { entryId: connectorId + '-entry', serverName: connectorId,
+        url: `stdio://${connectorId}`,
+        source: { kind: 'curated' as const, connectorId },
+      },
+    }))
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [] })),
+      install: vi.fn(), installCurated, search: vi.fn(),
+    } })
+    for (const id of ['microsoft-workiq', 'microsoft-azure'] as const) {
+      const card = document.querySelector(`[data-connector-id="${id}"]`)!
+      const install = Array.from(card.querySelectorAll('button')).find(b => b.textContent === 'Install')!
+      const checkbox = card.querySelector('input[type="checkbox"]') as HTMLInputElement
+      expect(install).toBeTruthy()
+      expect(install.disabled).toBe(true)
+      expect(checkbox.checked).toBe(false)
+      expect(card.textContent).toContain('Comprendo que debo autorizar los costes')
+      fireEvent.click(checkbox)
+      expect(checkbox.checked).toBe(true)
+      expect(install.disabled).toBe(false)
+      fireEvent.click(install)
+      await waitFor(() => expect(installCurated).toHaveBeenCalledWith({ connectorId: id }))
+    }
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
   it('installs Canva directly as a Host-curated official MCP when the Host supports it', async () => {
     const api = {
       list: vi.fn(() => Promise.resolve(ok({ entries: [] }))),
