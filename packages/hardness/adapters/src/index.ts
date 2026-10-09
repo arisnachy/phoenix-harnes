@@ -53,6 +53,7 @@ import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
 import { createPhoenixCanvasTool } from './canvas-tool.ts'
 import { createPhoenix3DTool } from './scene3d-tool.ts'
+import { PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 import { createConnectorListTool } from './connector-list-tool.ts'
 import { createConnectorDiscoverTool } from './connector-discover-tool.ts'
@@ -132,6 +133,7 @@ export { createHardnessTool } from './hardness-tool.ts'
 export { createPhoenixVisualizerTool } from './visualize-tool.ts'
 export { createPhoenixCanvasTool, PHOENIX_CANVAS_MIME } from './canvas-tool.ts'
 export { createPhoenix3DTool, PHOENIX_SCENE3D_MIME, tropicalVillaScene } from './scene3d-tool.ts'
+export { choosePhoenixDesignMedium, PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
 export { installOrdinaryCompletionJudgeBridge, reviewOrdinaryCompletion } from './ordinary-completion-judge.ts'
 export type { OrdinaryCompletionJudgeDecision } from './ordinary-completion-judge.ts'
@@ -355,6 +357,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         ctx,
       ))
       disposers.push(installCapabilityOperatingProtocol(systemPrompt))
+      disposers.push(systemPrompt.section({ name: 'phoenix:3d-intent-router', order: 176, text: PHOENIX_3D_ROUTING_PROTOCOL }))
       disposers.push(installBinanceTradingProtocol(systemPrompt))
     }
     if (modelTools && (authorization !== undefined || mcpConnectors !== undefined)) {
