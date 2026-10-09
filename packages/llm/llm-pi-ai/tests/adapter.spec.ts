@@ -14,7 +14,7 @@ import * as LlmPiAi from '@phoenix-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@phoenix-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
-import { DEFAULT_MAX_REQUEST_IMAGE_BYTES, resolveProfiles } from '../src/config.ts'
+import { DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS, DEFAULT_MAX_REQUEST_IMAGE_BYTES, DEFAULT_STREAM_IDLE_TIMEOUT_MS, resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
@@ -1325,6 +1325,16 @@ describe('provider profile lifecycle', () => {
         source: { kind: 'plugin', plugin: 'test' },
       })],
     })).rejects.toMatchObject({ code: 'UNSUPPORTED_CONTENT' })
+  })
+
+  it('times out a silent Codex MCP stream earlier without changing other providers or explicit overrides', () => {
+    const automatic = resolveProfiles({ 'openai-codex': {}, deepseek: {} })
+    expect(automatic.get('openai-codex')?.streamIdleTimeoutMs).toBe(DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS)
+    expect(DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS).toBe(90_000)
+    expect(automatic.get('deepseek')?.streamIdleTimeoutMs).toBe(DEFAULT_STREAM_IDLE_TIMEOUT_MS)
+
+    const customized = resolveProfiles({ 'openai-codex': { streamIdleTimeoutMs: 240_000 } })
+    expect(customized.get('openai-codex')?.streamIdleTimeoutMs).toBe(240_000)
   })
 
   it('validates profiles at the shared resolver boundary', () => {
