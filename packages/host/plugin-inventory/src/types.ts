@@ -144,6 +144,16 @@ export type CuratedMcpConnectorId =
   | 'memory'
   | 'fetch'
 
+/** Secret-free Telegram Bot API configuration state; this does not mean an inbox is running. */
+export interface TelegramBotSnapshot {
+  readonly configured: boolean
+  readonly verified: boolean
+  readonly phase: 'unconfigured' | 'verified' | 'invalid-token' | 'unreachable' | 'credentials-unavailable'
+  readonly username?: string
+  /** Telegram receiver and task dispatch are intentionally not represented as active. */
+  readonly inboxActive: false
+}
+
 /** Browser/model-safe request selecting one Host-curated MCP identity. */
 export interface CuratedMcpInstallRequest {
   readonly connectorId: CuratedMcpConnectorId
