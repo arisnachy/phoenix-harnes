@@ -1,0 +1,38 @@
+{
+  "description": "EJEMPLO SINTÉTICO del evaluador, no una investigación realizada por Phoenix",
+  "cases": [
+    {
+      "id": "mcp-diagnosis",
+      "answer": "La comprobación directa devolvió HTTP 404 Server not found ([fuente](https://primary.example.com/mcp/endpoint)). retry-exhausted es un límite de reintentos ([supervisor](https://secondary.example.org/mcp/retries)). Un HTTP 401/403 requiere autorización, pero el 404 no demuestra por sí mismo falta de credenciales ([supervisor](https://secondary.example.org/mcp/retries)). La URL configurada debe verificarse; no conozco la excepción original fuera del registro.",
+      "observedWebFetchUrls": [
+        "https://primary.example.com/mcp/endpoint",
+        "https://secondary.example.org/mcp/retries"
+      ],
+      "elapsedMs": 24000,
+      "promptTokens": 2400,
+      "completionTokens": 1050
+    },
+    {
+      "id": "neuro-evidence",
+      "answer": "El ensayo aleatorizado incluyó 440 participantes ([original](https://trial.example.com/paper)); todavía requiere replicación. El estudio piloto sin control tuvo 18 participantes y sus resultados preliminares no prueban eficacia ([original](https://pilot.example.org/preprint)).",
+      "observedWebFetchUrls": [
+        "https://trial.example.com/paper",
+        "https://pilot.example.org/preprint"
+      ],
+      "elapsedMs": 60000,
+      "promptTokens": 2400,
+      "completionTokens": 1050
+    },
+    {
+      "id": "freshness-conflict",
+      "answer": "La actualización de septiembre de 2026 es la fuente vigente ([boletín](https://updates.example.com/2026)). El documento de 2024 es histórico y no debe sustituir la actualización ([archivo](https://archives.example.org/2024)).",
+      "observedWebFetchUrls": [
+        "https://updates.example.com/2026",
+        "https://archives.example.org/2024"
+      ],
+      "elapsedMs": 24000,
+      "promptTokens": 2400,
+      "completionTokens": 1050
+    }
+  ]
+}

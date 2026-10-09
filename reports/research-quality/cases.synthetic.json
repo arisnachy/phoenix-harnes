@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "description": "Datos sintéticos verificables solo para probar el evaluador; NO son resultados reales de Phoenix ni noticias actuales.",
+  "cases": [
+    {
+      "id": "mcp-diagnosis",
+      "category": "technical",
+      "prompt": "Diagnostica por qué un conector MCP devuelve 404 y retry-exhausted; distingue hechos de hipótesis y cita las dos fuentes.",
+      "timeBudgetMs": 90000,
+      "tokenBudget": 12000,
+      "minIndependentSources": 2,
+      "sources": [
+        {
+          "url": "https://primary.example.com/mcp/endpoint",
+          "publishedAt": "2026-10-01",
+          "text": "A direct request to the configured MCP endpoint returned HTTP 404 Server not found. This alone does not establish missing OAuth credentials."
+        },
+        {
+          "url": "https://secondary.example.org/mcp/retries",
+          "publishedAt": "2026-10-02",
+          "text": "retry-exhausted is a count of attempts after connection failures; recognized HTTP 401/403 stops retries and requests authorization."
+        }
+      ],
+      "requiredFacts": [
+        {
+          "aliases": [
+            "HTTP 404",
+            "404 Server not found"
+          ],
+          "sourceUrl": "https://primary.example.com/mcp/endpoint",
+          "evidenceQuote": "HTTP 404 Server not found"
+        },
+        {
+          "aliases": [
+            "retry-exhausted es un límite de reintentos",
+            "retry-exhausted indica reintentos agotados"
+          ],
+          "sourceUrl": "https://secondary.example.org/mcp/retries",
+          "evidenceQuote": "retry-exhausted is a count of attempts"
+        },
+        {
+          "aliases": [
+            "401/403 solicita autorización",
+            "401/403 requiere autorización"
+          ],
+          "sourceUrl": "https://secondary.example.org/mcp/retries",
+          "evidenceQuote": "HTTP 401/403 stops retries"
+        }
+      ],
+      "bannedClaims": [
+        "404 demuestra que faltan credenciales",
+        "404 prueba que el usuario no autorizó"
+      ]
+    },
+    {
+      "id": "neuro-evidence",
+      "category": "research",
+      "prompt": "Compara evidencias de un ensayo controlado y un estudio piloto, separando resultados robustos de preliminares y enlazando los originales.",
+      "timeBudgetMs": 180000,
+      "tokenBudget": 20000,
+      "minIndependentSources": 2,
+      "sources": [
+        {
+          "url": "https://trial.example.com/paper",
+          "publishedAt": "2026-07-21",
+          "text": "Randomized controlled trial in 440 participants; replication is needed before translating this into routine clinical practice."
+        },
+        {
+          "url": "https://pilot.example.org/preprint",
+          "publishedAt": "2026-09-30",
+          "text": "Uncontrolled feasibility pilot with 18 participants. The observations are preliminary, not evidence of efficacy."
+        }
+      ],
+      "requiredFacts": [
+        {
+          "aliases": [
+            "ensayo aleatorizado",
+            "ensayo controlado"
+          ],
+          "sourceUrl": "https://trial.example.com/paper",
+          "evidenceQuote": "Randomized controlled trial in 440 participants"
+        },
+        {
+          "aliases": [
+            "440 participantes"
+          ],
+          "sourceUrl": "https://trial.example.com/paper",
+          "evidenceQuote": "440 participants"
+        },
+        {
+          "aliases": [
+            "piloto sin grupo de control",
+            "estudio piloto sin control"
+          ],
+          "sourceUrl": "https://pilot.example.org/preprint",
+          "evidenceQuote": "Uncontrolled feasibility pilot with 18 participants"
+        },
+        {
+          "aliases": [
+            "resultados preliminares"
+          ],
+          "sourceUrl": "https://pilot.example.org/preprint",
+          "evidenceQuote": "observations are preliminary"
+        }
+      ],
+      "bannedClaims": [
+        "el piloto demuestra eficacia",
+        "aplicación clínica confirmada"
+      ]
+    },
+    {
+      "id": "freshness-conflict",
+      "category": "current",
+      "prompt": "Distingue una actualización de 2026 de una hoja archivada de 2024, cita ambas y no presentes la versión antigua como vigente.",
+      "timeBudgetMs": 90000,
+      "tokenBudget": 10000,
+      "minIndependentSources": 2,
+      "asOf": "2026-10-09",
+      "maxAgeDays": 60,
+      "sources": [
+        {
+          "url": "https://updates.example.com/2026",
+          "publishedAt": "2026-09-20",
+          "text": "The updated bulletin is effective from September 2026 and supersedes the previous public note."
+        },
+        {
+          "url": "https://archives.example.org/2024",
+          "publishedAt": "2024-05-10",
+          "text": "Historical bulletin from May 2024. This archive is not the current version."
+        }
+      ],
+      "requiredFacts": [
+        {
+          "aliases": [
+            "vigente desde septiembre de 2026",
+            "actualización de septiembre de 2026"
+          ],
+          "sourceUrl": "https://updates.example.com/2026",
+          "evidenceQuote": "effective from September 2026"
+        },
+        {
+          "aliases": [
+            "documento de 2024 es histórico",
+            "boletín de 2024 es histórico"
+          ],
+          "sourceUrl": "https://archives.example.org/2024",
+          "evidenceQuote": "Historical bulletin from May 2024"
+        }
+      ],
+      "bannedClaims": [
+        "boletín 2024 sigue vigente",
+        "documento de 2024 es el actual"
+      ]
+    }
+  ]
+}
