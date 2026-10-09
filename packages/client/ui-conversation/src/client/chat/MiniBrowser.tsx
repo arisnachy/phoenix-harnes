@@ -63,7 +63,7 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser() {
+export function MiniBrowser({ requested = false }: { requested?: boolean }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
   const [enabled, setEnabled] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -75,13 +75,15 @@ export function MiniBrowser() {
   const [frame, setFrame] = useState<string>()
   const [error, setError] = useState<string>()
   const [supported, setSupported] = useState(false)
+  const [connectionError, setConnectionError] = useState<string>()
+  const [captureError, setCaptureError] = useState<string>()
   const focusRef = useRef<HTMLImageElement>(null)
   const currentTab = useRef<string | undefined>(undefined)
   const lastObservedUrl = useRef<string | undefined>(undefined)
   const busy = useRef(false)
   const mounted = useRef(true)
   const frameRef = useRef<string | undefined>(undefined)
-  const show = !dismissed && (enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
+  const show = !dismissed && (requested || enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
   const videoId = youtubeId(snapshot.url)
 
   const run = useCallback(async (request: Command): Promise<void> => {
@@ -104,8 +106,13 @@ export function MiniBrowser() {
         const state = await inspect(first.signal)
         if (stopped) return
         setSupported(true)
+        setConnectionError(undefined)
         setSnapshot(state)
-      } catch { /* Older hosts simply do not expose the browser feature. */ }
+      } catch (reason) {
+        if (stopped) return
+        // Missing host routes must not make a requested browser disappear.
+        setConnectionError(reason instanceof Error ? reason.message : String(reason))
+      }
     }
     void poll()
     const timer = window.setInterval(() => { void poll() }, 1700)
@@ -132,8 +139,13 @@ export function MiniBrowser() {
         const previous = frameRef.current
         frameRef.current = next
         setFrame(next)
+        setCaptureError(undefined)
         if (previous) URL.revokeObjectURL(previous)
-      } catch { /* Retry after background tabs, navigation, or transient CDP teardown. */ }
+      } catch (reason) {
+        if (!stopped) setCaptureError(reason instanceof Error ? reason.message : String(reason))
+        // A failed screenshot does not discard the last successful frame,
+        // the selected Chromium tab, or the user's navigation controls.
+      }
       finally { busy.current = false }
     }
     void load()
@@ -189,7 +201,7 @@ export function MiniBrowser() {
     void run({ type: 'key', key: event.key, modifiers })
   }
 
-  if (!supported) return null
+  if (!supported && !requested && !enabled) return null
   const viewer = (
     <section className={css.browser} data-mini-browser data-expanded={expanded ? 'true' : undefined} aria-label="Navegador de Kira">
       <div className={css.titlebar}>
@@ -242,7 +254,9 @@ export function MiniBrowser() {
           </div>
         ) : (
           <div className={css.empty}>
-            <p>Chrome real dentro de la conversación. Kira y tú utilizáis las mismas pestañas.</p>
+            <p>{connectionError
+              ? 'Phoenix todavía no ha conectado la vista del navegador. Puedes reintentar sin salir del chat.'
+              : 'Chrome real dentro de la conversación. Kira y tú utilizáis las mismas pestañas.'}</p>
             <button type="button" onClick={() => { void run({ type: 'open', url: 'https://www.google.com' }) }}>Iniciar navegador</button>
           </div>
         )}
@@ -258,6 +272,10 @@ export function MiniBrowser() {
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Enter' }) }}>Enter</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Tab' }) }}>Tab</button>
         </form>
+        {captureError && <p className={css.error} role="status">
+          La página está abierta, pero su imagen todavía no está disponible: {captureError}. Phoenix reintentará la captura automáticamente.
+        </p>}
+        {connectionError && <p className={css.error} role="status">Conexión del navegador: {connectionError}</p>}
         {error && <p className={css.error} role="alert">{error}</p>}
         <p className={css.hint}>Haz clic en la imagen para interactuar. «Ampliar» conserva la pestaña y la sesión.</p>
       </>}
