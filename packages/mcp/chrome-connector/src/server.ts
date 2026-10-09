@@ -500,8 +500,13 @@ server.registerTool('wait_for', {
   const deadline = Date.now() + timeoutMs
   let last: BrowserInteractionResult | undefined
   do {
-    last = await evaluate(tab, browserInteractionExpression({ operation: 'wait', expectedText })) as BrowserInteractionResult
-    if (last?.ok) return formatBrowserResult(last)
+    try {
+      last = await evaluate(tab, browserInteractionExpression({ operation: 'wait', expectedText })) as BrowserInteractionResult
+      if (last?.ok) return formatBrowserResult(last)
+    } catch {
+      // A form submit may invalidate its old JavaScript context during
+      // navigation. Retry reading the new page, never replay the submit.
+    }
     if (Date.now() >= deadline) break
     await new Promise(resolve => setTimeout(resolve, 250))
   } while (Date.now() < deadline)
@@ -561,7 +566,7 @@ server.registerTool('press_key', {
   const virtual = virtualCodes[key] ?? key.toUpperCase().charCodeAt(0)
   const params = { key, code: key, modifiers, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual }
   await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', ...params,
-    ...key.length === 1 && modifiers === 0 ? { text: key } : key === 'Enter' ? { text: '\\r' } : {} })
+    ...(key.length === 1 && modifiers === 0 ? { text: key } : key === 'Enter' ? { text: '\r' } : {}) })
   await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', ...params })
   return { content: [{ type: 'text', text: 'Tecla enviada: ' + key + ' en la pestaña ' + tab.id }] }
 })
