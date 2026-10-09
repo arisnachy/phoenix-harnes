@@ -504,3 +504,87 @@
     transition: none;
   }
 }
+
+/* Full library destination: saved projects and sessions are actionable rows. */
+.libraryBody {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 200px;
+  max-height: min(60vh, 560px);
+  color: var(--dsw-alias-label-primary);
+}
+.libraryToolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.librarySearch {
+  flex: 1;
+  min-width: 210px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  color: var(--dsw-alias-label-secondary);
+}
+.librarySearch input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  font: inherit;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
+}
+.libraryResults {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.libraryGroup {
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 14px;
+  padding: 12px;
+}
+.libraryGroupHeader {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0 10px;
+}
+.libraryGroupHeader h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.librarySession {
+  display: block;
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  font: inherit;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.librarySession:hover,
+.librarySession:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.libraryEmpty {
+  margin: 20px 0;
+  text-align: center;
+  color: var(--dsw-alias-label-secondary);
+}
