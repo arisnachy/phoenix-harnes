@@ -1643,6 +1643,40 @@ describe('connectors settings section', () => {
     expect(install).not.toHaveBeenCalled()
   })
 
+  it('offers source-aware Repair instead of endless reconnect when Notion has no OAuth flow', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const repair = vi.fn(async () => ({
+      status: 'installed' as const,
+      connector: { entryId: 'notion-repaired', serverName: 'notion',
+        url: 'https://mcp.notion.com/mcp', source: { kind: 'curated' as const, connectorId: 'notion' } },
+    }))
+    const reconnect = vi.fn()
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({
+        managed: [{ entryId: 'notion-stale', serverName: 'notion',
+          url: 'https://mcp.notion.com/mcp', source: { kind: 'curated' as const, connectorId: 'notion' } }],
+        runtime: [{ serverName: 'notion', transport: 'streamable-http' as const,
+          status: 'auth-required' as const, reasonCode: 'authorization-required' as const, toolNames: [] }],
+      })),
+      repair, reconnect, install: vi.fn(), search: vi.fn(),
+    } })
+    await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="notion"]')
+      expect(card?.textContent).toContain('no registró su método OAuth')
+    })
+    const card = document.querySelector('[data-connector-id="notion"]')!
+    const repairButton = Array.from(card.querySelectorAll('button')).find(button => button.textContent === 'Repair')
+    expect(repairButton).toBeTruthy()
+    expect(Array.from(card.querySelectorAll('button')).some(button => button.textContent === 'Authorize')).toBe(false)
+    fireEvent.click(repairButton!)
+    await waitFor(() => expect(repair).toHaveBeenCalledWith({ entryId: 'notion-stale' }))
+    expect(reconnect).not.toHaveBeenCalled()
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
   it('uses the managed Notion registry identity to find hashed MCP runtime and OAuth key', async () => {
     const begin = vi.fn(async () => ok({ attemptId: 'registered-notion-oauth' }))
     const api = {
