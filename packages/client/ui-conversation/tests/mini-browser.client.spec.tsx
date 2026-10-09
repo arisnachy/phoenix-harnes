@@ -55,6 +55,30 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('scopes state and screenshot requests to the verified CDP receipt without changing the active tab', async () => {
+    const calls = installBrowserMock()
+    render(<MiniBrowser requested tabId="shared-tab" />)
+    await screen.findByRole('region', { name: 'Navegador de Kira' })
+    await waitFor(() => {
+      const seen = vi.mocked(fetch).mock.calls.some(([path]) => String(path).endsWith('/frame'))
+      expect(seen).toBe(true)
+    })
+    for (const [path, options] of vi.mocked(fetch).mock.calls) {
+      if (!String(path).endsWith('/state') && !String(path).endsWith('/frame')) continue
+      expect((options as { headers?: Record<string, string> } | undefined)?.headers?.['x-phoenix-mini-browser-tab'])
+        .toBe('shared-tab')
+    }
+    expect(calls).toHaveLength(0)
+  })
+
+  it('does not show a stale page as successful while navigation lacks a real receipt', async () => {
+    installBrowserMock()
+    render(<MiniBrowser requested />)
+    expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
+    expect(screen.getByText(/Esperando el identificador de pestaña/)).toBeTruthy()
+    expect(vi.mocked(fetch)).not.toHaveBeenCalled()
+  })
+
   it('only opens desktop Chrome when the user presses the footer button', async () => {
     const calls = installBrowserMock()
     render(<MiniBrowser />)
