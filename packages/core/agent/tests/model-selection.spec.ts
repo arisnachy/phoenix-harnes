@@ -806,14 +806,14 @@ describe('installModelSelection()', () => {
     await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
     expect(steered).toEqual([])
 
-    // An invalid/failed visual receipt must never pretend the task is done.
+    // An invalid/failed visual receipt must not spawn a teammate as a fake
+    // repair when the agent has already chosen to finish this turn.
     const result = events.find(event => event.type === 'tool/result')
     if (result === undefined) throw new Error('expected visual result fixture')
     const success = result.data
     result.data = { turn: 1, step: 1, error: { code: 'INVALID_VISUAL' }, message: success }
     await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
-    expect(steered).toHaveLength(1)
-    expect(JSON.stringify(steered[0])).toContain('real Kira Team participation')
+    expect(steered).toEqual([])
     result.data = success
 
     // Previous-turn evidence cannot count for another user's request.
@@ -828,13 +828,14 @@ describe('installModelSelection()', () => {
       },
     } })
     await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 2, signal })
-    expect(steered).toHaveLength(2)
+    expect(steered).toHaveLength(1)
+    expect(JSON.stringify(steered[0])).toContain('execute the next concrete action')
 
     dispose()
     await ctx.fiber.dispose()
   })
 
-  it('keeps actionable Phoenix Auto work open until a real Kira teammate reports back', async () => {
+  it('lets Kira finish an actionable task without mandatory Team delegation', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -879,19 +880,17 @@ describe('installModelSelection()', () => {
     await ctx.systemPrompt.assemble()
     await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
 
-    expect(steered).toHaveLength(1)
-    expect(JSON.stringify(steered[0])).toMatch(/real Kira Team participation/i)
-    expect(JSON.stringify(steered[0])).toMatch(/spawn_teammate/i)
+    expect(steered).toEqual([])
 
     dispose()
     await ctx.fiber.dispose()
   })
 
-  it('does not inject Team admission after successful GitHub MCP get_me and a finished read-only reply', async () => {
+  it('does not resume completed operations regardless of tool/provider when Kira ends the turn', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({ schemas: [
-      { name: 'mcp__github__get_me', description: 'inspect connected GitHub identity', parameters: { type: 'object' } },
+      { name: 'read', description: 'inspect a file', parameters: { type: 'object' } },
       { name: 'spawn_teammate', description: 'optional Team delegation', parameters: { type: 'object' } },
     ] }))
     const selection: ModelSelectionRef = {
@@ -901,18 +900,17 @@ describe('installModelSelection()', () => {
     const events: { type: string; data: unknown }[] = [
       { type: 'turn/start', data: { turn: 1 } },
       { type: 'user/message', data: { source: { kind: 'user' },
-        content: [{ type: 'text', text: 'Prueba si GitHub MCP funciona y reconoce mi cuenta; solo lectura' }] } },
-      { type: 'tool/call', data: {
-        turn: 1, step: 2, callId: 'github-read-1', name: 'mcp__github__get_me', arguments: '{}',
-      } },
-      { type: 'tool/result', data: {
-        turn: 1, step: 2, message: { source: { kind: 'tool', callId: 'github-read-1' },
-          content: [{ type: 'tool-result', toolCallId: 'github-read-1', isError: false,
-            content: [{ type: 'text', text: '{"login":"arisnachy"}' }] }] },
-      } },
+        content: [{ type: 'text', text: 'Revisa la configuración del navegador de Phoenix.' }] } },
+      { type: 'tool/call', data: { turn: 1, step: 2, callId: 'read-1', name: 'read', arguments: '{}' } },
+      { type: 'tool/result', data: { turn: 1, step: 2, message: {
+        source: { kind: 'tool', callId: 'read-1' }, content: [
+          { type: 'tool-result', toolCallId: 'read-1', isError: false,
+            content: [{ type: 'text', text: 'viewport=1280' }] },
+        ],
+      } } },
       { type: 'assistant/message', data: { turn: 1, step: 3,
         message: { source: { model: 'gpt-6-luna' },
-          content: [{ type: 'text', text: 'GitHub MCP respondió correctamente y reconoció la cuenta arisnachy. No hay trabajo pendiente.' }] } } },
+          content: [{ type: 'text', text: 'La revisión está completa. Configuración: 1280 px. No queda trabajo pendiente.' }] } } },
     ]
     const steered: unknown[] = []
     const agent = { session: { events }, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
@@ -923,7 +921,7 @@ describe('installModelSelection()', () => {
         if (step > 3) {
           events.push({ type: 'assistant/message', data: { turn: 1, step,
             message: { source: { model: 'gpt-6-luna' },
-              content: [{ type: 'text', text: 'La prueba ya está completada; GitHub MCP funciona.' }] } } })
+              content: [{ type: 'text', text: 'La revisión ya terminó; configuración comprobada.' }] } } })
         }
         await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
       }
@@ -934,7 +932,7 @@ describe('installModelSelection()', () => {
     }
   })
 
-  it('limits a missing Team outcome to one admission instead of an unbounded injection loop', async () => {
+  it('never injects Team admission after a final Kira answer across repeated stopping callbacks', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({ schemas: [
@@ -961,8 +959,7 @@ describe('installModelSelection()', () => {
             content: [{ type: 'text', text: 'Corregido y verificado, sin trabajo adicional.' }] } } })
         await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
       }
-      expect(steered).toHaveLength(1)
-      expect(JSON.stringify(steered[0])).toContain('Phoenix Auto substantive unfinished work')
+      expect(steered).toEqual([])
     } finally {
       dispose()
       await ctx.fiber.dispose()
@@ -994,6 +991,45 @@ describe('installModelSelection()', () => {
       await ctx.systemPrompt.assemble()
       await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal: new AbortController().signal })
       expect(steered).toHaveLength(0)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('treats first-step terminal replies as final but preserves unfinished Sol execution handoff', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'spawn_teammate', description: 'optional peer', parameters: { type: 'object' } },
+    ] }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Prueba la interfaz de Phoenix.' }] } },
+      { type: 'assistant/message', data: { turn: 1, step: 1,
+        message: { source: { model: 'gpt-6.1-sol' },
+          content: [{ type: 'text', text: 'Tarea completada. No hay nada pendiente.' }] } } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+      expect(steered).toEqual([])
+      events.push({ type: 'turn/start', data: { turn: 2 } }, { type: 'user/message', data: {
+        source: { kind: 'user' }, content: [{ type: 'text', text: 'Prueba la interfaz de Phoenix otra vez.' }],
+      } }, { type: 'assistant/message', data: { turn: 2, step: 1, message: {
+        source: { model: 'gpt-6.1-sol' }, content: [{ type: 'text', text: '**Plan:** comprobar interfaz y verificar.' }],
+      } } })
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 2, signal })
+      expect(steered).toHaveLength(1)
+      expect(JSON.stringify(steered[0])).toContain('visible **Plan:**')
     } finally {
       dispose()
       await ctx.fiber.dispose()
