@@ -4,7 +4,7 @@
  * model-generated browser states. Fullscreen is a larger view of SAME tab.
  */
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react'
-import { createPortal } from 'react-dom'
+import { Modal } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './MiniBrowser.module.css'
 
 type Tab = { id: string; title: string; url: string }
@@ -269,6 +269,6 @@ export function MiniBrowser() {
         ◉ Abrir navegador
       </button>
     )}</div>}
-    {expanded && createPortal(<div className={css.overlay} role="presentation">{viewer}</div>, document.body)}
+    {expanded && <Modal open headless className={css.expandedDialog} title="Navegador de Kira" onClose={() => { setExpanded(false) }}>{viewer}</Modal>}
   </>
 }
