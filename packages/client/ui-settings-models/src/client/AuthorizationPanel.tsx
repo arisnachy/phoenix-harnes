@@ -80,7 +80,7 @@ export interface OpenClawConnectorView {
   runtimeAvailable: boolean
   connected: boolean
   account?: string
-  phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill'
+  phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill' | 'api-unavailable'
 }
 
 /** OpenClaw connector routes currently reusable by Phoenix. */
