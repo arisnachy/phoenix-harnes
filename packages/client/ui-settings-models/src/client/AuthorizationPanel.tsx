@@ -667,6 +667,36 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           </details>
         </div>
       ) : null}
+      {definition.id === 'meta-devtools' ? (
+        <div className={styles['advancedHint']}>
+          <p>
+            MCP oficial de Meta para tus aplicaciones, permisos, App Review, uso de API y webhooks.
+            No sirve para publicar directamente en páginas de Facebook o cuentas de Instagram.
+            {' '}<a href="https://developers.facebook.com/documentation/mcp/devtools-mcp"
+              target="_blank" rel="noopener noreferrer">Documentación oficial</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/meta-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía de Phoenix</a>.
+          </p>
+          <p>OAuth de Meta requiere autorización real y puede exigir un redirect HTTPS; si Meta rechaza
+            el callback local de Phoenix, la conexión permanecerá pendiente, nunca conectada ficticiamente.</p>
+        </div>
+      ) : null}
+      {definition.id === 'meta-whatsapp-business' ? (
+        <div className={styles['advancedHint']}>
+          <p>
+            Para WhatsApp Business Cloud API, no para WhatsApp personal.
+            Necesitas permisos de administrador en Meta Business y en la app de WhatsApp,
+            además de aceptar los términos de Cloud API.
+            {' '}<a href="https://mcp.facebook.com/whatsapp_business_tools"
+              target="_blank" rel="noopener noreferrer">Servidor oficial</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/meta-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía de Phoenix</a>.
+          </p>
+          <p>Conectar y consultar no supone envíos gratuitos ilimitados. Algunos mensajes y
+            operaciones pueden generar cargos de Meta: confirma el coste y pide aprobación
+            antes de cualquier envío o cambio de facturación.</p>
+        </div>
+      ) : null}
       {definition.id === 'figma' && managed?.url === 'http://127.0.0.1:3845/mcp'
         && mcpRuntime?.status !== 'ready' ? (
           <p className={styles['advancedHint']}>
