@@ -104,3 +104,37 @@ If a provider is disabled, blocked or returns zero sources, mark access as
 exists. Public HTML search may be rate-limited; authenticated sources still
 require existing user authorization. Do not scrape personal user data or
 bypass permissions to improve an evaluation score.
+
+## Run the REAL model on the current local Phoenix installation
+
+This command actually starts Phoenix **headless** once per challenge using
+the model/provider configured in the existing local account (not a mocked
+assistant). It keeps credentials outside the output and forces read-only tool
+permissions, without changing the user's authentication or source checkout.
+
+```sh
+node scripts/phoenix-research-live.mjs \
+  --cases reports/research-quality/live-prompts.json \
+  --case mcp-live \
+  --output phoenix-research-live-result.json
+```
+
+Omit `--case mcp-live` to run all curated tasks, each with its own maximum
+execution time (up to four minutes). The script creates disposable isolated
+JSONL session storage and deletes it after collecting source-opening receipts
+and tokens. It keeps only the final model response, public origin/path URLs
+(without query parameters), elapsed time, token counts and tool-call counts.
+
+If local Phoenix packages/model authorization are not installed, the run
+will fail explicitly; the CI synthetic benchmark is **not** a substitute.
+If the model adapter doesn't emit token usage, the value is `null`, never
+a fabricated zero. Do not publish real benchmark output without checking
+its content for personal data.
+
+The live runner returns an **unscored** JSON report. To grade it, a separate
+reviewer must establish a contemporary gold evidence file (exact primary
+text, verified claims, source dates, contradiction checks) *without consulting
+the model's output*, and pass that file into
+`phoenix-research-benchmark.mjs --cases <independent-corpus> --run <live-report>`.
+Running the same questions twice, separately on a comparison system, is
+necessary before claiming Phoenix matches or exceeds ChatGPT research.

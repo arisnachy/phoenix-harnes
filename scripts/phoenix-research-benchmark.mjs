@@ -97,8 +97,11 @@ export function scoreResearchCase(testCase, run) {
   if (grounded < factCount) failures.push('required-claim-not-fully-grounded')
   if (!withinTime || !withinTokens) failures.push('missing-measured-runtime-or-tokens')
   if (fresh === false) failures.push('stale-research')
+  if (run.exitCode !== undefined && run.exitCode !== 0) failures.push('failed-live-execution')
+  if (run.timedOut === true) failures.push('live-execution-timeout')
   const rawScore = Object.values(points).reduce((sum, value) => sum + value, 0)
-  const score = banned.length > 0 ? Math.min(rawScore, 49)
+  const incomplete = run.timedOut === true || (run.exitCode !== undefined && run.exitCode !== 0)
+  const score = banned.length > 0 || incomplete ? Math.min(rawScore, 49)
     : unknownCitations.length > 0 ? Math.min(rawScore, 59) : rawScore
   return {
     id: run.id,

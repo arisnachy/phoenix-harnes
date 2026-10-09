@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'scripts/phoenix-research-benchmark.*'
+      - 'scripts/phoenix-research-live.*'
       - 'reports/research-quality/**'
       - '.github/workflows/phoenix-research-quality.yml'
   workflow_dispatch:
@@ -21,7 +22,7 @@ jobs:
         with:
           node-version: '24'
       - name: Validate auditable research scoring
-        run: node --test scripts/phoenix-research-benchmark.test.mjs
+        run: node --test scripts/phoenix-research-benchmark.test.mjs scripts/phoenix-research-live.test.mjs
       - name: Score known-good synthetic research receipts
         run: |
           node scripts/phoenix-research-benchmark.mjs \
