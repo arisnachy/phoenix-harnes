@@ -213,6 +213,8 @@ async function state(): Promise<Record<string, unknown>> {
  * implement every capture option equally. Try one tightly cropped frame,
  * then the visible viewport, then the software surface, without navigating or
  * replacing the browser/tab. Never fake a successful screenshot.
+ * @param capture - Execute one CDP screenshot request against the same tab.
+ * @returns A verified JPEG buffer from Chromium.
  */
 export async function captureBrowserFrameWithFallback(
   capture: (params: Record<string, unknown>) => Promise<{ data: string }>,
