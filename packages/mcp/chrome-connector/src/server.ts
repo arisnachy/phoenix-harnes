@@ -508,6 +508,76 @@ server.registerTool('wait_for', {
   return formatBrowserResult({ ok: false, reason: 'TIMEOUT_WAITING_FOR_TEXT', url: last?.url, title: last?.title, foundText: false })
 })
 
+server.registerTool('screenshot', {
+  description: 'Vista visual REAL de Chromium (JPEG 1280x720) únicamente cuando la inspección DOM no sea suficiente. Permite reconocer canvas, menús, diseños, errores y diálogos web. Puede costar más tokens que inspect_page; evita capturas repetidas.',
+  inputSchema: { tabId: z.string().optional() },
+}, async ({ tabId }) => {
+  const tab = await selectedTab(tabId)
+  const shot = await cdp<{ data: string }>(tab, 'Page.captureScreenshot', {
+    format: 'jpeg', quality: 65, captureBeyondViewport: false, fromSurface: true,
+  })
+  const bytes = typeof shot.data === 'string' ? Buffer.from(shot.data, 'base64') : Buffer.alloc(0)
+  if (bytes.length < 64 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes.length > 5_000_000) {
+    return { isError: true, content: [{ type: 'text', text: 'CAPTURE_FAILED: Chromium no proporcionó un JPEG verificable.' }] }
+  }
+  return { content: [
+    { type: 'image' as const, data: shot.data, mimeType: 'image/jpeg' as const },
+    { type: 'text' as const, text: 'Captura real de ' + tab.url + ' (1280x720, sin clip). Usa inspect_page primero para formularios.' },
+  ] }
+})
+
+server.registerTool('mouse_action', {
+  description: 'Control visual alternativo sobre una captura REAL de Chromium: clic o desplazamiento en coordenadas 1280x720. Úsalo solo si no existe control DOM accesible; nunca hagas clic a ciegas sin una captura reciente.',
+  inputSchema: { tabId: z.string().optional(), action: z.enum(['click','scroll']),
+    x: z.number().min(0).max(1280), y: z.number().min(0).max(720),
+    deltaY: z.number().min(-1500).max(1500).optional() },
+}, async ({ tabId, action, x, y, deltaY }) => {
+  ensureBrowserActionPermission()
+  const tab = await selectedTab(tabId)
+  if (action === 'scroll') {
+    await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY: deltaY ?? 480 })
+  } else {
+    await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 })
+    await cdp(tab, 'Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 })
+  }
+  return { content: [{ type: 'text', text: 'Acción enviada al Chromium real, pestaña ' + tab.id
+    + '. Verifica con inspect_page o screenshot antes de afirmar el resultado.' }] }
+})
+
+server.registerTool('press_key', {
+  description: 'Tecla de navegador (Enter, Tab, Escape, Backspace, flechas, letras, dígitos y modificadores). Alternativa CDP a Computer si la ventana de escritorio está oculta. Nunca escribe en otra aplicación del sistema.',
+  inputSchema: { tabId: z.string().optional(), key: z.string().min(1).max(25),
+    modifiers: z.number().int().min(0).max(15).default(0) },
+}, async ({ tabId, key, modifiers }) => {
+  ensureBrowserActionPermission()
+  const allowed = new Set(['Enter','Tab','Escape','Backspace','Delete','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Home','End','PageUp','PageDown'])
+  if (!allowed.has(key) && !/^[a-zA-Z0-9 ]$/.test(key)) throw new Error('Tecla no admitida; solo navegación y texto simple.')
+  const tab = await selectedTab(tabId)
+  const virtualCodes: Record<string, number> = {
+    Enter: 13, Tab: 9, Escape: 27, Backspace: 8, Delete: 46,
+    ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39,
+    Home: 36, End: 35, PageUp: 33, PageDown: 34,
+  }
+  const virtual = virtualCodes[key] ?? key.toUpperCase().charCodeAt(0)
+  const params = { key, code: key, modifiers, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual }
+  await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', ...params,
+    ...key.length === 1 && modifiers === 0 ? { text: key } : key === 'Enter' ? { text: '\\r' } : {} })
+  await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', ...params })
+  return { content: [{ type: 'text', text: 'Tecla enviada: ' + key + ' en la pestaña ' + tab.id }] }
+})
+
+server.registerTool('type_text', {
+  description: 'Escribe texto en el campo actualmente enfocado del Chromium del chat mediante CDP, sin ventana visible. Inspecciona y enfoca antes: no escribir a ciegas. Para formularios normales usar fill_form es más rápido y fiable.',
+  inputSchema: { tabId: z.string().optional(), text: z.string().max(4096) },
+}, async ({ tabId, text }) => {
+  ensureBrowserActionPermission()
+  const tab = await selectedTab(tabId)
+  const focused = await evaluate(tab, 'Boolean(document.activeElement && (document.activeElement.matches("input:not([type=hidden]):not([disabled]):not([readonly]),textarea:not([disabled]):not([readonly]),[contenteditable=true]")))')
+  if (focused !== true) throw new Error('No hay campo editable enfocado en Chromium. Usa inspect_page e interact primero.')
+  await cdp(tab, 'Input.insertText', { text })
+  return { content: [{ type: 'text', text: 'Texto introducido en el control enfocado. Verifica en el DOM antes de confirmar.' }] }
+})
+
 server.registerTool('click_text', {
   description: 'Hace clic en un elemento cuyo texto coincide cuando la política de permisos del navegador permite acciones.',
   inputSchema: { text: z.string().min(1), tabId: z.string().optional() },
