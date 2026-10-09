@@ -49,7 +49,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
   it('does not show a global Abrir navegador button in an unrelated chat', async () => {
     const calls = installBrowserMock({ ...state, available: false, url: 'about:blank', tabs: [] })
     render(<MiniBrowser />)
-    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
+    await waitFor(() => { expect(vi.mocked(fetch)).toHaveBeenCalled() })
     expect(screen.queryByText(/Abrir navegador/)).toBeNull()
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
     expect(calls).toHaveLength(0)
