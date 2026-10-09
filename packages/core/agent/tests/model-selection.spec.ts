@@ -10,6 +10,7 @@ import {
   persistModelSelectionPreference,
   isContextualConversationFastPathText,
   isConversationalFastPathText,
+  isBriefTeamDemonstration,
   jevSelectedModelId,
   PHOENIX_CODEX_AUTO_MODEL,
   type Agent,
@@ -185,6 +186,107 @@ describe('installModelSelection()', () => {
 
     dispose()
     await ctx.fiber.dispose()
+  })
+
+  it('adapts a tiny requested Team demonstration to Sol/medium without sacrificing real work quality', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const userMessage = (value: string) => ({
+      type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: value }] },
+    })
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      userMessage('quiero verte en acción con tu equipo vamos has una pequeña prueba'),
+    ]
+    const agent = { session: { events }, options: {} } as unknown as Agent
+    const signal = new AbortController().signal
+    try {
+      expect(isBriefTeamDemonstration('quiero verte en accion con tu equipo vamos has una pequena prueba')).toBe(true)
+      expect(isBriefTeamDemonstration('haz una prueba con tu equipo en github repo')).toBe(false)
+      expect(isBriefTeamDemonstration('Hola, ¿cómo estás?')).toBe(false)
+      await ctx.systemPrompt.assemble()
+      await expect(agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 1, step: 1, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
+        .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('medium') })
+      await expect(agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('exposes the first-step Sol plan policy, then switches to a single Luna execution brief', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const events: { type: string; data: unknown }[] = [{ type: 'turn/start', data: { turn: 1 } }]
+    const agent = { options: {}, session: { events } } as unknown as Agent
+    ctx.agent = agent
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    try {
+      const first = await ctx.systemPrompt.assemble()
+      const firstPolicy = first.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
+      expect(firstPolicy).toContain('**Plan:**')
+      expect(firstPolicy).toContain('user-visible')
+      events.push({ type: 'step/start', data: { turn: 1, step: 1 } })
+      const second = await ctx.systemPrompt.assemble()
+      const secondPolicy = second.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
+      expect(secondPolicy).toContain('already-approved execution brief')
+      expect(secondPolicy).not.toContain('FIRST step')
+      selection.current = { provider: 'deepseek', model: 'deepseek-v4-pro' }
+      const external = await ctx.systemPrompt.assemble()
+      expect(external.sections.some(item => item.name === 'phoenix:auto-visible-handoff')).toBe(false)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('hands off Sol\'s actual visible plan to Luna exactly once before requiring real Team work', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({
+      schemas: [{ name: 'spawn_teammate', description: 'assign real work', parameters: { type: 'object' } }],
+    }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'quiero verte en accion con tu equipo haz una pequeña prueba' }] } },
+      { type: 'assistant/message', data: { turn: 1, step: 1, message: {
+        source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+        content: [{ type: 'text', text: '**Plan:** Haré una pequeña prueba; asignaré una verificación y compartiré evidencia.' }],
+      } } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, options: {}, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+      expect(steered).toHaveLength(1)
+      expect(JSON.stringify(steered[0])).toContain('visible **Plan:**')
+      expect(JSON.stringify(steered[0])).toContain('spawn_teammate')
+      expect(JSON.stringify(steered[0])).not.toContain('Phoenix Auto team admission')
+      await expect(agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
   })
 
   it('routes Phoenix Auto from Sol planning to Luna Max execution', async () => {
