@@ -30,13 +30,6 @@ export function teamMissionClosed(events: readonly SessionEvent[]): boolean {
   const boundary = events.findLastIndex(event =>
     event.type === 'turn/start' || (event.type === 'user/message' && event.data.source.kind === 'user'))
   const current = events.slice(boundary + 1)
-  const statement = current.findLast(event => event.type === 'assistant/message')
-  if (statement?.type !== 'assistant/message') return false
-  const content = statement.data.message.content
-    .flatMap(block => block.type === 'text' ? [block.text] : [])
-    .join(' ')
-  if (!NO_WORK_REMAINING.test(content)) return false
-
   const calls = new Map<string, string>()
   let action = false
   let verification = false
@@ -50,7 +43,14 @@ export function teamMissionClosed(events: readonly SessionEvent[]): boolean {
         action ||= EFFECT.test(tool)
         verification ||= VERIFY.test(tool)
       }
+    } else if (event.type === 'assistant/message' && action && verification) {
+      const content = event.data.message.content
+        .flatMap(block => block.type === 'text' ? [block.text] : [])
+        .join(' ')
+      // Closure is sticky in this user turn. A later model-produced "I'll review"
+      // cannot undo Kira's evidenced final delivery or spawn an Aegis reviewer.
+      if (NO_WORK_REMAINING.test(content)) return true
     }
   }
-  return action && verification
+  return false
 }
