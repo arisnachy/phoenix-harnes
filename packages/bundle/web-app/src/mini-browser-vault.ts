@@ -17,7 +17,7 @@ Add-Type -AssemblyName System.Security
 $raw = [Console]::In.ReadToEnd().Trim()
 $bytes = [Convert]::FromBase64String($raw)
 try {
-  if ($args[0] -eq 'protect') {
+  if (__MODE__ -eq 'protect') {
     $result = [Security.Cryptography.ProtectedData]::Protect($bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
   } else {
     $result = [Security.Cryptography.ProtectedData]::Unprotect($bytes, $null, [Security.Cryptography.DataProtectionScope]::CurrentUser)
@@ -41,7 +41,10 @@ export function secureBrowserOrigin(value: string): string {
   return url.origin
 }
 
-/** Whether the current host can protect browser logins with Windows DPAPI. */
+/**
+ * Whether Windows DPAPI is available for this native user.
+ * @returns True only on Windows.
+ */
 export function browserVaultSupported(): boolean {
   return process.platform === 'win32'
 }
@@ -56,7 +59,8 @@ function vaultFile(origin: string): string {
 function invokeDpapi(mode: 'protect' | 'unprotect', bytes: Buffer): Promise<Buffer> {
   if (!browserVaultSupported()) throw new Error('El vault cifrado requiere Phoenix en Windows.')
   return new Promise((resolve, reject) => {
-    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', SCRIPT, mode], {
+    const command = SCRIPT.replace('__MODE__', "'" + mode + "'")
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {
       windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'],
     })
     const chunks: Buffer[] = []
@@ -112,6 +116,7 @@ export function hasSecureBrowserLogin(origin: string): boolean {
  * @param origin - Exact authorized site origin.
  * @param account - Credential entered by the person, never the model.
  * @param secret - Password entered by the person, never the model.
+ * @returns Completion after the encrypted record is written.
  */
 export async function saveSecureBrowserLogin(origin: string, account: string, secret: string): Promise<void> {
   const canonical = secureBrowserOrigin(origin)
@@ -150,6 +155,7 @@ export async function resolveSecureBrowserLogin(origin: string): Promise<{ accou
 /**
  * Revoke one origin's protected login; does not read or reveal its contents.
  * @param origin - Exact origin selected by the human.
+ * @returns Completion after the vault record is revoked.
  */
 export async function forgetSecureBrowserLogin(origin: string): Promise<void> {
   await unlink(vaultFile(origin)).catch((error: unknown) => {
