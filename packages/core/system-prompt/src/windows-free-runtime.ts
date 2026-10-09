@@ -52,7 +52,8 @@ export function startWindowsCapabilityDiscovery(
   if (platform !== 'win32' || !supervised || !exists(path)) return () => ''
 
   let snapshot = ''
-  const execute: ProbeExecutor = options.execute ?? nodeExecFile
+  const execute: ProbeExecutor = options.execute ?? ((binary, args, execOptions, callback) =>
+    nodeExecFile(binary, args, execOptions, (error, stdout) => callback(error, stdout)))
   execute(process.execPath, [path], {
     encoding: 'utf8',
     windowsHide: true,
