@@ -38,7 +38,7 @@ describe('hardness_run tool adapter', () => {
     const tool = createHardnessTool(runner)
 
     expect(tool.name).toBe('hardness_run')
-    expect(tool.description).toContain('A blocked result is non-terminal')
+    expect(tool.description).toContain('WAITING_EXTERNAL or exhausted RECOVERING')
     expect(tool.description).toContain('mission_status')
     expect(tool.description).toContain('next_action')
     expect(tool.parameters).toEqual({
@@ -125,7 +125,47 @@ describe('hardness_run tool adapter', () => {
     expect(JSON.stringify(projected)).not.toContain('must-not-leak')
   })
 
-  it('projects a blocked mission as recoverable state and leaves a durable recovery instruction', async () => {
+  it('stops after a browser permission blocker without scheduling another HARDNESS loop', async () => {
+    const { runner, run } = runnerReturning({
+      kind: 'blocked',
+      reason: 'Browser permission required',
+      status: 'WAITING_EXTERNAL',
+      nextAction: 'wait_for_dependency',
+    })
+    const tool = createHardnessTool(runner)
+    const exec = execution()
+    await expect(tool.execute({ need: { kind: 'browser' }, arguments: { url: 'https://example.org' } }, exec))
+      .resolves.toMatchObject({ kind: 'blocked', mission_status: 'WAITING_EXTERNAL' })
+    expect(exec.deferContext).not.toHaveBeenCalled()
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('does not restart an exhausted provider recovery until something changes', async () => {
+    const { runner } = runnerReturning({
+      kind: 'blocked',
+      reason: 'automatic recovery limit reached',
+      status: 'RECOVERING',
+      nextAction: 'retry_with_alternative',
+    })
+    const exec = execution()
+    const tool = createHardnessTool(runner)
+    await tool.execute({ need: { kind: 'browser' }, arguments: {} }, exec)
+    expect(exec.deferContext).not.toHaveBeenCalled()
+  })
+
+  it('still defers one real ACTIVE judge repair when evidence is incomplete', async () => {
+    const { runner } = runnerReturning({
+      kind: 'blocked',
+      reason: 'artifact requires a corrected output',
+      status: 'ACTIVE',
+      nextAction: 'repair_and_replan',
+    })
+    const exec = execution()
+    await createHardnessTool(runner).execute({ need: { kind: 'report' }, arguments: {} }, exec)
+    expect(exec.deferContext).toHaveBeenCalledOnce()
+  })
+
+  it('projects the exhausted recovery state but does not requeue the same mission', async () => {
     const { runner, run } = runnerReturning({
       kind: 'blocked',
       reason: 'approval required',
@@ -143,11 +183,7 @@ describe('hardness_run tool adapter', () => {
         mission_status: 'RECOVERING',
         next_action: 'retry_with_alternative',
       })
-    const { deferContext } = exec
-    expect(deferContext).toHaveBeenCalledWith(expect.objectContaining({
-      source: expect.objectContaining({ plugin: 'hardness-adapters' }) as unknown,
-      content: [expect.objectContaining({ type: 'text', text: expect.stringContaining('Do not treat this blocked result as mission completion') as unknown }) as unknown],
-    }) as unknown)
+    expect(exec.deferContext).not.toHaveBeenCalled()
     expect(run).toHaveBeenCalledOnce()
   })
 
