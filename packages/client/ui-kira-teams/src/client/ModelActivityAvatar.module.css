@@ -1,442 +1,89 @@
+/* Phoenix Kira / team — stable, crisp portraits without distracting movement. */
 .avatar {
-  --avatar-accent: #4f7fd8;
-  --avatar-accent-2: #9ec8ff;
+  --avatar-accent: #6881a5;
   --avatar-surface: var(--dsh-color-surface, #fff);
   position: relative;
   isolation: isolate;
   flex: none;
+  display: inline-block;
   width: 42px;
   height: 42px;
   border-radius: 50%;
-  color: var(--avatar-accent);
+  background: var(--avatar-surface);
 }
 
-.card {
-  width: 54px;
-  height: 54px;
-}
+.card { width: 50px; height: 50px; }
 
-.aura,
-.ring,
-.core,
-.portraitImage,
-.lifeGlint,
-.scanLine,
-.energyRibbon,
-.phaseCue,
-.badge {
+.portraitImage {
   position: absolute;
+  z-index: 1;
+  inset: 3px;
+  width: calc(100% - 6px);
+  height: calc(100% - 6px);
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 44%;
+  image-rendering: auto;
+  filter: none;
+  transform: none;
+  background: #f4e9df;
+  user-select: none;
   pointer-events: none;
 }
 
-.aura {
-  z-index: 0;
-  inset: -5px;
-  border-radius: 50%;
-  background: radial-gradient(circle, color-mix(in srgb, var(--avatar-accent) 34%, transparent), transparent 68%);
-  filter: blur(7px);
-  opacity: .12;
-  transform: scale(.94);
-}
-
 .ring {
+  position: absolute;
   z-index: 2;
   inset: 0;
-  overflow: hidden;
-  border: 2px solid color-mix(in srgb, var(--avatar-accent) 38%, var(--dsh-color-border, transparent));
+  border: 1.5px solid color-mix(in srgb, var(--avatar-accent) 64%, #fff);
   border-radius: 50%;
-  background: transparent;
-  box-shadow:
-    0 5px 14px rgb(15 23 42 / 12%),
-    inset 0 0 0 2px color-mix(in srgb, #fff 70%, transparent);
-}
-
-.ring::after {
-  position: absolute;
-  inset: -2px;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg,
-    transparent 0deg 240deg,
-    color-mix(in srgb, var(--avatar-accent-2) 92%, #fff) 285deg,
-    transparent 340deg);
-  content: '';
-  opacity: 0;
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px));
-}
-
-.core {
-  z-index: 1;
-  inset: 3px;
-  overflow: hidden;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle at 25% 16%, rgb(255 255 255 / 76%), transparent 30%),
-    color-mix(in srgb, var(--avatar-accent-2) 9%, var(--avatar-surface));
-}
-
-.portraitImage {
-  z-index: 3;
-  inset: 4px;
-  width: calc(100% - 8px);
-  height: calc(100% - 8px);
-  border-radius: 50%;
-  object-fit: cover;
-  object-position: 50% 42%;
-  user-select: none;
-  filter: saturate(1.04) contrast(1.01);
-  transform: scale(1.03);
-  transition: filter 180ms ease, transform 220ms ease, opacity 180ms ease;
-}
-
-.lifeGlint {
-  z-index: 4;
-  top: 8px;
-  left: 10px;
-  width: 13px;
-  height: 7px;
-  border-radius: 50%;
-  background: rgb(255 255 255 / 54%);
-  filter: blur(2.6px);
-  opacity: .38;
-  transform: rotate(-28deg);
-}
-
-.scanLine {
-  z-index: 5;
-  left: 8px;
-  right: 8px;
-  top: 9px;
-  height: 1px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--avatar-accent-2) 86%, #fff), transparent);
-  box-shadow: 0 0 7px color-mix(in srgb, var(--avatar-accent) 45%, transparent);
-  opacity: 0;
-}
-
-.energyRibbon {
-  z-index: 5;
-  inset: 7px;
-  border: 1px dashed color-mix(in srgb, var(--avatar-accent-2) 74%, #fff);
-  border-radius: 50%;
-  opacity: 0;
-}
-
-.phaseCue {
-  z-index: 6;
-  right: -1px;
-  bottom: 1px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--avatar-surface);
-  box-shadow: 0 2px 5px rgb(15 23 42 / 16%);
-}
-
-.phaseCueInner {
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  background: var(--avatar-accent);
+  box-shadow: 0 2px 8px rgb(52 37 19 / 9%), inset 0 0 0 1px var(--avatar-surface);
+  pointer-events: none;
 }
 
 .badge {
-  z-index: 7;
-  right: -1px;
-  bottom: -1px;
-  width: 12px;
-  height: 12px;
+  position: absolute;
+  z-index: 3;
+  right: 0;
+  bottom: 0;
+  width: 9px;
+  height: 9px;
   border: 2px solid var(--avatar-surface);
   border-radius: 50%;
-  background: #94a3b8;
-  box-shadow: 0 2px 5px rgb(15 23 42 / 16%);
+  background: #87929b;
+  box-shadow: 0 1px 3px rgb(52 37 19 / 14%);
+  pointer-events: none;
 }
 
-.badge::after {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 7px;
-  line-height: 1;
-  font-weight: 900;
-  content: '';
-}
-
-.avatar[data-avatar='kira'] {
-  --avatar-accent: #a76516;
-  --avatar-accent-2: #ffd28a;
-}
-
-.avatar[data-avatar='kira'] .ring {
-  border-width: 2px;
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--avatar-accent-2) 28%, transparent),
-    0 6px 18px rgb(15 23 42 / 16%),
-    inset 0 0 0 2px color-mix(in srgb, #fff 76%, transparent);
-}
-
-.avatar[data-avatar='kira'][data-state] .badge {
-  background: var(--avatar-accent);
-}
-
-.avatar[data-avatar='kira'][data-state] .badge::after {
-  content: 'K';
-  font-size: 6px;
-}
-
-.avatar[data-avatar='vega'],
-.avatar[data-avatar='aurora'] { --avatar-accent: #16a7c7; --avatar-accent-2: #74e4f3; }
+/* Keep Kira unmistakable, but without the extra animated halo or K badge. */
+.avatar[data-avatar='kira'] { --avatar-accent: #c9954d; }
+.avatar[data-avatar='aurora'],
+.avatar[data-avatar='vega'] { --avatar-accent: #ca8ca6; }
 .avatar[data-avatar='atlas'],
-.avatar[data-avatar='helix'] { --avatar-accent: #2878e6; --avatar-accent-2: #8ec6ff; }
+.avatar[data-avatar='helix'] { --avatar-accent: #6997c2; }
 .avatar[data-avatar='nova'],
-.avatar[data-avatar='quasar'] { --avatar-accent: #8b5bd7; --avatar-accent-2: #d1a9ff; }
-.avatar[data-avatar='orion'],
-.avatar[data-avatar='zenith'] { --avatar-accent: #5b72d9; --avatar-accent-2: #aebcff; }
-.avatar[data-avatar='solaria'],
-.avatar[data-avatar='vortice'] { --avatar-accent: #e56b45; --avatar-accent-2: #ffb28f; }
+.avatar[data-avatar='quasar'] { --avatar-accent: #8e8ac1; }
 .avatar[data-avatar='prisma'],
-.avatar[data-avatar='lyra'] { --avatar-accent: #b44fc6; --avatar-accent-2: #efa3fa; }
+.avatar[data-avatar='lyra'] { --avatar-accent: #d28aac; }
+.avatar[data-avatar='orion'],
+.avatar[data-avatar='zenith'] { --avatar-accent: #7a8fb7; }
+.avatar[data-avatar='solaria'],
+.avatar[data-avatar='vortice'] { --avatar-accent: #d3a169; }
 .avatar[data-avatar='cobalto'],
-.avatar[data-avatar='eclipse'] { --avatar-accent: #3e5f8f; --avatar-accent-2: #8fa8c9; }
+.avatar[data-avatar='eclipse'] { --avatar-accent: #869bb3; }
 .avatar[data-avatar='nexo'],
-.avatar[data-avatar='astra'] { --avatar-accent: #d88736; --avatar-accent-2: #ffd08c; }
+.avatar[data-avatar='astra'] { --avatar-accent: #c9a277; }
 .avatar[data-avatar='senda'],
-.avatar[data-avatar='argo'] { --avatar-accent: #3d9b86; --avatar-accent-2: #96ddca; }
+.avatar[data-avatar='argo'] { --avatar-accent: #86af9e; }
 .avatar[data-avatar='orbita'],
-.avatar[data-avatar='lumen'] { --avatar-accent: #4e8bb8; --avatar-accent-2: #a6d7ef; }
+.avatar[data-avatar='lumen'] { --avatar-accent: #8aaabf; }
 
-.avatar[data-state='running'] .aura {
-  opacity: .34;
-  animation: avatar-breathe 1.9s ease-in-out infinite;
-}
+/* Only the small dot changes when Phoenix reports actual work state. */
+.avatar[data-state='running'] .badge { background: #4391da; }
+.avatar[data-state='pending'] .badge { background: #d4983c; }
+.avatar[data-state='ready'] .badge { background: #37b67a; }
+.avatar[data-state='done'] .badge { background: #8c9d99; }
 
-.avatar[data-state='running'] .badge {
-  background: #2f80ed;
-  animation: avatar-badge-pulse 1.35s ease-in-out infinite;
-}
-
-.avatar[data-phase='preparing'] .ring::after {
-  opacity: .9;
-  animation: avatar-orbit 2.6s linear infinite;
-}
-
-.avatar[data-phase='preparing'] .portraitImage {
-  animation: avatar-attend 2.4s ease-in-out infinite;
-}
-
-.avatar[data-phase='running-tools'] .scanLine {
-  opacity: .82;
-  animation: avatar-scan 1.65s ease-in-out infinite;
-}
-
-.avatar[data-phase='running-tools'] .energyRibbon {
-  opacity: .42;
-  animation: avatar-orbit 4.2s linear infinite;
-}
-
-.avatar[data-phase='running-tools'] .portraitImage {
-  animation: avatar-work 1.8s ease-in-out infinite;
-}
-
-.avatar[data-phase='verifying'] .ring::after {
-  opacity: .96;
-  animation: avatar-orbit 1.25s linear infinite;
-}
-
-.avatar[data-phase='verifying'] .energyRibbon {
-  opacity: .5;
-  animation: avatar-verify 1.2s ease-in-out infinite;
-}
-
-.avatar[data-state='pending'] .portraitImage {
-  filter: saturate(.72) contrast(.97);
-  opacity: .88;
-}
-
-.avatar[data-state='pending'] .aura {
-  opacity: .22;
-  animation: avatar-breathe 3s ease-in-out infinite;
-}
-
-.avatar[data-state='pending'] .badge { background: #8b63c7; }
-
-.avatar[data-state='ready'] .badge,
-.avatar[data-state='done'] .badge {
-  background: var(--dsh-color-success, #22a65a);
-}
-
-.avatar[data-state='ready'] .badge::after { content: '•'; font-size: 9px; }
-.avatar[data-state='done'] .badge::after { content: '✓'; font-size: 7px; }
-
-.avatar[data-state='done'] .portraitImage {
-  filter: saturate(.88) contrast(.99);
-}
-
-@keyframes avatar-orbit {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes avatar-breathe {
-  0%, 100% { transform: scale(.94); opacity: .24; }
-  50% { transform: scale(1.08); opacity: .46; }
-}
-
-@keyframes avatar-badge-pulse {
-  0%, 100% { transform: scale(.9); }
-  50% { transform: scale(1.08); }
-}
-
-@keyframes avatar-attend {
-  0%, 100% { transform: scale(1.03) translateY(0); }
-  50% { transform: scale(1.055) translateY(-.5px); }
-}
-
-@keyframes avatar-work {
-  0%, 100% { transform: scale(1.03); }
-  50% { transform: scale(1.06); }
-}
-
-@keyframes avatar-scan {
-  0% { transform: translateY(0); opacity: 0; }
-  18% { opacity: .9; }
-  82% { opacity: .8; }
-  100% { transform: translateY(27px); opacity: 0; }
-}
-
-@keyframes avatar-verify {
-  0%, 100% { transform: scale(.9); opacity: .25; }
-  50% { transform: scale(1.06); opacity: .65; }
-}
-
-@media (max-width: 680px) {
-  .card { width: 50px; height: 50px; }
-}
-
-
-/* Actual portrait motion reflects idle, attention, work, review and voice. */
-.avatar[data-state='ready'] .portraitImage,
-.avatar[data-avatar='kira'][data-state='done'] .portraitImage {
-  animation: kira-living-idle 8s ease-in-out infinite;
-}
-.avatar[data-state='pending'] .portraitImage { animation: kira-living-attention 3s ease-in-out infinite; }
-.avatar[data-state='running'][data-phase='verifying'] .portraitImage {
-  animation: kira-living-review 2.5s ease-in-out infinite;
-}
-:global(html[data-phoenix-voice-phase='listening']) .avatar[data-avatar='kira'] .portraitImage {
-  animation: kira-living-attention 3s ease-in-out infinite;
-}
-:global(html[data-phoenix-voice-phase='speaking']) .avatar[data-avatar='kira'] .portraitImage {
-  animation: kira-living-speak .85s ease-in-out infinite;
-}
-@keyframes kira-living-idle {
-  0%,100%{transform:scale(1.07) translate(0,0) rotate(0)}
-  27%{transform:scale(1.10) translate(-.5px,-.7px) rotate(-.55deg)}
-  63%{transform:scale(1.08) translate(.5px,.4px) rotate(.65deg)}
-}
-@keyframes kira-living-attention {
-  0%,100%{transform:scale(1.08) translateY(0) rotate(0)}
-  50%{transform:scale(1.12) translateY(-.9px) rotate(1.2deg)}
-}
-@keyframes kira-living-review {
-  0%,100%{transform:scale(1.07) translateX(0) rotate(-.5deg)}
-  50%{transform:scale(1.10) translateX(-.8px) rotate(.9deg)}
-}
-@keyframes kira-living-speak {
-  0%,100%{transform:scale(1.09) translateY(0) rotate(0)}
-  34%{transform:scale(1.12,1.075) translateY(-.8px) rotate(-.9deg)}
-  70%{transform:scale(1.085,1.12) translateY(.7px) rotate(.7deg)}
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .avatar *,
-  .avatar *::before,
-  .avatar *::after {
-    animation: none !important;
-    transition: none !important;
-  }
-}
-
-/* Pause all (including older CSS ring) animation tracks when offscreen. */
-.avatar[data-avatar-visible='false'] *, .avatar[data-avatar-motion='off'] * {
-  animation-play-state: paused !important;
-}
-
-
-/* User-approved 20 characters, each tile in a single fast-loading atlas. */
-.portraitAtlas {
-  position:absolute; z-index:4; inset:4px; pointer-events:none;
-  border-radius:50%; background-repeat:no-repeat;
-  background-image:url('/assets/kira-agents/roster-approved.webp');
-  background-size:500% 400%; transform-origin:50% 60%;
-  animation: living-head-scan 13.5s ease-in-out infinite;
-  filter:saturate(1.07);
-  will-change:transform;
-}
-.avatar[data-avatar='kira'] .portraitAtlas {
-  background-image:url('/assets/kira-agents/kira-poses-13.webp');
-  background-size:1300% 100%; background-position:0% 50%;
-  animation:kira-look-around 12s step-end infinite;
-}
-.avatar[data-avatar='kira'][data-phase='preparing'] .portraitAtlas {background-position:16.6667% 50%;animation:none}
-.avatar[data-avatar='kira'][data-phase='verifying'] .portraitAtlas {background-position:50% 50%;animation:none}
-.avatar[data-avatar='kira'][data-state='pending'] .portraitAtlas {background-position:83.3333% 50%;animation:none}
-.avatar[data-avatar='kira'][data-state='done'] .portraitAtlas {background-position:66.6667% 50%;animation:none}
-.avatar[data-avatar='kira'][data-state='running'][data-phase='running-tools'] .portraitAtlas {
- background-position:50% 50%;animation:kira-focused 6s ease-in-out infinite;
-}
-.avatar[data-avatar='kira'][data-expression='happy'] .portraitAtlas {
- background-position:25% 50%;animation:none;
-}
-.avatar[data-avatar='kira'][data-expression='concerned'] .portraitAtlas {
- background-position:83.3333% 50%;animation:none;
-}
-:global(html[data-phoenix-voice-phase='listening']) .avatar[data-avatar='kira'] .portraitAtlas {
- background-position:41.6667% 50%;animation:kira-focused 3.1s ease-in-out infinite;
-}
-:global(html[data-phoenix-voice-phase='speaking']) .avatar[data-avatar='kira'] .portraitAtlas {
- background-position:33.3333% 50%;animation:kira-speaking-pose 2s step-end infinite;
-}
-.avatar[data-avatar-pose='forward'] .portraitAtlas {animation:none;transform:perspective(140px) rotateY(0) rotateX(0)}
-.avatar[data-avatar-pose='left'] .portraitAtlas {animation:none;transform:perspective(140px) rotateY(-16deg) rotateZ(-2deg) translateX(-2px)}
-.avatar[data-avatar-pose='right'] .portraitAtlas {animation:none;transform:perspective(140px) rotateY(16deg) rotateZ(2deg) translateX(2px)}
-.avatar[data-avatar-pose='up'] .portraitAtlas {animation:none;transform:perspective(140px) rotateX(12deg) translateY(-2px)}
-.avatar[data-avatar-pose='down'] .portraitAtlas {animation:none;transform:perspective(140px) rotateX(-11deg) translateY(2px)}
-.avatar[data-avatar='kira'][data-avatar-pose='left'] .portraitAtlas {background-position:8.3333% 50%}
-.avatar[data-avatar='kira'][data-avatar-pose='right'] .portraitAtlas {background-position:91.6667% 50%}
-.avatar[data-avatar='kira'][data-avatar-pose='up'] .portraitAtlas {background-position:16.6667% 50%}
-.avatar[data-avatar='kira'][data-avatar-pose='down'] .portraitAtlas {background-position:50% 50%}
-@keyframes living-head-scan {
-  0%,7%,100% {transform:perspective(140px) rotateY(0) rotateX(0) translateY(0)}
-  15%,20% {transform:perspective(140px) rotateY(-11deg) rotateZ(-1deg) translateX(-1px)}
-  38%,43% {transform:perspective(140px) rotateY(8deg) rotateZ(1deg) translateX(1px)}
-  61%,64% {transform:perspective(140px) rotateX(9deg) translateY(-1px)}
-  81%,85% {transform:perspective(140px) rotateX(-7deg) translateY(1px)}
-}
-@keyframes kira-look-around {
-  0%,12%,68%,100% {background-position:0% 50%;transform:translateY(0)}
-  13%,26% {background-position:8.3333% 50%;transform:translateX(-.7px)}
-  27%,40% {background-position:16.6667% 50%;transform:translateY(-1px)}
-  41%,50% {background-position:0% 50%;transform:translateY(0)}
-  51%,58% {background-position:75% 50%;transform:translateY(1px)}
-  59%,67% {background-position:8.3333% 50%;transform:translateX(-.7px)}
-}
-@keyframes kira-focused {
-  0%,100%{transform:translateY(0) rotate(0)}
-  50%{transform:translateY(-.8px) rotate(.7deg)}
-}
-@keyframes kira-speaking-pose {
-  0%,25%{background-position:33.3333% 50%;transform:translateY(0)}
-  26%,49%{background-position:58.3333% 50%;transform:translateY(-.8px)}
-  50%,75%{background-position:66.6667% 50%;transform:translateY(0)}
-  76%,100%{background-position:33.3333% 50%;transform:translateY(.4px)}
-}
-.avatar[data-avatar-visible='false'] .portraitAtlas,
-.avatar[data-avatar-motion='off'] .portraitAtlas {animation-play-state:paused!important}
-@media(prefers-reduced-motion:reduce) { .portraitAtlas{animation:none!important} }
-
-/* Preserve a calm face when the user prefers reduced animation. */
-@media (prefers-reduced-motion:reduce) {
-  .avatar .portraitAtlas,.avatar .portraitImage {animation:none!important; transition:none!important}
+@media (max-width: 620px) {
+  .card { width: 44px; height: 44px; }
 }

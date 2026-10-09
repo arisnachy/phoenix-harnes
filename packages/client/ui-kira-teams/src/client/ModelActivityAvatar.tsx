@@ -1,8 +1,9 @@
-import type { CSSProperties } from 'react'
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import { KIRA_AGENT_PORTRAITS, type KiraPortraitKey } from './KiraAgentPortraits.ts'
 import css from './ModelActivityAvatar.module.css'
-import { LivingAvatarFace, avatarExpressionOf, type AvatarExpression, type AvatarMotion } from './LivingAvatarFace.tsx'
+/** Deprecated animation props remain accepted for existing callers; portraits stay still. */
+type AvatarExpression = 'neutral' | 'warm' | 'focused' | 'happy' | 'concerned' | 'confident'
+type AvatarMotion = 'auto' | 'off'
 
 /** Exact visible identities from the user-approved 20-avatar KIRA reference. */
 export type ModelAvatarKind =
@@ -97,7 +98,7 @@ export interface ModelActivityAvatarProps {
   pose?: 'auto' | 'forward' | 'left' | 'right' | 'up' | 'down'
 }
 
-/** Render one exact KIRA portrait with restrained state-reactive motion. */
+/** A single high-quality fixed portrait: no animated sprites, facial overlays or motion effects. */
 export function ModelActivityAvatar({
   activity,
   running,
@@ -107,10 +108,6 @@ export function ModelActivityAvatar({
   ready = false,
   variant = 'compact',
   emotion,
-  speaking = false,
-  listening = false,
-  motion = 'auto',
-  pose = 'auto',
 }: ModelActivityAvatarProps) {
   const resolvedKind = kind
     ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
@@ -121,40 +118,24 @@ export function ModelActivityAvatar({
       ? 'ready'
       : running ? 'running' : 'done'
 
-  const rosterIndex = AGENT_AVATAR_KINDS.indexOf((resolvedKind === 'kira' ? 'aurora' : PORTRAIT_ALIAS[resolvedKind]) as PortraitKey)
-  const column = Math.max(0, rosterIndex) % 5
-  const row = Math.floor(Math.max(0, rosterIndex) / 5)
-  const atlasPosition = {
-    backgroundPosition: resolvedKind === 'kira' ? '0% 50%' : `${column * 25}% ${row * 100 / 3}%`,
-  } satisfies CSSProperties
   return (
     <span
       className={`${css.avatar} ${variant === 'card' ? css.card : ''}`}
       data-avatar={resolvedKind}
       data-phase={phase}
       data-state={state}
-      data-expression={avatarExpressionOf(running, pending, phase, emotion)}
-      data-avatar-motion={motion}
-      data-avatar-pose={pose}
+      data-expression={emotion ?? (pending ? 'concerned' : running ? 'focused' : 'neutral')}
       aria-hidden="true"
     >
-      <span className={css.aura} />
       <span className={css.ring} />
-      <span className={css.core} />
       <img
         className={css.portraitImage}
         src={portraitSrcForKind(resolvedKind)}
         alt=""
         draggable={false}
+        decoding="async"
         data-agent-portrait-image={true}
       />
-      <span className={css.portraitAtlas} style={atlasPosition} data-portrait-atlas="approved-roster" />
-      <LivingAvatarFace kind={resolvedKind} expression={avatarExpressionOf(running, pending, phase, emotion)}
-        speaking={speaking} listening={listening} motion={motion} pose={pose} />
-      <span className={css.lifeGlint} />
-      <span className={css.scanLine} />
-      <span className={css.energyRibbon} />
-      <span className={css.phaseCue}><span className={css.phaseCueInner} /></span>
       <span className={css.badge} />
     </span>
   )

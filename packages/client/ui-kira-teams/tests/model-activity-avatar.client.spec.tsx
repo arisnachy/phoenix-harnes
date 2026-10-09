@@ -64,7 +64,7 @@ describe('ModelActivityAvatar', () => {
     ['verifying', 'verifying', 'running'],
     ['idle', 'idle', 'ready'],
   ] as const)(
-    'exposes %s work as the reactive %s motion state',
+    'exposes %s as work-status metadata without animating the portrait',
     (inputPhase, expectedPhase, expectedState) => {
       const element: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
         agentId: 'c2',
@@ -80,11 +80,17 @@ describe('ModelActivityAvatar', () => {
     },
   )
 
-  it('exposes head pose direction with the same stable identity', () => {
-    const element = ModelActivityAvatar({ kind:'kira', activity:undefined, running:false,
-      pending:false, ready:true, pose:'up' })
-    expect(element.props['data-avatar-pose']).toBe('up')
+  it('renders a fixed sharp Kira image even when legacy callers request a pose', () => {
+    const element = ModelActivityAvatar({ kind: 'kira', activity: undefined,
+      running: false, pending: false, ready: true, pose: 'up', speaking: true })
+    const children = Children.toArray(element.props.children).filter(isValidElement<Record<string, unknown>>)
+    const portraits = children.filter(child => child.props['data-agent-portrait-image'] === true)
     expect(element.props['data-avatar']).toBe('kira')
+    expect(element.props['data-avatar-pose']).toBeUndefined()
+    expect(portraits).toHaveLength(1)
+    expect(portraits[0]?.props.src).toBe(portraitSrcForKind('kira'))
+    expect(children).toHaveLength(3) // static border, single portrait, small status dot
+    expect(children.every(child => typeof child.type === 'string')).toBe(true)
   })
 
   it('keeps ready, pending and completed avatars alive without losing identity', () => {

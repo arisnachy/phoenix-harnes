@@ -14,7 +14,6 @@ import {
   conversationalSpeechText, createSpeechOutput, hasSpeechOutput, nextStreamingSpeechSegment, spokenLanguage,
   type SpeechOutput,
 } from './speech-output.ts'
-import { connectRealtimeAvatarVoiceMeter, disconnectRealtimeAvatarVoiceMeter } from './voice-avatar-meter.ts'
 
 /** States exposed by the short-lived browser recognition session. */
 export type VoiceInputState = 'idle' | 'listening' | 'unsupported' | 'permission-denied' | 'error'
@@ -423,7 +422,6 @@ export async function tryStartCodexRealtimeVoice(
       if (codexRealtimeVoiceGeneration !== generation || audio === undefined) return
       const stream = event.streams[0] ?? new MediaStream([event.track])
       audio.srcObject = stream
-      connectRealtimeAvatarVoiceMeter(stream)
       void audio.play().catch(() => {})
     }
     events.onmessage = (event) => {
@@ -501,7 +499,6 @@ export async function tryStartCodexRealtimeVoice(
     }
     return { kind: 'started' }
   } catch (error) {
-    disconnectRealtimeAvatarVoiceMeter()
     if (peer !== undefined) peer.close()
     if (microphone !== undefined) {
       for (const track of microphone.getTracks()) track.stop()
@@ -531,7 +528,6 @@ export async function stopCodexRealtimeVoice(): Promise<boolean> {
   codexRealtimeVoiceSession = undefined
   if (session === undefined) return false
 
-  disconnectRealtimeAvatarVoiceMeter()
   setVoiceAssistantListening(false)
   discardCodexRealtimeUtterances(session.key)
   session.events.close()
