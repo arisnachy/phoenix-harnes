@@ -72,7 +72,7 @@ const PUBLIC_CONNECTOR_CATALOG = [
     curatedMcp: true,
     name: 'GitHub',
     category: 'Development',
-    description: 'Repositories, commits, issues, pull requests, releases, and CI via a verified GitHub CLI session or GitHub's official remote MCP with dedicated repository OAuth; GitHub Copilot model authentication is separate.',
+    description: "Repositories, commits, issues, pull requests, releases, and CI via a verified GitHub CLI session or GitHub's official remote MCP with dedicated repository OAuth; GitHub Copilot model authentication is separate.",
     mode: 'mcp',
     authorizationKey: 'authorization-openclaw/github',
     openClawConnectorId: 'github',

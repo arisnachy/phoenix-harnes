@@ -49,6 +49,8 @@ describe('connector catalog', () => {
     expect(github?.openClawConnectorId).toBe('github')
     expect(github?.mode).toBe('mcp')
     expect(github?.authorizationKey).toBe('authorization-openclaw/github')
+    expect(github?.description).toContain("GitHub's official remote MCP")
+    expect(github?.description).toContain('GitHub Copilot model authentication is separate')
     expect(google?.authorizationKey).toBe('authorization-google/account')
     expect(byId.get('firebase')?.providerFamily).toBe('firebase')
     expect(byId.get('bigquery')?.providerFamily).toBe('bigquery')
