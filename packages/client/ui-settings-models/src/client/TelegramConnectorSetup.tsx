@@ -26,7 +26,7 @@ const STATUS: Record<TelegramBotSnapshot['phase'], string> = {
   'credentials-unavailable': 'Vault de Phoenix no disponible',
 }
 
-export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient }): ReactNode {
+export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient | undefined }): ReactNode {
   const [snapshot, setSnapshot] = useState<TelegramBotSnapshot | undefined>()
   const [token, setToken] = useState('')
   const [open, setOpen] = useState(false)
