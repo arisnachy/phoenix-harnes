@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, createEvent, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import type {
   SessionId, SessionListState, SessionSummary, WorkspaceId, WorkspaceListState, WorkspaceView,
@@ -96,6 +96,42 @@ function rerender(b: ReturnType<typeof mount>, overrides: Partial<WorkspaceBrows
 }
 
 describe('WorkspaceBrowser', () => {
+  it('opens the Library directory and launches an existing saved session', () => {
+    const open = vi.fn()
+    mount({
+      open,
+      useSessions: hook(sessionState([summary('saved-chat', 1, { displayTitle: 'Informe clínico' })])),
+      useWorkspaces: hook(workspaceState([workspace('clinic', ['saved-chat'], 'Clínica')])),
+    })
+    act(() => { window.dispatchEvent(new Event('phoenix:open-workspace-library')) })
+    const dialog = screen.getByRole('dialog', { name: '资料库' })
+    expect(within(dialog).getByText('Clínica')).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Informe clínico' }))
+    expect(open).toHaveBeenCalledWith(sid('saved-chat'))
+    expect(screen.queryByRole('dialog', { name: '资料库' })).toBeNull()
+  })
+
+  it('filters saved workspaces and starts a new session from the selected project', () => {
+    const startSession = vi.fn()
+    mount({
+      startSession,
+      useSessions: hook(sessionState([])),
+      useWorkspaces: hook(workspaceState([
+        workspace('a', [], 'Alpha'),
+        workspace('b', [], 'Beta'),
+      ])),
+    })
+    act(() => { window.dispatchEvent(new Event('phoenix:open-workspace-library')) })
+    const dialog = screen.getByRole('dialog', { name: '资料库' })
+    fireEvent.change(within(dialog).getByRole('searchbox', { name: '搜索工作区或会话…' }), {
+      target: { value: 'Beta' },
+    })
+    expect(within(dialog).getByText('Beta')).toBeTruthy()
+    expect(within(dialog).queryByText('Alpha')).toBeNull()
+    fireEvent.click(within(dialog).getByRole('button', { name: '新会话' }))
+    expect(startSession).toHaveBeenCalledWith(wid('b'))
+  })
+
   it('workspace hover card shows a POSIX home descendant as ~', () => {
     vi.useFakeTimers()
     try {
