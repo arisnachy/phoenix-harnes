@@ -18,7 +18,6 @@ import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.t
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { turnProgress } from './turn-progress.ts'
 import { ToolActivityFlow } from './ToolActivityFlow.tsx'
-import { MiniBrowser } from './MiniBrowser.tsx'
 import css from './ChatView.module.css'
 
 const FOLLOW_THRESHOLD = 24
@@ -194,20 +193,6 @@ export function ChatView({
     }),
     [nodeStore, order],
   )
-  // A browser request must have a visible result even when CDP or screenshot
-  // discovery fails. Keep this scoped to the latest user request in this chat.
-  const browserRequested = useMemo(() => {
-    const browserVerb = /\b(?:abre|abrir|abreme|abrirme|navega|navegar|entra|entrar|visita|visitar|accede|acceder|open|browse)\b/iu
-    const browserTarget = /\b(?:ir a|ve a|busca en)\b|https?:\/\//iu
-    const browserIntent = (value: string) => browserVerb.test(value) || browserTarget.test(value)
-    if (pendingSubmit !== undefined && browserIntent(pendingSubmit.modelText ?? pendingSubmit.text)) return true
-    for (let index = chatNodes.length - 1; index >= 0; index -= 1) {
-      const node = chatNodes[index]
-      if (node?.kind !== 'user' && node?.kind !== 'steering') continue
-      return browserIntent(userMessageText(node.data as UserMessageNode))
-    }
-    return false
-  }, [chatNodes, pendingSubmit])
   // Freeze the durable flow position that existed when this local submission
   // appeared. Later assistant/tool nodes must render after the user's bubble,
   // not above it while Host steering admission is still settling.
@@ -573,8 +558,6 @@ export function ChatView({
             renderSlot={renderSlot}
             t={t}
           />
-          {/* Same Chromium tab for Kira and the user: full browser inside the chat flow. */}
-          <MiniBrowser requested={browserRequested} />
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}
