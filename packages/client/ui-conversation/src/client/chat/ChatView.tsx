@@ -197,14 +197,15 @@ export function ChatView({
   // A browser request must have a visible result even when CDP or screenshot
   // discovery fails. Keep this scoped to the latest user request in this chat.
   const browserRequested = useMemo(() => {
+    const browserIntent = /\b(?:abre|abrir|abreme|abrirme|navega|navegar|entra|entrar|visita|visitar|accede|acceder|open|browse|ir a|ve a|busca en)\b|https?:\/\//iu
+    if (pendingSubmit !== undefined && browserIntent.test(pendingSubmit.modelText ?? pendingSubmit.text)) return true
     for (let index = chatNodes.length - 1; index >= 0; index -= 1) {
       const node = chatNodes[index]
-      if (node?.kind !== 'user') continue
-      const prompt = userMessageText(node.data as UserMessageNode)
-      return /\b(?:abre|abrir|abreme|abrirme|navega|navegar|entra|entrar|visita|visitar|accede|acceder|open|browse|ir a|ve a|busca en)\b|https?:\/\//iu.test(prompt)
+      if (node?.kind !== 'user' && node?.kind !== 'steering') continue
+      return browserIntent.test(userMessageText(node.data as UserMessageNode))
     }
     return false
-  }, [chatNodes])
+  }, [chatNodes, pendingSubmit])
   // Freeze the durable flow position that existed when this local submission
   // appeared. Later assistant/tool nodes must render after the user's bubble,
   // not above it while Host steering admission is still settling.
