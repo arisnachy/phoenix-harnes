@@ -22,6 +22,8 @@ function defaultRun(bin: string, args: readonly string[]): CommandResult {
     encoding: 'utf8',
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 4_000,
+    maxBuffer: 64 * 1024,
   })
   return {
     status: result.status,
@@ -92,17 +94,33 @@ export class OpenClawConnectorBridge {
     const skill = skillInstalled('openclaw-github')
     const version = this.run('gh', ['--version'])
     const runtimeAvailable = version.error === undefined && version.status === 0
-    const checked = runtimeAvailable
+    const checked = runtimeAvailable && skill
       ? this.run('gh', ['auth', 'status', '--hostname', 'github.com'])
       : undefined
-    const connected = checked !== undefined && checked.error === undefined && checked.status === 0
+    const authVerified = checked !== undefined && checked.error === undefined && checked.status === 0
+    // 'gh auth status' proves a stored CLI login, not a working repository API.
+    // A bounded read-only request checks effective GitHub API access. The
+    // --jq projection never returns secrets or the raw HTTP response.
+    const probe = authVerified
+      ? this.run('gh', ['api', 'user', '--hostname', 'github.com', '--jq', '.login'])
+      : undefined
+    const login = probe?.stdout.trim()
+    const apiVerified = probe !== undefined && probe.error === undefined
+      && probe.status === 0 && login !== undefined
+      && /^[a-z0-9](?:[a-z0-9-]{0,37})$/i.test(login)
+    const connected = skill && runtimeAvailable && authVerified && apiVerified
     return {
       id: 'github',
       skillAlias: 'openclaw-github',
       skillInstalled: skill,
       runtimeAvailable,
       connected,
-      phase: phase(skill, runtimeAvailable, connected),
+      ...(connected && login !== undefined ? { account: login } : {}),
+      phase: !skill ? 'missing-skill'
+        : !runtimeAvailable ? 'missing-runtime'
+        : !authVerified ? 'auth-required'
+        : !apiVerified ? 'api-unavailable'
+        : 'ready',
     }
   }
 
