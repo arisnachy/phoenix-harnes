@@ -53,7 +53,7 @@ describe('Phoenix 3D standard GLB/glTF models',()=>{
   it('round-trips PBR base color, normal, AO and metallic/roughness texture maps without external fetches',()=>{
     const tinyPng='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y8YyM8AAAAASUVORK5CYII='
     const textured=parseScene3D({...model,nodes:[{
-      ...model.nodes[0],material:{...model.nodes[0].material,
+      ...model.nodes[0]!,material:{...model.nodes[0]!.material,
         baseColorTexture:tinyPng,normalTexture:tinyPng,occlusionTexture:tinyPng,
         metallicRoughnessTexture:tinyPng},
     }]})
