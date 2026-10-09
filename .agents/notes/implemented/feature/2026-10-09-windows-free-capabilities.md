@@ -12,6 +12,8 @@ Phoenix cannot assume that local Windows runtimes, AI APIs or accelerators are a
 
 Phoenix exposes an opt-in, read-only JSON environment inventory with `pnpm run windows:capabilities`. It uses built-in Node and Windows PowerShell to inspect Windows build, aggregate RAM, adapter names and command presence for WinGet, WSL, Ollama, Foundry Local and PowerShell 7, with bounded execution and sanitized failure output.
 
+The supervised Windows Web Host also invokes the inspection asynchronously at startup. `SystemPrompt` exposes the verified tool inventory to Kira as logged, dynamic runtime context, with explicit guidelines about when to choose WinGet, WSL or candidate local inference runtimes, and when to keep the configured provider. Startup and the model request are never blocked on the probe. This is a discovery feature, not autonomous installation, local model integration, or additional tool authorization.
+
 Native notifications, Windows AI APIs and Microsoft Execution Containers (MXC) remain explicitly labeled as requiring an additional bridge, SDK/device verification or runtime update. MXC is not a dependency because its Node SDK requires Node 24+, while Phoenix retains Node 22 support.
 
 ## Alternatives considered
