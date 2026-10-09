@@ -20,6 +20,7 @@ import z from '@phoenix-ai/schemastery'
 import { addHarnessSourceSection } from '@phoenix-ai/dsh-app-boot'
 import * as FrontendStatic from '@phoenix-ai/dsh-host-frontend-static'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
+import { registerMiniBrowserRoutes } from './mini-browser.ts'
 import { scrubbedParentEnv } from '@phoenix-ai/dsh-subprocess'
 import type {} from '@phoenix-ai/cordis-plugin-loader'
 import type {} from '@phoenix-ai/dsh-host-webserver'
@@ -146,6 +147,11 @@ function webSurfacePrompt(webUrl: string): string {
   return `You are interacting with the user through the PHOENIX Web GUI at ${webUrl}. `
     + 'When the user refers to "this page", "this GUI", or "this app" without naming another target, they mean this GUI. '
     + 'The browser provides no implicit DOM, route, or screenshot context. '
+    + 'When the user asks to open or navigate a public website, prefer the available local Chromium MCP browser tools; '
+    + 'the same CDP tab is visible as the in-chat MiniBrowser with a full-window expansion for human control. '
+    + 'Use one direct browser action for simple navigation and report only the verified outcome. '
+    + 'Do not open an unrelated OS tab when a working local browser connector is available, '
+    + 'and never bypass its configured action permissions. '
     + updateContract
     + 'Starting another server does not update this GUI. '
     + 'The apps/web Vite entry builds the shell but is not a standalone application because only dsh web injects window.__DSH_BOOT__. '
@@ -231,6 +237,8 @@ export function apply(ctx: Context, config: Config): void {
   // Release dependent rows only after bind-dependent trust has been sampled once.
   ctx.provide(WEB_RUNTIME_SERVICE, runtime)
   ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
+  // A local Chromium session shared with Phoenix's MCP Chrome connector. Never a remote iframe.
+  registerMiniBrowserRoutes(ctx)
   if (config.surfaceContext) {
     ctx.inject(['systemPrompt'], (promptCtx) => {
       addHarnessSourceSection(promptCtx, SOURCE_ROOT)
