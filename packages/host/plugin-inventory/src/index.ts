@@ -20,7 +20,7 @@ import {
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
-import { readTelegramBotState, saveTelegramBot, removeTelegramBot } from './telegram-bot.ts'
+import { readTelegramBotState, saveTelegramBot, removeTelegramBot, telegramInbox } from './telegram-bot.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
   BINANCE_AGENT_OS_URL,
@@ -125,6 +125,12 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.chatGptWeb = createChatGptWebIntegration()
     this.managedMcp = new ManagedMcpController(ctx.loader)
     this.openClawConnectors = new OpenClawConnectorBridge()
+    // Run the inbound Telegram receiver in the Host, not in a browser tab.
+    ctx.effect(() => {
+      const inbox = telegramInbox(ctx)
+      inbox.start()
+      return () => { inbox.stop() }
+    }, 'telegram inbound message receiver')
     void ctx.effect(async () => {
       try {
         await this.managedMcp.retireJev()
@@ -343,6 +349,12 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('configureTelegramBot')
   async configureTelegramBot(request: { token: string }): Promise<TelegramBotSnapshot> {
     return saveTelegramBot(this.ctx, request.token)
+  }
+
+  /** Issue an ephemeral owner-linking code; only a private chat presenting it may issue tasks. */
+  @Remote('telegramPairingCode')
+  async telegramPairingCode(): Promise<{ code: string; expiresInSeconds: number }> {
+    return { code: await telegramInbox(this.ctx).pairing(), expiresInSeconds: 900 }
   }
 
   /** Forget the local Telegram credential without issuing a Telegram-side token revocation. */

@@ -7,13 +7,16 @@ export interface TelegramBotSnapshot {
   verified: boolean
   phase: 'unconfigured' | 'verified' | 'invalid-token' | 'unreachable' | 'credentials-unavailable'
   username?: string
-  inboxActive: false
+  inboxActive: boolean
+  paired: boolean
+  reason?: string
 }
 
 export interface TelegramBotClient {
   state(): Promise<TelegramBotSnapshot>
   configure(token: string): Promise<TelegramBotSnapshot>
   disconnect(): Promise<TelegramBotSnapshot>
+  pairing(): Promise<{ code: string; expiresInSeconds: number }>
 }
 
 const BOTFATHER = 'https://t.me/BotFather'
@@ -30,6 +33,7 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
   const [snapshot, setSnapshot] = useState<TelegramBotSnapshot | undefined>()
   const [token, setToken] = useState('')
   const [open, setOpen] = useState(false)
+  const [pairCode, setPairCode] = useState<string | undefined>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | undefined>()
 
@@ -67,6 +71,19 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
     ).finally(() => { setBusy(false) })
   }
 
+  const refresh = (): void => {
+    if (client === undefined) return
+    void client.state().then(setSnapshot).catch(() => setError('No se pudo actualizar el estado de Telegram.'))
+  }
+  const pair = (): void => {
+    if (client === undefined) return
+    setBusy(true)
+    setError(undefined)
+    void client.pairing().then(
+      response => { setPairCode(response.code) },
+      () => { setError('No se pudo generar el código para vincular tu cuenta.') },
+    ).finally(() => setBusy(false))
+  }
   const username = snapshot?.username
   const canOpenBot = username !== undefined && /^[A-Za-z][A-Za-z0-9_]{4,31}$/.test(username)
   return (
@@ -74,9 +91,18 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
       <p role="status" style={{ margin: 0, fontSize: 12 }}>
         {snapshot === undefined ? 'Comprobando configuración…' : STATUS[snapshot.phase]}
         {canOpenBot ? ` · @${username}` : ''}
+        {snapshot?.inboxActive ? ' · receptor activo' : ' · receptor no confirmado'}
+        {snapshot?.paired ? ' · usuario vinculado' : ' · falta vincular usuario'}
       </p>
+      {snapshot?.reason ? <p role="alert" style={{ margin: 0, fontSize: 11 }}>Receptor: {snapshot.reason}</p> : null}
+      {snapshot?.configured && !snapshot.paired ? (
+        <div style={{ display: 'grid', gap: 6 }}>
+          <button type="button" disabled={busy} onClick={pair}>Generar código de vinculación (15 min)</button>
+          {pairCode ? <p style={{ fontSize: 12, margin: 0 }}>En el chat privado de tu bot, envía <code>/start {pairCode}</code>. Luego pulsa «Actualizar estado».</p> : null}
+        </div>
+      ) : null}
       <p style={{ margin: 0, fontSize: 11 }}>
-        La verificación comprueba la identidad del bot; aún no significa que Telegram pueda recibir mensajes o ejecutar tareas en Phoenix.
+        El bot recibe mensajes solo mientras el Host de Phoenix está en ejecución y tu usuario está vinculado. Las notas de voz y las llamadas de Codex se integrarán aparte; el texto nunca activa el micrófono.
       </p>
       <details>
         <summary>Instrucciones para configurar Telegram con Kira</summary>
@@ -86,7 +112,8 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
           <li>Elige un usuario terminado en <code>bot</code>, que esté disponible.</li>
           <li>Copia el token entregado por BotFather y pégalo solamente en el campo seguro de Phoenix.</li>
           <li>Pulsa «Guardar y verificar». Si es válido, Phoenix mostrará el usuario real del bot.</li>
-          <li>Abre el bot en Telegram y pulsa «Iniciar». La vinculación de tu identidad y el receptor de mensajes se activarán en una siguiente etapa.</li>
+          <li>Pulsa «Generar código de vinculación», abre tu bot y envía <code>/start CODIGO</code> sustituyendo CODIGO por el número mostrado.</li>
+          <li>Tras recibir la confirmación de Kira, envía un mensaje de texto. Phoenix lo procesará a través del Agent real.</li>
         </ol>
         <p style={{ fontSize: 11 }}>No envíes el token por el chat ni lo incluyas en GitHub. El token es distinto de la autenticación de voz Codex.</p>
         <a href={GUIDE} target="_blank" rel="noopener noreferrer">Guía completa de Phoenix</a>
@@ -96,6 +123,7 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
           {open ? 'Ocultar configuración' : snapshot?.configured ? 'Cambiar token' : 'Configurar Telegram'}
         </button>
         {canOpenBot ? <a href={`https://t.me/${username}`} target="_blank" rel="noopener noreferrer">Abrir mi bot</a> : null}
+        {snapshot?.configured ? <button type="button" disabled={busy} onClick={refresh}>Actualizar estado</button> : null}
         {snapshot?.configured ? <button type="button" disabled={busy} onClick={disconnect}>Desconectar</button> : null}
       </div>
       {open ? (
