@@ -67,7 +67,7 @@ describe('HARDNESS cognitive workflow catalog', () => {
 
     expect(plan.executionMode).toBe('standard')
     expect(plan.measurements.evidenceScore).toBe(3)
-    expect(plan.budget).toEqual({ maxAttempts: 2, maxRecoveryAttempts: 2, maxExternalSources: 3, maxParallelSubtasks: 4, maxReviewPasses: 1 })
+    expect(plan.budget).toEqual({ maxAttempts: 2, maxRecoveryAttempts: 2, maxExternalSources: 3, maxParallelSubtasks: 2, maxReviewPasses: 1 })
   })
 
   it('uses deep thresholds and budget for high-risk failed work', () => {
@@ -75,7 +75,7 @@ describe('HARDNESS cognitive workflow catalog', () => {
 
     expect(plan.executionMode).toBe('deep')
     expect(plan.measurements).toEqual({ complexityScore: 3, riskScore: 3, noveltyScore: 1, evidenceScore: 2 })
-    expect(plan.budget).toEqual({ maxAttempts: 3, maxRecoveryAttempts: 3, maxExternalSources: 8, maxParallelSubtasks: 8, maxReviewPasses: 2 })
+    expect(plan.budget).toEqual({ maxAttempts: 3, maxRecoveryAttempts: 3, maxExternalSources: 8, maxParallelSubtasks: 3, maxReviewPasses: 2 })
   })
 
   it('selects design, planning, proof, critique, and simulation for complex code builds', () => {

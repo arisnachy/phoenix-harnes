@@ -57,6 +57,18 @@ describe('HARDNESS capability resolver', () => {
     await ctx.fiber.dispose()
   })
 
+  it('prefers a verified available capability over an alphabetically earlier testing adapter', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const service = ctx.get('hardness') as HardnessService | undefined
+    if (service === undefined) throw new Error('hardness service missing')
+    service.register({ ...descriptor, id: 'a-testing-calendar' as CapabilityId, status: 'testing' })
+    service.register({ ...descriptor, id: 'z-verified-calendar' as CapabilityId, status: 'verified' })
+    const result = service.resolveNeed({ kind: 'tool', inputs: ['calendar_event'], outputs: ['text/calendar'] })
+    expect(result.capability?.id).toBe('z-verified-calendar')
+    await ctx.fiber.dispose()
+  })
+
   it('routes an exact tool name as a semantic capability kind without treating descriptive need text as atlas tags', async () => {
     const ctx = new Context()
     await ctx.plugin(HardnessRegistry)

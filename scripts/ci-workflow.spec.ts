@@ -25,8 +25,33 @@ describe('CI workflow', () => {
     expect(job.env).toMatchObject({ PHOENIX_BUILD_TIMINGS: '1' })
     expect(commands.some(command => command.includes('pnpm run typecheck'))).toBe(true)
     expect(commands.some(command => command.includes('pnpm run build'))).toBe(true)
-    expect(commands.some(command => command.includes("Select-String -Path $log -SimpleMatch '[PLUGIN_TIMINGS]' -Quiet"))).toBe(true)
+    expect(commands.some(command => command.includes('plugin timing advisories'))).toBe(true)
+    expect(commands.some(command => command.includes('PLUGIN_TIMINGS regression detected'))).toBe(false)
     expect(commands).toContain('pnpm run check:ci:windows-blocking')
+  })
+
+  it('requires successful exact-SHA CI before stable promotion, including manual dispatch', () => {
+    const workflow = loadWorkflow('.github/workflows/phoenix-stable-update-channel.yml')
+    if (!isRecord(workflow.on) || !isRecord(workflow.jobs) || !isRecord(workflow.jobs.publish)) {
+      throw new TypeError('Stable channel must define a guarded publishing job')
+    }
+    expect(workflow.on.push).toBeUndefined()
+    expect(workflow.on.workflow_run).toMatchObject({
+      workflows: ['PHOENIX main guard'], types: ['completed'], branches: ['main'],
+    })
+    const job = workflow.jobs.publish
+    expect(String(job.if)).toContain("github.event.workflow_run.conclusion == 'success'")
+    expect(String(job.if)).toContain("github.event.workflow_run.event == 'push'")
+    if (!Array.isArray(job.steps)) throw new TypeError('Stable publishing steps are missing')
+    const commands = job.steps.filter((step): step is Record<string, unknown> & { run: string } =>
+      isRecord(step) && typeof step.run === 'string').map(step => step.run)
+    expect(commands.some(command => command.includes('head_sha=$target&status=success'))).toBe(true)
+    expect(commands.some(command => command.includes('TRIGGER_SHA') && command.includes('promote=false'))).toBe(true)
+    expect(commands.some(command => command.includes('git rev-parse origin/main') && command.includes('git push origin'))).toBe(true)
+    for (const name of ['Verify updater contract', 'Publish stable manifest']) {
+      expect(job.steps.find((step: unknown) => isRecord(step) && step.name === name))
+        .toMatchObject({ if: "steps.target.outputs.promote == 'true'" })
+    }
   })
 
   it('isolates every pnpm action setup destination per runner', () => {

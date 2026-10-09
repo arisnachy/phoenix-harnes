@@ -1,19 +1,27 @@
 name: PHOENIX Stable Update Channel
 
 on:
-  push:
+  workflow_run:
+    workflows: [PHOENIX main guard]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: phoenix-stable-update-channel
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,26 +29,49 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Resolve current main commit
+      - name: Resolve verified and current main commit
         id: target
         shell: bash
+        env:
+          TRIGGER_SHA: ${{ github.event.workflow_run.head_sha }}
+          TRIGGER_EVENT: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git fetch origin main --quiet
+          git fetch origin main stable --quiet
           target="$(git rev-parse origin/main)"
           if [[ ! "$target" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Invalid main SHA: $target" >&2
+            echo "Invalid main SHA" >&2
             exit 1
           fi
+          if [[ "$TRIGGER_EVENT" == "workflow_run" ]]; then
+            if [[ "$TRIGGER_SHA" != "$target" ]]; then
+              echo "A newer main commit exists; skip superseded guard."
+              echo "promote=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          else
+            successful="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/phoenix-main-guard.yml/runs?head_sha=$target&status=success&event=push&per_page=100" --jq '.workflow_runs[].head_sha')"
+            if ! grep -Fxq "$target" <<< "$successful"; then
+              echo "Manual promotion requires successful exact-SHA main guard." >&2
+              exit 1
+            fi
+          fi
           echo "sha=$target" >> "$GITHUB_OUTPUT"
+          echo "promote=true" >> "$GITHUB_OUTPUT"
 
       - name: Keep stable exactly aligned with main
+        if: steps.target.outputs.promote == 'true'
         shell: bash
         env:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
         run: |
           set -euo pipefail
-          git fetch origin stable --quiet
+          git fetch origin main stable --quiet
+          if [[ "$(git rev-parse origin/main)" != "$TARGET_SHA" ]]; then
+            echo "main advanced after guard success; refusing stale publication" >&2
+            exit 1
+          fi
           stable_sha="$(git rev-parse origin/stable)"
           if [[ "$stable_sha" == "$TARGET_SHA" ]]; then
             echo "stable already matches main at $TARGET_SHA"
@@ -52,15 +83,21 @@ jobs:
             --force-with-lease="refs/heads/stable:$stable_sha"
 
       - name: Verify updater contract
+        if: steps.target.outputs.promote == 'true'
         run: node scripts/phoenix-auto-update.mjs --self-test
 
       - name: Publish stable manifest
+        if: steps.target.outputs.promote == 'true'
         shell: bash
         env:
           TARGET_SHA: ${{ steps.target.outputs.sha }}
         run: |
           set -euo pipefail
-          git fetch origin phoenix/update-channel --quiet
+          git fetch origin phoenix/update-channel stable --quiet
+          if [[ "$(git rev-parse origin/stable)" != "$TARGET_SHA" ]]; then
+            echo "stable does not match verified target SHA" >&2
+            exit 1
+          fi
           channel_dir="$(mktemp -d)"
           cleanup() {
             git worktree remove --force "$channel_dir" >/dev/null 2>&1 || true
@@ -100,8 +137,9 @@ jobs:
           git push origin HEAD:phoenix/update-channel
 
       - name: Stable channel summary
+        if: steps.target.outputs.promote == 'true'
         run: |
           echo "### PHOENIX stable synchronized" >> "$GITHUB_STEP_SUMMARY"
           echo "- main/stable: `${{ steps.target.outputs.sha }}`" >> "$GITHUB_STEP_SUMMARY"
           echo "- channel: `phoenix/update-channel`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- policy: stable branch follows every main push" >> "$GITHUB_STEP_SUMMARY"
+          echo "- policy: stable only follows successful exact-SHA main guard" >> "$GITHUB_STEP_SUMMARY"

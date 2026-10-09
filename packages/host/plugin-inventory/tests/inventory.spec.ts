@@ -153,6 +153,28 @@ describe('PluginInventoryGateway', () => {
     })
   })
 
+  it('keeps live MCP diagnostics available when managed persistence is corrupt', async () => {
+    const { ctx, inventory } = await harness()
+    ;(ctx as unknown as { provide(name: string, value: unknown): void }).provide('mcpConnectors', {
+      list: () => [{
+        serverName: 'github', transport: 'streamable-http', status: 'ready',
+        toolNames: ['mcp__github__get_me'],
+      }],
+    })
+    const managed = (inventory as unknown as {
+      managedMcp: { snapshot(): Promise<unknown[]> }
+    }).managedMcp
+    vi.spyOn(managed, 'snapshot').mockRejectedValue(new Error('managed MCP patch row 16 is invalid'))
+    await expect(inventory.mcpConnectorHubState()).resolves.toEqual({
+      runtime: [{
+        serverName: 'github', transport: 'streamable-http', status: 'ready',
+        toolNames: ['mcp__github__get_me'],
+      }],
+      managed: [],
+      managedStatus: 'degraded',
+    })
+  })
+
   it('projects and controls the official X MCP bundle without exposing secrets', async () => {
     const { ctx, inventory } = await harness()
     ;(ctx as unknown as { provide(name: string, value: unknown): void }).provide('credentials', {

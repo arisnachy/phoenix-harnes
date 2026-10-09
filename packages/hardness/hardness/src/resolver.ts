@@ -86,6 +86,12 @@ export function resolveCapabilityNeed(
     candidates.push(descriptor)
   }
 
+  // Prefer reliable verified adapters to earlier alphabetically sorted testing
+  // candidates; avoid additional discovery rounds when both satisfy the need.
+  candidates.sort((left, right) =>
+    (left.status === 'verified' ? 0 : 1) - (right.status === 'verified' ? 0 : 1)
+    || left.dependencies.length - right.dependencies.length
+    || left.id.localeCompare(right.id))
   const selected = candidates[0]
   if (selected !== undefined) return { kind: 'have', capability: selected, considered: considered.map(item => item.id), reasons }
   return { kind: 'missing', considered: considered.map(item => item.id), reasons: reasons.length > 0 ? reasons : ['no usable capability matches the declared need'] }

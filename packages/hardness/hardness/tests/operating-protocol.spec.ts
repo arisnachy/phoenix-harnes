@@ -45,6 +45,21 @@ const input = (patch: Partial<HardnessProtocolInput> = {}): HardnessProtocolInpu
 })
 
 describe('HARDNESS model operating protocol', () => {
+  it('does not reopen a cancelled mission for recovery, verification or auditing', () => {
+    for (const patch of [
+      { inspection: 'pending' as const },
+      { execution: 'failed' as const, approval: 'approved' as const },
+      { execution: 'completed' as const, verification: 'failed' as const, approval: 'approved' as const },
+      { execution: 'completed' as const, verification: 'passed' as const, presentation: 'ready' as const, audit: 'recorded' as const, approval: 'approved' as const },
+    ]) {
+      const view = evaluateHardnessProtocol(input({ ...patch, cancelled: true }))
+      expect(view).toMatchObject({ outcome: 'complete', terminalReason: 'cancelled' })
+      expect(view.allowedActions).toEqual([])
+      expect(view.forbiddenActions).toContain('dispatch-routed-capability')
+      expect(view.forbiddenActions).toContain('claim-success')
+    }
+  })
+
   it('requires inspection and planning before approval or execution', () => {
     expect(evaluateHardnessProtocol(input({ inspection: 'pending' }))).toMatchObject({ step: 'inspect', outcome: 'continue' })
     expect(evaluateHardnessProtocol(input({ planning: 'pending' }))).toMatchObject({ step: 'plan', outcome: 'continue' })
