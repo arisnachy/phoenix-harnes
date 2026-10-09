@@ -1355,13 +1355,28 @@ async function runOriginBoundBrowserLogin(
     credentials.resolve(originCredentialRef(origin, 'secret')),
     credentials.resolve(originCredentialRef(origin, 'autonomous')),
   ])
-  if (grant?.value !== '1' || account === undefined || secret === undefined) {
-    throw new Error(`No unattended login is configured for ${origin}; use /secret login-set once.`)
+  // Legacy origin-bound credentials remain supported. Otherwise native Windows
+  // presents a secure form the first time; no password crosses the model or
+  // the browser-control pipe in that onboarding path.
+  if (grant?.value === '1' && account !== undefined && secret !== undefined) {
+    return await runEmbeddedBrowserAction(args, signal, {
+      account: account.value,
+      secret: secret.value,
+    })
   }
-  return await runEmbeddedBrowserAction(args, signal, {
-    account: account.value,
-    secret: secret.value,
-  })
+  const details = await runEmbeddedBrowserAction(args, signal)
+  let consent = false
+  try {
+    const result: unknown = JSON.parse(details)
+    consent = typeof result === 'object' && result !== null
+      && 'vaultConsent' in result && result.vaultConsent === true
+  } catch { /* A native result without consent must never imply authorization. */ }
+  if (consent && grant?.value !== '1') {
+    // Only native explicit opt-in authorizes future unattended work on the
+    // exact origin. A read-only provider cannot silently widen authority.
+    await credentials.set(originCredentialRef(origin, 'autonomous'), '1')
+  }
+  return details
 }
 
 function inputRisk(action: ComputerAction): { risk: 'low' | 'medium' | 'high'; reversible: boolean } {
@@ -1474,7 +1489,7 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. A /secret login-set grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
+    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login opens the protected Windows login form on first use or resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. A /secret login-set grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
   })
 
   ctx.tools.register(defineTool({

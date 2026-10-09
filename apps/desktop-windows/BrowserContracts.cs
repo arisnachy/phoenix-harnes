@@ -194,17 +194,26 @@ public sealed record BrowserCommand(
 
             if (type == "phoenix.browser.login")
             {
-                if (!TryGetString(doc.RootElement, "account", out var account)
-                    || account.Length > 4096
-                    || !TryGetString(doc.RootElement, "secret", out var secret)
-                    || secret.Length > 16384)
+                // A secret-free request opens a native human-only vault form on first use.
+                // Reject half-populated legacy requests; secrets are never model fields.
+                var hasAccount = doc.RootElement.TryGetProperty("account", out var accountNode);
+                var hasSecret = doc.RootElement.TryGetProperty("secret", out var secretNode);
+                if (hasAccount != hasSecret) return false;
+                if (!hasAccount)
+                {
+                    command = new BrowserCommand(type, Origin: origin, Submit: submit);
+                    return true;
+                }
+                if (accountNode.ValueKind != JsonValueKind.String
+                    || secretNode.ValueKind != JsonValueKind.String)
+                    return false;
+                var account = accountNode.GetString();
+                var secret = secretNode.GetString();
+                if (string.IsNullOrEmpty(account) || account.Length > 4096
+                    || string.IsNullOrEmpty(secret) || secret.Length > 16384)
                     return false;
                 command = new BrowserCommand(
-                    type,
-                    Origin: origin,
-                    Account: account,
-                    Secret: secret,
-                    Submit: submit);
+                    type, Origin: origin, Account: account, Secret: secret, Submit: submit);
                 return true;
             }
 
