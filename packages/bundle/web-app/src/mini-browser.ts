@@ -219,7 +219,7 @@ async function cdp<T extends Record<string, unknown>>(tab: Tab, method: string, 
       try { reply = JSON.parse(String(event.data)) as RpcReply } catch { return }
       if (reply.id === viewportId && needsViewport) {
         if (reply.error && method !== 'Page.captureScreenshot') {
-          settle(new Error('No se pudo ajustar el tamaño del navegador: ' + reply.error.message))
+          settle(new Error('No se pudo ajustar el tamaño del navegador: ' + (reply.error.message ?? 'error desconocido')))
         } else sendAction()
         return
       }
