@@ -132,7 +132,7 @@ export class TelegramInbox {
     void work.catch((error: unknown) => {
       // Credential storage and Agent services may be temporarily unavailable;
       // never let a background poller rejection crash the Phoenix Host.
-      this.failure = error instanceof Error ? error.message.replace(/\\d{6,}:[A-Za-z0-9_-]+/g, '[redacted]') : 'telegram-runtime-error'
+      this.failure = error instanceof Error ? error.message.replace(/\d{6,}:[A-Za-z0-9_-]+/g, '[redacted]') : 'telegram-runtime-error'
       this.phase = 'failed'
     }).finally(() => {
       if (this.worker === work) this.worker = undefined
@@ -286,10 +286,10 @@ export class TelegramInbox {
       agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] }))
       await this.send(token, chat, 'Recibido. Kira está trabajando en tu solicitud.')
       await agent.whenIdle()
-      const result = agent.session.deriveMessages().slice(before)
-        .filter(m => m.role === 'assistant' && m.source.kind === 'model')
-        .flatMap(m => m.content.filter(part => part.type === 'text').map(part => part.text))
-        .filter(Boolean).join('\n\n').trim()
+      const lastAnswer = agent.session.deriveMessages().slice(before)
+        .filter(m => m.role === 'assistant' && m.source.kind === 'model').at(-1)
+      const result = lastAnswer?.content.filter(part => part.type === 'text')
+        .map(part => part.text).join('\n').trim() ?? ''
       await this.send(token, chat, result || 'La ejecución terminó sin una respuesta de texto. Revisa el historial de Phoenix.')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown'
