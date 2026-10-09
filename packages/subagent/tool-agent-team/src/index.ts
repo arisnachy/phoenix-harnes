@@ -324,7 +324,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       text: () => {
         const membership = ctx.agentTeams.membership(agent)
         const socialStyle = teamSocialStyle(membership.name, membership.role)
-        return `${teamLanguageInstruction(membership.root.session.events)}\n\n${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}`
+        return `${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}\n\n${teamLanguageInstruction(membership.root.session.events)}`
       },
     }))
 
