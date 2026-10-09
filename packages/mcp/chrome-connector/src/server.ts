@@ -219,7 +219,10 @@ async function launchDedicatedBrowser(): Promise<string> {
 }
 
 async function endpoint(): Promise<string> {
-  const configured = cdpBase()
+  // A visible personal Chrome profile must never become the default target of
+  // agent navigation. External CDP attachment requires an explicit opt-in.
+  const allowVisible = process.env.PHOENIX_BROWSER_ALLOW_VISIBLE_CDP === 'true'
+  const configured = allowVisible ? cdpBase() : ''
   if (configured) {
     await json(`${configured}/json/version`)
     return configured
@@ -229,7 +232,7 @@ async function endpoint(): Promise<string> {
     const base = shared.endpoint.replace(/\/$/, '')
     try { await json(`${base}/json/version`); return base } catch { /* stale peer */ }
   }
-  const discovered = await Promise.all(DEFAULT_PORTS.map(async (port) => {
+  const discovered = await Promise.all((allowVisible ? DEFAULT_PORTS : []).map(async (port) => {
     const candidate = `http://127.0.0.1:${port}`
     try {
       await json(`${candidate}/json/version`)
