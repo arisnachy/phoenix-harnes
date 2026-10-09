@@ -39,21 +39,108 @@
 
 .controls {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   gap: 6px;
   flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  min-width: 0;
 }
 
-.root[data-artifact-kind='visual'] .controls :global(button) {
-  border-color: var(--dsw-alias-border-subtle, #e1dad1);
-  background: var(--dsw-alias-surface-primary, #faf8f5);
-  color: var(--dsw-alias-label-primary, inherit);
+.actionButton {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--dsw-alias-border-subtle, #e1d8ce);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dsw-alias-surface-primary, #faf8f5) 92%, transparent);
+  color: var(--dsw-alias-label-primary, #322e29);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 1px 3px color-mix(in srgb, currentColor 7%, transparent);
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease;
 }
 
-.root[data-artifact-kind='visual'] .controls :global(button:hover:not(:disabled)) {
+.actionButton:hover:not(:disabled) {
   border-color: var(--dsw-alias-border-l2, #cbbfb4);
-  background: var(--dsw-alias-interactive-bg-hover, #f0ebe5);
+  background: var(--dsw-alias-interactive-bg-hover, #f1eae2);
+  box-shadow: 0 2px 6px color-mix(in srgb, currentColor 9%, transparent);
+}
+
+.actionButton:focus-visible {
+  outline: 2px solid var(--dsw-alias-border-l2, #a97954);
+  outline-offset: 2px;
+}
+
+.actionButton:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.actionIcon {
+  display: block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* Native <dialog> opens in the browser top layer, outside chat clipping and
+   stacking contexts, with a genuinely wide chart/table reading surface. */
+.modal {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  width: min(1320px, calc(100vw - 40px));
+  max-width: calc(100vw - 20px);
+  height: min(880px, calc(100dvh - 40px));
+  max-height: calc(100dvh - 20px);
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-subtle, #dfd5ca);
+  border-radius: 22px;
+  background: var(--dsw-alias-surface-primary, #faf8f5);
+  color: var(--dsw-alias-label-primary, #322e29);
+  box-shadow: 0 24px 80px rgba(44, 35, 28, .21);
+}
+
+.modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.modal::backdrop {
+  background: rgba(30, 25, 21, .43);
+  backdrop-filter: blur(3px);
+}
+
+.modalHeader {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--dsw-alias-border-subtle, #e1d8ce);
+}
+
+.modalBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: auto;
+  padding: clamp(18px, 3vw, 36px);
+  overscroll-behavior: contain;
 }
 
 .content {
@@ -73,7 +160,11 @@
 }
 
 @media (max-width: 560px) {
-  .header { align-items: flex-start; flex-direction: column; }
+  .header, .modalHeader { align-items: flex-start; flex-direction: column; }
   .controls { width: 100%; justify-content: flex-start; }
-  .controls > * { flex: 1 1 88px; }
+  .controls > * { flex: 0 0 auto; }
+  .actionButton { min-height: 30px; padding: 6px 9px; font-size: 11px; }
+  .modal { width: calc(100vw - 16px); height: calc(100dvh - 24px); border-radius: 16px; }
+  .modalHeader { padding: 12px 16px; }
+  .modalBody { padding: 14px; }
 }
