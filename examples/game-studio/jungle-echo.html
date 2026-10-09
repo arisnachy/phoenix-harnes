@@ -20,15 +20,16 @@ canvas{display:block;width:100%;height:auto;border-radius:11px;border:1px solid 
 <body>
 <header><div><h1>JUNGLE ECHO</h1><small>Arcade original · prototipo jugable · Phoenix Game Studio</small></div>
 <div><button id="restart" type="button">Reiniciar</button> <button id="mute" type="button" aria-pressed="false">Sonido: encender</button></div></header>
-<canvas id="game" width="960" height="500" tabindex="0" aria-label="Juego de plataformas, movimiento A D o flechas, salto Espacio, disparo J"></canvas>
+<canvas id="game" width="960" height="500" tabindex="0" aria-label="Juego de plataformas, movimiento A D o flechas, salto Espacio, disparo J, apuntar I hacia arriba u O hacia abajo"></canvas>
 <div id="controls" aria-label="Controles táctiles">
 <button data-key="ArrowLeft" type="button">◀</button><button data-key="ArrowRight" type="button">▶</button>
-<button data-key="Space" type="button">Saltar</button><button data-key="KeyJ" type="button">Disparar</button>
+<button data-key="Space" type="button">Saltar</button><button data-key="KeyJ" type="button">Disparar</button><button data-key="KeyI" type="button">Apuntar ↑</button><button data-key="KeyO" type="button">Apuntar ↓</button>
 </div>
-<div id="status" role="status">Haz clic en el juego. A/D o flechas: mover · Espacio: saltar · J: disparar · M: sonido</div>
+<div id="status" role="status">Haz clic en el juego. A/D o flechas: mover · Espacio: saltar · J: disparar · I/O: apuntar arriba/abajo · M: sonido</div>
 <script id="phoenix-game-manifest" type="application/json">
 {
   "schemaVersion":1,"title":"Jungle Echo","genre":"original run-and-gun",
+  "gameType":"run-and-gun","motion":{"rig":{"type":"two-bone IK","legs":2,"arms":2},"aimDirections":["horizontal","diagonal-up","diagonal-down"]},
   "player":{"states":["idle","run","jump","fall","shoot","hurt","death"],"animations":{"idle":4,"run":8,"jump":2,"fall":2,"shoot":3,"hurt":2,"death":6}},
   "enemies":[{"id":"scout","states":["move","attack","hurt","death"]},{"id":"turret","states":["move","attack","hurt","death"]}],
   "bosses":[{"id":"iron-stag","phases":["patrol","barrage"]}],
@@ -41,6 +42,114 @@ canvas{display:block;width:100%;height:auto;border-radius:11px;border:1px solid 
 <script>
 (function(){
 'use strict';
+/* PHOENIX Game Studio: original, dependency-free 2D motion kit.
+ * Inline this source into a standalone game HTML artifact. No CDN or network.
+ * Render quality depends on art and testing; math alone is not polished artwork.
+ */
+const PhoenixGameKit = (() => {
+  'use strict';
+  const clamp = (v, low, high) => Math.max(low, Math.min(high, v));
+  const point = (x, y) => ({ x, y });
+  const distance = (a, b) => Math.hypot(b.x - a.x, b.y - a.y);
+
+  function direction8(face, up, down) {
+    const dy = Number(Boolean(down)) - Number(Boolean(up));
+    const length = Math.hypot(face, dy) || 1;
+    return point(face / length, dy / length);
+  }
+
+  // Analytical two-bone inverse kinematics. Both distances are clamped for stable
+  // near/far targets; the bend sign keeps elbows/knees on a consistent side.
+  function twoBone(root, target, upper, lower, bend = 1) {
+    if (!(upper > 0 && lower > 0)) throw new RangeError('Bone lengths must be positive');
+    const dx = target.x - root.x;
+    const dy = target.y - root.y;
+    const requested = Math.hypot(dx, dy);
+    const reach = clamp(requested, Math.abs(upper - lower) + .001, upper + lower - .001);
+    const angle = requested > .0001 ? Math.atan2(dy, dx) : 0;
+    const c = clamp((upper * upper + reach * reach - lower * lower) / (2 * upper * reach), -1, 1);
+    const jointAngle = angle + Math.acos(c) * (bend < 0 ? -1 : 1);
+    const joint = point(root.x + Math.cos(jointAngle) * upper, root.y + Math.sin(jointAngle) * upper);
+    const end = point(root.x + Math.cos(angle) * reach, root.y + Math.sin(angle) * reach);
+    return { root, joint, end, reached: Math.abs(reach - requested) < .01 };
+  }
+
+  function animationFrame(elapsed, fps, frames) {
+    if (!Number.isFinite(elapsed) || !Number.isFinite(fps) || !Number.isFinite(frames) || fps <= 0 || frames < 1) return 0;
+    return Math.floor(Math.max(0, elapsed) * fps) % Math.floor(frames);
+  }
+
+  function parallaxX(worldX, camera, factor) {
+    return worldX - camera * clamp(factor, 0, 1);
+  }
+
+  function humanPose({ walk = 0, running = false, airborne = false, falling = false, aim = 0, recoil = 0 } = {}) {
+    const stride = running && !airborne ? Math.sin(walk * 2) * 13 : 0;
+    const liftA = running && !airborne ? Math.max(0, Math.cos(walk * 2)) * 10 : 0;
+    const liftB = running && !airborne ? Math.max(0, -Math.cos(walk * 2)) * 10 : 0;
+    const landing = airborne ? (falling ? 7 : -9) : 0;
+    const hipA = point(-6, 8), hipB = point(7, 8);
+    const ankleA = point(-7 + stride, 30 - liftA + landing);
+    const ankleB = point(8 - stride, 30 - liftB - landing * .5);
+    const hand = point(25 * Math.cos(aim) - recoil, 6 + 25 * Math.sin(aim));
+    const support = point(18 * Math.cos(aim) - recoil * .6, 5 + 18 * Math.sin(aim));
+    return {
+      legs: [twoBone(hipA, ankleA, 18, 18, 1), twoBone(hipB, ankleB, 18, 18, -1)],
+      arms: [twoBone(point(-8, 1), support, 17, 17, -1), twoBone(point(9, 1), hand, 17, 18, 1)],
+      hand, support, aim,
+      muzzle: point(hand.x + Math.cos(aim) * 26, hand.y + Math.sin(aim) * 26),
+    };
+  }
+
+  function strokeLimb(ctx, limb, thickness, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = thickness; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(limb.root.x, limb.root.y); ctx.lineTo(limb.joint.x, limb.joint.y);
+    ctx.lineTo(limb.end.x, limb.end.y); ctx.stroke();
+  }
+
+  function drawHumanoid(ctx, x, y, options = {}) {
+    const { face = 1, walk = 0, running = false, airborne = false, falling = false,
+      aim = 0, recoil = 0, flash = false, enemy = false } = options;
+    const pose = humanPose({ walk, running, airborne, falling, aim, recoil });
+    ctx.save(); ctx.translate(x, y); ctx.scale(face, 1);
+    strokeLimb(ctx, pose.legs[0], 9, enemy ? '#65594d' : '#8c9e7e');
+    strokeLimb(ctx, pose.legs[1], 9, enemy ? '#443d39' : '#c2b894');
+    for (const leg of pose.legs) {
+      ctx.fillStyle = enemy ? '#292f34' : '#343e47';
+      ctx.fillRect(leg.end.x - 7, leg.end.y - 2, 15, 7);
+    }
+    ctx.fillStyle = enemy ? '#765647' : '#38565e'; ctx.fillRect(-14, -5, 29, 26);
+    ctx.fillStyle = enemy ? '#b6785f' : '#90b49b'; ctx.fillRect(-13, -4, 25, 7);
+    ctx.fillStyle = enemy ? '#a29b76' : '#dfc58b'; ctx.fillRect(-11, -22, 23, 20);
+    ctx.fillStyle = enemy ? '#565047' : '#425b59'; ctx.fillRect(-13, -25, 27, 9);
+    ctx.fillStyle = '#171f25'; ctx.fillRect(7, -13, 7, 3);
+    strokeLimb(ctx, pose.arms[0], 7, enemy ? '#ad795c' : '#b5ae84');
+    ctx.save(); ctx.translate(pose.hand.x, pose.hand.y); ctx.rotate(aim);
+    ctx.fillStyle = enemy ? '#5d5e5e' : '#394f5d'; ctx.fillRect(-5, -6, 34, 12);
+    ctx.fillStyle = enemy ? '#c6aa7c' : '#9cb5af'; ctx.fillRect(14, -3, 24, 5);
+    ctx.fillStyle = '#222d33'; ctx.fillRect(3, 4, 7, 11);
+    if (flash) {
+      ctx.fillStyle = '#fff0b2'; ctx.beginPath();ctx.moveTo(36, 0);
+      ctx.lineTo(49, -8); ctx.lineTo(45, 0); ctx.lineTo(49, 8);ctx.closePath();ctx.fill();
+    }
+    ctx.restore();
+    strokeLimb(ctx, pose.arms[1], 7, enemy ? '#ad795c' : '#ddc797');
+    ctx.restore();
+    return pose;
+  }
+
+  // A small deterministic role-based decision primitive, not a claim of advanced AI.
+  function enemyDecision({ distanceToTarget, cooldown = 0, health = 1, role = 'scout', visible = true }) {
+    if (health <= 0) return 'dead';
+    if (!visible || Math.abs(distanceToTarget) > 570) return 'patrol';
+    if (cooldown <= 0 && Math.abs(distanceToTarget) < 490) return 'telegraph';
+    if (role === 'scout' && Math.abs(distanceToTarget) > 130) return 'chase';
+    return 'cover';
+  }
+
+  return { clamp, direction8, twoBone, animationFrame, parallaxX, humanPose, drawHumanoid, enemyDecision, distance };
+})();
+
 const canvas=document.getElementById('game'),g=canvas.getContext('2d'),status=document.getElementById('status');
 const W=960,H=500,FLOOR=440,WORLD=3800,keys=new Set(),sparks=[],bullets=[],enemyBullets=[];
 const platforms=[{x:0,y:FLOOR,w:WORLD},{x:465,y:370,w:180},{x:1160,y:352,w:190},{x:2080,y:365,w:240}];
@@ -51,7 +160,7 @@ function reset(){
  boss={x:3410,y:FLOOR-122,w:110,h:122,hp:30,phase:'patrol',shot:1,alive:true,flash:0};
  enemies.length=0;bullets.length=0;enemyBullets.length=0;sparks.length=0;
  [330,620,940,1300,1630,1850,2260,2520,2860,3190].forEach((x,i)=>enemies.push({x,y:FLOOR-42,w:30,h:42,hp:i%3===0?3:2,
-  type:i%3===0?'turret':'scout',face:-1,shot:i%2,walk:i,alive:true,flash:0}));
+  type:i%3===0?'turret':'scout',face:-1,shot:i%2,walk:i,alive:true,flash:0,aiState:'patrol',telegraph:0}));
  camera=0;t=0;score=0;invuln=0;ended=false;status.textContent='Misión: atraviesa la jungla y derrota al Iron Stag.';
 }
 function unlockAudio(){
@@ -89,7 +198,8 @@ function particles(x,y,c,n=10,power=1){
 function addBullet(x,y,dir,owner='player'){
  const arr=owner==='player'?bullets:enemyBullets;
  if(arr.length>35)return;
- arr.push({x,y,vx:dir*(owner==='player'?730:270),r:owner==='player'?5:7,ttl:1.7});
+ const axis=typeof dir==='number'?{x:dir,y:0}:dir;
+ arr.push({x,y,vx:axis.x*(owner==='player'?730:270),vy:axis.y*(owner==='player'?730:270),r:owner==='player'?5:7,ttl:1.7});
  if(owner==='player'){sound.shoot();particles(x,y,'#ffde72',4,.28)}
 }
 function overlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
@@ -119,16 +229,25 @@ function update(dt){
  if((keys.has('Space')||keys.has('ArrowUp')||keys.has('KeyW'))&&p.grounded){p.vy=-660;p.grounded=false;sound.jump();particles(p.x+15,p.y+p.h,'#cab48a',8,.38)}
  moveBody(p,dt,true);
  if((keys.has('KeyJ')||keys.has('KeyK'))&&p.shot<=0){
-  addBullet(p.x+15+p.face*31,p.y+22,p.face);p.shot=.14
+  const aim=PhoenixGameKit.direction8(p.face,keys.has('KeyI'),keys.has('KeyO'));
+  const ang=Math.atan2(aim.y,Math.abs(aim.x));
+  const recoil=p.shot/.14*3,forward=51*Math.cos(ang)-recoil;
+  addBullet(p.x+15+p.face*forward,p.y+27+51*Math.sin(ang),aim);p.shot=.14
  }
  p.state=invuln>.68?'hurt':!p.grounded?(p.vy<0?'jump':'fall'):p.shot>.08?'shoot':Math.abs(p.vx)>4?'run':'idle';
  for(const e of enemies){
   if(!e.alive)continue;
   const dist=p.x-e.x;e.face=dist>=0?1:-1;e.walk+=dt*5;e.flash=Math.max(0,e.flash-dt);
-  e.vx=e.type==='scout'&&Math.abs(dist)<460?e.face*55:0;
-  e.vy=e.vy||0;moveBody(e,dt,false);
-  e.shot-=dt;
-  if(Math.abs(dist)<550&&e.shot<=0){addBullet(e.x+15+e.face*18,e.y+18,e.face,'enemy');e.shot=e.type==='turret'?1.35:2.2}
+  e.vy=e.vy||0;e.shot-=dt;
+  const target=PhoenixGameKit.enemyDecision({distanceToTarget:dist,cooldown:e.shot,health:e.hp,role:e.type,
+    visible:Math.abs(p.y-e.y)<100});
+  if(e.telegraph>0){
+   e.aiState='telegraph';e.telegraph-=dt;e.vx=0;
+   if(e.telegraph<=0){addBullet(e.x+15+e.face*18,e.y+18,e.face,'enemy');
+    e.shot=e.type==='turret'?1.45:2.3;e.aiState='recover'}
+  }else if(target==='telegraph'&&Math.abs(dist)<500){e.aiState='telegraph';e.telegraph=.34;e.vx=0}
+  else{e.aiState=target;e.vx=target==='chase'?e.face*55:0}
+  moveBody(e,dt,false);
   if(overlap(p,e))damagePlayer();
  }
  boss.phase=boss.hp<=15?'barrage':'patrol';
@@ -143,7 +262,7 @@ function update(dt){
   if(Math.abs(p.x-boss.x)<700&&boss.phase==='barrage'){boss.x+=Math.sin(t*1.4)*.35}
  }
  for(const b of bullets){
-  b.x+=b.vx*dt;b.ttl-=dt;
+  b.x+=b.vx*dt;b.y+=b.vy*dt;b.ttl-=dt;
   for(const e of enemies){
    if(e.alive&&b.ttl>0&&b.x>e.x&&b.x<e.x+e.w&&b.y>e.y&&b.y<e.y+e.h){
     e.hp--;e.flash=.12;b.ttl=0;particles(b.x,b.y,'#fce195',7,.45);sound.hit();
@@ -157,7 +276,7 @@ function update(dt){
      sound.explosion();status.textContent='¡VICTORIA! Jungla liberada. Puntaje: '+score+'. Pulsa Reiniciar.'}
   }
  }
- for(const b of enemyBullets){b.x+=b.vx*dt;b.ttl-=dt;
+ for(const b of enemyBullets){b.x+=b.vx*dt;b.y+=b.vy*dt;b.ttl-=dt;
   if(b.ttl>0&&b.x>p.x&&b.x<p.x+p.w&&b.y>p.y&&b.y<p.y+p.h){b.ttl=0;damagePlayer()}
  }
  for(let i=sparks.length-1;i>=0;i--){
@@ -212,30 +331,22 @@ function world(){
  treeRow(.81,500,'#122f2d',170,.75);
 }
 function drawHero(){
- const x=p.x+15,y=p.y+15;const stride=p.state==='run'?Math.sin(p.walk*2.6)*12:0;
- const leap=p.state==='jump'?-9:p.state==='fall'?8:0;
- g.save();g.translate(x,y);g.scale(p.face,1);
- if(p.state==='hurt')g.globalAlpha=.65;
- rect(-11,-10,22,22,'#485d58');rect(-11,-9,20,8,'#adca91');rect(-7,-15,16,7,'#c0ad70');
- rect(1,-12,7,3,'#f9dbac');rect(5,-10,4,3,'#202b33');
- // articulated legs use distinct poses (run/jump/fall/landing) rather than translating static art
- g.strokeStyle='#c0be8a';g.lineWidth=7;g.lineCap='round';
- g.beginPath();g.moveTo(-6,13);g.lineTo(-6+stride,27+leap);g.lineTo(-6+stride*.45,38+leap*.2);
- g.moveTo(7,13);g.lineTo(7-stride,27-leap*.4);g.lineTo(7-stride*.6,38-leap*.15);g.stroke();
- g.strokeStyle='#e0bc89';g.lineWidth=6;g.beginPath();g.moveTo(5,0);g.lineTo(18,9+(p.state==='shoot'?-4:0));g.stroke();
- rect(13,4,27,7,'#354953');rect(27,3,16,5,'#7c9ba0');
- if(p.shot>.08){rect(40,3,15,4,'#ffe3a1');rect(55,1,7,8,'#ff9f43')}
- g.restore();
+ const aim=PhoenixGameKit.direction8(p.face,keys.has('KeyI'),keys.has('KeyO'));
+ g.save();if(p.state==='hurt')g.globalAlpha=.65;
+ PhoenixGameKit.drawHumanoid(g,p.x+15,p.y+21,{
+  face:p.face,walk:p.walk,running:p.state==='run',airborne:!p.grounded,
+  falling:p.vy>0,aim:Math.atan2(aim.y,Math.abs(aim.x)),
+  recoil:p.shot/.14*3,flash:p.shot>.09
+ });g.restore();
 }
 function drawEnemy(e){
- const x=e.x,y=e.y;const foot=Math.sin(e.walk)*4;
- g.save();g.translate(x+15,y);g.scale(e.face,1);
- rect(-13,4,26,25,e.flash?'#fff2ab':'#925343');rect(-9,0,18,11,'#d6a369');
- rect(0,8,7,4,'#ffcc84');
- rect(-15,27,10,14+foot,'#4d4540');rect(7,27,10,14-foot,'#4d4540');
- rect(9,16,22,6,e.type==='turret'?'#879296':'#635a4e');
- if(e.type==='turret'){rect(-18,-8,36,9,'#454e51');rect(-9,-12,19,5,'#d3b96b')}
+ g.save();g.translate(e.x+15,e.y+18);g.scale(.83,.75);
+ PhoenixGameKit.drawHumanoid(g,0,0,{face:e.face,walk:e.walk,running:e.aiState==='chase',
+  enemy:true,flash:e.telegraph>0,aim:0});
+ if(e.telegraph>0){g.strokeStyle='#ffc16c';g.lineWidth=3;g.beginPath();g.arc(0,0,29+Math.sin(t*26)*3,0,Math.PI*2);g.stroke()}
  g.restore();
+ if(e.type==='turret'){rect(e.x-3,e.y-11,36,8,'#4a5960');rect(e.x+7,e.y-15,16,5,'#eac178')}
+ if(e.flash>0)rect(e.x,e.y,e.w,e.h,'#fff2ab77');
 }
 function drawBoss(){
  const x=boss.x,y=boss.y;
@@ -272,7 +383,7 @@ function frame(ms){
 }
 document.addEventListener('keydown',event=>{
  const key=event.code;
- if(['ArrowLeft','ArrowRight','ArrowUp','Space','KeyA','KeyD','KeyW','KeyJ','KeyK','KeyM'].includes(key))event.preventDefault();
+ if(['ArrowLeft','ArrowRight','ArrowUp','Space','KeyA','KeyD','KeyW','KeyJ','KeyK','KeyI','KeyO','KeyM'].includes(key))event.preventDefault();
  if(key==='KeyM'){toggleAudio();return}
  keys.add(key);if(!event.repeat){unlockAudio()}
 });

@@ -1,30 +1,26 @@
-# Jungle Echo — PHOENIX Game Studio vertical slice
+# PHOENIX Game Studio — offline playable examples
 
 English | [中文](README.zh.md)
 
-An **original, offline** 2D run-and-gun technical starter. It is **not** Contra artwork, and it is **not** evidence of production-grade character art.
+These **original, offline** examples establish reusable game mechanics, not a promise of perfect commercial art, finished sound design or automatic support for every engine.
 
 ## Run
 
-Open `jungle-echo.html` in any modern browser, or publish its entire HTML payload as MIME `application/vnd.phoenix.game+html` in a PHOENIX chat artifact. The preview uses a sandboxed iframe with inline scripts and no external network/CDN.
+Open either `jungle-echo.html` or `lumen-circuit.html` in a modern browser, or publish its complete HTML content using MIME `application/vnd.phoenix.game+html` in PHOENIX. The in-chat preview uses an isolated iframe with inline scripts and no network/CDN dependencies.
 
-- Left/right arrows or A/D: move
-- Space / up / W: jump
-- J/K: shoot
-- M or **Sonido: encender**: toggle music and effects (browser gesture required)
-- On-screen controls: touch input
-- Restart: reset the game
+- **Jungle Echo** (run-and-gun): A/D or arrows move; Space/up/W jump; J/K fire; I aims diagonally up; O aims diagonally down; M toggles sound; touch buttons and restart are available.
+- **Lumen Circuit** (puzzle): click/tap a tile to rotate it; arrow keys move keyboard focus; Enter/Space rotate the selected tile; use New Game to restart.
+- Both use WebAudio only after a user gesture and allow sound to be disabled.
 
-## Verified against source
+## Reusable foundation
 
-- Embedded manifest declares original art, protagonist states and animations, two enemies, a two-phase boss, level geometry/layers and audio events.
-- Game loop uses fixed time steps, position-dependent drawing, jump physics, dynamic parallax, enemy projectiles, particles and phase-dependent boss cadence.
-- Uses only inline HTML, CSS, JS and browser Canvas/WebAudio; no remote dependencies or third-party assets.
+- `game-kit.js` contains analytical two-bone inverse kinematics, coordinated legs and arms, hands aligned with weapon aiming, directional targeting, animation frame math, parallax and a bounded enemy decision primitive. `jungle-echo.html` inlines it so the preview does not fetch external files.
+- The game artifact audit supports genre-specific `gameType` profiles (run-and-gun, platformer, top-down action, racing, puzzle, strategy, RPG, rhythm, simulation, 3D and custom) and does not require a boss or gun in puzzle and racing games.
+- The examples exercise two actual game loops: shooter combat and a puzzle connectivity/rotation ruleset. Profiles for other genres validate structure but do not create their gameplay automatically.
 
-## Limits
+## Verification and limits
 
-- Procedural/rigged shapes are a motion/physics reference, not a replacement for high-resolution spritesheets, advanced shaders, original commissioned imagery or composed audio.
-- Schema inspection is **not** visual QA or listening QA. Before a commercial release, run with a real browser/device, inspect screenshots and animations, test WebAudio with user interaction, check accessibility, and optimize for target hardware.
-- Research references are not invented; the skill requires Kira to search and document real references for every new reference-based game request.
-
-The skill .agents/skills/phoenix-game-studio/SKILL.md describes the bounded La Forja workflow, licensing, quality contract, and stopping conditions.
+- Deterministic JavaScript frame and input smokes exercise the supplied source code, including directional character motion and puzzle interactions.
+- Source or metadata checks **do not constitute** visual QA, animation comparisons or audible playback tests. Verify any new game using real browser/device screenshots, animation recordings, audio listening, input and performance measurements.
+- Procedural character shapes, oscillator audio and simple opponent decisions are technical references, not a substitute for consistent authored sprite atlases, detailed scenery, multi-layer sound mixes, licensed or original character art and polished gameplay balancing.
+- Kira's `.agents/skills/phoenix-game-studio/SKILL.md` describes genre routing, actual source research, specialist collaboration, animation and assets, game QA and stopping conditions.
