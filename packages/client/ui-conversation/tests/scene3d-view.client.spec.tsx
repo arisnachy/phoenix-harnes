@@ -53,7 +53,7 @@ describe('Phoenix real interactive 3D artifacts',()=>{
     const artifact=normalizeHardnessArtifact({
       id:'villa-3d',title:'Villa en 3D',mime:'application/vnd.phoenix.scene3d+json',data:scene,
     })
-    render(<UniversalArtifactSurface artifact={artifact} />)
+    render(<UniversalArtifactSurface artifact={artifact} onStop={vi.fn()} />)
     expect(screen.getByRole('button',{name:'Expand'})).toBeTruthy()
     fireEvent.click(screen.getByRole('button',{name:'Expand'}))
     const dialog=screen.getByRole('dialog',{name:'Vista ampliada: Villa en 3D'})
