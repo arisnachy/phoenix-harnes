@@ -1324,7 +1324,9 @@ export function ConnectorsSettingsSection({ api,
     ]).then(async (result) => {
       if (!result.accepted) {
         if (recoverAuthorization) closeOAuthPopup()
-        setCatalogFailure(connectorT('reconnectRequiredStatus'))
+        const message = connectorT('reconnectRequiredStatus')
+        setReconnectFailure({ serverName: runtime.serverName, message })
+        setCatalogFailure(message)
         return
       }
       setRefresh(current => current + 1)
@@ -1332,6 +1334,9 @@ export function ConnectorsSettingsSection({ api,
       if (!recoverAuthorization) return
       if (api === undefined) {
         closeOAuthPopup()
+        const message = 'El Host no expone la API de autorización. Comprueba la instalación activa de Phoenix.'
+        setReconnectFailure({ serverName: runtime.serverName, message })
+        setCatalogFailure(message)
         return
       }
 
@@ -1362,10 +1367,10 @@ export function ConnectorsSettingsSection({ api,
         }
       }
       closeOAuthPopup()
-      setCatalogFailure(
-        `No se inició la autorización de ${runtime.serverName}: el MCP sigue sin exponer un método OAuth operativo. `
-        + 'Comprueba su URL, disponibilidad y si requiere API key, client ID o secret. El conector no está conectado.',
-      )
+      const message = `No se inició la autorización de ${runtime.serverName}: el MCP sigue sin exponer un método OAuth operativo. `
+        + 'Comprueba su URL, disponibilidad y si requiere API key, client ID o secret. El conector no está conectado.'
+      setReconnectFailure({ serverName: runtime.serverName, message })
+      setCatalogFailure(message)
     }).catch((error: unknown) => {
       if (recoverAuthorization) closeOAuthPopup()
       const message = String(error)
