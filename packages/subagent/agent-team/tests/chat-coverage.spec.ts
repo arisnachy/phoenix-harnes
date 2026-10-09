@@ -3,7 +3,7 @@ import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId, type Session } from '@phoenix-ai/dsh-session'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import { CallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
-import { TeamChat } from '../src/chat.ts'
+import { TeamChat, shouldPublishTeammateSpeech } from '../src/chat.ts'
 import { TEAM_PERSONAS } from '../src/personas.ts'
 import { TeamId } from '../src/types.ts'
 import { TeamJournal } from '../src/journal.ts'
@@ -35,6 +35,40 @@ async function fixture(maxBytes = 1024) {
   }
   return { store, ctx, root, child, lead, worker, agents, abort, followup, listChildren, inspect, chat, row }
 }
+
+describe('human teamwork without progress spam', () => {
+  it('keeps actions and new evidence but removes duplicate future-tense messages', () => {
+    expect(shouldPublishTeammateSpeech('Kira, revisaré la portada.', false, false)).toBe(true)
+    expect(shouldPublishTeammateSpeech('La tercera nota la tomaré también de la portada.', true, false)).toBe(false)
+    expect(shouldPublishTeammateSpeech('Kira, voy a verificar otra noticia.', true, true)).toBe(false)
+    expect(shouldPublishTeammateSpeech('Kira, confirmé el titular y la URL.', true, true)).toBe(true)
+    expect(shouldPublishTeammateSpeech('Kira, ¿necesitas otra fuente?', true, false)).toBe(true)
+    expect(shouldPublishTeammateSpeech('', false, false)).toBe(false)
+  })
+  it('shares one opening and one tool-backed finding with Kira, not a stream of plans', async () => {
+    const f = await fixture()
+    f.child.append('turn/start', { turn: 1 })
+    const speak = (text: string, step: number) => f.child.append('assistant/message', {
+      turn: 1, step, message: createAssistantMessage({ source: { provider: 'mock', model: 'mock' }, content: content(text) }),
+    }, { surfaceOp: 'append' })
+    speak('Revisaré la portada y comprobaré los enlaces.', 1)
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    speak('La tercera nota la tomaré también de la portada.', 2)
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    expect(f.chat.messages(f.root).filter(row => row.senderKind === 'agent')).toHaveLength(1)
+    const callId = CallId('browser-verification')
+    f.child.append('tool/call', { turn: 1, step: 3, callId,
+      name: 'phoenix_browser', arguments: '{"url":"https://listindiario.com"}' })
+    f.child.append('tool/result', { turn: 1, step: 3,
+      message: createToolResultMessage({ callId, content: content('verified page opened'), isError: false }),
+    }, { surfaceOp: 'append' })
+    speak('Kira, encontré la nota y comprobé su página individual.', 4)
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    const shared = f.chat.messages(f.root).filter(row => row.senderKind === 'agent')
+    expect(shared).toHaveLength(2)
+    expect(shared.every(row => row.targetId === f.root.id)).toBe(true)
+  })
+})
 
 describe('chat durable ownership and delivery', () => {
   it('rejects missing, child, replaced and aborted roots', async () => {
