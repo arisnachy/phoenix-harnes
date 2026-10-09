@@ -46,6 +46,27 @@ function installBrowserMock(current: typeof state = state) {
 }
 
 describe('MiniBrowser in Phoenix conversation', () => {
+  it('does not show a global Abrir navegador button in an unrelated chat', async () => {
+    const calls = installBrowserMock({ ...state, available: false, url: 'about:blank', tabs: [] })
+    render(<MiniBrowser />)
+    await waitFor(() => expect(vi.mocked(fetch)).toHaveBeenCalled())
+    expect(screen.queryByText(/Abrir navegador/)).toBeNull()
+    expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('only opens desktop Chrome when the user presses the footer button', async () => {
+    const calls = installBrowserMock()
+    render(<MiniBrowser />)
+    await screen.findByRole('region', { name: 'Navegador de Kira' })
+    expect(calls).toHaveLength(0)
+    expect(screen.queryByText('◉ Abrir navegador')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Abrir navegador completo/ }))
+    await waitFor(() => {
+      expect(calls).toContainEqual({ type: 'open-external' })
+    })
+  })
+
   it('shows a browser card for a browsing request even when the host screenshot service is unavailable', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       error: 'El host todavía no pudo conectar con Chromium.',
