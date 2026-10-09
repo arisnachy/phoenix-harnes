@@ -29,7 +29,7 @@ describe('original dependency-free Phoenix Game Studio motion kit', () => {
     expect(Number.isFinite(near.joint.y)).toBe(true)
     expect(far.reached).toBe(false)
     expect(Math.hypot(far.end.x, far.end.y)).toBeLessThan(38)
-    expect(() => kit.twoBone({ x: 0, y: 0 }, { x: 3, y: 4 }, 0, 10)).toThrow(RangeError)
+    expect(() => kit.twoBone({ x: 0, y: 0 }, { x: 3, y: 4 }, 0, 10)).toThrow('Bone lengths must be positive')
     const left = kit.twoBone({ x: 0, y: 0 }, { x: 20, y: 0 }, 15, 15, -1)
     const right = kit.twoBone({ x: 0, y: 0 }, { x: 20, y: 0 }, 15, 15, 1)
     expect(left.joint.y * right.joint.y).toBeLessThan(0)
