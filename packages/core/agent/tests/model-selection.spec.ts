@@ -625,6 +625,113 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('routes simple fictional visual requests directly to Luna low, retaining Sol for actual multi-step work', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'phoenix_visualize', description: 'inline chart', parameters: { type: 'object' } },
+      { name: 'spawn_teammate', description: 'create Kira teammate', parameters: { type: 'object' } },
+    ] }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [{ type: 'turn/start', data: { turn: 1 } }]
+    const agent = { session: { events }, options: {} } as unknown as Agent
+    const signal = new AbortController().signal
+    const seed = { provider: 'seed', model: 'seed' }
+    await ctx.systemPrompt.assemble()
+    for (const text of ['crea un grafico ficticio', 'genera una tabla de ejemplo', 'create a sample chart']) {
+      events.push({ type: 'user/message', data: {
+        source: { kind: 'user' }, content: [{ type: 'text', text }],
+      } })
+      await expect(agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 1, step: 1, signal }, () => Promise.resolve(seed))).resolves.toMatchObject({
+        model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('low'),
+      })
+      events.pop()
+    }
+    events.push({ type: 'user/message', data: {
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'Crea un gráfico ficticio y después intégralo en un reporte de producción.' }],
+    } })
+    await expect(agentEvents(ctx, agent).waterfall('agent/request',
+      { turn: 1, step: 1, signal }, () => Promise.resolve(seed))).resolves.toMatchObject({
+      model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh'),
+    })
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
+  it('closes a verified fictitious graphic without the Phoenix Auto team admission loop', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'phoenix_visualize', description: 'inline chart', parameters: { type: 'object' } },
+      { name: 'spawn_teammate', description: 'create Kira teammate', parameters: { type: 'object' } },
+    ] }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: {
+        source: { kind: 'user' }, content: [{ type: 'text', text: 'crea un grafico ficticio' }],
+      } },
+      { type: 'tool/call', data: {
+        turn: 1, step: 1, callId: 'visual-1', name: 'phoenix_visualize',
+        arguments: '{"title":"Tendencia de ejemplo","visual":{"visualType":"chart","chartType":"line","demo":true}}',
+      } },
+      { type: 'tool/result', data: {
+        turn: 1, step: 1, message: {
+          source: { kind: 'tool', callId: 'visual-1' },
+          content: [{ type: 'tool-result', toolCallId: 'visual-1', isError: false,
+            content: [{ type: 'text', text: 'Rich visual ready: Tendencia de ejemplo' }] }],
+        },
+      } },
+      { type: 'assistant/message', data: {
+        turn: 1, step: 1, message: {
+          source: { provider: 'openai-codex', model: 'gpt-6-luna' },
+          content: [{ type: 'text', text: 'Gráfico de ejemplo generado y mostrado.' }],
+        },
+      } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    const signal = new AbortController().signal
+    await ctx.systemPrompt.assemble()
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+    expect(steered).toEqual([])
+
+    // An invalid/failed visual receipt must never pretend the task is done.
+    const result = events.find(event => event.type === 'tool/result')
+    if (result === undefined) throw new Error('expected visual result fixture')
+    const success = result.data
+    result.data = { turn: 1, step: 1, error: { code: 'INVALID_VISUAL' }, message: success }
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+    expect(steered).toHaveLength(1)
+    expect(JSON.stringify(steered[0])).toContain('real Kira Team participation')
+    result.data = success
+
+    // Previous-turn evidence cannot count for another user's request.
+    events.push({ type: 'turn/start', data: { turn: 2 } })
+    events.push({ type: 'user/message', data: {
+      source: { kind: 'user' }, content: [{ type: 'text', text: 'crea un grafico ficticio' }],
+    } })
+    events.push({ type: 'assistant/message', data: {
+      turn: 2, step: 1, message: {
+        source: { provider: 'openai-codex', model: 'gpt-6-luna' },
+        content: [{ type: 'text', text: 'Lo haré ahora.' }],
+      },
+    } })
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 2, signal })
+    expect(steered).toHaveLength(2)
+
+    dispose()
+    await ctx.fiber.dispose()
+  })
+
   it('keeps actionable Phoenix Auto work open until a real Kira teammate reports back', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)

@@ -551,18 +551,24 @@ function phoenixAutoHasInlineVisualReceiptForTurn(
     const result = event.data as {
       readonly error?: unknown
       readonly message?: {
-        readonly callId?: string
-        readonly isError?: boolean
-        readonly content?: readonly { readonly type?: string; readonly text?: string }[]
+        readonly source?: { readonly kind?: string; readonly callId?: string }
+        readonly content?: readonly {
+          readonly type?: string
+          readonly toolCallId?: string
+          readonly isError?: boolean
+          readonly content?: readonly { readonly type?: string; readonly text?: string }[]
+        }[]
       }
     }
-    if (result.error !== undefined || result.message?.isError === true
-      || !callIds.has(result.message?.callId ?? '')) continue
-    const content = result.message?.content
-      ?.filter(block => block.type === 'text')
-      .map(block => block.text ?? '')
-      .join(' ') ?? ''
-    if (content.includes('Rich visual ready:') || content.includes('Canvas ready in Phoenix:')) return true
+    if (result.error !== undefined || result.message?.source?.kind !== 'tool') continue
+    for (const block of result.message.content ?? []) {
+      if (block.type !== 'tool-result' || block.isError !== false
+        || block.toolCallId !== result.message.source.callId
+        || !callIds.has(block.toolCallId ?? '')) continue
+      if (block.content?.some(item => item.type === 'text'
+        && (item.text?.includes('Rich visual ready:') === true
+          || item.text?.includes('Canvas ready in Phoenix:') === true))) return true
+    }
   }
   return false
 }
