@@ -253,6 +253,23 @@ async function tabs(): Promise<Tab[]> {
   return (await json<Tab[]>(`${await endpoint()}/json/list`)).filter(tab => tab.type === 'page' || tab.type === undefined)
 }
 
+/**
+ * A new user navigation owns its own CDP tab; this keeps earlier MiniBrowser
+ * cards tied to their original pages when later chat turns open new sites.
+ * Explicit tabId still navigates the supplied tab for deliberate reuse.
+ */
+async function newBrowserTab(url: string): Promise<Tab> {
+  const base = await endpoint()
+  const result = await fetch(base + '/json/new?' + encodeURIComponent(url), {
+    method: 'PUT', signal: AbortSignal.timeout(5000),
+  })
+  if (!result.ok) throw new Error('No se pudo abrir una pestaña Chromium nueva: HTTP ' + result.status)
+  const tab = await result.json() as Tab
+  if (!tab.id || !tab.webSocketDebuggerUrl) throw new Error('Chrome no devolvió un identificador válido')
+  announceSession(base, tab.id)
+  return tab
+}
+
 async function selectedTab(id?: string): Promise<Tab> {
   const available = await tabs()
   const requestedId = id ?? sharedSession()?.selectedTabId
@@ -330,8 +347,10 @@ server.registerTool('navigate', {
   if (!actionsAllowed()) throw new Error('Navegación bloqueada por la política de permisos del navegador (modo read-only o PHOENIX_BROWSER_ALLOW_ACTIONS=false).')
   const parsed = new URL(url)
   if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Solo se permiten URLs HTTP(S)')
-  const tab = await selectedTab(tabId)
-  await cdp(tab, 'Page.navigate', { url })
+  const tab = tabId === undefined ? await newBrowserTab(url) : await selectedTab(tabId)
+  // /json/new already navigates the new page, while an explicit tabId must
+  // navigate the user's chosen existing tab.
+  if (tabId !== undefined) await cdp(tab, 'Page.navigate', { url })
   return { content: [{ type: 'text', text: `Navegación iniciada en ${url} (pestaña ${tab.id})` }] }
 })
 
@@ -345,9 +364,12 @@ server.registerTool('youtube_search', {
   }
   let tab: Tab
   try {
-    tab = await selectedTab(tabId)
-    const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
-    if (navigation.errorText) throw new Error(navigation.errorText)
+    tab = tabId === undefined ? await newBrowserTab(url) : await selectedTab(tabId)
+    // Opening a new request cannot replace the website shown by an older card.
+    if (tabId !== undefined) {
+      const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
+      if (navigation.errorText) throw new Error(navigation.errorText)
+    }
   } catch (error) {
     return { isError: true, content: [{ type: 'text', text: `No se pudo abrir YouTube en Chrome/Edge: ${String(error)}. Enlace directo para el usuario: ${url}. No reintentes automáticamente sin una causa nueva.` }] }
   }
