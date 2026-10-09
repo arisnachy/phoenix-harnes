@@ -434,6 +434,29 @@ describe('connectors settings section', () => {
     expect(api.begin).not.toHaveBeenCalled()
   })
 
+  it('never mistakes a github-copilot runtime for the GitHub repository MCP', async () => {
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'llm-pi-ai/github-copilot', label: 'GitHub Copilot',
+        methods: [{ id: 'oauth', label: 'GitHub Copilot' }], inFlight: false,
+      }] })),
+      begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { mcpRegistry: {
+      state: vi.fn(async () => ({ managed: [], runtime: [{
+        serverName: 'github-copilot', transport: 'streamable-http' as const,
+        status: 'ready' as const, toolNames: ['copilot_models'],
+      }] })),
+      install: vi.fn(), installCurated: vi.fn(), search: vi.fn(),
+    } })
+    const card = document.querySelector('[data-connector-id="github"]')!
+    await waitFor(() => expect(card.textContent).toContain('Instalar MCP GitHub'))
+    expect(card.textContent).not.toContain('Connected')
+    expect(card.textContent).not.toContain('Callable')
+    expect(document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')).toBeNull()
+    expect(api.begin).not.toHaveBeenCalled()
+  })
+
   it('installs official GitHub MCP even if gh CLI is authenticated', async () => {
     const api = { list: vi.fn(async () => ok({ entries: [] })),
       begin: vi.fn(), status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
