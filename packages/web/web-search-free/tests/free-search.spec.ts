@@ -25,6 +25,26 @@ describe('FreeSearchProvider', () => {
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
+  it('stops retrying blocked engines while another free engine works', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response('captcha', { status: 200 }))
+      .mockResolvedValueOnce(new Response(duckHtml, { status: 200 }))
+      .mockResolvedValueOnce(new Response(duckHtml, { status: 200 }))
+    const provider = new FreeSearchProvider({ fetcher })
+    await expect(provider.search({ query: 'first' })).resolves.toHaveProperty('sources')
+    await expect(provider.search({ query: 'second' })).resolves.toHaveProperty('sources')
+    expect(fetcher).toHaveBeenCalledTimes(3)
+    expect(fetcher.mock.calls[2]?.[0]).toContain('duckduckgo.com')
+  })
+
+  it('does not hammer engines returning server errors', async () => {
+    const fetcher = vi.fn(async () => new Response('blocked', { status: 503 }))
+    const provider = new FreeSearchProvider({ fetcher })
+    await expect(provider.search({ query: 'one' })).rejects.toThrow(/no free search engine returned results/)
+    await expect(provider.search({ query: 'two' })).rejects.toThrow(/no free search engine returned results/)
+    expect(fetcher).toHaveBeenCalledTimes(2)
+  })
+
   it('rejects unsafe redirects and exposes no credentials', async () => {
     const fetcher = vi.fn(async () => new Response('', { status: 200 }))
     const provider = new FreeSearchProvider({ fetcher, engines: ['bing'] })
