@@ -126,8 +126,8 @@ export function auditGameHtml(html: string): GameStudioAudit {
   const result = auditGameManifest(readGameManifest(html))
   const issues = [...result.issues]
   const warnings = [...result.warnings]
-  if (/(\<script\b[^>]*\bsrc\s*=|\<link\b[^>]*\bhref\s*=)/iu.test(html)) issues.push('external-script-or-stylesheet-blocked')
-  if (/(\<img\b[^>]*\bsrc\s*=\s*["']https?:|\bfetch\s*\(|\bXMLHttpRequest\b)/iu.test(html)) warnings.push('network-assets-blocked-in-game-sandbox')
+  if (/(<script\b[^>]*\bsrc\s*=|<link\b[^>]*\bhref\s*=)/iu.test(html)) issues.push('external-script-or-stylesheet-blocked')
+  if (/(<img\b[^>]*\bsrc\s*=\s*["']https?:|\bfetch\s*\(|\bXMLHttpRequest\b)/iu.test(html)) warnings.push('network-assets-blocked-in-game-sandbox')
   if (!/<canvas\b/iu.test(html)) warnings.push('no-canvas-found')
   if (!/<script\b(?![^>]*type\s*=\s*["']application\/json)/iu.test(html)) warnings.push('no-game-runtime-detected')
   return {
