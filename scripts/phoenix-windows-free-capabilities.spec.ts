@@ -13,7 +13,7 @@ describe('free Windows capabilities inventory', () => {
   })
 
   it('recognizes detected tools without claiming local models or acceleration are functional', () => {
-    const spawn = vi.fn(() => ({
+    const spawn = vi.fn((_command: string, _args: string[]) => ({
       status: 0,
       stdout: JSON.stringify({
         build: '26100',
