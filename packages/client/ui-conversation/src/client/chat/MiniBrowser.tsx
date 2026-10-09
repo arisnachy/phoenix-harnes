@@ -137,14 +137,16 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
     mounted.current = true
     let stopped = false
     const first = new AbortController()
-    if (!previousActive.current && cardTabId.current !== undefined) {
-      // Reopening an older card selects its retained browser tab once only.
-      void command({ type: 'select-tab', tabId: cardTabId.current }).catch(() => undefined)
-    }
+    const selection = !previousActive.current && cardTabId.current !== undefined
+      // Wait for the old target to become active BEFORE inspecting it; otherwise
+      // a race with the newest tab could accidentally overwrite this card.
+      ? command({ type: 'select-tab', tabId: cardTabId.current }).then(() => undefined, () => undefined)
+      : Promise.resolve()
     previousActive.current = active
     const poll = async (): Promise<void> => {
       try {
-        // Recover the exact tab bound to this older card before observing it.
+        await selection
+        if (stopped) return
         const state = await inspect(first.signal)
         if (stopped) return
         setConnectionError(undefined)
