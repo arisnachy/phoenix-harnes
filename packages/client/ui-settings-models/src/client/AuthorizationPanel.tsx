@@ -1180,17 +1180,22 @@ export function ConnectorsSettingsSection({ api,
 
   const catalogRows = useMemo(() => catalogDefinitions.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
-    const mcpRuntime = definition.id === 'binance'
-      ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
-      : definition.id === 'jev'
-        ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
-        : mcpHub.runtime.find(candidate => runtimeMatchesDefinition(candidate, definition))
     const managed = definition.id === 'binance'
       ? mcpHub.managed.find(candidate => candidate.serverName === 'binance-agent-os'
         || candidate.url === 'https://agent.binance.com/mcp/agentic')
       : definition.id === 'jev'
         ? mcpHub.managed.find(candidate => candidate.serverName === 'jev')
         : mcpHub.managed.find(candidate => managedMatchesDefinition(candidate, definition))
+    // Registry MCPs often use generated namespaces (e.g. mcp-<digest>).
+    // The persisted managed source binds them to a catalogue identity; matching
+    // runtime status by the UI's friendly name misses that exact server entirely.
+    const mcpRuntime = managed !== undefined
+      ? mcpHub.runtime.find(candidate => candidate.serverName === managed.serverName)
+      : definition.id === 'binance'
+        ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
+        : definition.id === 'jev'
+          ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
+          : mcpHub.runtime.find(candidate => runtimeMatchesDefinition(candidate, definition))
     // A legacy provider API-key grant can share the same name as a curated
     // OAuth MCP (notably Cloudflare). Never substitute that unrelated flow:
     // it prompts for an API token even though the official MCP offers login.
