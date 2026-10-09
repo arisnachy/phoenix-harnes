@@ -38,3 +38,10 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Intelligent UI regression suite
         run: pnpm exec vitest run packages/client/ui-conversation/tests/generative-canvas.client.spec.tsx
+      - name: MiniBrowser and HARDNESS turn-stop regressions
+        run: >-
+          pnpm exec vitest run
+          packages/client/ui-conversation/tests/mini-browser-flow.client.spec.ts
+          packages/client/ui-conversation/tests/mini-browser.client.spec.tsx
+          packages/bundle/web-app/tests/mini-browser.spec.ts
+          packages/hardness/adapters/tests/hardness-tool.spec.ts
