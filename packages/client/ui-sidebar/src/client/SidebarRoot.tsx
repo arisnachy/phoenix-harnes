@@ -39,7 +39,6 @@ const SCROLLBAR_LINGER_MS = 2000
  */
 export function SidebarRoot({
   collapsed,
-  width,
   startSession,
   toggleSidebar,
   t,
