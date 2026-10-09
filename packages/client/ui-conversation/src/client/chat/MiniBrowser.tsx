@@ -135,7 +135,6 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
   useEffect(() => {
     if (!active || dismissed) return
     mounted.current = true
-    let stopped = false
     const first = new AbortController()
     const selection = !previousActive.current && cardTabId.current !== undefined
       // Wait for the old target to become active BEFORE inspecting it; otherwise
@@ -161,7 +160,6 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
     void poll()
     const timer = window.setInterval(() => { void poll() }, 1700)
     return () => {
-      stopped = true
       mounted.current = false
       previousActive.current = false
       first.abort()
