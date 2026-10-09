@@ -54,21 +54,25 @@ export function startWindowsCapabilityDiscovery(
   let snapshot = ''
   const execute: ProbeExecutor = options.execute ?? ((binary, args, execOptions, callback) =>
     nodeExecFile(binary, args, execOptions, (error, stdout) => callback(error, stdout)))
-  execute(process.execPath, [path], {
-    encoding: 'utf8',
-    windowsHide: true,
-    timeout: 9000,
-    maxBuffer: 262144,
-  }, (error, stdout) => {
-    if (error !== null) return
-    try {
-      const guidance = windowsCapabilityGuidance(JSON.parse(stdout) as unknown)
-      if (guidance.length === 0) return
-      snapshot = guidance
-      onChange()
-    } catch {
-      // A missing or malformed platform inventory is never model-visible.
-    }
-  })
+  try {
+    execute(process.execPath, [path], {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 9000,
+      maxBuffer: 262144,
+    }, (error, stdout) => {
+      if (error !== null) return
+      try {
+        const guidance = windowsCapabilityGuidance(JSON.parse(stdout) as unknown)
+        if (guidance.length === 0) return
+        snapshot = guidance
+        onChange()
+      } catch {
+        // A missing or malformed platform inventory is never model-visible.
+      }
+    })
+  } catch {
+    // Even a synchronous Windows process creation failure cannot block Host boot.
+  }
   return () => snapshot
 }
