@@ -146,14 +146,14 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
     const poll = async (): Promise<void> => {
       try {
         await selection
-        if (stopped) return
+        if (first.signal.aborted) return
         const state = await inspect(first.signal)
-        if (stopped) return
+        if (first.signal.aborted) return
         setConnectionError(undefined)
         if (state.tabId !== undefined) cardTabId.current = state.tabId
         setSnapshot(state)
       } catch (reason) {
-        if (stopped) return
+        if (first.signal.aborted) return
         // Missing host routes must not make a requested browser disappear.
         setConnectionError(reason instanceof Error ? reason.message : String(reason))
       }
@@ -170,7 +170,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
   }, [active, dismissed])
 
   useEffect(() => {
-    if (!active || !show || dismissed || !snapshot.available || collapsed || playingVideo) return
+    if (!active || !show || !snapshot.available || collapsed || playingVideo) return
     let stopped = false
     const load = async () => {
       if (busy.current) return
