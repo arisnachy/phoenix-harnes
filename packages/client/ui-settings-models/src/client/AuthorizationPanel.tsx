@@ -984,6 +984,7 @@ export function ConnectorsSettingsSection({ api,
     setAnswer,
     failure,
     preparingKey,
+    lastAttemptKey,
     reserveOAuthPopup,
     closeOAuthPopup,
     begin,
@@ -1715,6 +1716,8 @@ export function ConnectorsSettingsSection({ api,
                     <p role="status" className={styles['advancedHint']}>
                       {attempt.url === undefined ? 'Preparando autorización del MCP…' : 'La URL OAuth está lista. Continúa en la pestaña abierta o usa el enlace superior.'}
                     </p>
+                  ) : failure !== undefined && lastAttemptKey === authorizationKey ? (
+                    <p role="alert" className={styles['error']}>{failure}</p>
                   ) : undefined}
                   pending={rowAuthorizationPending || jevBusy
                     || (disconnectingKey !== undefined && disconnectingKey === row.account?.key)}
