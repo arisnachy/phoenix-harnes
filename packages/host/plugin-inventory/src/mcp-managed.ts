@@ -445,6 +445,12 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
     return false
   }
 
+  // Host-curated credentials are admitted by exact specification only.
+  // GitHub's official MCP remote does NOT support OAuth DCR; the previous
+  // PAT migration persisted oauth:false and bearerTokenRef:GITHUB_MCP_TOKEN.
+  // Reject any other bearer ref, arbitrary URL, headers, or extra OAuth fields.
+  if (exactJson(value, githubMcpConfig())) return true
+
   // Slack is the one curated confidential OAuth client. Its references and
   // fixed callback are admitted only as one exact Host-owned configuration.
   if (exactJson(value, slackMcpConfig())) return true
