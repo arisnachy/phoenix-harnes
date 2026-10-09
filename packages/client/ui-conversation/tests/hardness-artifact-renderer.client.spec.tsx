@@ -83,7 +83,7 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(dialog.querySelector('[data-phoenix-chart-type="donut"]')).toBeTruthy()
     expect(dialog.querySelectorAll('[data-phoenix-visual-mark="donut-slice"]')).toHaveLength(4)
     expect(screen.getAllByRole('img', { name: 'donut chart' })).toHaveLength(1)
-    fireEvent.cancel(dialog)
+    fireEvent(dialog, new Event('cancel', { bubbles: true, cancelable: true }))
     expect((dialog as HTMLDialogElement).open).toBe(false)
     expect(screen.getByRole('button', { name: 'Expand' })).toBeTruthy()
     expect(screen.getByRole('img', { name: 'donut chart' })).toBeTruthy()
