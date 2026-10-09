@@ -56,12 +56,12 @@ export class HttpFetchProvider implements WebFetchProvider {
         // address to prevent a rebinding hostname reaching loopback or the LAN.
         lookup(hostname, _options, callback) {
           void dnsLookup(hostname, { all: true, order: 'verbatim' }).then(
-            records => {
+            (records) => {
               try {
                 const selected = selectPublicDialAddress(hostname, records)
                 if (_options.all === true) {
                   const all = callback as unknown as (
-                    error: Error | null, addresses: readonly { address: string; family: number }[]
+                    error: Error | null, addresses: readonly { address: string; family: number }[],
                   ) => void
                   all(null, [selected])
                 } else {
@@ -71,7 +71,7 @@ export class HttpFetchProvider implements WebFetchProvider {
                 callback(error instanceof Error ? error : new Error(String(error)), '', 4)
               }
             },
-            error => { callback(error instanceof Error ? error : new Error(String(error)), '', 4) },
+            (error: unknown) => { callback(error instanceof Error ? error : new Error(String(error)), '', 4) },
           )
         },
       },
