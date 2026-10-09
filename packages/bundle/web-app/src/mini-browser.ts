@@ -276,7 +276,7 @@ async function action(input: Action): Promise<Record<string, unknown>> {
     }
     const virtual = virtualKeys[key] ?? (key.length === 1 ? key.toUpperCase().charCodeAt(0) : 0)
     const printable = key.length === 1 && modifiers === 0
-    const text = printable ? key : key === 'Enter' ? '\\r' : undefined
+    const text = printable ? key : key === 'Enter' ? '\r' : undefined
     const params = { key, code: key, windowsVirtualKeyCode: virtual, nativeVirtualKeyCode: virtual, modifiers }
     await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyDown', ...params, ...(text === undefined ? {} : { text }) })
     await cdp(tab, 'Input.dispatchKeyEvent', { type: 'keyUp', ...params })
