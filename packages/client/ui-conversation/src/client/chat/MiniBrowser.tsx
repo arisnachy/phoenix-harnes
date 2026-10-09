@@ -158,7 +158,7 @@ export function MiniBrowser({ requested = false, active = true, tabId, onActivat
         await selection
         if (first.signal.aborted) return
         const state = await inspect(first.signal, cardTabId.current)
-        if (first.signal.aborted) return
+        first.signal.throwIfAborted()
         setConnectionError(undefined)
         if (state.tabId !== undefined) cardTabId.current = state.tabId
         setSnapshot(state)

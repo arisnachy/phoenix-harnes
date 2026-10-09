@@ -138,6 +138,7 @@ export function isBrowserPrompt(text: string): boolean {
   // "puedes entras a la pagina..." must open the same in-chat browser
   // that Kira controls, rather than silently omitting its card.
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  // oxlint-disable-next-line @stylistic/max-len -- Bilingual verb pattern is intentionally kept in one auditable expression.
   const verb = /\b(?:abre|abres|abrir|abreme|abrirme|navega|navegas|navegar|entra|entras|entrar|ingresa|ingresas|ingresar|visita|visitas|visitar|accede|accedes|acceder|open|browse|visit)\b/u
   const target = /\b(?:ir a|ve a|busca en|buscar en)\b|https?:\/\//u
   const webContext = /\b(?:pagina|web|sitio|portal|navegador|website|internet|url|enlace)\b|https?:\/\//u
@@ -167,12 +168,13 @@ function browserNavigationTab(node: OrderedChatNode): string | undefined {
   if (node.kind !== 'tool-call') return undefined
   const root = (node.data as ToolChatData).root
   if (!isSettledTool(root) || root.isError) return undefined
-  const name = root.call?.name?.toLowerCase() ?? ''
+  const name = root.call?.name.toLowerCase() ?? ''
   if (!/(?:^|[^a-z])(?:navigate|youtube_search)$/u.test(name)
     || !/(?:chrome|browser)/u.test(name)) return undefined
   const output = root.content.flatMap(block => block.type === 'text' ? [block.text] : []).join(' ')
-  if (!/(?:Navegación iniciada en|Búsqueda abierta en YouTube:|Navegación a la búsqueda de YouTube iniciada:)/iu.test(output)) return undefined
-  return /\bpestaña\s+([a-zA-Z0-9_-]{3,128})/iu.exec(output)?.[1]
+  const navigationStarted = /(?:Navegación iniciada en|Búsqueda abierta en YouTube:|Navegación a la búsqueda de YouTube iniciada:)/iu
+  if (!navigationStarted.test(output)) return undefined
+  return /\bpestaña\s+([a-z0-9_-]{3,128})/iu.exec(output)?.[1]
 }
 
 function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {

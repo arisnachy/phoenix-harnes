@@ -249,6 +249,9 @@ export function normalizeMiniBrowserAddress(value: string): string {
  * Read-only tab inspection must never reselect a different conversation card.
  * The explicit ID is authoritative; a closed tab is an error, not a silent
  * fall-through to whichever tab Kira opened most recently.
+ * @param tabs - The live CDP page targets.
+ * @param tabId - Exact tab target bound to the chat card.
+ * @returns The matching target; throws if the tab is gone.
  */
 export function resolveMiniBrowserTab<T extends { id: string }>(tabs: readonly T[], tabId: string): T {
   const tab = tabs.find(candidate => candidate.id === tabId)
