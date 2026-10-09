@@ -404,12 +404,12 @@
   background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 80%, #ffddc7 20%);
 }
 .wideQuotaPanel {
-  flex: 0 1 131px;
+  flex: 0 1 148px;
   display: flex;
   justify-content: flex-end;
   align-items: center;
   min-width: 90px;
-  max-width: 131px;
+  max-width: 148px;
   height: 42px;
   padding: 0 2px 0 0;
   box-sizing: border-box;
