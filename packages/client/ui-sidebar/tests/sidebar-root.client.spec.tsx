@@ -162,19 +162,18 @@ describe('SidebarRoot shell', () => {
     expect(b.toggleSidebar).not.toHaveBeenCalled()
   })
 
-  it('keeps the region mounted through collapse and expands on its request', () => {
-    vi.useFakeTimers()
+  it('switches immediately to the rail and restores expanded controls on demand', () => {
     const b = mountShell()
     b.rerender({ collapsed: true })
-    // Wide content survives the crossfade window, then settles into the rail.
-    expect(b.regionOwner().wide).toBe(true)
-    vi.advanceTimersByTime(200)
-    b.rerender({})
     expect(b.regionOwner().wide).toBe(false)
     expect(b.footerActionOwner().wide).toBe(false)
-    expect(screen.getByTestId('region')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open sidebar' })).toBeTruthy()
     b.regionOwner().expandSidebar()
     expect(b.toggleSidebar).toHaveBeenCalledOnce()
+    b.rerender({ collapsed: false })
+    expect(b.regionOwner().wide).toBe(true)
+    expect(b.footerActionOwner().wide).toBe(true)
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeTruthy()
   })
 
   it('renders statically collapsed on a cold start (no crossfade classes)', () => {
