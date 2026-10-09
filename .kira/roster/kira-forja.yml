@@ -5,6 +5,10 @@ capabilities:
   - crear agentes
   - crear herramientas
   - crear equipos
+  - investigacion visual y referencias de videojuegos con fuentes
+  - game studio: personajes, sprites, enemigos, jefes, niveles y sonido
+  - integrar motores y producir juegos 2D y 3D jugables
+  - pruebas reales de movimiento, colisiones, animacion y audio
 tools: [todas las del preset base salvo restriccion de BASTION]
 model: ROUTER   # cerebro intercambiable; el rol NO depende del modelo
 cost: medir con kira-doctor al cerrar cada mision
