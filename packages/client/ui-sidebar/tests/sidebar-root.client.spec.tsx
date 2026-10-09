@@ -82,28 +82,34 @@ function mountShell({ collapsed = false, width = 300 }: { collapsed?: boolean; w
 }
 
 describe('SidebarRoot shell', () => {
-  it('navigates from reference links to real Settings and workspace search destinations', () => {
+  it('routes primary navigation to focused action surfaces instead of Settings navigation', () => {
     const b = mountShell()
-    const sections: string[] = []
-    let searches = 0
-    const onSettings = (e: Event) => { sections.push((e as CustomEvent<string>).detail) }
-    const onSearch = () => { searches++ }
-    window.addEventListener('phoenix:open-settings-section', onSettings)
-    window.addEventListener('phoenix:open-workspace-search', onSearch)
+    const features: Array<{ destination: string; label: string }> = []
+    let libraries = 0
+    const onFeature = (event: Event) => {
+      features.push((event as CustomEvent<{ destination: string; label: string }>).detail)
+    }
+    const onLibrary = () => { libraries++ }
+    window.addEventListener('phoenix:open-feature', onFeature)
+    window.addEventListener('phoenix:open-workspace-library', onLibrary)
     try {
       fireEvent.click(screen.getByRole('button', { name: 'Home' }))
       expect(b.startSession).toHaveBeenCalledOnce()
+      fireEvent.click(screen.getByRole('button', { name: 'Discover' }))
       fireEvent.click(screen.getByRole('button', { name: 'Connectors' }))
       fireEvent.click(screen.getByRole('button', { name: 'Team' }))
       fireEvent.click(screen.getByRole('button', { name: 'Library' }))
-      expect(sections).toEqual(['connectors', 'agent-presets'])
-      expect(searches).toBe(1)
+      expect(features).toEqual([
+        { destination: 'discover', label: 'Discover' },
+        { destination: 'connectors', label: 'Connectors' },
+        { destination: 'team', label: 'Team' },
+      ])
+      expect(libraries).toBe(1)
     } finally {
-      window.removeEventListener('phoenix:open-settings-section', onSettings)
-      window.removeEventListener('phoenix:open-workspace-search', onSearch)
+      window.removeEventListener('phoenix:open-feature', onFeature)
+      window.removeEventListener('phoenix:open-workspace-library', onLibrary)
     }
   })
-
 
   it('routes New Session (capsule + wordmark) and the column toggle', () => {
     const b = mountShell()

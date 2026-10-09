@@ -181,6 +181,37 @@ describe('SettingsPanel navigation', () => {
   })
 
 
+  it('opens Discover as a focused MCP catalog, without the Settings section menu', () => {
+    const { renderSlot } = mount({ rows: [
+      { id: 'general', order: 0, label: 'General' },
+      { id: 'connectors', order: 30, label: 'Connectors' },
+    ] })
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:open-feature', {
+        detail: { destination: 'discover', label: 'Discover' },
+      }))
+    })
+    expect(screen.getByRole('dialog', { name: 'Discover' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'General' })).toBeNull()
+    expect(screen.getByTestId('section-connectors')).toBeTruthy()
+    expect(renderSlot).toHaveBeenCalledWith('settings.section',
+      expect.objectContaining({ launchContext: 'discover' }), { only: 'connectors' })
+  })
+
+  it('does not route a missing feature to unrelated Settings content', () => {
+    mount({ rows: [{ id: 'general', order: 0, label: 'General' }] })
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:open-feature', {
+        detail: { destination: 'team', label: 'Team' },
+      }))
+    })
+    expect(screen.getByRole('dialog', { name: 'Team' })).toBeTruthy()
+    expect(screen.queryByTestId('section-general')).toBeNull()
+    expect(screen.getByRole('status').textContent).toContain('no está disponible')
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByTestId('section-general')).toBeTruthy()
+  })
+
   it('projects rows, marks the first active, and renders only that section', () => {
     mount()
     openPanel()

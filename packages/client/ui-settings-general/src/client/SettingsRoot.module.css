@@ -360,3 +360,22 @@
     padding-bottom: 18px;
   }
 }
+
+/* Direct sidebar destinations show the feature itself, not Settings navigation. */
+.focusedPanel {
+  width: min(940px, 100%);
+}
+.focusTitle {
+  margin: 0;
+  font-size: 20px;
+  line-height: 30px;
+  font-weight: 650;
+  color: var(--dsw-alias-label-primary);
+}
+.focusedPanel .header {
+  padding-inline: 30px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+}
+.focusedPanel .options {
+  padding-top: 20px;
+}

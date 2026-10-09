@@ -741,6 +741,91 @@ function SearchResults({
   )
 }
 
+/** The saved-project and conversation library is a destination, not another sidebar menu. */
+function WorkspaceLibraryModal({
+  workspaces, archivedSessionIds, useSessions, startSession, open, t, onClose, onAdd,
+}: Pick<WorkspaceBrowserProps, 'useSessions' | 'startSession' | 'open' | 't'> & {
+  workspaces: readonly WorkspaceView[]
+  archivedSessionIds: readonly SessionId[]
+  onClose: () => void
+  onAdd?: () => void
+}) {
+  const byId = useSessions(state => state.byId)
+  const [query, setQuery] = useState('')
+  const search = query.trim().toLocaleLowerCase()
+  const archived = new Set(archivedSessionIds)
+  const allGrouped = new Set(workspaces.flatMap(workspace => workspace.sessionIds))
+  const labelOf = (id: SessionId) => byId[id]?.displayTitle?.trim() || String(id)
+  const sessionsFor = (ids: readonly SessionId[]): SessionId[] => ids.filter(id =>
+    byId[id] !== undefined && !archived.has(id)
+    && (search === '' || labelOf(id).toLocaleLowerCase().includes(search)))
+  const visibleWorkspaces = workspaces.map(workspace => {
+    const nameMatches = workspace.title.toLocaleLowerCase().includes(search)
+    return {
+      workspace,
+      sessions: nameMatches ? workspace.sessionIds.filter(id => byId[id] !== undefined && !archived.has(id)) : sessionsFor(workspace.sessionIds),
+      nameMatches,
+    }
+  }).filter(({ nameMatches, sessions }) => nameMatches || sessions.length > 0)
+  const looseSessions = sessionsFor(Object.keys(byId).filter(id =>
+    !allGrouped.has(id as SessionId)) as SessionId[])
+  const showUngrouped = looseSessions.length > 0
+  const empty = visibleWorkspaces.length === 0 && !showUngrouped
+
+  const launchSession = (id: SessionId): void => {
+    onClose()
+    open(id)
+  }
+  return (
+    <Modal open onClose={onClose} closeLabel={t('close')} title={t('library.title')}>
+      <div className={css.libraryBody}>
+        <div className={css.libraryToolbar}>
+          <label className={css.librarySearch}>
+            <IconSearchOutline16 size={16} />
+            <input
+              type="search"
+              autoFocus
+              value={query}
+              onChange={event => { setQuery(event.currentTarget.value) }}
+              placeholder={t('library.search')}
+              aria-label={t('library.search')}
+            />
+          </label>
+          {onAdd !== undefined && <Button variant="primary" onClick={onAdd}>{t('workspace.add')}</Button>}
+        </div>
+        <div className={css.libraryResults}>
+          {empty && <p className={css.libraryEmpty}>{t('library.empty')}</p>}
+          {visibleWorkspaces.map(({ workspace, sessions }) => (
+            <section className={css.libraryGroup} key={workspace.workspaceId}>
+              <div className={css.libraryGroupHeader}>
+                <h3>{workspace.title}</h3>
+                <Button variant="outline" onClick={() => { onClose(); startSession(workspace.workspaceId) }}>
+                  {t('session.new')}
+                </Button>
+              </div>
+              {sessions.map(id => (
+                <button className={css.librarySession} key={id} type="button" onClick={() => { launchSession(id) }}>
+                  {labelOf(id)}
+                </button>
+              ))}
+            </section>
+          ))}
+          {showUngrouped && (
+            <section className={css.libraryGroup}>
+              <div className={css.libraryGroupHeader}><h3>{t('group.ungrouped')}</h3></div>
+              {looseSessions.map(id => (
+                <button className={css.librarySession} key={id} type="button" onClick={() => { launchSession(id) }}>
+                  {labelOf(id)}
+                </button>
+              ))}
+            </section>
+          )}
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 /**
  * Render the browsing region.
  * @param props - composed slot props (shell owner share + store + injected actions).
@@ -832,6 +917,7 @@ export function WorkspaceBrowser({
   // Section-header ＋ opens the picker menu (same popover in wide and rail
   // states; the menu anchors on this button).
   const [wsPickerOpen, setWsPickerOpen] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const wsPlusRef = useRef<HTMLButtonElement>(null)
   const composingRef = useRef(false)
 
@@ -847,8 +933,17 @@ export function WorkspaceBrowser({
         expandSidebar()
       }
     }
+    // A single click displays saved workspaces and sessions, with open/create actions.
+    const openLibrary = (): void => {
+      setWsPickerOpen(false)
+      setLibraryOpen(true)
+    }
     window.addEventListener('phoenix:open-workspace-search', openSearch)
-    return () => { window.removeEventListener('phoenix:open-workspace-search', openSearch) }
+    window.addEventListener('phoenix:open-workspace-library', openLibrary)
+    return () => {
+      window.removeEventListener('phoenix:open-workspace-search', openSearch)
+      window.removeEventListener('phoenix:open-workspace-library', openLibrary)
+    }
   }, [wide, expandSidebar])
   useEffect(() => {
     if (wide && searchOnExpand) {
@@ -1252,6 +1347,22 @@ export function WorkspaceBrowser({
             ))}
       </div>
 
+      {libraryOpen && (
+        <WorkspaceLibraryModal
+          workspaces={workspaces}
+          archivedSessionIds={archivedSessionIds}
+          useSessions={useSessions}
+          startSession={startSession}
+          open={open}
+          t={t}
+          onClose={() => { setLibraryOpen(false) }}
+          {...directoryFlowAvailable ? { onAdd: () => {
+            setLibraryOpen(false)
+            setWsPickerOpen(true)
+            if (!wide) expandSidebar()
+          } } : {}}
+        />
+      )}
       <Modal
         open={renameTarget !== null}
         onClose={closeRename}
