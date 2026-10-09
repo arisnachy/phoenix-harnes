@@ -504,7 +504,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
                       anchorKey={item.anchorKey}
                       {...seatProps}
                     />
-                )}
+                  )}
         </Fragment>
       ))}
       {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
