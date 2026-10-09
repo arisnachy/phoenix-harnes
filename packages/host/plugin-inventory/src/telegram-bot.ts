@@ -118,7 +118,6 @@ export class TelegramInbox {
   private pairCode?: string
   private pairUntil = 0
   private pairFailures = 0
-  private jobTail: Promise<void> = Promise.resolve()
   private agent?: Agent
   private agentHandle?: AgentHandle
   private agentPromise?: Promise<Agent>
@@ -246,11 +245,10 @@ export class TelegramInbox {
       await this.send(token, incoming.id, 'Soy Kira. Envíame lo que necesitas y lo ejecutaré en Phoenix cuando el harness esté disponible.')
       return
     }
-    // Receipt only acknowledges the queue, never claims task completion.
-    this.jobTail = this.jobTail.catch(() => undefined).then(
-      () => this.dispatch(incoming.id, incoming.text, token, creds),
-    )
-    void this.jobTail.catch(() => undefined)
+    // Process one user turn fully before confirming its update offset.
+    // Telegram retains later messages in its queue during longer Agent turns;
+    // we never mark an instruction consumed before the harness has settled.
+    await this.dispatch(incoming.id, incoming.text, token, creds)
   }
   private async liveAgent(creds: Credentials): Promise<Agent> {
     if (this.agent !== undefined) return this.agent
