@@ -109,17 +109,17 @@ function eligible(update: TelegramUpdate): { id: number; text: string } | undefi
 
 /** Finite sender; no session audio is started by message receipt. */
 export class TelegramInbox {
-  private controller?: AbortController
-  private worker?: Promise<void>
-  private token?: string
+  private controller: AbortController | undefined
+  private worker: Promise<void> | undefined
+  private token: string | undefined
   private phase: 'idle' | 'polling' | 'failed' = 'idle'
-  private failure?: string
+  private failure: string | undefined
   private lastPoll = 0
-  private pairCode?: string
+  private pairCode: string | undefined
   private pairUntil = 0
   private pairFailures = 0
-  private agent?: Agent
-  private agentPromise?: Promise<Agent>
+  private agent: Agent | undefined
+  private agentPromise: Promise<Agent> | undefined
   constructor(private readonly ctx: Context) {}
 
   /** Start once for this Host; it tolerates absent credentials until configured. */
@@ -259,7 +259,7 @@ export class TelegramInbox {
     if (this.agentPromise !== undefined) return this.agentPromise
     const task = (async () => {
       const agents = (this.ctx.get as (name: string) => unknown)('agents') as
-        | { get(id: ReturnType<typeof SessionId>): Agent | undefined; create(options: { sessionId: ReturnType<typeof SessionId> }): Promise<{ agent: Agent; dispose(): Promise<void> }>; resume(options: { resumeSessionId: ReturnType<typeof SessionId> }): Promise<AgentHandle> }
+        | { get(id: ReturnType<typeof SessionId>): Agent | undefined; create(options: { sessionId: ReturnType<typeof SessionId> }): Promise<{ agent: Agent; dispose(): Promise<void> }>; resume(options: { resumeSessionId: ReturnType<typeof SessionId> }): Promise<{ agent: Agent }> }
         | undefined
       if (agents === undefined) throw new Error('Phoenix Agent registry unavailable')
       const existingId = await stored(creds, SESSION_REF)
@@ -319,13 +319,14 @@ export async function readTelegramBotState(ctx: Context): Promise<TelegramBotSna
   if (token === undefined) return { configured: false, verified: false, phase: 'unconfigured', inboxActive: false, paired: false }
   const worker = telegramInbox(ctx)
   const paired = await worker.isPaired()
+  const reason = worker.error()
   try {
     const bot = await verifyTelegramBotToken(token)
     return { configured: true, verified: true, phase: 'verified', inboxActive: worker.isPolling(), paired, ...bot,
-      ...(worker.error() === undefined ? {} : { reason: worker.error() }) }
+      ...(reason === undefined ? {} : { reason }) }
   } catch (error) {
     return { configured: true, verified: false, phase: phase(error), inboxActive: false, paired,
-      ...(worker.error() === undefined ? {} : { reason: worker.error() }) }
+      ...(reason === undefined ? {} : { reason }) }
   }
 }
 export async function saveTelegramBot(ctx: Context, value: string): Promise<TelegramBotSnapshot> {
