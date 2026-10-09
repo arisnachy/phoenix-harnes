@@ -37,6 +37,17 @@ describe('FreeSearchProvider', () => {
     expect(fetcher.mock.calls[2]?.[0]).toContain('duckduckgo.com')
   })
 
+  it('prefers the working free engine when another engine returns unparseable HTML', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response('<html>layout changed</html>', { status: 200 }))
+      .mockResolvedValueOnce(new Response(duckHtml, { status: 200 }))
+      .mockResolvedValueOnce(new Response(duckHtml, { status: 200 }))
+    const provider = new FreeSearchProvider({ fetcher })
+    await provider.search({ query: 'first' })
+    await provider.search({ query: 'second' })
+    expect(fetcher).toHaveBeenCalledTimes(3)
+  })
+
   it('does not hammer engines returning server errors', async () => {
     const fetcher = vi.fn(async () => new Response('blocked', { status: 503 }))
     const provider = new FreeSearchProvider({ fetcher })
