@@ -147,6 +147,7 @@ describe('SidebarRoot shell', () => {
     expect(css).toContain('background: var(--phoenix-side-ember)')
     expect(css).toContain('.root:not(.collapsed) .navLink:first-child')
     expect(css).toContain('.root:not(.collapsed) .footerActions:not(:empty)')
+    expect(css).toContain('.root:not(.collapsed) .regionArea')
     mountShell()
     expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeTruthy()
   })
