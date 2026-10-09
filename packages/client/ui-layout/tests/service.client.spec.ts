@@ -31,7 +31,8 @@ describe('LayoutController', () => {
     service.closeDetails()
 
     expect(panels.toggleSidebar).toHaveBeenCalledTimes(1)
-    expect(panels.setSidebarFocus).toHaveBeenCalledExactlyOnceWith(true)
+    expect(panels.setSidebarFocus).toHaveBeenCalledTimes(1)
+    expect(panels.setSidebarFocus).toHaveBeenCalledWith(true)
     expect(panels.openDetails).toHaveBeenCalledTimes(1)
     expect(panels.closeDetails).toHaveBeenCalledTimes(1)
     expect(panels.setSidebar).not.toHaveBeenCalled()
