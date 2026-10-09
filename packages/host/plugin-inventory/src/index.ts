@@ -20,6 +20,7 @@ import {
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
+import { readTelegramBotState, saveTelegramBot, removeTelegramBot } from './telegram-bot.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
   BINANCE_AGENT_OS_URL,
@@ -54,6 +55,7 @@ import type {
   PhoenixUpdateRestartReceipt,
   PhoenixUpdateRefreshReceipt,
   PhoenixUpdateSnapshot,
+  TelegramBotSnapshot,
   PluginEntryId,
   PluginFiberPhase,
   PluginInventoryEntry,
@@ -327,6 +329,24 @@ export class PluginInventoryGateway extends TypertRemoteService {
   @Remote('repairManagedMcpConnector')
   async repairManagedMcpConnector(request: ManagedMcpEntryRequest): Promise<McpRegistryInstallReceipt> {
     return this.managedMcp.repair(request)
+  }
+
+  /** Describe the configured Telegram bot without revealing its token. */
+  @Remote('telegramBotState')
+  async telegramBotState(): Promise<TelegramBotSnapshot> {
+    return readTelegramBotState(this.ctx)
+  }
+
+  /** Verify with Telegram getMe *before* persisting the supplied bot token. */
+  @Remote('configureTelegramBot')
+  async configureTelegramBot(request: { token: string }): Promise<TelegramBotSnapshot> {
+    return saveTelegramBot(this.ctx, request.token)
+  }
+
+  /** Forget the local Telegram credential without issuing a Telegram-side token revocation. */
+  @Remote('disconnectTelegramBot')
+  async disconnectTelegramBot(): Promise<TelegramBotSnapshot> {
+    return removeTelegramBot(this.ctx)
   }
 
   /**

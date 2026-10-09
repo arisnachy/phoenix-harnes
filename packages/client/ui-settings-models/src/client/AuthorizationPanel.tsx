@@ -1,4 +1,5 @@
 import { AssistantMailPanel, type AssistantMailClient } from './AssistantMailPanel.tsx'
+import { TelegramConnectorSetup, type TelegramBotClient } from './TelegramConnectorSetup.tsx'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { ChatGptWebSnapshot, IApiClient } from '@phoenix-ai/dsh-api-remotes/client'
@@ -225,6 +226,7 @@ export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps 
   chatGptWeb?: ChatGptWebBridgeClient
   settings?: ChatGptWebSettingsClient
   mcpRegistry?: McpRegistryClient
+  telegram?: TelegramBotClient
 }
 
 function integer(value: number): string {
@@ -523,7 +525,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, connected, t, authorizationProgress,
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, telegram, connected, t, authorizationProgress,
   onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove,
   pending, installingCurated, reconnecting,
   repairing, removing }: {
@@ -533,6 +535,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   mcpRuntime?: McpConnectorRuntimeView | undefined
   managed?: ManagedMcpConnectorView | undefined
   openClaw?: OpenClawConnectorView | undefined
+  telegram?: TelegramBotClient | undefined
   connected: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   authorizationProgress?: ReactNode
@@ -644,6 +647,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {definition.id === 'telegram' ? <TelegramConnectorSetup client={telegram} /> : null}
       {definition.id === 'github' ? (
         <div className={styles['advancedHint']}>
           <p>
@@ -1103,6 +1107,7 @@ export function ConnectorsSettingsSection({ api,
   chatGptWeb,
   settings,
   mcpRegistry,
+  telegram,
   assistantMail,
   launchContext,
   onAuthorized }: ConnectorsSettingsSectionProps): ReactNode {
@@ -1921,6 +1926,7 @@ export function ConnectorsSettingsSection({ api,
                   mcpRuntime={row.mcpRuntime}
                   managed={row.managed}
                   openClaw={row.openClaw}
+                  telegram={telegram}
                   connected={row.connected}
                   t={connectorT}
                   authorizationProgress={preparingKey !== undefined && preparingKey === authorizationKey ? (

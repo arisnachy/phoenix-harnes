@@ -27,6 +27,7 @@ import type {
   McpRegistryClient,
   McpRegistrySearchSnapshot,
 } from './AuthorizationPanel.tsx'
+import type { TelegramBotClient, TelegramBotSnapshot } from './TelegramConnectorSetup.tsx'
 import { DeepSeekOnboardingDialog } from './DeepSeekOnboardingDialog.tsx'
 import type { DeepSeekOnboardingInjected } from './DeepSeekOnboardingDialog.tsx'
 import { WelcomeNotice } from './WelcomeNotice.tsx'
@@ -119,6 +120,27 @@ type PluginInventoryMcpRegistryRemote = {
       phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill'
     }>
   }>>
+}
+
+type PluginInventoryTelegramRemote = {
+  telegramBotState(): Promise<PluginInventoryRemoteResult<TelegramBotSnapshot>>
+  configureTelegramBot(request: { token: string }): Promise<PluginInventoryRemoteResult<TelegramBotSnapshot>>
+  disconnectTelegramBot(): Promise<PluginInventoryRemoteResult<TelegramBotSnapshot>>
+}
+
+function telegramBotClient(ctx: ClientContext): TelegramBotClient {
+  const remote = (): PluginInventoryTelegramRemote => {
+    const value = ctx.get('remote.pluginInventory') as PluginInventoryTelegramRemote | undefined
+    if (value === undefined) throw new Error('Telegram setup is unavailable on this Host.')
+    return value
+  }
+  return {
+    state: async () => unwrapPluginInventory('telegramBotState', await remote().telegramBotState()),
+    configure: async token => unwrapPluginInventory(
+      'configureTelegramBot', await remote().configureTelegramBot({ token }),
+    ),
+    disconnect: async () => unwrapPluginInventory('disconnectTelegramBot', await remote().disconnectTelegramBot()),
+  }
 }
 
 type PluginInventoryLocalRemote = {
@@ -359,6 +381,7 @@ export function apply(ctx: ClientContext): void {
     chatGptWeb: chatGptWebClient(ctx),
     settings: connection.api.settings,
     mcpRegistry,
+    telegram: telegramBotClient(ctx),
     onAuthorized: () => { refreshIfLoaded(controller) },
   })
   const deepSeekOnboardingInjected = (): DeepSeekOnboardingInjected => ({
