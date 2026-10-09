@@ -57,6 +57,7 @@ export function useAuthorizationAttempt(
   setAnswer: (value: string) => void
   failure: string | undefined
   preparingKey: string | undefined
+  lastAttemptKey: string | undefined
   reserveOAuthPopup: () => void
   closeOAuthPopup: () => void
   begin: (key: string, method?: string) => void
@@ -69,6 +70,7 @@ export function useAuthorizationAttempt(
   const [answer, setAnswer] = useState('')
   const [failure, setFailure] = useState<string | undefined>()
   const [preparingKey, setPreparingKey] = useState<string | undefined>()
+  const [lastAttemptKey, setLastAttemptKey] = useState<string | undefined>()
   const opened = useRef(new Set<string>())
   const popupRef = useRef<Window | null>(null)
   const navigatedRef = useRef(false)
@@ -257,6 +259,7 @@ export function useAuthorizationAttempt(
   const begin = (key: string, method = 'oauth'): void => {
     if (api === undefined) return
     setPreparingKey(key)
+    setLastAttemptKey(key)
     const beginSequence = ++beginSequenceRef.current
     clearConsentDeadline()
     // A hung RPC must not leave Conectando forever before it returns an id.
@@ -356,6 +359,7 @@ export function useAuthorizationAttempt(
     setAnswer,
     failure,
     preparingKey,
+    lastAttemptKey,
     reserveOAuthPopup,
     closeOAuthPopup: closeReservedPopup,
     begin,
