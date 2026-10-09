@@ -22,6 +22,7 @@ import type {
 import { requiredText, boundedTranscriptText } from './validation.ts'
 import { TEAM_PERSONAS } from './personas.ts'
 import { teamLanguageInstruction } from './language.ts'
+import { teamMissionClosed } from './mission-closure.ts'
 
 const MEMBER_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 
@@ -286,6 +287,9 @@ export class TeamRoster {
     const signal = AbortSignal.any([request.signal, this.lifecycle.signal])
     signal.throwIfAborted()
     const root = membership.root
+    if (teamMissionClosed(root.session.events)) {
+      throw new TeamError('Kira already closed this mission; a new user turn is required', 'TEAM_MISSION_CLOSED')
+    }
     const name = this.memberName(request.name)
     const description = requiredText(request.description, 'description', 200)
     const childId = SessionId(randomUUID())
@@ -299,6 +303,10 @@ export class TeamRoster {
     }
 
     await this.journal.transact(root.id, async () => {
+      // Recheck inside the serialized admission, closing the race with turn/end.
+      if (teamMissionClosed(root.session.events)) {
+        throw new TeamError('Kira already closed this mission', 'TEAM_MISSION_CLOSED')
+      }
       const state = this.journal.state(root)
       if (state.memberIdsByName.has(name)) {
         throw new TeamError(`teammate name "${name}" was already used in this Team`, 'TEAM_MEMBER_NAME_TAKEN')
@@ -358,6 +366,9 @@ export class TeamRoster {
         signal,
       })
       await this.checkpointInitialPrompt(childId, started.messageId, signal)
+      if (teamMissionClosed(root.session.events)) {
+        throw new TeamError('Kira closed this mission during teammate startup', 'TEAM_MISSION_CLOSED')
+      }
     } catch (error: unknown) {
       const failed: TeamMemberSnapshot = {
         ...member,
