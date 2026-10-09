@@ -250,6 +250,28 @@ async function frame(): Promise<Buffer> {
   return await captureBrowserFrameWithFallback(async params =>
     await cdp<{ data: string }>(tab, 'Page.captureScreenshot', params))
 }
+/**
+ * A visible OS Chrome/Edge window is never created by Kira's routine CDP
+ * navigation. This is called solely from the MiniBrowser's explicit
+ * “Abrir navegador completo” user gesture, keeping the controlled tab intact.
+ * The new desktop window uses the user's ordinary Chrome profile; it opens
+ * the same URL but does not share the isolated headless browser's cookies.
+ */
+async function openVisibleDesktopBrowser(rawUrl: string): Promise<void> {
+  const url = normalizeMiniBrowserAddress(rawUrl)
+  const executable = chromiumExecutable()
+  const child = spawn(executable, ['--new-window', url], {
+    windowsHide: false,
+    detached: true,
+    stdio: 'ignore',
+  })
+  await new Promise<void>((resolve, reject) => {
+    child.once('spawn', () => resolve())
+    child.once('error', reject)
+  })
+  child.unref()
+}
+
 async function action(input: Action): Promise<Record<string, unknown>> {
   const type = input.type
   const base = await endpoint(type === 'open' || type === 'new-tab' || type === 'start')
@@ -275,6 +297,11 @@ async function action(input: Action): Promise<Record<string, unknown>> {
   } else if (type === 'open' || type === 'navigate') {
     const url = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
     await cdp(tab, 'Page.navigate', { url })
+  } else if (type === 'open-external') {
+    // Never open a separate macro browser until the human explicitly asks
+    // from the MiniBrowser's own footer. No background model auto-popup.
+    if (!/^https?:\/\//iu.test(tab.url)) throw new Error('No hay una página web para abrir en Chrome.')
+    await openVisibleDesktopBrowser(tab.url)
   } else if (type === 'back' || type === 'forward') {
     const history = await cdp<{ currentIndex: number; entries: Array<{ id: number }> }>(tab, 'Page.getNavigationHistory')
     const index = history.currentIndex + (type === 'back' ? -1 : 1)
