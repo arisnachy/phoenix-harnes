@@ -76,10 +76,12 @@ export function scoreResearchCase(testCase, run) {
       const date = Date.parse(gold.get(url).publishedAt ?? '')
       return Number.isFinite(date) && date <= asOf && asOf - date <= freshnessDays * 86_400_000
     })
-  const latencyMs = Number(run.elapsedMs)
-  const tokens = Number(run.promptTokens) + Number(run.completionTokens)
-  const withinTime = Number.isFinite(latencyMs) && latencyMs >= 0
-  const withinTokens = Number.isFinite(tokens) && tokens >= 0
+  const latencyMs = run.elapsedMs
+  const tokens = run.promptTokens + run.completionTokens
+  const withinTime = typeof latencyMs === 'number' && Number.isFinite(latencyMs) && latencyMs >= 0
+  const withinTokens = typeof run.promptTokens === 'number' && Number.isFinite(run.promptTokens)
+    && run.promptTokens >= 0 && typeof run.completionTokens === 'number'
+    && Number.isFinite(run.completionTokens) && run.completionTokens >= 0
   const points = {
     completeness: weighted(25, coverage / factCount),
     sourcedClaims: weighted(25, grounded / factCount),
