@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "description": "Prompts reales. NO contienen respuestas oráculo ni garantías de exactitud; requieren modelo conectado y revisión independiente posterior.",
+  "cases": [
+    {
+      "id": "mcp-live",
+      "maxTimeMs": 120000,
+      "prompt": "Investiga con fuentes públicas por qué un MCP remoto puede mostrar retry-exhausted cuando devuelve HTTP 404. Distingue 404, 401/403 y errores transitorios. Lee la documentación original del transporte MCP y de GitHub MCP cuando esté disponible; cita URLs directas junto a cada conclusión, no inventes logs de mi PC. Entrega diagnóstico, evidencias, incertidumbre y próximo paso útil. Responde en español y termina sin búsquedas repetitivas."
+    },
+    {
+      "id": "neuro-live",
+      "maxTimeMs": 210000,
+      "prompt": "Revisa estudios clínicos recientes (2025-2026) sobre intervenciones de ejercicio y función ejecutiva en adultos mayores. Busca publicaciones primarias verificables, abre las fuentes disponibles, describe dos estudios reales con diseño, muestras y DOI o URL exacta. Separa evidencia sólida de hallazgos preliminares; evita inventar tamaños de efecto o resultados. Entrega una síntesis de nivel maestría en español con limitaciones y qué leer primero."
+    },
+    {
+      "id": "current-live",
+      "maxTimeMs": 120000,
+      "prompt": "Busca en el Banco Central de la República Dominicana la decisión más reciente de tasa de política monetaria disponible a fecha de consulta. Da fecha, tasa, enlace original del comunicado y distingue el dato confirmado de cualquier noticia secundaria. Lee la publicación principal y no inventes cifras cuando no esté accesible. Responde en español de manera concisa."
+    },
+    {
+      "id": "conflict-live",
+      "maxTimeMs": 150000,
+      "prompt": "Compara las instrucciones oficiales vigentes de autorización OAuth para un servidor MCP remoto de GitHub con una versión anterior o alternativa de la documentación. Comprueba al menos dos fuentes originales, qué cambió, fechas si constan, requisitos reales de autorización y límites de lo verificable. Explica contradicciones sin asumir que GitHub Copilot es lo mismo que el MCP GitHub. Cita enlaces directos, español y evita investigaciones redundantes."
+    }
+  ]
+}
