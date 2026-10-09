@@ -199,6 +199,12 @@ export function AppFrame({
   useEffect(() => { actions.setNarrow(narrow) }, [actions, narrow])
   const cordisOnLeft = panels.workspaceCordis && panels.workspaceCordisSide === 'left'
   const sidebarCollapsed = cordisOnLeft || (narrow ? !panels.narrowExpanded : panels.sidebar === 0)
+  // Grid-track easing reflows the entire conversation on every animation frame.
+  // Snap only when the sidebar changes its collapsed state; ordinary details
+  // transitions and manual width dragging keep their original behavior.
+  const previousSidebarCollapsed = useRef(sidebarCollapsed)
+  const sidebarSwitching = previousSidebarCollapsed.current !== sidebarCollapsed
+  previousSidebarCollapsed.current = sidebarCollapsed
   const sidebarPreference = sidebarCollapsed
     ? 0
     : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
@@ -246,6 +252,7 @@ export function AppFrame({
         '--dsh-overlay-stable-chat-axis-offset': `${overlayStableChatAxisOffset}px`,
       } as CSSProperties}
       data-sidebar-collapsed={sidebarCollapsed || undefined}
+      data-sidebar-switching={sidebarSwitching || undefined}
       data-cordis-side={panels.workspaceCordis ? panels.workspaceCordisSide ?? 'right' : undefined}
       data-details-collapsed={cols.details === 0 || undefined}
       data-dragging={dragging || undefined}
