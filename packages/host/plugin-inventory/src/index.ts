@@ -264,7 +264,9 @@ export class PluginInventoryGateway extends TypertRemoteService {
       // Do not hide healthy live MCPs because one persisted overlay is broken.
       // Never include raw patch data, remote credentials, or provider exceptions.
       this.ctx.logger.warn('managed MCP inventory unavailable; live connectors remain visible')
-      return { runtime, managed: [], managedStatus: 'degraded' }
+      // Keep the wire shape identical to the validated success response: the
+      // Typert result boundary rejects extra fields on this Remote contract.
+      return { runtime, managed: [] }
     }
   }
 
