@@ -250,8 +250,9 @@ async function frame(): Promise<Buffer> {
 }
 async function action(input: Action): Promise<Record<string, unknown>> {
   const type = input.type
-  const base = await endpoint(type === 'open' || type === 'new-tab')
+  const base = await endpoint(type === 'open' || type === 'new-tab' || type === 'start')
   if (!base) throw new Error('Inicia el navegador primero.')
+  if (type === 'start') return await state()
   if (type === 'new-tab') {
     const target = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
     const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent(target), 'PUT')
