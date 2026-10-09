@@ -805,6 +805,7 @@ export function isLikelyVoiceAssistantEcho(text: string): boolean {
  * @param text - finalized assistant prose.
  * @param messageTime - durable event time in Unix milliseconds.
  * @param final - Whether this is the final transcript update for the message.
+ * @param fromCompletedHarnessTurn - Whether a completed harness Turn authorized this speech.
  */
 export function streamVoiceAssistantResponse(
   messageKey: string,
