@@ -120,7 +120,7 @@ function mesh(node: Scene3DNode): Face[] {
         [node.vertices[i+6]!,node.vertices[i+7]!,node.vertices[i+8]!],
       ])
     }
-  } else
+  } else {
   const quad=(a: Vec3,b: Vec3,c:Vec3,d:Vec3)=>{faces.push([a,b,c,d])}
   if (node.type === 'box') {
     const v:Vec3[]=[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,.5,-.5],[-.5,.5,-.5],
@@ -153,6 +153,7 @@ function mesh(node: Scene3DNode): Face[] {
         }
       }
     }
+  }
   }
   return faces.map(vertices => ({
     vertices: vertices.map(point => transform(point,node)), color:node.material?.baseColor??node.color,
