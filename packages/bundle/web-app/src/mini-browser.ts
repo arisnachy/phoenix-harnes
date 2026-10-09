@@ -133,7 +133,12 @@ async function startChromium(): Promise<string> {
   return launching
 }
 async function endpoint(launch: boolean): Promise<string | undefined> {
-  const configured = process.env.PHOENIX_BROWSER_CDP_URL?.trim() || process.env.DSH_CHROME_CDP_URL?.trim()
+  // The in-chat browser must not hijack an independently visible Chrome
+  // window. External CDP targets are deliberately opt-in, not auto-discovered.
+  const allowVisible = process.env.PHOENIX_BROWSER_ALLOW_VISIBLE_CDP === 'true'
+  const configured = allowVisible
+    ? process.env.PHOENIX_BROWSER_CDP_URL?.trim() || process.env.DSH_CHROME_CDP_URL?.trim()
+    : undefined
   if (configured) {
     const normalized = configured.replace(/\/$/, '') + '/'
     if (!validEndpoint(normalized)) throw new Error('CDP solo admite una dirección HTTP de loopback.')
@@ -143,7 +148,7 @@ async function endpoint(launch: boolean): Promise<string | undefined> {
   const shared = readDescriptor()
   if (shared !== undefined && await isAlive(shared.endpoint.replace(/\/$/, ''))) return shared.endpoint.replace(/\/$/, '')
   if (ownedEndpoint && await isAlive(ownedEndpoint)) return ownedEndpoint
-  for (const port of [9222, 9223, 9224]) {
+  for (const port of (allowVisible ? [9222, 9223, 9224] : [])) {
     const base = 'http://127.0.0.1:' + port
     if (await isAlive(base)) return base
   }
