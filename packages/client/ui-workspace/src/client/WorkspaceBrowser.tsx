@@ -850,8 +850,15 @@ export function WorkspaceBrowser({
     // Library opens the actual Workspace create/open flow, not session-text search.
     const openLibrary = (): void => {
       setQuery('')
-      setSearchExpanded(false)
-      setWsPickerOpen(true)
+      if (directoryFlowAvailable) {
+        setSearchExpanded(false)
+        setWsPickerOpen(true)
+      } else {
+        // Remote clients without local directory picking can still browse
+        // their stored sessions instead of opening an invisible picker.
+        setWsPickerOpen(false)
+        setSearchExpanded(true)
+      }
       if (!wide) expandSidebar()
     }
     window.addEventListener('phoenix:open-workspace-search', openSearch)
@@ -860,7 +867,7 @@ export function WorkspaceBrowser({
       window.removeEventListener('phoenix:open-workspace-search', openSearch)
       window.removeEventListener('phoenix:open-workspace-library', openLibrary)
     }
-  }, [wide, expandSidebar])
+  }, [wide, expandSidebar, directoryFlowAvailable])
   useEffect(() => {
     if (wide && searchOnExpand) {
       const timer = window.setTimeout(() => {
