@@ -721,7 +721,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           {managed === undefined && (authorizationAccount === undefined || openClawRuntimeMissing)
             && openClaw?.connected !== true && onFindOfficial !== undefined ? (
               <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
-                {t('findOfficialConnector')}
+                {definition.registryName === undefined ? t('findConnector') : t('findOfficialConnector')}
               </button>
             ) : null}
           {managed === undefined && authorizationAccount === undefined && openClaw?.connected !== true && definition.provenance === 'registry-listed' && onFindRegistry !== undefined ? (
@@ -1305,7 +1305,7 @@ export function ConnectorsSettingsSection({ api,
 
   const findOfficialConnector = (definition: ConnectorDefinition): void => {
     const registryName = definition.registryName
-    if (mcpRegistry === undefined || registryBusy || (registryName === undefined && definition.mode !== 'mcp')) return
+    if (mcpRegistry === undefined || registryBusy || definition.mode === 'native') return
     setRegistryBusy(true)
     setRegistryFailure(false)
     setCatalogFailure(undefined)
@@ -1813,7 +1813,7 @@ export function ConnectorsSettingsSection({ api,
                     ? undefined
                     : () => { installCuratedConnector(row.definition) }}
                   onFindOfficial={mcpRegistry?.search === undefined
-                    || (row.definition.registryName === undefined && row.definition.mode !== 'mcp')
+                    || row.definition.mode === 'native'
                     || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
                     ? undefined
                     : () => { findOfficialConnector(row.definition) }}
