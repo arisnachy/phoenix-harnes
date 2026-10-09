@@ -3,7 +3,7 @@
  * tab Kira controls. No website iframe, hidden scripts, fake screenshots or
  * model-generated browser states. Fullscreen is a larger view of SAME tab.
  */
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type MouseEvent, type WheelEvent } from 'react'
 import { Modal } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './MiniBrowser.module.css'
 
@@ -177,7 +177,7 @@ export function MiniBrowser() {
     return () => { active = false }
   }, [snapshot.url, snapshot.available, snapshot.tabId])
 
-  const submitVault = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+  const submitVault = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     if (vaultPending || !vault?.origin) return
     setVaultPending(true)
