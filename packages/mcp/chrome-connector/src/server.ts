@@ -238,6 +238,15 @@ async function cdp<T = unknown>(tab: Tab, method: string, params: Record<string,
   })
 }
 
+/** Produce a canonical YouTube search URL without HTML interaction or extra model calls. */
+export function youtubeSearchUrl(query: string): string {
+  const term = query.trim()
+  if (term.length === 0 || term.length > 256) throw new Error('La búsqueda debe tener entre 1 y 256 caracteres')
+  const url = new URL('https://www.youtube.com/results')
+  url.searchParams.set('search_query', term)
+  return url.toString()
+}
+
 async function evaluate(tab: Tab, expression: string): Promise<unknown> {
   return await cdp(tab, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
 }
@@ -275,6 +284,35 @@ server.registerTool('navigate', {
   const tab = await selectedTab(tabId)
   await cdp(tab, 'Page.navigate', { url })
   return { content: [{ type: 'text', text: `Navegación iniciada en ${url} (pestaña ${tab.id})` }] }
+})
+
+server.registerTool('youtube_search', {
+  description: 'Acción rápida: abre YouTube directamente en los resultados de búsqueda de la frase solicitada, usando la sesión de Chrome/Edge y sus permisos actuales. Úsala en UNA sola llamada para peticiones como "abre YouTube y busca Bob Esponja"; no hace falta status, tabs, navigate, click_text, read_page, navegador adicional, subagentes ni review profundo. Tras una comprobación breve de URL, informa el resultado real y termina; no reproduzcas un video si no te lo pidieron. Si falta autorización, informa la restricción una vez, no repitas intentos.',
+  inputSchema: { query: z.string().trim().min(1).max(256), tabId: z.string().optional() },
+}, async ({ query, tabId }) => {
+  if (!actionsAllowed()) {
+    throw new Error('Navegación bloqueada por la política de permisos del navegador. Autoriza la navegación desde Phoenix; no se permite eludir PHOENIX_BROWSER_ALLOW_ACTIONS=false.')
+  }
+  const url = youtubeSearchUrl(query)
+  const tab = await selectedTab(tabId)
+  const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
+  if (navigation.errorText) throw new Error(`YouTube no pudo abrirse: ${navigation.errorText}`)
+  // One bounded read of tab metadata, not a text scrape, screenshot or second model turn.
+  const current = (await tabs()).find(candidate => candidate.id === tab.id)
+  let verified = false
+  if (current) {
+    try {
+      const found = new URL(current.url)
+      verified = found.hostname === 'www.youtube.com'
+        && found.pathname === '/results'
+        && found.searchParams.get('search_query') === query.trim()
+    } catch { /* A tab can momentarily expose an intermediate URL. */ }
+  }
+  return {
+    content: [{ type: 'text', text: verified
+      ? `Búsqueda abierta en YouTube: ${url} (pestaña ${tab.id}). URL comprobada. Muestra la pestaña al usuario; no se ha reproducido ningún video.`
+      : `Navegación a la búsqueda de YouTube iniciada: ${url} (pestaña ${tab.id}). La URL final todavía no se confirmó; no afirmes que los resultados cargaron. Evita comprobaciones repetidas si el usuario solo pidió abrir la búsqueda.` }],
+  }
 })
 
 server.registerTool('read_page', {
