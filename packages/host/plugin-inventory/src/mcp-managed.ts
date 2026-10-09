@@ -453,6 +453,11 @@ function validXApiConfig(value: Record<string, unknown>): boolean {
 function validHttpConfig(value: Record<string, unknown>): boolean {
   if (exactJson(value, xDocsMcpConfig())) return true
   if (exactJson(value, figmaDesktopMcpConfig())) return true
+  // Do not allow a persisted Microsoft Learn entry to silently gain OAuth,
+  // arbitrary headers or a bearer credential: the official Docs MCP is public.
+  if (value.serverName === 'microsoft-learn') {
+    return exactJson(value, microsoftLearnMcpConfig())
+  }
   if (typeof value.serverName !== 'string' || typeof value.url !== 'string'
     || typeof value.oauth !== 'boolean' || !isEmptyRecord(value.headers)) return false
   try {
@@ -466,7 +471,6 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
   // PAT migration persisted oauth:false and bearerTokenRef:GITHUB_MCP_TOKEN.
   // Reject any other bearer ref, arbitrary URL, headers, or extra OAuth fields.
   if (exactJson(value, githubMcpConfig())) return true
-  if (exactJson(value, microsoftLearnMcpConfig())) return true
 
   // Slack is the one curated confidential OAuth client. Its references and
   // fixed callback are admitted only as one exact Host-owned configuration.
