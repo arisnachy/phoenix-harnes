@@ -13,6 +13,7 @@ function fakeLayout(subagent = false): ILayout {
   const occupancy: WorkspaceOccupancy = Object.freeze({ subagent, cordis: false })
   return {
     toggleSidebar: vi.fn(),
+    setSidebarFocus: vi.fn(),
     openDetails: vi.fn(),
     closeDetails: vi.fn(),
     setWorkspaceOccupant: vi.fn(),
