@@ -191,8 +191,10 @@ export function useAuthorizationAttempt(
         // Confidential OAuth clients may ask for their client ID/secret before
         // producing a consent URL. Close the temporary tab during that prompt.
         if (view.prompt !== undefined && consent?.url === undefined && !navigatedRef.current) {
+          // Provider/client credentials can take minutes to enter. Do not
+          // apply the OAuth discovery timeout while waiting for user input.
+          clearConsentDeadline()
           closeReservedPopup()
-
         }
         if (consent?.url !== undefined && !failedPopupRef.current && !opened.current.has(consent.url)) {
           opened.current.add(consent.url)
@@ -224,7 +226,9 @@ export function useAuthorizationAttempt(
         } else if (view.status === 'failed') {
           clearConsentDeadline()
           activeAttemptIdRef.current = undefined
-          const reason = view.error ?? 'El proveedor no pudo iniciar OAuth. Comprueba la configuración y vuelve a intentar.'
+          const reason = view.error ?? (oauthAttemptRef.current
+            ? 'El proveedor no pudo iniciar OAuth. Comprueba la configuración y vuelve a intentar.'
+            : 'La configuración de credenciales falló. Comprueba la clave y vuelve a intentar.')
           if (!navigatedRef.current) failReservedPopup(reason)
           setFailure(reason)
         }
@@ -309,16 +313,18 @@ export function useAuthorizationAttempt(
       activeAttemptIdRef.current = attemptId
       // The Host normally returns a diagnostic after 38 s. A local deadline
       // also covers a lost/hung status RPC, never leaving a silent spinner.
-      consentDeadlineRef.current = window.setTimeout(() => {
-        if (activeAttemptIdRef.current !== attemptId || navigatedRef.current) return
-        const message = 'El MCP no entregó una URL OAuth en 45 segundos. Comprueba el estado de conexión y los requisitos de autenticación del proveedor.'
-        activeAttemptIdRef.current = undefined
-        failReservedPopup(message)
-        setAttempt(current => current?.id === attemptId
-          ? { ...current, status: 'failed', error: message }
-          : current)
-        void api.cancel({ attemptId }).catch(() => undefined)
-      }, 45_000)
+      if (method === 'oauth') {
+        consentDeadlineRef.current = window.setTimeout(() => {
+          if (activeAttemptIdRef.current !== attemptId || navigatedRef.current) return
+          const message = 'El MCP no entregó una URL OAuth en 45 segundos. Comprueba el estado de conexión y los requisitos de autenticación del proveedor.'
+          activeAttemptIdRef.current = undefined
+          failReservedPopup(message)
+          setAttempt(current => current?.id === attemptId
+            ? { ...current, status: 'failed', error: message }
+            : current)
+          void api.cancel({ attemptId }).catch(() => undefined)
+        }, 45_000)
+      }
       setAttempt({ id: attemptId, key, status: 'pending', nextSeq: 0 })
     }, (error: unknown) => {
       if (beginSequenceRef.current !== beginSequence || pendingBeginTimerRef.current === undefined) return
