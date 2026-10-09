@@ -523,11 +523,15 @@ function isStandaloneVisualPreviewRequest(text: string): boolean {
   const request = text.trim()
   if (request.length === 0 || request.length > 160 || request.includes('\n')) return false
   const normalized = request.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable bilingual task classifier.
   if (!/^(?:crea|crear|genera|generar|haz|hacer|dame|muestra|muestrame|dibuja|create|generate|make|show|draw)\b/u.test(normalized)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable supported visual vocabulary.
   if (!/\b(?:grafico|grafica|graph|chart|tabla|table|escala|scale|formulario|form|tarjeta|card)\b/u.test(normalized)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable preview intent vocabulary.
   if (!/\b(?:fictici[oa]s?|simulad[oa]s?|ejemplos?|demo|demostracion|sample|fictional|simulated|preview|vista\s+previa|para\s+verlo)\b/u.test(normalized)) return false
   // Additional work, real-world data, or external side effects keep ordinary
   // review and team admission intact.
+  // oxlint-disable-next-line @stylistic/max-len -- Conservatively exclude consequential workflows.
   return !/\b(?:y\s+(?:despues|luego|tambien|envia|envialo|publica|guarda|implementa|despliega)|and\s+(?:then|also|send|deploy|publish|save)|pacient\w*|produccion|production|real(?:es)?|correo|email|database|base\s+de\s+datos|api|github|repo|main|stable)\b/u.test(normalized)
 }
 
