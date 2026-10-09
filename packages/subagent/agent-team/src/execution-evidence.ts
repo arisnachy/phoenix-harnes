@@ -214,9 +214,11 @@ export function teamExecutionProof(
 }
 
 /**
- * Keep operational peer result messages grounded in the sender's own work.
- * Coordination chatter and user questions never become proof. Non-operational
- * explanations and honest blockers do not require a tool receipt.
+ * Require real child-session tool evidence for operational peer result messages.
+ * Coordination chatter and questions never substitute for a work receipt.
+ * @param events - Durable sender session events, including assignment and tools.
+ * @param purpose - Peer message purpose; honest blockers never require a receipt.
+ * @returns Whether the sender has sufficient runtime evidence for this message.
  */
 export function teamResultHasExecutionEvidence(
   events: readonly SessionEvent[],
