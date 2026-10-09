@@ -27,10 +27,10 @@ import { WorkspacePickFlow } from './WorkspacePicker.tsx'
 import css from './WorkspaceBrowser.module.css'
 
 /**
- * Column slide length (--ds-transition-duration-slow): rail-search focus waits it out —
- * focus() forces a synchronous layout and would jank the slide.
+ * A short post-flip delay lets the wide search control mount before focus.
+ * No 300ms column slide remains: the frame now snaps for responsiveness.
  */
-const EXPAND_SLIDE_MS = 300
+const EXPAND_SLIDE_MS = 40
 /** Pause between the latest keystroke and a Host content-search request. */
 const SEARCH_DEBOUNCE_MS = 250
 /** `session.search` wire bound, measured in JavaScript UTF-16 code units. */
