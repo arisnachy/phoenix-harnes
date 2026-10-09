@@ -63,6 +63,23 @@ describe('Phoenix real interactive 3D artifacts',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Collapse'}))
     expect(screen.getByRole('button',{name:'Expand'})).toBeTruthy()
   })
+  it('exposes native GLB/glTF workflows, camera/lighting and editable materials',()=>{
+    const ctx={setTransform:vi.fn(),fillRect:vi.fn(),beginPath:vi.fn(),moveTo:vi.fn(),
+      lineTo:vi.fn(),stroke:vi.fn(),closePath:vi.fn(),fill:vi.fn()} as unknown as CanvasRenderingContext2D
+    vi.spyOn(HTMLCanvasElement.prototype,'getContext').mockReturnValue(ctx)
+    render(<Scene3DView spec={scene}/>)
+    expect(screen.getByRole('button',{name:'Exportar GLB'})).toBeTruthy()
+    expect(screen.getByRole('button',{name:'Exportar glTF'})).toBeTruthy()
+    expect(screen.getByRole('button',{name:'Importar 3D'})).toBeTruthy()
+    fireEvent.click(screen.getByRole('button',{name:'Isométrica'}))
+    fireEvent.change(screen.getByLabelText('Iluminación del modelo 3D'),{target:{value:'sunset'}})
+    fireEvent.click(screen.getByRole('button',{name:'Editar'}))
+    expect(screen.getByLabelText('Seleccionar pieza 3D')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button',{name:'glass'}))
+    fireEvent.click(screen.getByRole('button',{name:'Duplicar'}))
+    expect(document.querySelector('[data-scene-node-count="3"]')).toBeTruthy()
+    expect(ctx.fill).toHaveBeenCalled()
+  })
   it('shows an actionable validation error rather than pretending invalid geometry is a scene',()=>{
     render(<Scene3DView spec={{version:1,units:'meters',nodes:[]}} />)
     expect(screen.getByRole('alert').textContent).toMatch(/geometría válida/u)
