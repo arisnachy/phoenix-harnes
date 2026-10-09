@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jungle Echo · Phoenix Game Studio</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}
+*{box-sizing:border-box}body{margin:0;background:#101d25;color:#f0f4e5;padding:8px}
+header{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;padding:5px 8px 10px}
+h1{font-size:16px;margin:0;letter-spacing:.08em;color:#f9df91}
+small{color:#c5cfbe;font-size:11px}
+button{border:1px solid #718d85;border-radius:8px;background:#1e3940;color:#edf7e5;padding:8px 12px;cursor:pointer;font-weight:600}
+button:focus-visible,canvas:focus-visible{outline:3px solid #ffe29c;outline-offset:2px}
+canvas{display:block;width:100%;height:auto;border-radius:11px;border:1px solid #536b65;background:#0b2534;image-rendering:auto}
+#controls{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:7px;touch-action:none}
+#controls button{min-width:65px;user-select:none;-webkit-user-select:none;touch-action:none}
+#status{min-height:18px;color:#eacb7e;margin-top:6px;font-size:12px}
+</style>
+</head>
+<body>
+<header><div><h1>JUNGLE ECHO</h1><small>Arcade original · prototipo jugable · Phoenix Game Studio</small></div>
+<div><button id="restart" type="button">Reiniciar</button> <button id="mute" type="button" aria-pressed="false">Sonido: encender</button></div></header>
+<canvas id="game" width="960" height="500" tabindex="0" aria-label="Juego de plataformas, movimiento A D o flechas, salto Espacio, disparo J"></canvas>
+<div id="controls" aria-label="Controles táctiles">
+<button data-key="ArrowLeft" type="button">◀</button><button data-key="ArrowRight" type="button">▶</button>
+<button data-key="Space" type="button">Saltar</button><button data-key="KeyJ" type="button">Disparar</button>
+</div>
+<div id="status" role="status">Haz clic en el juego. A/D o flechas: mover · Espacio: saltar · J: disparar · M: sonido</div>
+<script id="phoenix-game-manifest" type="application/json">
+{
+  "schemaVersion":1,"title":"Jungle Echo","genre":"original run-and-gun",
+  "player":{"states":["idle","run","jump","fall","shoot","hurt","death"],"animations":{"idle":4,"run":8,"jump":2,"fall":2,"shoot":3,"hurt":2,"death":6}},
+  "enemies":[{"id":"scout","states":["move","attack","hurt","death"]},{"id":"turret","states":["move","attack","hurt","death"]}],
+  "bosses":[{"id":"iron-stag","phases":["patrol","barrage"]}],
+  "level":{"layers":[{"id":"sky","scrollFactor":0},{"id":"mountains","scrollFactor":0.16},{"id":"forest","scrollFactor":0.38},{"id":"foreground","scrollFactor":0.8}],"platforms":[{"x":0,"y":440,"width":3800},{"x":465,"y":370,"width":180},{"x":1160,"y":352,"width":190},{"x":2080,"y":365,"width":240}]},
+  "controls":{"move":"A/D or ArrowLeft/ArrowRight","jump":"Space","shoot":"J"},
+  "audio":{"cues":["jump","shoot","hit","explosion","boss"],"music":"original WebAudio procedural loop, user gesture unlock"},
+  "sources":[{"path":"examples/game-studio/jungle-echo.html","license":"original"}]
+}
+</script>
+<script>
+(function(){
+'use strict';
+const canvas=document.getElementById('game'),g=canvas.getContext('2d'),status=document.getElementById('status');
+const W=960,H=500,FLOOR=440,WORLD=3800,keys=new Set(),sparks=[],bullets=[],enemyBullets=[];
+const platforms=[{x:0,y:FLOOR,w:WORLD},{x:465,y:370,w:180},{x:1160,y:352,w:190},{x:2080,y:365,w:240}];
+const enemies=[];
+let p,boss,camera=0,t=0,score=0,ended=false,audio=null,audioOn=false,beat=0,invuln=0;
+function reset(){
+ p={x:72,y:350,vx:0,vy:0,w:30,h:54,hp:8,grounded:false,face:1,shot:0,frame:0,walk:0,state:'idle'};
+ boss={x:3410,y:FLOOR-122,w:110,h:122,hp:30,phase:'patrol',shot:1,alive:true,flash:0};
+ enemies.length=0;bullets.length=0;enemyBullets.length=0;sparks.length=0;
+ [330,620,940,1300,1630,1850,2260,2520,2860,3190].forEach((x,i)=>enemies.push({x,y:FLOOR-42,w:30,h:42,hp:i%3===0?3:2,
+  type:i%3===0?'turret':'scout',face:-1,shot:i%2,walk:i,alive:true,flash:0}));
+ camera=0;t=0;score=0;invuln=0;ended=false;status.textContent='Misión: atraviesa la jungla y derrota al Iron Stag.';
+}
+function unlockAudio(){
+ if(audio===null){const C=window.AudioContext||window.webkitAudioContext;if(C)audio=new C();}
+ if(audio!==null&&audio.state==='suspended')audio.resume().catch(()=>{});
+}
+function tone(freq,duration,wave,volume,endFreq){
+ if(!audioOn||audio===null)return;
+ const now=audio.currentTime,o=audio.createOscillator(),gain=audio.createGain();
+ o.type=wave;o.frequency.setValueAtTime(freq,now);
+ if(endFreq)o.frequency.exponentialRampToValueAtTime(Math.max(25,endFreq),now+duration);
+ gain.gain.setValueAtTime(Math.max(.0001,volume),now);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);
+ o.connect(gain);gain.connect(audio.destination);o.start(now);o.stop(now+duration+.01);
+}
+const sound={
+ jump:()=>tone(240,.18,'triangle',.09,440),
+ shoot:()=>tone(640,.07,'square',.075,180),
+ hit:()=>tone(150,.14,'sawtooth',.11,65),
+ explosion:()=>{tone(90,.33,'sawtooth',.15,27);tone(40,.27,'triangle',.11,28)},
+ boss:()=>{tone(220,.3,'square',.11,110);tone(120,.38,'sawtooth',.07,60)}
+};
+function music(dt){
+ if(!audioOn||ended)return;
+ beat-=dt;
+ if(beat<=0){beat+=.22;const notes=[110,0,146.83,0,164.81,0,146.83,98,0,146.83,164.81,0,196,0,164.81,0];
+  const note=notes[Math.floor(t/.22)%notes.length];if(note)tone(note,.16,'triangle',.025,note*.998);
+ }
+}
+function particles(x,y,c,n=10,power=1){
+ for(let i=0;i<n&&sparks.length<160;i++){
+  const a=Math.PI*2*i/n+(Math.random()-.5),s=(45+Math.random()*170)*power;
+  sparks.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.25+Math.random()*.42,color:c,r:1+Math.random()*3});
+ }
+}
+function addBullet(x,y,dir,owner='player'){
+ const arr=owner==='player'?bullets:enemyBullets;
+ if(arr.length>35)return;
+ arr.push({x,y,vx:dir*(owner==='player'?730:270),r:owner==='player'?5:7,ttl:1.7});
+ if(owner==='player'){sound.shoot();particles(x,y,'#ffde72',4,.28)}
+}
+function overlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function damagePlayer(){
+ if(invuln>0||ended)return;
+ p.hp--;invuln=.85;p.state='hurt';sound.hit();particles(p.x+15,p.y+23,'#ee6d68',14,.6);
+ if(p.hp<=0){ended=true;p.state='death';sound.explosion();status.textContent='Misión fallida. Pulsa Reiniciar.'}
+}
+function moveBody(o,dt,isPlayer){
+ o.vy=Math.min(1150,o.vy+1700*dt);const prevBottom=o.y+o.h;
+ o.x=Math.max(0,Math.min(WORLD-o.w,o.x+o.vx*dt));
+ o.y+=o.vy*dt;
+ o.grounded=false;
+ for(const ledge of platforms){
+  if(o.x+o.w>ledge.x+5&&o.x<ledge.x+ledge.w-5
+    &&prevBottom<=ledge.y+9&&o.y+o.h>=ledge.y&&o.vy>=0){
+   o.y=ledge.y-o.h;o.vy=0;o.grounded=true;
+  }
+ }
+ if(o.y>H+300){if(isPlayer)damagePlayer();o.x=isPlayer?Math.max(70,o.x-250):o.x;o.y=220;o.vy=0}
+}
+function update(dt){
+ if(ended){for(const part of sparks){part.x+=part.vx*dt;part.y+=part.vy*dt;part.life-=dt}return}
+ t+=dt;invuln=Math.max(0,invuln-dt);p.shot=Math.max(0,p.shot-dt);p.walk+=dt*Math.abs(p.vx)/65;
+ const axis=Number(keys.has('ArrowRight')||keys.has('KeyD'))-Number(keys.has('ArrowLeft')||keys.has('KeyA'));
+ p.vx=axis*245;if(axis)p.face=axis;
+ if((keys.has('Space')||keys.has('ArrowUp')||keys.has('KeyW'))&&p.grounded){p.vy=-660;p.grounded=false;sound.jump();particles(p.x+15,p.y+p.h,'#cab48a',8,.38)}
+ moveBody(p,dt,true);
+ if((keys.has('KeyJ')||keys.has('KeyK'))&&p.shot<=0){
+  addBullet(p.x+15+p.face*31,p.y+22,p.face);p.shot=.14
+ }
+ p.state=invuln>.68?'hurt':!p.grounded?(p.vy<0?'jump':'fall'):p.shot>.08?'shoot':Math.abs(p.vx)>4?'run':'idle';
+ for(const e of enemies){
+  if(!e.alive)continue;
+  const dist=p.x-e.x;e.face=dist>=0?1:-1;e.walk+=dt*5;e.flash=Math.max(0,e.flash-dt);
+  e.vx=e.type==='scout'&&Math.abs(dist)<460?e.face*55:0;
+  e.vy=e.vy||0;moveBody(e,dt,false);
+  e.shot-=dt;
+  if(Math.abs(dist)<550&&e.shot<=0){addBullet(e.x+15+e.face*18,e.y+18,e.face,'enemy');e.shot=e.type==='turret'?1.35:2.2}
+  if(overlap(p,e))damagePlayer();
+ }
+ boss.phase=boss.hp<=15?'barrage':'patrol';
+ if(boss.alive){
+  boss.flash=Math.max(0,boss.flash-dt);boss.shot-=dt;
+  if(Math.abs(p.x-boss.x)<730&&boss.shot<=0){
+   const dir=p.x>=boss.x?1:-1;sound.boss();
+   addBullet(boss.x+55+dir*45,boss.y+40,dir,'enemy');
+   if(boss.phase==='barrage')addBullet(boss.x+55+dir*45,boss.y+80,dir,'enemy');
+   boss.shot=boss.phase==='barrage'?.72:1.35;
+  }
+  if(Math.abs(p.x-boss.x)<700&&boss.phase==='barrage'){boss.x+=Math.sin(t*1.4)*.35}
+ }
+ for(const b of bullets){
+  b.x+=b.vx*dt;b.ttl-=dt;
+  for(const e of enemies){
+   if(e.alive&&b.ttl>0&&b.x>e.x&&b.x<e.x+e.w&&b.y>e.y&&b.y<e.y+e.h){
+    e.hp--;e.flash=.12;b.ttl=0;particles(b.x,b.y,'#fce195',7,.45);sound.hit();
+    if(e.hp<=0){e.alive=false;score+=100;particles(e.x+15,e.y+20,'#ff9345',18,.9);sound.explosion()}
+   }
+  }
+  if(boss.alive&&b.ttl>0&&b.x>boss.x&&b.x<boss.x+boss.w&&b.y>boss.y&&b.y<boss.y+boss.h){
+   boss.hp--;boss.flash=.13;b.ttl=0;particles(b.x,b.y,'#fae7a1',7,.55);sound.hit();
+   if(boss.hp===15){particles(boss.x+55,boss.y+50,'#fba03b',32,1.1);sound.boss()}
+   if(boss.hp<=0){boss.alive=false;ended=true;score+=2000;particles(boss.x+55,boss.y+60,'#ffb54c',80,1.7);
+     sound.explosion();status.textContent='¡VICTORIA! Jungla liberada. Puntaje: '+score+'. Pulsa Reiniciar.'}
+  }
+ }
+ for(const b of enemyBullets){b.x+=b.vx*dt;b.ttl-=dt;
+  if(b.ttl>0&&b.x>p.x&&b.x<p.x+p.w&&b.y>p.y&&b.y<p.y+p.h){b.ttl=0;damagePlayer()}
+ }
+ for(let i=sparks.length-1;i>=0;i--){
+  const s=sparks[i];s.x+=s.vx*dt;s.y+=s.vy*dt;s.vy+=420*dt;s.life-=dt;
+  if(s.life<=0)sparks.splice(i,1);
+ }
+ for(const arr of [bullets,enemyBullets])for(let i=arr.length-1;i>=0;i--)if(arr[i].ttl<=0||arr[i].x<0||arr[i].x>WORLD)arr.splice(i,1);
+ camera=Math.max(0,Math.min(WORLD-W,camera+(Math.max(0,Math.min(WORLD-W,p.x-W*.33))-camera)*Math.min(1,dt*6)));
+ music(dt);
+}
+function rect(x,y,w,h,fill){g.fillStyle=fill;g.fillRect(x,y,w,h)}
+function mountains(factor,color,base,height,step){
+ g.fillStyle=color;g.beginPath();g.moveTo(0,H);
+ for(let x=-step*2;x<W+step*2;x+=step){
+  const worldX=x-camera*factor;g.lineTo(worldX,base);g.lineTo(worldX+step*.5,base-height*(.68+.32*Math.sin(x*.003+2)));}
+ g.lineTo(W,H);g.closePath();g.fill();
+}
+function treeRow(factor,base,color,spacing,scale){
+ const offset=(camera*factor)%spacing;for(let x=-spacing;x<W+spacing;x+=spacing){
+  const q=x-offset, variation=Math.sin((x+camera*factor)/spacing*13)*.15+1;
+  rect(q,base-105*variation*scale,8*scale,110*scale,color);
+  g.fillStyle=color;g.beginPath();g.moveTo(q-30*scale,base-45*scale);
+  g.lineTo(q+4*scale,base-176*variation*scale);g.lineTo(q+38*scale,base-45*scale);g.fill();
+ }}
+function background(){
+ const gradient=g.createLinearGradient(0,0,0,H);gradient.addColorStop(0,'#092842');gradient.addColorStop(.6,'#1c5263');gradient.addColorStop(1,'#486c57');g.fillStyle=gradient;g.fillRect(0,0,W,H);
+ rect(0,86,W,2,'#b2cfa266');
+ g.fillStyle='#d6e7b966';g.beginPath();g.arc(775,92,36,0,Math.PI*2);g.fill();
+ mountains(.12,'#1c4655',310,112,180);mountains(.23,'#214e50',367,103,130);
+ treeRow(.35,440,'#173b3b',95,.8);treeRow(.62,445,'#15352d',124,1.15);
+}
+function world(){
+ g.save();g.translate(-camera,0);
+ for(const platform of platforms){
+  rect(platform.x,platform.y,platform.w,H-platform.y,'#334a39');
+  rect(platform.x,platform.y,platform.w,9,'#76a362');
+  for(let x=platform.x+13;x<platform.x+platform.w;x+=48){
+   rect(x,platform.y+12,22,4,'#476749');rect(x+8,platform.y+24,16,3,'#283a33');
+  }
+ }
+ for(const e of enemies)if(e.alive)drawEnemy(e);
+ if(boss.alive)drawBoss();
+ if(invuln===0||Math.floor(t*16)%2===0)drawHero();
+ for(const b of bullets){
+  g.fillStyle='#fff2a5';g.shadowColor='#ffba46';g.shadowBlur=12;g.fillRect(b.x-10,b.y-3,18,6);g.shadowBlur=0;
+ }
+ for(const b of enemyBullets){
+  g.fillStyle='#fd7269';g.shadowColor='#fe4844';g.shadowBlur=14;g.beginPath();g.arc(b.x,b.y,b.r,0,Math.PI*2);g.fill();g.shadowBlur=0;
+ }
+ for(const s of sparks){g.globalAlpha=Math.min(1,s.life*2.8);rect(s.x,s.y,s.r,s.r,s.color)}g.globalAlpha=1;
+ g.restore();
+ treeRow(.81,500,'#122f2d',170,.75);
+}
+function drawHero(){
+ const x=p.x+15,y=p.y+15;const stride=p.state==='run'?Math.sin(p.walk*2.6)*12:0;
+ const leap=p.state==='jump'?-9:p.state==='fall'?8:0;
+ g.save();g.translate(x,y);g.scale(p.face,1);
+ if(p.state==='hurt')g.globalAlpha=.65;
+ rect(-11,-10,22,22,'#485d58');rect(-11,-9,20,8,'#adca91');rect(-7,-15,16,7,'#c0ad70');
+ rect(1,-12,7,3,'#f9dbac');rect(5,-10,4,3,'#202b33');
+ // articulated legs use distinct poses (run/jump/fall/landing) rather than translating static art
+ g.strokeStyle='#c0be8a';g.lineWidth=7;g.lineCap='round';
+ g.beginPath();g.moveTo(-6,13);g.lineTo(-6+stride,27+leap);g.lineTo(-6+stride*.45,38+leap*.2);
+ g.moveTo(7,13);g.lineTo(7-stride,27-leap*.4);g.lineTo(7-stride*.6,38-leap*.15);g.stroke();
+ g.strokeStyle='#e0bc89';g.lineWidth=6;g.beginPath();g.moveTo(5,0);g.lineTo(18,9+(p.state==='shoot'?-4:0));g.stroke();
+ rect(13,4,27,7,'#354953');rect(27,3,16,5,'#7c9ba0');
+ if(p.shot>.08){rect(40,3,15,4,'#ffe3a1');rect(55,1,7,8,'#ff9f43')}
+ g.restore();
+}
+function drawEnemy(e){
+ const x=e.x,y=e.y;const foot=Math.sin(e.walk)*4;
+ g.save();g.translate(x+15,y);g.scale(e.face,1);
+ rect(-13,4,26,25,e.flash?'#fff2ab':'#925343');rect(-9,0,18,11,'#d6a369');
+ rect(0,8,7,4,'#ffcc84');
+ rect(-15,27,10,14+foot,'#4d4540');rect(7,27,10,14-foot,'#4d4540');
+ rect(9,16,22,6,e.type==='turret'?'#879296':'#635a4e');
+ if(e.type==='turret'){rect(-18,-8,36,9,'#454e51');rect(-9,-12,19,5,'#d3b96b')}
+ g.restore();
+}
+function drawBoss(){
+ const x=boss.x,y=boss.y;
+ g.save();g.translate(x,y);
+ g.fillStyle='#151d28';g.fillRect(8,33,96,84);
+ for(let k=0;k<3;k++){rect(7+k*37,112,25,11,'#354550');rect(8+k*37,118+Math.sin(t*3+k)*3,19,8,'#161f28')}
+ rect(8,20,96,79,boss.flash?'#fff0b1':'#56676d');rect(19,7,75,17,'#789494');
+ rect(14,42,16,43,'#23313a');rect(83,42,14,43,'#23313a');
+ rect(33,36,44,29,boss.phase==='barrage'?'#db6c45':'#b9c773');
+ rect(44,45,23,12,'#172a30');
+ rect(-12,40,42,17,'#818a85');rect(82,41,45,17,'#818a85');
+ rect(-19,43,19,11,'#2c3c44');rect(123,44,18,11,'#2c3c44');
+ if(boss.phase==='barrage'){g.strokeStyle='#f0a15a';g.lineWidth=3;g.strokeRect(5,17,101,84)}
+ g.restore();
+}
+function hud(){
+ g.fillStyle='#0b1e29d9';g.fillRect(14,13,344,59);g.fillRect(W-229,13,213,59);
+ g.font='bold 17px system-ui';g.fillStyle='#efdea2';g.fillText('JUNGLE ECHO',25,35);
+ g.font='13px system-ui';g.fillStyle='#e8efda';g.fillText('VIDAS '+p.hp+'     PUNTOS '+score,25,57);
+ g.fillText('Iron Stag '+(boss.alive?boss.phase:'derrotado'),W-217,34);
+ rect(W-215,46,180,11,'#34454a');rect(W-215,46,Math.max(0,boss.hp)/30*180,11,'#d98750');
+ if(ended){
+  rect(0,0,W,H,'#07141bc2');g.textAlign='center';g.fillStyle='#ffe2a0';
+  g.font='bold 44px system-ui';g.fillText(boss.alive?'MISIÓN FALLIDA':'¡VICTORIA!',W/2,H/2);
+  g.font='18px system-ui';g.fillText('Pulsa Reiniciar para jugar otra vez',W/2,H/2+40);g.textAlign='left';
+ }
+}
+function render(){background();world();hud();}
+let previous=0,accumulator=0;
+function frame(ms){
+ const dt=Math.min(.06,(ms-previous)/1000||0);previous=ms;accumulator+=dt;
+ let steps=0;while(accumulator>=1/60&&steps<4){update(1/60);accumulator-=1/60;steps++}
+ render();requestAnimationFrame(frame);
+}
+document.addEventListener('keydown',event=>{
+ const key=event.code;
+ if(['ArrowLeft','ArrowRight','ArrowUp','Space','KeyA','KeyD','KeyW','KeyJ','KeyK','KeyM'].includes(key))event.preventDefault();
+ if(key==='KeyM'){toggleAudio();return}
+ keys.add(key);if(!event.repeat){unlockAudio()}
+});
+document.addEventListener('keyup',e=>{keys.delete(e.code)});
+window.addEventListener('blur',()=>keys.clear());
+document.addEventListener('visibilitychange',()=>{if(document.hidden)keys.clear()});
+for(const control of document.querySelectorAll('[data-key]')){
+ const key=control.dataset.key;
+ control.addEventListener('pointerdown',e=>{e.preventDefault();keys.add(key);unlockAudio();control.setPointerCapture(e.pointerId)});
+ const clear=()=>keys.delete(key);
+ control.addEventListener('pointerup',clear);control.addEventListener('pointercancel',clear);control.addEventListener('lostpointercapture',clear);
+}
+function toggleAudio(){
+ unlockAudio();audioOn=!audioOn;document.getElementById('mute').textContent=audioOn?'Sonido: apagar':'Sonido: encender';
+ document.getElementById('mute').setAttribute('aria-pressed',String(audioOn));if(audioOn)tone(440,.15,'triangle',.1);
+}
+document.getElementById('mute').addEventListener('click',toggleAudio);
+document.getElementById('restart').addEventListener('click',()=>{reset();canvas.focus();unlockAudio()});
+canvas.addEventListener('pointerdown',()=>{canvas.focus();unlockAudio()});
+reset();requestAnimationFrame(frame);
+})();
+</script>
+</body></html>
