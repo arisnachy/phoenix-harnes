@@ -16,6 +16,7 @@ export interface FreeSearchProviderOptions {
 const DEFAULT_ENGINES: readonly FreeSearchEngine[] = ['bing', 'duckduckgo']
 const DEFAULT_TIMEOUT_MS = 8_000
 const ENGINE_COOLDOWN_MS = 5 * 60_000
+const EMPTY_RESULTS_COOLDOWN_MS = 60_000
 const SEARCH_CHALLENGE = /captcha|verify (?:you are|that you're) human|unusual traffic|robot check|automated queries|prove you are human|attention required/i
 
 /** Stable provider id used by `ctx.web`. */
@@ -65,8 +66,9 @@ export class FreeSearchProvider implements WebSearchProvider {
           truncated: request.maxResults !== undefined && sources.length > request.maxResults,
         }
       }
-      // Only classify a challenge when there are no genuine search-result links.
-      if (SEARCH_CHALLENGE.test(html)) this.blockedUntil.set(engine, Date.now() + ENGINE_COOLDOWN_MS)
+      // HTML layout changes and challenges should not trigger a retry storm.
+      const cooldown = SEARCH_CHALLENGE.test(html) ? ENGINE_COOLDOWN_MS : EMPTY_RESULTS_COOLDOWN_MS
+      this.blockedUntil.set(engine, Date.now() + cooldown)
     }
     throw new WebError('no free search engine returned results', 'WEB_PROVIDER_TRANSIENT')
   }
