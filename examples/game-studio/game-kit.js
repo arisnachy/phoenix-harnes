@@ -44,13 +44,13 @@ const PhoenixGameKit = (() => {
     const liftA = running && !airborne ? Math.max(0, Math.cos(walk * 2)) * 10 : 0;
     const liftB = running && !airborne ? Math.max(0, -Math.cos(walk * 2)) * 10 : 0;
     const landing = airborne ? (falling ? 7 : -9) : 0;
-    const hipA = point(-6, 17), hipB = point(7, 17);
-    const ankleA = point(-7 + stride, 51 - liftA + landing);
-    const ankleB = point(8 - stride, 51 - liftB - landing * .5);
+    const hipA = point(-6, 8), hipB = point(7, 8);
+    const ankleA = point(-7 + stride, 30 - liftA + landing);
+    const ankleB = point(8 - stride, 30 - liftB - landing * .5);
     const hand = point(25 * Math.cos(aim) - recoil, 6 + 25 * Math.sin(aim));
     const support = point(18 * Math.cos(aim) - recoil * .6, 5 + 18 * Math.sin(aim));
     return {
-      legs: [twoBone(hipA, ankleA, 20, 20, 1), twoBone(hipB, ankleB, 20, 20, -1)],
+      legs: [twoBone(hipA, ankleA, 18, 18, 1), twoBone(hipB, ankleB, 18, 18, -1)],
       arms: [twoBone(point(-8, 1), support, 17, 17, -1), twoBone(point(9, 1), hand, 17, 18, 1)],
       hand, support, aim,
       muzzle: point(hand.x + Math.cos(aim) * 26, hand.y + Math.sin(aim) * 26),
