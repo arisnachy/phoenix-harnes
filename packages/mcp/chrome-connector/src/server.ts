@@ -188,12 +188,12 @@ async function launchDedicatedBrowser(): Promise<string> {
   managedLaunch = (async () => {
     const executable = browserExecutable()
     const profileDir = mkdtempSync(join(tmpdir(), 'phoenix-browser-'))
-    // A requested browser is visible in the conversation by default; avoid a second OS window.
-    const headless = process.env.PHOENIX_BROWSER_HEADLESS !== 'false'
-      && process.env.DSH_CHROME_HEADLESS !== 'false'
-    const child = spawn(executable, buildDedicatedBrowserArgs(profileDir, headless), {
+    // Agent navigation uses a private headless Chromium target regardless of
+    // stale HEADLESS=false settings. Only the explicit user MiniBrowser footer
+    // action may open a visible desktop Chrome window.
+    const child = spawn(executable, buildDedicatedBrowserArgs(profileDir, true), {
       stdio: 'ignore',
-      windowsHide: false,
+      windowsHide: true,
     })
     managedBrowser = child
     managedProfileDir = profileDir
