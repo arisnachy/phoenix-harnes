@@ -223,6 +223,54 @@ describe('chat durable ownership and delivery', () => {
     expect(f.followup.mock.calls[0]?.[2][0]?.text).toContain('Reply to User (original)')
   })
 
+  it('shows one verified Astra-to-Kira handoff without a duplicate child final reply', async () => {
+    const f = await fixture(8192)
+    f.child.append('turn/start', { turn: 1 })
+    const first = createAssistantMessage({
+      source: { provider: 'mock', model: 'mock' },
+      content: content('Kira, abriré la portada y comprobaré el enlace.'),
+    })
+    f.child.append('assistant/message', { turn: 1, step: 1, message: first }, { surfaceOp: 'append' })
+    const callId = CallId('team-result-handoff')
+    f.child.append('tool/call', {
+      turn: 1, step: 2, callId, name: 'send_message',
+      arguments: '{"target":"lead","purpose":"result","message":"Titular verificado"}',
+    })
+    f.child.append('tool/result', {
+      turn: 1, step: 2,
+      message: createToolResultMessage({ callId, content: content('accepted'), isError: false }),
+    }, { surfaceOp: 'append' })
+    const redundant = createAssistantMessage({
+      source: { provider: 'mock', model: 'mock' }, content: content('El titular está verificado; ya informé a Kira.'),
+    })
+    f.child.append('assistant/message', { turn: 1, step: 3, message: redundant }, { surfaceOp: 'append' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    expect(f.chat.messages(f.root).map(row => row.text)).toEqual([
+      'Kira, abriré la portada y comprobaré el enlace.',
+    ])
+    // An explicit new assignment can still produce new substantive dialogue.
+    f.child.append('turn/start', { turn: 2 })
+    const next = createAssistantMessage({
+      source: { provider: 'mock', model: 'mock' }, content: content('Kira, comprobaré ahora el segundo artículo.'),
+    })
+    f.child.append('assistant/message', { turn: 2, step: 1, message: next }, { surfaceOp: 'append' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    expect(f.chat.messages(f.root).map(row => row.text)).toContain('Kira, comprobaré ahora el segundo artículo.')
+  })
+
+  it('never publishes child narration produced after a user-stopped lead turn', async () => {
+    const f = await fixture()
+    f.root.append('turn/start', { turn: 1 })
+    f.root.append('turn/end', { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } })
+    const stale = createAssistantMessage({
+      source: { provider: 'mock', model: 'mock' }, content: content('Kira, seguiré navegando.'),
+    })
+    f.child.append('turn/start', { turn: 1 })
+    f.child.append('assistant/message', { turn: 1, step: 1, message: stale }, { surfaceOp: 'append' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    expect(f.chat.messages(f.root)).toHaveLength(0)
+  })
+
   it('keeps raw tool telemetry in child events without impersonating a teammate in chat', async () => {
     const f = await fixture()
     const callId = CallId('github-read')

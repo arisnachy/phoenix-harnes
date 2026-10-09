@@ -132,6 +132,8 @@ describe('dsh-tool-team', () => {
     const leadPrompt = renderPrompt(leadAssembly)
     expect(leadPrompt).toContain('real shared work, not role-play')
     expect(leadPrompt).toContain('Simple-task fast path')
+    expect(leadPrompt).toContain('Team conversation must be genuinely two-way')
+    expect(leadPrompt).toContain('After that successful handoff, do not repeat the finding')
     expect(leadPrompt).toContain('do NOT open a browser, demand independent visual confirmation')
     expect(leadPrompt).toContain('A real external connection, permission change, send, purchase, deletion')
     expect(leadPrompt).toContain('Resolve discoverable missing facts with available tools before asking the user')

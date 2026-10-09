@@ -93,15 +93,15 @@ describe('KIRA Team chat message', () => {
     const done = render(<View node={assignment} useProjection={() => ({
       'worker-a': { id: 'worker-a', name: 'Argo', avatar: 'argo', role: 'skill.verification', status: 'done' },
     })} />)
-    expect(done.getByRole('status').textContent).toContain('terminó')
-    expect(done.container.querySelector('[data-team-target-status="done"]')).toBeTruthy()
+    expect(done.queryByRole('status')).toBeNull()
+    expect(done.container.querySelector('[data-team-target-status="done"]')).toBeNull()
     done.unmount()
 
     const failed = render(<View node={assignment} useProjection={() => ({
       'worker-a': { id: 'worker-a', name: 'Argo', avatar: 'argo', role: 'skill.verification', status: 'failed' },
     })} />)
-    expect(failed.getByRole('status').textContent).toContain('falló')
-    expect(failed.container.querySelector('[data-team-target-status="failed"]')).toBeTruthy()
+    expect(failed.queryByRole('status')).toBeNull()
+    expect(failed.container.querySelector('[data-team-target-status="failed"]')).toBeNull()
   })
 
   it('leaves all emoji reactions to the canonical animated message-actions tray', () => {
