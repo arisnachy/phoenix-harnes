@@ -5552,6 +5552,18 @@ importers:
 
   packages/host/plugin-inventory:
     dependencies:
+      '@phoenix-ai/dsh-agent':
+        specifier: workspace:^
+        version: link:../../core/agent
+      '@phoenix-ai/dsh-credentials':
+        specifier: workspace:^
+        version: link:../../credentials/credentials
+      '@phoenix-ai/dsh-llm':
+        specifier: workspace:^
+        version: link:../../llm/llm
+      '@phoenix-ai/dsh-session':
+        specifier: workspace:^
+        version: link:../../core/session
       '@phoenix-ai/dsh-atomic-write':
         specifier: workspace:^
         version: link:../../util/atomic-write

@@ -148,8 +148,11 @@ export interface TelegramBotSnapshot {
   readonly verified: boolean
   readonly phase: 'unconfigured' | 'verified' | 'invalid-token' | 'unreachable' | 'credentials-unavailable'
   readonly username?: string
-  /** Telegram receiver and task dispatch are intentionally not represented as active. */
-  readonly inboxActive: false
+  /** True only after a successful inbound polling request on this Host. */
+  readonly inboxActive: boolean
+  readonly paired: boolean
+  /** A sanitized polling diagnostic, never a Telegram token or URL. */
+  readonly reason?: string
 }
 
 /** Browser/model-safe request selecting one Host-curated MCP identity. */
