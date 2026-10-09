@@ -51,6 +51,8 @@ export interface HardnessProtocolInput {
   readonly verification: HardnessVerificationState
   readonly presentation: HardnessPresentationState
   readonly audit: HardnessAuditState
+  /** Authoritative human cancellation propagated by the mission controller. */
+  readonly cancelled?: boolean
 }
 
 /** Serializable instructions for the next safe operation. */
@@ -60,6 +62,8 @@ export interface HardnessProtocolView {
   readonly allowedActions: readonly string[]
   readonly forbiddenActions: readonly string[]
   readonly reason: string
+  /** A cancelled mission must never be presented as task success. */
+  readonly terminalReason?: 'cancelled'
 }
 
 /** Evaluate the next governed lifecycle step without executing or authorizing anything.
@@ -67,6 +71,16 @@ export interface HardnessProtocolView {
  * @returns serializable next-step guidance and allowed/forbidden actions.
  */
 export function evaluateHardnessProtocol(input: HardnessProtocolInput): HardnessProtocolView {
+  if (input.cancelled === true) {
+    return {
+      step: 'audit',
+      outcome: 'complete',
+      terminalReason: 'cancelled',
+      allowedActions: [],
+      forbiddenActions: ['inspect', 'resolve', 'plan', 'approve', 'execute', 'verify', 'present', 'audit', 'replan', 'dispatch-routed-capability', 'claim-success'],
+      reason: 'the user cancelled this mission; no review, retry, agent or tool can reopen it',
+    }
+  }
   if (input.inspection === 'pending') {
     return {
       step: 'inspect',

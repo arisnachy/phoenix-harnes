@@ -225,8 +225,8 @@ const LEVEL_SCORES: Readonly<Record<CognitiveMissionLevel, number>> = Object.fre
 
 const EXECUTION_BUDGETS: Readonly<Record<CognitiveExecutionMode, CognitiveExecutionBudget>> = Object.freeze({
   fast: Object.freeze({ maxAttempts: 1, maxRecoveryAttempts: 1, maxExternalSources: 0, maxParallelSubtasks: 0, maxReviewPasses: 0 }),
-  standard: Object.freeze({ maxAttempts: 2, maxRecoveryAttempts: 2, maxExternalSources: 3, maxParallelSubtasks: 4, maxReviewPasses: 1 }),
-  deep: Object.freeze({ maxAttempts: 3, maxRecoveryAttempts: 3, maxExternalSources: 8, maxParallelSubtasks: 8, maxReviewPasses: 2 }),
+  standard: Object.freeze({ maxAttempts: 2, maxRecoveryAttempts: 2, maxExternalSources: 3, maxParallelSubtasks: 2, maxReviewPasses: 1 }),
+  deep: Object.freeze({ maxAttempts: 3, maxRecoveryAttempts: 3, maxExternalSources: 8, maxParallelSubtasks: 3, maxReviewPasses: 2 }),
 })
 
 function measurements(profile: CognitiveMissionProfile): CognitiveWorkflowMeasurements {
