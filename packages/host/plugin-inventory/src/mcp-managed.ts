@@ -850,6 +850,15 @@ export class ManagedMcpController {
         throw new Error(`managed MCP entry "${entryId}" could not be unloaded; its previous configuration was preserved`)
       }
       try {
+        // The existing Figma Desktop MCP does not use browser OAuth. Repairing
+        // it must preserve its loopback endpoint rather than silently switching
+        // to Figma's separate remote OAuth integration.
+        if (connectorId === 'figma'
+          && row.config.transport === 'streamable-http'
+          && row.config.url === FIGMA_DESKTOP_MCP_URL) {
+          return await this.installManagedConfig(figmaDesktopMcpConfig(), 'Figma Desktop',
+            { kind: 'curated', connectorId: 'figma' })
+        }
         return await this.installCuratedMcp(connectorId)
       } catch (error) {
         await this.restoreRemovedManagedRow(row)
