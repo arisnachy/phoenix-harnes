@@ -14,6 +14,7 @@ import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Context } from '@phoenix-ai/cordis'
 import type {} from '@phoenix-ai/dsh-host-webserver'
+import { browserVaultSupported, hasSecureBrowserLogin, saveSecureBrowserLogin, resolveSecureBrowserLogin, forgetSecureBrowserLogin, secureBrowserOrigin } from './mini-browser-vault.ts'
 
 type Tab = { id: string; url: string; title: string; type?: string; webSocketDebuggerUrl?: string }
 type Descriptor = { pid: number; endpoint: string; selectedTabId?: string }
@@ -287,6 +288,105 @@ async function action(input: Action): Promise<Record<string, unknown>> {
   } else throw new Error('Acción de navegador desconocida.')
   return await state()
 }
+/** Inject credentials into the correct Chromium origin without returning them to a model. */
+async function browserVaultLogin(tab: Tab, origin: string, account: string, secret: string): Promise<{ phase: string; submitted: boolean }> {
+  const expected = secureBrowserOrigin(origin)
+  if (secureBrowserOrigin(tab.url) !== expected) throw new Error('La pestaña cambió de dominio; acceso detenido.')
+  const expression = `(() => {
+    const expected = ${JSON.stringify(expected)};
+    if (location.origin !== expected) return JSON.stringify({ phase: 'origin-mismatch', submitted: false });
+    const account = ${JSON.stringify(account)};
+    const secret = ${JSON.stringify(secret)};
+    const visible = el => el instanceof HTMLInputElement && el.type !== 'hidden' && el.type !== 'file' && el.getClientRects().length > 0;
+    const inputs = Array.from(document.querySelectorAll('input')).filter(visible);
+    const user = inputs.find(el => /user|email|login|account/.test((el.name + ' ' + el.id + ' ' + el.autocomplete + ' ' + el.placeholder).toLowerCase()))
+      || inputs.find(el => el.type === 'email' || el.type === 'text');
+    const password = inputs.find(el => el.type === 'password');
+    if (!user && !password) return JSON.stringify({ phase: 'fields-not-found', submitted: false });
+    const assign = (el, value) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+      if (!setter) throw new Error('El campo no admite edición segura');
+      setter.call(el, value);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    if (user) assign(user, account);
+    if (password) assign(password, secret);
+    const form = password?.form || user?.form;
+    if (!form) return JSON.stringify({ phase: 'credentials-filled', submitted: false });
+    if (new URL(form.action || location.href, location.href).origin !== expected)
+      return JSON.stringify({ phase: 'cross-origin-form', submitted: false });
+    if (typeof form.requestSubmit === 'function') form.requestSubmit();
+    else form.submit();
+    return JSON.stringify({ phase: 'credentials-submitted', submitted: true });
+  })()`
+  const result = await cdp<{ result?: { value?: unknown } }>(tab, 'Runtime.evaluate', {
+    expression, returnByValue: true, awaitPromise: false,
+  })
+  let parsed: unknown
+  try { parsed = JSON.parse(String(result.result?.value)) }
+  catch { throw new Error('La página no confirmó la operación de acceso.') }
+  if (typeof parsed !== 'object' || parsed === null || !('phase' in parsed) || typeof parsed.phase !== 'string'
+      || !('submitted' in parsed) || typeof parsed.submitted !== 'boolean') {
+    throw new Error('La página no confirmó la operación de acceso.')
+  }
+  if (parsed.phase === 'origin-mismatch' || parsed.phase === 'cross-origin-form') {
+    throw new Error('El formulario apunta a otro dominio; acceso detenido.')
+  }
+  return { phase: parsed.phase, submitted: parsed.submitted }
+}
+
+type VaultAction = { type: 'connect' | 'forget' | 'run'; origin: string; account?: string; secret?: string; remember?: boolean }
+async function readVaultAction(req: IncomingMessage): Promise<VaultAction> {
+  let raw = ''
+  for await (const chunk of req) {
+    raw += String(chunk)
+    if (raw.length > 25000) throw new Error('Solicitud demasiado grande.')
+  }
+  const input: unknown = JSON.parse(raw)
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) throw new Error('Solicitud inválida.')
+  const candidate = input as Record<string, unknown>
+  if (!['connect','forget','run'].includes(String(candidate.type))
+      || typeof candidate.origin !== 'string') throw new Error('Acción del vault inválida.')
+  return candidate as VaultAction
+}
+async function browserVaultAction(input: VaultAction): Promise<Record<string, unknown>> {
+  if (!browserVaultSupported()) throw new Error('El vault cifrado requiere Windows.')
+  const expected = secureBrowserOrigin(input.origin)
+  const base = await endpoint(false)
+  if (!base) throw new Error('Primero inicia el navegador.')
+  const tab = await selected(base)
+  if (secureBrowserOrigin(tab.url) !== expected) throw new Error('El dominio de la pestaña ha cambiado.')
+  if (input.type === 'forget') {
+    await forgetSecureBrowserLogin(expected)
+    return { configured: false, forgotten: true, origin: expected }
+  }
+  if (input.type === 'run') {
+    const credentials = await resolveSecureBrowserLogin(expected)
+    if (!credentials) return { configured: false, requiresUser: true, origin: expected }
+    const result = await browserVaultLogin(tab, expected, credentials.account, credentials.secret)
+    return { origin: expected, configured: true, ...result }
+  }
+  if (typeof input.account !== 'string' || typeof input.secret !== 'string'
+      || input.account.length > 4096 || input.secret.length > 16384 || !input.account.trim() || !input.secret) {
+    throw new Error('Completa las credenciales en el formulario privado.')
+  }
+  const result = await browserVaultLogin(tab, expected, input.account, input.secret)
+  if (result.phase === 'fields-not-found') return { origin: expected, configured: false, ...result }
+  if (input.remember === true) await saveSecureBrowserLogin(expected, input.account, input.secret)
+  return { origin: expected, configured: input.remember === true, ...result }
+}
+async function browserVaultStatus(): Promise<Record<string, unknown>> {
+  if (!browserVaultSupported()) return { supported: false, configured: false }
+  const base = await endpoint(false)
+  if (!base) return { supported: true, configured: false }
+  const tab = await selected(base)
+  try {
+    const origin = secureBrowserOrigin(tab.url)
+    return { supported: true, origin, configured: hasSecureBrowserLogin(origin) }
+  } catch { return { supported: true, configured: false } }
+}
+
 /** Reject DNS rebinding and cross-origin browser requests, even on localhost. */
 export function miniBrowserRequestAllowed(input: {
   remoteAddress?: string | undefined; host?: string | undefined; origin?: string | undefined;
@@ -342,6 +442,26 @@ export function registerMiniBrowserRoutes(ctx: Context): void {
         res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
         res.end(jpeg)
       } catch (error) { reply(res, 503, { error: String(error) }) }
+    } }),
+    ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/vault', handler: async (req, res) => {
+      if (!sharedGuard(req, res)) return
+      if (req.method === 'GET') {
+        try { reply(res, 200, await browserVaultStatus()) }
+        catch { reply(res, 503, { error: 'No se pudo comprobar el vault.' }) }
+        return
+      }
+      if (req.method !== 'POST') { reply(res, 405, { error: 'Método no permitido.' }); return }
+      if (!req.headers['content-type']?.startsWith('application/json')) { reply(res, 415, { error: 'Solo JSON.' }); return }
+      try {
+        const input = await readVaultAction(req)
+        // Only the foreground human-facing MiniBrowser can save/delete logins;
+        // a local MCP process can request an existing approved origin's login.
+        if (input.type !== 'run' && !req.headers.origin) { reply(res, 403, { error: 'Requiere interacción humana.' }); return }
+        reply(res, 200, await browserVaultAction(input))
+      } catch {
+        // Never echo exceptions that might include a credential or CDP source.
+        reply(res, 400, { error: 'No se pudo completar la operación segura del vault.' })
+      }
     } }),
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/action', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return
