@@ -206,7 +206,7 @@ export function SidebarRoot({
           <button type="button" className={css.navLink} onClick={() => { openFeature('connectors', t('nav.connectors')) }}>
             <IconPlugOutline16 size={19} /><span>{t('nav.connectors')}</span>
           </button>
-          <button type="button" className={css.navLink} onClick={() => { openFeature('team', t('nav.team')) }}>
+          <button type="button" className={css.navLink} onClick={() => { window.dispatchEvent(new Event('phoenix:toggle-team-directory')) }}>
             <IconAgentPresetOutline16 size={19} /><span>{t('nav.team')}</span>
           </button>
           <button type="button" className={css.navLink} onClick={openLibrary}>

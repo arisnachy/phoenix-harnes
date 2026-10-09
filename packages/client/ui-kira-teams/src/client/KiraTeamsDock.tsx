@@ -10,6 +10,7 @@ import {
   ModelActivityAvatar, type ModelAvatarKind,
 } from './ModelActivityAvatar.tsx'
 import css from './KiraTeamsDock.module.css'
+import directoryCss from './KiraTeamDirectory.module.css'
 
 /** Sessions face plus business actions supplied by the slot registration. */
 export interface KiraTeamsInjected {
@@ -71,6 +72,30 @@ export const KIRA_ROSTER: readonly KiraRosterEntry[] = [
   { kind: 'senda', name: 'Senda', tagline: 'Navega, busca y encuentra evidencia', specialty: 'skill.browser', skills: ['browser', 'research'] },
   { kind: 'orbita', name: 'Órbita', tagline: 'Mantiene runtime, tareas y operaciones en curso', specialty: 'skill.runtime', skills: ['automation', 'orchestration', 'performance'] },
 ] as const
+
+/** Profiles describe fictional AI specialties, not personal life histories. */
+export const KIRA_TEAM_BIOGRAPHIES: Readonly<Record<string,string>> = {
+  vortice: "Optimiza tiempos de respuesta, memoria y rendimiento.",
+  aurora: "Diseña experiencias cálidas, accesibles y fáciles de comprender.",
+  atlas: "Ingeniero de software: construye arquitectura resistente y corrige errores.",
+  nova: "Investiga fuentes y reúne evidencia antes de concluir.",
+  lumen: "Organiza el conocimiento complejo y lo explica con claridad.",
+  helix: "Integra APIs, MCP, OAuth, webhooks y servicios externos.",
+  prisma: "Analiza datos, detecta patrones y construye métricas útiles.",
+  orion: "Reproduce fallos y verifica que las soluciones funcionen.",
+  vega: "Especialista en diseño de interfaces y experiencia de usuario.",
+  eclipse: "Anticipa riesgos y detecta fallos de seguridad.",
+  argo: "Comprueba entregas y recopila evidencia verificable.",
+  solaria: "Automatiza procesos, tareas repetitivas y despliegues.",
+  nexo: "Coordina agentes y herramientas para ejecutar objetivos.",
+  astra: "Planifica proyectos y transforma metas en pasos realizables.",
+  lyra: "Escribe mensajes, informes y documentos precisos.",
+  zenith: "Revisa calidad con independencia y criterio exigente.",
+  cobalto: "Protege sistemas, identidades y permisos.",
+  quasar: "Investiga problemas complejos mediante análisis profundo.",
+  senda: "Navega páginas y encuentra fuentes y evidencia.",
+  orbita: "Coordina tareas continuas y supervisa recursos del sistema.",
+}
 
 export function activityOf(summary: SessionSummary): SubagentActivityProjection | undefined {
   return summary.projectionValues?.subagentActivity
@@ -381,6 +406,18 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
   const { root, rows } = lineageMembers(state)
   const cards = liveCardsOf(rows, root?.projectionValues?.teamChatParticipants)
   const [selectedId, setSelectedId] = useState<string>()
+  const [teamOpen, setTeamOpen] = useState(false)
+  const [selectedPersona, setSelectedPersona] = useState<ModelAvatarKind>('kira')
+  useEffect(() => {
+    const toggle = () => { setTeamOpen(previous => !previous) }
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setTeamOpen(false) }
+    window.addEventListener('phoenix:toggle-team-directory', toggle)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('phoenix:toggle-team-directory', toggle)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [])
 
   useEffect(() => {
     // KIRA stays in the overlay layer; the rail never consumes chat width.
@@ -388,7 +425,66 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
     return () => { layout.setWorkspaceOccupant('subagent', false) }
   }, [layout])
 
-  if (root === undefined || cards.length === 0) return null
+  const selected = KIRA_ROSTER.find(person => person.kind === selectedPersona)
+  const active = cards.find(card => card.kind === selectedPersona)
+  const actual = active?.summary
+  const directory = (
+    <aside className={directoryCss.directory} aria-label="Directorio del equipo" data-kira-team-directory>
+      <header className={directoryCss.header}>
+        <div><span className={directoryCss.eyebrow}>PHOENIX LIVING TEAM</span>
+          <h2>Equipo de Kira</h2><p>Una líder y 20 especialistas.</p></div>
+        <button type="button" className={directoryCss.close} aria-label="Cerrar equipo"
+          onClick={() => { setTeamOpen(false) }}>×</button>
+      </header>
+      <div className={directoryCss.profile} data-team-profile={selectedPersona}>
+        <ModelActivityAvatar kind={selectedPersona}
+          activity={actual === undefined ? undefined : activityOf(actual)}
+          running={actual?.running ?? false} pending={actual?.pendingInteraction !== undefined}
+          ready={actual === undefined} variant="card" />
+        <div className={directoryCss.profileText}>
+          <strong>{selected?.name ?? 'Kira'}</strong><span>{selected?.tagline ?? 'Liderazgo y coordinación'}</span>
+        </div>
+        <p className={directoryCss.biography}>{selected === undefined
+          ? 'Kira coordina especialistas, asigna trabajos y orienta el equipo hacia resultados verificables.'
+          : KIRA_TEAM_BIOGRAPHIES[selected.kind]}</p>
+        <p className={directoryCss.specialities}><strong>Especialidades: </strong>
+          {selected?.skills.join(' · ') ?? 'Coordinación · calidad · ejecución'}</p>
+        <span className={directoryCss.status}>{selectedPersona === 'kira'
+          ? root?.running ? 'Kira trabajando' : 'Kira disponible'
+          : actual?.running ? 'Trabajando en una sesión real' : 'Sin tarea activa'}</span>
+        {actual !== undefined && active !== undefined && <button type="button" className={directoryCss.jump}
+          onClick={() => { openAgent(active, openChild); setTeamOpen(false) }}>Ver conversación →</button>}
+      </div>
+      <div className={directoryCss.listHead}><span>Especialistas</span><span>21 perfiles</span></div>
+      <div className={directoryCss.list} role="list" aria-label="Especialistas de Phoenix">
+        <button type="button" className={directoryCss.person} data-selected={selectedPersona === 'kira'}
+          onClick={() => { setSelectedPersona('kira') }}>
+          <ModelActivityAvatar kind="kira" activity={undefined} running={root?.running ?? false}
+            pending={false} ready />
+          <span className={directoryCss.personText}><strong>Kira</strong><small>Líder y coordinadora</small></span>
+          <span className={directoryCss.personState}>✦</span>
+        </button>
+        {KIRA_ROSTER.map(person => {
+          const live = cards.find(card => card.kind === person.kind)
+          const summary = live?.summary
+          return (
+            <button key={person.kind} type="button" className={directoryCss.person}
+              data-selected={selectedPersona === person.kind}
+              onClick={() => { setSelectedPersona(person.kind) }} aria-label={person.name + ': ' + person.tagline}>
+              <ModelActivityAvatar kind={person.kind}
+                activity={summary === undefined ? undefined : activityOf(summary)}
+                running={summary?.running ?? false} pending={summary?.pendingInteraction !== undefined}
+                ready={summary === undefined} />
+              <span className={directoryCss.personText}><strong>{person.name}</strong><small>{person.tagline}</small></span>
+              <span className={directoryCss.personState} data-active={summary?.running ?? false}
+                title={summary?.running ? 'Trabajando' : 'Sin tarea activa'} />
+            </button>
+          )
+        })}
+      </div>
+    </aside>
+  )
+  if (root === undefined || cards.length === 0) return teamOpen ? directory : null
 
   const selectedCard = cards.find(card => String(card.summary?.id) === selectedId)
     ?? cards.find(card => card.summary?.id === state.current)
@@ -396,6 +492,8 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
   const selectedSummaryId = selectedCard?.summary?.id
 
   return (
+    <>
+      {teamOpen && directory}
     <div
       className={css.root}
       data-kira-teams
@@ -439,6 +537,7 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
         </span>
       </aside>
     </div>
+    </>
   )
 }
 
