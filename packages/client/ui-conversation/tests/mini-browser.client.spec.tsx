@@ -46,6 +46,18 @@ function installBrowserMock(current: typeof state = state) {
 }
 
 describe('MiniBrowser in Phoenix conversation', () => {
+  it('shows a browser card for a browsing request even when the host screenshot service is unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: 'El host todavía no pudo conectar con Chromium.',
+    }), { status: 503, headers: { 'content-type': 'application/json' } })))
+    render(<MiniBrowser requested />)
+    expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
+    await waitFor(() => {
+      expect(screen.getByRole('status').textContent).toContain('Conexión del navegador')
+    })
+    expect(screen.getByRole('button', { name: 'Iniciar navegador' })).toBeTruthy()
+  })
+
   it('shows the actual CDP tab and expands without reopening the browser', async () => {
     const calls = installBrowserMock()
     render(<MiniBrowser />)
