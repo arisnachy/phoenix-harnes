@@ -52,8 +52,12 @@ export function hydrateFetchMcpNodeEnvironment(
     || config.args[0] !== 'mcp-server-fetch') return result
 
   const exists = options.fileExists ?? existsSync
-  const key = Object.keys(result).find(item => item.toUpperCase() === 'PATH') ?? 'Path'
+  // A Windows stdio child must not receive both Path and PATH. The last
+  // spelling is the explicit config override after the scrubbed parent merge.
+  const pathKeys = Object.keys(result).filter(item => item.toUpperCase() === 'PATH')
+  const key = pathKeys.at(-1) ?? 'Path'
   const current = result[key] ?? ''
+  for (const alias of pathKeys) if (alias !== key) delete result[alias]
   const validDirectory = (directory: string): boolean => {
     if (!win32.isAbsolute(directory) || !exists(win32.join(directory, 'node.exe'))) return false
     return exists(win32.join(directory, 'npm.cmd')) || exists(win32.join(directory, 'npm.exe'))
