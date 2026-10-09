@@ -1,5 +1,7 @@
 # Jungle Echo — PHOENIX Game Studio vertical slice
 
+English | [中文](README.zh.md)
+
 An **original, offline** 2D run-and-gun technical starter. It is **not** Contra artwork, and it is **not** evidence of production-grade character art.
 
 ## Run
