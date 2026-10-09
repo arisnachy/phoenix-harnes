@@ -3,7 +3,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MiniBrowser } from '../src/client/chat/MiniBrowser.tsx'
 
-afterEach(() => { cleanup(); vi.unstubAllGlobals() })
+const originalCreateObjectUrl = Object.getOwnPropertyDescriptor(URL, 'createObjectURL')
+const originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+  if (originalCreateObjectUrl) Object.defineProperty(URL, 'createObjectURL', originalCreateObjectUrl)
+  else Reflect.deleteProperty(URL, 'createObjectURL')
+  if (originalRevokeObjectUrl) Object.defineProperty(URL, 'revokeObjectURL', originalRevokeObjectUrl)
+  else Reflect.deleteProperty(URL, 'revokeObjectURL')
+})
 
 const state = {
   available: true,
