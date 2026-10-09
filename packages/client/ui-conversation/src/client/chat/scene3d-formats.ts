@@ -266,7 +266,7 @@ function hexColor(v:unknown):string{
   const xs=nums(v);if(xs.length<3)return '#d9c6ac'
   return '#'+xs.slice(0,3).map(n=>Math.max(0,Math.min(255,Math.round(n*255))).toString(16).padStart(2,'0')).join('')
 }
-function parseMaterial(m:unknown):{color:string;material:NonNullable<Node['material']>}{
+function parseMaterial(m:unknown,texture:(index:number)=>string):{color:string;material:NonNullable<Node['material']>}{
   const data=obj(m)?m:{},p=obj(data.pbrMetallicRoughness)?data.pbrMetallicRoughness:{}
   const base=Array.isArray(p.baseColorFactor)?p.baseColorFactor:[.85,.76,.65,1]
   const color=hexColor(base)
@@ -280,6 +280,10 @@ function parseMaterial(m:unknown):{color:string;material:NonNullable<Node['mater
     transmission:typeof trans.transmissionFactor==='number'?trans.transmissionFactor:0,
     clearcoat:typeof coat.clearcoatFactor==='number'?coat.clearcoatFactor:0,
     emissive:Array.isArray(data.emissiveFactor)?hexColor(data.emissiveFactor):'#000000',
+    ...(obj(p.baseColorTexture)?{baseColorTexture:texture(Number(p.baseColorTexture.index))}:{}),
+    ...(obj(p.metallicRoughnessTexture)?{metallicRoughnessTexture:texture(Number(p.metallicRoughnessTexture.index))}:{}),
+    ...(obj(data.normalTexture)?{normalTexture:texture(Number(data.normalTexture.index))}:{}),
+    ...(obj(data.occlusionTexture)?{occlusionTexture:texture(Number(data.occlusionTexture.index))}:{})
   }}
 }
 export function importSceneGLTF(input:string|Uint8Array):Scene3D{
@@ -287,6 +291,27 @@ export function importSceneGLTF(input:string|Uint8Array):Scene3D{
   if(!obj(json.asset)||(json.asset.version!=='2.0'&&json.asset.minVersion!=='2.0'))throw Error('Solo se admite glTF 2.0.')
   const nodes=Array.isArray(json.nodes)?json.nodes:[],meshes=Array.isArray(json.meshes)?json.meshes:[]
   const materials=Array.isArray(json.materials)?json.materials:[]
+  const textureSlots=Array.isArray(json.textures)?json.textures:[]
+  const imageSlots=Array.isArray(json.images)?json.images:[]
+  const views=Array.isArray(json.bufferViews)?json.bufferViews:[]
+  const texture=(index:number):string=>{
+    const slot=textureSlots[index]
+    if(!obj(slot))throw Error('Índice de textura glTF inválido.')
+    const image=imageSlots[Number(slot.source)]
+    if(!obj(image))throw Error('Imagen glTF inválida.')
+    if(typeof image.uri==='string'){
+      if(!/^data:image\/(?:png|jpeg);base64,[a-z0-9+/]+={0,2}$/iu.test(image.uri)
+        ||image.uri.length>1_500_000)throw Error('Las imágenes externas no están admitidas en glTF.')
+      return image.uri
+    }
+    const view=views[Number(image.bufferView)]
+    if(!obj(view)||view.buffer!==0||!['image/png','image/jpeg'].includes(String(image.mimeType)))
+      throw Error('Textura GLB incompatible.')
+    const start=Number(view.byteOffset??0),length=Number(view.byteLength)
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(length)||length<=0||length>1_100_000
+      ||start<0||start+length>binary.length)throw Error('Buffer de imagen GLB fuera de límites.')
+    return 'data:'+image.mimeType+';base64,'+bytesBase64(binary.subarray(start,start+length))
+  }
   const sceneList=Array.isArray(json.scenes)?json.scenes:[]
   const root:R=obj(sceneList[Number(json.scene??0)])?sceneList[Number(json.scene??0)] as R:{}
   const roots=Array.isArray(root.nodes)?root.nodes.map(Number):nodes.map((_,i)=>i)
@@ -315,7 +340,7 @@ export function importSceneGLTF(input:string|Uint8Array):Scene3D{
         }
         total+=vertices.length/9
         if(total>MAX_TRIANGLES||output.length>=150)throw Error('Escena demasiado compleja; límite de 60 000 triángulos y 150 piezas.')
-        const props=parseMaterial(materials[Number(prim.material??-1)])
+        const props=parseMaterial(materials[Number(prim.material??-1)],texture)
         output.push({type:'mesh',name:typeof raw.name==='string'?raw.name:'Malla glTF',
           position:[0,0,0],size:[1,1,1],color:props.color,vertices,material:props.material})
       }
