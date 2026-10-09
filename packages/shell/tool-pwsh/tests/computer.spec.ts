@@ -93,6 +93,8 @@ describe('Computer Use argument contract', () => {
     expect(() =>{  validateComputerArgs({ action: 'browser_fill_form', origin: 'https://example.com' }) }).toThrow(/field/i)
     expect(() =>{  validateComputerArgs({ action: 'browser_click_text', origin: 'https://example.com', text: 'Continue' }) }).not.toThrow()
     expect(() =>{  validateComputerArgs({ action: 'browser_login', origin: 'https://example.com/login' }) }).not.toThrow()
+    expect(() =>{ validateComputerArgs({ action: 'browser_forget_login', origin: 'https://example.com' }) }).not.toThrow()
+    expect(() =>{ validateComputerArgs({ action: 'browser_forget_login', origin: 'http://bad.example' }) }).toThrow(/HTTPS/i)
     expect(() =>{  validateComputerArgs({ action: 'browser_login', origin: 'http://example.com/login' }) }).toThrow(/HTTPS/i)
   })
 
@@ -176,6 +178,9 @@ describe('Computer Use argument contract', () => {
       origin: 'https://example.com',
       text: 'Continue',
     })
+    expect(browserCommandForAction({
+      action: 'browser_forget_login', origin: 'https://example.com/restore',
+    })).toEqual({ type: 'phoenix.browser.forget-login', origin: 'https://example.com' })
     expect(browserCommandForAction({
       action: 'browser_login',
       origin: 'https://example.com/sign-in',
