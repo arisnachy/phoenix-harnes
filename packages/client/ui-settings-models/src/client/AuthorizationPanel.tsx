@@ -630,6 +630,19 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {definition.id === 'figma' && managed?.url === 'http://127.0.0.1:3845/mcp'
+        && mcpRuntime?.status !== 'ready' ? (
+          <p className={styles['advancedHint']}>
+            Figma Desktop no abre OAuth: inicia Figma, abre un diseño en Dev Mode y habilita el servidor MCP local.
+            Para OAuth utiliza el MCP remoto oficial de Figma.
+          </p>
+        ) : null}
+      {definition.id === 'memory' && mcpRuntime?.status === 'failed' ? (
+        <p className={styles['advancedHint']}>
+          Memory MCP es local (stdio), no requiere OAuth. Pulsa Reparar y comprueba que Node.js y npx están disponibles
+          para el proceso de PHOENIX; si continúa roto, revisa el error de arranque del Host.
+        </p>
+      ) : null}
       {missingOAuthFlow ? (
         <p role="alert" className={styles['advancedHint']}>
           El Host solicita autorización, pero el plugin MCP no registró su método OAuth.
@@ -706,7 +719,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               </button>
             ) : null}
           {managed === undefined && (authorizationAccount === undefined || openClawRuntimeMissing)
-            && openClaw?.connected !== true && definition.registryName !== undefined && onFindOfficial !== undefined ? (
+            && openClaw?.connected !== true && onFindOfficial !== undefined ? (
               <button className={hubStyles['compactButton']} type="button" disabled={pending} onClick={onFindOfficial}>
                 {t('findOfficialConnector')}
               </button>
@@ -1292,16 +1305,21 @@ export function ConnectorsSettingsSection({ api,
 
   const findOfficialConnector = (definition: ConnectorDefinition): void => {
     const registryName = definition.registryName
-    if (mcpRegistry === undefined || registryName === undefined || registryBusy) return
+    if (mcpRegistry === undefined || registryBusy || (registryName === undefined && definition.mode !== 'mcp')) return
     setRegistryBusy(true)
     setRegistryFailure(false)
     setCatalogFailure(undefined)
-    void mcpRegistry.search({ query: registryName, limit: 12 }).then(
+    // For providers without a pinned registry ID, allow discovery by product
+    // name. Installation is still limited to Host-verified registry entries.
+    const lookup = registryName ?? definition.name
+    setQuery(definition.name)
+    void mcpRegistry.search({ query: lookup, limit: 12 }).then(
       (snapshot) => {
-        const exact = snapshot.candidates.filter(candidate =>
-          candidate.name === registryName && !isRetiredJevCandidate(candidate))
-        setRegistrySnapshot({ ...snapshot, candidates: exact })
-        if (exact.length === 0) setCatalogFailure(connectorT('officialConnectorMissing'))
+        const matches = snapshot.candidates.filter(candidate =>
+          !isRetiredJevCandidate(candidate)
+          && (registryName === undefined || candidate.name === registryName))
+        setRegistrySnapshot({ ...snapshot, candidates: matches })
+        if (matches.length === 0) setCatalogFailure(connectorT('officialConnectorMissing'))
       },
       () => {
         setRegistrySnapshot(undefined)
@@ -1794,8 +1812,9 @@ export function ConnectorsSettingsSection({ api,
                   onInstallCurated={mcpRegistry?.installCurated === undefined || row.definition.curatedMcp !== true
                     ? undefined
                     : () => { installCuratedConnector(row.definition) }}
-                  onFindOfficial={mcpRegistry === undefined || row.definition.registryName === undefined
-                  || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
+                  onFindOfficial={mcpRegistry?.search === undefined
+                    || (row.definition.registryName === undefined && row.definition.mode !== 'mcp')
+                    || (row.definition.curatedMcp === true && mcpRegistry.installCurated !== undefined)
                     ? undefined
                     : () => { findOfficialConnector(row.definition) }}
                   onFindRegistry={mcpRegistry === undefined || row.definition.provenance !== 'registry-listed'
