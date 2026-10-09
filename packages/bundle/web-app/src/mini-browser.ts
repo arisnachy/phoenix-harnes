@@ -28,7 +28,6 @@ let ownedProfile: string | undefined
 let ownedEndpoint: string | undefined
 let launching: Promise<string> | undefined
 let activeTabId: string | undefined
-const sizedTabs = new Set<string>()
 
 function isLoopback(value: string | undefined): boolean {
   return value === '127.0.0.1' || value === '::1' || value === '::ffff:127.0.0.1' || value === 'localhost'
@@ -213,11 +212,13 @@ async function frame(): Promise<Buffer> {
   const base = await endpoint(false)
   if (!base) throw new Error('El navegador no está iniciado.')
   const tab = await selected(base)
-  if (!sizedTabs.has(tab.id)) {
-    await cdp(tab, 'Emulation.setDeviceMetricsOverride', { ...VIEWPORT, deviceScaleFactor: 1, mobile: false })
-    sizedTabs.add(tab.id)
-  }
-  const response = await cdp<{ data: string }>(tab, 'Page.captureScreenshot', { format: 'jpeg', quality: 63, captureBeyondViewport: false, fromSurface: true })
+  // An explicit 16:9 clip keeps the displayed image and CDP input coordinates
+  // in sync. Emulation overrides are session-scoped; separate short-lived CDP
+  // sockets must not rely on an override surviving socket closure.
+  const response = await cdp<{ data: string }>(tab, 'Page.captureScreenshot', {
+    format: 'jpeg', quality: 63, captureBeyondViewport: true, fromSurface: true,
+    clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height, scale: 1 },
+  })
   if (typeof response.data !== 'string' || response.data.length > 6_000_000) throw new Error('Fotograma inválido.')
   return Buffer.from(response.data, 'base64')
 }
@@ -241,7 +242,6 @@ async function action(input: Action): Promise<Record<string, unknown>> {
     if ((await listTabs(base)).length < 2) throw new Error('Debes conservar una pestaña abierta.')
     const res = await fetch(base + '/json/close/' + encodeURIComponent(tab.id), { signal: AbortSignal.timeout(2500) })
     if (!res.ok) throw new Error('No se pudo cerrar la pestaña.')
-    sizedTabs.delete(tab.id)
     activeTabId = undefined
   } else if (type === 'open' || type === 'navigate') {
     const url = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
