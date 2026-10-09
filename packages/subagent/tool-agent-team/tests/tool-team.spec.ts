@@ -10,6 +10,7 @@ import {
   CallId,
   ReasoningEffortId,
   createToolResultMessage,
+  createUserMessage,
   type LlmModelReasoningInfo,
 } from '@phoenix-ai/dsh-llm'
 import { scopeOf } from '@phoenix-ai/dsh-scope'
@@ -207,6 +208,45 @@ describe('dsh-tool-team', () => {
     expect(text(denied)).toContain('only the Team Lead')
     await execute(ctx, lead, 'interrupt_agent', { target: 'tool-worker' })
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
+  })
+
+  it('keeps every live Team actor in the real user language and updates on language change', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    lead.session.append('user/message', createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'Kira, revisa los conectores y responde en español. Quiero el diagnóstico aquí.' }],
+    }), { surfaceOp: 'append' })
+    expect(renderPrompt(await assembly(ctx, lead))).toContain('Team conversational language: Spanish (es)')
+    const created = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'nexo', description: 'Diagnosticar un fallo de OAuth',
+      prompt: 'Inspect OAuth errors and report the evidence to Kira.',
+    })
+    expect(created.isError).toBe(false)
+    const child = await waitRunning(ctx, spawnedChildId(created))
+    expect(renderPrompt(await assembly(ctx, child))).toContain('Team conversational language: Spanish (es)')
+    const firstUserInstruction = child.session.events
+      .filter(event => event.type === 'user/message')
+      .flatMap(event => event.data.content)
+      .filter(block => block.type === 'text')
+      .map(block => block.text).join('\n')
+    expect(firstUserInstruction).toContain('Team conversational language: Spanish (es)')
+    expect(firstUserInstruction).toContain('peer send_message/followup_task handoffs')
+
+    // English connector output must not become the user language. Only a new
+    // genuine user request may switch all actors together.
+    lead.session.append('user/message', createUserMessage({
+      source: { kind: 'plugin', plugin: 'tool-agent-team', form: 'notice', summary: 'connector output' },
+      content: [{ type: 'text', text: 'The runtime inventory is explicitly secret-free and exposes transport.' }],
+    }), { surfaceOp: 'append' })
+    expect(renderPrompt(await assembly(ctx, child))).toContain('Spanish (es)')
+    lead.session.append('user/message', createUserMessage({
+      source: { kind: 'user' },
+      content: [{ type: 'text', text: 'Please review the connector and explain the outcome in English.' }],
+    }), { surfaceOp: 'append' })
+    expect(renderPrompt(await assembly(ctx, lead))).toContain('Team conversational language: English (en)')
+    expect(renderPrompt(await assembly(ctx, child))).toContain('Team conversational language: English (en)')
+    await execute(ctx, lead, 'interrupt_agent', { target: 'nexo' })
+    await waitNoAgent(ctx, child.id)
   })
 
   it('injects only the active named KIRA persona instead of all twenty voices', async () => {
