@@ -50,6 +50,15 @@ describe('automatic Windows capability context', () => {
     expect(changed).toHaveBeenCalledOnce()
   })
 
+  it('does not interrupt Phoenix boot when process creation throws synchronously', () => {
+    const changed = vi.fn()
+    const read = startWindowsCapabilityDiscovery(changed, {
+      platform: 'win32', supervised: true, exists: () => true,
+      execute: () => { throw new Error('cannot create process') },
+    })
+    expect(read()).toBe('')
+    expect(changed).not.toHaveBeenCalled()
+  })
   it('keeps errors and invalid JSON invisible to the model', () => {
     for (const [error, stdout] of [[new Error('machine secret'), '{}'], [null, 'not-json'], [null, '{}']] as const) {
       const changed = vi.fn()
