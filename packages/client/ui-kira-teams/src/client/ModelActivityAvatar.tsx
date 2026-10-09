@@ -1,6 +1,7 @@
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
 import { KIRA_AGENT_PORTRAITS, type KiraPortraitKey } from './KiraAgentPortraits.ts'
 import css from './ModelActivityAvatar.module.css'
+import { LivingAvatarFace, avatarExpressionOf, type AvatarExpression, type AvatarMotion } from './LivingAvatarFace.tsx'
 
 /** Exact visible identities from the user-approved 20-avatar KIRA reference. */
 export type ModelAvatarKind =
@@ -86,6 +87,11 @@ export interface ModelActivityAvatarProps {
   ready?: boolean
   /** Compact is backward-compatible; card matches the approved board portrait scale. */
   variant?: 'compact' | 'card'
+  /** Override for authored team events, never inferred from model names. */
+  emotion?: AvatarExpression
+  speaking?: boolean
+  listening?: boolean
+  motion?: AvatarMotion
 }
 
 /** Render one exact KIRA portrait with restrained state-reactive motion. */
@@ -97,6 +103,10 @@ export function ModelActivityAvatar({
   kind,
   ready = false,
   variant = 'compact',
+  emotion,
+  speaking = false,
+  listening = false,
+  motion = 'auto',
 }: ModelActivityAvatarProps) {
   const resolvedKind = kind
     ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
@@ -113,6 +123,8 @@ export function ModelActivityAvatar({
       data-avatar={resolvedKind}
       data-phase={phase}
       data-state={state}
+      data-expression={avatarExpressionOf(running, pending, phase, emotion)}
+      data-avatar-motion={motion}
       aria-hidden="true"
     >
       <span className={css.aura} />
@@ -125,6 +137,8 @@ export function ModelActivityAvatar({
         draggable={false}
         data-agent-portrait-image={true}
       />
+      <LivingAvatarFace kind={resolvedKind} expression={avatarExpressionOf(running, pending, phase, emotion)}
+        speaking={speaking} listening={listening} motion={motion} />
       <span className={css.lifeGlint} />
       <span className={css.scanLine} />
       <span className={css.energyRibbon} />

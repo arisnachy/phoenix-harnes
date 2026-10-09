@@ -169,6 +169,9 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
           running={data.senderKind === 'agent' && runningStatus(senderStatus)}
           pending={data.senderKind === 'agent' && senderStatus === 'provisioning'}
           ready={senderStatus !== 'provisioning'}
+          emotion={data.purpose === 'blocker' ? 'concerned'
+            : data.purpose === 'result' ? 'happy'
+              : data.purpose === 'review' ? 'focused' : undefined}
           variant="card"
         />}
       </div>
