@@ -58,8 +58,9 @@ function publish(endpoint: string, tabId?: string): void {
 function cleanup(): void {
   const previous = owned?.pid
   if (previous !== undefined) {
+    const ownsDescriptor = readDescriptor()?.pid === previous
     try { owned?.kill() } catch { /* detached browser */ }
-    if (readDescriptor()?.pid === previous) {
+    if (ownsDescriptor) {
       try { rmSync(SHARED, { force: true }) } catch { /* best effort */ }
     }
   }
