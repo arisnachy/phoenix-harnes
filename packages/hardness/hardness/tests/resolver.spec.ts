@@ -69,6 +69,94 @@ describe('HARDNESS capability resolver', () => {
     await ctx.fiber.dispose()
   })
 
+
+  it('prefers verified adapters with stronger distinct-case success evidence', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const service = ctx.get('hardness') as HardnessService
+    const unreliable = { ...descriptor, id: 'a-unreliable' as CapabilityId }
+    const reliable = { ...descriptor, id: 'z-reliable' as CapabilityId }
+    service.register(unreliable)
+    service.register(reliable)
+    for (let i = 0; i < 3; i += 1) {
+      for (const capability of [unreliable, reliable]) {
+        service.recordEvidence({
+          id: `${capability.id}-evidence-${i}`,
+          capabilityId: capability.id,
+          descriptorVersion: capability.version,
+          caseId: `independent-case-${i}`,
+          inputSummary: 'Actual verification input, not a model claim',
+          outcome: capability === reliable ? 'passed' : i === 0 ? 'passed' : 'failed',
+          durationMs: 100,
+          artifactRefs: [],
+        })
+      }
+    }
+    expect(service.resolveNeed({ kind: 'tool' }).capability?.id).toBe(reliable.id)
+    await ctx.fiber.dispose()
+  })
+
+  it('uses median successful duration only when both verified adapters have enough quality evidence', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const service = ctx.get('hardness') as HardnessService
+    const slower = { ...descriptor, id: 'a-slower' as CapabilityId }
+    const faster = { ...descriptor, id: 'z-faster' as CapabilityId }
+    service.register(slower)
+    service.register(faster)
+    for (let i = 0; i < 3; i += 1) {
+      for (const capability of [slower, faster]) {
+        service.recordEvidence({
+          id: `${capability.id}-case-${i}`,
+          capabilityId: capability.id,
+          descriptorVersion: capability.version,
+          caseId: `verification-${i}`,
+          inputSummary: 'Verified comparable tool operation',
+          outcome: 'passed',
+          durationMs: capability === faster ? 40 + i : 500 + i,
+          artifactRefs: [],
+        })
+      }
+    }
+    expect(service.resolveNeed({ kind: 'tool' }).capability?.id).toBe(faster.id)
+    await ctx.fiber.dispose()
+  })
+
+  it('ignores stale-version and sparse evidence; verified status outranks testing', async () => {
+    const ctx = new Context()
+    await ctx.plugin(HardnessRegistry)
+    const service = ctx.get('hardness') as HardnessService
+    const baseline = { ...descriptor, id: 'a-baseline' as CapabilityId }
+    const unproven = { ...descriptor, id: 'z-unproven' as CapabilityId }
+    service.register(baseline)
+    service.register(unproven)
+    service.register({ ...descriptor, id: 'testing-fast' as CapabilityId, status: 'testing' })
+    for (let i = 0; i < 4; i += 1) {
+      service.recordEvidence({
+        id: `stale-${i}`,
+        capabilityId: unproven.id,
+        descriptorVersion: '0.9.0',
+        caseId: `old-${i}`,
+        inputSummary: 'Stale previous revision',
+        outcome: 'passed',
+        durationMs: 1,
+        artifactRefs: [],
+      })
+    }
+    service.recordEvidence({
+      id: 'sparse-current',
+      capabilityId: unproven.id,
+      descriptorVersion: unproven.version,
+      caseId: 'only-one-case',
+      inputSummary: 'Insufficient distinct case coverage',
+      outcome: 'passed',
+      durationMs: 1,
+      artifactRefs: [],
+    })
+    expect(service.resolveNeed({ kind: 'tool' }).capability?.id).toBe(baseline.id)
+    await ctx.fiber.dispose()
+  })
+
   it('routes an exact tool name as a semantic capability kind without treating descriptive need text as atlas tags', async () => {
     const ctx = new Context()
     await ctx.plugin(HardnessRegistry)
