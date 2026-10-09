@@ -129,10 +129,15 @@ export class TelegramInbox {
     this.controller = controller
     const work = this.loop(controller.signal)
     this.worker = work
-    void work.finally(() => {
+    void work.catch((error: unknown) => {
+      // Credential storage and Agent services may be temporarily unavailable;
+      // never let a background poller rejection crash the Phoenix Host.
+      this.failure = error instanceof Error ? error.message.replace(/\\d{6,}:[A-Za-z0-9_-]+/g, '[redacted]') : 'telegram-runtime-error'
+      this.phase = 'failed'
+    }).finally(() => {
       if (this.worker === work) this.worker = undefined
       if (this.controller === controller) this.controller = undefined
-      this.phase = 'idle'
+      if (controller.signal.aborted) this.phase = 'idle'
     })
   }
   stop(): void {
