@@ -2,7 +2,6 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import type { CognitiveMemoryHit, CognitiveMemoryRecord } from '@phoenix-ai/dsh-session-learning'
-import { learningOwnerSessionId } from './team-learning-context.ts'
 import {
   decodeTaskFingerprint,
   fingerprintTask,
@@ -444,43 +443,6 @@ export function filterProceduralSearchHits(hits: readonly CognitiveMemoryHit[]):
   })
 }
 
-/**
- * Project only nonsecret browser intent into a reusable workflow step.
- * Values supplied to forms, site cookies, credentials and transient indexes
- * are deliberately omitted: recall must inspect the new live DOM again.
- * @param toolName - Actual executed model-facing tool.
- * @param raw - Untrusted serialized or object-form tool arguments.
- * @returns Safe action and canonical origin, or undefined for unrelated work.
- */
-export function reusableBrowserWorkStep(toolName: string, raw: unknown): string | undefined {
-  if (toolName !== 'computer') return undefined
-  let args: unknown = raw
-  if (typeof raw === 'string') {
-    try { args = JSON.parse(raw) } catch { return undefined }
-  }
-  if (!isRecord(args) || typeof args.action !== 'string') return undefined
-  const actions: Record<string, string> = {
-    browser_open: 'Open target website',
-    browser_inspect: 'Inspect live navigation and form fields',
-    browser_login: 'Authenticate through origin-bound protected vault',
-    browser_click_text: 'Navigate using current visible page controls',
-    browser_fill_form: 'Re-inspect and fill nonsecret form fields',
-  }
-  const step = actions[args.action]
-  if (step === undefined) return undefined
-  const rawOrigin = typeof args.origin === 'string' ? args.origin
-    : typeof args.url === 'string' ? args.url : undefined
-  if (rawOrigin === undefined) return step
-  try {
-    const url = new URL(rawOrigin)
-    const loopback = url.protocol === 'http:' &&
-      (url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]')
-    if (url.protocol !== 'https:' && !loopback) return step
-    // Keep only the origin; a path or query can carry private account tokens.
-    return `${step} on ${url.origin}`
-  } catch { return step }
-}
-
 /** Bounded, argument-free trace of observable work used during one session. */
 export class ProceduralExperienceTrace {
   private readonly traces = new Map<string, string[]>()
@@ -492,17 +454,6 @@ export class ProceduralExperienceTrace {
    */
   toolCall(sessionId: string, toolName: string): void {
     this.push(sessionId, `Use tool ${boundedText(toolName, 'tool name').slice(0, 160)}`)
-  }
-
-  /**
-   * Append one vetted reusable browser action without any form values or secrets.
-   * @param sessionId - Owning root mission session.
-   * @param step - Nonsecret browser workflow step.
-   */
-  browserStep(sessionId: string, step: string): void {
-    const safe = boundedText(step, 'browser workflow step')
-    rejectSecrets(safe)
-    this.push(sessionId, safe)
   }
 
   /**
@@ -579,7 +530,6 @@ export function installProceduralLearning(
 
   ctx.on('session/event', (session, event) => {
     const sessionId = String(session.id)
-    const learningOwnerId = learningOwnerSessionId(session)
     const eventType = String(event.type)
     const data = event.data as unknown
     const eventSeq = typeof event.seq === 'number' ? event.seq : 0
@@ -589,49 +539,22 @@ export function installProceduralLearning(
     const run = async (): Promise<void> => {
       if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
         if (data.name === 'living_act' && isRecord(data.arguments) && typeof data.arguments.action === 'string') {
-          trace.livingAction(learningOwnerId, data.arguments.action)
-        } else if (data.name !== 'computer') {
-          trace.toolCall(learningOwnerId, data.name)
+          trace.livingAction(sessionId, data.arguments.action)
+        } else {
+          trace.toolCall(sessionId, data.name)
         }
-        // Browser actions enter procedural memory only after a successful
-        // corresponding tool/result, never merely when they are attempted.
-        return
-      }
-      if (eventType === 'tool/result' && isRecord(data)) {
-        if (data.error !== undefined || !isRecord(data.message)) return
-        const message = data.message
-        if (!isRecord(message.source) || message.source.callId === undefined) return
-        const failed = Array.isArray(message.content) && message.content.some(
-          (part: unknown) => isRecord(part) && part.isError === true,
-        )
-        if (failed) return
-        const callId = String(message.source.callId)
-        const call = session.events.findLast(row => row.type === 'tool/call'
-          && String(row.data.callId) === callId)
-        if (call?.type !== 'tool/call') return
-        const browserStep = reusableBrowserWorkStep(call.data.name, call.data.arguments)
-        if (browserStep === undefined) return
-        // Native WebView may accept a request but report that no login form
-        // exists. Never learn that as a successful login procedure.
-        const output = Array.isArray(message.content)
-          ? message.content.flatMap((part: unknown) =>
-            isRecord(part) && typeof part.text === 'string' ? [part.text] : []).join(' ')
-          : ''
-        if (output.includes('fields-not-found')) return
-        trace.browserStep(learningOwnerId, browserStep)
         return
       }
       if (eventType === 'hardness/kernel' && isRecord(data)) {
         if (data.kind === 'learning-recorded' && isRecord(data.learning) && typeof data.learning.solution === 'string') {
-          trace.recovery(learningOwnerId, data.learning.solution)
+          trace.recovery(sessionId, data.learning.solution)
           return
         }
         if (data.kind === 'route-selected' && typeof data.strategy === 'string') {
-          trace.decision(learningOwnerId, data.strategy)
+          trace.decision(sessionId, data.strategy)
           return
         }
       }
-      if (eventType === 'goal/change' && session.header.origin === 'subagent') return
       if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
         trace.clear(sessionId)
         return

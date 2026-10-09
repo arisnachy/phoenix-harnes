@@ -7,7 +7,7 @@
  * Mutating actions are controlled by Phoenix's permission-derived PHOENIX_BROWSER_ALLOW_ACTIONS policy.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -15,6 +15,30 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 const DEFAULT_PORTS = [9222, 9223, 9224]
+/** User-temp discovery lets the in-chat view reuse this exact Chromium tab. */
+const SHARED_BROWSER = join(tmpdir(), 'phoenix-browser-cdp.json')
+type SharedSession = { pid: number; endpoint: string; selectedTabId?: string }
+function sharedSession(): SharedSession | undefined {
+  try {
+    const value = JSON.parse(readFileSync(SHARED_BROWSER, 'utf8')) as SharedSession
+    const url = new URL(value.endpoint)
+    if (!Number.isInteger(value.pid) || value.pid < 1 || url.protocol !== 'http:'
+      || !isLoopback(url.hostname) || url.username || url.password || url.pathname !== '/'
+      || url.search || url.hash) return
+    process.kill(value.pid, 0)
+    return value
+  } catch { return undefined }
+}
+function announceSession(base: string, tabId?: string): void {
+  const pid = managedBrowser?.pid ?? sharedSession()?.pid
+  if (!pid) return
+  try {
+    writeFileSync(SHARED_BROWSER, JSON.stringify({
+      pid, endpoint: base.replace(/\/$/, '') + '/',
+      ...(tabId === undefined ? {} : { selectedTabId: tabId }),
+    }), { mode: 0o600 })
+  } catch { /* An inaccessible descriptor must never block browser tools. */ }
+}
 const CDP_READY_TIMEOUT_MS = 6_000
 let managedBrowser: ChildProcess | undefined
 let managedProfileDir: string | undefined
@@ -117,7 +141,12 @@ async function json<T>(url: string): Promise<T> {
 }
 
 function cleanupManagedBrowser(): void {
+  const oldPid = managedBrowser?.pid
+  const ownsDescriptor = oldPid !== undefined && sharedSession()?.pid === oldPid
   try { managedBrowser?.kill() } catch { /* best effort */ }
+  if (ownsDescriptor) {
+    try { rmSync(SHARED_BROWSER, { force: true }) } catch { /* best effort */ }
+  }
   managedBrowser = undefined
   managedEndpoint = undefined
   const profileDir = managedProfileDir
@@ -152,8 +181,9 @@ async function launchDedicatedBrowser(): Promise<string> {
   managedLaunch = (async () => {
     const executable = browserExecutable()
     const profileDir = mkdtempSync(join(tmpdir(), 'phoenix-browser-'))
-    const headless = process.env.PHOENIX_BROWSER_HEADLESS === 'true'
-      || process.env.DSH_CHROME_HEADLESS === 'true'
+    // A requested browser is visible in the conversation by default; avoid a second OS window.
+    const headless = process.env.PHOENIX_BROWSER_HEADLESS !== 'false'
+      && process.env.DSH_CHROME_HEADLESS !== 'false'
     const child = spawn(executable, buildDedicatedBrowserArgs(profileDir, headless), {
       stdio: 'ignore',
       windowsHide: false,
@@ -169,6 +199,7 @@ async function launchDedicatedBrowser(): Promise<string> {
     try {
       const base = await waitForManagedEndpoint(profileDir)
       managedEndpoint = base
+      announceSession(base)
       return base
     } catch (error) {
       const exitDetail = child.exitCode === null ? '' : `; proceso terminó con código ${child.exitCode}`
@@ -185,6 +216,11 @@ async function endpoint(): Promise<string> {
   if (configured) {
     await json(`${configured}/json/version`)
     return configured
+  }
+  const shared = sharedSession()
+  if (shared !== undefined) {
+    const base = shared.endpoint.replace(/\/$/, '')
+    try { await json(`${base}/json/version`); return base } catch { /* stale peer */ }
   }
   const discovered = await Promise.all(DEFAULT_PORTS.map(async (port) => {
     const candidate = `http://127.0.0.1:${port}`
@@ -212,9 +248,11 @@ async function tabs(): Promise<Tab[]> {
 
 async function selectedTab(id?: string): Promise<Tab> {
   const available = await tabs()
-  const tab = id ? available.find(candidate => candidate.id === id) : available[0]
+  const requestedId = id ?? sharedSession()?.selectedTabId
+  const tab = available.find(candidate => candidate.id === requestedId) ?? available[0]
   if (!tab) throw new Error(id ? `No existe la pestaña ${id}` : 'El navegador no tiene pestañas web disponibles')
   if (!tab.webSocketDebuggerUrl) throw new Error('La pestaña no ofrece una conexión CDP')
+  announceSession(await endpoint(), tab.id)
   return tab
 }
 

@@ -18,6 +18,7 @@ import type { ChatViewSlotProps, RenderMessageImages } from '../contract/slots.t
 import { PendingSteeringBubble } from './MessageItem.tsx'
 import { turnProgress } from './turn-progress.ts'
 import { ToolActivityFlow } from './ToolActivityFlow.tsx'
+import { MiniBrowser } from './MiniBrowser.tsx'
 import css from './ChatView.module.css'
 
 const FOLLOW_THRESHOLD = 24
@@ -558,6 +559,8 @@ export function ChatView({
             renderSlot={renderSlot}
             t={t}
           />
+          {/* Same Chromium tab for Kira and the user: full browser inside the chat flow. */}
+          <MiniBrowser />
           {/* No pending placeholders: questions (ui-user-questions) and approvals
               (ApprovalPanel) both take over the composer, so a flow card would
               double-render the same wait. */}

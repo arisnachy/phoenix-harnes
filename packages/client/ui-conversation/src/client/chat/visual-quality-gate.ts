@@ -74,9 +74,9 @@ function chartType(spec: JsonRecord): string | undefined {
 }
 
 function candlestickRows(spec: JsonRecord): readonly unknown[] {
-  if (Array.isArray(spec.candles)) return spec.candles
-  if (!isRecord(spec.data)) return []
-  return Array.isArray(spec.data.candles) ? spec.data.candles : []
+  const nested = isRecord(spec.data) ? spec.data : undefined
+  return [spec.candles, spec.ohlc, spec.data, spec.rows, nested?.candles, nested?.ohlc, nested?.rows]
+    .find(Array.isArray) ?? []
 }
 
 function chartRows(spec: JsonRecord): readonly unknown[] {
@@ -89,6 +89,10 @@ function validateCandlesticks(spec: JsonRecord, issues: string[]): void {
   const rows = candlestickRows(spec)
   if (rows.length === 0) {
     issues.push('candlestick-no-data')
+    return
+  }
+  if (rows.length > 160) {
+    issues.push('candlestick-too-many-rows')
     return
   }
 
@@ -118,6 +122,18 @@ function validateGenericChart(spec: JsonRecord, issues: string[]): void {
     return
   }
   if (!rows.some(isRecord)) issues.push('chart-data-not-records')
+  if (rows.length > 80) issues.push('chart-too-many-rows')
+
+  const first = rows.find(isRecord)
+  const xKey = text(spec.xKey) ?? text(spec.categoryKey) ?? 'label'
+  const keys = Array.isArray(spec.series) && spec.series.length > 0
+    ? spec.series.filter(isRecord).map(item => text(item.dataKey) ?? text(item.key) ?? text(item.id))
+    : first === undefined ? [] : Object.entries(first)
+      .filter(([key, value]) => key !== xKey && finite(value)).map(([key]) => key)
+  if (keys.length === 0 || !rows.every(row => isRecord(row)
+    && keys.every(key => key !== undefined && finite(row[key])))) {
+    issues.push('chart-invalid-numeric-series')
+  }
 
   if (Array.isArray(spec.series)) {
     const series = spec.series.filter(isRecord)

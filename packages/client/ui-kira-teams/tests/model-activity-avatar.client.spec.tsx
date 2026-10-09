@@ -6,6 +6,7 @@ import {
   modelAvatarKind,
   portraitSrcForKind,
 } from '../src/client/ModelActivityAvatar.tsx'
+import { KIRA_MODERN_STILL_PORTRAITS } from '../src/client/KiraModernStillPortraits.ts'
 
 describe('modelAvatarKind', () => {
   it.each([
@@ -120,7 +121,21 @@ describe('ModelActivityAvatar', () => {
 
 describe('Kira lead identity', () => {
   it('uses Kira\'s exclusive portrait instead of Aurora\'s', () => {
-    expect(portraitSrcForKind('kira')).toBe('/assets/kira-agents/kira-official.webp')
+    expect(portraitSrcForKind('kira')).toBe(KIRA_MODERN_STILL_PORTRAITS.kira)
+    expect(portraitSrcForKind('kira')).toMatch(/^data:image\/webp;base64,/)
     expect(portraitSrcForKind('kira')).not.toBe(portraitSrcForKind('aurora'))
+  })
+})
+
+describe('approved 21 modern static characters', () => {
+  it('bundles one independent high-resolution still portrait per team identity', () => {
+    const portraits = Object.values(KIRA_MODERN_STILL_PORTRAITS)
+    expect(portraits).toHaveLength(21)
+    expect(new Set(portraits).size).toBe(21)
+    expect(portraits.every(portrait => portrait.startsWith('data:image/webp;base64,'))).toBe(true)
+    expect(portraits.every(portrait => portrait.length > 2000)).toBe(true)
+    for (const kind of Object.keys(KIRA_MODERN_STILL_PORTRAITS) as Array<keyof typeof KIRA_MODERN_STILL_PORTRAITS>) {
+      expect(portraitSrcForKind(kind)).toBe(KIRA_MODERN_STILL_PORTRAITS[kind])
+    }
   })
 })

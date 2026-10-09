@@ -1,7 +1,7 @@
 import { defineTool, ToolArgsError, type JsonValue, type ToolDefinition } from '@phoenix-ai/dsh-tools'
 import { admitVisualChart } from './visual-chart-contract.ts'
 
-const VISUAL_TYPES = ['chart', 'table', 'metrics', 'timeline', 'cards', 'progress', 'visual'] as const
+const VISUAL_TYPES = ['chart', 'table', 'metrics', 'timeline', 'cards', 'progress', 'sports', 'scoreboard', 'standings', 'visual'] as const
 
 /** The connector registry owns present-tense MCP state; a model-created card is not a live probe. */
 function requestsCurrentConnectorStatus(title: string): boolean {
@@ -20,12 +20,16 @@ function requestsCurrentConnectorStatus(title: string): boolean {
 export function createPhoenixVisualizerTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_visualize',
-    description: 'Present structured information as a rich inline Phoenix visual. For a simple line chart with explicitly fictional/sample data, use one direct phoenix_visualize call: title="Tendencia de ejemplo", visual={visualType:"chart",chartType:"line",demo:true}. It generates 7 clearly labeled simulated points locally; NO hardness_run, subagents, search, file writes or extra visual review are needed. For real charts, supply xKey, series and populated numeric data: {visualType:"chart",chartType:"line",xKey:"mes",series:[{dataKey:"valor",label:"Valor"}],data:[{mes:"Ene",valor:10},{mes:"Feb",valor:17}]}. Invalid or empty charts are rejected before publishing. Tables accept columns with rows as arrays or keyed objects. Never pass blank placeholder rows or headers without verified data. For current connector/MCP status, use connector_list with target=mcp instead: it emits a truthful live status visual. phoenix_visualize rejects live MCP status summaries even when they contain apparently populated rows; do not construct or duplicate these tables. Prefer this over ASCII charts or dumping visualization JSON into prose. This tool is for data/structure only: never use it to imitate a requested photo, illustration, logo, hero, banner, or generated image with shapes or SVG-like artwork; use image_generation for real raster imagery. The visual is declarative and presentation-only.',
+    description: 'Present structured information as a rich inline Phoenix visual. For a simple line chart with explicitly fictional/sample data, use one direct phoenix_visualize call: title="Tendencia de ejemplo", visual={visualType:"chart",chartType:"line",demo:true}. It generates 7 clearly labeled simulated points locally; NO hardness_run, subagents, search, file writes or extra visual review are needed. For an explicitly fictional candlestick chart use {visualType:"chart",chartType:"candlestick",demo:true}; Phoenix supplies seven valid, labeled OHLC candles. For a real candlestick chart pass {visualType:"chart",chartType:"candlestick",candles:[{time:"2026-10-08",open:100,high:104,low:98,close:102}]} with authentic prices; data/rows and nested data.candles are also normalized. Never pass fabricated prices as real. For real non-OHLC charts, supply xKey, series and populated numeric data: {visualType:"chart",chartType:"line",xKey:"mes",series:[{dataKey:"valor",label:"Valor"}],data:[{mes:"Ene",valor:10},{mes:"Feb",valor:17}]}. Invalid or empty charts are rejected before publishing. Choose the smallest useful renderer for each request: charts (bar/line/area/scatter/pie/donut/candlestick), tables, metrics, timeline, cards, progress, sports/scoreboard, standings or visual. Tables accept columns with rows as arrays or keyed objects. Never pass blank placeholder rows or headers without verified data. For current connector/MCP status, use connector_list with target=mcp instead: it emits a truthful live status visual. phoenix_visualize rejects live MCP status summaries even when they contain apparently populated rows; do not construct or duplicate these tables. Prefer this over ASCII charts or dumping visualization JSON into prose. This tool is for data/structure only: never use it to imitate a requested photo, illustration, logo, hero, banner, or generated image with shapes or SVG-like artwork; use image_generation for real raster imagery. The visual is declarative and presentation-only. Once a self-contained chart is admitted and displayed, end the turn: no Phoenix Auto team admission, no independent reviewer and no repeated verification. Set continueAfterDisplay=true only when the user explicitly requests more work after showing the visual.',
     parameters: {
       title: {
         type: 'string',
         required: true,
         description: 'Short user-facing title for the visual.',
+      },
+      continueAfterDisplay: {
+        type: 'boolean',
+        description: 'Default false: end the turn after the visual is published. True only for expressly requested subsequent work.',
       },
       visual: {
         type: 'object',
@@ -36,10 +40,10 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
             type: 'string',
             required: true,
             enum: VISUAL_TYPES,
-            description: 'Primary renderer: chart, table, metrics, timeline, cards, progress, or visual.',
+            description: 'Primary renderer: chart, table, metrics, timeline, cards, progress, sports, scoreboard, standings, or visual.',
           },
         },
-        description: 'Declarative Phoenix visual specification. For an explicitly fictional chart use chartType:"line" and demo:true to generate labeled synthetic data without another tool. Real charts accept chartType, xKey, series, and numeric data; other kinds accept their matching arrays such as metrics, rows, timeline, cards, or progress.',
+        description: 'Declarative Phoenix visual specification. For explicitly fictional line OR candlestick charts use demo:true to generate labeled synthetic data without another tool. Candlesticks support candles:[{time,open,high,low,close}], data or rows; other charts use xKey/series/data. Real charts accept chartType, xKey, series, and numeric data; other kinds accept their matching arrays such as metrics, rows, timeline, cards, or progress.',
       },
     },
     output: {
@@ -98,6 +102,8 @@ export function createPhoenixVisualizerTool(): ToolDefinition {
           ])
         }
       }
+      // A valid self-contained visual is complete; do not relaunch an agent review.
+      if (args.continueAfterDisplay !== true) exec.concludeTurn()
       return {
         artifactId: `phoenix-visual:${String(exec.callId)}`,
         title,

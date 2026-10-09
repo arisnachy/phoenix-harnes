@@ -596,15 +596,20 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     && openClaw?.connected !== true
     && !openClawRuntimeMissing
     && (authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required')
+  const missingOAuthFlow = managed !== undefined && mcpRuntime?.status === 'auth-required'
+    && authorizationAccount === undefined
+  const canRepair = managed !== undefined && managed.source !== undefined && onRepair !== undefined
+    && (mcpRuntime === undefined || mcpRuntime.status === 'failed'
+      || mcpRuntime.status === 'disconnected'
+      || (mcpRuntime.status === 'ready' && mcpRuntime.toolNames.length === 0)
+      || missingOAuthFlow)
+  // Reconnecting an auth-required MCP with no registered flow cannot produce
+  // consent. Offer the source-aware Repair action instead of looping forever.
   const canReconnect = mcpRuntime !== undefined
     && (mcpRuntime.status === 'failed'
       || mcpRuntime.status === 'disconnected'
-      || (mcpRuntime.status === 'auth-required' && authorizationAccount === undefined))
+      || (missingOAuthFlow && !canRepair))
     && onReconnect !== undefined
-  const brokenManaged = managed !== undefined && (mcpRuntime === undefined
-    || mcpRuntime.status === 'failed' || mcpRuntime.status === 'disconnected'
-    || (mcpRuntime.status === 'ready' && mcpRuntime.toolNames.length === 0))
-  const canRepair = brokenManaged && managed.source !== undefined && onRepair !== undefined
   return (
     <article className={connectorStyles['connectorCard']} data-connector-id={definition.id}>
       <div className={connectorStyles['connectorTop']}>
@@ -625,6 +630,12 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {missingOAuthFlow ? (
+        <p role="alert" className={styles['advancedHint']}>
+          El Host solicita autorización, pero el plugin MCP no registró su método OAuth.
+          Usa Reparar para reconstruir el conector desde su origen oficial, sin eliminar las credenciales existentes.
+        </p>
+      ) : null}
       {openClaw?.connected !== true ? null : (
         <p className={styles['advancedHint']}>
           {openClaw.account === undefined ? openClaw.skillAlias : `${openClaw.skillAlias} · ${openClaw.account}`}
@@ -1180,17 +1191,22 @@ export function ConnectorsSettingsSection({ api,
 
   const catalogRows = useMemo(() => catalogDefinitions.map((definition) => {
     const live = liveConnectors.find(candidate => liveMatchesDefinition(candidate, definition))
-    const mcpRuntime = definition.id === 'binance'
-      ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
-      : definition.id === 'jev'
-        ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
-        : mcpHub.runtime.find(candidate => runtimeMatchesDefinition(candidate, definition))
     const managed = definition.id === 'binance'
       ? mcpHub.managed.find(candidate => candidate.serverName === 'binance-agent-os'
         || candidate.url === 'https://agent.binance.com/mcp/agentic')
       : definition.id === 'jev'
         ? mcpHub.managed.find(candidate => candidate.serverName === 'jev')
         : mcpHub.managed.find(candidate => managedMatchesDefinition(candidate, definition))
+    // Registry MCPs often use generated namespaces (e.g. mcp-<digest>).
+    // The persisted managed source binds them to a catalogue identity; matching
+    // runtime status by the UI's friendly name misses that exact server entirely.
+    const mcpRuntime = managed !== undefined
+      ? mcpHub.runtime.find(candidate => candidate.serverName === managed.serverName)
+      : definition.id === 'binance'
+        ? mcpHub.runtime.find(candidate => candidate.serverName === 'binance-agent-os')
+        : definition.id === 'jev'
+          ? mcpHub.runtime.find(candidate => candidate.serverName === 'jev')
+          : mcpHub.runtime.find(candidate => runtimeMatchesDefinition(candidate, definition))
     // A legacy provider API-key grant can share the same name as a curated
     // OAuth MCP (notably Cloudflare). Never substitute that unrelated flow:
     // it prompts for an API token even though the official MCP offers login.

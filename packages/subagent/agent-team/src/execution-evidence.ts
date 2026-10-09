@@ -212,19 +212,3 @@ export function teamExecutionProof(
     satisfied: tools.length > 0,
   }
 }
-
-/**
- * Require real child-session tool evidence for operational peer result messages.
- * Coordination chatter and questions never substitute for a work receipt.
- * @param events - Durable sender session events, including assignment and tools.
- * @param purpose - Peer message purpose; honest blockers never require a receipt.
- * @returns Whether the sender has sufficient runtime evidence for this message.
- */
-export function teamResultHasExecutionEvidence(
-  events: readonly SessionEvent[],
-  purpose?: string,
-): boolean {
-  if (purpose !== 'result') return true
-  const proof = teamExecutionProof(events)
-  return proof.requirement === 'none' || proof.satisfied
-}

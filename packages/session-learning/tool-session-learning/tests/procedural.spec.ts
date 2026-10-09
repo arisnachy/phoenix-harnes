@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   ProceduralExperienceTrace,
-  reusableBrowserWorkStep,
   ProceduralLearningEngine,
   filterProceduralSearchHits,
   type ProceduralMemoryStore,
@@ -49,32 +48,6 @@ function provenance(now: number) {
     projectId: 'phoenix',
   } as const
 }
-
-describe('browser learn-by-doing without sensitive payloads', () => {
-  it('captures useful workflow order and HTTPS origin without passwords or answers', () => {
-    const trace = new ProceduralExperienceTrace()
-    const actions = [
-      { action: 'browser_open', url: 'https://surveys.example/login?session=private-value' },
-      { action: 'browser_inspect', origin: 'https://surveys.example' },
-      { action: 'browser_login', origin: 'https://surveys.example', secret: 'never-save-me' },
-      { action: 'browser_click_text', origin: 'https://surveys.example', text: 'Available surveys' },
-      { action: 'browser_fill_form', origin: 'https://surveys.example',
-        fields: [{ field: 4, value: 'my private opinion is secret' }] },
-    ]
-    for (const action of actions) {
-      const step = reusableBrowserWorkStep('computer', JSON.stringify(action))
-      expect(step).toBeDefined()
-      trace.browserStep('mission', step!)
-    }
-    const steps = trace.complete('mission')
-    expect(steps).toHaveLength(5)
-    expect(steps[0]).toContain('https://surveys.example')
-    expect(steps.join(' ')).not.toMatch(/never-save-me|private-value|private opinion|session=|Available surveys|field: 4/i)
-    expect(reusableBrowserWorkStep('computer', '{"action":"browser_forget_login"}')).toBeUndefined()
-    expect(reusableBrowserWorkStep('computer', '{bad json')).toBeUndefined()
-    expect(reusableBrowserWorkStep('other-tool', '{"action":"browser_open"}')).toBeUndefined()
-  })
-})
 
 describe('ProceduralLearningEngine', () => {
   it('activates an explicit guided procedure with structured steps', async () => {

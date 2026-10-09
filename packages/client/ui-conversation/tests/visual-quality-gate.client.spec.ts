@@ -65,6 +65,29 @@ describe('visual quality gate', () => {
     expect(result.issues).toContain('candlestick-row-0-invalid-ohlc')
   })
 
+  it('accepts OHLC arrays in data or rows and rejects malformed numeric chart values', () => {
+    const candle = { time: 'Oct 8', open: 100, high: 104, low: 97, close: 102 }
+    for (const spec of [
+      { visualType: 'chart', chartType: 'candlestick', data: [candle] },
+      { visualType: 'chart', chartType: 'candlestick', rows: [candle] },
+      { visualType: 'chart', chartType: 'candlestick', data: { candles: [candle] } },
+    ]) {
+      expect(preflightVisualSpec(spec)).toMatchObject({ valid: true, issues: [] })
+    }
+    expect(preflightVisualSpec({
+      visualType: 'chart', chartType: 'line', data: [
+        { label: 'Lun', value: 'sin datos' }, { label: 'Mar', value: 12 },
+      ],
+      series: [{ dataKey: 'value' }],
+    }).issues).toContain('chart-invalid-numeric-series')
+    expect(preflightVisualSpec({
+      visualType: 'chart', chartType: 'line', data: [
+        { label: 'Lun', value: 10 }, { label: 'Mar', value: 12 },
+      ],
+      series: [{ dataKey: 'value' }],
+    }).valid).toBe(true)
+  })
+
   it('repairs chart aliases and nested candle payloads deterministically', () => {
     const aliased = repairVisualSpec({
       visualType: 'chart',
