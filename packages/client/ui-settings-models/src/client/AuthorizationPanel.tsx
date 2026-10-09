@@ -102,10 +102,10 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
-type CuratedMcpConnectorId = 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+type CuratedMcpConnectorId = 'github' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
 
 const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
-  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
+  'github', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
   'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
 ])
 
@@ -279,7 +279,7 @@ const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
 // do not declare an OAuth method absent before the registry has time to settle.
 const MCP_AUTH_FLOW_RETRY_MS = [0, 250, 500, 750, 1_000, 1_500, 2_000, 2_500, 3_000] as const
 const CURATED_OAUTH_MCP_IDS = new Set<string>([
-  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
+  'github', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
 ])
 const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
@@ -568,7 +568,10 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const openClawStatus = openClaw?.connected === true
     ? { text: t('openClawConnectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : undefined
-  const status = openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
+  // MCP state is authoritative whenever installed: a gh CLI session cannot
+  // hide a failed or unauthenticated GitHub MCP.
+  const status = (managed !== undefined || mcpRuntime !== undefined ? mcpStatus : undefined)
+    ?? openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
       ? { text: t('binancePaperReadyStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
@@ -593,8 +596,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   const openClawRuntimeMissing = definition.id === 'github' && openClaw?.phase === 'missing-runtime'
   const shouldShowAuthorization = authorizationAccount !== undefined
     && !connectedByAccount
-    && openClaw?.connected !== true
-    && !openClawRuntimeMissing
+    && (openClaw?.connected !== true || managed !== undefined || mcpRuntime !== undefined)
+    && (!openClawRuntimeMissing || managed !== undefined || mcpRuntime !== undefined)
     && (authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required')
   const missingOAuthFlow = managed !== undefined && mcpRuntime?.status === 'auth-required'
     && authorizationAccount === undefined
@@ -652,8 +655,22 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
       {openClaw?.connected !== true ? null : (
         <p className={styles['advancedHint']}>
           {openClaw.account === undefined ? openClaw.skillAlias : `${openClaw.skillAlias} · ${openClaw.account}`}
+          {definition.id === 'github' ? ' · API CLI verificada (independiente del MCP)' : ''}
         </p>
       )}
+      {definition.id === 'github' && managed === undefined && mcpRuntime === undefined ? (
+        <p className={styles['advancedHint']}>
+          El MCP oficial de GitHub proporciona herramientas de repositorios y PR.
+          Se autoriza con GitHub, no con GitHub Copilot como modelo.
+        </p>
+      ) : null}
+      {definition.id === 'github' && openClaw?.phase === 'api-unavailable'
+        && managed === undefined ? (
+          <p role="alert" className={styles['advancedHint']}>
+            GitHub CLI está autenticado, pero gh api user no pudo verificar acceso a la API.
+            Comprueba permisos/red o utiliza el MCP oficial.
+          </p>
+        ) : null}
       <div className={connectorStyles['connectorFooter']}>
         <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
         <div className={connectorStyles['connectorActions']}>
@@ -708,14 +725,15 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
             </button>
           ) : null}
           {managed === undefined && mcpRuntime === undefined && authorizationAccount === undefined
-            && openClaw?.connected !== true && definition.curatedMcp === true && onInstallCurated !== undefined ? (
+            && (openClaw?.connected !== true || definition.id === 'github')
+            && definition.curatedMcp === true && onInstallCurated !== undefined ? (
               <button
                 className={connectorStyles['connectorPrimaryButton']}
                 type="button"
                 disabled={pending || installingCurated}
                 onClick={onInstallCurated}
               >
-                {installingCurated ? t('installing') : t('install')}
+                {installingCurated ? t('installing') : definition.id === 'github' ? 'Instalar MCP GitHub' : t('install')}
               </button>
             ) : null}
           {managed === undefined && (authorizationAccount === undefined || openClawRuntimeMissing)
@@ -1192,6 +1210,7 @@ export function ConnectorsSettingsSection({ api,
   const catalogDefinitions = useMemo(() => {
     const providers: ConnectorDefinition[] = entries.filter(entry =>
       entry.key.startsWith('llm-pi-ai/')
+      && entry.key !== 'llm-pi-ai/github-copilot'
       && !CONNECTOR_CATALOG.some(definition => entryMatchesDefinitionAuthorization(entry, definition)))
       .map(entry => ({
         id: entry.key, name: entry.label, category: connectorT('modelProviders'),
@@ -1236,7 +1255,7 @@ export function ConnectorsSettingsSection({ api,
       && mcpRuntime === undefined
       && accountGrantConnectsCatalogEntry(account)
     const runtimeAuthoritative = managed !== undefined || mcpRuntime !== undefined
-    const connected = openClawRoute?.connected === true
+    const connected = (openClawRoute?.connected === true && !runtimeAuthoritative)
       || (runtimeAuthoritative
         ? mcpRuntime?.status === 'ready' && mcpRuntime.toolNames.length > 0
         : live?.callable === true || accountConnected)
@@ -1253,7 +1272,8 @@ export function ConnectorsSettingsSection({ api,
   })
 
   const visibleAccountEntries = useMemo(() => entries.filter(entry =>
-    !catalogDefinitions.some(definition =>
+    entry.key !== 'llm-pi-ai/github-copilot'
+    && !catalogDefinitions.some(definition =>
       entryMatchesDefinitionAuthorization(entry, definition))),
   [catalogDefinitions, entries])
   // Localize each credential or OAuth dialog at the exact connector card.
