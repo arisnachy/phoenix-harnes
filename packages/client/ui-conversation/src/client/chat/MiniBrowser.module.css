@@ -73,7 +73,6 @@
   .brand { font-size: 12px; } .expandedDialog { width: 100vw !important; height: 100vh; border-radius: 0 !important; }
   .expandedDialog .browser { border-radius: 0; }
 }
-@media (prefers-reduced-motion: reduce) { .overlay { backdrop-filter: none; } }
 
 /* Only the official YouTube watch player uses an iframe; arbitrary pages remain CDP. */
 .player { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; background: #111; }
