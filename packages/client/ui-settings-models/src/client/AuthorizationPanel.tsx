@@ -863,7 +863,7 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
   const [entries, setEntries] = useState<Entry[]>([])
   const [catalogFailure, setCatalogFailure] = useState<string | undefined>()
   const [refresh, setRefresh] = useState(0)
-  const { attempt, answer, setAnswer, failure, begin, submitAnswer, cancel } =
+  const { attempt, answer, setAnswer, failure, preparingKey, begin, submitAnswer, cancel } =
     useAuthorizationAttempt(api, () => {
       setRefresh(current => current + 1)
       onAuthorized()
@@ -896,7 +896,7 @@ export function AuthorizationPanel({ api, t, onAuthorized }: AuthorizationPanelP
       <p className={styles.intro}>{t('accountConnectionsHint')}</p>
       {entries.map((entry) => {
         const connected = entry.stored !== undefined
-        const busy = entry.inFlight || (attempt?.status === 'pending' && attempt.key === entry.key)
+        const busy = entry.inFlight || preparingKey === entry.key || (attempt?.status === 'pending' && attempt.key === entry.key)
         const methods = entry.methods.filter(method => method.id === 'oauth')
         return (
           <div key={entry.key} className={styles.authorizationActions}>
@@ -983,6 +983,7 @@ export function ConnectorsSettingsSection({ api,
     answer,
     setAnswer,
     failure,
+    preparingKey,
     reserveOAuthPopup,
     closeOAuthPopup,
     begin,
@@ -1513,6 +1514,7 @@ export function ConnectorsSettingsSection({ api,
     <div className={styles['section']}>
       <h2 className={styles['title']}>{connectorT('title')}</h2>
       <p className={styles['intro']}>{connectorT('intro')}</p>
+      {preparingKey === undefined ? null : <p role="status" className={styles['advancedHint']}>Contactando al servicio de autorización de PHOENIX…</p>}
       {failure === undefined ? null : <p role="alert" className={styles['error']}>{failure}</p>}
       {attempt === undefined ? null : (
         <section className={hubStyles['block']} aria-label={t('signingIn')}>
@@ -1598,7 +1600,8 @@ export function ConnectorsSettingsSection({ api,
                 && runtime !== undefined
                 && (runtime.status === 'failed' || runtime.status === 'disconnected')
                 && mcpRegistry?.reconnect !== undefined
-              const thisAuthorizationPending = attempt?.status === 'pending' && attempt.key === entry.key
+              const thisAuthorizationPending = preparingKey === entry.key
+                || (attempt?.status === 'pending' && attempt.key === entry.key)
               const preferredMethod = entry.methods[0]
               return (
                 <article key={entry.key} className={connectorStyles['connectorCard']} data-authorization-key={entry.key}>
@@ -1692,9 +1695,9 @@ export function ConnectorsSettingsSection({ api,
                 ?? (row.managed === undefined
                   ? undefined
                   : `mcp-client/${row.managed.serverName.toLowerCase().replaceAll('_', '-')}`)
-              const rowAuthorizationPending = attempt?.status === 'pending'
-                && authorizationKey !== undefined
-                && attempt.key === authorizationKey
+              const rowAuthorizationPending = authorizationKey !== undefined
+                && (preparingKey === authorizationKey
+                  || (attempt?.status === 'pending' && attempt.key === authorizationKey))
               return (
                 <CatalogCard
                   key={row.definition.id}
@@ -1706,7 +1709,9 @@ export function ConnectorsSettingsSection({ api,
                   openClaw={row.openClaw}
                   connected={row.connected}
                   t={connectorT}
-                  authorizationProgress={attempt !== undefined && attempt.key === authorizationKey && attempt.status === 'pending' ? (
+                  authorizationProgress={preparingKey === authorizationKey ? (
+                    <p role="status" className={styles['advancedHint']}>Iniciando autorización con el Host…</p>
+                  ) : attempt !== undefined && attempt.key === authorizationKey && attempt.status === 'pending' ? (
                     <p role="status" className={styles['advancedHint']}>
                       {attempt.url === undefined ? 'Preparando autorización del MCP…' : 'La URL OAuth está lista. Continúa en la pestaña abierta o usa el enlace superior.'}
                     </p>
