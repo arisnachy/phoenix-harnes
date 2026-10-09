@@ -460,7 +460,7 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
         <button type="button" className={directoryCss.person} data-selected={selectedPersona === 'kira'}
           onClick={() => { setSelectedPersona('kira') }}>
           <ModelActivityAvatar kind="kira" activity={undefined} running={root?.running ?? false}
-            pending={false} ready />
+            pending={false} ready={!root?.running} />
           <span className={directoryCss.personText}><strong>Kira</strong><small>Líder y coordinadora</small></span>
           <span className={directoryCss.personState}>✦</span>
         </button>
