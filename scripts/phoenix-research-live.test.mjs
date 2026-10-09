@@ -6,7 +6,7 @@ test('counts only successful actual web_fetch tool receipts, not verbal promises
   const input = [
     { type: 'tool/call', data: { callId: 'f1', name: 'web_fetch',
       arguments: JSON.stringify({ url: 'https://research.example.com/paper?apikey=private#section' }) } },
-    { type: 'tool/result', data: { message: { source: { callId: 'f1' },
+    { type: 'tool/result', data: { meta: { statusCode: 200, url: 'https://research.example.com/paper?apikey=private#section' }, message: { source: { callId: 'f1' },
       content: [{ type: 'tool-result', toolCallId: 'f1', isError: false }] } } },
     { type: 'tool/call', data: { callId: 'f2', name: 'web_fetch',
       arguments: JSON.stringify({ url: 'https://blocked.example.com/report' }) } },
@@ -51,9 +51,31 @@ test('URL with embedded credentials and non-HTTP URL never enters evidence repor
     const callId = `f-${index}`
     return [
       { type: 'tool/call', data: { callId, name: 'web_fetch', arguments: { url } } },
-      { type: 'tool/result', data: { message: { source: { callId },
+      { type: 'tool/result', data: { meta: { statusCode: 200, url }, message: { source: { callId },
         content: [{ type: 'tool-result', toolCallId: callId, isError: false }] } } },
     ]
   })
   assert.deepEqual(researchEvidenceFromEvents(events).observedWebFetchUrls, [])
+})
+
+test('HTTP 404, even with a successful tool response, never counts as a verified source', () => {
+  const out = researchEvidenceFromEvents([
+    { type: 'tool/call', data: { callId: 'a1', name: 'web_fetch',
+      arguments: JSON.stringify({ url: 'https://research.example.com/not-found' }) } },
+    { type: 'tool/result', data: { meta: { url: 'https://research.example.com/not-found',
+      statusCode: 404, truncated: false }, message: { source: { callId: 'a1' },
+      content: [{ type: 'tool-result', toolCallId: 'a1', isError: false }] } } },
+  ])
+  assert.equal(out.fetches, 1)
+  assert.deepEqual(out.observedWebFetchUrls, [])
+})
+
+test('cached prompt tokens are counted to avoid claiming a false zero-cost research turn', () => {
+  const out = researchEvidenceFromEvents([
+    { type: 'assistant/message', data: { usage: {
+      inputTokens: 10, cacheReadTokens: 900, cacheWriteTokens: 90, outputTokens: 70,
+    }, message: { content: [{ type: 'text', text: 'Resultado' }] } } },
+  ])
+  assert.equal(out.promptTokens, 1000)
+  assert.equal(out.completionTokens, 70)
 })

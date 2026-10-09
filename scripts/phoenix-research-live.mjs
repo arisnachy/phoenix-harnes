@@ -60,7 +60,9 @@ export function researchEvidenceFromEvents(events) {
       const input = numericUsage(usage, 'inputTokens', 'promptTokens', 'input_tokens', 'prompt_tokens')
       const output = numericUsage(usage, 'outputTokens', 'completionTokens', 'output_tokens', 'completion_tokens')
       if (input !== undefined && output !== undefined) {
-        promptTokens += input
+        const cacheRead = numericUsage(usage, 'cacheReadTokens')
+        const cacheWrite = numericUsage(usage, 'cacheWriteTokens')
+        promptTokens += input + (cacheRead ?? 0) + (cacheWrite ?? 0)
         completionTokens += output
         tokenSamples++
       }
@@ -90,7 +92,11 @@ export function researchEvidenceFromEvents(events) {
       const successful = event.data.error === undefined
         && blocks.some(block => block.type === 'tool-result' && block.isError !== true)
       if (!successful) continue
-      const url = boundedSourceUrl(call.args.url)
+      const status = event.data?.meta?.statusCode
+      // A tool may complete successfully while the HTTP response is 404.
+      // Only a validated 2xx source body is a factual research receipt.
+      if (!Number.isInteger(status) || status < 200 || status >= 300) continue
+      const url = boundedSourceUrl(event.data.meta.url ?? call.args.url)
       if (url) fetched.add(url)
     }
   }
