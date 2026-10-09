@@ -551,6 +551,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   repairing: boolean
   removing: boolean
 }): ReactNode {
+  const [microsoftBillingAcknowledged, setMicrosoftBillingAcknowledged] = useState(false)
+  const microsoftRequiresBillingAcknowledgement = definition.id === 'microsoft-workiq'
+    || definition.id === 'microsoft-azure'
   const connectedByAccount = managed === undefined
     && mcpRuntime === undefined
     && accountGrantConnectsCatalogEntry(account)
@@ -697,6 +700,55 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
             antes de cualquier envío o cambio de facturación.</p>
         </div>
       ) : null}
+      {definition.id === 'microsoft-learn' ? (
+        <p className={styles['advancedHint']}>
+          Gratuito: documentación pública oficial sin inicio de sesión ni acceso a correos privados.
+          {' '}<a href="https://learn.microsoft.com/en-us/training/support/mcp-developer-reference"
+            target="_blank" rel="noopener noreferrer">Documentación oficial</a>.
+        </p>
+      ) : null}
+      {definition.id === 'microsoft-workiq' ? (
+        <div className={styles['advancedHint']}>
+          <p>Microsoft Work IQ es una puerta de entrada a Outlook, Calendar, Teams,
+            OneDrive y SharePoint, pero su API <strong>se factura por uso</strong>. Necesitas
+            plan de pago habilitado, consentimiento administrativo de Entra y aceptar
+            el contrato de licencia (EULA) antes del primer uso.</p>
+          <p>Tras instalarlo, acepta la licencia en una terminal propia:
+            <code>npx -y @microsoft/workiq accept-eula</code>. No se aceptará automáticamente.</p>
+          <p><a href="https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/cli"
+            target="_blank" rel="noopener noreferrer">Requisitos oficiales</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía Phoenix</a></p>
+        </div>
+      ) : null}
+      {definition.id === 'microsoft-azure' ? (
+        <div className={styles['advancedHint']}>
+          <p>Azure MCP oficial utiliza <code>npx</code> y las credenciales de
+            <code>az login</code>. El MCP no tiene coste de licencia independiente,
+            pero ejecutar operaciones sobre recursos Azure puede generar cargos.
+            El modo consolidado reduce el volumen de herramientas.</p>
+          <p><a href="https://learn.microsoft.com/en-us/azure/developer/azure-mcp-server/concepts"
+            target="_blank" rel="noopener noreferrer">Documentación oficial</a>
+            {' '}·{' '}<a href="https://github.com/arisnachy/phoenix-harnes/blob/stable/docs/connectors/microsoft-mcp.md"
+              target="_blank" rel="noopener noreferrer">Guía Phoenix</a></p>
+        </div>
+      ) : null}
+      {['outlook-mail', 'outlook-calendar', 'onedrive', 'sharepoint', 'microsoft-teams'].includes(definition.id)
+        && managed === undefined && authorizationAccount === undefined ? (
+          <p className={styles['advancedHint']}>
+            Para consultar datos de Microsoft 365, instala Microsoft 365 Work IQ
+            (requiere plan de facturación y permisos Entra) o conecta un adaptador
+            Graph con los permisos de tu cuenta. Esta tarjeta no es un OAuth operativo independiente.
+          </p>
+        ) : null}
+      {microsoftRequiresBillingAcknowledgement && managed === undefined ? (
+        <label className={styles['advancedHint']}>
+          <input type="checkbox" checked={microsoftBillingAcknowledged}
+            onChange={(event) => { setMicrosoftBillingAcknowledged(event.target.checked) }} />
+          {' '}Comprendo que debo autorizar los costes y requisitos de Microsoft
+          antes de activar este MCP. La instalación no garantiza uso gratuito.
+        </label>
+      ) : null}
       {definition.id === 'figma' && managed?.url === 'http://127.0.0.1:3845/mcp'
         && mcpRuntime?.status !== 'ready' ? (
           <p className={styles['advancedHint']}>
@@ -796,7 +848,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
               <button
                 className={connectorStyles['connectorPrimaryButton']}
                 type="button"
-                disabled={pending || installingCurated}
+                disabled={pending || installingCurated
+                  || (microsoftRequiresBillingAcknowledgement && !microsoftBillingAcknowledged)}
                 onClick={onInstallCurated}
               >
                 {installingCurated ? t('installing') : definition.id === 'github' ? 'Instalar MCP GitHub' : t('install')}
