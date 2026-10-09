@@ -656,3 +656,14 @@
   .root:not(.rail) .sectionHeader { height: 36px; margin-bottom: 4px; }
   .recentHeader { height: 28px; margin-top: 5px; }
 }
+
+/* Prioritize the recent-chat scroll seat instead of spending the viewport on headers. */
+.root:not(.rail) .sectionHeader { height: 34px; margin-bottom: 3px; }
+.root:not(.rail) .groupSection { margin-bottom: 3px; }
+.root:not(.rail) .groupSection + .groupSection { margin-top: 4px; }
+.root:not(.rail) .list { padding-bottom: 8px; }
+.recentHeader { height: 27px; margin: 4px 1px 1px; }
+@media (max-height: 860px) {
+  .root:not(.rail) .sectionHeader { height: 30px; margin-bottom: 2px; }
+  .recentHeader { height: 24px; margin-top: 3px; }
+}
