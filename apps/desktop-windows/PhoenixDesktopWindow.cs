@@ -35,6 +35,7 @@ internal sealed class PhoenixDesktopWindow : Form
     private readonly SplitContainer split = new();
     private readonly WebView2 phoenixView = new();
     private readonly WebView2 browserView = new();
+    private readonly BrowserCredentialVault browserVault = new();
     private readonly ToolStripTextBox address = new();
     private readonly ToolStripButton backButton = new("←");
     private readonly ToolStripButton forwardButton = new("→");
@@ -626,6 +627,8 @@ internal sealed class PhoenixDesktopWindow : Form
                 return await ClickBrowserTextAsync(command);
             case "phoenix.browser.login":
                 return await LoginBrowserAsync(command);
+            case "phoenix.browser.forget-login":
+                return ForgetBrowserLogin(command);
             default:
                 ExecuteBrowserCommand(command);
                 return null;
@@ -770,18 +773,75 @@ internal sealed class PhoenixDesktopWindow : Form
         return DecodeScriptJson(raw);
     }
 
+    private string ForgetBrowserLogin(BrowserCommand command)
+    {
+        var origin = command.Origin
+            ?? throw new InvalidOperationException("Removing credentials requires a secure origin.");
+        var answer = MessageBox.Show(this,
+            "Eliminar el acceso guardado para " + origin + "?",
+            "Phoenix · Vault", MessageBoxButtons.YesNo, MessageBoxIcon.Question,
+            MessageBoxDefaultButton.Button2);
+        if (answer != DialogResult.Yes)
+            return JsonSerializer.Serialize(new { forgotten = false });
+        browserVault.Delete(origin);
+        return JsonSerializer.Serialize(new { forgotten = true });
+    }
+
     private async Task<string> LoginBrowserAsync(BrowserCommand command)
     {
+        // Reject redirects before opening the credential prompt or using cached data.
         var core = await RequireBrowserForOriginAsync(command.Origin);
-        if (string.IsNullOrEmpty(command.Account) || string.IsNullOrEmpty(command.Secret))
-            throw new InvalidOperationException("Origin-bound login is incomplete.");
+        var origin = command.Origin
+            ?? throw new InvalidOperationException("Browser login requires an exact origin.");
+        var account = command.Account;
+        var secret = command.Secret;
+        var stored = false;
+        var remember = false;
+        var humanEntry = false;
+
+        if (string.IsNullOrEmpty(account) || string.IsNullOrEmpty(secret))
+        {
+            var saved = browserVault.Load(origin);
+            if (saved is not null)
+            {
+                account = saved.Account;
+                secret = saved.Secret;
+                stored = true;
+            }
+            else
+            {
+                using var prompt = new BrowserLoginPrompt(origin);
+                if (prompt.ShowDialog(this) != DialogResult.OK)
+                    throw new OperationCanceledException("Browser login was cancelled by the user.");
+                account = prompt.Account;
+                secret = prompt.Secret;
+                remember = prompt.Remember;
+                humanEntry = true;
+            }
+        }
+
+        // The model never sees either value. The native WebView receives only
+        // the exact-origin DOM injection it needs for this login action.
         var script = BrowserLoginScript
-            .Replace("__ORIGIN__", JsonSerializer.Serialize(command.Origin), StringComparison.Ordinal)
-            .Replace("__ACCOUNT__", JsonSerializer.Serialize(command.Account), StringComparison.Ordinal)
-            .Replace("__SECRET__", JsonSerializer.Serialize(command.Secret), StringComparison.Ordinal)
+            .Replace("__ORIGIN__", JsonSerializer.Serialize(origin), StringComparison.Ordinal)
+            .Replace("__ACCOUNT__", JsonSerializer.Serialize(account), StringComparison.Ordinal)
+            .Replace("__SECRET__", JsonSerializer.Serialize(secret), StringComparison.Ordinal)
             .Replace("__SUBMIT__", command.Submit ? "true" : "false", StringComparison.Ordinal);
         var raw = await core.ExecuteScriptAsync(script);
-        return DecodeScriptJson(raw);
+        var details = DecodeScriptJson(raw);
+        using var parsed = JsonDocument.Parse(details);
+        var phase = parsed.RootElement.TryGetProperty("phase", out var node)
+            ? node.GetString() : null;
+        if (phase == "fields-not-found")
+            return JsonSerializer.Serialize(new { phase, vaultConsent = false });
+        // Only store the user's explicit opt-in after the expected form was found.
+        if (humanEntry && remember)
+            browserVault.Save(origin, account!, secret!);
+        return JsonSerializer.Serialize(new {
+            phase = phase ?? "credentials-filled",
+            vaultConsent = stored || (humanEntry && remember),
+            credentialSource = stored ? "protected-vault" : humanEntry ? "human-entry" : "existing-vault"
+        });
     }
 
     private const string BrowserInspectScript = """

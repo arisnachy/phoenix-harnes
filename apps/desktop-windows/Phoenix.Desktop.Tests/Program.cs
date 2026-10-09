@@ -116,12 +116,66 @@ True(
     failures);
 Equal("https://example.com", loginCommand.Origin, "login origin canonicalized", failures);
 True(loginCommand.Submit, "login submits by default", failures);
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com/login\"}",
+        out var secretFreeLogin,
+        allowAutomation: true),
+    "runtime pipe admits credential-free login request for native human-only prompt",
+    failures);
+Equal(null, secretFreeLogin.Secret, "model-free login does not include a password", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.login\",\"origin\":\"https://example.com\",\"account\":\"user-only\"}",
+        out _, allowAutomation: true),
+    "runtime rejects half-populated credentials",
+    failures);
 False(
     BrowserCommand.TryParse(
         "{\"type\":\"phoenix.browser.login\",\"origin\":\"http://example.com\",\"account\":\"unit-user\",\"secret\":\"synthetic-login-secret\"}",
         out _,
         allowAutomation: true),
     "runtime pipe rejects insecure remote login origin",
+    failures);
+
+// Native DPAPI vault: encrypted at rest, origin-bound and inaccessible to other origins.
+var vaultTestRoot = Path.Combine(Path.GetTempPath(), $"phoenix-native-vault-test-{Guid.NewGuid():N}");
+try
+{
+    var vault = new BrowserCredentialVault(vaultTestRoot);
+    Equal(null, vault.Load("https://example.com")?.Account, "empty vault needs first-use prompt", failures);
+    vault.Save("https://example.com", "test-user", "synthetic-private-secret");
+    var saved = vault.Load("https://example.com");
+    Equal("test-user", saved?.Account, "current Windows account decrypts saved login", failures);
+    Equal("synthetic-private-secret", saved?.Secret, "secret round trips only inside native vault", failures);
+    Equal(null, vault.Load("https://elsewhere.example")?.Account, "vault entries stay origin-bound", failures);
+    var filesInVault = Directory.GetFiles(vaultTestRoot);
+    EqualInt(1, filesInVault.Length, "vault stores a single encrypted record", failures);
+    var raw = File.ReadAllText(filesInVault[0]);
+    False(raw.Contains("test-user", StringComparison.Ordinal)
+        || raw.Contains("synthetic-private-secret", StringComparison.Ordinal),
+        "vault files never contain plaintext login values", failures);
+    vault.Delete("https://example.com");
+    Equal(null, vault.Load("https://example.com")?.Account, "vault forget action removes credentials", failures);
+}
+finally
+{
+    if (Directory.Exists(vaultTestRoot))
+        Directory.Delete(vaultTestRoot, recursive: true);
+}
+
+True(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.forget-login\",\"origin\":\"https://example.com/login\"}",
+        out var forgetLogin, allowAutomation: true),
+    "native vault removal is origin bound",
+    failures);
+Equal("https://example.com", forgetLogin.Origin, "forget origin canonicalized", failures);
+False(
+    BrowserCommand.TryParse(
+        "{\"type\":\"phoenix.browser.forget-login\",\"origin\":\"https://example.com\"}",
+        out _),
+    "untrusted web surface cannot remove native vault credentials",
     failures);
 
 // The model/runtime must control the embedded WebView through a direct current-user named pipe.

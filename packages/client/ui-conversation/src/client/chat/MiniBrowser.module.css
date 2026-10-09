@@ -88,3 +88,21 @@
   color: var(--dsw-alias-label-primary); cursor: pointer; font-size: 12px;
 }
 .mediaBar button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+
+
+.vaultBox { display: grid; gap: 10px; padding: 14px; max-width: 490px; }
+.vaultBox p { margin: 0; opacity: .85; line-height: 1.5; }
+.vaultBox form { display: grid; gap: 12px; }
+.vaultBox form > label { display: grid; gap: 5px; }
+.vaultBox form > label > input:not([type='checkbox']) {
+  width: 100%; border: 1px solid var(--dsh-color-border, #c4c8d0);
+  color: var(--dsh-color-text, #1f2937); background: var(--dsh-color-surface, #fff);
+  border-radius: 8px; padding: 10px;
+}
+.vaultConsent { display: flex !important; align-items: start; gap: 8px !important; }
+.vaultConsent input { margin-top: 3px; }
+.vaultActions { display: flex; flex-wrap: wrap; gap: 8px; }
+.vaultActions button {
+  border: 1px solid var(--dsh-color-border, #c4c8d0);
+  border-radius: 8px; padding: 8px 12px;
+}
