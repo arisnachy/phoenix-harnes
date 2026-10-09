@@ -426,10 +426,11 @@ describe('connectors settings section', () => {
     expect(googleCard?.textContent).toContain('Connected · OpenClaw')
     expect(githubCard?.textContent).toContain('Connected · OpenClaw')
 
-    expect(screen.getByText('GitHub Copilot')).toBeTruthy()
+    // Copilot's MODEL login is not a GitHub REPOSITORY connector.
+    expect(screen.queryByText('GitHub Copilot')).toBeNull()
     expect(githubCard?.textContent).not.toContain('GitHub Copilot')
     expect(document.querySelector('[data-authorization-key="authorization-openclaw/github"]')).toBeNull()
-    expect(document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')).toBeTruthy()
+    expect(document.querySelector('[data-authorization-key="llm-pi-ai/github-copilot"]')).toBeNull()
     expect(api.begin).not.toHaveBeenCalled()
   })
 
@@ -464,7 +465,7 @@ describe('connectors settings section', () => {
 
     const githubCard = document.querySelector('[data-connector-id="github"]')
     expect(githubCard).toBeTruthy()
-    expect(githubCard?.textContent).toContain('Find official / install')
+    expect(githubCard?.textContent).toContain('Instalar MCP GitHub')
     expect(githubCard?.textContent).not.toContain('Authorize')
     expect(api.begin).not.toHaveBeenCalled()
   })
