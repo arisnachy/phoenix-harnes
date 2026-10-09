@@ -450,6 +450,54 @@ describe('ManagedMcpController', () => {
     })
   })
 
+  it('installs official Vercel MCP over HTTPS with OAuth', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.installCuratedMcp('vercel')).resolves.toMatchObject({
+      connector: {
+        serverName: 'vercel', url: 'https://mcp.vercel.com',
+        source: { kind: 'curated', connectorId: 'vercel' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      inject: [...MANAGED_MCP_INJECT],
+      config: expect.objectContaining({
+        transport: 'streamable-http', serverName: 'vercel',
+        url: 'https://mcp.vercel.com', oauth: true,
+      }),
+    }))
+  })
+
+  it('preserves local Figma Desktop MCP and oauth=false when repairing', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, JSON.stringify([{ insert: [{
+      id: 'old-figma', name: '@phoenix-ai/dsh-mcp-client',
+      inject: [...MANAGED_MCP_INJECT],
+      source: { kind: 'curated', connectorId: 'figma' },
+      config: {
+        transport: 'streamable-http', serverName: 'figma',
+        url: 'http://127.0.0.1:3845/mcp', headers: {}, oauth: false,
+        toolCallTimeoutMs: 60_000, startupTimeoutMs: 2_000,
+        failOnStartupError: false, reconnect: {
+          enabled: true, initialDelayMs: 1000, maxDelayMs: 30_000, maxAttempts: 120,
+        },
+      },
+    }] }]))
+    const live = loader()
+    live.create.mockResolvedValueOnce('new-figma')
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.repair({ entryId: 'old-figma' })).resolves.toMatchObject({
+      connector: { entryId: 'new-figma', serverName: 'figma',
+        url: 'http://127.0.0.1:3845/mcp' },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({ oauth: false,
+        url: 'http://127.0.0.1:3845/mcp' }),
+    }))
+  })
+
   it('installs and removes only the pinned official Binance Agent OS connector', async () => {
     const patchPath = tempPatch()
     const live = loader()
