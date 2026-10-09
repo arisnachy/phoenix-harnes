@@ -51,7 +51,10 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, focus }:
   // A direct destination must never silently fall back to unrelated Settings content.
   const active = rows.find(r => r.id === activeId)?.id ?? (focus === undefined ? rows[0]?.id : undefined)
   const deferredActive = useDeferredValue(active)
-  const renderedActive = rows.some(row => row.id === deferredActive) ? deferredActive : active
+  // Direct navigation never paints a previous Settings section during a deferred transition.
+  const renderedActive = focus === undefined
+    ? rows.some(row => row.id === deferredActive) ? deferredActive : active
+    : active
   const titleId = useId()
 
   useEffect(() => {
