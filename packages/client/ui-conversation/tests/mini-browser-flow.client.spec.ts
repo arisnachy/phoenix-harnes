@@ -14,6 +14,12 @@ describe('MiniBrowser chronological conversation cards', () => {
   it('recognizes real navigation prompts but not ordinary conversation', () => {
     expect(isBrowserPrompt('Abre Listín Diario en el navegador')).toBe(true)
     expect(isBrowserPrompt('Por favor, navega a youtube.com')).toBe(true)
+    expect(isBrowserPrompt('puedes entras a la pagina listindiario')).toBe(true)
+    expect(isBrowserPrompt('¿Puedes entrar a la página de Listín Diario?')).toBe(true)
+    expect(isBrowserPrompt('puedes ingresar al sitio listindiario.com')).toBe(true)
+    expect(isBrowserPrompt('Abre YouTube')).toBe(true)
+    expect(isBrowserPrompt('Abre la carpeta del proyecto')).toBe(false)
+    expect(isBrowserPrompt('No abras el navegador')).toBe(false)
     expect(isBrowserPrompt('Hola, ¿cómo va todo?')).toBe(false)
   })
 
