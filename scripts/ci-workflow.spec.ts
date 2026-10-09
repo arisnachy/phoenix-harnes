@@ -121,7 +121,7 @@ describe('CI workflow', () => {
 
     // windows-native: portable real-kernel signal on a standard hosted runner.
     expect(windowsNative['runs-on']).toBe('windows-latest')
-    expect(windowsNative.name).toBe('windows node 24 / native complete')
+    expect(windowsNative.name).toBe('windows node 24 / native required')
     expect(windowsNative.if).toBe("github.event_name == 'pull_request'")
     expect(windowsNative.env).toMatchObject({
       DSH_COVERAGE_TEST_TIMEOUT_MS: '30000',
@@ -130,7 +130,7 @@ describe('CI workflow', () => {
     const nativeCommandSteps = nativeSteps.filter((step): step is Record<string, unknown> & { run: string } => (
       isRecord(step) && typeof step.run === 'string'
     ))
-    expect(nativeCommandSteps.map(step => step.run)).toContain('pnpm run check:ci:windows-complete')
+    expect(nativeCommandSteps.map(step => step.run)).toContain('pnpm run check:ci:windows-blocking')
 
     // wine-apt-cache: master-only, seeds the Wine apt cache, lives in ci-master.
     expect(wineAptCache.if).toBe("github.event_name == 'push' && github.ref == 'refs/heads/master'")
@@ -240,24 +240,28 @@ describe('CI workflow', () => {
     expect(config).not.toContain('packages/lsp/lsp-stdio/src/instance.ts')
   })
 
-  it('requires one release-shaped Python runtime target on every pull request', () => {
+  it('requires the actual keyless Python SDK suite on every pull request', () => {
     const workflow = loadWorkflow('.github/workflows/ci.yml')
-    const pythonRuntime = workflowJob(workflow, 'python-runtime')
+    const pythonSdk = workflowJob(workflow, 'python-sdk')
     const aggregate = workflowJob(workflow, 'all-checks-passed')
-    if (!Array.isArray(aggregate.needs)) {
-      throw new TypeError('CI aggregate must define required job dependencies')
+    if (!Array.isArray(aggregate.needs) || !Array.isArray(pythonSdk.steps)) {
+      throw new TypeError('CI aggregate and Python SDK steps must exist')
     }
 
-    expect(pythonRuntime).toMatchObject({
+    expect(pythonSdk).toMatchObject({
       if: "github.event_name == 'pull_request'",
-      name: 'python runtime / release-shaped Linux x64',
-      uses: './.github/workflows/build-exe-for-python-sdk.yml',
-      with: {
-        targets: 'node24-linux-x64',
-        ci: true,
-      },
+      name: 'python 3.10 / keyless SDK',
+      'runs-on': 'ubuntu-latest',
     })
-    expect(aggregate.needs).toContain('python-runtime')
+    const commands = pythonSdk.steps
+      .filter((step): step is Record<string, unknown> & { run: string } => isRecord(step) && typeof step.run === 'string')
+      .map(step => step.run)
+    expect(commands).toContain('uv run --python 3.10 --group test --project python/sdk pytest')
+    expect(pythonSdk.steps.some((step: unknown) => isRecord(step)
+      && step.uses === 'actions/setup-python@v6.3.0'
+      && isRecord(step.with)
+      && step.with['python-version'] === '3.10')).toBe(true)
+    expect(aggregate.needs).toContain('python-sdk')
   })
 
   it('keeps every Vitest project process-isolated on native Windows', () => {

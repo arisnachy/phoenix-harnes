@@ -64,12 +64,16 @@ describe('PluginInventoryGateway', () => {
       serviceKey: 'pluginInventory',
       namespace: 'pluginInventory',
     })
-    expect(remoteMethods(inventory)).toEqual([
+    const exposed = remoteMethods(inventory)
+    expect(exposed).toEqual(expect.arrayContaining([
       { method: 'list', invocation: { kind: 'direct' } },
       { method: 'updateState', invocation: { kind: 'direct' } },
       { method: 'restartForUpdate', invocation: { kind: 'direct' } },
       { method: 'refreshForUpdate', invocation: { kind: 'direct' } },
-    ])
+      { method: 'mcpConnectorHubState', invocation: { kind: 'direct' } },
+    ]))
+    expect(new Set(exposed.map(entry => entry.method)).size).toBe(exposed.length)
+    expect(exposed.every(entry => entry.invocation.kind === 'direct')).toBe(true)
   })
 
   it('projects current non-group Loader entries without a second cache', async () => {
