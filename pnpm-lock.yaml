@@ -9071,6 +9071,9 @@ importers:
       '@phoenix-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      undici:
+        specifier: ^7.28.0
+        version: 7.28.0
     devDependencies:
       '@phoenix-ai/cordis':
         specifier: workspace:^

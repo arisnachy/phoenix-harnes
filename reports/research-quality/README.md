@@ -14,9 +14,11 @@ reader in the base profile, with private/reserved network targets blocked,
 credentials never sent, same-origin redirects, byte/time caps and no cookies.
 Do not enable `allowPrivateNetworks` for model-chosen URLs.
 
-**Security caveat:** a workstation facing hostile DNS rebinding still needs a
-restrictive egress proxy or pinned-DNS transport. The current preflight
-public-IP check alone is not a complete defense against that threat.
+**Security:** this version pins each physical outbound socket DNS lookup to a
+public vetted address, as well as pre-checking every URL and same-origin
+redirect. It never sends cookies or vault secrets. High-security deployments
+should still place Phoenix behind a restrictive egress firewall or proxy
+for defense-in-depth.
 
 ## Three-stage validation
 

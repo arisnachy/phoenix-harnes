@@ -61,9 +61,27 @@ export async function assertPublicFetchTarget(url: URL): Promise<void> {
   } catch (error: unknown) {
     throw new WebError(`could not resolve web target ${url.hostname}`, 'WEB_PROVIDER_ERROR', { cause: error })
   }
+  selectPublicDialAddress(url.hostname, addresses)
+}
+
+/**
+ * Reject every private/reserved record and select a public address for the
+ * actual outbound socket lookup. Reusing the selected address inside the TCP
+ * connector prevents a hostname switching to localhost after preflight.
+ * @param hostname - Original hostname for the refusal message.
+ * @param addresses - One complete DNS resolution candidate list.
+ * @returns Public socket address and family, with no private fallback.
+ */
+export function selectPublicDialAddress(
+  hostname: string,
+  addresses: readonly { address: string; family: number }[],
+): { address: string; family: number } {
   if (addresses.length === 0 || addresses.some(({ address }) => isPrivateAddress(address))) {
-    throw new WebError(`private or reserved network resolution is blocked: ${url.hostname}`, 'WEB_BLOCKED_URL')
+    throw new WebError(`private or reserved network resolution is blocked: ${hostname}`, 'WEB_BLOCKED_URL')
   }
+  const selected = addresses[0]
+  if (selected === undefined) throw new WebError('public DNS lookup returned no records', 'WEB_BLOCKED_URL')
+  return { address: selected.address, family: selected.family }
 }
 
 function isPrivateAddress(value: string): boolean {

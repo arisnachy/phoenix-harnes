@@ -3,15 +3,21 @@
  * enforces time and size limits, classifies and decodes text, and leaves presentation to
  * `@phoenix-ai/dsh-tool-web`. Requests carry no browser cookies or ambient credentials.
  *
- * Private and reserved targets are blocked after URL validation and DNS resolution. A deployment
- * requiring protection against a hostile DNS-rebinding environment should still use an egress proxy.
+ * Private/reserved targets are checked at URL resolution AND rejected at socket lookup.
+ * The connection uses the inspected public IP, blocking DNS rebinds into private services.
+ * A separate network egress policy remains recommended for high-risk deployments.
  * @module @phoenix-ai/dsh-web-fetch-http/provider
  */
 
+import { lookup as dnsLookup } from 'node:dns/promises'
+import { Agent } from 'undici'
 import { WebError } from '@phoenix-ai/dsh-web'
 import type { WebFetchBody, WebFetchProvider, WebFetchRequest, WebFetchResult } from '@phoenix-ai/dsh-web'
 import { deadline, timeoutOf } from '@phoenix-ai/dsh-timeout'
-import { assertPublicFetchTarget, classifyContentType, decoderForCharset, isSameOrigin, parseCharset, validateFetchUrl } from './policy.ts'
+import {
+  assertPublicFetchTarget, classifyContentType, decoderForCharset, isSameOrigin,
+  parseCharset, selectPublicDialAddress, validateFetchUrl,
+} from './policy.ts'
 
 /** Resolved provider limits (the plugin's schemastery Config supplies defaults). */
 export interface HttpFetchLimits {
@@ -38,7 +44,32 @@ export const LOCAL_FETCH_PROVIDER_ID = 'http'
 export class HttpFetchProvider implements WebFetchProvider {
   readonly id = LOCAL_FETCH_PROVIDER_ID
 
-  constructor(private readonly limits: HttpFetchLimits) {}
+  private readonly publicDispatcher: Agent | undefined
+
+  constructor(private readonly limits: HttpFetchLimits) {
+    this.publicDispatcher = limits.allowPrivateNetworks ? undefined : new Agent({
+      keepAliveTimeout: 1_000,
+      keepAliveMaxTimeout: 1_000,
+      connect: {
+        // DNS is resolved again at the physical socket, where every address
+        // must pass the same private/reserved filter. Return ONLY the vetted
+        // address to prevent a rebinding hostname reaching loopback or the LAN.
+        lookup(hostname, _options, callback) {
+          void dnsLookup(hostname, { all: true, order: 'verbatim' }).then(
+            records => {
+              try {
+                const selected = selectPublicDialAddress(hostname, records)
+                callback(null, selected.address, selected.family)
+              } catch (error) {
+                callback(error instanceof Error ? error : new Error(String(error)), '', 4)
+              }
+            },
+            error => { callback(error instanceof Error ? error : new Error(String(error)), '', 4) },
+          )
+        },
+      },
+    })
+  }
 
   /** No credentials to check — an anonymous public fetcher is always usable. */
   available(): boolean {
@@ -105,12 +136,14 @@ export class HttpFetchProvider implements WebFetchProvider {
 
   private async requestOnce(url: URL, signal: AbortSignal): Promise<Response> {
     try {
-      return await fetch(url, {
+      const options: RequestInit & { dispatcher?: Agent } = {
         method: 'GET',
         redirect: 'manual',
         headers: { 'user-agent': this.limits.userAgent, 'accept': 'text/html,application/xhtml+xml,text/*;q=0.9,application/json;q=0.8' },
         signal,
-      })
+        ...(this.publicDispatcher === undefined ? {} : { dispatcher: this.publicDispatcher }),
+      }
+      return await fetch(url, options)
     } catch (error: unknown) {
       throw translateAbortOrNetwork(error, signal)
     }
