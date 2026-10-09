@@ -314,6 +314,41 @@
   .card { width: 50px; height: 50px; }
 }
 
+
+/* Actual portrait motion reflects idle, attention, work, review and voice. */
+.avatar[data-state='ready'] .portraitImage,
+.avatar[data-avatar='kira'][data-state='done'] .portraitImage {
+  animation: kira-living-idle 8s ease-in-out infinite;
+}
+.avatar[data-state='pending'] .portraitImage { animation: kira-living-attention 3s ease-in-out infinite; }
+.avatar[data-state='running'][data-phase='verifying'] .portraitImage {
+  animation: kira-living-review 2.5s ease-in-out infinite;
+}
+:global(html[data-phoenix-voice-phase='listening']) .avatar[data-avatar='kira'] .portraitImage {
+  animation: kira-living-attention 3s ease-in-out infinite;
+}
+:global(html[data-phoenix-voice-phase='speaking']) .avatar[data-avatar='kira'] .portraitImage {
+  animation: kira-living-speak .85s ease-in-out infinite;
+}
+@keyframes kira-living-idle {
+  0%,100%{transform:scale(1.07) translate(0,0) rotate(0)}
+  27%{transform:scale(1.10) translate(-.5px,-.7px) rotate(-.55deg)}
+  63%{transform:scale(1.08) translate(.5px,.4px) rotate(.65deg)}
+}
+@keyframes kira-living-attention {
+  0%,100%{transform:scale(1.08) translateY(0) rotate(0)}
+  50%{transform:scale(1.12) translateY(-.9px) rotate(1.2deg)}
+}
+@keyframes kira-living-review {
+  0%,100%{transform:scale(1.07) translateX(0) rotate(-.5deg)}
+  50%{transform:scale(1.10) translateX(-.8px) rotate(.9deg)}
+}
+@keyframes kira-living-speak {
+  0%,100%{transform:scale(1.09) translateY(0) rotate(0)}
+  34%{transform:scale(1.12,1.075) translateY(-.8px) rotate(-.9deg)}
+  70%{transform:scale(1.085,1.12) translateY(.7px) rotate(.7deg)}
+}
+
 @media (prefers-reduced-motion: reduce) {
   .avatar *,
   .avatar *::before,

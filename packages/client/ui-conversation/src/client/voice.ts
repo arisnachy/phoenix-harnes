@@ -112,6 +112,7 @@ const pendingCodexRealtimeUtterances: PendingCodexRealtimeUtterance[] = []
 
 function publishVoiceAssistant(next: VoiceAssistantSnapshot): void {
   voiceAssistantSnapshot = next
+  if (typeof document !== 'undefined') document.documentElement.dataset.phoenixVoicePhase = next.phase
   for (const listener of voiceAssistantListeners) listener()
 }
 

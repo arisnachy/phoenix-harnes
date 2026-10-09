@@ -20,8 +20,7 @@ const AGENT_AVATAR_KINDS: readonly PortraitKey[] = [
   'zenith', 'cobalto', 'quasar', 'senda', 'orbita',
 ]
 
-const PORTRAIT_ALIAS: Record<ModelAvatarKind, PortraitKey> = {
-  kira: 'aurora',
+const PORTRAIT_ALIAS: Record<Exclude<ModelAvatarKind, 'kira'>, PortraitKey> = {
   sol: 'solaria',
   luna: 'eclipse',
   terra: 'senda',
@@ -72,6 +71,7 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
 
 /** Resolve one KIRA identity to its standalone public portrait asset. */
 export function portraitSrcForKind(kind: ModelAvatarKind): string {
+  if (kind === 'kira') return '/assets/kira-agents/kira-official.webp'
   return KIRA_AGENT_PORTRAITS[PORTRAIT_ALIAS[kind]]
 }
 

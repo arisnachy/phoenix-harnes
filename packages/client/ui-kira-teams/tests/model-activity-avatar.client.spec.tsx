@@ -106,7 +106,8 @@ describe('ModelActivityAvatar', () => {
 })
 
 describe('Kira lead identity', () => {
-  it('reuses an approved portrait asset while remaining a distinct semantic avatar kind', () => {
-    expect(portraitSrcForKind('kira')).toBe(portraitSrcForKind('aurora'))
+  it('uses Kira\'s exclusive portrait instead of Aurora\'s', () => {
+    expect(portraitSrcForKind('kira')).toBe('/assets/kira-agents/kira-official.webp')
+    expect(portraitSrcForKind('kira')).not.toBe(portraitSrcForKind('aurora'))
   })
 })
