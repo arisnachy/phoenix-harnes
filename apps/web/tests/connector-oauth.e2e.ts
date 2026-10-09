@@ -89,20 +89,27 @@ describe('connector OAuth browser handoff', () => {
       await page.goto(scaffold.baseUrl)
       await page.getByRole('button', { name: /^Settings/ }).click()
       await page.getByRole('dialog').getByRole('button', { name: 'Connectors', exact: true }).click()
-      const popupPromise = page.waitForEvent('popup')
       const card = page.locator(id !== 'browser-probe'
         ? '[data-connector-id="notion"]' : '[data-authorization-key="mcp-client/browser-probe"]')
       await card.getByRole('button', { name: 'Authorize', exact: true }).click()
-      // Every provider reserves a lightweight blank tab in the user's click
-      // gesture; no Phoenix waiting HTML page or cross-window relay is loaded.
-      const popup = await popupPromise
-      expect(popup.url()).toBe('about:blank')
+      // Discovery and prerequisites occur *inside* Phoenix: never open the old
+      // waiting page or a speculative about:blank tab in the click gesture.
       await page.getByLabel('Provider prerequisite').waitFor()
       await page.getByLabel('Provider prerequisite').fill('continue')
+      const popupPromise = page.waitForEvent('popup', { timeout: 15000 }).catch(() => null)
       await page.getByRole('button', { name: 'Continue', exact: true }).click()
-      await popup.getByRole('heading', { name: 'Provider consent fixture' }).waitFor({ timeout: 15000 })
-      expect(popup.url()).toBe(consent)
-      await page.getByRole('button', { name: 'Cancel', exact: true }).last().click()
+      await page.getByRole('link', { name: 'Open authorization page' }).waitFor({ timeout: 15000 })
+      const popup = await popupPromise
+      if (popup !== null) {
+        await popup.getByRole('heading', { name: 'Provider consent fixture' }).waitFor({ timeout: 15000 })
+        expect(popup.url()).toBe(consent)
+        await page.getByRole('button', { name: 'Cancel', exact: true }).last().click()
+      } else {
+        // Chromium can decline an asynchronous popup. The client must still
+        // expose the official consent hyperlink; no placeholder is required.
+        const href = await page.getByRole('link', { name: 'Open authorization page' }).getAttribute('href')
+        expect(href).toBe(consent)
+      }
     } finally {
       await browser?.close()
       await scaffold?.close()
