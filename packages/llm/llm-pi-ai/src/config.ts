@@ -467,7 +467,9 @@ export function resolveProfiles(
       throw new Error(`llm-pi-ai: provider "${provider}" has an empty displayName`)
     }
     const streamIdleTimeoutMs = source.streamIdleTimeoutMs
-      ?? (provider === 'openai-codex' ? DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS : DEFAULT_STREAM_IDLE_TIMEOUT_MS)
+      ?? (provider === 'openai-codex'
+        ? DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS
+        : DEFAULT_STREAM_IDLE_TIMEOUT_MS)
     if (!Number.isFinite(streamIdleTimeoutMs)
       || streamIdleTimeoutMs <= 0
       || streamIdleTimeoutMs > MAX_TIMER_DELAY_MS) {
