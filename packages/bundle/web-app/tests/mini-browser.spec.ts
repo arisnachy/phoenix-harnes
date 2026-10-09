@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { captureBrowserFrameWithFallback, miniBrowserRequestAllowed, miniBrowserSingleHeader, normalizeMiniBrowserAddress } from '../src/mini-browser.ts'
+import { captureBrowserFrameWithFallback, miniBrowserRequestAllowed, miniBrowserSingleHeader, normalizeMiniBrowserAddress, resolveMiniBrowserTab } from '../src/mini-browser.ts'
 
 afterEach(() => { /* Pure contracts: no live Chrome or network is required. */ })
 
@@ -32,6 +32,17 @@ describe('MiniBrowser capture recovery', () => {
   it('returns an actionable failure instead of inventing a screenshot', async () => {
     await expect(captureBrowserFrameWithFallback(async () => { throw new Error('Target closed') }))
       .rejects.toThrow('CDP_CAPTURE_FAILED')
+  })
+})
+
+describe('Scoped MiniBrowser CDP tabs', () => {
+  const tabs = [{ id: 'one', url: 'https://youtube.com' }, { id: 'two', url: 'https://github.com' }]
+  it('returns the requested tab even if another is globally active', () => {
+    expect(resolveMiniBrowserTab(tabs, 'one').url).toBe('https://youtube.com')
+    expect(resolveMiniBrowserTab(tabs, 'two').url).toBe('https://github.com')
+  })
+  it('refuses a closed or forged tab instead of silently showing another one', () => {
+    expect(() => resolveMiniBrowserTab(tabs, 'closed')).toThrow('no está disponible')
   })
 })
 
