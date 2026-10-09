@@ -1043,7 +1043,7 @@ export function PhoenixVisualizer({ spec }: PhoenixVisualizerProps) {
           {active.preflight.issues.includes('table-empty-data') || active.preflight.issues.includes('table-no-rows')
             ? 'La tabla no contiene datos verificables. Consulta la fuente de datos y vuelve a generarla.'
             : active.preflight.issues.some(issue => issue.startsWith('candlestick-'))
-              ? 'Las velas necesitan datos OHLC válidos (apertura, máximo, mínimo y cierre). Para un ejemplo ficticio usa demo:true.'
+              ? 'No se pudo representar esta gráfica: las velas necesitan OHLC válido (apertura, máximo, mínimo y cierre). Para un ejemplo ficticio usa demo:true.'
               : 'No se pudo representar esta gráfica con los datos recibidos. Comprueba los valores numéricos de cada serie.'}
         </div>
       </section>
