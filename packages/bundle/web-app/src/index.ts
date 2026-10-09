@@ -20,6 +20,7 @@ import z from '@phoenix-ai/schemastery'
 import { addHarnessSourceSection } from '@phoenix-ai/dsh-app-boot'
 import * as FrontendStatic from '@phoenix-ai/dsh-host-frontend-static'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
+import { registerMiniBrowserRoutes } from './mini-browser.ts'
 import { scrubbedParentEnv } from '@phoenix-ai/dsh-subprocess'
 import type {} from '@phoenix-ai/cordis-plugin-loader'
 import type {} from '@phoenix-ai/dsh-host-webserver'
@@ -231,6 +232,8 @@ export function apply(ctx: Context, config: Config): void {
   // Release dependent rows only after bind-dependent trust has been sampled once.
   ctx.provide(WEB_RUNTIME_SERVICE, runtime)
   ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
+  // A local Chromium session shared with Phoenix's MCP Chrome connector. Never a remote iframe.
+  registerMiniBrowserRoutes(ctx)
   if (config.surfaceContext) {
     ctx.inject(['systemPrompt'], (promptCtx) => {
       addHarnessSourceSection(promptCtx, SOURCE_ROOT)
