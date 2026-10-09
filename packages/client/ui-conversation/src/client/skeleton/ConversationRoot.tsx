@@ -64,16 +64,71 @@ export function ConversationRoot({
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
-  const [writing, setWriting] = useState(false)
   const [visualActive, setVisualActive] = useState(false)
+  // Collapsing on the FIRST keystroke blocks the input's first paint.
+  // Only a first locally admitted submission in a blank session can arm focus.
+  const [awaitingFirstBubbleFor, setAwaitingFirstBubbleFor] = useState<SessionId | undefined>()
+  const [firstBubbleSettledFor, setFirstBubbleSettledFor] = useState<SessionId | undefined>()
+  const firstSendGuard = useRef({
+    sessionId,
+    wasBlank: composerPhase === 'blank',
+    armed: false,
+  })
+  if (firstSendGuard.current.sessionId !== sessionId) {
+    firstSendGuard.current = { sessionId, wasBlank: composerPhase === 'blank', armed: false }
+  } else if (composerPhase === 'blank') {
+    firstSendGuard.current.wasBlank = true
+  }
   // null follows automatic focus; explicit expand/collapse overrides it for this session.
   const [headerOverride, setHeaderOverride] = useState<boolean | null>(null)
 
   useEffect(() => {
-    setWriting(false)
     setVisualActive(false)
     setHeaderOverride(null)
   }, [sessionId])
+
+  const pendingSubmitAt = inputState?.pendingSubmit?.startedAt
+  useEffect(() => {
+    const guard = firstSendGuard.current
+    if (sessionId === undefined || pendingSubmitAt === undefined || guard.sessionId !== sessionId
+      || !guard.wasBlank || guard.armed) return
+    guard.armed = true
+    setAwaitingFirstBubbleFor(sessionId)
+  }, [sessionId, pendingSubmitAt])
+
+  // ChatView paints an optimistic user bubble as soon as the input machine
+  // admits Enter OR a Send click. Never collapse until that bubble is in the
+  // DOM; one animation frame + 72ms gives the bubble its own paint first.
+  // A pending Host admission must not hold typing or trigger on rejected sends.
+  useEffect(() => {
+    if (sessionId === undefined || awaitingFirstBubbleFor !== sessionId
+      || typeof MutationObserver === 'undefined') return
+    const scroller = rootRef.current?.querySelector('[data-conversation-scroll]')
+    if (scroller === null || scroller === undefined) return
+    let raf: number | undefined
+    let timeout: number | undefined
+    let found = false
+    const onBubble = (): void => {
+      if (found || scroller.querySelector(
+        '[data-chat-flow] [data-pending-steering="true"], [data-chat-flow] [data-chat-flow-kind="user"]',
+      ) === null) return
+      found = true
+      observer.disconnect()
+      raf = window.requestAnimationFrame(() => {
+        timeout = window.setTimeout(() => {
+          setFirstBubbleSettledFor(sessionId)
+        }, 72)
+      })
+    }
+    const observer = new MutationObserver(onBubble)
+    observer.observe(scroller, { subtree: true, childList: true })
+    onBubble()
+    return () => {
+      observer.disconnect()
+      if (raf !== undefined) window.cancelAnimationFrame(raf)
+      if (timeout !== undefined) window.clearTimeout(timeout)
+    }
+  }, [awaitingFirstBubbleFor, sessionId])
 
   // Rendered browser/visual blocks arrive asynchronously as transcript nodes.
   // DOM observation here avoids coupling the chat shell to individual plugins.
@@ -94,7 +149,9 @@ export function ConversationRoot({
     return () => { observer.disconnect() }
   }, [sessionId])
 
-  useEffect(() => { setSidebarFocus(writing || visualActive) }, [setSidebarFocus, writing, visualActive])
+  useEffect(() => {
+    setSidebarFocus((sessionId !== undefined && firstBubbleSettledFor === sessionId) || visualActive)
+  }, [setSidebarFocus, sessionId, firstBubbleSettledFor, visualActive])
   useEffect(() => () => { setSidebarFocus(false) }, [setSidebarFocus])
 
   const openSettingsSection = useCallback((id: string): void => {
@@ -297,9 +354,7 @@ export function ConversationRoot({
           </button>
         </div>
       </div>
-      <div className={css.scrollBody} data-conversation-scroll="" onInputCapture={(event) => {
-        if (event.target instanceof HTMLTextAreaElement) setWriting(true)
-      }}>
+      <div className={css.scrollBody} data-conversation-scroll="">
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
         {composerSeat}
       </div>
