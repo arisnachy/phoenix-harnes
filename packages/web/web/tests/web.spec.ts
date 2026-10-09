@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import WebRuntime, {
   WebError,
@@ -120,6 +120,39 @@ describe('WebRuntime execution resolution', () => {
     }))
     web.registerSearchProvider(makeSearchProvider('browser', available, () => Promise.resolve(searchResult('browser'))))
     await expect(web.search({ query: 'q' })).resolves.toMatchObject({ content: 'browser' })
+  })
+
+  it('quarantines repeatedly failing providers and recovers after cooldown', async () => {
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(1_000)
+    try {
+      const { web } = await mountWeb({ searchProvider: 'primary', searchFallbackProviders: ['free'] })
+      const primary = vi.fn(async (): Promise<WebSearchResult> => { throw new WebError('timeout', 'WEB_PROVIDER_TIMEOUT') })
+      const free = vi.fn(async (): Promise<WebSearchResult> => { throw new WebError('blocked', 'WEB_PROVIDER_TRANSIENT') })
+      web.registerSearchProvider(makeSearchProvider('primary', available, primary))
+      web.registerSearchProvider(makeSearchProvider('free', available, free))
+      await expect(web.search({ query: 'first' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_FALLBACK_EXHAUSTED' })
+      await expect(web.search({ query: 'second' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_FALLBACK_EXHAUSTED' })
+      await expect(web.search({ query: 'third' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_CIRCUIT_OPEN' })
+      expect(primary).toHaveBeenCalledTimes(2)
+      expect(free).toHaveBeenCalledTimes(2)
+      clock.mockReturnValue(301_001)
+      await expect(web.search({ query: 'after cooldown' })).rejects.toMatchObject({ code: 'WEB_PROVIDER_FALLBACK_EXHAUSTED' })
+      expect(primary).toHaveBeenCalledTimes(3)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('skips a quota-limited route immediately but keeps the free fallback', async () => {
+    const { web } = await mountWeb({ searchProvider: 'primary', searchFallbackProviders: ['free'] })
+    const primary = vi.fn(async (): Promise<WebSearchResult> => { throw new WebError('quota reached', 'WEB_PROVIDER_QUOTA') })
+    const free = vi.fn(async () => searchResult('free'))
+    web.registerSearchProvider(makeSearchProvider('primary', available, primary))
+    web.registerSearchProvider(makeSearchProvider('free', available, free))
+    await expect(web.search({ query: 'one' })).resolves.toMatchObject({ content: 'free' })
+    await expect(web.search({ query: 'two' })).resolves.toMatchObject({ content: 'free' })
+    expect(primary).toHaveBeenCalledOnce()
+    expect(free).toHaveBeenCalledTimes(2)
   })
 
   it('ignores unusable providers when auto-selecting', async () => {
