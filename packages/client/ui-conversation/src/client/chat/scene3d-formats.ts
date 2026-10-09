@@ -227,7 +227,8 @@ const identity=():number[]=>[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]
 function matrix(node:R):number[]{
   if(Array.isArray(node.matrix)&&node.matrix.length===16&&node.matrix.every(Number.isFinite))return node.matrix
   const t=nums(node.translation),s=nums(node.scale),q=nums(node.rotation)
-  const [x,y,z,w]=q.length===4?q:[0,0,0,1],sx=s[0]??1,sy=s[1]??1,sz=s[2]??1
+  const x=q[0]??0,y=q[1]??0,z=q[2]??0,w=q.length===4?(q[3]??1):1
+  const sx=s[0]??1,sy=s[1]??1,sz=s[2]??1
   return [
     (1-2*(y*y+z*z))*sx,(2*(x*y+z*w))*sx,(2*(x*z-y*w))*sx,0,
     (2*(x*y-z*w))*sy,(1-2*(x*x+z*z))*sy,(2*(y*z+x*w))*sy,0,
