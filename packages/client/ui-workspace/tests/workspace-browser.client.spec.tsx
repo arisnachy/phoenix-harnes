@@ -813,10 +813,10 @@ describe('WorkspaceBrowser', () => {
       expect(screen.queryByPlaceholderText('搜索会话…')).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
       expect(expandSidebar).toHaveBeenCalledTimes(1)
-      // The wide flip mounts the input and focuses it after the slide.
+      // The instant rail flip focuses the input within 40ms, not the old 300ms.
       rerender(b, { wide: true })
       const input = screen.getByPlaceholderText('搜索会话…')
-      act(() => { vi.advanceTimersByTime(300) })
+      act(() => { vi.advanceTimersByTime(40) })
       expect(document.activeElement).toBe(input)
       // Wide search button is decorative (tabIndex -1, no expand call).
       fireEvent.click(screen.getByRole('button', { name: '搜索会话' }))
