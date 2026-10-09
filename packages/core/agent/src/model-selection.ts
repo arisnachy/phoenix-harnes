@@ -640,7 +640,7 @@ function nextPhoenixAutoAssemblyStep(
 
 /** A plan is evidence only if Sol actually published text, not if it thought privately. */
 function hasVisibleSolPlan(text: string): boolean {
-  return /^(?:#{1,3}\s*)?(?:\*\*)?plan(?:\s+de\s+trabajo)?(?:\*\*)?\s*:/iu.test(text.trim())
+  return /^(?:#{1,3}\s*)?(?:\*\*)?plan(?:\s+de\s+trabajo)?\s*:(?:\*\*)?/iu.test(text.trim())
 }
 
 interface PhoenixAutoRouterState {
