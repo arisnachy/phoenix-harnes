@@ -85,6 +85,8 @@ export class WebRuntime extends Service {
     fetchProvider: z.string(),
   })
 
+  private readonly searchCooldownUntil = new Map<string, number>()
+  private static readonly SEARCH_COOLDOWN_MS = 60_000
   private searchProviders = new Map<string, WebSearchProvider>()
   private fetchProviders = new Map<string, WebFetchProvider>()
   private readonly searchProviderId: string | undefined
@@ -145,18 +147,24 @@ export class WebRuntime extends Service {
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
     const providers = resolveSearchProviders(this.searchProviders, this.searchProviderId, this.searchFallbackProviderIds)
     let lastRecoverable: unknown
+    let skipped = 0
     for (const provider of providers) {
       if (signal?.aborted === true) throw signal.reason ?? new WebError('web search was aborted', 'WEB_SEARCH_ABORTED')
+      const retryAt = this.searchCooldownUntil.get(provider.id) ?? 0
+      if (retryAt > Date.now()) { skipped++; continue }
+      this.searchCooldownUntil.delete(provider.id)
       try {
         const result = await provider.search(request, signal)
         return capSources(result, request.maxResults)
       } catch (error) {
+        if (signal?.aborted === true) throw signal.reason ?? error
         if (!isRecoverableSearchError(error)) throw error
         lastRecoverable = error
+        this.searchCooldownUntil.set(provider.id, Date.now() + WebRuntime.SEARCH_COOLDOWN_MS)
       }
     }
     throw new WebError(
-      `all configured web search providers failed recoverably: ${providers.map(provider => provider.id).join(', ')}`,
+      `web search temporarily unavailable: ${providers.map(provider => provider.id).join(', ')} (${skipped} on cooldown). Do not retry immediately. Try one approved direct-source web_fetch/browser route and report unverified facts.`,
       'WEB_PROVIDER_FALLBACK_EXHAUSTED',
       { cause: lastRecoverable },
     )
@@ -218,6 +226,7 @@ const RECOVERABLE_SEARCH_CODES = new Set([
   'WEB_PROVIDER_UNAVAILABLE',
   'WEB_PROVIDER_CONFIGURED_UNAVAILABLE',
   'WEB_PROVIDER_TRANSIENT',
+  'WEB_PROVIDER_CREDENTIAL_MISSING',
 ])
 
 /** Resolve the configured primary followed by usable, explicitly ordered fallbacks. */
