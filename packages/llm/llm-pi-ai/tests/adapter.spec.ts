@@ -14,7 +14,12 @@ import * as LlmPiAi from '@phoenix-ai/dsh-llm-pi-ai'
 import { PiAiAdapter } from '@phoenix-ai/dsh-llm-pi-ai'
 import { MAX_TIMER_DELAY_MS } from '@phoenix-ai/dsh-timeout'
 import { getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
-import { DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS, DEFAULT_MAX_REQUEST_IMAGE_BYTES, DEFAULT_STREAM_IDLE_TIMEOUT_MS, resolveProfiles } from '../src/config.ts'
+import {
+  DEFAULT_CODEX_STREAM_IDLE_TIMEOUT_MS,
+  DEFAULT_MAX_REQUEST_IMAGE_BYTES,
+  DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  resolveProfiles,
+} from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer, textEvents } from './mock-server.ts'
