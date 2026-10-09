@@ -42,3 +42,23 @@
 .face[data-motion='off'],.face[data-in-view='false'] {animation-play-state:paused!important;}
 @media(prefers-reduced-motion:reduce){.face *{animation:none!important;transition:none!important}
  .face .eye,.face .mouth{opacity:0!important}}
+
+
+/* Pupil highlights share the face layer coordinate system and gaze direction. */
+.gaze{position:absolute;width:3%;height:3%;border-radius:50%;pointer-events:none;
+ background:radial-gradient(circle,#fff 5%,#453735 48%,transparent 75%);
+ transform:translate(-50%,-50%);opacity:.38;filter:blur(.2px);
+ animation:living-eye-scan 13.5s ease-in-out infinite; }
+.face[data-gaze='left'] .gaze {animation:none;transform:translate(calc(-50% - 2px),-50%)}
+.face[data-gaze='right'] .gaze {animation:none;transform:translate(calc(-50% + 2px),-50%)}
+.face[data-gaze='up'] .gaze {animation:none;transform:translate(-50%,calc(-50% - 2px))}
+.face[data-gaze='down'] .gaze {animation:none;transform:translate(-50%,calc(-50% + 2px))}
+.face[data-expression='focused'] .gaze {opacity:.5}
+.face[data-listening='true'] .gaze {animation-duration:4s}
+@keyframes living-eye-scan {
+  0%,10%,100%{transform:translate(-50%,-50%)}
+  15%,20%{transform:translate(calc(-50% - 1.5px),-50%)}
+  40%,45%{transform:translate(calc(-50% + 1.5px),-50%)}
+  61%,65%{transform:translate(-50%,calc(-50% - 1.5px))}
+  81%,84%{transform:translate(-50%,calc(-50% + 1.5px))}
+}

@@ -60,6 +60,7 @@ export interface LivingAvatarFaceProps {
   readonly kind: ModelAvatarKind
   readonly expression: AvatarExpression
   readonly motion?: AvatarMotion
+  readonly pose?: 'auto' | 'forward' | 'left' | 'right' | 'up' | 'down'
   readonly speaking?: boolean
   readonly listening?: boolean
 }
@@ -70,7 +71,7 @@ export interface LivingAvatarFaceProps {
  * This is a 2.5D approximation, NOT a fully articulated Live2D mesh.
  */
 export function LivingAvatarFace({
-  kind, expression, speaking = false, listening = false, motion = 'auto',
+  kind, expression, speaking = false, listening = false, motion = 'auto', pose = 'auto',
 }: LivingAvatarFaceProps) {
   const node = useRef<HTMLSpanElement>(null)
   useEffect(() => {
@@ -96,11 +97,15 @@ export function LivingAvatarFace({
   return (
     <span ref={node} className={css.face} data-living-face data-expression={expression}
       data-speaking={speaking} data-listening={listening} data-motion={motion}
-      data-in-view="true" aria-hidden="true" style={skin}>
+      data-in-view="true" data-gaze={pose} aria-hidden="true" style={skin}>
       <span className={css.eye} data-eye="left"
         style={{ left: `${marks.leftX}%`, top: `${marks.eyesY}%`, animationDelay: `${blinkOffset}s` }} />
       <span className={css.eye} data-eye="right"
         style={{ left: `${marks.rightX}%`, top: `${marks.eyesY - 1}%`, animationDelay: `${blinkOffset}s` }} />
+      <span className={css.gaze} data-gaze-eye="left"
+        style={{ left: `${marks.leftX}%`, top: `${marks.eyesY}%` }} />
+      <span className={css.gaze} data-gaze-eye="right"
+        style={{ left: `${marks.rightX}%`, top: `${marks.eyesY - 1}%` }} />
       <span className={css.mouth} style={{ left: `${marks.mouthX}%`, top: `${marks.mouthY}%` }} />
       <span className={css.expressionGlint} />
     </span>
