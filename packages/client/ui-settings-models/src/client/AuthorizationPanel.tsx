@@ -102,10 +102,10 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
-type CuratedMcpConnectorId = 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+type CuratedMcpConnectorId = 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'microsoft-learn' | 'microsoft-workiq' | 'microsoft-azure' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
 
 const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
-  'github', 'meta-devtools', 'meta-whatsapp-business', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
+  'github', 'meta-devtools', 'meta-whatsapp-business', 'microsoft-learn', 'microsoft-workiq', 'microsoft-azure', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
   'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
 ])
 
