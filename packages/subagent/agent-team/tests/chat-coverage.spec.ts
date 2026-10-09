@@ -43,6 +43,10 @@ describe('human teamwork without progress spam', () => {
     expect(shouldPublishTeammateSpeech('Kira, voy a verificar otra noticia.', true, true)).toBe(false)
     expect(shouldPublishTeammateSpeech('Kira, confirmé el titular y la URL.', true, true)).toBe(true)
     expect(shouldPublishTeammateSpeech('Kira, ¿necesitas otra fuente?', true, false)).toBe(true)
+    expect(shouldPublishTeammateSpeech('Kira, el buscador dio HTTP 500; probaré otro.', true, false)).toBe(false)
+    expect(shouldPublishTeammateSpeech('Kira, Google mostró CAPTCHA; intentaré Yahoo.', true, true)).toBe(false)
+    expect(shouldPublishTeammateSpeech('Kira, no puedo continuar sin tu autorización.', true, false)).toBe(true)
+    expect(shouldPublishTeammateSpeech('Kira, confirmé en una fuente oficial los requisitos; ya tengo el enlace.', true, true)).toBe(true)
     expect(shouldPublishTeammateSpeech('', false, false)).toBe(false)
   })
   it('shares one opening and one tool-backed finding with Kira, not a stream of plans', async () => {
