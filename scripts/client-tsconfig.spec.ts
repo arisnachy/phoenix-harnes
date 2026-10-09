@@ -21,7 +21,6 @@ function clientCssDeclarations(): string[] {
     .sort()
 }
 
-
 /** Keep one CSS-independent owner for every client test's TypeScript program. */
 function clientPackageTestFiles(): string[] {
   const packages = resolve(root, 'packages/client')
@@ -29,7 +28,7 @@ function clientPackageTestFiles(): string[] {
     readdirSync(directory, { withFileTypes: true }).flatMap(entry => {
       const path = resolve(directory, entry.name)
       return entry.isDirectory() ? walk(path)
-        : /\\.tsx?$/.test(entry.name) ? [path.replaceAll(sep, '/')] : []
+        : /\.tsx?$/.test(entry.name) ? [path.replaceAll(sep, '/')] : []
     })
   return readdirSync(packages, { withFileTypes: true })
     .filter(entry => entry.isDirectory())
@@ -43,7 +42,7 @@ function clientPackageTestFiles(): string[] {
 function aggregateFiles(name: 'host' | 'client'): Set<string> {
   const file = resolve(root, `tsconfig.${name}.json`)
   const read = ts.readConfigFile(file, ts.sys.readFile)
-  if (read.error !== undefined) throw new Error(ts.flattenDiagnosticMessageText(read.error.messageText, '\\n'))
+  if (read.error !== undefined) throw new Error(ts.flattenDiagnosticMessageText(read.error.messageText, '\n'))
   const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, root)
   return new Set(parsed.fileNames.map(path => path.replaceAll(sep, '/')))
 }
@@ -53,8 +52,8 @@ describe('client TypeScript aggregate', () => {
     const host = aggregateFiles('host')
     const client = aggregateFiles('client')
     const misplaced = clientPackageTestFiles().filter(file => {
-      const expected = /\\.client\\.(?:spec\\.)?tsx?$/.test(file) ? 'client'
-        : /\\.host\\.(?:spec\\.)?tsx?$/.test(file) ? 'host' : undefined
+      const expected = /\.client\.(?:spec\.)?tsx?$/.test(file) ? 'client'
+        : /\.host\.(?:spec\.)?tsx?$/.test(file) ? 'host' : undefined
       return expected === undefined
         || (expected === 'host') !== host.has(file)
         || (expected === 'client') !== client.has(file)
