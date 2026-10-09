@@ -590,11 +590,35 @@ export function installProceduralLearning(
       if (eventType === 'tool/call' && isRecord(data) && typeof data.name === 'string' && data.name.trim() !== '') {
         if (data.name === 'living_act' && isRecord(data.arguments) && typeof data.arguments.action === 'string') {
           trace.livingAction(learningOwnerId, data.arguments.action)
-        } else {
-          const browserStep = reusableBrowserWorkStep(data.name, data.arguments)
-          if (browserStep !== undefined) trace.browserStep(learningOwnerId, browserStep)
-          else if (data.name !== 'computer') trace.toolCall(learningOwnerId, data.name)
+        } else if (data.name !== 'computer') {
+          trace.toolCall(learningOwnerId, data.name)
         }
+        // Browser actions enter procedural memory only after a successful
+        // corresponding tool/result, never merely when they are attempted.
+        return
+      }
+      if (eventType === 'tool/result' && isRecord(data)) {
+        if (data.error !== undefined || !isRecord(data.message)) return
+        const message = data.message
+        if (!isRecord(message.source) || message.source.callId === undefined) return
+        const failed = Array.isArray(message.content) && message.content.some(
+          (part: unknown) => isRecord(part) && part.isError === true,
+        )
+        if (failed) return
+        const callId = String(message.source.callId)
+        const call = session.events.findLast(row => row.type === 'tool/call'
+          && String(row.data.callId) === callId)
+        if (call?.type !== 'tool/call') return
+        const browserStep = reusableBrowserWorkStep(call.data.name, call.data.arguments)
+        if (browserStep === undefined) return
+        // Native WebView may accept a request but report that no login form
+        // exists. Never learn that as a successful login procedure.
+        const output = Array.isArray(message.content)
+          ? message.content.flatMap((part: unknown) =>
+            isRecord(part) && typeof part.text === 'string' ? [part.text] : []).join(' ')
+          : ''
+        if (output.includes('fields-not-found')) return
+        trace.browserStep(learningOwnerId, browserStep)
         return
       }
       if (eventType === 'hardness/kernel' && isRecord(data)) {
