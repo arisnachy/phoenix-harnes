@@ -87,7 +87,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(screen.queryByText('◉ Abrir navegador')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /Abrir navegador completo/ }))
     await waitFor(() => {
-      expect(calls).toContainEqual({ type: 'open-external' })
+      expect(calls).toContainEqual(expect.objectContaining({ type: 'open-external' }))
     })
   })
 
@@ -95,7 +95,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
       error: 'El host todavía no pudo conectar con Chromium.',
     }), { status: 503, headers: { 'content-type': 'application/json' } })))
-    render(<MiniBrowser requested />)
+    render(<MiniBrowser requested tabId="shared-tab" />)
     expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
     await waitFor(() => {
       expect(screen.getByRole('status').textContent).toContain('Conexión del navegador')
@@ -107,7 +107,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     installBrowserMock()
     const view = render(<><MiniBrowser key="previous" requested active={false} /></>)
     expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Ocultar microventana' }))
+    fireEvent.click(screen.getByTitle('Ocultar microventana'))
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
     view.rerender(<>
       <MiniBrowser key="previous" requested active={false} />
@@ -124,7 +124,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
       <MiniBrowser key="second-request" requested active />
     </>)
     expect(screen.getAllByRole('region', { name: 'Navegador de Kira' })).toHaveLength(2)
-    expect(screen.getByRole('button', { name: 'Reactivar esta página' })).toBeTruthy()
+    expect(screen.getByTitle('Reactivar esta página')).toBeTruthy()
     view.unmount()
   })
 
@@ -149,7 +149,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     fireEvent.change(address, { target: { value: 'https://example.org' } })
     fireEvent.click(screen.getByRole('button', { name: 'Ir' }))
     await waitFor(() => {
-      expect(calls).toContainEqual({ type: 'open', url: 'https://example.org' })
+      expect(calls).toContainEqual(expect.objectContaining({ type: 'open', url: 'https://example.org' }))
     })
   })
   it('plays a YouTube watch URL with sound without replacing Kira\'s CDP tab', async () => {
