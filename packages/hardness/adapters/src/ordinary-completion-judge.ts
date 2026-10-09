@@ -126,6 +126,15 @@ export function ordinaryCompletionReviewBudget(input: {
   return { mode: 'fast', maxPasses: 0 }
 }
 
+/** Only a concrete fixable finding plus remaining allowance warrants another LLM review. */
+export function independentReviewNeedsFollowup(
+  verdict: 'pass' | 'needs_changes' | 'blocked',
+  completedPasses: number,
+  maximumPasses: number,
+): boolean {
+  return verdict === 'needs_changes' && completedPasses < maximumPasses
+}
+
 /** Structured outcome returned by one ordinary-task independent completion review. */
 export interface OrdinaryCompletionJudgeDecision {
   readonly verdict: 'pass' | 'needs_changes' | 'blocked'
@@ -377,8 +386,6 @@ export async function reviewOrdinaryCompletion(input: {
     }
   }
 
-  // Preserve an explicit user cancellation rather than funding another independent run.
-  input.signal.throwIfAborted()
   const toolFilter: ToolRestriction = { allow: [...READ_ONLY_TOOLS] }
   const taskQuality = qualityRequirementsForNeed({ description: input.request })
   const gameReview = isAbstractGameNeed(input.request) ? abstractGameReview(input.request) : isGameDevelopmentNeed(input.request)
@@ -386,6 +393,8 @@ export async function reviewOrdinaryCompletion(input: {
     : ''
   let run: Awaited<ReturnType<JudgeRuntime['start']>> | undefined
   try {
+    // Preserve an explicit user cancellation rather than funding another independent run.
+    input.signal.throwIfAborted()
     run = await input.subagents.start(resolved.name, {
       label: 'ordinary-completion-judge',
       parent: input.parent,
@@ -607,8 +616,7 @@ export function installOrdinaryCompletionJudgeBridge(
     })
     if (signal.aborted) return
     state.judgedGeneration = state.generation
-    state.reviewNeedsFollowup = decision.verdict === 'needs_changes'
-      && state.judgePasses < reviewBudget.maxPasses
+    state.reviewNeedsFollowup = independentReviewNeedsFollowup(decision.verdict, state.judgePasses, reviewBudget.maxPasses)
     if (decision.verdict === 'needs_changes'
       || (decision.verdict === 'blocked' && !isJudgeInfrastructureBlock(decision))) {
       agent.steer(judgeNotice(decision))

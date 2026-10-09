@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { SubagentRuntime } from '@phoenix-ai/dsh-subagent'
 import {
+  independentReviewNeedsFollowup,
   isGameAssetDiscovery,
   isGameAssetProduction,
   isGameAssetProvenanceMutation,
@@ -22,6 +23,13 @@ describe('ordinary completion judge', () => {
       mutationCount: 3,
       failureCount: 0,
     })).toEqual({ mode: 'fast', maxPasses: 0 })
+  })
+
+  it('only reopens a review when a fixable finding is followed by new evidence and budget remains', () => {
+    expect(independentReviewNeedsFollowup('pass', 1, 3)).toBe(false)
+    expect(independentReviewNeedsFollowup('blocked', 1, 3)).toBe(false)
+    expect(independentReviewNeedsFollowup('needs_changes', 1, 2)).toBe(true)
+    expect(independentReviewNeedsFollowup('needs_changes', 2, 2)).toBe(false)
   })
 
   it('does not finance independent review for pure previews and ordinary local work', () => {
