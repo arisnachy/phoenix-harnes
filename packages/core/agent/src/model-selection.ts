@@ -233,7 +233,7 @@ const AUTO_EXECUTION_CONTINUATION =
   'and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
 
 const AUTO_TEAM_ADMISSION_CONTINUATION =
-  'Phoenix Auto substantive unfinished work may require Team participation, but successful one-shot graphs and other completed previews NEVER do. ' +
+  'Phoenix Auto substantive unfinished work may require real Kira Team participation, but successful one-shot graphs and other completed previews NEVER do. ' +
   'Continue as Kira on Luna Max and delegate one bounded responsibility from the Sol plan with spawn_teammate, ' +
   'or wake an existing appropriate teammate. Add a second teammate only when a genuinely independent front shortens the critical path. ' +
   'Keep the critical path and supervision with Kira, communicate through Team tools, wait for a real teammate result or blocker, ' +
@@ -972,8 +972,10 @@ export function installModelSelection(
     // The actual visible assistant text is the Sol->Luna handoff. Never invent
     // a hidden plan or wait for a second planning call to repeat it.
     if (latest.step === 1 && !latestStepHasToolActivity
-      && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL && hasVisibleSolPlan(latest.text)
-      && phoenixAutoState.lastContinuationStep !== latest.step) {
+      && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL && hasVisibleSolPlan(latest.text)) {
+      // Once the plan was handed off, do not re-enter Team admission for the
+      // exact same stopping step. It would manufacture a second coordination turn.
+      if (phoenixAutoState.lastContinuationStep === latest.step) return
       phoenixAutoState.continuationCount += 1
       phoenixAutoState.lastContinuationStep = latest.step
       agent.steer(createUserMessage({
