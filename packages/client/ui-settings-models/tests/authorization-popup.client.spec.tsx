@@ -115,6 +115,18 @@ describe('OAuth without a placeholder page', () => {
     expect(open).not.toHaveBeenCalled()
   })
 
+  it('explains a timed-out Host begin instead of blaming the Notion provider', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const api = panelApi(pendingForever)
+    api.begin = vi.fn(async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    })
+    renderPanel(api)
+    await clickAuthorize()
+    expect(await screen.findByText(/no respondió a authorization.begin en 12 segundos/)).toBeTruthy()
+    expect(open).not.toHaveBeenCalled()
+  })
+
   it('keeps provider stage diagnostics and failed status inside PHOENIX', async () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
     const api = panelApi(async () => ok({
