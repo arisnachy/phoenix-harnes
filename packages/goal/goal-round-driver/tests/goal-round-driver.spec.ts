@@ -404,6 +404,25 @@ describe('same-session goal driving', () => {
     expect(test.adapter.requests).toHaveLength(1)
   })
 
+  it('pauses Phoenix Auto instead of restarting when the user says Kira, para la prueba', async () => {
+    const test = await harness(['hang', textResponse('must not resume')])
+    test.ctx.goals.create(test.agent, { objective: 'complete the browser form', maxGoalRounds: 3 })
+    await waitForRequests(test.adapter, 1)
+
+    test.agent.steer(createUserMessage({
+      content: [{ type: 'text', text: 'Kira, para la prueba' }],
+      source: { kind: 'user' },
+    }))
+    await test.agent.whenIdle()
+    const goal = await waitForGoal(test.ctx, test.agent, current => current?.phase === 'paused')
+
+    expect(goal).toMatchObject({ roundsStarted: 1, activation: 'disarmed' })
+    expect(test.adapter.requests).toHaveLength(1)
+    expect(test.agent.inbox.nextTurn).toHaveLength(0)
+    expect(test.agent.inbox.nextStep).toHaveLength(0)
+    expect(test.agent.session.events.filter(event => event.type === 'turn/start')).toHaveLength(1)
+  })
+
   it('retries an admitted round after an internal hook cancellation without pausing the mission', async () => {
     const test = await harness(['hang', textResponse('recovered after verifier interruption')])
     const continued = stopAfterContinuation(test.ctx, test.agent)
