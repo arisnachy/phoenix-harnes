@@ -73,7 +73,7 @@ describe('KIRA Team chat message', () => {
 
     expect(view.getByText('Kira')).toBeTruthy()
     expect(view.getByText('Coordinación')).toBeTruthy()
-    expect(view.getByText('Asignación')).toBeTruthy()
+    expect(view.queryByText('Asignación')).toBeNull()
     expect(view.getByText('→ La Forja')).toBeTruthy()
     expect(view.container.querySelector('[data-avatar="kira"]')).toBeTruthy()
     expect(view.container.querySelector('[data-agent-portrait-image]')).toBeTruthy()
@@ -93,15 +93,15 @@ describe('KIRA Team chat message', () => {
     const done = render(<View node={assignment} useProjection={() => ({
       'worker-a': { id: 'worker-a', name: 'Argo', avatar: 'argo', role: 'skill.verification', status: 'done' },
     })} />)
-    expect(done.getByRole('status').textContent).toContain('terminó')
-    expect(done.container.querySelector('[data-team-target-status="done"]')).toBeTruthy()
+    expect(done.queryByRole('status')).toBeNull()
+    expect(done.container.querySelector('[data-team-target-status="done"]')).toBeNull()
     done.unmount()
 
     const failed = render(<View node={assignment} useProjection={() => ({
       'worker-a': { id: 'worker-a', name: 'Argo', avatar: 'argo', role: 'skill.verification', status: 'failed' },
     })} />)
-    expect(failed.getByRole('status').textContent).toContain('falló')
-    expect(failed.container.querySelector('[data-team-target-status="failed"]')).toBeTruthy()
+    expect(failed.queryByRole('status')).toBeNull()
+    expect(failed.container.querySelector('[data-team-target-status="failed"]')).toBeNull()
   })
 
   it('leaves all emoji reactions to the canonical animated message-actions tray', () => {
@@ -165,15 +165,33 @@ describe('KIRA Team chat message', () => {
   })
 
   it.each([
-    ['assignment', 'Asignación'],
     ['question', 'Pregunta'],
-    ['result', 'Resultado'],
     ['review', 'Revisión'],
     ['decision', 'Decisión'],
   ] as const)('labels consequential %s messages', (purpose, label) => {
     const view = render(<View node={node({ purpose })} />)
     expect(view.getByText(label)).toBeTruthy()
   })
+  it('shows ordinary Kira-to-Astra and Astra-to-Kira turns without administrative labels', () => {
+    const assignment = render(<View node={node({
+      senderId: 'root', senderName: 'lead', senderKind: 'kira',
+      targetId: 'astra', targetName: 'astra', purpose: 'assignment',
+      content: [{ type: 'text', text: 'Astra, busca el titular y confirma el enlace.' }],
+    })} />)
+    expect(assignment.getByText('Kira')).toBeTruthy()
+    expect(assignment.getByText('→ Astra')).toBeTruthy()
+    expect(assignment.queryByText('Asignación')).toBeNull()
+    assignment.unmount()
+    const answer = render(<View node={node({
+      senderId: 'astra', senderName: 'astra', senderKind: 'agent',
+      targetId: 'root', targetName: 'Kira', purpose: 'result',
+      content: [{ type: 'text', text: 'Kira, aquí tienes el titular y su enlace verificado.' }],
+    })} />)
+    expect(answer.getByText('Astra')).toBeTruthy()
+    expect(answer.getByText('→ Kira')).toBeTruthy()
+    expect(answer.queryByText('Resultado')).toBeNull()
+  })
+
   it('uses the persisted participant identity for a real peer coordination message', () => {
     const view = render(<View node={node({ senderName: 'review-worker', targetId: 'worker-b', targetName: 'verify-worker' })}
       useProjection={() => ({

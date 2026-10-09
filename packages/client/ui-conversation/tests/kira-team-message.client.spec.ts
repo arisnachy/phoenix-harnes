@@ -185,6 +185,22 @@ describe('KIRA Team conversation node', () => {
     expect(kiraTeamMessageDefinition.buildViewNode?.(context(undefined))).toBeNull()
   })
 
+  it('makes a real teammate address to Kira explicit without inventing speech', () => {
+    const message = match('team/chat-message', {
+      version: 1,
+      message: {
+        id: 'worker-a:reply', senderId: 'worker-a', senderName: 'Astra',
+        senderKind: 'agent', missionId: 'root', targetId: 'root',
+        text: 'Kira, encontré un titular y comprobaré el enlace.', reactions: [],
+      },
+    })
+    const projected = kiraTeamMessageDefinition.start(context(undefined), message, {} as never)
+    expect(projected).toMatchObject({
+      senderName: 'Astra', targetName: 'Kira',
+      content: [{ type: 'text', text: 'Kira, encontré un titular y comprobaré el enlace.' }],
+    })
+  })
+
   it('keeps optional recipient and purpose backward-compatible and resolves location fallbacks', () => {
     const legacy = match('team/message/queued', {
       version: 1,

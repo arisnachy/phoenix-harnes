@@ -141,6 +141,22 @@ export class TeamService extends TypertRemoteService {
 
     ctx.on('session/event', (session, event) => {
       if (this.lifecycle.disposed) return
+      // A human stopping Kira also stops the live Team mission; otherwise
+      // children keep speaking after the UI reports that the turn stopped.
+      if (session.header.origin !== 'subagent' && event.type === 'turn/end'
+        && event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user') {
+        const lead = ctx.agents.get(session.id)
+        if (lead?.session === session) {
+          for (const childId of this.roster.liveChildrenByRoot().get(lead) ?? []) {
+            if (ctx.agents.get(childId)?.status !== 'running') continue
+            try {
+              ctx.subagents.interrupt(childId, { kind: 'ancestor', agent: lead })
+            } catch (error: unknown) {
+              ctx.logger.warn(`Teammate cancellation failed: ${errorMessage(error)}`)
+            }
+          }
+        }
+      }
       this.mailbox.observeSessionEvent(session, event)
       const parentId = session.header.parentSession
       const root = parentId === undefined ? undefined : ctx.sessions.get(parentId)

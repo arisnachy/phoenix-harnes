@@ -218,8 +218,35 @@ export class TeamChat {
       const status = end?.type === 'turn/end' ? end.data.reason.kind === 'error' ? 'failed' : 'done'
         : end?.type === 'turn/start' ? 'working' : prior !== undefined ? prior.status : 'working'
       const person = this.participant(root, header, events, status)
+      const resultCallIds = new Set<string>()
+      let handedOffResult = false
       for (const event of events) {
-        if (event.seq < (header.seedLength ?? 0) || event.type !== 'assistant/message' || !isAppendSurfaceEvent(event)) continue
+        if (event.seq < (header.seedLength ?? 0)) continue
+        if (event.type === 'turn/start') handedOffResult = false
+        if (event.type === 'tool/call'
+          && (event.data.name === 'send_message' || event.data.name === 'followup_task')) {
+          try {
+            const args: unknown = JSON.parse(event.data.arguments)
+            if (typeof args === 'object' && args !== null && 'purpose' in args
+              && 'target' in args && args.purpose === 'result' && args.target === 'lead') {
+              resultCallIds.add(event.data.callId)
+            }
+          } catch { /* Invalid tool arguments cannot establish a successful handoff. */ }
+        }
+        if (event.type === 'tool/result' && event.data.message.source.kind === 'tool') {
+          const callId = event.data.message.source.callId
+          if (resultCallIds.has(callId) && event.data.message.content.some(
+            block => block.type === 'tool-result' && block.toolCallId === callId && !block.isError,
+          )) handedOffResult = true
+        }
+        if (event.type !== 'assistant/message' || !isAppendSurfaceEvent(event)) continue
+        // The peer result is already a real visible Astra -> Kira message.
+        // Do not show the child's subsequent end-of-turn paraphrase a second time.
+        if (handedOffResult) continue
+        const rootBoundary = root.events.findLast(record =>
+          record.time <= event.time && (record.type === 'turn/start' || record.type === 'turn/end'))
+        if (rootBoundary?.type === 'turn/end' && rootBoundary.data.reason.kind === 'aborted'
+          && rootBoundary.data.reason.reason.kind === 'user') continue
         const id = `${header.id}:${event.data.message.id}`
         const text = textOf(event.data.message.content)
         if (known.has(id) || text.trim() === '') continue
@@ -233,7 +260,8 @@ export class TeamChat {
         const bounded = boundedTranscriptText(text, this.maxBytes)
         root.append('team/chat-message', { version: 1, message: { id, senderId: header.id,
           senderName: person.name, senderKind: 'agent', avatar: person.avatar, role: person.role, missionId: root.id, text: bounded,
-          time: event.time, sourceSeq: event.seq, mentions: [], reactions: [] } })
+          ...(/^@?Kira[,!:]\s/iu.test(bounded) ? { targetId: root.id, mentions: [root.id] } : { mentions: [] }),
+          time: event.time, sourceSeq: event.seq, reactions: [] } })
         known.add(id)
       }
       await this.ctx.sessions.flush(root)

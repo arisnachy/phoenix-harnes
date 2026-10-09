@@ -150,7 +150,10 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   const targetStatus = data.purpose === 'assignment'
     ? participants[data.targetId]?.status
     : undefined
+  // An assignment is a past utterance, not a dashboard. Never append today's
+  // 'terminó' or 'falló' to what Kira said at assignment time.
   const targetStatusKey = data.purpose === 'assignment' && target !== undefined
+    && (runningStatus(targetStatus) || targetStatus === 'waiting')
     ? assignmentStatusKey(targetStatus)
     : undefined
   const text = textOf(data.content)
@@ -182,7 +185,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
           <strong>{sender.name}</strong>
           <span>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
             : t?.((data.role ?? participants[data.senderId]?.role) as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
-          {data.purpose !== undefined && data.purpose !== 'update' && (
+          {data.purpose !== undefined && !['update', 'assignment', 'result'].includes(data.purpose) && (
             <span className={css.purpose} data-purpose={data.purpose}>{PURPOSE_LABEL[data.purpose]}</span>
           )}
           {target !== undefined && <span className={css.target}>→ {target.name}</span>}
