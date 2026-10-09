@@ -28,6 +28,7 @@ let ownedProfile: string | undefined
 let ownedEndpoint: string | undefined
 let launching: Promise<string> | undefined
 let activeTabId: string | undefined
+const sizedTabs = new Set<string>()
 
 function isLoopback(value: string | undefined): boolean {
   return value === '127.0.0.1' || value === '::1' || value === '::ffff:127.0.0.1' || value === 'localhost'
@@ -152,8 +153,8 @@ async function listTabs(base: string): Promise<Tab[]> {
 }
 async function selected(base: string, id?: string): Promise<Tab> {
   const rows = await listTabs(base)
-  const chosen = rows.find(row => row.id === (id ?? activeTabId ?? readDescriptor()?.selectedTabId))
-    ?? rows[0]
+  const requested = id ?? readDescriptor()?.selectedTabId ?? activeTabId
+  const chosen = rows.find(row => row.id === requested) ?? (id === undefined ? rows[0] : undefined)
   if (!chosen?.webSocketDebuggerUrl) throw new Error('No hay una pestaña Chromium disponible.')
   activeTabId = chosen.id
   publish(base + '/', chosen.id)
@@ -208,6 +209,10 @@ async function frame(): Promise<Buffer> {
   const base = await endpoint(false)
   if (!base) throw new Error('El navegador no está iniciado.')
   const tab = await selected(base)
+  if (!sizedTabs.has(tab.id)) {
+    await cdp(tab, 'Emulation.setDeviceMetricsOverride', { ...VIEWPORT, deviceScaleFactor: 1, mobile: false })
+    sizedTabs.add(tab.id)
+  }
   const response = await cdp<{ data: string }>(tab, 'Page.captureScreenshot', { format: 'jpeg', quality: 63, captureBeyondViewport: false, fromSurface: true })
   if (typeof response.data !== 'string' || response.data.length > 6_000_000) throw new Error('Fotograma inválido.')
   return Buffer.from(response.data, 'base64')
@@ -225,11 +230,14 @@ async function action(input: Action): Promise<Record<string, unknown>> {
   const tab = await selected(base, input.tabId)
   if (type === 'select-tab') {
     if (typeof input.tabId !== 'string') throw new Error('Falta la pestaña.')
-    await json(base + '/json/activate/' + encodeURIComponent(tab.id))
+    const res = await fetch(base + '/json/activate/' + encodeURIComponent(tab.id), { signal: AbortSignal.timeout(2500) })
+    if (!res.ok) throw new Error('No se pudo activar la pestaña.')
     activeTabId = tab.id
   } else if (type === 'close-tab') {
     if ((await listTabs(base)).length < 2) throw new Error('Debes conservar una pestaña abierta.')
-    await json(base + '/json/close/' + encodeURIComponent(tab.id))
+    const res = await fetch(base + '/json/close/' + encodeURIComponent(tab.id), { signal: AbortSignal.timeout(2500) })
+    if (!res.ok) throw new Error('No se pudo cerrar la pestaña.')
+    sizedTabs.delete(tab.id)
     activeTabId = undefined
   } else if (type === 'open' || type === 'navigate') {
     const url = validateUrl(input.url ?? 'https://www.google.com')
