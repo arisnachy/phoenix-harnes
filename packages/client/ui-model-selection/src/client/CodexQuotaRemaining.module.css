@@ -216,9 +216,18 @@
   font-weight: 650;
   color: var(--dsw-alias-label-primary);
 }
-.copy { min-width: 0; }
+.copy { min-width: 0; gap: 1px; }
 .label { font-size: 10px; line-height: 12px; }
-.reset { display: none; }
+.reset {
+  display: block;
+  font-size: 8px;
+  line-height: 10px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+}
 @media (prefers-reduced-motion: reduce) {
   .meter { transition: none; }
 }
