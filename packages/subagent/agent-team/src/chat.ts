@@ -69,10 +69,12 @@ export function shouldPublishTeammateSpeech(message: string, alreadySpoke: boole
   const text = message.trim()
   if (!text) return false
   if (!alreadySpoke) return true
-  if (/\?|\b(?:bloqueo|bloqueado|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|requires approval)\b/iu.test(text)) return true
+  const needsHelp = /[?]|bloquead[oa]|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|approval/iu
+  if (needsHelp.test(text)) return true
   if (!newReceipt) return false
-  const stillPlanning = /^(?:(?:@?Kira)[,:!]?\s*)?(?:ahora |luego |despu[eé]s |next |now )*(?:voy a |proceder[eé] a |har[eé] |buscar[eé] |comprobar[eé] |verificar[eé] |revisar[eé] |abrir[eé] |i(?:'ll| will) |i am going to |i'm going to )/iu
-  return !stillPlanning.test(text)
+  const heading = /^(?:@?Kira[,!:]?\s*)?(?:ahora |luego |despu[eé]s |next |now )*/iu
+  const plan = /^(?:voy a|proceder[eé] a|har[eé]|buscar[eé]|comprobar[eé]|verificar[eé]|revisar[eé]|abrir[eé]|i'll|i will|i am going to|i'm going to)\b/iu
+  return !plan.test(text.replace(heading, ''))
 }
 
 /** Owns actual output publication and authorized reaction mutations. */
@@ -265,10 +267,10 @@ export class TeamChat {
             }
           } catch { /* Invalid tool arguments cannot establish a successful handoff. */ }
         }
-        if (event.type === 'tool/result' && event.data.message.source.kind === 'tool') {
+        if (event.type === 'tool/result') {
           const callId = event.data.message.source.callId
           const succeeded = event.data.message.content.some(
-            block => block.type === 'tool-result' && block.toolCallId === callId && !block.isError,
+            block => block.toolCallId === callId && !block.isError,
           )
           if (resultCallIds.has(callId) && succeeded) handedOffResult = true
           else if (succeeded && workCallIds.has(callId)) newReceipt = true
