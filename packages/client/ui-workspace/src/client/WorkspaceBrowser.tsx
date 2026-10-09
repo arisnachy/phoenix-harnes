@@ -847,8 +847,19 @@ export function WorkspaceBrowser({
         expandSidebar()
       }
     }
+    // Library opens the actual Workspace create/open flow, not session-text search.
+    const openLibrary = (): void => {
+      setQuery('')
+      setSearchExpanded(false)
+      setWsPickerOpen(true)
+      if (!wide) expandSidebar()
+    }
     window.addEventListener('phoenix:open-workspace-search', openSearch)
-    return () => { window.removeEventListener('phoenix:open-workspace-search', openSearch) }
+    window.addEventListener('phoenix:open-workspace-library', openLibrary)
+    return () => {
+      window.removeEventListener('phoenix:open-workspace-search', openSearch)
+      window.removeEventListener('phoenix:open-workspace-library', openLibrary)
+    }
   }, [wide, expandSidebar])
   useEffect(() => {
     if (wide && searchOnExpand) {
