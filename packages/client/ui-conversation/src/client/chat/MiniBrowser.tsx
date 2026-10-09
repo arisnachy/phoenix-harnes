@@ -73,7 +73,11 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser({ requested = false }: { requested?: boolean }) {
+export function MiniBrowser({ requested = false, active = true, onActivate }: {
+  requested?: boolean
+  active?: boolean
+  onActivate?: () => void
+}) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
   const [enabled, setEnabled] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -93,6 +97,10 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
   const busy = useRef(false)
   const mounted = useRef(true)
   const frameRef = useRef<string | undefined>(undefined)
+  // Each card is bound to the Chromium target it originally displayed.
+  // New browser requests never overwrite prior cards with the latest page.
+  const cardTabId = useRef<string | undefined>(undefined)
+  const previousActive = useRef(active)
   const show = !dismissed && (requested || enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
   const videoId = youtubeId(snapshot.url)
 
@@ -100,17 +108,23 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
   // its height without changing chat message IDs; bring the result into view
   // once instead of leaving it invisibly below the last Kira bubble.
   useEffect(() => {
-    if (!requested || !show || expanded) return
+    if (!requested || !show || expanded || !active) return
     const element = inlineRef.current
     if (element && typeof element.scrollIntoView === 'function') {
       element.scrollIntoView({ block: 'nearest', behavior: 'auto' })
     }
-  }, [requested, show, expanded, snapshot.tabId, snapshot.url])
+  }, [requested, show, expanded, active, snapshot.tabId, snapshot.url])
 
   const run = useCallback(async (request: Command): Promise<void> => {
     try {
       setError(undefined)
-      const state = await command(request)
+      const scoped = request.type === 'new-tab' || request.type === 'start'
+        ? request
+        : { ...request, ...request.tabId === undefined && cardTabId.current !== undefined
+          ? { tabId: cardTabId.current }
+          : {} }
+      const state = await command(scoped)
+      if (state.tabId !== undefined) cardTabId.current = state.tabId
       setSnapshot(state)
       if (request.type === 'open' || request.type === 'new-tab' || request.type === 'start') setEnabled(true)
     } catch (reason) {
@@ -119,14 +133,22 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
   }, [])
 
   useEffect(() => {
+    if (!active) return
     mounted.current = true
     let stopped = false
     const first = new AbortController()
+    if (!previousActive.current && cardTabId.current !== undefined) {
+      // Reopening an older card selects its retained browser tab once only.
+      void command({ type: 'select-tab', tabId: cardTabId.current }).catch(() => undefined)
+    }
+    previousActive.current = active
     const poll = async (): Promise<void> => {
       try {
+        // Recover the exact tab bound to this older card before observing it.
         const state = await inspect(first.signal)
         if (stopped) return
         setConnectionError(undefined)
+        if (state.tabId !== undefined) cardTabId.current = state.tabId
         setSnapshot(state)
       } catch (reason) {
         if (stopped) return
@@ -139,13 +161,14 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
     return () => {
       stopped = true
       mounted.current = false
+      previousActive.current = false
       first.abort()
       window.clearInterval(timer)
     }
-  }, [])
+  }, [active])
 
   useEffect(() => {
-    if (!show || !snapshot.available || collapsed || playingVideo) return
+    if (!active || !show || !snapshot.available || collapsed || playingVideo) return
     let stopped = false
     const load = async () => {
       if (busy.current) return
@@ -171,7 +194,7 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
     void load()
     const timer = window.setInterval(() => { void load() }, expanded ? 350 : 600)
     return () => { stopped = true; window.clearInterval(timer) }
-  }, [show, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded])
+  }, [active, show, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded])
 
   useEffect(() => () => {
     if (frameRef.current) URL.revokeObjectURL(frameRef.current)
@@ -205,15 +228,18 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
   }, [expanded])
 
   const click = (event: MouseEvent<HTMLImageElement>) => {
+    if (!active) { onActivate?.(); return }
     const position = point(event.currentTarget, event.clientX, event.clientY)
     event.currentTarget.focus()
     if (position) void run({ type: 'click', ...position })
   }
   const wheel = (event: WheelEvent<HTMLImageElement>) => {
+    if (!active) { onActivate?.(); return }
     const position = point(event.currentTarget, event.clientX, event.clientY)
     if (position) void run({ type: 'scroll', ...position, deltaY: event.deltaY })
   }
   const keyboard = (event: KeyboardEvent<HTMLImageElement>) => {
+    if (!active) { onActivate?.(); return }
     if (event.key === 'F5') { event.preventDefault(); void run({ type: 'reload' }); return }
     if (event.key === 'Control' || event.key === 'Alt' || event.key === 'Shift' || event.key === 'Meta') return
     event.preventDefault()
@@ -228,7 +254,8 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
     <section className={css.browser} data-mini-browser data-expanded={expanded ? 'true' : undefined} aria-label="Navegador de Kira">
       <div className={css.titlebar}>
         <span className={css.brand}>◉ <span>Navegador de Kira</span></span>
-        <span className={css.status}>{snapshot.available ? 'Chrome · En vivo' : 'Listo para iniciar'}</span>
+        <span className={css.status}>{!active ? 'Vista conservada' : snapshot.available ? 'Chrome · En vivo' : 'Listo para iniciar'}</span>
+        {!active && <button type="button" title="Reactivar esta página" onClick={() => { onActivate?.() }}>↻ Reactivar</button>}
         <span className={css.grow} />
         <button type="button" title={expanded ? 'Volver al chat' : 'Ampliar navegador'} onClick={() => { setExpanded(value => !value); setCollapsed(false) }}>
           {expanded ? '↙ Volver al chat' : '⛶ Ampliar'}
@@ -294,7 +321,7 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Enter' }) }}>Enter</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Tab' }) }}>Tab</button>
         </form>
-        {captureError && <p className={css.error} role="status">
+        {captureError && active && <p className={css.error} role="status">
           La página está abierta, pero su imagen todavía no está disponible: {captureError}. Phoenix reintentará la captura automáticamente.
         </p>}
         {connectionError && <p className={css.error} role="status">Conexión del navegador: {connectionError}</p>}
