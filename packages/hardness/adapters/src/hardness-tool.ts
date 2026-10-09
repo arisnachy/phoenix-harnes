@@ -189,6 +189,9 @@ export function createHardnessTool(runner: HardnessMissionRunner): ToolDefinitio
         args: args.arguments,
         context,
       })
+      // A late mission result must never schedule a recovery notice after
+      // Kira or the user cancelled the owning turn.
+      exec.signal.throwIfAborted()
       const projected = projectMissionResult(result)
       if (projected.kind === 'blocked') deferMissionRecovery(exec, projected)
       return projected
