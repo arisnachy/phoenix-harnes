@@ -86,6 +86,8 @@ export class WebRuntime extends Service {
   })
 
   private searchProviders = new Map<string, WebSearchProvider>()
+  /** Transient per-provider health; never stores credentials or query text. */
+  private readonly searchFailures = new Map<string, { count: number; retryAt: number }>()
   private fetchProviders = new Map<string, WebFetchProvider>()
   private readonly searchProviderId: string | undefined
   private readonly searchFallbackProviderIds: readonly string[]
@@ -145,18 +147,37 @@ export class WebRuntime extends Service {
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
     const providers = resolveSearchProviders(this.searchProviders, this.searchProviderId, this.searchFallbackProviderIds)
     let lastRecoverable: unknown
+    const attempted: string[] = []
     for (const provider of providers) {
       if (signal?.aborted === true) throw signal.reason ?? new WebError('web search was aborted', 'WEB_SEARCH_ABORTED')
+      const health = this.searchFailures.get(provider.id)
+      if (health !== undefined && health.retryAt > Date.now()) continue
+      attempted.push(provider.id)
       try {
         const result = await provider.search(request, signal)
+        this.searchFailures.delete(provider.id)
         return capSources(result, request.maxResults)
       } catch (error) {
+        if (signal?.aborted === true) throw signal.reason ?? error
         if (!isRecoverableSearchError(error)) throw error
         lastRecoverable = error
+        const count = (health?.count ?? 0) + 1
+        const limited = error instanceof WebError && [
+          'WEB_PROVIDER_AUTH', 'WEB_PROVIDER_QUOTA', 'WEB_PROVIDER_RATE_LIMIT',
+          'WEB_PROVIDER_CREDENTIAL_MISSING',
+        ].includes(error.code)
+        const retryAt = limited || count >= 2 ? Date.now() + SEARCH_PROVIDER_COOLDOWN_MS : 0
+        this.searchFailures.set(provider.id, { count, retryAt })
       }
     }
+    if (attempted.length === 0) {
+      throw new WebError(
+        'web search providers are cooling down; use direct trusted sources instead of repeating the same search',
+        'WEB_PROVIDER_CIRCUIT_OPEN',
+      )
+    }
     throw new WebError(
-      `all configured web search providers failed recoverably: ${providers.map(provider => provider.id).join(', ')}`,
+      `web search sources unavailable (${attempted.join(', ')}); use direct trusted sources instead of repeating the same search`,
       'WEB_PROVIDER_FALLBACK_EXHAUSTED',
       { cause: lastRecoverable },
     )
@@ -210,7 +231,12 @@ function resolveProvider<P extends ResolvableProvider>(selection: Selection<P>):
 }
 
 /** Provider failures that are safe to retry through a configured fallback. */
+/** Five-minute quarantine prevents retry storms during provider outages. */
+const SEARCH_PROVIDER_COOLDOWN_MS = 5 * 60_000
+
 const RECOVERABLE_SEARCH_CODES = new Set([
+  'WEB_PROVIDER_ERROR',
+  'WEB_PROVIDER_CREDENTIAL_MISSING',
   'WEB_PROVIDER_QUOTA',
   'WEB_PROVIDER_RATE_LIMIT',
   'WEB_PROVIDER_AUTH',

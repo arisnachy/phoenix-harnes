@@ -26,6 +26,7 @@ describe('KIRA Team social personalities', () => {
     expect(style).toContain('Humor, sarcasm, and emoji are optional and contextual')
     expect(style).toContain('high quality, fast completion, and low cost')
     expect(style).toContain('never degrade any of the three')
+    expect(style).toContain('not a tool log or corporate status report')
   })
 
   it('selects the real named specialist voice and preserves aliases', () => {
