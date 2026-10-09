@@ -142,8 +142,9 @@ async function json<T>(url: string): Promise<T> {
 
 function cleanupManagedBrowser(): void {
   const oldPid = managedBrowser?.pid
+  const ownsDescriptor = oldPid !== undefined && sharedSession()?.pid === oldPid
   try { managedBrowser?.kill() } catch { /* best effort */ }
-  if (oldPid && sharedSession()?.pid === oldPid) {
+  if (ownsDescriptor) {
     try { rmSync(SHARED_BROWSER, { force: true }) } catch { /* best effort */ }
   }
   managedBrowser = undefined
@@ -180,8 +181,9 @@ async function launchDedicatedBrowser(): Promise<string> {
   managedLaunch = (async () => {
     const executable = browserExecutable()
     const profileDir = mkdtempSync(join(tmpdir(), 'phoenix-browser-'))
-    const headless = process.env.PHOENIX_BROWSER_HEADLESS === 'true'
-      || process.env.DSH_CHROME_HEADLESS === 'true'
+    // A requested browser is visible in the conversation by default; avoid a second OS window.
+    const headless = process.env.PHOENIX_BROWSER_HEADLESS !== 'false'
+      && process.env.DSH_CHROME_HEADLESS !== 'false'
     const child = spawn(executable, buildDedicatedBrowserArgs(profileDir, headless), {
       stdio: 'ignore',
       windowsHide: false,
