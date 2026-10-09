@@ -45,7 +45,7 @@ describe('Telegram owner-paired Host inbox', () => {
     const code = await f.inbox.pairing()
     await f.internal.process(makeMessage(12345, `/start ${code}`, 'group'), TOKEN, f.creds)
     await f.internal.process(makeMessage(12345, `/start ${code}`, 'private', 54321), TOKEN, f.creds)
-    expect(f.inbox.isPaired()).resolves.toBe(false)
+    expect(await f.inbox.isPaired()).toBe(false)
     await f.internal.process(makeMessage(12345, `/start ${code}`), TOKEN, f.creds)
     expect(await f.inbox.isPaired()).toBe(true)
     expect(f.values.get('PHOENIX_TELEGRAM_OWNER_CHAT_ID')).toBe('12345')
