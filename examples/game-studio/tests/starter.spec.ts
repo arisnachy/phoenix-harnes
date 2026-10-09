@@ -40,7 +40,7 @@ describe('Jungle Echo offline starter', () => {
       fillRect: () => { fills++ },
       beginPath: () => {}, moveTo: () => {}, lineTo: () => {}, closePath: () => {},
       fill: () => {}, stroke: () => {}, arc: () => {}, save: () => {},
-      restore: () => {}, translate: () => {}, scale: () => {}, fillText: () => {},
+      restore: () => {}, translate: () => {}, scale: () => {}, rotate: () => {}, fillText: () => {},
       createLinearGradient: () => ({ addColorStop: () => {} }),
     }
     const noop = (): void => {}
