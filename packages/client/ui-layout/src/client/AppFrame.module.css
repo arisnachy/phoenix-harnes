@@ -8,7 +8,9 @@
   transition: grid-template-columns var(--ds-transition-duration-slow) var(--ds-ease-in-out);
 }
 
-.frame[data-dragging] {
+.frame[data-dragging],
+.frame[data-sidebar-switching] {
+  /* No frame-by-frame layout of rich chat/visualizer during sidebar toggle. */
   transition: none;
 }
 
