@@ -13,6 +13,9 @@ describe('automatic Windows capability context', () => {
     expect(guidance).toContain('NOT a ready model')
     expect(guidance).toContain('NOT enabled')
     expect(guidance).not.toContain('wsl,')
+    expect(windowsCapabilityGuidance({ ...inspected, hardware: { memoryGiB: 32 } })).toContain('32.0 GiB')
+    expect(windowsCapabilityGuidance({ ...inspected, hardware: { memoryGiB: 9999 } })).not.toContain('GiB')
+    expect(windowsCapabilityGuidance({ ...inspected, hardware: { memoryGiB: 'private' } })).not.toContain('private')
     expect(windowsCapabilityGuidance({ probe: 'completed', executables: {} })).toContain('none detected')
   })
 
