@@ -117,7 +117,7 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
       min:lows,max:highs})
     return index
   }
-  for(const node of scene.nodes){
+  for(const node of scene.nodes.filter(item=>item.hidden!==true)){
     const vertices=primitiveTriangles(node)
     if(vertices.length%9!==0||vertices.length===0||!vertices.every(Number.isFinite))throw Error('Geometría 3D inválida.')
     verticesCount+=vertices.length/3
@@ -130,6 +130,7 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
       rotation:quaternion(node.rotation??[0,0,0])}
     nodes.push(tr)
   }
+  if(nodes.length===0)throw Error('No hay piezas visibles para exportar.')
   const binary=new Uint8Array(offset)
   let cursor=0
   for(const chunk of chunks){binary.set(chunk,cursor);cursor+=align(chunk.length)}
@@ -249,7 +250,7 @@ function parseMaterial(m:unknown):{color:string;material:NonNullable<Node['mater
     opacity:typeof base[3]==='number'?base[3]:1,
     transmission:typeof trans.transmissionFactor==='number'?trans.transmissionFactor:0,
     clearcoat:typeof coat.clearcoatFactor==='number'?coat.clearcoatFactor:0,
-    emissive:hexColor(data.emissiveFactor),
+    emissive:Array.isArray(data.emissiveFactor)?hexColor(data.emissiveFactor):'#000000',
   }}
 }
 export function importSceneGLTF(input:string|Uint8Array):Scene3D{
