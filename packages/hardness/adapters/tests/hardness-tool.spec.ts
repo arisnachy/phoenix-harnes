@@ -151,6 +151,20 @@ describe('hardness_run tool adapter', () => {
     expect(run).toHaveBeenCalledOnce()
   })
 
+  it('never injects HARDNESS recovery after Kira cancelled while a mission was in flight', async () => {
+    const controller = new AbortController()
+    const run = vi.fn<HardnessMissionRunner['run']>(async () => {
+      controller.abort(new Error('Kira stopped HARDNESS'))
+      return { kind: 'blocked', reason: 'old provider failure', retryable: true }
+    })
+    const tool = createHardnessTool({ run })
+    const exec = { ...execution(), signal: controller.signal }
+    await expect(tool.execute({ need: { kind: 'analysis' }, arguments: {} }, exec))
+      .rejects.toThrow('Kira stopped HARDNESS')
+    expect(run).toHaveBeenCalledOnce()
+    expect(exec.deferContext).not.toHaveBeenCalled()
+  })
+
   it('blocks callbacks and sensitive keys in the rendered model-facing projection', async () => {
     const result: HardnessMissionResult = {
       kind: 'completed',
