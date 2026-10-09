@@ -33,7 +33,7 @@ function props(data: {
 
 describe('HARDNESS inline artifact renderer', () => {
   afterEach(() => { cleanup() })
-  it('renders a compact card and expands in place', () => {
+  it('opens a real large dialog instead of merely changing inline height', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'table-1',
       mime: 'application/json',
@@ -45,12 +45,49 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(screen.getByRole('table')).toBeTruthy()
     expect(document.querySelector('header')).toBeNull()
     const expand = screen.getByRole('button', { name: 'Expand' })
-    expect(expand.getAttribute('aria-label')).toBe('Expand')
     expect(expand.getAttribute('aria-expanded')).toBe('false')
     fireEvent.click(expand)
+
+    const dialog = screen.getByRole('dialog', { name: 'Vista ampliada: Results' })
+    expect((dialog as HTMLDialogElement).open).toBe(true)
+    expect(dialog.getAttribute('aria-modal')).toBe('true')
+    expect(dialog.querySelector('table')).toBeTruthy()
+    expect(document.querySelector('[data-artifact-height="expanded"]')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Collapse' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getAllByRole('table')).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse' }))
+    expect((dialog as HTMLDialogElement).open).toBe(false)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Expand' })).toBeTruthy()
+    expect(screen.getByRole('table')).toBeTruthy()
   })
 
+  it('enlarges a donut visualization in the dialog and restores it on Escape/cancel', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'pie-1',
+      mime: 'application/vnd.phoenix.visual+json',
+      title: 'Gráfico de pastel de ejemplo',
+      data: {
+        visualType: 'chart', chartType: 'donut', xKey: 'label',
+        series: [{ dataKey: 'value', label: 'Valor ficticio' }],
+        data: [
+          { label: 'Lun', value: 38 }, { label: 'Mar', value: 51 },
+          { label: 'Mié', value: 47 }, { label: 'Jue', value: 65 },
+        ],
+      },
+    })} />)
+    expect(screen.getByRole('img', { name: 'donut chart' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
+    const dialog = screen.getByRole('dialog', { name: /Vista ampliada: Gráfico de pastel/i })
+    expect(dialog.querySelector('[data-phoenix-chart-type="donut"]')).toBeTruthy()
+    expect(dialog.querySelectorAll('[data-phoenix-visual-mark="donut-slice"]')).toHaveLength(4)
+    expect(screen.getAllByRole('img', { name: 'donut chart' })).toHaveLength(1)
+    fireEvent(dialog, new Event('cancel', { bubbles: true, cancelable: true }))
+    expect((dialog as HTMLDialogElement).open).toBe(false)
+    expect(screen.getByRole('button', { name: 'Expand' })).toBeTruthy()
+    expect(screen.getByRole('img', { name: 'donut chart' })).toBeTruthy()
+  })
 
   it('renders a Phoenix canvas inline in chat and auto-fits its reported content height', () => {
     const openCanvas = vi.fn(() => true)

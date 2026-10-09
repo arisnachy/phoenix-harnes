@@ -547,3 +547,33 @@
   color: color-mix(in srgb, currentColor 50%, transparent);
   font-size: 9px;
 }
+
+/* The standalone dialog expands the *chart*, not just its outer card. */
+:global([data-phoenix-artifact-expanded='true']) .polarWrap {
+  grid-template-columns: minmax(320px, 540px) minmax(180px, 1fr);
+  gap: clamp(20px, 3vw, 48px);
+}
+
+:global([data-phoenix-artifact-expanded='true']) .polar {
+  width: min(100%, 540px);
+  max-width: none;
+}
+
+:global([data-phoenix-artifact-expanded='true']) .chart {
+  min-height: min(52vh, 580px);
+}
+
+:global([data-phoenix-artifact-expanded='true']) .tableWrap {
+  max-height: none;
+}
+
+@media (max-width: 700px) {
+  :global([data-phoenix-artifact-expanded='true']) .polarWrap {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  :global([data-phoenix-artifact-expanded='true']) .polar {
+    width: min(100%, 460px);
+  }
+}
+
