@@ -81,7 +81,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
 
   it('closing one card does not prevent a later browser card from opening', async () => {
     installBrowserMock()
-    const view = render(<MiniBrowser key="previous" requested active={false} />)
+    const view = render(<><MiniBrowser key="previous" requested active={false} /></>)
     expect(screen.getByRole('region', { name: 'Navegador de Kira' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Ocultar microventana' }))
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
