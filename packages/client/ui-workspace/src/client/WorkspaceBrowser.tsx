@@ -755,7 +755,7 @@ function WorkspaceLibraryModal({
   const search = query.trim().toLocaleLowerCase()
   const archived = new Set(archivedSessionIds)
   const allGrouped = new Set(workspaces.flatMap(workspace => workspace.sessionIds))
-  const labelOf = (id: SessionId) => byId[id]?.title?.trim() || String(id)
+  const labelOf = (id: SessionId) => byId[id]?.displayTitle?.trim() || String(id)
   const sessionsFor = (ids: readonly SessionId[]): SessionId[] => ids.filter(id =>
     byId[id] !== undefined && !archived.has(id)
     && (search === '' || labelOf(id).toLocaleLowerCase().includes(search)))
