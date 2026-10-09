@@ -90,6 +90,9 @@ export interface CodexRealtimeProbe {
 const RPC_TIMEOUT_MS = 30_000
 const SDP_TIMEOUT_MS = 30_000
 const IDLE_CLOSE_MS = 60_000
+// Even if the browser dies without a hangup RPC, no remote voice thread may
+// retain the Codex app-server indefinitely. A call can be reopened explicitly.
+const MAX_REALTIME_CALL_MS = 60 * 60_000
 
 /** Small JSON-RPC client around `codex app-server --listen stdio://`. */
 export class CodexRealtimeBridge {
@@ -99,6 +102,7 @@ export class CodexRealtimeBridge {
   private readonly pending = new Map<string, RpcPending>()
   private readonly notifications = new Map<string, Set<NotificationWaiter>>()
   private readonly sessions = new Map<string, string>()
+  private readonly callTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly transcriptListeners = new Map<string, (transcript: CodexRealtimeTranscript) => void>()
   private readonly stderrTail: string[] = []
   private nextRequestId = 1
@@ -152,6 +156,7 @@ export class CodexRealtimeBridge {
         answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
       }
       this.sessions.set(options.key, threadId)
+      this.armCallExpiry(options.key)
       return { threadId, answerSdp }
     } catch (error) {
       if (threadId !== undefined) {
@@ -277,6 +282,7 @@ export class CodexRealtimeBridge {
    * @returns Whether an existing call was removed; transport failures may reject after local removal.
    */
   async stop(key: string): Promise<boolean> {
+    this.clearCallExpiry(key)
     const threadId = this.sessions.get(key)
     if (threadId === undefined) {
       if (this.sessions.size === 0) this.armIdleClose()
@@ -295,6 +301,7 @@ export class CodexRealtimeBridge {
   /** Tear down the sidecar and reject outstanding RPC work. */
   close(): void {
     this.clearIdleClose()
+    for (const key of this.callTimers.keys()) this.clearCallExpiry(key)
     const child = this.child
     this.child = undefined
     this.startup = undefined
@@ -552,6 +559,7 @@ export class CodexRealtimeBridge {
   private failProcess(error: Error): void {
     if (this.child !== undefined) this.child = undefined
     this.startup = undefined
+    for (const key of this.callTimers.keys()) this.clearCallExpiry(key)
     this.sessions.clear()
     this.transcriptListeners.clear()
     for (const pending of this.pending.values()) {
@@ -566,6 +574,22 @@ export class CodexRealtimeBridge {
       }
     }
     this.notifications.clear()
+  }
+
+  /** Absolute host-side expiry protects calls whose browsers can no longer send hangup. */
+  private armCallExpiry(key: string): void {
+    this.clearCallExpiry(key)
+    const timer = setTimeout(() => {
+      void this.stop(key).catch(() => undefined)
+    }, MAX_REALTIME_CALL_MS)
+    timer.unref?.()
+    this.callTimers.set(key, timer)
+  }
+
+  private clearCallExpiry(key: string): void {
+    const timer = this.callTimers.get(key)
+    if (timer !== undefined) clearTimeout(timer)
+    this.callTimers.delete(key)
   }
 
   private armIdleClose(): void {
