@@ -1331,6 +1331,13 @@ describe('Fetch MCP Windows Node/npm environment hydration', () => {
     expect(Object.keys(result)).toEqual(['PATH'])
   })
 
+  it('normalizes duplicate Windows Path/PATH aliases while keeping the explicit override', () => {
+    const result = hydrateFetchMcpNodeEnvironment(fetchServer, {
+      Path: 'C:\\old', PATH: 'C:\\Windows\\System32',
+    }, { platform: 'win32', nodeExecutable: nodeExe, fileExists })
+    expect(result).toEqual({ PATH: 'C:\\Program Files\\nodejs;C:\\Windows\\System32' })
+  })
+
   it('finds a system Node installation if Phoenix itself runs a standalone node.exe', () => {
     const result = hydrateFetchMcpNodeEnvironment(
       { ...fetchServer, command: 'uvx.exe' },
