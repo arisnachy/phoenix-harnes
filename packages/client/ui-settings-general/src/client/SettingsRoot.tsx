@@ -186,9 +186,11 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   return (
     <>
       <div className={clsx(css.triggerStack, !wide && css.triggerStackRail)}>
-        <div className={wide ? css.wideQuotaPanel : css.railStatus}>
-          {renderSlot('settings.trigger.trailing', { wide })}
-        </div>
+        {!wide && (
+          <div className={css.railStatus}>
+            {renderSlot('settings.trigger.trailing', { wide })}
+          </div>
+        )}
         <button
           type="button"
           className={clsx(css.trigger, !wide && css.rail)}
@@ -198,6 +200,11 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
         >
           {renderSlot('settings.trigger', { wide })}
         </button>
+        {wide && (
+          <div className={css.wideQuotaPanel}>
+            {renderSlot('settings.trigger.trailing', { wide })}
+          </div>
+        )}
       </div>
       {open && (
         <SettingsPanel
