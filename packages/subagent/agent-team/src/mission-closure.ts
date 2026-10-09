@@ -5,7 +5,9 @@ import type { SessionEvent } from '@phoenix-ai/dsh-session'
 // this narrow early-stop path additionally needs successful effect AND verification receipts.
 // oxlint-disable-next-line @stylistic/max-len -- Bilingual explicit no-work-remaining patterns must stay auditable.
 const NO_WORK_REMAINING = /\b(?:no (?:queda|hay) (?:m[aá]s )?(?:trabajo|tareas?|nada) pendiente|no (?:queda|hay) (?:trabajo|tareas?) (?:por hacer|que justifique delegar)|nothing (?:else )?(?:is )?left to do|no (?:further|more|additional) work (?:is )?(?:needed|required|remaining)|(?:tarea|misi[oó]n) (?:ya )?(?:completada|finalizada) y verificada)\b/iu
+// oxlint-disable-next-line @stylistic/max-len -- Closed-mission action receipts are matched by exact tool operation.
 const EFFECT = /(?:^|__)(?:submit_form|fill_form|send_email|create_file|update_file|apply_patch|write|edit|submit|deploy|publish|save|send|execute|run_code|browser_submit|browser_fill_form|click_text|update_ref|merge_pull_request)$/iu
+// oxlint-disable-next-line @stylistic/max-len -- Closure needs a distinct actual verification tool receipt.
 const VERIFY = /(?:^|__)(?:wait_for|read_page|verify|check|test|typecheck|build|read|inspect_form|inspect_page|browser_snapshot|browser_inspect|status)$/iu
 
 /**
