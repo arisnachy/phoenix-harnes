@@ -51,6 +51,17 @@ function point(element: HTMLImageElement, clientX: number, clientY: number) {
   if (x < 0 || y < 0 || x > 1280 || y > 720) return null
   return { x, y }
 }
+/** Only official YouTube watch URLs qualify for the native video/audio player. */
+function youtubeId(raw: string | undefined): string | undefined {
+  if (!raw) return undefined
+  try {
+    const url = new URL(raw)
+    if (!['youtube.com', 'www.youtube.com', 'm.youtube.com'].includes(url.hostname)
+      || url.protocol !== 'https:' || url.pathname !== '/watch') return undefined
+    const id = url.searchParams.get('v')
+    return id !== null && /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : undefined
+  } catch { return undefined }
+}
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
 export function MiniBrowser() {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
@@ -60,6 +71,7 @@ export function MiniBrowser() {
   const [dismissed, setDismissed] = useState(false)
   const [address, setAddress] = useState('')
   const [typed, setTyped] = useState('')
+  const [playingVideo, setPlayingVideo] = useState(false)
   const [frame, setFrame] = useState<string>()
   const [error, setError] = useState<string>()
   const [supported, setSupported] = useState(false)
@@ -70,6 +82,7 @@ export function MiniBrowser() {
   const mounted = useRef(true)
   const frameRef = useRef<string | undefined>(undefined)
   const show = !dismissed && (enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
+  const videoId = youtubeId(snapshot.url)
 
   const run = useCallback(async (request: Command): Promise<void> => {
     try {
@@ -105,7 +118,7 @@ export function MiniBrowser() {
   }, [])
 
   useEffect(() => {
-    if (!show || !snapshot.available || collapsed) return
+    if (!show || !snapshot.available || collapsed || playingVideo) return
     let stopped = false
     const load = async () => {
       if (busy.current) return
@@ -124,9 +137,9 @@ export function MiniBrowser() {
       finally { busy.current = false }
     }
     void load()
-    const timer = window.setInterval(() => { void load() }, 900)
+    const timer = window.setInterval(() => { void load() }, expanded ? 350 : 600)
     return () => { stopped = true; window.clearInterval(timer) }
-  }, [show, snapshot.available, snapshot.tabId, collapsed])
+  }, [show, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded])
 
   useEffect(() => () => {
     if (frameRef.current) URL.revokeObjectURL(frameRef.current)
@@ -137,6 +150,7 @@ export function MiniBrowser() {
       setDismissed(false)
       setCollapsed(false)
     }
+    if (snapshot.url !== lastObservedUrl.current) setPlayingVideo(false)
     lastObservedUrl.current = snapshot.url
   }, [snapshot.url])
 
@@ -212,7 +226,16 @@ export function MiniBrowser() {
         </form>
         {snapshot.available ? (
           <div className={css.viewport}>
-            {frame ? <img ref={focusRef} src={frame} alt={'Página actual: ' + (snapshot.title || snapshot.url || '')}
+            {playingVideo && videoId ? (
+              <iframe className={css.player}
+                title="Reproductor YouTube"
+                src={'https://www.youtube-nocookie.com/embed/' + videoId + '?autoplay=1'}
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                sandbox="allow-scripts allow-same-origin allow-presentation"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+            ) : frame ? <img ref={focusRef} src={frame} alt={'Página actual: ' + (snapshot.title || snapshot.url || '')}
               role="button" aria-label="Controlar página con el ratón y el teclado"
               tabIndex={0} draggable={false} onClick={click} onWheel={wheel} onKeyDown={keyboard}
               className={css.screen} /> : <div className={css.loading}>Conectando imagen del navegador…</div>}
@@ -223,6 +246,12 @@ export function MiniBrowser() {
             <button type="button" onClick={() => { void run({ type: 'open', url: 'https://www.google.com' }) }}>Iniciar navegador</button>
           </div>
         )}
+        {videoId && <div className={css.mediaBar}>
+          <button type="button" onClick={() => { setPlayingVideo(current => !current) }}>
+            {playingVideo ? '↩ Volver al navegador' : '▶ Reproducir con audio'}
+          </button>
+          <span>Reproductor oficial; la pestaña de Kira permanece abierta.</span>
+        </div>}
         <form className={css.typeRow} onSubmit={event => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
           <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={event => { setTyped(event.currentTarget.value) }} />
           <button type="submit" disabled={!snapshot.available || !typed}>Escribir</button>
