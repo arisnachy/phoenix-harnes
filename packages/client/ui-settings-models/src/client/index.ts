@@ -126,6 +126,7 @@ type PluginInventoryTelegramRemote = {
   telegramBotState(): Promise<PluginInventoryRemoteResult<TelegramBotSnapshot>>
   configureTelegramBot(request: { token: string }): Promise<PluginInventoryRemoteResult<TelegramBotSnapshot>>
   disconnectTelegramBot(): Promise<PluginInventoryRemoteResult<TelegramBotSnapshot>>
+  telegramPairingCode(): Promise<PluginInventoryRemoteResult<{ code: string; expiresInSeconds: number }>>
 }
 
 function telegramBotClient(ctx: ClientContext): TelegramBotClient {
@@ -140,6 +141,7 @@ function telegramBotClient(ctx: ClientContext): TelegramBotClient {
       'configureTelegramBot', await remote().configureTelegramBot({ token }),
     ),
     disconnect: async () => unwrapPluginInventory('disconnectTelegramBot', await remote().disconnectTelegramBot()),
+    pairing: async () => unwrapPluginInventory('telegramPairingCode', await remote().telegramPairingCode()),
   }
 }
 

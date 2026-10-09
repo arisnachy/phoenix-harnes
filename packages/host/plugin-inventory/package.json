@@ -54,6 +54,10 @@
   "license": "MIT",
   "dependencies": {
     "zod": "^4.4.3",
+    "@phoenix-ai/dsh-agent": "workspace:^",
+    "@phoenix-ai/dsh-credentials": "workspace:^",
+    "@phoenix-ai/dsh-llm": "workspace:^",
+    "@phoenix-ai/dsh-session": "workspace:^",
     "@phoenix-ai/dsh-atomic-write": "workspace:^",
     "@phoenix-ai/dsh-home-paths": "workspace:^"
   },

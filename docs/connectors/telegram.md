@@ -1,29 +1,30 @@
-# Telegram para Kira — Configuración en Phoenix
+# Telegram — recepción y comunicación de Kira
 
-**Estado de esta versión:** la pantalla Configuración → Conectores → «Telegram · Kira» permite validar con la Bot API oficial y guardar de forma segura un token de bot; **no** habilita todavía recepción automática de mensajes, ejecución del harness, audio, llamadas ni notificaciones proactivas. El estado «Bot verificado» no significa «Kira disponible en Telegram».
+## Configuración
 
-## 1. Crear tu bot
+1. En Telegram, crea el bot con [@BotFather](https://t.me/BotFather) usando `/newbot`.
+2. En Phoenix, abre **Configuración → Conectores → Telegram · Kira**.
+3. Guarda y verifica el token. Phoenix utiliza el almacén seguro de credenciales.
+4. Pulsa **Generar código de vinculación (15 min)**. En el chat **privado** con tu bot escribe `/start 123456` reemplazando el número por el que aparece en Phoenix.
+5. Cuando el bot confirme la vinculación, envíale una orden por texto. Phoenix la incorpora a una sesión real del harness, confirma la recepción y responde con el texto del resultado al terminar.
+6. Pulsa **Actualizar estado** para ver si la cuenta está vinculada y el receptor está operativo.
 
-1. Abre [@BotFather](https://t.me/BotFather) en Telegram. Verifica que sea la cuenta oficial.
-2. Envía `/newbot` y responde con un nombre (por ejemplo, «Kira Phoenix»).
-3. Elige un nombre de usuario disponible que termine en `bot`.
-4. BotFather te entrega un **token secreto**. No lo envíes a un chat, a GitHub ni a ninguna web que no sea tu instalación local de Phoenix.
-5. En Phoenix abre **Configuración → Conectores**, busca **Telegram** y pulsa **Configurar Telegram**.
-6. Pega el token en el campo de contraseña y pulsa **Guardar y verificar**. Phoenix llama únicamente a `https://api.telegram.org/bot<TOKEN>/getMe` por HTTPS y guarda el token en el proveedor de credenciales local.
-7. Debes ver **Bot verificado · receptor pendiente** y el nombre de usuario. Abre el bot y pulsa **Iniciar**.
+## Qué hace y qué no hace
 
-## 2. Qué falta antes de chatear con Kira
+- El receptor usa `getUpdates` vía HTTPS y un único Host de Phoenix activo. No necesita registrar un webhook público.
+- Si Phoenix está cerrado, no puede ejecutar tareas ni responder. Al volver, solicita los mensajes recientes que Telegram todavía conserve.
+- Solo el ID de un usuario vinculado mediante un código temporal puede ejecutar órdenes; ignora chats grupales, bots y remitentes no autorizados.
+- El offset se conserva en credenciales locales y las entradas se procesan en orden. Se evita reconocer un update antes de procesarlo.
+- Los trabajos se envían mediante `agent.followup` y los resultados proceden de mensajes del agente, no de respuestas prefabricadas.
+- El modo de voz nunca se activa por un mensaje de Telegram. Las llamadas programadas y la recepción de notas de voz **no están implementadas** en este canal.
+- Al cambiar de token se borra la vinculación local anterior. «Desconectar» borra las credenciales locales; para revocarlas también en Telegram usa BotFather.
 
-El receptor de mensajes de Telegram es una fase **pendiente**. Debe implementar: `getUpdates` con persistencia de offset y exclusión de webhooks, o un webhook HTTPS; vinculación con desafío de un solo uso y allowlist de usuario/chat ID; deduplicación y autorización por evento; publicación en la sesión de Phoenix como turno del usuario; respuesta usando `sendMessage`; audio como mensajes finitos; invitaciones a sesiones WebRTC Codex mediante interacción explícita; programación/proactividad con límites, consentimiento y horario silencioso.
+## Diagnóstico
 
-**No** debe iniciarse una conversación de voz en segundo plano por recibir texto o nota de voz. Debe respetar el contrato de [ciclo de vida de voz](../telegram-voice-lifecycle.md), que limpia el micrófono al colgar.
+- **Bot verificado, receptor no confirmado**: abre Phoenix y comprueba conectividad con `api.telegram.org`.
+- **Falta vincular usuario**: genera un código nuevo, envía `/start CODIGO`, pulsa actualizar. En bots recién creados también debes iniciar el chat privado.
+- **telegram-webhook-conflict**: Telegram tiene un webhook activo; `getUpdates` no puede funcionar simultáneamente. Desactiva el webhook existente desde el servicio que lo registró y reinicia la integración.
+- **Recibo confirmación, pero no respuesta final**: Phoenix necesita que el agente y su proveedor de modelo estén operativos. Verifica el chat de Phoenix y sus registros.
+- **No llega el mensaje**: comprueba que no haya otras instalaciones que estén consumiendo `getUpdates` con el mismo token. Solo una puede ser receptora.
 
-## 3. Seguridad y solución de problemas
-
-- La ruta es **Bot API de Telegram**, no «MCP oficial de Telegram» ni OAuth.
-- En caso de token inválido no se reemplaza la credencial anterior; revisa que copiaste el token completo.
-- «Telegram no respondió» puede significar bloqueo de red o falta de servicio: no se confunde con «verificado».
-- **Desconectar** borra la copia local del token. Para invalidarlo también en Telegram, usa `/revoke` con BotFather y genera uno nuevo.
-- Los bots no pueden iniciar espontáneamente un chat con un usuario que nunca pulsó **Iniciar**.
-- La autenticación Codex no es necesaria para verificar un bot y no se envía ningún token Codex a Telegram.
-- La recepción/proactividad y llamadas no se deben presentar como listas hasta tener pruebas reales de envío y respuesta en un dispositivo.
+No pegues tokens en chats, logs o repositorios.
