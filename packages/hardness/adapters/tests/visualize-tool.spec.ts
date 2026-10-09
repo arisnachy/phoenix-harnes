@@ -1,9 +1,9 @@
 import { CallId } from '@phoenix-ai/dsh-llm'
 import type { ToolRunContext } from '@phoenix-ai/dsh-tools'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createPhoenixVisualizerTool } from '../src/visualize-tool.ts'
 
-function execution(): ToolRunContext {
+function execution(concludeTurn: () => void = () => {}): ToolRunContext {
   const callId = CallId('visual-1')
   return {
     callId,
@@ -13,7 +13,7 @@ function execution(): ToolRunContext {
     token: Symbol('visual-tool') as never,
     signal: new AbortController().signal,
     deferContext: () => {},
-    concludeTurn: () => {},
+    concludeTurn,
   }
 }
 
@@ -82,6 +82,32 @@ describe('phoenix_visualize tool', () => {
       visual: { visualType: 'table', columns: ['Mes', 'Cantidad'],
         rows: [['Septiembre', 4]] },
     }, execution())).resolves.toMatchObject({ artifactId: 'phoenix-visual:visual-1' })
+  })
+
+  it('ends an admitted fictitious chart without spawning a reviewer', async () => {
+    const concludeTurn = vi.fn()
+    const tool = createPhoenixVisualizerTool()
+    const result = await tool.execute({
+      title: 'Tendencia de ejemplo',
+      visual: { visualType: 'chart', chartType: 'line', demo: true },
+    }, execution(concludeTurn)) as { visual: { simulated: boolean; data: unknown[] } }
+    expect(result.visual.simulated).toBe(true)
+    expect(result.visual.data).toHaveLength(7)
+    expect(concludeTurn).toHaveBeenCalledOnce()
+  })
+
+  it('permits explicit downstream work and never concludes an invalid visual', async () => {
+    const concludeTurn = vi.fn()
+    const tool = createPhoenixVisualizerTool()
+    await tool.execute({
+      title: 'Primera pieza de un reporte',
+      visual: { visualType: 'chart', chartType: 'line', demo: true },
+      continueAfterDisplay: true,
+    }, execution(concludeTurn))
+    expect(concludeTurn).not.toHaveBeenCalled()
+    await expect(tool.execute({ title: 'Gráfico vacío',
+      visual: { visualType: 'chart', chartType: 'line' } }, execution(concludeTurn))).rejects.toThrow()
+    expect(concludeTurn).not.toHaveBeenCalled()
   })
 
   it('creates a populated simulated line chart in one tool call without model repair', async () => {
