@@ -383,6 +383,12 @@ function liveMatchesDefinition(live: ConnectorTelemetry, definition: ConnectorDe
 function serverMatchesDefinition(serverName: string, definition: ConnectorDefinition): boolean {
   if (definition.authorizationKey?.startsWith('llm-pi-ai/') === true) return false
   const server = normalize(serverName)
+  // GitHub Copilot is an independent model provider, not a GitHub repository
+  // MCP runtime. Fuzzy "github" includes "github-copilot" and caused a false
+  // connected status and incorrect authorization routing.
+  if (definition.id === 'github') {
+    return server === 'github' || server === 'github-mcp' || server === 'github-mcp-server'
+  }
   const needles = [definition.id, definition.name, ...(definition.aliases ?? [])]
     .map(normalize)
     .filter(value => value.length >= 3)
