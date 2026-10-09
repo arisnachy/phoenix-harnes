@@ -15,6 +15,32 @@ This skill is an executable workflow, not a statement that a game already exists
 - Choose one unified art bible BEFORE generating batches of assets: canvas resolution, palette, outline, pixel density, shading, animation fps, silhouettes, collision bounds, camera scale, layers, material cues, lighting and audio style.
 - Asset sourcing: use self-generated original art or verified CC0/compatible licenses. Track provenance/attribution per file. Do not assume a search result permits reuse.
 
+## Genre router — never force every game into a shooter
+
+Select a concrete gameplay loop before drawing assets. The manifest may declare `gameType`: `run-and-gun`, `platformer`, `top-down-action`, `racing`, `puzzle`, `strategy`, `rpg`, `rhythm`, `simulation`, `3d`, or `custom`. Genre-specific preflight checks are implemented in `packages/client/ui-conversation/src/client/chat/game-studio-quality.ts`. `custom` must declare `mechanics`. A genre label does **not** create the gameplay logic automatically.
+
+- **Platformer/action**: movement tuning, collision, coyote time and jump buffering if required, authored animation cycles, attack anticipation and camera motion.
+- **Racing**: steering/braking physics, lap/track geometry, collision, opponents, camera dynamics and engine audio, not forced bullets or jump animations.
+- **Puzzle/strategy**: deterministic rules, undo/restart, solvable or generated levels with verified solutions, keyboard/touch interaction, clear win/lose logic, adversarial tests.
+- **RPG/adventure**: stateful inventory, dialogue, quests, persistence, combat only when designed, controllable NPCs and safe save/load.
+- **Rhythm/music**: event timestamps tied to audio clock, latency calibration and input scoring; WebAudio playback must be tested after a user gesture.
+- **3D/simulation**: scene graph and 3D assets, rig/animation controllers, camera, lights, physics/collisions and disposal; use WebGL-compatible inlined/bundled resources for chat and deliver native project files if necessary. Do not pretend Canvas 2D is a 3D engine.
+- When the requirement spans several genres or engines, build one **playable genre-specific vertical slice** first, measure it, then generalize a reusable system.
+
+## Character and asset production — coordinate the full body
+
+For a polished original character, build a character turnaround/model sheet in the chosen art style, then derive independently visible action poses. The standard is joint continuity, consistent anatomy/proportions, anchored feet, coordinated torso balance, hands contacting the gun/tool, barrel direction matching projectile velocity, arm recoil, transition anticipation and clear silhouettes at gameplay scale. Audit walk cycles frame by frame, including alternating foot contact and swing, rather than accepting moving rectangles.
+
+- Choose **sprite atlas** for frame-by-frame pixel/hand-painted 2D or **2-bone skeletal IK** for flexible articulated motion. Mix these only with explicit skinning/masks, aligned pivots, depth ordering and visible quality checks.
+- Use original art generation or licensed assets when image capabilities are available; isolate transparent backgrounds, preserve proportions between every frame, define source atlas coordinates and anchor points, and optimize texture memory. A prompt to an image model is **not** proof that the sprite sheet is consistent.
+- Include idle, movement, airborne, attack, hurt, death and genre-specific interaction where relevant. Provide directions (horizontal/vertical/diagonal or eight-way where requested), equipment-hand attachment, synchronized hitboxes and state transitions. For a 3D rig, validate bone hierarchy, inverse kinematics constraints, retargeting and root motion.
+- **Game-kit reference:** `examples/game-studio/game-kit.js` exposes zero-dependency two-bone IK, articulated figure drawing, directional aim, deterministic animation frames, parallax mapping and a simple enemy decision primitive. Embed this script into a self-contained HTML artifact. It is a functional base, **not** high-resolution original art or advanced navigation AI.
+- Author original sound effects/music or use correctly licensed sources; tie audio to actual action events, manage volume, overlap, mute and user-gesture unlock. Procedural oscillator tones are temporary game audio, not a substitute for professional composed and mixed music.
+
+## Cross-genre evidence and limits
+
+The source-controlled examples demonstrate **two different genres**: `jungle-echo.html` (run-and-gun with 2-bone limb animation, diagonal aiming, parallax, enemy telegraphs and procedural WebAudio) and `lumen-circuit.html` (interactive puzzle with connection checking, pointer and keyboard controls). Test the actual game requested — an example passing does not prove all genres work. The deterministic manifest audit checks only JSON structure and packaging; it does not see rendered quality, correctness of asset transitions, or heard audio. For delivery collect real browser screenshots/video or engine frame captures, animation state and directional tests, AI behavior tests, audio evidence and hardware-specific performance before stating production quality.
+
 ## 2. Bounded specialist work in the same Kira conversation
 
 Kira owns the approved objective, handles research and integration, and launches at most THREE actual workers concurrently:
@@ -24,7 +50,7 @@ Kira owns the approved objective, handles research and integration, and launches
 
 A worker's message is not proof of tool execution. Require actual outputs, file paths, integration commit or observed playback/screenshot as appropriate. Reuse finished assets, avoid duplicated investigation, and stop workers once the acceptance gate is satisfied. No endless follow-up audit or HARDNESS loop after Kira closes.
 
-## 3. Production contracts (mandatory for run-and-gun)
+## 3. Production contracts (mandatory for run-and-gun; adapt to other genres)
 
 - **Protagonist**: consistent silhouette, texture/rig/spritesheet, idle/run/jump/fall/shoot/hurt/death states, readable timings and transitions, jump physics, aiming while airborne, landing anticipation and recoil. Draw actual temporal frames (not a static sprite translated across the screen). If an advanced engine is available prefer animation blending where needed.
 - **Enemies**: distinct roles, silhouettes and states (move/attack/hurt/death), navigation, anticipation, reactions, finite health and collision, rate-limited spawning and avoid unfair offscreen shooting.
