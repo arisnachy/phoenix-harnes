@@ -279,7 +279,7 @@ const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
 // do not declare an OAuth method absent before the registry has time to settle.
 const MCP_AUTH_FLOW_RETRY_MS = [0, 250, 500, 750, 1_000, 1_500, 2_000, 2_500, 3_000] as const
 const CURATED_OAUTH_MCP_IDS = new Set<string>([
-  'github', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
+  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
 ])
 const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
@@ -604,7 +604,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     && !connectedByAccount
     && (openClaw?.connected !== true || managed !== undefined || mcpRuntime !== undefined)
     && (!openClawRuntimeMissing || managed !== undefined || mcpRuntime !== undefined)
-    && (authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required')
+    && (authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required'
+      || (authorizationAccount.methods.some(method => method.id === 'credentials')
+        && mcpRuntime !== undefined && mcpRuntime.status !== 'ready'))
   const missingOAuthFlow = managed !== undefined && mcpRuntime?.status === 'auth-required'
     && authorizationAccount === undefined
   const canRepair = managed !== undefined && managed.source !== undefined && onRepair !== undefined
@@ -639,6 +641,15 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
         </div>
       </div>
       <p className={connectorStyles['connectorDescription']}>{definition.description}</p>
+      {definition.id === 'github' && managed !== undefined && mcpRuntime?.status !== 'ready' ? (
+        <p className={styles['advancedHint']}>
+          GitHub MCP remoto no admite registro OAuth dinámico. Configura un token personal de GitHub
+          (PAT) con los permisos mínimos para tus repositorios; PHOENIX lo guardará en el vault.
+          {' '}<a href="https://github.com/settings/personal-access-tokens/new" target="_blank"
+            rel="noopener noreferrer">Crear token en GitHub</a>.
+          GitHub Copilot como proveedor de modelos es independiente.
+        </p>
+      ) : null}
       {definition.id === 'figma' && managed?.url === 'http://127.0.0.1:3845/mcp'
         && mcpRuntime?.status !== 'ready' ? (
           <p className={styles['advancedHint']}>
@@ -689,7 +700,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
           ) : null}
           {shouldShowAuthorization ? (
             <button className={hubStyles['compactButton']} type="button" disabled={pending || authorizationAccount.inFlight} onClick={() => { onAuthorize(authorizationAccount) }}>
-              {reauthorizationRequired || connected ? t('reauthorize') : t('authorize')}
+              {definition.id === 'github' && authorizationAccount.methods.some(method => method.id === 'credentials')
+                ? 'Configurar token GitHub'
+                : reauthorizationRequired || connected ? t('reauthorize') : t('authorize')}
             </button>
           ) : null}
           {account?.stored !== undefined && account.disconnectable === true && onDisconnect !== undefined ? (
@@ -1817,6 +1830,7 @@ export function ConnectorsSettingsSection({ api,
                       <AuthorizationAttemptProgress attempt={attempt} answer={answer} setAnswer={setAnswer}
                         submitAnswer={submitAnswer} cancel={cancel} t={t} />
                       {failure !== undefined && lastAttemptKey === authorizationKey
+                        && !(attempt.status === 'failed' && attempt.error === failure)
                         ? <p role="alert" className={styles['error']}>{failure}</p> : null}
                     </div>
                   ) : failure !== undefined && lastAttemptKey === authorizationKey ? (
