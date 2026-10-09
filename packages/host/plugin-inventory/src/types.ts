@@ -111,6 +111,8 @@ export interface ManagedMcpConnector {
 export interface McpConnectorHubSnapshot {
   readonly runtime: readonly McpConnectorRuntimeEntry[]
   readonly managed: readonly ManagedMcpConnector[]
+  /** A persisted overlay failed validation; live connector state is still available. */
+  readonly managedStatus?: 'degraded'
 }
 
 /** Explicit install request for a registry-listed MCP candidate. */

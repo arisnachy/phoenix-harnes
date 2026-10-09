@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -1044,6 +1044,39 @@ describe('ManagedMcpController', () => {
     })
     await expect(controller.install({ name: 'io.example/calendar' })).rejects.toThrow('live failed')
     await expect(controller.snapshot()).resolves.toEqual([])
+  })
+
+  it('quarantines corrupt rows with a full private backup and recovers only validated connections', async () => {
+    const patchPath = tempPatch()
+    const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([]) })
+    await controller.installCuratedMcp('github')
+    const valid = JSON.parse(readFileSync(patchPath, 'utf8'))[0].insert[0]
+    const corrupted = JSON.stringify([{ insert: [
+      valid,
+      { ...valid, id: 'malicious', config: { ...valid.config, url: 'https://untrusted.example/mcp' } },
+    ] }])
+    writeFileSync(patchPath, corrupted)
+    await expect(controller.snapshot()).rejects.toThrow(/managed MCP patch row 1 is invalid/)
+    await expect(controller.recoverInvalidOverlay()).resolves.toEqual({
+      recovered: 1, quarantined: 1, backupCreated: true,
+    })
+    await expect(controller.snapshot()).resolves.toMatchObject([{ entryId: valid.id }])
+    const files = readdirSync(dirname(patchPath)).filter(name => name.includes('.quarantined-'))
+    expect(files).toHaveLength(1)
+    expect(readFileSync(join(dirname(patchPath), files[0]!), 'utf8')).toBe(corrupted)
+    expect(await controller.recoverInvalidOverlay()).toMatchObject({ backupCreated: false })
+  })
+
+  it('recovers unreadable JSON without activating or discarding its original', async () => {
+    const patchPath = tempPatch()
+    mkdirSync(dirname(patchPath), { recursive: true })
+    writeFileSync(patchPath, '[{"insert":')
+    const controller = new ManagedMcpController(loader(), { patchPath, registrySearch: registry([]) })
+    await expect(controller.recoverInvalidOverlay()).resolves.toEqual({
+      recovered: 0, quarantined: 1, backupCreated: true,
+    })
+    await expect(controller.snapshot()).resolves.toEqual([])
+    expect(readdirSync(dirname(patchPath)).some(name => name.includes('.quarantined-'))).toBe(true)
   })
 
   it('rejects a corrupted managed overlay instead of executing altered configuration', async () => {

@@ -134,7 +134,12 @@ export class PluginInventoryGateway extends TypertRemoteService {
     }, 'managed Jev retirement')
     void ctx.effect(() => {
       let active = true
-      void this.managedMcp.ensureCoreMcpPack({ installMissing: false }).then((result) => {
+      void this.managedMcp.recoverInvalidOverlay().then(async (recovery) => {
+        if (active && recovery.backupCreated) {
+          ctx.logger.warn(`quarantined ${recovery.quarantined} invalid managed MCP row(s); ${recovery.recovered} validated row(s) preserved; restart may be required`)
+        }
+        return this.managedMcp.ensureCoreMcpPack({ installMissing: false })
+      }).then((result) => {
         if (!active) return
         if (result.failed.length > 0) {
           ctx.logger.warn(
@@ -244,15 +249,20 @@ export class PluginInventoryGateway extends TypertRemoteService {
     const service = (this.ctx.get as (name: string) => unknown)('mcpConnectors') as
       | { list(): readonly McpConnectorRuntimeEntry[] }
       | undefined
-    return {
-      runtime: service === undefined ? [] : service.list().map(entry => ({
-        serverName: entry.serverName,
-        transport: entry.transport,
-        status: entry.status,
-        toolNames: [...entry.toolNames],
-        ...(entry.reasonCode === undefined ? {} : { reasonCode: entry.reasonCode }),
-      })),
-      managed: [...await this.managedMcp.snapshot()],
+    const runtime = service === undefined ? [] : service.list().map(entry => ({
+      serverName: entry.serverName,
+      transport: entry.transport,
+      status: entry.status,
+      toolNames: [...entry.toolNames],
+      ...(entry.reasonCode === undefined ? {} : { reasonCode: entry.reasonCode }),
+    }))
+    try {
+      return { runtime, managed: [...await this.managedMcp.snapshot()] }
+    } catch {
+      // Do not hide healthy live MCPs because one persisted overlay is broken.
+      // Never include raw patch data, remote credentials, or provider exceptions.
+      this.ctx.logger.warn('managed MCP inventory unavailable; live connectors remain visible')
+      return { runtime, managed: [], managedStatus: 'degraded' }
     }
   }
 
