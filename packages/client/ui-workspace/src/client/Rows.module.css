@@ -463,3 +463,13 @@
 @media (prefers-reduced-motion: reduce) {
   .projectRow, .sessionRow { transition: none; }
 }
+
+/* Density responds to window height, without squeezing text or removing actions. */
+.projectRow { min-height: 49px; padding: 5px 9px; gap: 8px; }
+.projectRow .folder { width: 30px; height: 30px; }
+.projectAvatar { width: 30px; height: 30px; }
+.sessionRow { min-height: 33px; height: 33px; padding-inline: 8px; gap: 6px; }
+@media (max-height: 860px) {
+  .projectRow { min-height: 45px; padding-block: 4px; }
+  .sessionRow { min-height: 30px; height: 30px; }
+}
