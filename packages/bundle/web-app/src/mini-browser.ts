@@ -187,7 +187,8 @@ async function cdp<T extends Record<string, unknown>>(tab: Tab, method: string, 
     socket.addEventListener('error', () => { settle(new Error('Se perdió la conexión con Chromium.')) })
   })
 }
-function validateUrl(value: string): string {
+/** Turn a human address/search query into a safe Chromium HTTP(S) target. */
+export function normalizeMiniBrowserAddress(value: string): string {
   const raw = value.trim()
   if (raw.length === 0 || raw.length > 2048) throw new Error('Dirección no válida.')
   const candidate = /^https?:\/\//i.test(raw) ? raw
@@ -222,7 +223,7 @@ async function action(input: Action): Promise<Record<string, unknown>> {
   const base = await endpoint(type === 'open' || type === 'new-tab')
   if (!base) throw new Error('Inicia el navegador primero.')
   if (type === 'new-tab') {
-    const target = validateUrl(input.url ?? 'https://www.google.com')
+    const target = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
     const tab = await json<Tab>(base + '/json/new?' + encodeURIComponent(target), 'PUT')
     activeTabId = tab.id; publish(base + '/', tab.id)
     return await state()
@@ -240,7 +241,7 @@ async function action(input: Action): Promise<Record<string, unknown>> {
     sizedTabs.delete(tab.id)
     activeTabId = undefined
   } else if (type === 'open' || type === 'navigate') {
-    const url = validateUrl(input.url ?? 'https://www.google.com')
+    const url = normalizeMiniBrowserAddress(input.url ?? 'https://www.google.com')
     await cdp(tab, 'Page.navigate', { url })
   } else if (type === 'back' || type === 'forward') {
     const history = await cdp<{ currentIndex: number; entries: Array<{ id: number }> }>(tab, 'Page.getNavigationHistory')
@@ -275,15 +276,24 @@ async function action(input: Action): Promise<Record<string, unknown>> {
   } else throw new Error('Acción de navegador desconocida.')
   return await state()
 }
-function authorized(req: IncomingMessage): boolean {
-  const address = req.socket.remoteAddress?.replace(/^::ffff:/, '')
-  if (!isLoopback(address) || req.headers['x-phoenix-mini-browser'] !== '1') return false
-  const host = req.headers.host ?? ''
+/** Reject DNS rebinding and cross-origin browser requests, even on localhost. */
+export function miniBrowserRequestAllowed(input: {
+  remoteAddress?: string; host?: string; origin?: string; marker?: string; fetchSite?: string;
+}): boolean {
+  const address = input.remoteAddress?.replace(/^::ffff:/, '')
+  if (!isLoopback(address) || input.marker !== '1') return false
+  const host = input.host ?? ''
   if (!/^(?:localhost|127\.0\.0\.1|\[::1\]):\d{1,5}$/i.test(host)) return false
-  const origin = req.headers.origin
-  if (origin !== undefined && origin !== 'http://' + host && origin !== 'https://' + host) return false
-  if (req.headers['sec-fetch-site'] === 'cross-site') return false
+  if (input.origin !== undefined && input.origin !== 'http://' + host && input.origin !== 'https://' + host) return false
+  if (input.fetchSite === 'cross-site') return false
   return true
+}
+function authorized(req: IncomingMessage): boolean {
+  return miniBrowserRequestAllowed({
+    remoteAddress: req.socket.remoteAddress, host: req.headers.host, origin: req.headers.origin,
+    marker: req.headers['x-phoenix-mini-browser'] as string | undefined,
+    fetchSite: req.headers['sec-fetch-site'] as string | undefined,
+  })
 }
 function reply(res: ServerResponse, code: number, data: unknown): void {
   res.writeHead(code, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
