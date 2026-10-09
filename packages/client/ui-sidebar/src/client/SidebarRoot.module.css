@@ -23,13 +23,8 @@
   --dsh-scrollbar-thumb-hover: transparent;
 }
 
-.fading > * {
-  opacity: 0;
-  transition: opacity 150ms var(--ds-ease-in-out);
-}
-
 .wide {
-  animation: wide-in 160ms var(--ds-ease-in-out);
+  animation: wide-in 80ms ease-out;
 }
 
 @keyframes wide-in {
@@ -39,18 +34,15 @@
 .railIn .iconButton,
 .railIn .newSession,
 .railIn .regionArea {
-  animation: rail-in 150ms var(--ds-ease-in-out) backwards;
+  animation: rail-in 80ms ease-out;
 }
 
 .railIn .footArea {
-  animation: rail-fade-in 150ms var(--ds-ease-in-out) backwards;
+  animation: rail-fade-in 80ms ease-out;
 }
 
 @keyframes rail-in {
-  from {
-    opacity: 0;
-    transform: translateX(49px);
-  }
+  from { opacity: .55; }
 }
 
 @keyframes rail-fade-in {
