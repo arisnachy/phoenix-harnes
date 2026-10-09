@@ -69,12 +69,20 @@ export function shouldPublishTeammateSpeech(message: string, alreadySpoke: boole
   const text = message.trim()
   if (!text) return false
   if (!alreadySpoke) return true
-  const needsHelp = /[?]|bloquead[oa]|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|approval/iu
-  if (needsHelp.test(text)) return true
+  // A mention of an ordinary tool error is not an actionable blocker. The
+  // failed tool receipt stays in the child Session; it is not peer speech.
+  const needsDecision = /[¿?]/u
+  const actionableBlocker = /(?:no puedo (?:continuar|avanzar|terminar|finalizar)|necesito (?:tu ayuda|autorizaci[oó]n|credenciales|acceso|permiso)|(?:requiere|se requiere) (?:tu|su) (?:aprobaci[oó]n|intervenci[oó]n)|need (?:your|user) (?:approval|help|credentials))/iu
+  if (needsDecision.test(text) || actionableBlocker.test(text)) return true
   if (!newReceipt) return false
   const heading = /^(?:@?Kira[,!:]?\s*)?(?:ahora |luego |despu[eé]s |next |now )*/iu
-  const plan = /^(?:voy a|proceder[eé] a|har[eé]|buscar[eé]|comprobar[eé]|verificar[eé]|revisar[eé]|abrir[eé]|i'll|i will|i am going to|i'm going to)\b/iu
-  return !plan.test(text.replace(heading, ''))
+  const plan = /^(?:voy a|proceder[eé] a|har[eé]|buscar[eé]|comprobar[eé]|verificar[eé]|revisar[eé]|abrir[eé]|probar[eé]|intentar[eé]|pasar[eé] a|consultar[eé]|seguir[eé]|volver[eé] a|i'll|i will|i am going to|i'm going to)\b/iu
+  if (plan.test(text.replace(heading, ''))) return false
+  // A failed-source status followed by another promised search is still just
+  // narration even if a separate tool happened to succeed in the meantime.
+  const retryNarration = /(?:fall[óo]|captcha|http [45]\d\d|404|bloque[óo]|access denied|error|failed).*(?:probar[eé]|buscar[eé]|consultar[eé]|intentar[eé]|pasar[eé]|seguir[eé]|verificar[eé]|i'll try|will retry)/iu
+  const materialFinding = /(?:fuente oficial|https?:\/\/|confirm[éeó]|encontr[éeó]|comprob[éeó]|dato verificable|evidencia nueva)/iu
+  return !retryNarration.test(text) || materialFinding.test(text)
 }
 
 /** Owns actual output publication and authorized reaction mutations. */
