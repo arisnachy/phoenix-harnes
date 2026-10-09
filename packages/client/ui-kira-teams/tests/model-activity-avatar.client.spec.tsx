@@ -80,6 +80,13 @@ describe('ModelActivityAvatar', () => {
     },
   )
 
+  it('exposes head pose direction with the same stable identity', () => {
+    const element = ModelActivityAvatar({ kind:'kira', activity:undefined, running:false,
+      pending:false, ready:true, pose:'up' })
+    expect(element.props['data-avatar-pose']).toBe('up')
+    expect(element.props['data-avatar']).toBe('kira')
+  })
+
   it('keeps ready, pending and completed avatars alive without losing identity', () => {
     const ready: ReactElement<Record<string, unknown> & { children?: ReactNode }> = ModelActivityAvatar({
       kind: 'argo', activity: undefined, running: false, pending: false, ready: true,
