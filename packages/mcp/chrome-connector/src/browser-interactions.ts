@@ -153,6 +153,10 @@ export function executeBrowserInteraction(input: BrowserInteraction): BrowserInt
       return { ...common, ok: true }
     }
     if (input.operation === 'click') {
+      if ((el instanceof HTMLButtonElement && el.type === 'submit')
+        || (el instanceof HTMLInputElement && el.type === 'submit')) {
+        return { ...common, ok: false, reason: 'USE_EXPLICIT_SUBMIT_FORM_CONFIRMATION' }
+      }
       (el as HTMLElement).click()
       return { ...common, ok: true }
     }
