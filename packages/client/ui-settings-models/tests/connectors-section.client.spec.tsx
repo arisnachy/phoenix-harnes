@@ -737,7 +737,7 @@ describe('connectors settings section', () => {
     } })
     const card = document.querySelector('[data-connector-id="neon"]')!
     const button = Array.from(card.querySelectorAll('button'))
-      .find(b => b.textContent === 'Find official / install')
+      .find(b => b.textContent === 'Find connector')
     expect(button).toBeTruthy()
     fireEvent.click(button!)
     await waitFor(() => expect(search).toHaveBeenCalledWith({ query: 'Neon', limit: 12 }))
