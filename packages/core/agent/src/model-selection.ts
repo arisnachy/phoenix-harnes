@@ -233,7 +233,7 @@ const AUTO_EXECUTION_CONTINUATION =
   'and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
 
 const AUTO_TEAM_ADMISSION_CONTINUATION =
-  'Phoenix Auto actionable work requires real Kira Team participation before completion. ' +
+  'Phoenix Auto substantive unfinished work may require Team participation, but successful one-shot graphs and other completed previews NEVER do. ' +
   'Continue as Kira on Luna Max and delegate one bounded responsibility from the Sol plan with spawn_teammate, ' +
   'or wake an existing appropriate teammate. Add a second teammate only when a genuinely independent front shortens the critical path. ' +
   'Keep the critical path and supervision with Kira, communicate through Team tools, wait for a real teammate result or blocker, ' +
@@ -514,6 +514,69 @@ export function isPhoenixCodexAutoStalled(
   return events.filter(event => event.type === 'llm/retry').length >= 2
 }
 
+/**
+ * Classify a standalone fictional/demo visual without downgrading real work.
+ * @param text - Direct user request in the current turn.
+ * @returns True only for a bounded, one-shot visual presentation.
+ */
+function isStandaloneVisualPreviewRequest(text: string): boolean {
+  const request = text.trim()
+  if (request.length === 0 || request.length > 160 || request.includes('\n')) return false
+  const normalized = request.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable bilingual task classifier.
+  if (!/^(?:crea|crear|genera|generar|haz|hacer|dame|muestra|muestrame|dibuja|create|generate|make|show|draw)\b/u.test(normalized)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable supported visual vocabulary.
+  if (!/\b(?:grafico|grafica|graph|chart|tabla|table|escala|scale|formulario|form|tarjeta|card)\b/u.test(normalized)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable preview intent vocabulary.
+  if (!/\b(?:fictici[oa]s?|simulad[oa]s?|ejemplos?|demo|demostracion|sample|fictional|simulated|preview|vista\s+previa|para\s+verlo)\b/u.test(normalized)) return false
+  // Additional work, real-world data, or external side effects keep ordinary
+  // review and team admission intact.
+  // oxlint-disable-next-line @stylistic/max-len -- Conservatively exclude consequential workflows.
+  return !/\b(?:y\s+(?:despues|luego|tambien|envia|envialo|publica|guarda|implementa|despliega)|and\s+(?:then|also|send|deploy|publish|save)|pacient\w*|produccion|production|real(?:es)?|correo|email|database|base\s+de\s+datos|api|github|repo|main|stable)\b/u.test(normalized)
+}
+
+/**
+ * Require the actual successful tool receipt from THIS turn rather than
+ * accepting an assistant claim or an artifact left over from a prior turn.
+ */
+function phoenixAutoHasInlineVisualReceiptForTurn(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): boolean {
+  const callIds = new Set<string>()
+  for (const event of turnEvents(agent, turn)) {
+    if (event.type === 'tool/call') {
+      const call = event.data as { readonly name?: string; readonly callId?: string }
+      if ((call.name === 'phoenix_visualize' || call.name === 'phoenix_canvas')
+        && typeof call.callId === 'string') callIds.add(call.callId)
+      continue
+    }
+    if (event.type !== 'tool/result') continue
+    const result = event.data as {
+      readonly error?: unknown
+      readonly message?: {
+        readonly source?: { readonly kind?: string; readonly callId?: string }
+        readonly content?: readonly {
+          readonly type?: string
+          readonly toolCallId?: string
+          readonly isError?: boolean
+          readonly content?: readonly { readonly type?: string; readonly text?: string }[]
+        }[]
+      }
+    }
+    if (result.error !== undefined || result.message?.source?.kind !== 'tool') continue
+    for (const block of result.message.content ?? []) {
+      if (block.type !== 'tool-result' || block.isError !== false
+        || block.toolCallId !== result.message.source.callId
+        || !callIds.has(block.toolCallId ?? '')) continue
+      if (block.content?.some(item => item.type === 'text'
+        && (item.text?.includes('Rich visual ready:') === true
+          || item.text?.includes('Canvas ready in Phoenix:') === true))) return true
+    }
+  }
+  return false
+}
+
 function phoenixAutoTaskRequest(text: string): boolean {
   const candidate = text.trim()
   return CONTEXTUAL_CONTINUATION.test(candidate)
@@ -599,6 +662,13 @@ function phoenixAutoRoute(
       }
     }
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
+      return {
+        provider: 'openai-codex',
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('low'),
+      }
+    }
+    if (isStandaloneVisualPreviewRequest(directText)) {
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
@@ -809,6 +879,10 @@ export function installModelSelection(
 
     const directText = directUserTextForTurn(agent, turn)
     if (!phoenixAutoTaskRequest(directText)) return
+    // A tool-verified one-shot visual meets the original request. Do not
+    // resurrect it with a mandatory team-admission notice.
+    if (isStandaloneVisualPreviewRequest(directText)
+      && phoenixAutoHasInlineVisualReceiptForTurn(agent, turn)) return
     resetPhoenixAutoTurnState(phoenixAutoState, turn)
 
     const latest = latestPhoenixAutoAssistantStop(agent, turn)
