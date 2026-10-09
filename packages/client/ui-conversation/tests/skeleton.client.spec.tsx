@@ -272,6 +272,7 @@ function mount(
     useUserProfile: bindSnapshotSelector(userProfile),
     useProactivityAttention: bindSnapshotSelector(proactivityAttention),
     recordAttention: async () => {},
+    setSidebarFocus: vi.fn(),
     useInput,
     inputActions,
     renderSlot,
