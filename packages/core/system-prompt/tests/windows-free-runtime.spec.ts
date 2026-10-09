@@ -34,7 +34,7 @@ describe('automatic Windows capability context', () => {
   it('runs once in the background, then informs the model without delaying startup', () => {
     const changed = vi.fn()
     let done: ((error: Error | null, stdout: string) => void) | undefined
-    const execute = vi.fn((_bin: string, _args: string[], _opts: unknown, cb: typeof done) => { done = cb })
+    const execute = vi.fn((_bin: string, _args: string[], _opts: unknown, cb: (error: Error | null, stdout: string) => void) => { done = cb })
     const read = startWindowsCapabilityDiscovery(changed, {
       platform: 'win32', supervised: true, runtimeRoot: 'C:/Phoenix', exists: () => true, execute,
     })
