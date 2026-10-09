@@ -357,3 +357,8 @@
     transition: none !important;
   }
 }
+
+/* Pause all (including older CSS ring) animation tracks when offscreen. */
+.avatar[data-avatar-visible='false'] *, .avatar[data-avatar-motion='off'] * {
+  animation-play-state: paused !important;
+}

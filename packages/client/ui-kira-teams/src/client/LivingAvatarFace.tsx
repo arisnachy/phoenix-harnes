@@ -79,7 +79,12 @@ export function LivingAvatarFace({
     if (typeof IntersectionObserver === 'undefined') return
     const observer = new IntersectionObserver(records => {
       for (const record of records) {
-        if (record.target === element) element.dataset.inView = String(record.isIntersecting)
+        if (record.target === element) {
+          element.dataset.inView = String(record.isIntersecting)
+          if (element.parentElement !== null) {
+            element.parentElement.dataset.avatarVisible = String(record.isIntersecting)
+          }
+        }
       }
     }, { threshold: 0.01 })
     observer.observe(element)
