@@ -9,7 +9,17 @@ import css from './MiniBrowser.module.css'
 
 type Tab = { id: string; title: string; url: string }
 type Snapshot = { available: boolean; tabId?: string; url?: string; title?: string; tabs: Tab[] }
-type Command = { type: string; url?: string; tabId?: string; x?: number; y?: number; deltaY?: number; key?: string; text?: string; modifiers?: number }
+type Command = {
+  type: string
+  url?: string
+  tabId?: string
+  x?: number
+  y?: number
+  deltaY?: number
+  key?: string
+  text?: string
+  modifiers?: number
+}
 const API = '/phoenix-mini-browser'
 const HEADERS = { 'x-phoenix-mini-browser': '1' }
 const BLANK: Snapshot = { available: false, tabs: [] }
@@ -239,13 +249,13 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
           ))}
           <button type="button" title="Nueva pestaña" onClick={() => { void run({ type: 'new-tab', url: 'https://www.google.com' }) }}>+</button>
         </div>
-        <form className={css.toolbar} onSubmit={event => { event.preventDefault(); void run({ type: 'open', url: address }) }}>
+        <form className={css.toolbar} onSubmit={(event) => { event.preventDefault(); void run({ type: 'open', url: address }) }}>
           <button type="button" aria-label="Atrás" onClick={() => { void run({ type: 'back' }) }}>←</button>
           <button type="button" aria-label="Adelante" onClick={() => { void run({ type: 'forward' }) }}>→</button>
           <button type="button" aria-label="Recargar" onClick={() => { void run({ type: 'reload' }) }}>↻</button>
           <input data-mini-address="true" aria-label="Dirección web" type="text" spellCheck={false}
             placeholder="Buscar o escribir una dirección"
-            value={address} onChange={event => { setAddress(event.currentTarget.value) }} />
+            value={address} onChange={(event) => { setAddress(event.currentTarget.value) }} />
           <button type="submit">Ir</button>
         </form>
         {snapshot.available ? (
@@ -278,8 +288,8 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
           </button>
           <span>Reproductor oficial; la pestaña de Kira permanece abierta.</span>
         </div>}
-        <form className={css.typeRow} onSubmit={event => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
-          <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={event => { setTyped(event.currentTarget.value) }} />
+        <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
+          <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={(event) => { setTyped(event.currentTarget.value) }} />
           <button type="submit" disabled={!snapshot.available || !typed}>Escribir</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Enter' }) }}>Enter</button>
           <button type="button" disabled={!snapshot.available} onClick={() => { void run({ type: 'key', key: 'Tab' }) }}>Tab</button>
