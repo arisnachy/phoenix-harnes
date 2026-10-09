@@ -459,7 +459,6 @@
 @media (max-height: 850px) {
   .projectRow { min-height: 52px; padding-block: 6px; }
   .sessionRow { height: 34px; min-height: 34px; }
-  .recentHeader { height: 29px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .projectRow, .sessionRow { transition: none; }
