@@ -132,6 +132,63 @@ describe('phoenix_visualize tool', () => {
     expect(args.visual).toEqual({ visualType: 'chart', chartType: 'line', demo: true })
   })
 
+  it('generates seven disclosed fictitious OHLC candles in a single tool call', async () => {
+    const tool = createPhoenixVisualizerTool()
+    const args = { title: 'Cripto ficticia · velas simuladas',
+      visual: { visualType: 'chart', chartType: 'candlestick', demo: true } }
+    const result = await tool.execute(args, execution()) as {
+      visual: { chartType: string; simulated: boolean; description: string;
+        candles: Array<{ open: number; high: number; low: number; close: number; time: string }> }
+    }
+    expect(result.visual.chartType).toBe('candlestick')
+    expect(result.visual.simulated).toBe(true)
+    expect(result.visual.description).toContain('ficticios')
+    expect(result.visual.candles).toHaveLength(7)
+    expect(result.visual.candles.every(candle => candle.low <= Math.min(candle.open, candle.close)
+      && candle.high >= Math.max(candle.open, candle.close))).toBe(true)
+    expect(tool.output.presentationMeta?.(args, result as never)).toMatchObject({
+      artifact: { data: { chartType: 'candlestick', simulated: true } },
+    })
+    expect(args.visual).toEqual({ visualType: 'chart', chartType: 'candlestick', demo: true })
+  })
+
+  it('accepts OHLC arrays, nested candles, string prices, and chart aliases', async () => {
+    const tool = createPhoenixVisualizerTool()
+    const input = [
+      { visualType: 'chart', chartType: 'candlestick',
+        candles: [{ time: 'Lun', open: 10, high: 12, low: 9, close: 11 }] },
+      { visualType: 'chart', chartType: 'ohlc',
+        data: [{ date: '2026-10-08', o: '10.0', h: '12', l: '9', c: '11' }] },
+      { visualType: 'chart', chartType: 'candles',
+        data: { candles: [{ time: 'Mar', Open: 10, High: 12, Low: 9, Close: 11 }] } },
+      { visualType: 'visual', candles: [{ label: 'Mié', open: 10, high: 12, low: 9, close: 11 }] },
+      { visualType: 'chart', chartType: 'candle',
+        rows: [{ time: 'Jue', open: 10, high: 12, low: 9, close: 11 }] },
+    ]
+    for (const visual of input) {
+      const result = await tool.execute({ title: 'Precios verificados', visual }, execution()) as {
+        visual: { chartType: string; candles: Array<Record<string, unknown>>; simulated?: boolean }
+      }
+      expect(result.visual.chartType).toBe('candlestick')
+      expect(result.visual.candles).toHaveLength(1)
+      expect(result.visual.candles[0]).toMatchObject({ open: 10, high: 12, low: 9, close: 11 })
+      expect(result.visual.simulated).not.toBe(true)
+    }
+  })
+
+  it('rejects empty, impossible, and nonfinite OHLC series instead of publishing empty charts', async () => {
+    const tool = createPhoenixVisualizerTool()
+    for (const visual of [
+      { visualType: 'chart', chartType: 'candlestick' },
+      { visualType: 'chart', chartType: 'candlestick', candles: [] },
+      { visualType: 'chart', chartType: 'candlestick', candles: [{ open: 10, high: 8, low: 5, close: 9 }] },
+      { visualType: 'chart', chartType: 'candlestick', candles: [{ open: 10, high: 12, low: 5, close: 'no' }] },
+      { visualType: 'chart', chartType: 'candlestick', candles: [{ open: 10, high: 12, low: 5, close: Infinity }] },
+    ]) {
+      await expect(tool.execute({ title: 'Mercado en tiempo real', visual }, execution())).rejects.toThrow()
+    }
+  })
+
   it('normalizes legacy chart shapes to populated, accurately typed line series', async () => {
     const tool = createPhoenixVisualizerTool()
     const list = [
