@@ -226,6 +226,8 @@ const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|d
 const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate))/isu
 /** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
 const AUTO_CONTINUATION_LIMIT = 4
+/** One Team-admission prompt is enough; repeating it is never additional work. */
+const AUTO_TEAM_ADMISSION_LIMIT = 1
 const AUTO_EXECUTION_CONTINUATION =
   'Planning or describing the next action is not task completion. ' +
   'Continue the current user request now with the available tools. ' +
@@ -607,6 +609,69 @@ function phoenixAutoHasInlineVisualReceiptForTurn(
   return false
 }
 
+/**
+ * A read-only MCP connection probe is a one-tool task, not a Team mission.
+ * Require the matching successful tool receipt AND a conclusive user-facing
+ * response in this turn. Never trust Kira's prose alone or a previous turn.
+ */
+function phoenixAutoCompletedReadOnlyConnectorProbe(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+  request: string,
+  closingText: string,
+): boolean {
+  const direct = request.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  if (!/\b(?:github|mcp)\b/u.test(direct)
+    || !/\b(?:prueb\p{L}*|prob\p{L}*|verific\p{L}*|comprueb\p{L}*|comprob\p{L}*|funciona|conexion|conectad\p{L}*|check|test|verify|connected)\b/iu.test(direct)
+    || /\b(?:crea\p{L}*|edit\p{L}*|modific\p{L}*|elimin\p{L}*|borra\p{L}*|escrib\p{L}*|actualiz\p{L}*|commit|push|merge|issue|pull\s+request|envia\p{L}*|send|delete|create|update|write)\b/iu.test(direct)) return false
+  const closing = closingText.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  if (!/\b(?:funciona|correctamente|respondio|respondio|verificad\p{L}*|completad\p{L}*|comprobad\p{L}*|connected|works|succeeded|successfully)\b/iu.test(closing)
+    || AUTO_UNFINISHED_ACTION.test(closingText)) return false
+  const successfulCalls = new Set<string>()
+  const completed = new Set<string>()
+  for (const event of turnEvents(agent, turn)) {
+    if (event.type === 'tool/call') {
+      const data = event.data as { readonly callId?: string; readonly name?: string }
+      // A successful get_me receipt proves the connected GitHub identity; a
+      // tool registration, plan, or unrelated web search does not.
+      if (typeof data.callId === 'string'
+        && /^(?:mcp__)?github(?:__|[./:])get_me$/iu.test(data.name ?? '')) successfulCalls.add(data.callId)
+    }
+    if (event.type !== 'tool/result') continue
+    const data = event.data as {
+      readonly error?: unknown
+      readonly message?: {
+        readonly source?: { readonly kind?: string; readonly callId?: string }
+        readonly content?: readonly {
+          readonly type?: string; readonly toolCallId?: string; readonly isError?: boolean
+        }[]
+      }
+    }
+    const callId = data.message?.source?.callId
+    if (data.error !== undefined || data.message?.source?.kind !== 'tool'
+      || typeof callId !== 'string' || !successfulCalls.has(callId)) continue
+    if (data.message.content?.some(block =>
+      block.type === 'tool-result' && block.toolCallId === callId && block.isError === false)) {
+      completed.add(callId)
+    }
+  }
+  return completed.size > 0
+}
+
+/** Once a human stops the turn, no continuation or Team gate may revive it. */
+function phoenixAutoTurnWasUserStopped(
+  agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
+  turn: number,
+): boolean {
+  return turnEvents(agent, turn).some(event => {
+    if (event.type !== 'turn/end') return false
+    const data = event.data as {
+      readonly reason?: { readonly kind?: string; readonly reason?: { readonly kind?: string } }
+    }
+    return data.reason?.kind === 'aborted' && data.reason.reason?.kind === 'user'
+  })
+}
+
 /** A tiny requested Team showcase still gets a real Sol plan, but never pays xhigh effort. */
 export function isBriefTeamDemonstration(text: string): boolean {
   const request = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
@@ -954,7 +1019,7 @@ export function installModelSelection(
     if ((selection.assembledToolCount ?? 0) === 0) return
 
     const directText = directUserTextForTurn(agent, turn)
-    if (!phoenixAutoTaskRequest(directText)) return
+    if (!phoenixAutoTaskRequest(directText) || phoenixAutoTurnWasUserStopped(agent, turn)) return
     // A tool-verified one-shot visual meets the original request. Do not
     // resurrect it with a mandatory team-admission notice.
     if (isStandaloneVisualPreviewRequest(directText)
@@ -963,6 +1028,9 @@ export function installModelSelection(
 
     const latest = latestPhoenixAutoAssistantStop(agent, turn)
     if (latest === undefined) return
+    // A verified, single read-only MCP identity check is already the requested
+    // result. In particular, never force a teammate after get_me succeeded.
+    if (phoenixAutoCompletedReadOnlyConnectorProbe(agent, turn, directText, latest.text)) return
 
     const events = turnEvents(agent, turn)
     const latestStepHasToolActivity = events.some((event) => {
@@ -989,12 +1057,12 @@ export function installModelSelection(
     }
 
     if (phoenixAutoTeamAvailable && !phoenixAutoHasTeamOutcomeForTurn(agent, turn)
+      && phoenixAutoState.teamAdmissionCount < AUTO_TEAM_ADMISSION_LIMIT
       && phoenixAutoState.lastTeamAdmissionStep !== latest.step) {
       phoenixAutoState.teamAdmissionCount += 1
       phoenixAutoState.lastTeamAdmissionStep = latest.step
-      // Repeatedly trying to close without a real teammate outcome is itself
-      // a coordination stall. Let Sol xhigh repair the delegation strategy once.
-      if (phoenixAutoState.teamAdmissionCount >= 2) phoenixAutoState.forcePlannerNext = true
+      // One explicit admission reminder is the full budget. Never manufacture
+      // an endless series of context injections or invoke Sol as a side effect.
       agent.steer(createUserMessage({
         content: [{ type: 'text', text: AUTO_TEAM_ADMISSION_CONTINUATION }],
         source: {

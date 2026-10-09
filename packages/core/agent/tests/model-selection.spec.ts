@@ -887,6 +887,119 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
+  it('does not inject Team admission after successful GitHub MCP get_me and a finished read-only reply', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'mcp__github__get_me', description: 'inspect connected GitHub identity', parameters: { type: 'object' } },
+      { name: 'spawn_teammate', description: 'optional Team delegation', parameters: { type: 'object' } },
+    ] }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Prueba si GitHub MCP funciona y reconoce mi cuenta; solo lectura' }] } },
+      { type: 'tool/call', data: {
+        turn: 1, step: 2, callId: 'github-read-1', name: 'mcp__github__get_me', arguments: '{}',
+      } },
+      { type: 'tool/result', data: {
+        turn: 1, step: 2, message: { source: { kind: 'tool', callId: 'github-read-1' },
+          content: [{ type: 'tool-result', toolCallId: 'github-read-1', isError: false,
+            content: [{ type: 'text', text: '{"login":"arisnachy"}' }] }] },
+      } },
+      { type: 'assistant/message', data: { turn: 1, step: 3,
+        message: { source: { model: 'gpt-6-luna' },
+          content: [{ type: 'text', text: 'GitHub MCP respondió correctamente y reconoció la cuenta arisnachy. No hay trabajo pendiente.' }] } } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      for (const step of [3, 4, 5, 6, 7, 8]) {
+        if (step > 3) {
+          events.push({ type: 'assistant/message', data: { turn: 1, step,
+            message: { source: { model: 'gpt-6-luna' },
+              content: [{ type: 'text', text: 'La prueba ya está completada; GitHub MCP funciona.' }] } } })
+        }
+        await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+      }
+      expect(steered).toHaveLength(0)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('limits a missing Team outcome to one admission instead of an unbounded injection loop', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'read', description: 'read source', parameters: { type: 'object' } },
+      { name: 'spawn_teammate', description: 'delegate work', parameters: { type: 'object' } },
+    ] }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Arregla el router.ts y ejecuta los tests' }] } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      for (let step = 2; step <= 12; step += 1) {
+        events.push({ type: 'assistant/message', data: { turn: 1, step,
+          message: { source: { model: 'gpt-6-luna' },
+            content: [{ type: 'text', text: 'Corregido y verificado, sin trabajo adicional.' }] } } })
+        await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+      }
+      expect(steered).toHaveLength(1)
+      expect(JSON.stringify(steered[0])).toContain('Phoenix Auto substantive unfinished work')
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('never resurrects a user-stopped turn with Team admission or execution continuation', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'spawn_teammate', description: 'delegate work', parameters: { type: 'object' } },
+    ] }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Prueba GitHub MCP' }] } },
+      { type: 'assistant/message', data: { turn: 1, step: 2, message: {
+        source: { model: 'gpt-6-luna' }, content: [{ type: 'text', text: 'Voy a probarlo ahora.' }],
+      } } },
+      { type: 'turn/end', data: { turn: 1, reason: { kind: 'aborted', reason: { kind: 'user' } } } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, steer: (message: unknown) => { steered.push(message) } } as unknown as Agent
+    try {
+      await ctx.systemPrompt.assemble()
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal: new AbortController().signal })
+      expect(steered).toHaveLength(0)
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('allows Phoenix Auto to close after a real teammate result reaches Kira', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
