@@ -48,7 +48,7 @@ export function hydrateFetchMcpNodeEnvironment(
   const result = { ...environment }
   if ((options.platform ?? process.platform) !== 'win32'
     || config.serverName !== 'fetch'
-    || !/^(?:uvx|uvx\\.exe)$/iu.test(win32.basename(config.command))
+    || !/^uvx(?:\.exe)?$/iu.test(win32.basename(config.command))
     || config.args[0] !== 'mcp-server-fetch') return result
 
   const exists = options.fileExists ?? existsSync
