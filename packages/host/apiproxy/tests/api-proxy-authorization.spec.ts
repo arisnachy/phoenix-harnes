@@ -208,6 +208,33 @@ describe('authorization API domain', () => {
     expect(entries.entries[0]?.telemetry).toBeUndefined()
   }, 3_000)
 
+  it('starts OAuth promptly even when every catalog inspection ignores abort', async () => {
+    const ctx = new Context()
+    const { service, key } = fakeAuthorization()
+    const hung = service as unknown as {
+      inspect: () => Promise<undefined>
+    }
+    // An uncooperative provider ignores AbortSignal entirely.
+    hung.inspect = () => new Promise<undefined>(() => undefined)
+    ctx.provide('authorization', service)
+    ctx.provide('credentials', {
+      describeRecord: () => new Promise<never>(() => undefined),
+    } as never)
+    const api = createApiProxy(ctx, DEFAULTS)
+    const startedAt = Date.now()
+    const listing = api.authorization.list(request({}))
+    const begun = ok(await api.authorization.begin(request({ key: String(key), method: 'oauth' })))
+    expect(begun.status).toBe('pending')
+    const state = ok(await api.authorization.status(request({ attemptId: begun.attemptId })))
+    expect(state.notices[0]?.notice.url).toBe('https://example.test/oauth')
+    const catalog = ok(await listing)
+    expect(catalog.entries).toHaveLength(1)
+    expect(catalog.entries[0]?.telemetry).toBeUndefined()
+    expect(catalog.entries[0]?.stored).toBeUndefined()
+    expect(Date.now() - startedAt).toBeLessThan(3_500)
+    ok(await api.authorization.cancel(request({ attemptId: begun.attemptId })))
+  }, 4_500)
+
   it('projects live connector telemetry and forwards provider-owned disconnect', async () => {
     const ctx = new Context()
     const { service, key, wasDisconnected } = fakeAuthorization()

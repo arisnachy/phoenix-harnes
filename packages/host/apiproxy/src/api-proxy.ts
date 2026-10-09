@@ -2265,6 +2265,28 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
     }
   }
 
+  /**
+   * Browser catalog probes must never starve the high-priority authorization
+   * begin/status RPCs. The provider may ignore AbortSignal (notably during
+   * Codex native state refresh); abort alone cannot bound an awaited inspect.
+   * @param probe - Optional catalog lookup; its late result is deliberately ignored.
+   * @returns The lookup result, or undefined after the catalog time budget.
+   */
+  async function boundedAuthorizationCatalogProbe<T>(probe: () => Promise<T>): Promise<T | undefined> {
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    try {
+      return await Promise.race([
+        probe(),
+        new Promise<undefined>(resolve => {
+          timeout = setTimeout(() => resolve(undefined), AUTHORIZATION_INSPECTION_UI_BUDGET_MS)
+          timeout.unref?.()
+        }),
+      ])
+    } finally {
+      if (timeout !== undefined) clearTimeout(timeout)
+    }
+  }
+
   /** Remove a pending prompt and reject its waiter without retaining its answer. */
   function rejectAuthorizationPrompt(attempt: AuthorizationAttempt, error: unknown): void {
     const prompt = attempt.prompt
@@ -3916,8 +3938,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
           let stored: { kind: 'api-key' | 'grant' } | undefined
           if (credentials !== undefined) {
             try {
-              const info = await credentials.describeRecord(parseCredentialKey(String(entry.key)))
-              if (info.configured && info.kind !== undefined) stored = { kind: info.kind }
+              const info = await boundedAuthorizationCatalogProbe(
+                () => credentials.describeRecord(parseCredentialKey(String(entry.key))),
+              )
+              if (info?.configured === true && info.kind !== undefined) stored = { kind: info.kind }
             } catch {
               // The key did not address a record this deployment stores; leave stored off.
             }
@@ -3929,10 +3953,10 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
             // this catalog request a short wait budget; provider-owned
             // single-flight refreshes may continue in the background and the
             // next UI poll will pick up their cached sanitized telemetry.
-            telemetry = await authorization.inspect(
+            telemetry = await boundedAuthorizationCatalogProbe(() => authorization.inspect(
               entry.key,
               AbortSignal.timeout(AUTHORIZATION_INSPECTION_UI_BUDGET_MS),
-            )
+            ))
           } catch {
             // Live provider inspection is optional; the flow itself remains usable.
           }

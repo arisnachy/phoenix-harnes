@@ -975,6 +975,7 @@ export function ConnectorsSettingsSection({ api,
   const [repairingEntryId, setRepairingEntryId] = useState<string | undefined>()
   const [removingEntryId, setRemovingEntryId] = useState<string | undefined>()
   const [reconnectingServerName, setReconnectingServerName] = useState<string | undefined>()
+  const [reconnectFailure, setReconnectFailure] = useState<{ serverName: string; message: string } | undefined>()
   const [chatGptWebState, setChatGptWebState] = useState<ChatGptWebSnapshot | undefined>()
   const [chatGptWebBusy, setChatGptWebBusy] = useState(false)
   const [chatGptWebFailure, setChatGptWebFailure] = useState<string | undefined>()
@@ -984,6 +985,7 @@ export function ConnectorsSettingsSection({ api,
     setAnswer,
     failure,
     preparingKey,
+    lastAttemptKey,
     reserveOAuthPopup,
     closeOAuthPopup,
     begin,
@@ -1300,6 +1302,7 @@ export function ConnectorsSettingsSection({ api,
         || ((runtime.status === 'failed' || runtime.status === 'disconnected')
           && knownFlow?.stored === undefined))
     setCatalogFailure(undefined)
+    setReconnectFailure(undefined)
     // If the runtime already asks for auth and the flow is registered, a
     // reconnect cannot produce consent; go directly to the Host authorization.
     if (runtime.status === 'auth-required' && knownFlow !== undefined && knownMethod !== undefined) {
@@ -1308,10 +1311,22 @@ export function ConnectorsSettingsSection({ api,
     }
     if (recoverAuthorization) reserveOAuthPopup()
     setReconnectingServerName(runtime.serverName)
-    void reconnect({ serverName: runtime.serverName }).then(async (result) => {
+    // The registry can hold a pending transport generation indefinitely.
+    // Never make the user wait for that RPC without a visible failure.
+    let reconnectTimeout: ReturnType<typeof setTimeout> | undefined
+    void Promise.race([
+      reconnect({ serverName: runtime.serverName }),
+      new Promise<never>((_resolve, reject) => {
+        reconnectTimeout = setTimeout(() => reject(new Error(
+          'El Host MCP no confirmó la reconexión en 12 segundos. Comprueba la disponibilidad del servicio y vuelve a intentar.',
+        )), 12_000)
+      }),
+    ]).then(async (result) => {
       if (!result.accepted) {
         if (recoverAuthorization) closeOAuthPopup()
-        setCatalogFailure(connectorT('reconnectRequiredStatus'))
+        const message = connectorT('reconnectRequiredStatus')
+        setReconnectFailure({ serverName: runtime.serverName, message })
+        setCatalogFailure(message)
         return
       }
       setRefresh(current => current + 1)
@@ -1319,6 +1334,9 @@ export function ConnectorsSettingsSection({ api,
       if (!recoverAuthorization) return
       if (api === undefined) {
         closeOAuthPopup()
+        const message = 'El Host no expone la API de autorización. Comprueba la instalación activa de Phoenix.'
+        setReconnectFailure({ serverName: runtime.serverName, message })
+        setCatalogFailure(message)
         return
       }
 
@@ -1349,14 +1367,19 @@ export function ConnectorsSettingsSection({ api,
         }
       }
       closeOAuthPopup()
-      setCatalogFailure(
-        `No se inició la autorización de ${runtime.serverName}: el MCP sigue sin exponer un método OAuth operativo. `
-        + 'Comprueba su URL, disponibilidad y si requiere API key, client ID o secret. El conector no está conectado.',
-      )
+      const message = `No se inició la autorización de ${runtime.serverName}: el MCP sigue sin exponer un método OAuth operativo. `
+        + 'Comprueba su URL, disponibilidad y si requiere API key, client ID o secret. El conector no está conectado.'
+      setReconnectFailure({ serverName: runtime.serverName, message })
+      setCatalogFailure(message)
     }).catch((error: unknown) => {
       if (recoverAuthorization) closeOAuthPopup()
-      setCatalogFailure(String(error))
-    }).finally(() => { setReconnectingServerName(undefined) })
+      const message = String(error)
+      setReconnectFailure({ serverName: runtime.serverName, message })
+      setCatalogFailure(message)
+    }).finally(() => {
+      if (reconnectTimeout !== undefined) clearTimeout(reconnectTimeout)
+      setReconnectingServerName(undefined)
+    })
   }
 
   const repairManagedConnector = (connector: ManagedMcpConnectorView): void => {
@@ -1715,6 +1738,10 @@ export function ConnectorsSettingsSection({ api,
                     <p role="status" className={styles['advancedHint']}>
                       {attempt.url === undefined ? 'Preparando autorización del MCP…' : 'La URL OAuth está lista. Continúa en la pestaña abierta o usa el enlace superior.'}
                     </p>
+                  ) : failure !== undefined && lastAttemptKey === authorizationKey ? (
+                    <p role="alert" className={styles['error']}>{failure}</p>
+                  ) : reconnectFailure !== undefined && row.mcpRuntime?.serverName === reconnectFailure.serverName ? (
+                    <p role="alert" className={styles['error']}>{reconnectFailure.message}</p>
                   ) : undefined}
                   pending={rowAuthorizationPending || jevBusy
                     || (disconnectingKey !== undefined && disconnectingKey === row.account?.key)}
