@@ -103,7 +103,7 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
       setError(undefined)
       const state = await command(request)
       setSnapshot(state)
-      if (request.type === 'open' || request.type === 'new-tab') setEnabled(true)
+      if (request.type === 'open' || request.type === 'new-tab' || request.type === 'start') setEnabled(true)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     }
@@ -269,7 +269,7 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
             <p>{connectionError
               ? 'Phoenix todavía no ha conectado la vista del navegador. Puedes reintentar sin salir del chat.'
               : 'Chrome real dentro de la conversación. Kira y tú utilizáis las mismas pestañas.'}</p>
-            <button type="button" onClick={() => { void run({ type: 'open', url: 'https://www.google.com' }) }}>Iniciar navegador</button>
+            <button type="button" onClick={() => { void run({ type: 'start' }) }}>Conectar navegador</button>
           </div>
         )}
         {videoId && <div className={css.mediaBar}>
