@@ -79,7 +79,7 @@ function youtubeId(raw: string | undefined): string | undefined {
 export function MiniBrowser({ requested = false, active = true, tabId, onActivate }: {
   requested?: boolean
   active?: boolean
-  tabId?: string
+  tabId?: string | undefined
   onActivate?: () => void
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
