@@ -1,15 +1,13 @@
 # Microsoft MCP en Phoenix (octubre de 2026)
 
 Phoenix ofrece tres servidores **oficiales** de Microsoft, cada uno instalable
-**a petición** desde Configuración → Conectores. No se instalan en el PC ni
-acceden a los datos de Microsoft hasta que el usuario elija Instalar y
-complete los requisitos de cada proveedor.
+desde Configuración → Conectores. **Microsoft Learn Docs** se prepara automáticamente como MCP público y gratuito en el paquete básico de Phoenix; **Work IQ y Azure** son opcionales y no se instalan ni usan sin una acción del usuario y sus requisitos. El equipo Windows necesita actualizar el Host para recibir estos cambios.
 
 ## 1. Microsoft Learn Docs MCP — público y gratuito
 
 - Documentación oficial: https://learn.microsoft.com/en-us/training/support/mcp-developer-reference
 - Servidor: `https://learn.microsoft.com/api/mcp` (Streamable HTTP, sin OAuth).
-- En Phoenix: **Microsoft Learn (Docs)** → **Instalar**.
+- En Phoenix: **Microsoft Learn (Docs)** se instala automáticamente en el núcleo gratuito si el Host está actualizado. Si el servicio no está disponible, consultar su estado y reparar/reconectar; nunca afirmar que está listo sin herramientas.
 - Uso por Kira: investigar Microsoft 365, Windows, Azure, Graph y documentación
   de desarrollo; comprobar los resultados contra documentación oficial.
 - **No** concede acceso a Outlook, archivos, calendario ni mensajes privados.
@@ -88,8 +86,4 @@ de SharePoint Embedded; no reemplaza SharePoint convencional.
 ## 6. Privacidad y costes
 
 Todas las identidades y los permisos se gestionan por el proveedor.
-**Microsoft Learn** lee documentación pública. **Work IQ y Azure** requieren
-credenciales y pueden incurrir en facturación aunque el servidor MCP sea
-software de libre distribución. En Phoenix, cada uno tiene su propio estado
-y su instalación debe ser voluntaria. Los conectores no forman parte del
-paquete de arranque automático (CORE_MCP_PACK_IDS).
+**Microsoft Learn** lee documentación pública, se aprovisiona en el paquete base y no requiere credenciales. **Work IQ y Azure** requieren credenciales y pueden incurrir en facturación aunque el servidor MCP sea software de libre distribución. Cada uno tiene estado separado; **Work IQ y Azure no están en el paquete de arranque automático** (CORE_MCP_PACK_IDS).
