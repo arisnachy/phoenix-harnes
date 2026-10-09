@@ -11,6 +11,7 @@ function fakePanels(): PanelActions {
     setSidebar: vi.fn(),
     setDetails: vi.fn(),
     toggleSidebar: vi.fn(),
+    setSidebarFocus: vi.fn(),
     setNarrow: vi.fn(),
     openDetails: vi.fn(),
     closeDetails: vi.fn(),
@@ -25,10 +26,13 @@ describe('LayoutController', () => {
     service.attachPanels(panels)
 
     service.toggleSidebar()
+    service.setSidebarFocus(true)
     service.openDetails()
     service.closeDetails()
 
     expect(panels.toggleSidebar).toHaveBeenCalledTimes(1)
+    expect(panels.setSidebarFocus).toHaveBeenCalledTimes(1)
+    expect(panels.setSidebarFocus).toHaveBeenCalledWith(true)
     expect(panels.openDetails).toHaveBeenCalledTimes(1)
     expect(panels.closeDetails).toHaveBeenCalledTimes(1)
     expect(panels.setSidebar).not.toHaveBeenCalled()
@@ -38,6 +42,7 @@ describe('LayoutController', () => {
   it('fails loud before the root entry wired its actions', () => {
     const service = new LayoutController()
     expect(() => { service.toggleSidebar() }).toThrow(/panel actions not wired/)
+    expect(() => { service.setSidebarFocus(true) }).toThrow(/panel actions not wired/)
     expect(() => { service.openDetails() }).toThrow(/panel actions not wired/)
     expect(() => { service.closeDetails() }).toThrow(/panel actions not wired/)
     expect(() => { service.setWorkspaceOccupant('cordis', true) }).toThrow(/panel actions not wired/)
