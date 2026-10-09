@@ -290,15 +290,21 @@ server.registerTool('youtube_search', {
   description: 'Acción rápida: abre YouTube directamente en los resultados de búsqueda de la frase solicitada, usando la sesión de Chrome/Edge y sus permisos actuales. Úsala en UNA sola llamada para peticiones como "abre YouTube y busca Bob Esponja"; no hace falta status, tabs, navigate, click_text, read_page, navegador adicional, subagentes ni review profundo. Tras una comprobación breve de URL, informa el resultado real y termina; no reproduzcas un video si no te lo pidieron. Si falta autorización, informa la restricción una vez, no repitas intentos.',
   inputSchema: { query: z.string().trim().min(1).max(256), tabId: z.string().optional() },
 }, async ({ query, tabId }) => {
-  if (!actionsAllowed()) {
-    throw new Error('Navegación bloqueada por la política de permisos del navegador. Autoriza la navegación desde Phoenix; no se permite eludir PHOENIX_BROWSER_ALLOW_ACTIONS=false.')
-  }
   const url = youtubeSearchUrl(query)
-  const tab = await selectedTab(tabId)
-  const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
-  if (navigation.errorText) throw new Error(`YouTube no pudo abrirse: ${navigation.errorText}`)
-  // One bounded read of tab metadata, not a text scrape, screenshot or second model turn.
-  const current = (await tabs()).find(candidate => candidate.id === tab.id)
+  if (!actionsAllowed()) {
+    return { isError: true, content: [{ type: 'text', text: `Navegación no autorizada por la política actual. No se abrió YouTube. Enlace directo para el usuario: ${url}. No repitas ni eludas el permiso; informa este bloqueo una sola vez.` }] }
+  }
+  let tab: Tab
+  try {
+    tab = await selectedTab(tabId)
+    const navigation = await cdp<{ errorText?: string }>(tab, 'Page.navigate', { url })
+    if (navigation.errorText) throw new Error(navigation.errorText)
+  } catch (error) {
+    return { isError: true, content: [{ type: 'text', text: `No se pudo abrir YouTube en Chrome/Edge: ${String(error)}. Enlace directo para el usuario: ${url}. No reintentes automáticamente sin una causa nueva.` }] }
+  }
+  // One bounded read of tab metadata, not a scrape, screenshot or second model turn.
+  // A metadata failure after successful Page.navigate must not lose the navigation receipt.
+  const current = await tabs().then(rows => rows.find(candidate => candidate.id === tab.id), () => undefined)
   let verified = false
   if (current) {
     try {
