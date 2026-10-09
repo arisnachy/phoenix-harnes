@@ -11,6 +11,7 @@ import {
   teamExecutionProof,
   teamExecutionRequirement,
   teamSocialStyle,
+  teamLanguageInstruction,
 } from '@phoenix-ai/dsh-agent-team'
 import type { TeamMemberView } from '@phoenix-ai/dsh-agent-team'
 import { foldRequestHeader } from '@phoenix-ai/dsh-session'
@@ -230,7 +231,12 @@ function installChatTools(agent: Agent, ctx: Context): () => void {
   const register = (dispose: () => unknown): void => { disposers.push(dispose) }
   try {
     register(scoped.systemPrompt.section({ name: 'team:conversation', order: 61,
-      text: 'Your real operational text appears under your own identity in the main user conversation. Reply to Kira as a teammate, not as an impersonal background tool: address her naturally when reporting a meaningful development, and use send_message with purpose result for the final verified handoff. After that successful handoff, do not repeat the finding in another assistant final message. Keep updates useful and sparse; never expose private reasoning or narrate every tool call. team_chat_react is the canonical visible reaction control for the shared transcript. A directed user question takes priority at the next safe boundary: answer the addressed person with team_chat_answer and the delivered Team-user message id, then continue your existing mission unless the user explicitly changes or cancels it. A conversational answer does not complete a task or replace execution evidence. Reactions are optional and must not add avoidable turns, latency, or token cost; never manufacture banter or repeat a fixed emoji. Use a delivered message id when available; call team_chat_read only for missing context. Do not guess repository paths for identity or configuration: active KIRA identity/personality comes from runtime metadata, not .kira/roster files, so never synthesize roster filenames; Phoenix has no repository-root cordis.yml, because profile roots are generated under DSH_HOME/profiles and shipped preset configs live under apps/cli/config/agent-presets. Discover the exact existing path with available status/search/list tools before reading configuration. Kira supervises the mission and delivers its final answer.' }))
+      text: () => `${teamLanguageInstruction((
+        ctx.agentTeams.tryMembership(agent)?.root
+        ?? (agent.session.header.parentSession === undefined
+          ? undefined : ctx.agents.get(agent.session.header.parentSession))
+        ?? agent
+      ).session.events)}\n\nYour real operational text appears under your own identity in the main user conversation. Reply to Kira as a teammate, not as an impersonal background tool: address her naturally when reporting a meaningful development, and use send_message with purpose result for the final verified handoff. After that successful handoff, do not repeat the finding in another assistant final message. Keep updates useful and sparse; never expose private reasoning or narrate every tool call. team_chat_react is the canonical visible reaction control for the shared transcript. A directed user question takes priority at the next safe boundary: answer the addressed person with team_chat_answer and the delivered Team-user message id, then continue your existing mission unless the user explicitly changes or cancels it. A conversational answer does not complete a task or replace execution evidence. Reactions are optional and must not add avoidable turns, latency, or token cost; never manufacture banter or repeat a fixed emoji. Use a delivered message id when available; call team_chat_read only for missing context. Do not guess repository paths for identity or configuration: active KIRA identity/personality comes from runtime metadata, not .kira/roster files, so never synthesize roster filenames; Phoenix has no repository-root cordis.yml, because profile roots are generated under DSH_HOME/profiles and shipped preset configs live under apps/cli/config/agent-presets. Discover the exact existing path with available status/search/list tools before reading configuration. Kira supervises the mission and delivers its final answer.` }))
     register(scoped.tools.register(defineTool({
       name: 'team_chat_read',
       description: 'Read recent real user/Kira/agent conversation messages and IDs for replies or reactions. Does not wake agents.',
@@ -248,7 +254,7 @@ function installChatTools(agent: Agent, ctx: Context): () => void {
     })))
     register(scoped.tools.register(defineTool({
       name: 'team_chat_answer',
-      description: 'Answer a conversational user request addressed to you using its delivered Team-user message id, then continue your existing mission. Does not complete a task or replace operational execution evidence.',
+      description: 'Answer the addressed user naturally in that user\'s conversation language using its delivered Team-user message id, then continue the mission. Does not replace execution evidence.',
       parameters: { message_id: { type: 'string', required: true }, text: { type: 'string', required: true } },
       output: jsonOutput({ type: 'object', additionalProperties: false, properties: { message_id: { type: 'string', required: true } } }),
       async execute(args, exec) {
@@ -318,7 +324,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       text: () => {
         const membership = ctx.agentTeams.membership(agent)
         const socialStyle = teamSocialStyle(membership.name, membership.role)
-        return `${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}`
+        return `${POLICY}\n\nYour Team role is ${membership.role}; your Team name is ${membership.name}; Team id is ${membership.id}.\nYour social voice: ${socialStyle}\n\n${teamLanguageInstruction(membership.root.session.events)}`
       },
     }))
 
@@ -413,7 +419,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
             enum: ['assignment', 'question', 'blocker', 'result', 'review', 'decision', 'update'],
             description: 'Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.',
           },
-          message: { type: 'string', required: true, description: 'Self-contained message for the target.' },
+          message: { type: 'string', required: true, description: 'Self-contained message for the target in the current user conversational language; preserve exact code and error strings.' },
         },
         output: jsonOutput(SEND_VALUE_SCHEMA),
         execute(args, exec) {

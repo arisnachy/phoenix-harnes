@@ -39,6 +39,8 @@ export { TeamError } from './error.ts'
 export { teamExecutionProof, teamExecutionRequirement } from './execution-evidence.ts'
 export type { TeamExecutionProof, TeamExecutionRequirement } from './execution-evidence.ts'
 export { foldTeam } from './fold.ts'
+export { classifyTeamUserLanguage, teamUserLanguage, teamLanguageInstruction } from './language.ts'
+export type { TeamUserLanguage } from './language.ts'
 export {
   KIRA_SOCIAL_STYLE,
   TEAM_PERSONAS,
