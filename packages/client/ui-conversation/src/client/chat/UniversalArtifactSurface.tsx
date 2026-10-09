@@ -97,7 +97,9 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
     const url = resolvedUrl ?? URL.createObjectURL(new Blob([serialized], { type: artifact.mime }))
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = artifact.title.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'phoenix-artifact'
+    const basename = artifact.title.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '') || 'phoenix-artifact'
+    anchor.download = artifact.mime === 'application/vnd.phoenix.scene3d+json'
+      ? `${basename}.scene3d.json` : basename
     anchor.click()
     if (resolvedUrl === undefined) URL.revokeObjectURL(url)
   }
