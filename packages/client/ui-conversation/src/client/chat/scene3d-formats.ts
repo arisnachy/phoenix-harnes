@@ -273,7 +273,7 @@ export function importSceneGLTF(input:string|Uint8Array):Scene3D{
   const nodes=Array.isArray(json.nodes)?json.nodes:[],meshes=Array.isArray(json.meshes)?json.meshes:[]
   const materials=Array.isArray(json.materials)?json.materials:[]
   const sceneList=Array.isArray(json.scenes)?json.scenes:[]
-  const root=obj(sceneList[Number(json.scene??0)])?sceneList[Number(json.scene??0)] as R:{}
+  const root:R=obj(sceneList[Number(json.scene??0)])?sceneList[Number(json.scene??0)] as R:{}
   const roots=Array.isArray(root.nodes)?root.nodes.map(Number):nodes.map((_,i)=>i)
   const output:Scene3DNode[]=[],visits=new Set<number>()
   let total=0
