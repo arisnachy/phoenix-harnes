@@ -170,16 +170,21 @@ export function MiniBrowser() {
   useEffect(() => {
     if (!snapshot.available || !snapshot.url) { setVault(undefined); return }
     let active = true
-    void fetch(API + '/vault', { headers: HEADERS, cache: 'no-store' })
-      .then(async response => await decode<VaultStatus>(response))
-      .then(value => {
+    const refresh = async (): Promise<void> => {
+      try {
+        const response = await fetch(API + '/vault', { headers: HEADERS, cache: 'no-store' })
+        const value = await decode<VaultStatus>(response)
         if (!active) return
         setVault(value)
-        if (value.requiresUser && value.origin && !vaultOpen) setVaultOpen(true)
-      })
-      .catch(() => { if (active) setVault(undefined) })
-    return () => { active = false }
-  }, [snapshot.url, snapshot.available, snapshot.tabId, vaultOpen])
+        if (value.requiresUser && value.origin) setVaultOpen(true)
+      } catch { if (active) setVault(undefined) }
+    }
+    // A model tool can request login without changing the currently open URL.
+    // Poll the bounded local status, not any secret, while this tab is selected.
+    void refresh()
+    const timer = window.setInterval(() => { void refresh() }, 2000)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [snapshot.url, snapshot.available, snapshot.tabId])
 
   const submitVault = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
