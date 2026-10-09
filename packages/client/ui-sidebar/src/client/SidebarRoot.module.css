@@ -433,14 +433,14 @@
   box-shadow: 6px 0 28px rgba(102, 71, 46, 0.035);
 }
 .root:not(.collapsed) {
-  padding-inline: 22px;
-  padding-block: 10px 12px;
+  padding-inline: 17px;
+  padding-block: 6px 9px;
 }
 .root:not(.collapsed) .logoRow {
-  height: 66px;
+  height: 54px;
   padding-inline: 0;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 7px;
 }
 .root:not(.collapsed) .brandIdentity { gap: 11px; }
 .root:not(.collapsed) .brandMark img {
@@ -468,9 +468,9 @@
 .root:not(.collapsed) .toggle:hover { border-color: var(--phoenix-side-ember); }
 .root:not(.collapsed) .newSession {
   justify-content: center;
-  height: 51px;
-  min-height: 51px;
-  margin-bottom: 18px;
+  height: 44px;
+  min-height: 44px;
+  margin-bottom: 10px;
   padding: 0 14px;
   gap: 11px;
   border: 1px solid color-mix(in srgb, var(--phoenix-side-ember) 92%, #c33b12 8%);
@@ -488,15 +488,15 @@
   border-color: var(--phoenix-side-ember-hover);
 }
 .root:not(.collapsed) .primaryNavigation {
-  gap: 3px;
-  margin-bottom: 15px;
-  padding-bottom: 15px;
+  gap: 1px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid var(--phoenix-side-outline);
 }
 .root:not(.collapsed) .navLink {
-  height: 45px;
-  gap: 15px;
-  padding-inline: 15px;
+  height: 38px;
+  gap: 12px;
+  padding-inline: 12px;
   border-radius: 12px;
   font-size: 14px;
   font-weight: 450;
@@ -518,15 +518,16 @@
   padding-inline: 6px;
 }
 .root:not(.collapsed) .footArea {
-  gap: 8px;
-  padding-top: 11px;
+  gap: 3px;
+  padding-top: 5px;
   border-top: 1px solid var(--phoenix-side-outline);
 }
 .root:not(.collapsed) .footerActions:not(:empty) {
-  padding: 9px 10px;
-  border: 1px solid var(--phoenix-side-outline);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 90%, #fff 10%);
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  min-height: 0;
 }
 .root:not(.collapsed) .settingsArea { min-height: 40px; }
 .root:not(.collapsed) .settingsArea :global(button) {
@@ -535,12 +536,14 @@
 .root:not(.collapsed) .settingsArea :global(button):hover {
   background: var(--phoenix-side-peach);
 }
-@media (max-height: 850px) {
-  .root:not(.collapsed) { padding-block: 7px; }
-  .root:not(.collapsed) .logoRow { height: 55px; margin-bottom: 7px; }
-  .root:not(.collapsed) .newSession { height: 43px; min-height: 43px; margin-bottom: 10px; }
-  .root:not(.collapsed) .primaryNavigation { gap: 0; margin-bottom: 8px; padding-bottom: 9px; }
-  .root:not(.collapsed) .navLink { height: 36px; }
+@media (max-height: 860px) {
+  .root:not(.collapsed) { padding-block: 5px 6px; }
+  .root:not(.collapsed) .logoRow { height: 46px; margin-bottom: 5px; }
+  .root:not(.collapsed) .brandMark img { width: 35px; height: 35px; }
+  .root:not(.collapsed) .newSession { height: 40px; min-height: 40px; margin-bottom: 6px; }
+  .root:not(.collapsed) .primaryNavigation { gap: 0; margin-bottom: 5px; padding-bottom: 5px; }
+  .root:not(.collapsed) .navLink { height: 33px; }
+  .root:not(.collapsed) .footArea { gap: 1px; padding-top: 3px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .root:not(.collapsed) .navLink { transition: none; }
