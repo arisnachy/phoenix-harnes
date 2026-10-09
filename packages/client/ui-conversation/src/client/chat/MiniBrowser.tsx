@@ -9,7 +9,7 @@ import css from './MiniBrowser.module.css'
 
 type Tab = { id: string; title: string; url: string }
 type Snapshot = { available: boolean; tabId?: string; url?: string; title?: string; tabs: Tab[] }
-type VaultStatus = { supported: boolean; origin?: string; configured: boolean }
+type VaultStatus = { supported: boolean; origin?: string; configured: boolean; requiresUser?: boolean }
 type Command = { type: string; url?: string; tabId?: string; x?: number; y?: number; deltaY?: number; key?: string; text?: string; modifiers?: number }
 const API = '/phoenix-mini-browser'
 const HEADERS = { 'x-phoenix-mini-browser': '1' }
@@ -172,10 +172,14 @@ export function MiniBrowser() {
     let active = true
     void fetch(API + '/vault', { headers: HEADERS, cache: 'no-store' })
       .then(async response => await decode<VaultStatus>(response))
-      .then(value => { if (active) setVault(value) })
+      .then(value => {
+        if (!active) return
+        setVault(value)
+        if (value.requiresUser && value.origin && !vaultOpen) setVaultOpen(true)
+      })
       .catch(() => { if (active) setVault(undefined) })
     return () => { active = false }
-  }, [snapshot.url, snapshot.available, snapshot.tabId])
+  }, [snapshot.url, snapshot.available, snapshot.tabId, vaultOpen])
 
   const submitVault = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
@@ -204,6 +208,15 @@ export function MiniBrowser() {
     } catch {
       setError('No se pudo conectar el sitio. Verifica el dominio y las credenciales.')
     } finally { setVaultPending(false) }
+  }
+
+  const dismissVault = (): void => {
+    setVaultOpen(false)
+    if (!vault?.origin) return
+    void fetch(API + '/vault', {
+      method: 'POST', headers: { ...HEADERS, 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'dismiss', origin: vault.origin }),
+    }).catch(() => undefined)
   }
 
   const forgetVault = async (): Promise<void> => {
@@ -330,7 +343,7 @@ export function MiniBrowser() {
       </button>
     )}</div>}
     {expanded && <Modal open headless className={css.expandedDialog ?? ''} title="Navegador de Kira" onClose={() => { setExpanded(false) }}>{viewer}</Modal>}
-    {vaultOpen && vault?.origin && <Modal open title="Acceso seguro al sitio" onClose={() => { if (!vaultPending) setVaultOpen(false) }}>
+    {vaultOpen && vault?.origin && <Modal open title="Acceso seguro al sitio" onClose={() => { if (!vaultPending) dismissVault() }}>
       <div className={css.vaultBox}>
         <strong>{vault.origin}</strong>
         <p>Solo se guardarán las credenciales de este dominio. Kira no tendrá acceso a tu contraseña.</p>
@@ -347,7 +360,7 @@ export function MiniBrowser() {
           </label>
           <div className={css.vaultActions}>
             <button disabled={vaultPending} type="submit">{vaultPending ? 'Conectando…' : 'Conectar'}</button>
-            <button disabled={vaultPending} type="button" onClick={() => { setVaultOpen(false) }}>Cancelar</button>
+            <button disabled={vaultPending} type="button" onClick={dismissVault}>Cancelar</button>
             {vault.configured && <button disabled={vaultPending} type="button" onClick={() => { void forgetVault() }}>Olvidar acceso</button>}
           </div>
         </form>

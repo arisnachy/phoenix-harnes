@@ -29,6 +29,7 @@ let ownedProfile: string | undefined
 let ownedEndpoint: string | undefined
 let launching: Promise<string> | undefined
 let activeTabId: string | undefined
+let pendingVaultOrigin: string | undefined
 
 function isLoopback(value: string | undefined): boolean {
   return value === '127.0.0.1' || value === '::1' || value === '::ffff:127.0.0.1' || value === 'localhost'
@@ -336,7 +337,7 @@ async function browserVaultLogin(tab: Tab, origin: string, account: string, secr
   return { phase: parsed.phase, submitted: parsed.submitted }
 }
 
-type VaultAction = { type: 'connect' | 'forget' | 'run'; origin: string; account?: string; secret?: string; remember?: boolean }
+type VaultAction = { type: 'connect' | 'forget' | 'run' | 'dismiss'; origin: string; account?: string; secret?: string; remember?: boolean }
 async function readVaultAction(req: IncomingMessage): Promise<VaultAction> {
   let raw = ''
   for await (const chunk of req) {
@@ -346,7 +347,7 @@ async function readVaultAction(req: IncomingMessage): Promise<VaultAction> {
   const input: unknown = JSON.parse(raw)
   if (typeof input !== 'object' || input === null || Array.isArray(input)) throw new Error('Solicitud inválida.')
   const candidate = input as Record<string, unknown>
-  if (!['connect','forget','run'].includes(String(candidate.type))
+  if (!['connect','forget','run','dismiss'].includes(String(candidate.type))
       || typeof candidate.origin !== 'string') throw new Error('Acción del vault inválida.')
   return candidate as VaultAction
 }
@@ -357,13 +358,21 @@ async function browserVaultAction(input: VaultAction): Promise<Record<string, un
   if (!base) throw new Error('Primero inicia el navegador.')
   const tab = await selected(base)
   if (secureBrowserOrigin(tab.url) !== expected) throw new Error('El dominio de la pestaña ha cambiado.')
+  if (input.type === 'dismiss') {
+    if (pendingVaultOrigin === expected) pendingVaultOrigin = undefined
+    return { dismissed: true }
+  }
   if (input.type === 'forget') {
+    pendingVaultOrigin = undefined
     await forgetSecureBrowserLogin(expected)
     return { configured: false, forgotten: true, origin: expected }
   }
   if (input.type === 'run') {
     const credentials = await resolveSecureBrowserLogin(expected)
-    if (!credentials) return { configured: false, requiresUser: true, origin: expected }
+    if (!credentials) {
+      pendingVaultOrigin = expected
+      return { configured: false, requiresUser: true, origin: expected }
+    }
     const result = await browserVaultLogin(tab, expected, credentials.account, credentials.secret)
     return { origin: expected, configured: true, ...result }
   }
@@ -374,6 +383,7 @@ async function browserVaultAction(input: VaultAction): Promise<Record<string, un
   const result = await browserVaultLogin(tab, expected, input.account, input.secret)
   if (result.phase === 'fields-not-found') return { origin: expected, configured: false, ...result }
   if (input.remember === true) await saveSecureBrowserLogin(expected, input.account, input.secret)
+  if (pendingVaultOrigin === expected) pendingVaultOrigin = undefined
   return { origin: expected, configured: input.remember === true, ...result }
 }
 async function browserVaultStatus(): Promise<Record<string, unknown>> {
@@ -383,7 +393,8 @@ async function browserVaultStatus(): Promise<Record<string, unknown>> {
   const tab = await selected(base)
   try {
     const origin = secureBrowserOrigin(tab.url)
-    return { supported: true, origin, configured: hasSecureBrowserLogin(origin) }
+    return { supported: true, origin, configured: hasSecureBrowserLogin(origin),
+      requiresUser: pendingVaultOrigin === origin }
   } catch { return { supported: true, configured: false } }
 }
 
