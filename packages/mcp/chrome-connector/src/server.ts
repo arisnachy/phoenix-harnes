@@ -293,6 +293,95 @@ async function evaluate(tab: Tab, expression: string): Promise<unknown> {
   return await cdp(tab, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
 }
 
+/** Exact-origin authorization shared by inspect/fill/login. */
+export function browserTaskOrigin(value: string): string {
+  const url = new URL(value)
+  const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)
+  if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) || url.username || url.password)
+    throw new Error('Se requiere un dominio HTTPS seguro.')
+  return url.origin
+}
+
+const inspectFormScript = `(() => {
+  const visible = el => {
+    const s = getComputedStyle(el);
+    return s.display !== 'none' && s.visibility !== 'hidden' && el.getClientRects().length > 0;
+  };
+  const fields = [...document.querySelectorAll('input,textarea,select')].filter(visible).slice(0, 100);
+  return JSON.stringify({ origin: location.origin, url: location.href, fields: fields.map((el, index) => {
+    const type = (el.type || el.tagName).toLowerCase();
+    const label = (el.id && document.querySelector('label[for="' + CSS.escape(el.id) + '"]')?.innerText)
+      || el.closest('label')?.innerText || el.getAttribute('aria-label') || el.placeholder || el.name || '';
+    return { field: index, type, label: String(label).slice(0, 120),
+      editable: !['password','file','hidden'].includes(type) && !el.disabled && !el.readOnly,
+      required: el.required === true,
+      options: el instanceof HTMLSelectElement ? [...el.options].slice(0, 30).map(o => ({ value: o.value, label: o.textContent?.trim().slice(0, 80) })) : undefined };
+  }) });
+})()`
+
+/**
+ * Build an exact-origin form update without privileged/password fields.
+ * @param origin - Explicit HTTPS origin to verify inside Chromium.
+ * @param fields - Visible-field indices from fresh inspect_form output.
+ * @param submit - Whether to attempt a same-origin form submission.
+ * @returns CDP JS expression with redacted result.
+ */
+export function safeBrowserFormScript(origin: string, fields: readonly { field: number; value?: string; checked?: boolean }[], submit: boolean): string {
+  const expected = browserTaskOrigin(origin)
+  if (fields.length === 0 || fields.length > 100 || fields.some(f =>
+    !Number.isSafeInteger(f.field) || f.field < 0 || f.field >= 100
+    || (f.value === undefined) === (f.checked === undefined)
+    || (f.value !== undefined && f.value.length > 16384))) throw new Error('Campos de formulario inválidos.')
+  return `(() => {
+    const expected = ${JSON.stringify(expected)};
+    if (location.origin !== expected) throw new Error('origin mismatch');
+    const changes = ${JSON.stringify(fields)};
+    const visible = el => {
+      const s = getComputedStyle(el);
+      return s.display !== 'none' && s.visibility !== 'hidden' && el.getClientRects().length > 0;
+    };
+    const inputs = [...document.querySelectorAll('input,textarea,select')].filter(visible).slice(0, 100);
+    const touched = new Set();
+    let filled = 0;
+    for (const change of changes) {
+      const el = inputs[change.field];
+      if (!el || el.disabled || el.readOnly) throw new Error('Reinspect changed fields');
+      const type = (el.type || '').toLowerCase();
+      if (['password','file','hidden'].includes(type)) throw new Error('Protected field');
+      if (change.checked !== undefined) {
+        if (!['checkbox','radio'].includes(type)) throw new Error('Expected choice');
+        el.checked = change.checked;
+      } else {
+        if (['checkbox','radio'].includes(type)) throw new Error('Use checked');
+        if (el instanceof HTMLSelectElement) {
+          if (![...el.options].some(o => o.value === change.value)) throw new Error('Unknown option');
+          el.value = change.value;
+        } else {
+          const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+          const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+          if (!setter) throw new Error('Readonly field');
+          setter.call(el, change.value);
+        }
+      }
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      if (el.form) touched.add(el.form);
+      filled++;
+    }
+    let submitted = false;
+    if (${submit ? 'true' : 'false'}) {
+      if (touched.size !== 1) throw new Error('Expected a single form');
+      const form = [...touched][0];
+      if (new URL(form.action || location.href, location.href).origin !== expected)
+        throw new Error('Cross-origin submission refused');
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.submit();
+      submitted = true;
+    }
+    return JSON.stringify({ origin: expected, filled, submitted, verification: 'read-page-required' });
+  })()`
+}
+
 const server = new McpServer(
   { name: 'phoenix-browser-connector', version: '0.3.0' },
   { capabilities: { tools: {} } },
@@ -382,6 +471,57 @@ server.registerTool('click_text', {
   const escaped = JSON.stringify(text)
   const result = await evaluate(tab, `(() => { const wanted=${escaped}; const el=[...document.querySelectorAll('button,a,[role="button"],input[type="submit"]')].find(e => (e.innerText || e.value || '').trim().includes(wanted)); if (!el) return 'No encontrado'; el.click(); return 'Clic realizado'; })()`)
   return { content: [{ type: 'text', text: String(result) }] }
+})
+
+server.registerTool('inspect_form', {
+  description: 'Examina formularios actuales del Chromium compartido con el MiniBrowser. Devuelve etiquetas, tipos y opciones, pero nunca valores ya escritos ni contraseñas. Inspecciona antes de llenar.',
+  inputSchema: { tabId: z.string().optional() },
+}, async ({ tabId }) => {
+  const tab = await selectedTab(tabId)
+  return { content: [{ type: 'text', text: String(await evaluate(tab, inspectFormScript)) }] }
+})
+
+server.registerTool('fill_form', {
+  description: 'Rellena campos inspeccionados usando solo respuestas verdaderas dadas por el usuario; niega campos contraseña/archivo y envío a otro dominio. Tras submit, comprueba confirmación mediante read_page.',
+  inputSchema: {
+    origin: z.url(), tabId: z.string().optional(),
+    fields: z.array(z.object({ field: z.number().int().min(0).max(99), value: z.string().max(16384).optional(), checked: z.boolean().optional() })).min(1).max(100),
+    submit: z.boolean().default(false),
+  },
+}, async ({ origin, tabId, fields, submit }) => {
+  if (!actionsAllowed()) throw new Error('Acciones Chromium no autorizadas.')
+  const expected = browserTaskOrigin(origin)
+  const tab = await selectedTab(tabId)
+  if (browserTaskOrigin(tab.url) !== expected) throw new Error('La pestaña cambió de dominio.')
+  const result = await evaluate(tab, safeBrowserFormScript(expected, fields, submit))
+  return { content: [{ type: 'text', text: String(result) }] }
+})
+
+server.registerTool('secure_login', {
+  description: 'Accede en Chromium usando credenciales DPAPI guardadas para el origen; nunca recibe ni devuelve usuario/clave. Si faltan, solicita que la persona abra «Acceso seguro» en el MiniBrowser y rellene el formulario privado. Verifica la sesión mediante read_page.',
+  inputSchema: { origin: z.url() },
+}, async ({ origin }) => {
+  if (!actionsAllowed()) throw new Error('Acceso no autorizado por política Chromium.')
+  const expected = browserTaskOrigin(origin)
+  const tab = await selectedTab()
+  if (browserTaskOrigin(tab.url) !== expected) throw new Error('La pestaña cambió de dominio.')
+  const configured = (process.env.PHOENIX_WEB_URL || process.env.DSH_WEB_URL || 'http://127.0.0.1:3080').trim()
+  const host = new URL(configured)
+  if (host.protocol !== 'http:' || !['localhost','127.0.0.1','[::1]'].includes(host.hostname)
+      || host.username || host.password || host.search || host.hash) throw new Error('Host local inválido.')
+  const response = await fetch(new URL('/phoenix-mini-browser/vault', host), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-phoenix-mini-browser': '1' },
+    body: JSON.stringify({ type: 'run', origin: expected }),
+    signal: AbortSignal.timeout(15000),
+  })
+  if (!response.ok) throw new Error('El vault local no pudo autenticar este sitio.')
+  const data = await response.json() as { requiresUser?: boolean; phase?: string; submitted?: boolean }
+  const text = data.requiresUser
+    ? 'Se necesita configurar el acceso. Pide al usuario usar «Acceso seguro» dentro del MiniBrowser; jamás solicites contraseñas en el chat.'
+    : JSON.stringify({ phase: data.phase, submitted: data.submitted === true,
+      verification: 'Comprueba el estado real de la sesión; la solicitud enviada no demuestra autenticación.' })
+  return { content: [{ type: 'text', text }] }
 })
 
 /** Start the local stdio MCP connector. */
