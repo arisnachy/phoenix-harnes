@@ -140,7 +140,15 @@ export function MiniBrowser({ requested = false, active = true, tabId, onActivat
   }, [])
 
   useEffect(() => {
-    if (tabId !== undefined) cardTabId.current = tabId
+    if (tabId === undefined || cardTabId.current === tabId) return
+    cardTabId.current = tabId
+    // One card can navigate more than once per turn. A failed capture of the
+    // new target must never leave the old target's screenshot on screen.
+    if (frameRef.current !== undefined) URL.revokeObjectURL(frameRef.current)
+    frameRef.current = undefined
+    setFrame(undefined)
+    setSnapshot(BLANK)
+    setCaptureError(undefined)
   }, [tabId])
 
   useEffect(() => {
