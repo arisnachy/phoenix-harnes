@@ -99,6 +99,8 @@ export const FIGMA_MCP_URL = 'https://mcp.figma.com/mcp'
 export const FIGMA_DESKTOP_MCP_URL = 'http://127.0.0.1:3845/mcp'
 /** GitHub's official remote MCP endpoint (not a Copilot model login). */
 export const GITHUB_MCP_URL = 'https://api.githubcopilot.com/mcp/'
+/** Vault reference for a GitHub personal access token. Never persisted in MCP config. */
+export const GITHUB_MCP_TOKEN_REF = 'GITHUB_MCP_TOKEN'
 /** Official Vercel remote MCP endpoint. */
 export const VERCEL_MCP_URL = 'https://mcp.vercel.com'
 /** Official Notion remote MCP endpoint. */
@@ -211,6 +213,18 @@ function canvaMcpConfig(): ManagedStreamableHttpMcpConfig {
   }
 }
 
+/** Remote GitHub MCP does not support dynamic OAuth client registration.
+ * GitHub Apps/OAuth Apps need separately registered client IDs; the default
+ * supported path for custom hosts is a vault-backed, revocable GitHub PAT.
+ */
+function githubMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return {
+    ...remoteOauthMcpConfig('github', GITHUB_MCP_URL),
+    oauth: false,
+    bearerTokenRef: GITHUB_MCP_TOKEN_REF,
+  }
+}
+
 function slackMcpConfig(): ManagedStreamableHttpMcpConfig {
   return {
     ...remoteOauthMcpConfig('slack', SLACK_MCP_URL),
@@ -298,7 +312,7 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   supabase: { label: 'Supabase', config: () => remoteOauthMcpConfig('supabase', SUPABASE_MCP_URL) },
   heygen: { label: 'HeyGen', config: () => remoteOauthMcpConfig('heygen', HEYGEN_MCP_URL, 120_000) },
   figma: { label: 'Figma', config: () => remoteOauthMcpConfig('figma', FIGMA_MCP_URL) },
-  github: { label: 'GitHub repositories', config: () => remoteOauthMcpConfig('github', GITHUB_MCP_URL) },
+  github: { label: 'GitHub repositories', config: githubMcpConfig },
   vercel: { label: 'Vercel', config: () => remoteOauthMcpConfig('vercel', VERCEL_MCP_URL) },
   notion: { label: 'Notion', config: () => remoteOauthMcpConfig('notion', NOTION_MCP_URL) },
   linear: { label: 'Linear', config: () => remoteOauthMcpConfig('linear', LINEAR_MCP_URL) },
