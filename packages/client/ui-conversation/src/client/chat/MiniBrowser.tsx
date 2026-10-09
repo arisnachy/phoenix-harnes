@@ -133,7 +133,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
   }, [])
 
   useEffect(() => {
-    if (!active) return
+    if (!active || dismissed) return
     mounted.current = true
     let stopped = false
     const first = new AbortController()
@@ -167,10 +167,10 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
       first.abort()
       window.clearInterval(timer)
     }
-  }, [active])
+  }, [active, dismissed])
 
   useEffect(() => {
-    if (!active || !show || !snapshot.available || collapsed || playingVideo) return
+    if (!active || !show || dismissed || !snapshot.available || collapsed || playingVideo) return
     let stopped = false
     const load = async () => {
       if (busy.current) return
@@ -196,7 +196,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
     void load()
     const timer = window.setInterval(() => { void load() }, expanded ? 350 : 600)
     return () => { stopped = true; window.clearInterval(timer) }
-  }, [active, show, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded])
+  }, [active, show, dismissed, snapshot.available, snapshot.tabId, collapsed, playingVideo, expanded])
 
   useEffect(() => () => {
     if (frameRef.current) URL.revokeObjectURL(frameRef.current)
