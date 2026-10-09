@@ -983,7 +983,7 @@ describe('Agent.cancel()', () => {
       description: 'Simulate a cooperatively cancellable browser form operation',
       parameters: {},
       execute: async (_args, exec) => {
-        toolStarted.resolve()
+        toolStarted.resolve(undefined)
         if (!exec.signal.aborted) {
           await new Promise<void>((resolve) => {
             exec.signal.addEventListener('abort', () => { toolAborted = true; resolve() }, { once: true })
