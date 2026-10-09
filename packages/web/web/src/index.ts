@@ -157,7 +157,7 @@ export class WebRuntime extends Service {
         const result = await provider.search(request, signal)
         return capSources(result, request.maxResults)
       } catch (error) {
-        if (signal?.aborted === true) throw signal.reason ?? error
+        signal?.throwIfAborted()
         if (!isRecoverableSearchError(error)) throw error
         lastRecoverable = error
         this.searchCooldownUntil.set(provider.id, Date.now() + WebRuntime.SEARCH_COOLDOWN_MS)
