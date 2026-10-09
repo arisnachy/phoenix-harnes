@@ -14,6 +14,8 @@ describe('Chrome/Edge MCP connector entry', () => {
     expect(args).toContain('--remote-debugging-address=127.0.0.1')
     expect(args).toContain(`--user-data-dir=${profileDir}`)
     expect(args).not.toContain('--headless=new')
+    expect(args).toContain('--window-size=1280,820')
+    expect(args).toContain('--force-device-scale-factor=1')
   })
 
   it('creates a direct YouTube results URL without separate open, type and submit operations', () => {

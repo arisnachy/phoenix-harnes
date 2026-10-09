@@ -198,10 +198,31 @@ async function cdp<T extends Record<string, unknown>>(tab: Tab, method: string, 
       else resolve(result as T)
     }
     const timer = setTimeout(() => { settle(new Error('Tiempo agotado: ' + method)) }, LIMIT_MS)
-    socket.addEventListener('open', () => { socket.send(JSON.stringify({ id, method, params })) })
+    // CDP emulation is connection-scoped. The viewport override and the
+    // screenshot/mouse action MUST use the same WebSocket session. Previously
+    // a 1280px screenshot clip captured a real 800px page plus black pixels.
+    const needsViewport = method === 'Page.captureScreenshot' || method === 'Input.dispatchMouseEvent'
+    const viewportId = id + 1
+    const sendAction = (): void => {
+      socket.send(JSON.stringify({ id, method, params }))
+    }
+    socket.addEventListener('open', () => {
+      if (!needsViewport) { sendAction(); return }
+      socket.send(JSON.stringify({
+        id: viewportId, method: 'Emulation.setDeviceMetricsOverride',
+        params: { ...VIEWPORT, screenWidth: VIEWPORT.width, screenHeight: VIEWPORT.height,
+          deviceScaleFactor: 1, mobile: false },
+      }))
+    })
     socket.addEventListener('message', (event) => {
       let reply: RpcReply
       try { reply = JSON.parse(String(event.data)) as RpcReply } catch { return }
+      if (reply.id === viewportId && needsViewport) {
+        if (reply.error && method !== 'Page.captureScreenshot') {
+          settle(new Error('No se pudo ajustar el tamaño del navegador: ' + reply.error.message))
+        } else sendAction()
+        return
+      }
       if (reply.id !== id) return
       if (reply.error) settle(new Error(reply.error.message || method + ' falló'))
       else settle(undefined, (reply.result ?? {}) as T)
@@ -247,12 +268,11 @@ export async function captureBrowserFrameWithFallback(
   capture: (params: Record<string, unknown>) => Promise<{ data: string }>,
 ): Promise<Buffer> {
   const attempts: Record<string, unknown>[] = [
-    {
-      format: 'jpeg', quality: 65, captureBeyondViewport: true, fromSurface: true,
-      clip: { x: 0, y: 0, width: VIEWPORT.width, height: VIEWPORT.height, scale: 1 },
-    },
+    // Never clip beyond the actual page. Chromium responds with only the
+    // visible viewport after the same-session emulation override.
     { format: 'jpeg', quality: 65, captureBeyondViewport: false, fromSurface: true },
     { format: 'jpeg', quality: 60, captureBeyondViewport: false, fromSurface: false },
+    { format: 'jpeg', quality: 60 },
   ]
   const failures: string[] = []
   for (const [index, options] of attempts.entries()) {

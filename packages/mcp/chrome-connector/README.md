@@ -17,7 +17,17 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 3. Carga `examples/mcp-chrome.cordis.yml` como overlay de PHOENIX.
 4. Para una inspección general, usa `mcp__browser__status`, `mcp__browser__tabs`, `mcp__browser__navigate` y `mcp__browser__read_page`. Para una solicitud sencilla como «abre YouTube y busca Bob Esponja», usa **una sola llamada** a `youtube_search` con `query="Bob Esponja"` y presenta el resultado.
 
-Las acciones que modifican la página están bloqueadas por defecto. Para habilitar `navigate`, `click_text` y `youtube_search`, establece `PHOENIX_BROWSER_ALLOW_ACTIONS=true` de forma consciente. `DSH_CHROME_*` se conserva solo como alias legado.
+Las acciones que modifican la página están bloqueadas por defecto. Para habilitar `navigate`, `click_text`, `youtube_search`, `fill_form`, `interact` y `submit_form`, establece `PHOENIX_BROWSER_ALLOW_ACTIONS=true` de forma consciente. `DSH_CHROME_*` se conserva solo como alias legado.
+
+### Formularios y aplicaciones web (sin Computer visible)
+
+- `inspect_page`: en una sola consulta devuelve controles, etiquetas, tipo, alternativas de select, bloqueos readonly/disabled y formularios. No devuelve valores de contraseñas.
+- `fill_form`: hasta 30 cambios en una llamada con `fields: [{operation:'fill', name:'my-text', value:'texto'}, {operation:'check', name:'my-check', checked:true}, {operation:'select', name:'my-select', value:'Two'}]`. Para fecha usa el valor ISO `YYYY-MM-DD`. Se detiene ante controles ambiguos o protegidos; no altera archivos ni campos ocultos.
+- `interact`: clic/scroll/fill/check/select individual por `selector`, `name`, `label` o `placeholder` en una pestaña activa.
+- `submit_form`: solo si el usuario pidió explícitamente enviar; `selector:'form', confirmation:true`. Es un intento de envío, **no** una confirmación de éxito.
+- `wait_for`: verifica un texto de éxito real y la URL final tras la navegación; no reenvía el formulario.
+
+Para `https://www.selenium.dev/selenium/web/web-form.html`, un flujo normal es inspeccionar → completar campos en lote, sin cambiar Disabled/Readonly/File/Hidden → enviar si fue autorizado → esperar `Received!`. No uses Computer si no hay ventanas de escritorio visibles; Chromium CDP actúa directamente sobre la página, con permiso de navegador. Si aparece CAPTCHA, autenticación externa, iframe de otro origen o diálogo nativo, devuelve el bloqueo observable y solicita intervención humana en vez de intentar sortearlo.
 
 El conector no lee archivos del perfil, cookies ni contraseñas. CDP debe ser habilitado explícitamente por el usuario; una pestaña normal no puede ser adoptada mágicamente desde otro proceso.
 
@@ -53,4 +63,4 @@ Action results append to the tool transcript and do not rewrite the earlier syst
 
 ## Known Limitations and Deferred Work
 
-- The connector requires a usable Chromium CDP session (a configured loopback endpoint or a dedicated auto-launched Chrome/Edge profile). It does not provide a browser binary, login flow, screenshot capture, or arbitrary JavaScript execution tool.
+- El conector requiere Chromium disponible con CDP en loopback (perfil aislado si hace falta). Las herramientas estructuradas no ejecutan JavaScript arbitrario del modelo. No pueden automatizar CAPTCHA, file input, iframes cross-origin, selectores ambiguos, diálogos nativos o aplicaciones de escritorio sin interfaz visible; esos casos se reportan y se derivan al usuario.
