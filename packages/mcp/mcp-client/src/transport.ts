@@ -8,7 +8,7 @@
 
 import { existsSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { dirname, join } from 'node:path'
+import { dirname, join, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
@@ -25,6 +25,63 @@ import type { Config } from './index.ts'
  */
 function buildChildEnv(extra: Record<string, string>): Record<string, string> {
   return { ...scrubbedParentEnv(), ...extra }
+}
+
+
+/**
+ * The curated Python Fetch MCP uses readabilipy, which launches Node and npm
+ * for Readability.js. Long-running Phoenix Windows Hosts can inherit a PATH
+ * without the Node installation even while process.execPath works.
+ *
+ * Admit only a verified local Node + npm installation. This deliberately does
+ * not install packages, change system PATH, or alter other/user MCP servers.
+ */
+export function hydrateFetchMcpNodeEnvironment(
+  config: { readonly serverName: string; readonly command: string; readonly args: readonly string[] },
+  environment: Readonly<Record<string, string>>,
+  options: {
+    readonly platform?: NodeJS.Platform
+    readonly nodeExecutable?: string
+    readonly fileExists?: (path: string) => boolean
+  } = {},
+): Record<string, string> {
+  const result = { ...environment }
+  if ((options.platform ?? process.platform) !== 'win32'
+    || config.serverName !== 'fetch'
+    || !/^uvx(?:\.exe)?$/iu.test(win32.basename(config.command))
+    || config.args[0] !== 'mcp-server-fetch') return result
+
+  const exists = options.fileExists ?? existsSync
+  // A Windows stdio child must not receive both Path and PATH. The last
+  // spelling is the explicit config override after the scrubbed parent merge.
+  const pathKeys = Object.keys(result).filter(item => item.toUpperCase() === 'PATH')
+  const key = pathKeys.at(-1) ?? 'Path'
+  const current = result[key] ?? ''
+  for (const alias of pathKeys) if (alias !== key) delete result[alias]
+  const validDirectory = (directory: string): boolean => {
+    if (!win32.isAbsolute(directory) || !exists(win32.join(directory, 'node.exe'))) return false
+    return exists(win32.join(directory, 'npm.cmd')) || exists(win32.join(directory, 'npm.exe'))
+  }
+
+  // Preserve a working user/system PATH before considering a curated fallback.
+  const present = current.split(';').map(entry => entry.replace(/^"(.*)"$/u, '$1').trim())
+  if (present.some(validDirectory)) return result
+
+  const node = options.nodeExecutable ?? process.execPath
+  const localAppData = Object.entries(result).find(([name]) => name.toUpperCase() === 'LOCALAPPDATA')?.[1]
+  const programFiles = Object.entries(result).find(([name]) => name.toUpperCase() === 'PROGRAMFILES')?.[1]
+  const x86ProgramFiles = Object.entries(result).find(([name]) => name.toUpperCase() === 'PROGRAMFILES(X86)')?.[1]
+  const nvmLink = Object.entries(result).find(([name]) => name.toUpperCase() === 'NVM_SYMLINK')?.[1]
+  const candidates = [
+    win32.dirname(node),
+    nvmLink,
+    programFiles === undefined ? undefined : win32.join(programFiles, 'nodejs'),
+    x86ProgramFiles === undefined ? undefined : win32.join(x86ProgramFiles, 'nodejs'),
+    localAppData === undefined ? undefined : win32.join(localAppData, 'Programs', 'nodejs'),
+  ]
+  const directory = candidates.find(value => value !== undefined && validDirectory(value))
+  if (directory !== undefined) result[key] = current === '' ? directory : `${directory};${current}`
+  return result
 }
 
 type SdkStdioChild = {
@@ -257,7 +314,8 @@ export function createTransport(config: Config, options: TransportOptions = {}):
       return new PhoenixStdioClientTransport({
         command: launch.command,
         args: launch.args,
-        env: buildChildEnv({ ...config.env, ...options.stdioCredentialEnv }),
+        env: hydrateFetchMcpNodeEnvironment(config,
+          buildChildEnv({ ...config.env, ...options.stdioCredentialEnv })),
         cwd: config.cwd,
       })
     }
