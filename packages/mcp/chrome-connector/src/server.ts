@@ -266,7 +266,7 @@ async function newBrowserTab(url: string): Promise<Tab> {
   const result = await fetch(base + '/json/new?' + encodeURIComponent(url), {
     method: 'PUT', signal: AbortSignal.timeout(5000),
   })
-  if (!result.ok) throw new Error('No se pudo abrir una pestaña Chromium nueva: HTTP ' + result.status)
+  if (!result.ok) throw new Error('No se pudo abrir una pestaña Chromium nueva: HTTP ' + String(result.status))
   const tab = await result.json() as Tab
   if (!tab.id || !tab.webSocketDebuggerUrl) throw new Error('Chrome no devolvió un identificador válido')
   announceSession(base, tab.id)
