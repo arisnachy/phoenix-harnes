@@ -308,6 +308,7 @@ function executionNeedAfterAcquisition(need: CapabilityNeed, preparedStatus: str
  * @returns Completed rendered artifact or the governed reason the mission was blocked.
  */
 async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<HardnessMissionResult> {
+  input.context.signal.throwIfAborted()
   const lockedGoal = input.goal ?? missionGoal(input)
   const kernel = missionKernel(input, lockedGoal)
   kernel.start()
@@ -316,6 +317,7 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
   let executionNeed = input.need
   if (initial.kind !== 'route') {
     const acquired = await input.acquisition.acquireOrBuild(input.need, input.context.signal)
+    input.context.signal.throwIfAborted()
     if (acquired.kind !== 'built') {
       const reason = acquired.reasons.join('; ')
       kernel.dependencyMissing(input.need.kind ?? 'capability', reason)
@@ -356,7 +358,10 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
       input.executor,
       { beforeExecute: () => auditEntry(input, { step: 'approve', outcome: 'completed', ...capability }) },
     )
+    input.context.signal.throwIfAborted()
   } catch {
+    // Aborted tool calls are terminal, not eligible for recovery.
+    input.context.signal.throwIfAborted()
     kernel.fail({ scope: 'attempt', strategy: 'baseline', cause: 'capability execution threw', rootCause: 'executor raised an unclassified failure',
       fingerprint: 'execution-threw', blocked: false, routes: recoveryRoutes('execution') })
     return blocked(
@@ -370,6 +375,7 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
     )
   }
   if (execution.kind !== 'executed') {
+    input.context.signal.throwIfAborted()
     if (execution.kind === 'aborted') return auditUnavailable()
     if (execution.kind === 'missing') {
       const reason = execution.reasons.join('; ')
@@ -396,6 +402,7 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
     return quarantine(input, surface, startedAt, 'execute', execution.result.error.message)
   }
 
+  input.context.signal.throwIfAborted()
   const artifact = artifactFromToolResult(execution.result)
   if (artifact === undefined) {
     kernel.fail({ scope: 'plan', strategy: 'baseline', cause: 'mission produced no valid artifact', rootCause: 'execution output did not satisfy artifact validation',
@@ -411,6 +418,7 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
   kernel.markCriterion('artifact-produced', 'IMPLEMENTED', [artifact.id])
   kernel.markCriterion('artifact-rendered', 'IMPLEMENTED', [artifact.id])
 
+  input.context.signal.throwIfAborted()
   const evidence = input.hardness.recordEvidence(evidenceFor(
     input,
     execution.surface,
@@ -443,6 +451,7 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
   kernel.markCriterion('artifact-rendered', 'TESTED', [evidence.id])
   kernel.beginVerification()
   const decision = await judgeMission(input, lockedGoal, kernel.snapshot().criteria, artifact, rendered, evidence.id)
+  input.context.signal.throwIfAborted()
   const judged = kernel.judge(decision)
   if (judged.status !== 'DONE') {
     const reviewed = judged.judge ?? decision
@@ -476,12 +485,15 @@ async function runHardnessMissionAttempt(input: HardnessMissionInput): Promise<H
  * @returns Completed rendered artifact or the durable mission's current blocker.
  */
 export async function runHardnessMission(input: HardnessMissionInput): Promise<HardnessMissionResult> {
+  input.context.signal.throwIfAborted()
   let result = await runHardnessMissionAttempt(input)
   let attempts = 1
   while (result.kind === 'blocked' && result.retryable === true && attempts < MAX_AUTOMATIC_RECOVERY_ATTEMPTS) {
+    input.context.signal.throwIfAborted()
     attempts += 1
     result = await runHardnessMissionAttempt(input)
   }
+  input.context.signal.throwIfAborted()
   if (result.kind === 'blocked' && result.retryable === true) {
     return {
       kind: 'blocked',
