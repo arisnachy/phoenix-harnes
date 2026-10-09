@@ -34,9 +34,11 @@ describe('managed MCP preboot migration', () => {
     }
     const file = patch([{ insert: [...entries, hashed] }])
     expect(await repairManagedMcpDependenciesBeforeBoot(file)).toBe(4)
-    const rows = (JSON.parse(readFileSync(file, 'utf8')) as Array<{ insert: typeof entries }>)[0]!.insert
+    const rows = (JSON.parse(readFileSync(file, 'utf8')) as Array<{
+      insert: Array<{ inject?: string[]; config: Record<string, unknown>; source?: Record<string, unknown> }>
+    }>)[0]!.insert
     expect(rows).toHaveLength(5)
-    rows.forEach(row => { expect((row as typeof hashed).inject).toEqual(inject) })
+    rows.forEach(row => { expect(row.inject).toEqual(inject) })
     expect(rows[0]!.config.headers).toEqual({ Authorization: 'REDACTED-LOCAL-TEST' })
     expect(rows[0]!.source).toEqual({ kind: 'curated', connectorId: 'notion' })
     const first = readFileSync(file, 'utf8')
