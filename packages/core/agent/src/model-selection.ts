@@ -477,6 +477,7 @@ function toolCallFingerprint(event: PhoenixAutoEvent): string | undefined {
 interface PhoenixAutoAssistantStop {
   readonly step: number
   readonly text: string
+  readonly sourceModel: string | undefined
 }
 
 /** Read the latest text-only stopping reply from the current turn. */
@@ -493,6 +494,7 @@ function latestPhoenixAutoAssistantStop(
       readonly step?: number
       readonly message?: {
         readonly content?: readonly { readonly type?: string; readonly text?: string }[]
+        readonly source?: { readonly model?: string }
       }
     }
     if (data.turn !== turn || typeof data.step !== 'number') continue
@@ -501,7 +503,7 @@ function latestPhoenixAutoAssistantStop(
       .map(block => block.text as string)
       .join(' ')
       .trim() ?? ''
-    return { step: data.step, text }
+    return { step: data.step, text, sourceModel: data.message?.source?.model }
   }
   return undefined
 }
@@ -969,7 +971,8 @@ export function installModelSelection(
     })
     // The actual visible assistant text is the Sol->Luna handoff. Never invent
     // a hidden plan or wait for a second planning call to repeat it.
-    if (latest.step === 1 && !latestStepHasToolActivity && hasVisibleSolPlan(latest.text)
+    if (latest.step === 1 && !latestStepHasToolActivity
+      && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL && hasVisibleSolPlan(latest.text)
       && phoenixAutoState.lastContinuationStep !== latest.step) {
       phoenixAutoState.continuationCount += 1
       phoenixAutoState.lastContinuationStep = latest.step
