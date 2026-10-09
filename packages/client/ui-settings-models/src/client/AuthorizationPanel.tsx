@@ -102,10 +102,10 @@ export interface JevMcpSnapshot {
   reasonCode?: McpConnectorRuntimeView['reasonCode']
 }
 
-type CuratedMcpConnectorId = 'github' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
+type CuratedMcpConnectorId = 'github' | 'meta-devtools' | 'meta-whatsapp-business' | 'devpost' | 'canva' | 'supabase' | 'heygen' | 'figma' | 'vercel' | 'notion' | 'linear' | 'cloudflare' | 'slack' | 'brave-search' | 'filesystem' | 'memory' | 'fetch'
 
 const CURATED_MCP_CONNECTOR_IDS = new Set<string>([
-  'github', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
+  'github', 'meta-devtools', 'meta-whatsapp-business', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare',
   'slack', 'brave-search', 'filesystem', 'memory', 'fetch',
 ])
 
@@ -279,7 +279,7 @@ const TRANSIENT_CONNECTOR_REMOTE_RETRY_MS = [0, 150, 500, 1_500] as const
 // do not declare an OAuth method absent before the registry has time to settle.
 const MCP_AUTH_FLOW_RETRY_MS = [0, 250, 500, 750, 1_000, 1_500, 2_000, 2_500, 3_000] as const
 const CURATED_OAUTH_MCP_IDS = new Set<string>([
-  'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
+  'meta-devtools', 'meta-whatsapp-business', 'devpost', 'canva', 'supabase', 'heygen', 'figma', 'vercel', 'notion', 'linear', 'cloudflare', 'slack',
 ])
 const MCP_AUTH_FLOW_REFRESH_MS = 2_000
 
