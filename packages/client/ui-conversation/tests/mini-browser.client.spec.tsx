@@ -55,7 +55,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
     await waitFor(() => {
       expect(screen.getByRole('status').textContent).toContain('Conexión del navegador')
     })
-    expect(screen.getByRole('button', { name: 'Iniciar navegador' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Conectar navegador' })).toBeTruthy()
   })
 
   it('shows the actual CDP tab and expands without reopening the browser', async () => {
