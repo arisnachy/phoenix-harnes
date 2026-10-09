@@ -450,6 +450,25 @@ describe('ManagedMcpController', () => {
     })
   })
 
+  it('offers GitHub official MCP without requiring GitHub Copilot model auth', async () => {
+    const patchPath = tempPatch()
+    const live = loader()
+    const controller = new ManagedMcpController(live, { patchPath, registrySearch: registry([]) })
+    await expect(controller.installCuratedMcp('github')).resolves.toMatchObject({
+      connector: {
+        serverName: 'github',
+        url: 'https://api.githubcopilot.com/mcp/',
+        source: { kind: 'curated', connectorId: 'github' },
+      },
+    })
+    expect(live.create).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        transport: 'streamable-http', serverName: 'github',
+        url: 'https://api.githubcopilot.com/mcp/', oauth: true,
+      }),
+    }))
+  })
+
   it('installs official Vercel MCP over HTTPS with OAuth', async () => {
     const patchPath = tempPatch()
     const live = loader()
