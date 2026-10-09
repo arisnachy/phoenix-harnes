@@ -101,6 +101,10 @@ export const FIGMA_DESKTOP_MCP_URL = 'http://127.0.0.1:3845/mcp'
 export const GITHUB_MCP_URL = 'https://api.githubcopilot.com/mcp/'
 /** Vault reference for a GitHub personal access token. Never persisted in MCP config. */
 export const GITHUB_MCP_TOKEN_REF = 'GITHUB_MCP_TOKEN'
+/** Official Meta Social Technologies (formerly Developer Tools) MCP endpoint. */
+export const META_DEVTOOLS_MCP_URL = 'https://mcp.facebook.com/devtools'
+/** Official WhatsApp Business Tools hosted MCP; not consumer WhatsApp. */
+export const META_WHATSAPP_BUSINESS_MCP_URL = 'https://mcp.facebook.com/whatsapp_business_tools'
 /** Official Vercel remote MCP endpoint. */
 export const VERCEL_MCP_URL = 'https://mcp.vercel.com'
 /** Official Notion remote MCP endpoint. */
@@ -313,6 +317,8 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   heygen: { label: 'HeyGen', config: () => remoteOauthMcpConfig('heygen', HEYGEN_MCP_URL, 120_000) },
   figma: { label: 'Figma', config: () => remoteOauthMcpConfig('figma', FIGMA_MCP_URL) },
   github: { label: 'GitHub repositories', config: githubMcpConfig },
+  'meta-devtools': { label: 'Meta Social Technologies', config: () => remoteOauthMcpConfig('meta-devtools', META_DEVTOOLS_MCP_URL) },
+  'meta-whatsapp-business': { label: 'WhatsApp Business Tools', config: () => remoteOauthMcpConfig('meta-whatsapp-business', META_WHATSAPP_BUSINESS_MCP_URL) },
   vercel: { label: 'Vercel', config: () => remoteOauthMcpConfig('vercel', VERCEL_MCP_URL) },
   notion: { label: 'Notion', config: () => remoteOauthMcpConfig('notion', NOTION_MCP_URL) },
   linear: { label: 'Linear', config: () => remoteOauthMcpConfig('linear', LINEAR_MCP_URL) },
