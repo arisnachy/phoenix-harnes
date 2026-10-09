@@ -124,7 +124,8 @@ describe('CI workflow', () => {
     expect(windowsNative.name).toBe('windows node 24 / native required')
     expect(windowsNative.if).toBe("github.event_name == 'pull_request'")
     expect(windowsNative.env).toMatchObject({
-      DSH_COVERAGE_TEST_TIMEOUT_MS: '30000',
+      DSH_GATE_CONCURRENCY: '1',
+      DSH_PUBLINT_CONCURRENCY: '2',
     })
     const nativeSteps = windowsNative.steps as unknown[]
     const nativeCommandSteps = nativeSteps.filter((step): step is Record<string, unknown> & { run: string } => (
