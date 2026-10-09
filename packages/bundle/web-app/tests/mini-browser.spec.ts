@@ -4,16 +4,16 @@ import { captureBrowserFrameWithFallback, miniBrowserRequestAllowed, miniBrowser
 afterEach(() => { /* Pure contracts: no live Chrome or network is required. */ })
 
 describe('MiniBrowser capture recovery', () => {
-  it('uses the visible viewport if an oversized screenshot clip is rejected', async () => {
+  it('captures the visible viewport without adding black space beyond a clipped page', async () => {
     const calls: Record<string, unknown>[] = []
     const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, ...Array.from({ length: 30 }, () => 1)]).toString('base64')
     const received = await captureBrowserFrameWithFallback(async (options) => {
       calls.push(options)
-      if (calls.length === 1) throw new Error('Unable to capture screenshot')
       return { data: jpeg }
     })
-    expect(calls).toHaveLength(2)
-    expect(calls[1]).toMatchObject({ captureBeyondViewport: false, fromSurface: true })
+    expect(calls).toHaveLength(1)
+    expect(calls[0]).toMatchObject({ captureBeyondViewport: false, fromSurface: true })
+    expect(calls[0]).not.toHaveProperty('clip')
     expect(received.subarray(0, 2)).toEqual(Buffer.from([0xff, 0xd8]))
   })
 
@@ -25,7 +25,7 @@ describe('MiniBrowser capture recovery', () => {
       if (methods.length < 3) throw new Error('target surface missing')
       return { data: jpeg }
     })
-    expect(methods).toEqual([true, true, false])
+    expect(methods).toEqual([true, false, undefined])
     expect(received[0]).toBe(0xff)
   })
 
