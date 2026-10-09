@@ -22,6 +22,7 @@ export interface UniversalArtifactEnvelope {
 function artifactKind(mime: string, data: HardnessArtifactValue): ArtifactKind {
   if (mime === 'text/html'
     || mime === 'application/vnd.phoenix.canvas+html'
+    || mime === 'application/vnd.phoenix.game+html'
     || mime === 'application/vnd.hardness.app+html'
     || mime === 'application/vnd.phoenix.web-preview+json'
     || mime === 'application/vnd.hardness.web-preview+json') return 'html'
