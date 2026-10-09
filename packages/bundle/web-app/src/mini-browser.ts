@@ -18,7 +18,17 @@ import type {} from '@phoenix-ai/dsh-host-webserver'
 type Tab = { id: string; url: string; title: string; type?: string; webSocketDebuggerUrl?: string }
 type Descriptor = { pid: number; endpoint: string; selectedTabId?: string }
 type RpcReply = { id: number; result?: Record<string, unknown>; error?: { message?: string } }
-type Action = { type: string; url?: string; tabId?: string; x?: number; y?: number; deltaY?: number; key?: string; text?: string; modifiers?: number }
+type Action = {
+  type: string
+  url?: string
+  tabId?: string
+  x?: number
+  y?: number
+  deltaY?: number
+  key?: string
+  text?: string
+  modifiers?: number
+}
 const SHARED = join(tmpdir(), 'phoenix-browser-cdp.json')
 const VIEWPORT = { width: 1280, height: 720 }
 const MAX_BODY = 8192
@@ -45,7 +55,10 @@ function readDescriptor(): Descriptor | undefined {
     const record = JSON.parse(readFileSync(SHARED, 'utf8')) as Partial<Descriptor>
     if (!validEndpoint(record.endpoint) || !Number.isInteger(record.pid) || !record.pid || record.pid < 1) return
     process.kill(record.pid, 0)
-    return { pid: record.pid, endpoint: record.endpoint, ...(typeof record.selectedTabId === 'string' ? { selectedTabId: record.selectedTabId } : {}) }
+    return {
+      pid: record.pid, endpoint: record.endpoint,
+      ...(typeof record.selectedTabId === 'string' ? { selectedTabId: record.selectedTabId } : {}),
+    }
   } catch { return undefined }
 }
 function publish(endpoint: string, tabId?: string): void {
@@ -53,7 +66,9 @@ function publish(endpoint: string, tabId?: string): void {
   const pid = owned?.pid ?? current?.pid
   if (pid === undefined || !validEndpoint(endpoint)) return
   const data: Descriptor = { pid, endpoint, ...(tabId === undefined ? {} : { selectedTabId: tabId }) }
-  try { writeFileSync(SHARED, JSON.stringify(data), { mode: 0o600 }) } catch { /* Browser remains usable without cross-process collaboration. */ }
+  try {
+    writeFileSync(SHARED, JSON.stringify(data), { mode: 0o600 })
+  } catch { /* Browser remains usable without cross-process collaboration. */ }
 }
 function cleanup(): void {
   const previous = owned?.pid
@@ -73,7 +88,7 @@ function cleanup(): void {
 }
 async function json<T>(url: string, method = 'GET'): Promise<T> {
   const response = await fetch(url, { method, signal: AbortSignal.timeout(2500) })
-  if (!response.ok) throw new Error('Chromium respondió HTTP ' + response.status)
+  if (!response.ok) throw new Error('Chromium respondió HTTP ' + String(response.status))
   return await response.json() as T
 }
 async function isAlive(endpoint: string): Promise<boolean> {
@@ -110,13 +125,13 @@ async function startChromium(): Promise<string> {
     ], { stdio: 'ignore', windowsHide: true })
     owned = child
     let spawnFailure: Error | undefined
-    child.once('error', error => { spawnFailure = error })
+    child.once('error', (error) => { spawnFailure = error })
     const deadline = Date.now() + LIMIT_MS
     while (Date.now() < deadline) {
       try {
         const port = Number(readFileSync(join(profile, 'DevToolsActivePort'), 'utf8').split(/\r?\n/)[0])
         if (Number.isInteger(port) && port > 0 && port < 65536) {
-          const endpoint = 'http://127.0.0.1:' + port
+          const endpoint = 'http://127.0.0.1:' + String(port)
           if (await isAlive(endpoint)) {
             ownedEndpoint = endpoint
             publish(endpoint)
@@ -149,7 +164,7 @@ async function endpoint(launch: boolean): Promise<string | undefined> {
   if (shared !== undefined && await isAlive(shared.endpoint.replace(/\/$/, ''))) return shared.endpoint.replace(/\/$/, '')
   if (ownedEndpoint && await isAlive(ownedEndpoint)) return ownedEndpoint
   for (const port of (allowVisible ? [9222, 9223, 9224] : [])) {
-    const base = 'http://127.0.0.1:' + port
+    const base = 'http://127.0.0.1:' + String(port)
     if (await isAlive(base)) return base
   }
   return launch ? await startChromium() : undefined
@@ -184,7 +199,7 @@ async function cdp<T extends Record<string, unknown>>(tab: Tab, method: string, 
     }
     const timer = setTimeout(() => { settle(new Error('Tiempo agotado: ' + method)) }, LIMIT_MS)
     socket.addEventListener('open', () => { socket.send(JSON.stringify({ id, method, params })) })
-    socket.addEventListener('message', event => {
+    socket.addEventListener('message', (event) => {
       let reply: RpcReply
       try { reply = JSON.parse(String(event.data)) as RpcReply } catch { return }
       if (reply.id !== id) return
@@ -194,7 +209,11 @@ async function cdp<T extends Record<string, unknown>>(tab: Tab, method: string, 
     socket.addEventListener('error', () => { settle(new Error('Se perdió la conexión con Chromium.')) })
   })
 }
-/** Turn a human address/search query into a safe Chromium HTTP(S) target. */
+/**
+ * Turn a human address/search query into a safe Chromium HTTP(S) target.
+ * @param value - Typed address or search phrase.
+ * @returns Validated HTTP(S) URL.
+ */
 export function normalizeMiniBrowserAddress(value: string): string {
   const raw = value.trim()
   if (raw.length === 0 || raw.length > 2048) throw new Error('Dirección no válida.')
@@ -211,7 +230,10 @@ async function state(): Promise<Record<string, unknown>> {
   const tabs = await listTabs(base)
   if (tabs.length === 0) return { available: false, tabs: [] }
   const selectedTab = await selected(base)
-  return { available: true, tabId: selectedTab.id, url: selectedTab.url, title: selectedTab.title, tabs: tabs.map(({ id, url, title }) => ({ id, url, title })) }
+  return {
+    available: true, tabId: selectedTab.id, url: selectedTab.url, title: selectedTab.title,
+    tabs: tabs.map(({ id, url, title }) => ({ id, url, title })),
+  }
 }
 /**
  * Chromium versions, headless settings and shared DevTools targets do not
@@ -243,7 +265,7 @@ export async function captureBrowserFrameWithFallback(
       if (jpeg.length < 4 || jpeg[0] !== 0xff || jpeg[1] !== 0xd8) throw new Error('El fotograma no es JPEG')
       return jpeg
     } catch (error) {
-      failures.push('estrategia ' + (index + 1) + ': ' + (error instanceof Error ? error.message : String(error)))
+      failures.push('estrategia ' + String(index + 1) + ': ' + (error instanceof Error ? error.message : String(error)))
     }
   }
   throw new Error('CDP_CAPTURE_FAILED: no se pudo obtener un fotograma real. ' + failures.join(' | '))
@@ -271,7 +293,7 @@ async function openVisibleDesktopBrowser(rawUrl: string): Promise<void> {
     stdio: 'ignore',
   })
   await new Promise<void>((resolve, reject) => {
-    child.once('spawn', () => resolve())
+    child.once('spawn', () => { resolve() })
     child.once('error', reject)
   })
   child.unref()
@@ -310,7 +332,7 @@ async function action(input: Action): Promise<Record<string, unknown>> {
   } else if (type === 'back' || type === 'forward') {
     const history = await cdp<{ currentIndex: number; entries: Array<{ id: number }> }>(tab, 'Page.getNavigationHistory')
     const index = history.currentIndex + (type === 'back' ? -1 : 1)
-    const entry = history.entries?.[index]
+    const entry = history.entries[index]
     if (entry) await cdp(tab, 'Page.navigateToHistoryEntry', { entryId: entry.id })
   } else if (type === 'reload') {
     await cdp(tab, 'Page.reload', { ignoreCache: false })
@@ -348,10 +370,17 @@ async function action(input: Action): Promise<Record<string, unknown>> {
   } else throw new Error('Acción de navegador desconocida.')
   return await state()
 }
-/** Reject DNS rebinding and cross-origin browser requests, even on localhost. */
+/**
+ * Reject DNS rebinding and cross-origin browser requests, even on localhost.
+ * @param input - Request metadata sampled from the local HTTP peer.
+ * @returns True only for an authorized local browser request.
+ */
 export function miniBrowserRequestAllowed(input: {
-  remoteAddress?: string | undefined; host?: string | undefined; origin?: string | undefined;
-  marker?: string | undefined; fetchSite?: string | undefined;
+  remoteAddress?: string | undefined
+  host?: string | undefined
+  origin?: string | undefined
+  marker?: string | undefined
+  fetchSite?: string | undefined
 }): boolean {
   const address = input.remoteAddress?.replace(/^::ffff:/, '')
   if (!isLoopback(address) || input.marker !== '1') return false
@@ -364,8 +393,8 @@ export function miniBrowserRequestAllowed(input: {
 function authorized(req: IncomingMessage): boolean {
   return miniBrowserRequestAllowed({
     remoteAddress: req.socket.remoteAddress, host: req.headers.host, origin: req.headers.origin,
-    marker: req.headers['x-phoenix-mini-browser'] as string | undefined,
-    fetchSite: req.headers['sec-fetch-site'] as string | undefined,
+    marker: req.headers['x-phoenix-mini-browser'],
+    fetchSite: req.headers['sec-fetch-site'],
   })
 }
 function reply(res: ServerResponse, code: number, data: unknown): void {
@@ -383,7 +412,10 @@ async function readAction(req: IncomingMessage): Promise<Action> {
     || typeof (body as { type?: unknown }).type !== 'string') throw new Error('Acción mal formada.')
   return body as Action
 }
-/** Register the three bounded MiniBrowser routes in the existing Phoenix Web host. */
+/**
+ * Register the three bounded MiniBrowser routes in the existing Phoenix Web host.
+ * @param ctx - Active Cordis context with a bound Web server.
+ */
 export function registerMiniBrowserRoutes(ctx: Context): void {
   const sharedGuard = (req: IncomingMessage, res: ServerResponse): boolean => {
     if (!authorized(req)) { reply(res, 403, { error: 'Acceso de navegador no autorizado.' }); return false }
