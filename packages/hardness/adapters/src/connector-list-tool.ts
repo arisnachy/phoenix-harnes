@@ -230,7 +230,7 @@ export function createConnectorListTool(
                 tools: { type: 'array', items: { type: 'string' } },
                 reason_code: {
                   type: 'string',
-                  enum: ['connection-failed', 'connection-lost', 'authorization-required', 'retry-exhausted'],
+                  enum: ['connection-failed', 'connection-lost', 'authorization-required', 'retry-exhausted', 'endpoint-not-found'],
                 },
                 relevant: { type: 'boolean' },
               },
