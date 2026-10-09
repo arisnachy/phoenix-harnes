@@ -1009,6 +1009,37 @@ describe('connectors settings section', () => {
     } finally { open.mockRestore() }
   })
 
+  it('shows an OAuth Host rejection inside the Notion card, not only in the global header', async () => {
+    const begin = vi.fn(async () => { throw new Error('Host authorization unavailable') })
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'mcp-client/notion', label: 'MCP notion',
+        methods: [{ id: 'oauth', label: 'Authorize Notion' }], inFlight: false,
+      }] })),
+      begin,
+      status: vi.fn(), answer: vi.fn(), cancel: vi.fn(), disconnect: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    const mcpRegistry = {
+      state: vi.fn(async () => ({
+        managed: [{ entryId: 'notion-id', serverName: 'notion', url: 'https://mcp.notion.com/mcp',
+          source: { kind: 'curated' as const, connectorId: 'notion' } }],
+        runtime: [{ serverName: 'notion', transport: 'streamable-http' as const,
+          status: 'auth-required' as const, reasonCode: 'authorization-required' as const, toolNames: [] }],
+      })),
+      reconnect: vi.fn(), install: vi.fn(), search: vi.fn(), repair: vi.fn(), remove: vi.fn(),
+    }
+    renderHub(api, { mcpRegistry })
+    const card = (await screen.findByText('Notion')).closest('article')!
+    const connect = Array.from(card.querySelectorAll('button'))
+      .find(button => button.textContent === 'Authorize')!
+    fireEvent.click(connect)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'mcp-client/notion', method: 'oauth' })
+      expect(card.textContent).toContain('Host authorization unavailable')
+    })
+    expect(mcpRegistry.reconnect).not.toHaveBeenCalled()
+  })
+
   it('keeps Authorize visible while an auth-required MCP flow is still registering', async () => {
     const reconnect = vi.fn(async () => ({ accepted: true }))
     const begin = vi.fn()
