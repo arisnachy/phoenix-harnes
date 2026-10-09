@@ -440,7 +440,9 @@
 .root[data-phase='hero'] .composerHero {
   box-sizing: border-box;
   flex: 1 0 auto;
-  gap: 10px;
+  /* Center brand, workspace controls and input as a single welcome unit. */
+  justify-content: center;
+  gap: clamp(13px, 2.6vh, 24px);
   width: min(calc(var(--dsh-composer-card-max-width) + 2 * var(--dsh-composer-side-clearance)), 100%);
   max-width: 100%;
   min-height: 100%;
@@ -514,9 +516,22 @@
   outline: 2px solid var(--dsw-specific-phoenix-accent);
   outline-offset: 2px;
 }
+/* On the welcome screen there is no session title/tabs. Keep the global
+   tools in a compact floating toolbar instead of an empty full-width card. */
 .root[data-phase='hero'] .unifiedHeader {
-  min-height: 60px;
-  padding-block: 8px;
+  display: flex;
+  align-items: center;
+  align-self: flex-end;
+  width: max-content;
+  max-width: calc(100% - 28px);
+  min-height: 0;
+  margin-left: auto;
+  padding: 7px 10px;
+  border-radius: 22px;
+  box-shadow: 0 3px 14px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 8%, transparent);
+}
+.root[data-phase='hero'] .headerGlobal {
+  min-height: 38px;
 }
 .root[data-phase='hero'] .sessionChrome { display: none; }
 @media (max-width: 1120px) {
