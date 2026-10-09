@@ -1,5 +1,6 @@
 import type { SubagentActivityProjection } from '@phoenix-ai/dsh-subagent'
-import { KIRA_AGENT_PORTRAITS, type KiraPortraitKey } from './KiraAgentPortraits.ts'
+import type { KiraPortraitKey } from './KiraAgentPortraits.ts'
+import { KIRA_MODERN_STILL_PORTRAITS } from './KiraModernStillPortraits.ts'
 import css from './ModelActivityAvatar.module.css'
 /** Deprecated animation props remain accepted for existing callers; portraits stay still. */
 type AvatarExpression = 'neutral' | 'warm' | 'focused' | 'happy' | 'concerned' | 'confident'
@@ -74,8 +75,8 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
 
 /** Resolve one KIRA identity to its standalone public portrait asset. */
 export function portraitSrcForKind(kind: ModelAvatarKind): string {
-  if (kind === 'kira') return '/assets/kira-agents/kira-official.webp'
-  return KIRA_AGENT_PORTRAITS[PORTRAIT_ALIAS[kind]]
+  if (kind === 'kira') return KIRA_MODERN_STILL_PORTRAITS.kira
+  return KIRA_MODERN_STILL_PORTRAITS[PORTRAIT_ALIAS[kind]]
 }
 
 export interface ModelActivityAvatarProps {
