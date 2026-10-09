@@ -14,6 +14,7 @@ import type { PostToolDecision } from '@phoenix-ai/dsh-tools'
 import { publicToolName, syncTools, type ToolBridgeOptions } from '@phoenix-ai/dsh-mcp-client/src/tools.ts'
 import {
   createTransport,
+  hydrateFetchMcpNodeEnvironment,
   normalizeBearerToken,
   normalizeWindowsNpxMcpLaunch,
   repairPhoenixStdioProxyArgs,
@@ -1296,6 +1297,80 @@ describe('tool execution edge cases', () => {
     await syncTools(client as never, ctx, defaultOpts, new Map())
     const tool = ctx.tools.get('mcp__srv__nodesc')
     expect(tool?.description).toBe('')
+  })
+})
+
+describe('Fetch MCP Windows Node/npm environment hydration', () => {
+  const fetchServer = { serverName: 'fetch', command: 'uvx', args: ['mcp-server-fetch'] }
+  const nodePath = 'C:\\Program Files\\nodejs'
+  const nodeExe = nodePath + '\\node.exe'
+  const fileExists = (name: string): boolean => {
+    const normalized = name.toLowerCase()
+    return normalized === nodeExe.toLowerCase()
+      || normalized === (nodePath + '\\npm.cmd').toLowerCase()
+  }
+
+  it('adds the verified local Node and npm directory for curated Python Fetch when PATH is stale', () => {
+    const env = { Path: 'C:\\Windows\\System32', SAFE_VAR: 'preserved' }
+    const result = hydrateFetchMcpNodeEnvironment(fetchServer, env, {
+      platform: 'win32', nodeExecutable: nodeExe, fileExists,
+    })
+    expect(result).toEqual({
+      Path: 'C:\\Program Files\\nodejs;C:\\Windows\\System32',
+      SAFE_VAR: 'preserved',
+    })
+    expect(env.Path).toBe('C:\\Windows\\System32')
+  })
+
+  it('preserves a working PATH and Windows environment key casing', () => {
+    const env = { PATH: 'C:\\Program Files\\nodejs;C:\\Windows\\System32' }
+    const result = hydrateFetchMcpNodeEnvironment(fetchServer, env, {
+      platform: 'win32', nodeExecutable: nodeExe, fileExists,
+    })
+    expect(result).toEqual(env)
+    expect(Object.keys(result)).toEqual(['PATH'])
+  })
+
+  it('normalizes duplicate Windows Path/PATH aliases while keeping the explicit override', () => {
+    const result = hydrateFetchMcpNodeEnvironment(fetchServer, {
+      Path: 'C:\\old', PATH: 'C:\\Windows\\System32',
+    }, { platform: 'win32', nodeExecutable: nodeExe, fileExists })
+    expect(result).toEqual({ PATH: 'C:\\Program Files\\nodejs;C:\\Windows\\System32' })
+  })
+
+  it('finds a system Node installation if Phoenix itself runs a standalone node.exe', () => {
+    const result = hydrateFetchMcpNodeEnvironment(
+      { ...fetchServer, command: 'uvx.exe' },
+      { Path: 'C:\\Windows\\System32', ProgramFiles: 'C:\\Program Files' },
+      { platform: 'win32', nodeExecutable: 'D:\\portable\\node.exe', fileExists },
+    )
+    expect(result.Path).toBe('C:\\Program Files\\nodejs;C:\\Windows\\System32')
+  })
+
+  it('does not claim Node/npm are available if only Node exists', () => {
+    const result = hydrateFetchMcpNodeEnvironment(
+      fetchServer,
+      { Path: 'C:\\Windows\\System32' },
+      { platform: 'win32', nodeExecutable: nodeExe,
+        fileExists: (path) => path.toLowerCase() === nodeExe.toLowerCase() },
+    )
+    expect(result).toEqual({ Path: 'C:\\Windows\\System32' })
+  })
+
+  it('does not alter non-Fetch servers, non-uvx commands or non-Windows environments', () => {
+    const original = { Path: 'C:\\Windows\\System32' }
+    for (const config of [
+      { ...fetchServer, serverName: 'memory' },
+      { ...fetchServer, command: 'python' },
+      { ...fetchServer, args: ['other-server'] },
+    ]) {
+      expect(hydrateFetchMcpNodeEnvironment(config, original, {
+        platform: 'win32', nodeExecutable: nodeExe, fileExists,
+      })).toEqual(original)
+    }
+    expect(hydrateFetchMcpNodeEnvironment(fetchServer, original, {
+      platform: 'linux', nodeExecutable: nodeExe, fileExists,
+    })).toEqual(original)
   })
 })
 
