@@ -23,19 +23,6 @@ function safeOAuthConsentUrl(value: string): string | undefined {
   return undefined
 }
 
-/** Preserve only deterministic, secret-free failure categories in the popup tab. */
-function safePopupFailure(message: string): string {
-  if (/38 segundos|45 segundos|tiempo de espera|agot[oó] el tiempo|timeout/i.test(message)) {
-    return 'El MCP agotó el tiempo de preparación y no abrió el inicio de sesión. Revisa el diagnóstico en PHOENIX.'
-  }
-  if (/client.id|client.secret|registro|registrar|DCR/i.test(message)) {
-    return 'El MCP necesita configurar una aplicación cliente OAuth antes de iniciar sesión. Revisa el aviso en PHOENIX.'
-  }
-  if (/conexi[oó]n|network|ECONN|DNS|fetch failed/i.test(message)) {
-    return 'PHOENIX no pudo contactar al proveedor MCP. Revisa la URL y el diagnóstico en la pestaña principal.'
-  }
-  return 'El servidor no proporcionó una URL de autorización válida. Regresa a PHOENIX para consultar el error y reintentar.'
-}
 
 /** One browser-visible authorization attempt, carrying its last notice forward. */
 export interface AuthorizationAttempt {
@@ -91,48 +78,6 @@ export function useAuthorizationAttempt(
   const activeAttemptIdRef = useRef<string | undefined>(undefined)
   const pendingBeginTimerRef = useRef<number | undefined>(undefined)
 
-  // This is an active browser tab, not an inert splash screen. Only locally
-  // authored messages are written: never render raw provider URLs or secrets.
-  const showPopupStatus = useCallback((
-    headingText: string,
-    descriptionText: string,
-    failed = false,
-  ): void => {
-    const popup = popupRef.current
-    if (popup === null || navigatedRef.current) return
-    popupStatusRef.current = { heading: headingText, detail: descriptionText, failed }
-    try {
-      if (popup.closed) return
-      const doc = popup.document
-      if (doc?.body === undefined || doc.body === null) return
-      // Preserve the real waiting page, including its CSP-protected message
-      // listener. Replacing the document body would detach that listener's UI.
-      const realStatus = doc.getElementById('status')
-      const realHeading = doc.querySelector('h1')
-      if (realStatus !== null && realHeading !== null) {
-        realHeading.textContent = headingText
-        realStatus.textContent = failed ? safePopupFailure(descriptionText) : descriptionText
-        doc.title = failed ? 'PHOENIX · Autorización no iniciada' : 'PHOENIX · Autorización segura'
-        return
-      }
-      const heading = doc.getElementById('phoenix-oauth-heading') ?? doc.createElement('h2')
-      heading.id = 'phoenix-oauth-heading'
-      heading.textContent = headingText
-      const description = doc.getElementById('phoenix-oauth-description') ?? doc.createElement('p')
-      description.id = 'phoenix-oauth-description'
-      description.textContent = failed ? safePopupFailure(descriptionText) : descriptionText
-      const footer = doc.getElementById('phoenix-oauth-footer') ?? doc.createElement('p')
-      footer.id = 'phoenix-oauth-footer'
-      footer.textContent = failed
-        ? 'Regresa a la pestaña de PHOENIX para reintentar o revisar la configuración del conector.'
-        : 'PHOENIX mostrará un diagnóstico si el proveedor no responde.'
-      doc.title = failed ? 'PHOENIX · Autorización no iniciada' : 'PHOENIX · Autorización segura'
-      doc.body.replaceChildren(heading, description, footer)
-    } catch {
-      // The provider may already have taken over the tab or isolated it.
-    }
-  }, [])
-
   const closeReservedPopup = useCallback((): void => {
     popupTimeoutRef.current?.()
     popupTimeoutRef.current = undefined
@@ -140,7 +85,6 @@ export function useAuthorizationAttempt(
     popupRef.current = null
     navigatedRef.current = false
     failedPopupRef.current = false
-    popupStatusRef.current = undefined
     if (popup === null) return
     try {
       if (!popup.closed) popup.close()
@@ -153,9 +97,8 @@ export function useAuthorizationAttempt(
     popupTimeoutRef.current?.()
     popupTimeoutRef.current = undefined
     failedPopupRef.current = true
-    showPopupStatus('No se pudo abrir la autorización', message, true)
     setFailure(message)
-  }, [showPopupStatus])
+  }, [])
 
   // OAuth discovery, client registration and API prompts run within PHOENIX.
   // Do NOT open oauth-waiting.html or about:blank: those tabs are misleading
@@ -164,31 +107,6 @@ export function useAuthorizationAttempt(
     if (!navigatedRef.current) closeReservedPopup()
     setFailure(undefined)
   }, [closeReservedPopup])
-
-  const offerManualPopupConsent = useCallback((destination: string): boolean => {
-    const popup = popupRef.current
-    if (popup === null) return false
-    try {
-      if (popup.closed) return false
-      const doc = popup.document
-      if (doc?.body === undefined || doc.body === null) return false
-      showPopupStatus(
-        'Tu navegador bloqueó la redirección',
-        'El MCP entregó el enlace de autorización. Pulsa el enlace de abajo para abrir la página oficial.',
-      )
-      const link = doc.querySelector<HTMLAnchorElement>('#phoenix-oauth-manual-link') ?? doc.createElement('a')
-      link.id = 'phoenix-oauth-manual-link'
-      link.textContent = 'Abrir página de autorización'
-      link.href = destination
-      link.target = '_self'
-      link.rel = 'noreferrer'
-      if (link.parentElement !== doc.body) doc.body.appendChild(link)
-      return true
-    } catch {
-      // Cannot expose a manual link if the browser isolated this window.
-      return false
-    }
-  }, [showPopupStatus])
 
   const navigateOAuthPopup = useCallback((url: string): void => {
     const destination = safeOAuthConsentUrl(url)
@@ -247,11 +165,7 @@ export function useAuthorizationAttempt(
         // producing a consent URL. Close the temporary tab during that prompt.
         if (view.prompt !== undefined && consent?.url === undefined && !navigatedRef.current) {
           closeReservedPopup()
-        } else if (view.status === 'pending' && consent?.url === undefined && latest !== undefined && !failedPopupRef.current) {
-          showPopupStatus(
-            'Esperando enlace de autorización…',
-            'El servidor MCP está preparando el inicio de sesión. Si no entrega el enlace, PHOENIX mostrará el error.',
-          )
+
         }
         if (consent?.url !== undefined && !failedPopupRef.current && !opened.current.has(consent.url)) {
           opened.current.add(consent.url)
@@ -322,7 +236,7 @@ export function useAuthorizationAttempt(
         window.clearTimeout(timer)
       }
     }
-  }, [api, attempt, closeReservedPopup, failReservedPopup, navigateOAuthPopup, showPopupStatus])
+  }, [api, attempt, closeReservedPopup, failReservedPopup, navigateOAuthPopup])
 
   const begin = (key: string, method = 'oauth'): void => {
     if (api === undefined) return
