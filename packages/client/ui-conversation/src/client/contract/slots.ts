@@ -544,6 +544,8 @@ export interface ConversationUserProfileState {
 
 /** Business callbacks injected into the conversation slot. */
 export interface ConversationInjected {
+  /** Tell layout when writing or a live visualization requires focused space. */
+  setSidebarFocus: (active: boolean) => void
   /** Persist acknowledgement of the exact home-feed revision. */
   recordAttention: (item: ProactivityAttentionItem, state: 'handled' | 'dismissed') => Promise<void>
   /**
