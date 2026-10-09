@@ -9,6 +9,7 @@ import css from './MiniBrowser.module.css'
 
 type Tab = { id: string; title: string; url: string }
 type Snapshot = { available: boolean; tabId?: string; url?: string; title?: string; tabs: Tab[] }
+type VaultStatus = { supported: boolean; origin?: string; configured: boolean }
 type Command = { type: string; url?: string; tabId?: string; x?: number; y?: number; deltaY?: number; key?: string; text?: string; modifiers?: number }
 const API = '/phoenix-mini-browser'
 const HEADERS = { 'x-phoenix-mini-browser': '1' }
@@ -75,6 +76,9 @@ export function MiniBrowser() {
   const [frame, setFrame] = useState<string>()
   const [error, setError] = useState<string>()
   const [supported, setSupported] = useState(false)
+  const [vault, setVault] = useState<VaultStatus>()
+  const [vaultOpen, setVaultOpen] = useState(false)
+  const [vaultPending, setVaultPending] = useState(false)
   const focusRef = useRef<HTMLImageElement>(null)
   const currentTab = useRef<string | undefined>(undefined)
   const lastObservedUrl = useRef<string | undefined>(undefined)
@@ -164,6 +168,60 @@ export function MiniBrowser() {
   }, [snapshot.tabId, snapshot.url])
 
   useEffect(() => {
+    if (!snapshot.available || !snapshot.url) { setVault(undefined); return }
+    let active = true
+    void fetch(API + '/vault', { headers: HEADERS, cache: 'no-store' })
+      .then(async response => await decode<VaultStatus>(response))
+      .then(value => { if (active) setVault(value) })
+      .catch(() => { if (active) setVault(undefined) })
+    return () => { active = false }
+  }, [snapshot.url, snapshot.available, snapshot.tabId])
+
+  const submitVault = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    if (vaultPending || !vault?.origin) return
+    setVaultPending(true)
+    try {
+      const form = event.currentTarget
+      const data = new FormData(form)
+      const account = String(data.get('account') ?? '')
+      const secret = String(data.get('secret') ?? '')
+      const remember = data.get('remember') === 'on'
+      const response = await fetch(API + '/vault', {
+        method: 'POST', headers: { ...HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'connect', origin: vault.origin, account, secret, remember }),
+        cache: 'no-store',
+      })
+      form.reset()
+      const result = await decode<{ phase: string; configured: boolean }>(response)
+      if (result.phase === 'fields-not-found') {
+        setError('No se encontraron campos de acceso. Abre primero la página de inicio de sesión.')
+      } else {
+        setError(undefined)
+        setVault(value => value ? { ...value, configured: result.configured } : value)
+        setVaultOpen(false)
+      }
+    } catch {
+      setError('No se pudo conectar el sitio. Verifica el dominio y las credenciales.')
+    } finally { setVaultPending(false) }
+  }
+
+  const forgetVault = async (): Promise<void> => {
+    if (!vault?.origin || !window.confirm('¿Olvidar las credenciales de ' + vault.origin + '?')) return
+    setVaultPending(true)
+    try {
+      const response = await fetch(API + '/vault', {
+        method: 'POST', headers: { ...HEADERS, 'content-type': 'application/json' },
+        body: JSON.stringify({ type: 'forget', origin: vault.origin }), cache: 'no-store',
+      })
+      await decode<{ forgotten: boolean }>(response)
+      setVault(value => value ? { ...value, configured: false } : value)
+      setVaultOpen(false)
+    } catch { setError('No se pudo eliminar el acceso guardado.') }
+    finally { setVaultPending(false) }
+  }
+
+  useEffect(() => {
     if (!expanded) return
     const closeOnEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape' && document.activeElement !== focusRef.current) setExpanded(false)
@@ -223,6 +281,8 @@ export function MiniBrowser() {
             placeholder="Buscar o escribir una dirección"
             value={address} onChange={event => { setAddress(event.currentTarget.value) }} />
           <button type="submit">Ir</button>
+          {vault?.supported && vault.origin && <button type="button" title="Acceso protegido con DPAPI"
+            onClick={() => { setVaultOpen(true); setError(undefined) }}>Acceso seguro</button>}
         </form>
         {snapshot.available ? (
           <div className={css.viewport}>
@@ -270,5 +330,28 @@ export function MiniBrowser() {
       </button>
     )}</div>}
     {expanded && <Modal open headless className={css.expandedDialog ?? ''} title="Navegador de Kira" onClose={() => { setExpanded(false) }}>{viewer}</Modal>}
+    {vaultOpen && vault?.origin && <Modal open title="Acceso seguro al sitio" onClose={() => { if (!vaultPending) setVaultOpen(false) }}>
+      <div className={css.vaultBox}>
+        <strong>{vault.origin}</strong>
+        <p>Solo se guardarán las credenciales de este dominio. Kira no tendrá acceso a tu contraseña.</p>
+        <form onSubmit={event => { void submitVault(event) }} autoComplete="off">
+          <label>Usuario o correo
+            <input name="account" required autoComplete="username" maxLength={4096} />
+          </label>
+          <label>Contraseña
+            <input name="secret" type="password" required autoComplete="current-password" maxLength={16384} />
+          </label>
+          <label className={css.vaultConsent}>
+            <input type="checkbox" name="remember" />
+            Cifrar en el vault de Windows y autorizar futuros accesos a este dominio
+          </label>
+          <div className={css.vaultActions}>
+            <button disabled={vaultPending} type="submit">{vaultPending ? 'Conectando…' : 'Conectar'}</button>
+            <button disabled={vaultPending} type="button" onClick={() => { setVaultOpen(false) }}>Cancelar</button>
+            {vault.configured && <button disabled={vaultPending} type="button" onClick={() => { void forgetVault() }}>Olvidar acceso</button>}
+          </div>
+        </form>
+      </div>
+    </Modal>}
   </>
 }
