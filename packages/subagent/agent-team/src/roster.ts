@@ -21,6 +21,7 @@ import type {
 } from './types.ts'
 import { requiredText, boundedTranscriptText } from './validation.ts'
 import { TEAM_PERSONAS } from './personas.ts'
+import { teamLanguageInstruction } from './language.ts'
 
 const MEMBER_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 
@@ -313,6 +314,10 @@ export class TeamRoster {
 
     const initialPrompt = [
       ...request.prompt,
+      {
+        type: 'text' as const,
+        text: teamLanguageInstruction(root.session.events),
+      },
       name === 'aegis'
         ? {
           type: 'text' as const,
