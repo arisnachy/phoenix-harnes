@@ -49,6 +49,8 @@ function layout(){
    for(const other of [path[j-1],path[j+1]])if(other){for(let d=0;d<4;d++)
     if(x+dirs[d][0]===other[0]&&y+dirs[d][1]===other[1])ports.push(d)}
   }
+  if(x===0&&y===2)ports.push(3); // generator feeds the first tile from the left
+  if(x===4&&y===2)ports.push(1); // the final tile feeds the reactor on the right
   if(ports.length===0){const first=Math.floor(random()*4);ports.push(first,(first+Math.floor(random()*2+1))%4)}
   tiles.push({x,y,ports,rot:Math.floor(random()*4)});
  }
