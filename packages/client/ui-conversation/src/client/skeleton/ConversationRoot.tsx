@@ -43,7 +43,7 @@ const SessionBodyOutlet = memo(function SessionBodyOutlet({
 
 export function ConversationRoot({
   sessionId, useSession, useSessions, useWorkspaces, useInput, inputActions, useComposerBlock, useUserProfile,
-  useProactivityAttention, recordAttention, renderSlot, renderSlotChain, selectWorkspace, t,
+  useProactivityAttention, recordAttention, setSidebarFocus, renderSlot, renderSlotChain, selectWorkspace, t,
 }: ConversationRootProps) {
   const openState = useSession(s => s.openState)
   const composerPhase = useSession(s => s.composerPhase)
@@ -64,6 +64,39 @@ export function ConversationRoot({
   const [pendingWorkspaceId, setPendingWorkspaceId] = useState<WorkspaceId | undefined>()
   const pickerAnchor = useRef<HTMLButtonElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const [writing, setWriting] = useState(false)
+  const [visualActive, setVisualActive] = useState(false)
+  // null follows automatic focus; explicit expand/collapse overrides it for this session.
+  const [headerOverride, setHeaderOverride] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    setWriting(false)
+    setVisualActive(false)
+    setHeaderOverride(null)
+  }, [sessionId])
+
+  // Rendered browser/visual blocks arrive asynchronously as transcript nodes.
+  // DOM observation here avoids coupling the chat shell to individual plugins.
+  useEffect(() => {
+    const scroller = rootRef.current?.querySelector('[data-conversation-scroll]')
+    if (scroller == null || typeof MutationObserver === 'undefined') return
+    const refresh = (): void => {
+      setVisualActive(scroller.querySelector(
+        '[data-mini-browser-focus="true"], [data-phoenix-visual-qa]:not([data-phoenix-visual-qa="fail"])',
+      ) !== null)
+    }
+    const observer = new MutationObserver(refresh)
+    observer.observe(scroller, {
+      childList: true, subtree: true, attributes: true,
+      attributeFilter: ['data-mini-browser-focus', 'data-phoenix-visual-qa'],
+    })
+    refresh()
+    return () => { observer.disconnect() }
+  }, [sessionId])
+
+  useEffect(() => { setSidebarFocus(writing || visualActive) }, [setSidebarFocus, writing, visualActive])
+  useEffect(() => () => { setSidebarFocus(false) }, [setSidebarFocus])
+
   const openSettingsSection = useCallback((id: string): void => {
     window.dispatchEvent(new CustomEvent('phoenix:open-settings-section', { detail: id }))
   }, [])
@@ -216,6 +249,7 @@ export function ConversationRoot({
   )
 
   const phase = settling ? 'settling' : hero ? 'hero' : 'active'
+  const headerCompact = hero || (headerOverride ?? visualActive)
   const composer = renderSlotChain(
     'conversation.composer',
     { interactions: pending, session },
@@ -233,12 +267,21 @@ export function ConversationRoot({
   )
 
   return (
-    <div ref={rootRef} className={css.root} data-phase={phase}>
+    <div ref={rootRef} className={css.root} data-phase={phase} data-header-compact={headerCompact ? 'true' : undefined}>
       <div className={css.unifiedHeader} aria-label="Barra superior de Phoenix">
         <div className={css.sessionChrome}>
           <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
         </div>
         <div className={css.headerGlobal} aria-label="Herramientas globales">
+          {!hero && <button type="button" className={css.headerToggle}
+            aria-label={headerCompact ? 'Expandir barra superior' : 'Compactar barra superior'}
+            title={headerCompact ? 'Expandir barra superior' : 'Compactar barra superior'}
+            aria-expanded={!headerCompact}
+            onClick={() => { setHeaderOverride(!headerCompact) }}>
+            <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              {headerCompact ? <path d="m7 10 5 5 5-5" /> : <path d="m7 14 5-5 5 5" />}
+            </svg>
+          </button>}
           <button type="button" className={css.heroTopIcon} aria-label="Buscar sesiones" onClick={openWorkspaceSearch}>
             <IconSearchOutline16 size={19} />
           </button>
@@ -254,7 +297,9 @@ export function ConversationRoot({
           </button>
         </div>
       </div>
-      <div className={css.scrollBody} data-conversation-scroll="">
+      <div className={css.scrollBody} data-conversation-scroll="" onInputCapture={(event) => {
+        if (event.target instanceof HTMLTextAreaElement) setWriting(true)
+      }}>
         <SessionBodyOutlet sessionId={sessionId} renderSlot={renderSlot} />
         {composerSeat}
       </div>

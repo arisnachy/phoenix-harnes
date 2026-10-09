@@ -336,6 +336,8 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
     </section>
   )
   return <>
+    {/* Keep focus signaling in-flow even when the browser is portaled fullscreen. */}
+    <span hidden data-mini-browser-focus={expanded || !collapsed ? 'true' : undefined} />
     {!expanded && <div ref={inlineRef} className={css.inline}>{viewer}</div>}
     {expanded && <Modal open headless className={css.expandedDialog ?? ''} title="Navegador de Kira" onClose={() => { setExpanded(false) }}>{viewer}</Modal>}
   </>

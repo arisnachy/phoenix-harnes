@@ -482,6 +482,14 @@ function SessionTree({
                     },
                   }}
               />
+              {group.expanded && group.sessions.length > 0 && (
+                <div className={css.recentHeader}>
+                  <span>{t('sessions.recent')}</span>
+                  <button type="button" onClick={() => {
+                    window.dispatchEvent(new Event('phoenix:open-workspace-library'))
+                  }}>{t('sessions.viewAll')}</button>
+                </div>
+              )}
               {(expandedSessionGroups.includes(group.key)
                 ? group.sessions
                 : group.sessions.slice(0, COLLAPSED_SESSION_LIMIT)

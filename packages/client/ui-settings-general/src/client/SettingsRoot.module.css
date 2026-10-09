@@ -379,3 +379,36 @@
 .focusedPanel .options {
   padding-top: 20px;
 }
+
+/* Approved sidebar: quota is its own informational card above Settings. */
+.triggerStack:not(.triggerStackRail) {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+}
+.wideQuotaPanel {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 66px;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 65%, #e8ba9b 35%);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 88%, #fff4e8 12%);
+  box-shadow: 0 3px 10px rgba(113, 71, 41, .035);
+}
+.wideQuotaPanel:empty { display: none; }
+.triggerStack:not(.triggerStackRail) .trigger {
+  width: 100%;
+  margin: 1px 0;
+  padding-left: 12px;
+  border-radius: 12px;
+}
+.triggerStack:not(.triggerStackRail) .trigger:hover {
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 80%, #ffddc7 20%);
+}
+@media (max-height: 850px) {
+  .wideQuotaPanel { min-height: 57px; padding-block: 6px; }
+}

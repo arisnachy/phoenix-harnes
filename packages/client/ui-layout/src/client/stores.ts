@@ -21,6 +21,10 @@ type LayoutState = {
   details: number
   narrow: boolean
   narrowExpanded: boolean
+  /** Snapshot of the manual width while focus mode borrows the navigation rail. */
+  sidebarFocusActive: boolean
+  sidebarFocusRestore: number | null
+  sidebarFocusManual: boolean
   workspaceSubagent: boolean
   workspaceCordis: boolean
   workspaceCordisSide: WorkspaceSide | null
@@ -33,6 +37,7 @@ type LayoutActions = {
   setSidebar: (draft: LayoutState, px: number) => void
   setDetails: (draft: LayoutState, px: number) => void
   toggleSidebar: (draft: LayoutState) => void
+  setSidebarFocus: (draft: LayoutState, active: boolean) => void
   setNarrow: (draft: LayoutState, narrow: boolean) => void
   openDetails: (draft: LayoutState) => void
   closeDetails: (draft: LayoutState) => void
@@ -50,6 +55,9 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       details: 0,
       narrow: false,
       narrowExpanded: false,
+      sidebarFocusActive: false,
+      sidebarFocusRestore: null,
+      sidebarFocusManual: false,
       workspaceSubagent: false,
       workspaceCordis: false,
       workspaceCordisSide: null,
@@ -60,6 +68,10 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
     actions: {
       setSidebar: (d, px: number) => {
         if (d.workspaceCordis && d.workspaceCordisSide === 'left') return
+        if (d.sidebarFocusActive) {
+          d.sidebarFocusManual = true
+          d.sidebarFocusRestore = null
+        }
         d.sidebar = clampWidth(px, SIDEBAR_MIN, SIDEBAR_MAX)
       },
       setDetails: (d, px: number) => {
@@ -69,8 +81,32 @@ export function createLayoutStore(): EngineStoreHandle<LayoutState, LayoutAction
       toggleSidebar: (d) => {
         // A left Cordis rail owns the navigation side until it closes.
         if (d.workspaceCordis && d.workspaceCordisSide === 'left') return
+        if (d.sidebarFocusActive) {
+          d.sidebarFocusManual = true
+          d.sidebarFocusRestore = null
+        }
         if (d.narrow) d.narrowExpanded = !d.narrowExpanded
         else d.sidebar = d.sidebar === 0 ? SIDEBAR_DEFAULT : 0
+      },
+      setSidebarFocus: (d, active: boolean) => {
+        if (d.sidebarFocusActive === active) return
+        d.sidebarFocusActive = active
+        if (!active) {
+          if (!d.sidebarFocusManual && d.sidebarFocusRestore !== null
+            && d.sidebar === 0 && !d.narrow
+            && !(d.workspaceCordis && d.workspaceCordisSide === 'left')) {
+            d.sidebar = d.sidebarFocusRestore
+          }
+          d.sidebarFocusRestore = null
+          d.sidebarFocusManual = false
+          return
+        }
+        d.sidebarFocusManual = false
+        if (d.narrow || (d.workspaceCordis && d.workspaceCordisSide === 'left')) return
+        if (d.sidebar > 0) {
+          d.sidebarFocusRestore = d.sidebar
+          d.sidebar = 0
+        }
       },
       setNarrow: (d, narrow: boolean) => {
         if (d.narrow === narrow) return

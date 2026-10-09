@@ -427,3 +427,129 @@
   .navLink { height: 34px; }
 }
 @media (prefers-reduced-motion: reduce) { .navLink { transition: none; } }
+
+/* Warm Phoenix sidebar — approved cream/orange design, 320px open / 56px rail.
+   These rules deliberately style the existing actions instead of replacing them. */
+.root {
+  --phoenix-side-ember: #e76020;
+  --phoenix-side-ember-hover: #d75118;
+  --phoenix-side-peach: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 76%, #ffd6b8 24%);
+  --phoenix-side-outline: color-mix(in srgb, var(--dsw-alias-border-l2) 66%, #e8b58e 34%);
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 93%, #fff8ef 7%);
+  border-right: 1px solid var(--phoenix-side-outline);
+  border-radius: 0 22px 22px 0;
+  box-shadow: 6px 0 28px rgba(102, 71, 46, 0.035);
+}
+.root:not(.collapsed) {
+  padding-inline: 22px;
+  padding-block: 10px 12px;
+}
+.root:not(.collapsed) .logoRow {
+  height: 66px;
+  padding-inline: 0;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.root:not(.collapsed) .brandIdentity { gap: 11px; }
+.root:not(.collapsed) .brandMark img {
+  width: 42px;
+  height: 42px;
+  filter: sepia(1) saturate(2.8) hue-rotate(337deg) drop-shadow(0 3px 6px rgba(225, 109, 45, .13));
+}
+.root:not(.collapsed) .brandName {
+  padding-left: 0;
+  height: auto;
+  max-width: 190px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  font-family: 'Avenir Next', Inter, ui-sans-serif, system-ui, sans-serif;
+}
+.root:not(.collapsed) .fallbackBrandName { width: 145px; }
+.root:not(.collapsed) .toggle {
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--phoenix-side-outline);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 90%, #fff 10%);
+}
+.root:not(.collapsed) .toggle:hover { border-color: var(--phoenix-side-ember); }
+.root:not(.collapsed) .newSession {
+  justify-content: center;
+  height: 51px;
+  min-height: 51px;
+  margin-bottom: 18px;
+  padding: 0 14px;
+  gap: 11px;
+  border: 1px solid color-mix(in srgb, var(--phoenix-side-ember) 92%, #c33b12 8%);
+  border-radius: 13px;
+  background: var(--phoenix-side-ember);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  box-shadow: 0 6px 14px rgba(211, 98, 32, .11);
+}
+.root:not(.collapsed) .newSession svg { color: #fff; width: 19px; height: 19px; }
+.root:not(.collapsed) .newSession:hover,
+.root:not(.collapsed) .newSession:focus-visible {
+  background: var(--phoenix-side-ember-hover);
+  border-color: var(--phoenix-side-ember-hover);
+}
+.root:not(.collapsed) .primaryNavigation {
+  gap: 3px;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--phoenix-side-outline);
+}
+.root:not(.collapsed) .navLink {
+  height: 45px;
+  gap: 15px;
+  padding-inline: 15px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 450;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+.root:not(.collapsed) .navLink svg { width: 19px; height: 19px; }
+.root:not(.collapsed) .navLink:first-child {
+  color: var(--phoenix-side-ember);
+  background: var(--phoenix-side-peach);
+  font-weight: 600;
+}
+.root:not(.collapsed) .navLink:first-child svg { color: var(--phoenix-side-ember); }
+.root:not(.collapsed) .navLink:not(:first-child):hover,
+.root:not(.collapsed) .navLink:not(:first-child):focus-visible {
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 82%, #ffd5b6 18%);
+}
+.root:not(.collapsed) .regionArea {
+  margin-inline: -6px;
+  padding-inline: 6px;
+}
+.root:not(.collapsed) .footArea {
+  gap: 8px;
+  padding-top: 11px;
+  border-top: 1px solid var(--phoenix-side-outline);
+}
+.root:not(.collapsed) .footerActions:not(:empty) {
+  padding: 9px 10px;
+  border: 1px solid var(--phoenix-side-outline);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 90%, #fff 10%);
+}
+.root:not(.collapsed) .settingsArea { min-height: 40px; }
+.root:not(.collapsed) .settingsArea :global(button) {
+  border-radius: 11px;
+}
+.root:not(.collapsed) .settingsArea :global(button):hover {
+  background: var(--phoenix-side-peach);
+}
+@media (max-height: 850px) {
+  .root:not(.collapsed) { padding-block: 7px; }
+  .root:not(.collapsed) .logoRow { height: 55px; margin-bottom: 7px; }
+  .root:not(.collapsed) .newSession { height: 43px; min-height: 43px; margin-bottom: 10px; }
+  .root:not(.collapsed) .primaryNavigation { gap: 0; margin-bottom: 8px; padding-bottom: 9px; }
+  .root:not(.collapsed) .navLink { height: 36px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .root:not(.collapsed) .navLink { transition: none; }
+}

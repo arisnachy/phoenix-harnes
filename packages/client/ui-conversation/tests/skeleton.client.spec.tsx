@@ -4,7 +4,7 @@
 // owned draft, and the hero workspace picker (switching = retargetWorkspace).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { bindSnapshotSelector } from '@phoenix-ai/dsh-client-test-runtime'
 import {
   createSnapshotStore, EMPTY_CHAT_SNAPSHOT, EMPTY_CONVERSATION_VIEWS,
@@ -261,6 +261,7 @@ function mount(
       )
       : (opts?.fallback ?? null)
   )) as ConversationRootProps['renderSlotChain']
+  const focusSidebar = vi.fn()
   const props: ConversationRootProps = {
     sessionId: SID,
     SessionProvider: ({ children }) => children(SID),
@@ -272,6 +273,7 @@ function mount(
     useUserProfile: bindSnapshotSelector(userProfile),
     useProactivityAttention: bindSnapshotSelector(proactivityAttention),
     recordAttention: async () => {},
+    setSidebarFocus: focusSidebar,
     useInput,
     inputActions,
     renderSlot,
@@ -281,7 +283,7 @@ function mount(
   }
   const view = render(<ConversationRoot {...props} />)
   return {
-    view, chat, sink, retargetWorkspace, session, slotCalls, lineageOwners, seatOwners, open,
+    view, chat, sink, retargetWorkspace, session, slotCalls, lineageOwners, seatOwners, open, focusSidebar,
     pickerOwner: () => pickerOwner,
     rerender: () => { act(() => { for (const listener of viewListeners) listener() }); view.rerender(<ConversationRoot {...props} />) },
   }
@@ -608,5 +610,48 @@ describe('ConversationRoot resident composer', () => {
     }))
     expect(b.view.getByRole('alert').textContent).toContain('Message send failed (offline)')
     expect(b.view.queryByRole('button', { name: 'Retry' })).toBeNull()
+  })
+})
+
+describe('Contextual focus chrome', () => {
+  it('collapses the sidebar only when the user starts typing in the composer', () => {
+    const b = mount(conversationSnapshot())
+    expect(b.focusSidebar).toHaveBeenLastCalledWith(false)
+    const textarea = b.view.container.querySelector('textarea')
+    if (textarea === null) throw new Error('resident composer textarea is required')
+    fireEvent.input(textarea, { target: { value: 'Escribiendo en Phoenix' } })
+    expect(b.focusSidebar).toHaveBeenLastCalledWith(true)
+  })
+
+  it('compacts for visual output and lets an explicit header expansion win', async () => {
+    const b = mount(conversationSnapshot())
+    const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+    if (scroll === null) throw new Error('conversation scroll surface is required')
+    const visual = document.createElement('div')
+    visual.setAttribute('data-phoenix-visual-qa', 'pass')
+    act(() => { scroll.append(visual) })
+    await waitFor(() => {
+      expect(b.view.getByRole('button', { name: 'Expandir barra superior' })).toBeTruthy()
+      expect(b.focusSidebar).toHaveBeenLastCalledWith(true)
+    })
+    fireEvent.click(b.view.getByRole('button', { name: 'Expandir barra superior' }))
+    expect(b.view.getByRole('button', { name: 'Compactar barra superior' })).toBeTruthy()
+    act(() => { visual.remove() })
+    await waitFor(() => { expect(b.focusSidebar).toHaveBeenLastCalledWith(false) })
+    // Removing the auto-focus reason must not discard the user's manual expansion.
+    expect(b.view.getByRole('button', { name: 'Compactar barra superior' })).toBeTruthy()
+  })
+
+  it('keeps browser focus while its content is expanded into a portal', async () => {
+    const b = mount(conversationSnapshot())
+    const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+    if (scroll === null) throw new Error('conversation scroll surface is required')
+    const browser = document.createElement('span')
+    browser.hidden = true
+    browser.setAttribute('data-mini-browser-focus', 'true')
+    act(() => { scroll.append(browser) })
+    await waitFor(() => { expect(b.view.getByRole('button', { name: 'Expandir barra superior' })).toBeTruthy() })
+    act(() => { browser.remove() })
+    await waitFor(() => { expect(b.view.getByRole('button', { name: 'Compactar barra superior' })).toBeTruthy() })
   })
 })

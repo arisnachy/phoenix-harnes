@@ -588,3 +588,71 @@
   text-align: center;
   color: var(--dsw-alias-label-secondary);
 }
+
+/* Visual hierarchy of the approved cream sidebar. Actions and grouped sessions remain live. */
+.root:not(.rail) .sectionHeader {
+  height: 42px;
+  margin: 0 0 8px;
+  padding-left: 4px;
+  padding-right: 0;
+  gap: 3px;
+}
+.root:not(.rail) .sectionLabel {
+  max-width: 72%;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 17px;
+  letter-spacing: .065em;
+  text-transform: uppercase;
+  color: var(--dsw-alias-label-tertiary);
+}
+.root:not(.rail) .headerActions .iconButton,
+.root:not(.rail) .searchButton {
+  width: 31px;
+  height: 31px;
+  border-radius: 10px;
+}
+.root:not(.rail) .headerActions .iconButton:hover,
+.root:not(.rail) .searchButton:hover {
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 77%, #ffdbc0 23%);
+}
+.root:not(.rail) .searchExpanded { border-radius: 11px; }
+.root:not(.rail) .groupSection { margin-bottom: 8px; }
+.root:not(.rail) .groupSection + .groupSection { margin-top: 10px; }
+.root:not(.rail) .list { padding-bottom: 16px; }
+.recentHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+  height: 36px;
+  margin: 9px 1px 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.recentHeader button {
+  border: none;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  padding: 6px 4px;
+  border-radius: 8px;
+}
+.recentHeader button:hover,
+.recentHeader button:focus-visible {
+  color: #e76020;
+  background: color-mix(in srgb, var(--dsw-specific-sidebar-fill) 80%, #ffd9bc 20%);
+}
+@media (max-height: 850px) {
+  .root:not(.rail) .sectionHeader { height: 36px; margin-bottom: 4px; }
+  .recentHeader { height: 28px; margin-top: 5px; }
+}

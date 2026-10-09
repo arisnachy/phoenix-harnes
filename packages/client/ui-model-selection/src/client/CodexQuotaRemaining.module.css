@@ -164,3 +164,41 @@
     transition: color 180ms ease-out;
   }
 }
+
+/* Sidebar premium quota meters: compact circular indicators inside the
+   separated quota card. Percentages remain real native Codex telemetry. */
+.root {
+  width: 100%;
+  max-width: none;
+  justify-content: space-between;
+  margin-left: 0;
+  gap: 8px;
+  height: auto;
+  min-height: 40px;
+}
+.window { gap: 6px; grid-template-columns: 38px minmax(0, 1fr); }
+.window + .window { padding-left: 8px; }
+.meter {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: conic-gradient(#e98732 var(--quota-progress), color-mix(in srgb, var(--dsw-alias-border-l2) 74%, #f6d8bf 26%) 0);
+}
+.meter::before {
+  position: absolute;
+  inset: 5px;
+  content: '';
+  border-radius: 50%;
+  background: var(--dsw-specific-sidebar-fill);
+}
+.value { position: relative; z-index: 1; font-size: 10px; color: var(--dsw-alias-label-primary); }
+.label { font-size: 11px; }
+.reset { font-size: 9px; }
+@media (max-width: 380px) {
+  .window { grid-template-columns: 32px minmax(0, 1fr); gap: 4px; }
+  .meter { width: 32px; height: 32px; }
+  .value { font-size: 9px; }
+}

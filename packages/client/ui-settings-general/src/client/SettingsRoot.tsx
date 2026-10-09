@@ -186,11 +186,9 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
   return (
     <>
       <div className={clsx(css.triggerStack, !wide && css.triggerStackRail)}>
-        {!wide && (
-          <div className={css.railStatus}>
-            {renderSlot('settings.trigger.trailing', { wide })}
-          </div>
-        )}
+        <div className={wide ? css.wideQuotaPanel : css.railStatus}>
+          {renderSlot('settings.trigger.trailing', { wide })}
+        </div>
         <button
           type="button"
           className={clsx(css.trigger, !wide && css.rail)}
@@ -199,7 +197,6 @@ export function SettingsRoot(props: SettingsRootComponentProps) {
           onClick={() => { setFocus(undefined); setActiveId(undefined); setOpen(true) }}
         >
           {renderSlot('settings.trigger', { wide })}
-          {wide && renderSlot('settings.trigger.trailing', { wide })}
         </button>
       </div>
       {open && (
