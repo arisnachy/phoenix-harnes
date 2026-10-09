@@ -46,6 +46,18 @@ describe('managed MCP preboot migration', () => {
     expect(readFileSync(file, 'utf8')).toBe(first)
   })
 
+  it('upgrades curated GitHub OAuth DCR to a vault PAT reference', async () => {
+    const row = { id: 'github', name: '@phoenix-ai/dsh-mcp-client', inject: [...inject],
+      config: { transport: 'streamable-http', serverName: 'github',
+        url: 'https://api.githubcopilot.com/mcp/', oauth: true, headers: {} },
+      source: { kind: 'curated', connectorId: 'github' } }
+    const file = patch([{ insert: [row] }])
+    expect(await repairManagedMcpDependenciesBeforeBoot(file)).toBe(1)
+    const config = JSON.parse(readFileSync(file, 'utf8'))[0].insert[0].config
+    expect(config).toMatchObject({ oauth: false, bearerTokenRef: 'GITHUB_MCP_TOKEN' })
+    expect(await repairManagedMcpDependenciesBeforeBoot(file)).toBe(0)
+  })
+
   it('also upgrades old managed stdio connectors before loader startup', async () => {
     const file = patch([{ insert: [{ name: '@phoenix-ai/dsh-mcp-client',
       id: 'filesystem', config: { transport: 'stdio', serverName: 'filesystem' } }] }])
