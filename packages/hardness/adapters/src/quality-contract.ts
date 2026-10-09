@@ -27,6 +27,9 @@ const RESEARCH_REQUIREMENTS = [
   'Material factual claims are traceable to appropriate sources, citations, or directly inspectable evidence.',
   'Unsupported claims, source contradictions, uncertainty, and material factual gaps are identified rather than presented as established fact.',
   'The reasoning and document structure are complete enough that a reviewer can follow how the evidence supports the conclusions.',
+  'When current public primary sources are reachable, verify consequential facts by opening original pages or documents, not just reading third-party search snippets; never fabricate browsing success or a citation.',
+  'Differentiate study design, sample size, publication date, evidence strength, conflicts of interest, and limitations when these materially affect interpretation.',
+  'Do not repeat substantially identical searches or delegate duplicate source reviews after evidence is sufficient; report unavailable access and the remaining uncertainty explicitly.',
 ] as const
 
 const DATA_REQUIREMENTS = [
@@ -169,7 +172,8 @@ export function qualityRequirementsForNeed(need: unknown): readonly string[] {
   if (matches(text, /\b(?:ui|ux|visual|interface|dashboard|frontend|website|layout|responsive|design|presentation|slide)\b/u)) {
     requirements.push(...UI_REQUIREMENTS)
   }
-  if (matches(text, /\b(?:research|report|document|paper|literature|evidence|review|study|citation|source)\b/u)) {
+  if (matches(text, /\b(?:research|report|document|paper|literature|evidence|review|study|citation|source)\b/u)
+    || matches(text, /(?:^|[^\p{L}])(?:investigaci[oó]n|investigaciones|investiga(?:r)?|estudios?|evidencias?|fuentes?|citas?|art[ií]culos?|informes?|contrastar)(?=$|[^\p{L}])/u)) {
     requirements.push(...RESEARCH_REQUIREMENTS)
   }
   if (matches(text, /\b(?:analysis|analyze|analytics|data|dataset|spreadsheet|statistics|statistical|table|csv)\b/u)) {
