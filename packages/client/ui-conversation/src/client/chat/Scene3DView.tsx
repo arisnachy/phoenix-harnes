@@ -180,11 +180,22 @@ function shade(value:string, factor:number):string {
 }
 function sceneBounds(scene:Scene3D): {center:Vec3; radius:number} {
   const mins:Vec3=[Infinity,Infinity,Infinity], maxs:Vec3=[-Infinity,-Infinity,-Infinity]
-  for(const node of scene.nodes) for(let axis=0;axis<3;axis++){
-    const pos=node.position[axis]!,size=node.size[axis]!
-    mins[axis]=Math.min(mins[axis]!,pos-size/2)
-    maxs[axis]=Math.max(maxs[axis]!,pos+size/2)
+  for(const node of scene.nodes){
+    if(node.hidden===true)continue
+    if(node.type==='mesh'&&node.vertices!==undefined){
+      for(let i=0;i<node.vertices.length;i+=3){
+        const p=transform([node.vertices[i]!,node.vertices[i+1]!,node.vertices[i+2]!],node)
+        for(let axis=0;axis<3;axis++){mins[axis]=Math.min(mins[axis]!,p[axis]!);maxs[axis]=Math.max(maxs[axis]!,p[axis]!)}
+      }
+    }else{
+      for(let axis=0;axis<3;axis++){
+        const pos=node.position[axis]!,size=node.size[axis]!
+        mins[axis]=Math.min(mins[axis]!,pos-size/2)
+        maxs[axis]=Math.max(maxs[axis]!,pos+size/2)
+      }
+    }
   }
+  if(!Number.isFinite(mins[0]!))return {center:[0,0,0],radius:2}
   const center:Vec3=[(mins[0]+maxs[0])/2,(mins[1]+maxs[1])/2,(mins[2]+maxs[2])/2]
   return {center,radius:Math.max(2,Math.hypot(maxs[0]-mins[0],maxs[1]-mins[1],maxs[2]-mins[2])*.62)}
 }
