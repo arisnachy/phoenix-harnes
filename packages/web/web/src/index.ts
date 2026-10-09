@@ -147,18 +147,24 @@ export class WebRuntime extends Service {
   async search(request: WebSearchRequest, signal?: AbortSignal): Promise<WebSearchResult> {
     const providers = resolveSearchProviders(this.searchProviders, this.searchProviderId, this.searchFallbackProviderIds)
     let lastRecoverable: unknown
+    let skipped = 0
     for (const provider of providers) {
       if (signal?.aborted === true) throw signal.reason ?? new WebError('web search was aborted', 'WEB_SEARCH_ABORTED')
+      const retryAt = this.searchCooldownUntil.get(provider.id) ?? 0
+      if (retryAt > Date.now()) { skipped++; continue }
+      this.searchCooldownUntil.delete(provider.id)
       try {
         const result = await provider.search(request, signal)
         return capSources(result, request.maxResults)
       } catch (error) {
+        if (signal?.aborted === true) throw signal.reason ?? error
         if (!isRecoverableSearchError(error)) throw error
         lastRecoverable = error
+        this.searchCooldownUntil.set(provider.id, Date.now() + WebRuntime.SEARCH_COOLDOWN_MS)
       }
     }
     throw new WebError(
-      `all configured web search providers failed recoverably: ${providers.map(provider => provider.id).join(', ')}`,
+      `web search temporarily unavailable: ${providers.map(provider => provider.id).join(', ')} (${skipped} on cooldown). Do not retry immediately. Try one approved direct-source web_fetch/browser route and report unverified facts.`,
       'WEB_PROVIDER_FALLBACK_EXHAUSTED',
       { cause: lastRecoverable },
     )
