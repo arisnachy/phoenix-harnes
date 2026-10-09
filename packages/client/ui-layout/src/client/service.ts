@@ -20,6 +20,8 @@ export interface WorkspaceOccupancy {
 export interface ILayout {
   /** Toggle the sidebar panel. */
   toggleSidebar(): void
+  /** Contextual focus borrows the navigation rail, subject to manual overrides. */
+  setSidebarFocus(active: boolean): void
   /** Open the details/right-side panel. */
   openDetails(): void
   /** Close the details panel unless a visual workspace still owns it. */
@@ -56,6 +58,11 @@ export class LayoutController implements ILayout {
   /** Toggle the sidebar panel. */
   toggleSidebar(): void {
     this.#require().toggleSidebar()
+  }
+
+  /** Stable callback prevents reactive focus oscillation across keystrokes. */
+  readonly setSidebarFocus = (active: boolean): void => {
+    this.#require().setSidebarFocus(active)
   }
 
   /** Open the details panel. */
