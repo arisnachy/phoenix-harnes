@@ -126,6 +126,7 @@ export type CuratedMcpConnectorId =
   | 'supabase'
   | 'heygen'
   | 'figma'
+  | 'github'
   | 'vercel'
   | 'notion'
   | 'linear'
@@ -298,7 +299,7 @@ export interface OpenClawConnectorEntry {
   readonly runtimeAvailable: boolean
   readonly connected: boolean
   readonly account?: string
-  readonly phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill'
+  readonly phase: 'ready' | 'auth-required' | 'missing-runtime' | 'missing-skill' | 'api-unavailable'
 }
 
 /** Current OpenClaw connector readiness projected to Settings. */
