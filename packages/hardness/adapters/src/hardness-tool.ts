@@ -136,7 +136,11 @@ function executionContext(exec: { readonly callId: CapabilityExecutionContext['c
 export function createHardnessTool(runner: HardnessMissionRunner): ToolDefinition {
   return defineTool({
     name: 'hardness_run',
-    description: 'Run one governed HARDNESS capability mission. ACTIVE repair_and_replan may continue with new evidence. WAITING_EXTERNAL or exhausted RECOVERING are terminal for this attempt: report the blocker and stop; do not retry until a user request or new dependency changes the situation.',
+    description:
+      'Run one governed HARDNESS capability mission. ' +
+      'ACTIVE repair_and_replan may continue with new evidence. ' +
+      'WAITING_EXTERNAL or exhausted RECOVERING are terminal for this attempt: ' +
+      'report the blocker and stop; do not retry until a user request or new dependency changes the situation.',
     parameters: {
       need: {
         type: 'object',
