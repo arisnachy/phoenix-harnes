@@ -34,8 +34,11 @@ function validSnapshot(value: unknown): value is Snapshot {
   const x = value as Partial<Snapshot>
   return typeof x.available === 'boolean' && Array.isArray(x.tabs)
 }
-async function inspect(signal?: AbortSignal): Promise<Snapshot> {
-  const response = await fetch(API + '/state', { headers: HEADERS, ...(signal === undefined ? {} : { signal }), cache: 'no-store' })
+function tabHeaders(tabId?: string): Record<string, string> {
+  return tabId === undefined ? HEADERS : { ...HEADERS, 'x-phoenix-mini-browser-tab': tabId }
+}
+async function inspect(signal?: AbortSignal, tabId?: string): Promise<Snapshot> {
+  const response = await fetch(API + '/state', { headers: tabHeaders(tabId), ...(signal === undefined ? {} : { signal }), cache: 'no-store' })
   const data: unknown = await decode<unknown>(response)
   if (!validSnapshot(data)) throw new Error('Estado de Chromium no válido.')
   return data
@@ -73,9 +76,10 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser({ requested = false, active = true, onActivate }: {
+export function MiniBrowser({ requested = false, active = true, tabId, onActivate }: {
   requested?: boolean
   active?: boolean
+  tabId?: string | undefined
   onActivate?: () => void
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
@@ -99,8 +103,11 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
   const frameRef = useRef<string | undefined>(undefined)
   // Each card is bound to the Chromium target it originally displayed.
   // New browser requests never overwrite prior cards with the latest page.
-  const cardTabId = useRef<string | undefined>(undefined)
+  const cardTabId = useRef<string | undefined>(tabId)
   const previousActive = useRef(active)
+  // Do not misrepresent the previous global CDP tab as the page Kira is
+  // opening now. An unacknowledged request stays visibly pending.
+  const awaitingReceipt = requested && !enabled && tabId === undefined && cardTabId.current === undefined
   const show = !dismissed && (requested || enabled || (snapshot.available && snapshot.url !== undefined && snapshot.url !== 'about:blank'))
   const videoId = youtubeId(snapshot.url)
 
@@ -133,7 +140,19 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
   }, [])
 
   useEffect(() => {
-    if (!active || dismissed) return
+    if (tabId === undefined || cardTabId.current === tabId) return
+    cardTabId.current = tabId
+    // One card can navigate more than once per turn. A failed capture of the
+    // new target must never leave the old target's screenshot on screen.
+    if (frameRef.current !== undefined) URL.revokeObjectURL(frameRef.current)
+    frameRef.current = undefined
+    setFrame(undefined)
+    setSnapshot(BLANK)
+    setCaptureError(undefined)
+  }, [tabId])
+
+  useEffect(() => {
+    if (!active || dismissed || awaitingReceipt) return
     mounted.current = true
     const first = new AbortController()
     const selection = !previousActive.current && cardTabId.current !== undefined
@@ -146,8 +165,8 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
       try {
         await selection
         if (first.signal.aborted) return
-        const state = await inspect(first.signal)
-        if (first.signal.aborted) return
+        const state = await inspect(first.signal, cardTabId.current)
+        first.signal.throwIfAborted()
         setConnectionError(undefined)
         if (state.tabId !== undefined) cardTabId.current = state.tabId
         setSnapshot(state)
@@ -165,7 +184,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
       first.abort()
       window.clearInterval(timer)
     }
-  }, [active, dismissed])
+  }, [active, dismissed, awaitingReceipt, tabId])
 
   useEffect(() => {
     if (!active || !show || !snapshot.available || collapsed || playingVideo) return
@@ -174,7 +193,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
       if (busy.current) return
       busy.current = true
       try {
-        const response = await fetch(API + '/frame', { headers: HEADERS, cache: 'no-store' })
+        const response = await fetch(API + '/frame', { headers: tabHeaders(cardTabId.current), cache: 'no-store' })
         if (!response.ok) throw new Error('La imagen de la página no está disponible.')
         const blob = await response.blob()
         if (stopped || !mounted.current) return
@@ -305,7 +324,8 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
           <div className={css.empty}>
             <p>{connectionError
               ? 'Phoenix todavía no ha conectado la vista del navegador. Puedes reintentar sin salir del chat.'
-              : 'Chrome real dentro de la conversación. Kira y tú utilizáis las mismas pestañas.'}</p>
+              : awaitingReceipt ? 'Esperando el identificador de pestaña de una navegación real de Kira. No se mostrará otra página como si fuera la solicitada.'
+                : 'Chrome real dentro de la conversación. Kira y tú utilizáis las mismas pestañas.'}</p>
             <button type="button" onClick={() => { void run({ type: 'start' }) }}>Conectar navegador</button>
           </div>
         )}

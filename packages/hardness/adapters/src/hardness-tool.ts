@@ -97,7 +97,7 @@ function projectMissionResult(result: HardnessMissionResult): HardnessToolResult
   }
 }
 
-/** Keep a blocked mission visible as recovery work in the next model request. */
+/** Only actionable judge repairs may ask the model to continue this mission. */
 function deferMissionRecovery(exec: ToolRunContext, value: Extract<HardnessToolResult, { kind: 'blocked' }>): void {
   exec.deferContext(createUserMessage({
     content: [{
@@ -136,7 +136,12 @@ function executionContext(exec: { readonly callId: CapabilityExecutionContext['c
 export function createHardnessTool(runner: HardnessMissionRunner): ToolDefinition {
   return defineTool({
     name: 'hardness_run',
-    description: 'Run one governed HARDNESS capability mission. A blocked result is non-terminal: read mission_status and next_action, apply WALL_PROTOCOL, and continue until the final deliverable is independently verified by the judge or the user explicitly cancels.',
+    description:
+      'Run one governed HARDNESS capability mission. ' +
+      'Inspect mission_status and next_action before recovery. ' +
+      'ACTIVE repair_and_replan may continue with new evidence. ' +
+      'WAITING_EXTERNAL or exhausted RECOVERING are terminal for this attempt: ' +
+      'report the blocker and stop; do not retry until a user request or new dependency changes the situation.',
     parameters: {
       need: {
         type: 'object',
@@ -193,7 +198,13 @@ export function createHardnessTool(runner: HardnessMissionRunner): ToolDefinitio
       // Kira or the user cancelled the owning turn.
       exec.signal.throwIfAborted()
       const projected = projectMissionResult(result)
-      if (projected.kind === 'blocked') deferMissionRecovery(exec, projected)
+      // The runner has already exhausted bounded alternate providers.
+      // WAITING_EXTERNAL (permission/CAPTCHA/offline) and exhausted RECOVERING
+      // must not enqueue the very same mission again. This also prevents
+      // HARDNESS from reviving a completed Kira turn after a browser blocker.
+      if (projected.kind === 'blocked'
+        && projected.mission_status === 'ACTIVE'
+        && projected.next_action === 'repair_and_replan') deferMissionRecovery(exec, projected)
       return projected
     },
     presentCall(args) {
