@@ -57,10 +57,6 @@ export class FreeSearchProvider implements WebSearchProvider {
         continue
       }
       const html = await response.text()
-      if (SEARCH_CHALLENGE.test(html)) {
-        this.blockedUntil.set(engine, Date.now() + ENGINE_COOLDOWN_MS)
-        continue
-      }
       const sources = engine === 'bing' ? parseBing(html) : parseDuckDuckGo(html)
       if (sources.length > 0) {
         this.blockedUntil.delete(engine)
@@ -69,6 +65,8 @@ export class FreeSearchProvider implements WebSearchProvider {
           truncated: request.maxResults !== undefined && sources.length > request.maxResults,
         }
       }
+      // Only classify a challenge when there are no genuine search-result links.
+      if (SEARCH_CHALLENGE.test(html)) this.blockedUntil.set(engine, Date.now() + ENGINE_COOLDOWN_MS)
     }
     throw new WebError('no free search engine returned results', 'WEB_PROVIDER_TRANSIENT')
   }
