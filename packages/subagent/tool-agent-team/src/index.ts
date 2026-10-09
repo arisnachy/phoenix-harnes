@@ -254,7 +254,7 @@ function installChatTools(agent: Agent, ctx: Context): () => void {
     })))
     register(scoped.tools.register(defineTool({
       name: 'team_chat_answer',
-      description: 'Answer a conversational user request addressed to you using its delivered Team-user message id, then continue your existing mission. Does not complete a task or replace operational execution evidence.',
+      description: 'Answer the addressed user naturally in that user\'s conversation language using its delivered Team-user message id, then continue the mission. Does not replace execution evidence.',
       parameters: { message_id: { type: 'string', required: true }, text: { type: 'string', required: true } },
       output: jsonOutput({ type: 'object', additionalProperties: false, properties: { message_id: { type: 'string', required: true } } }),
       async execute(args, exec) {
@@ -419,7 +419,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
             enum: ['assignment', 'question', 'blocker', 'result', 'review', 'decision', 'update'],
             description: 'Operational purpose. Use blocker only for a real obstacle that needs the Lead to change strategy.',
           },
-          message: { type: 'string', required: true, description: 'Self-contained message for the target.' },
+          message: { type: 'string', required: true, description: 'Self-contained message for the target in the current user conversational language; preserve exact code and error strings.' },
         },
         output: jsonOutput(SEND_VALUE_SCHEMA),
         execute(args, exec) {
