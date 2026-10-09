@@ -278,7 +278,10 @@ export function useAuthorizationAttempt(
     // Reset preparation without opening an empty tab.
     if (method === 'oauth') reserveOAuthPopup()
     else closeReservedPopup()
-    void api.begin({ key, method }).then((response) => {
+    // The begin RPC only creates a Host attempt and must return immediately.
+    // Apply a network-level deadline independent of throttled UI timer callbacks.
+    // Consent itself remains user-paced through status/answer and is not aborted.
+    void api.begin({ key, method }, AbortSignal.timeout(12_000)).then((response) => {
       if (beginSequenceRef.current !== beginSequence || pendingBeginTimerRef.current === undefined) {
         if (response.result.ok) void api.cancel({ attemptId: response.result.value.attemptId }).catch(() => undefined)
         return
