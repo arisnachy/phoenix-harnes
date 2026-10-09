@@ -58,8 +58,8 @@ function measuredCapability(
   const medianPassedMs = times.length === 0
     ? Number.POSITIVE_INFINITY
     : times.length % 2 === 1
-      ? times[middle]!
-      : (times[middle - 1]! + times[middle]!) / 2
+      ? (times[middle] ?? Number.POSITIVE_INFINITY)
+      : ((times[middle - 1] ?? 0) + (times[middle] ?? 0)) / 2
   return { successRate: passed.length / observations.length, medianPassedMs }
 }
 
@@ -71,6 +71,7 @@ function measuredCapability(
  * @param descriptors - immutable capability descriptors considered for resolution.
  * @param need - declarative capability requirements.
  * @param context - ambient permission facts available to the resolver.
+ * @param evidence - independent current-version verification receipts for reliable routing.
  * @returns explicit have, missing, or unknown capability resolution.
  */
 export function resolveCapabilityNeed(
