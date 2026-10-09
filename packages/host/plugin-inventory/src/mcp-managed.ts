@@ -105,6 +105,8 @@ export const GITHUB_MCP_TOKEN_REF = 'GITHUB_MCP_TOKEN'
 export const META_DEVTOOLS_MCP_URL = 'https://mcp.facebook.com/devtools'
 /** Official WhatsApp Business Tools hosted MCP; not consumer WhatsApp. */
 export const META_WHATSAPP_BUSINESS_MCP_URL = 'https://mcp.facebook.com/whatsapp_business_tools'
+/** Public read-only, credential-free Microsoft Learn documentation MCP endpoint. */
+export const MICROSOFT_LEARN_MCP_URL = 'https://learn.microsoft.com/api/mcp'
 /** Official Vercel remote MCP endpoint. */
 export const VERCEL_MCP_URL = 'https://mcp.vercel.com'
 /** Official Notion remote MCP endpoint. */
@@ -229,6 +231,11 @@ function githubMcpConfig(): ManagedStreamableHttpMcpConfig {
   }
 }
 
+/** Public Microsoft Learn Docs MCP: no token, no OAuth and no private M365 data. */
+function microsoftLearnMcpConfig(): ManagedStreamableHttpMcpConfig {
+  return { ...remoteOauthMcpConfig('microsoft-learn', MICROSOFT_LEARN_MCP_URL), oauth: false }
+}
+
 function slackMcpConfig(): ManagedStreamableHttpMcpConfig {
   return {
     ...remoteOauthMcpConfig('slack', SLACK_MCP_URL),
@@ -319,6 +326,9 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
   github: { label: 'GitHub repositories', config: githubMcpConfig },
   'meta-devtools': { label: 'Meta Social Technologies', config: () => remoteOauthMcpConfig('meta-devtools', META_DEVTOOLS_MCP_URL) },
   'meta-whatsapp-business': { label: 'WhatsApp Business Tools', config: () => remoteOauthMcpConfig('meta-whatsapp-business', META_WHATSAPP_BUSINESS_MCP_URL) },
+  'microsoft-learn': { label: 'Microsoft Learn Docs', config: microsoftLearnMcpConfig },
+  'microsoft-workiq': { label: 'Microsoft Work IQ (metered)', config: () => localNpxMcpConfig('microsoft-workiq', '@microsoft/workiq', ['mcp']) },
+  'microsoft-azure': { label: 'Microsoft Azure MCP (metered resources)', config: () => localNpxMcpConfig('microsoft-azure', '@azure/mcp@latest', ['server', 'start', '--mode', 'consolidated']) },
   vercel: { label: 'Vercel', config: () => remoteOauthMcpConfig('vercel', VERCEL_MCP_URL) },
   notion: { label: 'Notion', config: () => remoteOauthMcpConfig('notion', NOTION_MCP_URL) },
   linear: { label: 'Linear', config: () => remoteOauthMcpConfig('linear', LINEAR_MCP_URL) },
@@ -456,6 +466,7 @@ function validHttpConfig(value: Record<string, unknown>): boolean {
   // PAT migration persisted oauth:false and bearerTokenRef:GITHUB_MCP_TOKEN.
   // Reject any other bearer ref, arbitrary URL, headers, or extra OAuth fields.
   if (exactJson(value, githubMcpConfig())) return true
+  if (exactJson(value, microsoftLearnMcpConfig())) return true
 
   // Slack is the one curated confidential OAuth client. Its references and
   // fixed callback are admitted only as one exact Host-owned configuration.
