@@ -526,3 +526,36 @@
  .card .bubble { padding:9px 12px 12px; }
  .card .bubble :global(.markdown) { font-size:14px; line-height:1.55; }
 }
+
+/* A conversational team thread, not giant repeated dashboard cards. */
+.row:not([data-team-sender-kind='user']) { gap: 7px; padding: 3px 0 5px; }
+.row:not([data-team-sender-kind='user']) .avatar {
+  width: 38px; height: 38px; margin: 3px 0 0;
+}
+.row:not([data-team-sender-kind='user']) .column {
+  flex: 0 1 auto; max-width: min(700px, calc(100% - 52px));
+}
+.card { border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.card .meta {
+  min-height: 0; padding: 2px 4px 6px; gap: 7px;
+  border: 0; border-radius: 0; background: transparent;
+}
+.card .meta strong { font-size: 13px; }
+.card .bubble {
+  padding: 9px 13px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 72%, transparent);
+  border-radius: 4px 14px 14px 14px;
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-2) 73%, var(--dsw-alias-bg-layer-1));
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 5%, transparent);
+}
+.card .bubble :global(.markdown) { font-size: 14px; line-height: 1.55; }
+.row[data-team-sender-kind='kira'] .card .bubble {
+  background: color-mix(in srgb, var(--dsw-alias-bg-layer-3) 30%, var(--dsw-alias-bg-layer-1));
+}
+.card + .messageActions { margin-top: 1px; padding-left: 2px; }
+@media (max-width: 620px) {
+  .row:not([data-team-sender-kind='user']) .avatar { width: 34px; height: 34px; margin: 2px 0 0; }
+  .row:not([data-team-sender-kind='user']) .column { max-width: calc(100% - 43px); }
+  .card .meta { min-height: 0; padding: 2px 4px 5px; }
+  .card .bubble { padding: 8px 11px; }
+}

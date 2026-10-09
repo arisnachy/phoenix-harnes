@@ -56,6 +56,27 @@ function answerNeedsEvidence(text: string): boolean {
     .some(clause => !conditional.test(clause) && (passive.test(clause) || status.test(clause.trim())))
 }
 
+/**
+ * Keep one genuine opening action, then only a new tool-backed milestone or
+ * actionable question/blocker. Redundant status narration is still in child
+ * Session history but does not clutter the human Team conversation.
+ * @param message - Actual teammate assistant text.
+ * @param alreadySpoke - Whether that teammate spoke visibly in this turn.
+ * @param newReceipt - Whether a non-Team tool succeeded since visible speech.
+ * @returns True for consequential dialogue, false for redundant chatter.
+ */
+export function shouldPublishTeammateSpeech(message: string, alreadySpoke: boolean, newReceipt: boolean): boolean {
+  const text = message.trim()
+  if (!text) return false
+  if (!alreadySpoke) return true
+  const needsHelp = /[?]|bloquead[oa]|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|approval/iu
+  if (needsHelp.test(text)) return true
+  if (!newReceipt) return false
+  const heading = /^(?:@?Kira[,!:]?\s*)?(?:ahora |luego |despu[eé]s |next |now )*/iu
+  const plan = /^(?:voy a|proceder[eé] a|har[eé]|buscar[eé]|comprobar[eé]|verificar[eé]|revisar[eé]|abrir[eé]|i'll|i will|i am going to|i'm going to)\b/iu
+  return !plan.test(text.replace(heading, ''))
+}
+
 /** Owns actual output publication and authorized reaction mutations. */
 export class TeamChat {
   private readonly backfilled = new WeakSet<Session>()
@@ -219,10 +240,23 @@ export class TeamChat {
         : end?.type === 'turn/start' ? 'working' : prior !== undefined ? prior.status : 'working'
       const person = this.participant(root, header, events, status)
       const resultCallIds = new Set<string>()
+      const workCallIds = new Set<string>()
       let handedOffResult = false
+      let alreadySpoke = false
+      let newReceipt = false
       for (const event of events) {
         if (event.seq < (header.seedLength ?? 0)) continue
-        if (event.type === 'turn/start') handedOffResult = false
+        if (event.type === 'turn/start') {
+          handedOffResult = false
+          alreadySpoke = false
+          newReceipt = false
+        }
+        if (event.type === 'tool/call'
+          && event.data.name !== 'send_message' && event.data.name !== 'followup_task'
+          && event.data.name !== 'team_chat_react' && event.data.name !== 'team_task_update'
+          && event.data.name !== 'wait_agent' && event.data.name !== 'list_agents') {
+          workCallIds.add(event.data.callId)
+        }
         if (event.type === 'tool/call'
           && (event.data.name === 'send_message' || event.data.name === 'followup_task')) {
           try {
@@ -233,11 +267,13 @@ export class TeamChat {
             }
           } catch { /* Invalid tool arguments cannot establish a successful handoff. */ }
         }
-        if (event.type === 'tool/result' && event.data.message.source.kind === 'tool') {
+        if (event.type === 'tool/result') {
           const callId = event.data.message.source.callId
-          if (resultCallIds.has(callId) && event.data.message.content.some(
-            block => block.type === 'tool-result' && block.toolCallId === callId && !block.isError,
-          )) handedOffResult = true
+          const succeeded = event.data.message.content.some(
+            block => block.toolCallId === callId && !block.isError,
+          )
+          if (resultCallIds.has(callId) && succeeded) handedOffResult = true
+          else if (succeeded && workCallIds.has(callId)) newReceipt = true
         }
         if (event.type !== 'assistant/message' || !isAppendSurfaceEvent(event)) continue
         // The peer result is already a real visible Astra -> Kira message.
@@ -249,7 +285,12 @@ export class TeamChat {
           && rootBoundary.data.reason.reason.kind === 'user') continue
         const id = `${header.id}:${event.data.message.id}`
         const text = textOf(event.data.message.content)
-        if (known.has(id) || text.trim() === '') continue
+        if (known.has(id)) {
+          alreadySpoke = true
+          newReceipt = false
+          continue
+        }
+        if (!shouldPublishTeammateSpeech(text, alreadySpoke, newReceipt)) continue
         const proof = teamExecutionProof(events, { upToSeq: event.seq })
         // Genuine work-in-progress and blockers belong in the shared chat even
         // before a tool succeeds. Completion claims remain receipt-gated:
@@ -260,9 +301,13 @@ export class TeamChat {
         const bounded = boundedTranscriptText(text, this.maxBytes)
         root.append('team/chat-message', { version: 1, message: { id, senderId: header.id,
           senderName: person.name, senderKind: 'agent', avatar: person.avatar, role: person.role, missionId: root.id, text: bounded,
-          ...(/^@?Kira[,!:]\s/iu.test(bounded) ? { targetId: root.id, mentions: [root.id] } : { mentions: [] }),
+          // Every direct child speech event belongs to the real root mission.
+          // Show Kira as recipient even if the specialist doesn't say her name.
+          targetId: root.id, mentions: [root.id],
           time: event.time, sourceSeq: event.seq, reactions: [] } })
         known.add(id)
+        alreadySpoke = true
+        newReceipt = false
       }
       await this.ctx.sessions.flush(root)
     })
