@@ -84,7 +84,6 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
   const [playingVideo, setPlayingVideo] = useState(false)
   const [frame, setFrame] = useState<string>()
   const [error, setError] = useState<string>()
-  const [supported, setSupported] = useState(false)
   const [connectionError, setConnectionError] = useState<string>()
   const [captureError, setCaptureError] = useState<string>()
   const focusRef = useRef<HTMLImageElement>(null)
@@ -127,7 +126,6 @@ export function MiniBrowser({ requested = false }: { requested?: boolean }) {
       try {
         const state = await inspect(first.signal)
         if (stopped) return
-        setSupported(true)
         setConnectionError(undefined)
         setSnapshot(state)
       } catch (reason) {
