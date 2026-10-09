@@ -1,5 +1,7 @@
 # Phoenix research-quality benchmark
 
+English | [中文](README.zh.md)
+
 **This suite is a reproducible audit, not proof that an LLM is already accurate or fast.**
 The checked-in cases are deliberately **synthetic** so that automated tests
 are deterministic, keyless and don't pretend to be real-world current news.
