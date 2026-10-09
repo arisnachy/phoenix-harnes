@@ -30,8 +30,9 @@ function sharedSession(): SharedSession | undefined {
   } catch { return undefined }
 }
 function announceSession(base: string, tabId?: string): void {
-  const pid = managedBrowser?.pid ?? sharedSession()?.pid
-  if (!pid) return
+  // External Chrome/Edge CDP sessions have no managed browser child PID.
+  // The live MCP connector owns their shared tab descriptor until shutdown.
+  const pid = managedBrowser?.pid ?? sharedSession()?.pid ?? process.pid
   try {
     writeFileSync(SHARED_BROWSER, JSON.stringify({
       pid, endpoint: base.replace(/\/$/, '') + '/',
@@ -39,6 +40,12 @@ function announceSession(base: string, tabId?: string): void {
     }), { mode: 0o600 })
   } catch { /* An inaccessible descriptor must never block browser tools. */ }
 }
+process.once('exit', () => {
+  // Do not leave a stale pointer to an external Chrome tab when this MCP dies.
+  if (sharedSession()?.pid === process.pid) {
+    try { rmSync(SHARED_BROWSER, { force: true }) } catch { /* best effort */ }
+  }
+})
 const CDP_READY_TIMEOUT_MS = 6_000
 let managedBrowser: ChildProcess | undefined
 let managedProfileDir: string | undefined
