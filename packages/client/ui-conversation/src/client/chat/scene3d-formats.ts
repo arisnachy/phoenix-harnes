@@ -92,7 +92,7 @@ function objectMaterial(node:Node):R{
     mat.extensions={KHR_materials_transmission:{transmissionFactor:material!.transmission}}
   }
   if((material?.clearcoat??0)>0){
-    mat.extensions={...mat.extensions as R,KHR_materials_clearcoat:{clearcoatFactor:material!.clearcoat}}
+    mat.extensions={...(mat.extensions as R|undefined),KHR_materials_clearcoat:{clearcoatFactor:material!.clearcoat}}
   }
   return mat
 }
@@ -111,9 +111,10 @@ function buildDocument(scene:Scene3D):{json:R;binary:Uint8Array}{
     const floats=new Float32Array(v)
     const view=append(new Uint8Array(floats.buffer),34962)
     const index=accessors.length
-    const bounds= [0,1,2].map(axis=>v.filter((_,i)=>i%size===axis))
+    const lows=[Infinity,Infinity,Infinity],highs=[-Infinity,-Infinity,-Infinity]
+    for(let i=0;i<v.length;i++){const axis=i%3; lows[axis]=Math.min(lows[axis]!,v[i]!);highs[axis]=Math.max(highs[axis]!,v[i]!)}
     accessors.push({bufferView:view,componentType:5126,count:v.length/size,type,
-      min:bounds.map(b=>Math.min(...b)),max:bounds.map(b=>Math.max(...b))})
+      min:lows,max:highs})
     return index
   }
   for(const node of scene.nodes){
