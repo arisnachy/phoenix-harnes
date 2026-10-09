@@ -381,6 +381,17 @@ describe('unary round trip', () => {
     await expect(never.sessions.list({})).rejects.toThrow()
   })
 
+  it('bounds authorization.begin even when the Host never acknowledges the request', async () => {
+    // The user-paced OAuth redirect/callback remains asynchronous, but the
+    // initial Host attempt creation is a regular bounded unary RPC.
+    const hung = new InProcessApiClient({
+      fetch: () => new Promise<Response>(() => undefined),
+    }, 25)
+    await expect(hung.authorization.begin({
+      key: 'mcp-client/notion', method: 'oauth',
+    })).rejects.toThrow()
+  })
+
   it('aborts a unary call through the caller-supplied external signal', async () => {
     // Real-fetch semantics: on abort the rejection is the signal's reason, and the abort
     // works even when the transport ignores the signal entirely (hung impl).

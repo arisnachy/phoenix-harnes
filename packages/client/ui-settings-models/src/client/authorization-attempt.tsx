@@ -24,6 +24,18 @@ function safeOAuthConsentUrl(value: string): string | undefined {
 }
 
 
+/** Translate a failed Host-start transport into an actionable, local-safe message. */
+function authorizationBeginFailure(error: unknown): string {
+  if (error instanceof Error && (error.name === 'TimeoutError'
+    || /(?:timed? out|timeout|operation was aborted due to timeout)/i.test(error.message))) {
+    return 'El Host de PHOENIX no respondió a authorization.begin en 12 segundos. Comprueba que la actualización está activa y revisa el registro del Host; todavía no se ha llegado a Notion.'
+  }
+  if (error instanceof Error && /(?:failed to fetch|networkerror|econnrefused|connection refused)/i.test(error.message)) {
+    return 'PHOENIX perdió la conexión con el Host al iniciar OAuth. Comprueba que el servidor local 127.0.0.1:3080 sigue funcionando.'
+  }
+  return String(error)
+}
+
 /** One browser-visible authorization attempt, carrying its last notice forward. */
 export interface AuthorizationAttempt {
   id: string
@@ -278,6 +290,8 @@ export function useAuthorizationAttempt(
     // Reset preparation without opening an empty tab.
     if (method === 'oauth') reserveOAuthPopup()
     else closeReservedPopup()
+    // Initial authorization has a dedicated network deadline in ApiClient.
+    // User consent stays pending after this initial response.
     void api.begin({ key, method }).then((response) => {
       if (beginSequenceRef.current !== beginSequence || pendingBeginTimerRef.current === undefined) {
         if (response.result.ok) void api.cancel({ attemptId: response.result.value.attemptId }).catch(() => undefined)
@@ -311,8 +325,9 @@ export function useAuthorizationAttempt(
       window.clearTimeout(pendingBeginTimerRef.current)
       pendingBeginTimerRef.current = undefined
       setPreparingKey(undefined)
-      if (!navigatedRef.current) failReservedPopup(String(error))
-      setFailure(String(error))
+      const reason = authorizationBeginFailure(error)
+      if (!navigatedRef.current) failReservedPopup(reason)
+      setFailure(reason)
     })
   }
 
