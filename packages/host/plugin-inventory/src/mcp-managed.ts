@@ -360,6 +360,9 @@ const CURATED_MCP_SPECS: Readonly<Record<CuratedMcpConnectorId, CuratedMcpSpec>>
  * high-risk activation/approval boundary.
  */
 export const CORE_MCP_PACK_IDS: readonly CuratedMcpConnectorId[] = [
+  // Public Microsoft documentation is free and requires no private credentials.
+  // Metered Work IQ and Azure remain optional and never auto-install.
+  'microsoft-learn',
   'canva',
   'supabase',
   'heygen',
