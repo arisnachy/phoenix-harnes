@@ -269,6 +269,6 @@ export function MiniBrowser() {
         ◉ Abrir navegador
       </button>
     )}</div>}
-    {expanded && <Modal open headless className={css.expandedDialog} title="Navegador de Kira" onClose={() => { setExpanded(false) }}>{viewer}</Modal>}
+    {expanded && <Modal open headless className={css.expandedDialog ?? ''} title="Navegador de Kira" onClose={() => { setExpanded(false) }}>{viewer}</Modal>}
   </>
 }
