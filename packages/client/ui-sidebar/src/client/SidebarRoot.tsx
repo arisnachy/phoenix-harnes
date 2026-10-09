@@ -57,11 +57,12 @@ export function SidebarRoot({
     return () => { window.clearTimeout(timer) }
   }, [collapsed])
   const wide = !collapsed || !settled
-  const openSettingsSection = (id: string): void => {
-    window.dispatchEvent(new CustomEvent('phoenix:open-settings-section', { detail: id }))
+  // Navigation destinations open an actionable, focused surface — never the Settings menu.
+  const openFeature = (destination: 'discover' | 'connectors' | 'team', label: string): void => {
+    window.dispatchEvent(new CustomEvent('phoenix:open-feature', { detail: { destination, label } }))
   }
-  const openWorkspaceSearch = (): void => {
-    window.dispatchEvent(new Event('phoenix:open-workspace-search'))
+  const openLibrary = (): void => {
+    window.dispatchEvent(new Event('phoenix:open-workspace-library'))
   }
 
   // Freeze the content at its expanded width while it fades out (collapsed
@@ -199,16 +200,16 @@ export function SidebarRoot({
           <button type="button" className={css.navLink} onClick={() => { startSession() }}>
             <IconNewChatOutline16 size={19} /><span>{t('nav.home')}</span>
           </button>
-          <button type="button" className={css.navLink} onClick={() => { openSettingsSection('plugins') }}>
+          <button type="button" className={css.navLink} onClick={() => { openFeature('discover', t('nav.discover')) }}>
             <IconGlobeOutline14 size={19} /><span>{t('nav.discover')}</span>
           </button>
-          <button type="button" className={css.navLink} onClick={() => { openSettingsSection('connectors') }}>
+          <button type="button" className={css.navLink} onClick={() => { openFeature('connectors', t('nav.connectors')) }}>
             <IconPlugOutline16 size={19} /><span>{t('nav.connectors')}</span>
           </button>
-          <button type="button" className={css.navLink} onClick={() => { openSettingsSection('agent-presets') }}>
+          <button type="button" className={css.navLink} onClick={() => { openFeature('team', t('nav.team')) }}>
             <IconAgentPresetOutline16 size={19} /><span>{t('nav.team')}</span>
           </button>
-          <button type="button" className={css.navLink} onClick={openWorkspaceSearch}>
+          <button type="button" className={css.navLink} onClick={openLibrary}>
             <IconFolderOpenOutline16 size={19} /><span>{t('nav.library')}</span>
           </button>
         </nav>
