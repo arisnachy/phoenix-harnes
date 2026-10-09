@@ -1754,6 +1754,35 @@ describe('command launcher chrome and control seats', () => {
     }
   })
 
+  it('steers a new Codex Live instruction into a running harness turn instead of piling up the queue', async () => {
+    let transcriptHandler: ((text: string) => void) | undefined
+    const transcript = vi.spyOn(voiceAdapter, 'configureCodexRealtimeUserTranscriptHandler')
+      .mockImplementation((handler) => {
+        transcriptHandler = handler
+        return () => {
+          if (transcriptHandler === handler) transcriptHandler = undefined
+        }
+      })
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice').mockImplementation(async () => {
+      voiceAdapter.setVoiceAssistantActive(true)
+      return { kind: 'started' }
+    })
+    try {
+      const { view, sink } = bench({ running: true })
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      await act(async () => { transcriptHandler?.('Kira, abre YouTube') })
+      expect(sink).toHaveBeenCalledWith(
+        'Kira, abre YouTube', [], 'steer', expect.any(AbortSignal),
+      )
+    } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
+      live.mockRestore()
+      transcript.mockRestore()
+      cleanup()
+    }
+  })
+
   it('submits each final browser speech fragment automatically in assistant mode', async () => {
     class FakeRecognition implements VoiceRecognitionLike {
       static instance: FakeRecognition | undefined
