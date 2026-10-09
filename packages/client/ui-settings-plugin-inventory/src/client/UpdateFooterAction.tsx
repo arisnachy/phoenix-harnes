@@ -322,7 +322,7 @@ export function UpdateFooterAction({
         <span className={css.copy} title={detail ?? target}>
           <span className={css.title}>{label}</span>
           {ready ? <span className={css.detail}>{t('updateRestart')}</span> : null}
-          {retryable && detailsOpen ? (
+          {retryable ? (
             <button
               type="button"
               className={css.retryButton}
