@@ -6,10 +6,22 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { auditGameHtml, readGameManifest } from '../../packages/client/ui-conversation/src/client/chat/game-studio-quality.ts'
-import { validateGameArt } from '../../packages/hardness/adapters/src/game-art.ts'
+import { validateGameHtml } from '../../packages/hardness/adapters/src/game-tool.ts'
 
 const marker = /<script\b[^>]*\bid\s*=\s*["']phoenix-game-manifest["'][^>]*>/iu
+
+/** Extract the exact JSON manifest from the offline game HTML.
+ * @param html - The embedded complete game document.
+ * @returns Authored metadata or undefined when missing/invalid.
+ */
+export function readGameManifest(html: string): unknown {
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)]
+  const matching = scripts.filter(match => /\bid\s*=\s*["']phoenix-game-manifest["']/iu.test(match[1] ?? ''))
+  if (matching.length !== 1 || !/\btype\s*=\s*["']application\/json["']/iu.test(matching[0]?.[1] ?? '')) {
+    return undefined
+  }
+  try { return JSON.parse(matching[0]?.[2] ?? '') as unknown } catch { return undefined }
+}
 
 /**
  * Prepare a standalone HTML game with the matching manifest.
@@ -36,14 +48,16 @@ export function prepareGameHtml(source: string, manifest: unknown): string {
   const safeJson = json.replace(/</gu, '\\u003c')
   const embedded = existing ? source : source.replace(/<\/body\s*>/iu,
     '<script id="phoenix-game-manifest" type="application/json">\n' + safeJson + '\n</script>\n</body>')
-  const audit = auditGameHtml(embedded)
-  if (!audit.valid) {
-    throw new Error('Game Studio structural preflight failed: ' + audit.issues.join(', ')
-      + '. Correct the real game/manifest before publishing.')
-  }
+  // Use the *same host-side validator* as the phoenix_game publisher. Client UI
+  // modules belong to tsconfig.client.json and must not leak into host tests.
+  validateGameHtml(embedded)
   if (manifest !== null && typeof manifest === 'object' && !Array.isArray(manifest)) {
-    // Match the actual publisher's structural art checks before consuming a tool call.
-    validateGameArt(embedded, manifest as Record<string, unknown>)
+    const record = manifest as Record<string, unknown>
+    const genre = String(record.gameType ?? record.genre ?? '').toLowerCase()
+    if (/run.and.gun|shooter/u.test(genre)) {
+      if (!record.player || typeof record.player !== 'object') throw new Error('missing-player')
+      if (!Array.isArray(record.bosses) || record.bosses.length === 0) throw new Error('missing-boss')
+    }
   }
   return embedded
 }
