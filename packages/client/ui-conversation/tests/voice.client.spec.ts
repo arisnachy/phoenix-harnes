@@ -148,8 +148,20 @@ describe('browser voice adapter', () => {
     const transcript = vi.fn<(text: string) => void>()
     const disposeTranscript = configureCodexRealtimeUserTranscriptHandler(transcript)
     const disposeRoute = configureVoiceModelRouteResolver(async () => ({
-      provider: 'openai-codex',
-      model: 'gpt-6-luna',
+      provider: 'phoenix-auto',
+      model: 'phoenix-auto',
+    }))
+    const realtimeStart = vi.fn(async (_request: {
+      readonly key: string
+      readonly offerSdp: string
+      readonly model?: string
+    }) => ({
+      ok: true as const,
+      value: {
+        accepted: true,
+        threadId: 'thread-harness',
+        answerSdp: 'v=0\r\n',
+      },
     }))
     const disposeRemote = configureVoiceAssistantRemote({
       conversationStatus: async () => ({
@@ -173,14 +185,7 @@ describe('browser voice adapter', () => {
           provider: 'openai-codex',
         },
       }),
-      conversationRealtimeStart: async () => ({
-        ok: true,
-        value: {
-          accepted: true,
-          threadId: 'thread-harness',
-          answerSdp: 'v=0\r\n',
-        },
-      }),
+      conversationRealtimeStart: realtimeStart,
       conversationRealtimeStop: async () => ({
         ok: true,
         value: { stopped: true },
@@ -188,6 +193,11 @@ describe('browser voice adapter', () => {
     })
     try {
       await expect(tryStartCodexRealtimeVoice('session-harness')).resolves.toEqual({ kind: 'started' })
+      // Phoenix Auto's text model must never be forced into Codex's voice thread.
+      expect(realtimeStart).toHaveBeenCalledWith({
+        key: 'session-harness',
+        offerSdp: 'v=0\r\n',
+      })
       const channel = FakeDataChannel.instance
       expect(channel).toBeDefined()
       const audio = document.querySelector<HTMLAudioElement>('[data-phoenix-codex-voice]')
