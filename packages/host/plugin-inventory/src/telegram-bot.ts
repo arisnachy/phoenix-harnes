@@ -300,6 +300,8 @@ export class TelegramInbox {
         | { get(id: ReturnType<typeof SessionId>): Agent | undefined }
         | undefined
       if (agents === undefined) throw new Error('telegram-phoenix-agents-unavailable')
+      if (this.agent !== undefined && agents.get(this.agent.id) === this.agent
+        && this.agent.options.provider && this.agent.options.model) return this.agent
       const gateway = this.gateway()
       const existingId = await stored(creds, SESSION_REF)
       const existing = existingId === undefined ? undefined : agents.get(SessionId(existingId))
