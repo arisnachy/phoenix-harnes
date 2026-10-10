@@ -92,6 +92,28 @@ describe('/secret', () => {
     expect(values.has(originCredentialRef(origin, 'autonomous'))).toBe(false)
   })
 
+  it('revokes unattended access if the second credential write fails', async () => {
+    const { ctx, agent, values } = await mount()
+    const origin = 'https://example.com'
+    const grant = originCredentialRef(origin, 'autonomous')
+    const passRef = originCredentialRef(origin, 'secret')
+    values.set(grant, '1')
+    const provider = ctx.get('credentials') as unknown as {
+      set: ReturnType<typeof vi.fn>
+    }
+    provider.set.mockImplementation(async (ref: string, value: string) => {
+      if (ref === passRef) throw new Error('secret write failed')
+      values.set(ref, value)
+    })
+    const result = await ctx.commands.execute(agent,
+      '/secret login-set https://example.com newuser synthetic-hidden-password',
+      [], new AbortController().signal)
+    expect(result?.result.kind).toBe('error')
+    expect(values.has(grant)).toBe(false)
+    expect(JSON.stringify(ctx.sessions.list().flatMap(item => item.events)))
+      .not.toContain('synthetic-hidden-password')
+  })
+
   it('rejects insecure remote login origins', async () => {
     const { ctx, agent, values } = await mount()
     const result = await ctx.commands.execute(
