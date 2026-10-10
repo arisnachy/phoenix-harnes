@@ -151,10 +151,11 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
       }
       const animated = boss.animations as RecordValue
       for (const phase of declared.phases) {
-        if (!nonempty(phase) || !Array.isArray(boss.phaseAnimations[phase])
-          || boss.phaseAnimations[phase].length === 0
-          || boss.phaseAnimations[phase].some(frame => !Number.isInteger(frame)
-            || frame < 0 || !Object.values(animated).some(value => Array.isArray(value) && value.includes(frame)))) {
+        const frames: unknown = nonempty(phase) ? boss.phaseAnimations[phase] : undefined
+        if (!Array.isArray(frames) || frames.length === 0
+          || frames.some((frame: unknown) => !Number.isInteger(frame)
+            || (frame as number) < 0
+            || !Object.values(animated).some(value => Array.isArray(value) && value.includes(frame)))) {
           failed('falta el atlas de animación para la fase "' + String(phase) + '" del jefe ' + String(boss.id))
         }
       }
