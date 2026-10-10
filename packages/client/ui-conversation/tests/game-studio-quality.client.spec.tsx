@@ -63,7 +63,7 @@ describe('Phoenix Game Studio 2D artifact quality', () => {
     expect(readGameManifest('<script id="phoenix-game-manifest" type="application/json">{bad</script>')).toBeUndefined()
   })
 
-  it('renders game artifact inline in a script-isolated iframe with visible preflight limits', () => {
+  it('renders game artifact inline in a script-isolated iframe with quiet structural preflight', () => {
     const artifact = normalizeHardnessArtifact({
       id: 'jungle', title: 'Jungle Echo', mime: 'application/vnd.phoenix.game+html',
       data: gameHtml(),
@@ -73,7 +73,11 @@ describe('Phoenix Game Studio 2D artifact quality', () => {
     render(<UniversalArtifactSurface artifact={artifact} onStop={() => {}} />)
     const root = document.querySelector('[data-phoenix-game-studio="true"]')
     expect(root?.getAttribute('data-game-preflight')).toBe('pass')
-    expect(screen.getByText(/Not a gameplay test/u)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'Jungle Echo' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Agregar a biblioteca' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Abrir biblioteca' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Abrir en otra ventana' })).toBeTruthy()
+    expect(screen.queryByText(/structural preflight|Not a gameplay test|Issues:|Review:/iu)).toBeNull()
     const frame = screen.getByTitle('Jungle Echo')
     expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
     expect(frame.getAttribute('srcdoc')).toContain("connect-src 'none'")

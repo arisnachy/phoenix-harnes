@@ -5,7 +5,11 @@ import type { RenderMessageImages } from '../contract/slots.ts'
 import styles from './HardnessArtifactNodeView.module.css'
 import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.tsx'
 import { Scene3DView } from './Scene3DView.tsx'
-import { auditGameHtml } from './game-studio-quality.ts'
+import { auditGameHtml, readGameManifest } from './game-studio-quality.ts'
+import {
+  libraryGameId, listLibraryGames, openGameInWindow, removeLibraryGame, saveLibraryGame,
+  type LibraryGame,
+} from './game-library.ts'
 
 interface ArtifactBodyProps {
   readonly mime: string
@@ -399,37 +403,132 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
   return <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
 }
 
+function GameIcon({ kind }: { readonly kind: 'add' | 'library' | 'window' }) {
+  return (
+    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {kind === 'add' && <><path d="M4 5h6v15H4zM14 5h6v15h-6zM10 9h4M10 15h4" /><path d="M7 2v6M4 5h6" /></>}
+      {kind === 'library' && <><path d="M3 7h18v13H3z" /><path d="M3 7V4h7l2 3" /></>}
+      {kind === 'window' && <><path d="M12 5H5v14h14v-7" /><path d="M13 4h7v7M20 4l-9 9" /></>}
+    </svg>
+  )
+}
+
 function GameStudioPreview({ html, title }: { readonly html: string; readonly title: string }) {
   const audit = useMemo(() => auditGameHtml(html), [html])
-  const manifestNeedsRepair = audit.issues.some(issue => issue.startsWith('game-manifest-'))
-  const exportGame = (): void => {
-    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = (title.replace(/[^a-z0-9._-]+/giu, '-').replace(/^-+|-+$/gu, '') || 'phoenix-game') + '.html'
-    anchor.click()
-    URL.revokeObjectURL(url)
+  const manifest = useMemo(() => readGameManifest(html), [html])
+  const gameTitle = isRecord(manifest) ? text(manifest.title) ?? title : title
+  const [libraryOpen, setLibraryOpen] = useState(false)
+  const [games, setGames] = useState<LibraryGame[]>([])
+  const [saved, setSaved] = useState(false)
+  const [libraryError, setLibraryError] = useState<string | undefined>()
+  const dialogRef = useRef<HTMLDialogElement>(null)
+
+  useEffect(() => {
+    setSaved(false)
+    setLibraryError(undefined)
+  }, [html, gameTitle])
+
+  useEffect(() => {
+    if (!libraryOpen) return
+    const dialog = dialogRef.current
+    if (dialog !== null && !dialog.open) {
+      if (typeof dialog.showModal === 'function') dialog.showModal()
+      else dialog.setAttribute('open', '')
+    }
+  }, [libraryOpen])
+
+  const refreshLibrary = async (): Promise<void> => {
+    try {
+      setGames(await listLibraryGames())
+      setLibraryError(undefined)
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : 'No se pudo leer la biblioteca.')
+    }
   }
+  const addToLibrary = async (): Promise<void> => {
+    try {
+      await saveLibraryGame(gameTitle, html)
+      setSaved(true)
+      setLibraryError(undefined)
+      if (libraryOpen) await refreshLibrary()
+    } catch (error) {
+      setSaved(false)
+      setLibraryError(error instanceof Error ? error.message : 'No se pudo guardar el juego.')
+    }
+  }
+  const openLibrary = (): void => {
+    setLibraryOpen(true)
+    void refreshLibrary()
+  }
+  const closeLibrary = (): void => {
+    setLibraryOpen(false)
+    const dialog = dialogRef.current
+    if (dialog?.open && typeof dialog.close === 'function') dialog.close()
+  }
+  const removeFromLibrary = async (id: string): Promise<void> => {
+    try {
+      await removeLibraryGame(id)
+      if (id === libraryGameId(gameTitle)) setSaved(false)
+      await refreshLibrary()
+    } catch (error) {
+      setLibraryError(error instanceof Error ? error.message : 'No se pudo eliminar el juego.')
+    }
+  }
+  const playInWindow = (name: string, documentHtml: string): void => {
+    openGameInWindow(name, sandboxDocument(documentHtml, true, true))
+  }
+
   return (
-    <div className={styles.stack} data-phoenix-game-studio="true"
+    <section className={styles.gameStudio} data-phoenix-game-studio="true"
       data-game-preflight={audit.valid ? 'pass' : 'needs-repair'}>
-      <div role="status" aria-label="Game Studio audit">
-        <strong>Game Studio · {audit.valid ? 'structural preflight passed' : 'review required'}</strong>
-        <p className={styles.note}>{audit.summary}. Not a gameplay test.</p>
-        {manifestNeedsRepair && (
-          <p className={styles.note}>
-            Falta o es incorrecto el manifiesto JSON. Kira debe añadir un único
-            {' <script id="phoenix-game-manifest" type="application/json">'} con datos reales y
-            volver a validar antes de publicar. El manifiesto NO controla el arranque:
-            si el juego está en blanco, revisa también JavaScript, recursos y CSP.
-          </p>
-        )}
-        {audit.issues.length > 0 && <p className={styles.note}>Issues: {audit.issues.join(', ')}</p>}
-        {audit.warnings.length > 0 && <p className={styles.note}>Review: {audit.warnings.join(', ')}</p>}
-        <button className={styles.uiButton} type="button" onClick={exportGame}>Exportar juego (.html)</button>
+      <header className={styles.gameHeader}>
+        <h2 className={styles.gameTitle}>{gameTitle}</h2>
+        <div className={styles.gameActions}>
+          <button className={`${styles.gameAction} ${styles.gamePrimary}`} type="button"
+            onClick={() => { void addToLibrary() }}>
+            <GameIcon kind="add" />{saved ? 'Guardado en biblioteca' : 'Agregar a biblioteca'}
+          </button>
+          <button className={styles.gameAction} type="button" onClick={openLibrary}>
+            <GameIcon kind="library" />Abrir biblioteca
+          </button>
+          <button className={styles.gameAction} type="button" onClick={() => { playInWindow(gameTitle, html) }}>
+            <GameIcon kind="window" />Abrir en otra ventana
+          </button>
+        </div>
+      </header>
+      {libraryError !== undefined && <p className={styles.gameError} role="alert">{libraryError}</p>}
+      <div className={styles.gameViewport}>
+        <MiniApp html={html} title={gameTitle} executable minimumHeight={460} gameDiagnostics />
       </div>
-      <MiniApp html={html} title={title} executable minimumHeight={460} gameDiagnostics />
-    </div>
+      {libraryOpen && (
+        <dialog ref={dialogRef} className={styles.gameLibraryDialog} aria-label="Biblioteca de juegos"
+          onCancel={event => { event.preventDefault(); closeLibrary() }}
+          onClose={() => { setLibraryOpen(false) }}>
+          <div className={styles.gameLibraryHeading}>
+            <h3>Biblioteca de juegos</h3>
+            <button className={styles.gameLibraryClose} type="button" onClick={closeLibrary}
+              aria-label="Cerrar biblioteca">Cerrar</button>
+          </div>
+          {libraryError !== undefined && <p className={styles.gameError} role="alert">{libraryError}</p>}
+          {games.length === 0 && libraryError === undefined && (
+            <p className={styles.gameLibraryEmpty}>Todavía no hay juegos guardados en este navegador.</p>
+          )}
+          <ul className={styles.gameLibraryList}>
+            {games.map(game => (
+              <li className={styles.gameLibraryRow} key={game.id}>
+                <strong title={game.title}>{game.title}</strong>
+                <div className={styles.gameLibraryRowActions}>
+                  <button type="button" onClick={() => { playInWindow(game.title, game.html) }}>Jugar</button>
+                  <button type="button" onClick={() => { void removeFromLibrary(game.id) }}
+                    aria-label={`Eliminar ${game.title} de la biblioteca`}>Eliminar</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </dialog>
+      )}
+    </section>
   )
 }
 

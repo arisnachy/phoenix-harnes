@@ -319,3 +319,192 @@
   .barRow > :last-child { grid-column: 2; }
   .bodyHtml { min-height: 0; padding: 12px; }
 }
+
+
+/* Game Studio: clean, compact game header and theme-aware action buttons. */
+.gameStudio {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.gameHeader {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.gameTitle {
+  min-width: 0;
+  margin: 0;
+  color: var(--dsw-alias-label-primary, #292420);
+  font-size: clamp(18px, 2.5vw, 25px);
+  font-weight: 750;
+  line-height: 1.25;
+  letter-spacing: -.025em;
+  overflow-wrap: anywhere;
+}
+
+.gameActions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.gameAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 37px;
+  padding: 8px 13px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2, #cdb6a0) 80%, #bc875a 20%);
+  border-radius: 12px;
+  background: var(--dsw-alias-bg-layer-1, #faf8f5);
+  color: var(--dsw-alias-label-primary, #69462e);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.gameAction svg { flex: none; }
+.gameAction:hover {
+  border-color: #af8059;
+  background: var(--dsw-alias-interactive-bg-hover, #f4eee8);
+  transform: translateY(-1px);
+}
+.gameAction:focus-visible,
+.gameLibraryRow button:focus-visible,
+.gameLibraryClose:focus-visible {
+  outline: 2px solid #bf8755;
+  outline-offset: 2px;
+}
+
+.gamePrimary {
+  border-color: #60432d;
+  background: #332318;
+  color: #f1d0a2;
+}
+.gamePrimary:hover {
+  border-color: #94683e;
+  background: #463021;
+}
+
+.gameViewport {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #10101b;
+}
+
+.gameError {
+  margin: 0;
+  color: #a82c35;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.gameLibraryDialog {
+  box-sizing: border-box;
+  position: fixed;
+  inset: 0;
+  width: min(680px, calc(100vw - 28px));
+  max-height: min(75dvh, 640px);
+  margin: auto;
+  padding: 22px;
+  overflow-y: auto;
+  border: 1px solid var(--dsw-alias-border-l2, #d8c6b4);
+  border-radius: 20px;
+  background: var(--dsw-alias-bg-layer-1, #faf8f5);
+  color: var(--dsw-alias-label-primary, #292420);
+  box-shadow: 0 26px 90px rgba(29, 18, 13, .26);
+}
+
+.gameLibraryDialog::backdrop {
+  background: rgba(25, 18, 16, .48);
+  backdrop-filter: blur(3px);
+}
+
+.gameLibraryHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.gameLibraryHeading h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 730;
+}
+
+.gameLibraryClose,
+.gameLibraryRow button {
+  min-height: 33px;
+  padding: 6px 11px;
+  border: 1px solid var(--dsw-alias-border-l2, #d8c6b4);
+  border-radius: 10px;
+  background: var(--dsw-alias-bg-layer-1, #faf8f5);
+  color: inherit;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.gameLibraryClose:hover,
+.gameLibraryRow button:hover {
+  background: var(--dsw-alias-interactive-bg-hover, #f4eee8);
+}
+
+.gameLibraryEmpty {
+  margin: 0 0 8px;
+  color: var(--dsw-alias-label-secondary, #786a61);
+  font-size: 13px;
+}
+
+.gameLibraryList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gameLibraryRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--dsw-alias-border-subtle, #e7ddd2);
+  border-radius: 12px;
+}
+
+.gameLibraryRow strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+.gameLibraryRowActions { display: flex; flex-wrap: wrap; gap: 7px; }
+
+@media (max-width: 560px) {
+  .gameActions { display: grid; grid-template-columns: 1fr; }
+  .gameAction { justify-content: flex-start; }
+  .gameLibraryDialog { padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gameAction { transition: none; }
+  .gameAction:hover { transform: none; }
+}

@@ -48,6 +48,7 @@ function ActionIcon({ kind }: { readonly kind: 'copy' | 'check' | 'download' | '
  */
 export function UniversalArtifactSurface({ artifact, renderMessageImages, loadImage, onRun, onStop }: UniversalArtifactSurfaceProps) {
   const isHtml = artifact.kind === 'html'
+  const isGame = artifact.mime === 'application/vnd.phoenix.game+html'
   const [expanded, setExpanded] = useState(false)
   const [running, setRunning] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -145,13 +146,13 @@ export function UniversalArtifactSurface({ artifact, renderMessageImages, loadIm
       data-universal-artifact={artifact.id} data-artifact-kind={artifact.kind}
       data-artifact-height={isHtml ? 'auto' : expanded ? 'expanded' : 'auto'}
       style={isHtml ? undefined : { minHeight: artifact.size.minHeight }}>
-      <div className={css.header}>
+      {!isGame && <div className={css.header}>
         <div className={css.heading}>
           <strong>{artifact.title}</strong>
           {!isHtml && <span>{artifact.language ?? artifact.kind}</span>}
         </div>
         {!isHtml && !expanded && actions(false)}
-      </div>
+      </div>}
       <div className={css.content}>
         {!expanded && content(false)}
       </div>
