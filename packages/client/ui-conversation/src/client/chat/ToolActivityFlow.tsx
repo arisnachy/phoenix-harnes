@@ -381,7 +381,7 @@ function ToolActivityGroup({
 }
 
 /** Turn-level model activity label retained across first-token, tool, and streaming phases. */
-function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
+function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }: {
   /** The running turn's logged `turn/start` time; null falls back to mount
    *  time when that boundary is outside the window. */
   readonly startTime: number | null
@@ -389,6 +389,8 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
   readonly progress: TurnProgress
   /** Optional age ceiling for admission-only feedback. */
   readonly expiresAfterMs: number | null
+  /** Use the reference hero-like position only for the first unfinished reply. */
+  readonly centered?: boolean
   /** The owning view's locale seat. */
   readonly t: ChatViewSlotProps['t']
 }) {
@@ -429,6 +431,7 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
   return (
     <div
       className={chatCss.turnStatus}
+      data-centered={centered ? 'true' : undefined}
       data-phase={progress.phase}
       data-activity={progress.activity}
       role="status"
@@ -473,6 +476,13 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
     }
   }, [newestBrowserKey, lastBrowserKey])
   const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
+  // The screenshot-like centered preparation state is confined to a blank
+  // conversation's first pending answer, never to a continuing transcript.
+  const centeredPreparing = turnStatus?.progress.phase === 'preparing'
+    && nodes.filter(node => node.kind === 'user' || node.kind === 'steering').length <= 1
+    && !nodes.some(node => node.kind === 'assistant-step' || node.kind === 'hardness-artifact')
+    && (nodes.some(node => node.kind === 'user' || node.kind === 'steering')
+      || flow.some(item => item.kind === 'optimistic'))
   const statusBeforeIndex = turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
     ? -1
     : flow.length - 1
@@ -485,6 +495,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
               startTime={turnStatus.startTime}
               progress={turnStatus.progress}
               expiresAfterMs={turnStatus.expiresAfterMs}
+              centered={centeredPreparing}
               t={seatProps.t}
             />
           )}
@@ -524,6 +535,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
           startTime={turnStatus.startTime}
           progress={turnStatus.progress}
           expiresAfterMs={turnStatus.expiresAfterMs}
+          centered={centeredPreparing}
           t={seatProps.t}
         />
       )}
