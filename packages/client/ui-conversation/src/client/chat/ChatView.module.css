@@ -528,3 +528,37 @@
     animation: none;
   }
 }
+
+/* Reference preparation state: no invented activity. Only the first real
+   pending response receives this calm centered, warm-orange identity. */
+.turnStatus[data-centered='true'] {
+  align-self: center;
+  justify-content: center;
+  margin: clamp(60px, 9vh, 110px) auto 16px;
+  max-width: min(100%, 700px);
+  min-height: 48px;
+  height: auto;
+  gap: 12px;
+  color: var(--dsw-alias-label-primary);
+}
+.turnStatus[data-centered='true'] .turnStatusText {
+  font-size: clamp(15px, 1.4vw, 18px);
+  line-height: 1.45;
+  font-weight: 500;
+}
+.turnStatus[data-centered='true'] .phoenixActivity {
+  width: 46px;
+  height: 46px;
+}
+.turnStatus[data-centered='true'] .phoenixActivity > img {
+  width: 39px;
+  height: 39px;
+}
+@media (max-width: 720px) {
+  .turnStatus[data-centered='true'] {
+    margin-top: clamp(36px, 7vh, 64px);
+    white-space: normal;
+    text-align: center;
+  }
+  .turnStatus[data-centered='true'] .turnStatusText { white-space: normal; }
+}
