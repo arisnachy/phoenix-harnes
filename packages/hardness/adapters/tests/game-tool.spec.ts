@@ -1,7 +1,7 @@
 import { CallId } from '@phoenix-ai/dsh-llm'
 import type { ToolRunContext } from '@phoenix-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
-import { createPhoenixGameTool, PHOENIX_GAME_MIME, preparePhoenixGameSubmission } from '../src/game-tool.ts'
+import { createPhoenixGameTool, PHOENIX_GAME_MIME, preparePhoenixGameSubmission, validateGameHtml } from '../src/game-tool.ts'
 
 const runnable = `<!doctype html><html lang="es"><body>
 <canvas width="320" height="180" id="game"></canvas>
@@ -29,16 +29,6 @@ function execution(conclude = vi.fn()): ToolRunContext {
     deferContext: () => {},
     concludeTurn: conclude,
   }
-}
-
-function prepareForPublisher(html: string, manifestJson: string): void {
-  // Perform the same two-stage preparation and validation as the model tool.
-  const tool = createPhoenixGameTool()
-  const args = { title: 'Test game', html, manifest_json: manifestJson }
-  const prepared = preparePhoenixGameSubmission(args.html, args.manifest_json)
-  if (prepared.length === 0) throw new Error('unreachable')
-  // Tool execution throws synchronously for invalid packaging before promise.
-  void tool.execute(args, execution())
 }
 
 describe('Phoenix Game Studio publisher', () => {
@@ -110,7 +100,7 @@ describe('Phoenix Game Studio publisher', () => {
       .not.toThrow()
     // Formatting a JSON envelope is not certification of invented controls,
     // levels or audio: the actual publisher still rejects that fake contract.
-    expect(() => prepareForPublisher(missing, JSON.stringify({ schemaVersion: 1, title: 'Fake', genre: 'puzzle' })))
+    expect(() => validateGameHtml(preparePhoenixGameSubmission(missing, JSON.stringify({ schemaVersion: 1, title: 'Fake', genre: 'puzzle' }))))
       .toThrow('controls')
   })
 
