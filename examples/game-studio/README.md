@@ -40,3 +40,7 @@ Game Studio uses the **real** `phoenix_game` model tool to publish playable self
 - Source or metadata checks **do not constitute** visual QA, animation comparisons or audible playback tests. Verify any new game using real browser/device screenshots, animation recordings, audio listening, input and performance measurements.
 - Procedural character shapes, oscillator audio and simple opponent decisions are technical references, not a substitute for consistent authored sprite atlases, detailed scenery, multi-layer sound mixes, licensed or original character art and polished gameplay balancing.
 - Kira's `.agents/skills/phoenix-game-studio/SKILL.md` describes genre routing, actual source research, specialist collaboration, animation and assets, game QA and stopping conditions.
+
+## Reusable articulated rigs + authored art (new)
+
+The offline engines [2D](animation-engine.js) and [3D](animation-engine-3d.js), [rigged sprite bridge](rigged-art.js), [API and visual-art constraints](ANIMATION_ENGINE.md) and [playable mechanical demo](articulated-arena.html) are included. `PhoenixRiggedArt.actor` connects a decoded, original PNG atlas to a skeletal rig or a full-body flipbook clip; `actor.draw` renders the actual image, not substitute rectangles. For production shooters the complete art, per-entity animation, parallax and sound inventory in `packages/hardness/adapters/src/game-art.ts` is mandatory. No source test can certify that art looks professionally finished.
