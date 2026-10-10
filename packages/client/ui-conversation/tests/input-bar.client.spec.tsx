@@ -255,7 +255,7 @@ describe('private origin-bound login Vault intake', () => {
     fireEvent.change(dialog.querySelector('#phoenix-vault-origin')!, { target: { value: 'https://brandpoll.brandinstitute.com/login' } })
     fireEvent.change(dialog.querySelector('#phoenix-vault-account')!, { target: { value: 'study@example.com' } })
     fireEvent.change(dialog.querySelector('#phoenix-vault-password')!, { target: { value: 'private-test-pass' } })
-    const button = screen.view.getByRole('button', { name: 'Guardar en Vault' })
+    const button = dialog.querySelector<HTMLButtonElement>('button[type=submit]')!
     expect(button.hasAttribute('disabled')).toBe(true)
     fireEvent.click(dialog.querySelector('input[type=checkbox]')!)
     await act(async () => { fireEvent.submit(dialog.querySelector('form')!) })
