@@ -1,7 +1,7 @@
 import { CallId } from '@phoenix-ai/dsh-llm'
 import type { ToolRunContext } from '@phoenix-ai/dsh-tools'
 import { describe, expect, it, vi } from 'vitest'
-import { createPhoenixGameTool, PHOENIX_GAME_MIME } from '../src/game-tool.ts'
+import { createPhoenixGameTool, PHOENIX_GAME_MIME, preparePhoenixGameSubmission } from '../src/game-tool.ts'
 
 const runnable = `<!doctype html><html lang="es"><body>
 <canvas width="320" height="180" id="game"></canvas>
@@ -29,6 +29,16 @@ function execution(conclude = vi.fn()): ToolRunContext {
     deferContext: () => {},
     concludeTurn: conclude,
   }
+}
+
+function prepareForPublisher(html: string, manifestJson: string): void {
+  // Perform the same two-stage preparation and validation as the model tool.
+  const tool = createPhoenixGameTool()
+  const args = { title: 'Test game', html, manifest_json: manifestJson }
+  const prepared = preparePhoenixGameSubmission(args.html, args.manifest_json)
+  if (prepared.length === 0) throw new Error('unreachable')
+  // Tool execution throws synchronously for invalid packaging before promise.
+  void tool.execute(args, execution())
 }
 
 describe('Phoenix Game Studio publisher', () => {
@@ -62,6 +72,54 @@ describe('Phoenix Game Studio publisher', () => {
       },
     })
     expect(conclude).not.toHaveBeenCalled()
+  })
+
+  it('publishes a newly authored game on the FIRST call when Kira supplies separate manifest_json', async () => {
+    const tool = createPhoenixGameTool()
+    const manifest = /<script id="phoenix-game-manifest" type="application\/json">([\s\S]*?)<\/script>/u.exec(runnable)?.[1]
+    if (manifest === undefined) throw new Error('Missing test manifest')
+    const source = runnable.replace(/<script id="phoenix-game-manifest" type="application\/json">[\s\S]*?<\/script>/u, '')
+    const args = { title: 'Luz de selva', html: source, manifest_json: manifest }
+    const receipt = await tool.execute(args, execution()) as { artifactId: string; title: string; preflight: string }
+    const output = tool.output.presentationMeta?.(args, receipt as never) as { artifact?: { data?: string } } | undefined
+    expect(receipt.preflight).toBe('packaging-only')
+    expect(output?.artifact?.data).toContain('id="phoenix-game-manifest" type="application/json"')
+    expect(output?.artifact?.data).toContain('canvas.getContext')
+    expect(output?.artifact?.data).not.toBe(source)
+    expect(tool.parameters).toMatchObject({ type: 'object', required: ['title', 'html'] })
+    expect(tool.description).toContain('manifest_json')
+  })
+
+  it('repairs the manifest wrapper when JSON exists but Kira omitted the exact script id', () => {
+    const source = runnable.replace(' id="phoenix-game-manifest"', '')
+    const fixed = preparePhoenixGameSubmission(source)
+    expect(fixed).toContain('id="phoenix-game-manifest"')
+    expect(preparePhoenixGameSubmission(fixed)).toBe(fixed)
+  })
+
+  it('keeps authored entity metadata intact and rejects ambiguous or contradicting contracts', () => {
+    const match = /<script id="phoenix-game-manifest" type="application\/json">([\s\S]*?)<\/script>/u.exec(runnable)
+    const raw = match?.[1]
+    if (raw === undefined) throw new Error('Missing test metadata')
+    const missing = runnable.replace(match?.[0] ?? '', '')
+    expect(() => preparePhoenixGameSubmission(missing)).toThrow('manifest_json')
+    expect(() => preparePhoenixGameSubmission(runnable, JSON.stringify({ schemaVersion: 1, title: 'Other', genre: 'puzzle' })))
+      .toThrow('no coincide')
+    expect(() => preparePhoenixGameSubmission(missing, '{invalid')).toThrow('JSON')
+    expect(() => preparePhoenixGameSubmission(missing, JSON.stringify({ schemaVersion: 1, title: 'Fake', genre: 'puzzle' })))
+      .not.toThrow()
+    // Formatting a JSON envelope is not certification of invented controls,
+    // levels or audio: the actual publisher still rejects that fake contract.
+    expect(() => prepareForPublisher(missing, JSON.stringify({ schemaVersion: 1, title: 'Fake', genre: 'puzzle' })))
+      .toThrow('controls')
+  })
+
+  it('requires controls, level and audio before publication, not after an iframe fails', async () => {
+    const tool = createPhoenixGameTool()
+    const incomplete = runnable.replace('"controls":{"interact":"Enter"},', '')
+    await expect(tool.execute({ title: 'Missing controls', html: incomplete }, execution())).rejects.toThrow('controls')
+    const withoutAudio = runnable.replace(',"audio":{"cues":["click"]}', '')
+    await expect(tool.execute({ title: 'Missing audio', html: withoutAudio }, execution())).rejects.toThrow('audio')
   })
 
   it('rejects image-only, inert HTML, and game declarations without executable code', async () => {
