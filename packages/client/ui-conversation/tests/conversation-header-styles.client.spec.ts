@@ -56,6 +56,19 @@ describe('ConversationRoot premium header', () => {
     expect(css).toContain('.unifiedHeader .tabs')
   })
 
+  it('collapses to one real row without discarding controls or accessibility', () => {
+    const compact = ".root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader"
+    expect(declarations(compact)?.get('min-height')).toBe('54px')
+    expect(declarations(compact + ' .header')?.get('grid-template-rows')).toBe('34px')
+    expect(declarations(compact + ' .sessionNavRow')?.get('display')).toBe('none')
+    expect(declarations(compact + ' .headerGlobal')?.get('min-height')).toBe('36px')
+    expect(css).toContain('grid-template-rows: auto;')
+    expect(css).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(conversationRoot).toContain('onMouseEnter')
+    expect(conversationRoot).toContain('onFocusCapture')
+    expect(conversationRoot).toContain('aria-pressed={headerPinnedOpen}')
+  })
+
   it('uses compact shell geometry', () => {
     expect(declarations('.header')?.get('padding')).toBe('8px 16px 0')
     expect(declarations('.titleRow')?.get('min-height')).toBe('36px')

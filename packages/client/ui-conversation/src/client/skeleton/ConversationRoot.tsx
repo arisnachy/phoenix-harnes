@@ -79,12 +79,17 @@ export function ConversationRoot({
   } else if (composerPhase === 'blank') {
     firstSendGuard.current.wasBlank = true
   }
-  // null follows automatic focus; explicit expand/collapse overrides it for this session.
-  const [headerOverride, setHeaderOverride] = useState<boolean | null>(null)
+  // The header responds to pointer/keyboard attention; the user can pin it open
+  // without disabling automatic compact mode for the next conversation.
+  const [headerPinnedOpen, setHeaderPinnedOpen] = useState(false)
+  const [headerHovered, setHeaderHovered] = useState(false)
+  const [headerFocused, setHeaderFocused] = useState(false)
 
   useEffect(() => {
     setVisualActive(false)
-    setHeaderOverride(null)
+    setHeaderPinnedOpen(false)
+    setHeaderHovered(false)
+    setHeaderFocused(false)
   }, [sessionId])
 
   const pendingSubmitAt = inputState?.pendingSubmit?.startedAt
@@ -306,7 +311,15 @@ export function ConversationRoot({
   )
 
   const phase = settling ? 'settling' : hero ? 'hero' : 'active'
-  const headerCompact = hero || (headerOverride ?? visualActive)
+  // Existing sessions start compact. A first send stays expanded until the
+  // optimistic bubble has painted, avoiding the layout jump during submission.
+  const headerAutoCompact = !hero && (
+    visualActive || firstBubbleSettledFor === sessionId
+    || (!firstSendGuard.current.armed
+      && (summaryBlank === false || !firstSendGuard.current.wasBlank))
+  )
+  const headerCompact = hero || (headerAutoCompact
+    && !headerPinnedOpen && !headerHovered && !headerFocused)
   const composer = renderSlotChain(
     'conversation.composer',
     { interactions: pending, session },
@@ -325,16 +338,25 @@ export function ConversationRoot({
 
   return (
     <div ref={rootRef} className={css.root} data-phase={phase} data-header-compact={headerCompact ? 'true' : undefined}>
-      <div className={css.unifiedHeader} aria-label="Barra superior de Phoenix">
+      <div className={css.unifiedHeader} aria-label="Barra superior de Phoenix"
+        onMouseEnter={() => { setHeaderHovered(true) }}
+        onMouseLeave={() => { setHeaderHovered(false) }}
+        onFocusCapture={() => { setHeaderFocused(true) }}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setHeaderFocused(false)
+          }
+        }}>
         <div className={css.sessionChrome}>
           <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
         </div>
         <div className={css.headerGlobal} aria-label="Herramientas globales">
           {!hero && <button type="button" className={css.headerToggle}
-            aria-label={headerCompact ? 'Expandir barra superior' : 'Compactar barra superior'}
-            title={headerCompact ? 'Expandir barra superior' : 'Compactar barra superior'}
+            aria-label={headerPinnedOpen ? 'Activar colapso automático' : headerCompact ? 'Expandir barra superior' : 'Fijar barra superior expandida'}
+            title={headerPinnedOpen ? 'Activar colapso automático' : headerCompact ? 'Expandir barra superior' : 'Fijar barra superior expandida'}
             aria-expanded={!headerCompact}
-            onClick={() => { setHeaderOverride(!headerCompact) }}>
+            aria-pressed={headerPinnedOpen}
+            onClick={() => { setHeaderPinnedOpen(current => !current) }}>
             <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               {headerCompact ? <path d="m7 10 5 5 5-5" /> : <path d="m7 14 5-5 5 5" />}
             </svg>

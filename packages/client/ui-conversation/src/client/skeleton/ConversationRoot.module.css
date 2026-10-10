@@ -482,6 +482,7 @@
   border-radius: 28px;
   background: var(--dsw-alias-bg-layer-1);
   box-shadow: 0 4px 18px rgba(87, 59, 37, 0.035);
+  transition: min-height 180ms ease, padding 180ms ease, border-radius 180ms ease;
 }
 .sessionChrome {
   grid-column: 1;
@@ -622,8 +623,29 @@
 .unifiedHeader .heroTopIcon { width: 38px; height: 38px; }
 .unifiedHeader .heroTopProfile { width: 48px; height: 48px; flex-basis: 48px; }
 .root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader {
-  min-height: 78px;
-  padding-block: 5px;
+  min-height: 54px;
+  padding-block: 6px;
+  border-radius: 19px;
+}
+.root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader .header {
+  grid-template-rows: 34px;
+  row-gap: 0;
+}
+.root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader .sessionNavRow {
+  display: none;
+}
+.root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader .headerGlobal {
+  min-height: 36px;
+  gap: 6px;
+}
+.root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader .heroTopIcon {
+  width: 34px;
+  height: 34px;
+}
+.root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader .heroTopProfile {
+  width: 36px;
+  height: 36px;
+  flex-basis: 36px;
 }
 .root[data-phase='hero'] .unifiedHeader {
   min-height: 68px;
@@ -660,4 +682,25 @@
   .unifiedHeader .heroTopIcon { width: 30px; height: 34px; }
   .unifiedHeader .heroTopProfile { width: 32px; height: 32px; flex-basis: 32px; }
   .root[data-phase='hero'] .headerGlobal { grid-column: 1; grid-row: 2; }
+  /* On narrow screens compact mode must stay a single row, not two empty rows. */
+  .root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-rows: auto;
+    min-height: 54px;
+    padding: 6px 8px;
+  }
+  .root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader .sessionChrome {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader .headerGlobal {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader .header {
+    grid-template-rows: 32px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .unifiedHeader { transition: none; }
 }
