@@ -21,7 +21,27 @@ export function verifyPhoenixVisualBaseline(root) {
       ['installThemeStyles', 'const leases = new Map', 'lease.owners += 1']],
     ['packages/client/ui-theme/src/styles/base.css', [':root']],
   ]
+  // The visual sources alone are insufficient: stale tsdown client bundles can
+  // still serve an older unstyled shell after an otherwise successful build.
+  // These exact custom-property names are embedded by the CSS virtual loader
+  // into each compiled plugin's lib/client.js; they survive minification.
+  const compiled = [
+    ['packages/client/ui-sidebar/lib/client.js', ['--phoenix-side-ember', '--phoenix-side-outline']],
+    ['packages/client/ui-conversation/lib/client.js', ['--dsh-chat-content-width', 'unifiedHeader']],
+    ['packages/client/ui-theme/lib/client.js', ['--dsw-font-family', '--ds-ease-in-out']],
+  ]
   const missing = []
+  for (const [path, fragments] of compiled) {
+    const file = resolve(root, path)
+    if (!existsSync(file)) {
+      missing.push(`${path}: missing compiled browser theme`)
+      continue
+    }
+    const body = readFileSync(file, 'utf8')
+    for (const fragment of fragments) {
+      if (!body.includes(fragment)) missing.push(`${path}: missing compiled style ${fragment}`)
+    }
+  }
   for (const [path, fragments] of required) {
     const file = resolve(root, path)
     if (!existsSync(file)) {
