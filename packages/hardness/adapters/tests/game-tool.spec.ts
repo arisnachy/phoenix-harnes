@@ -101,7 +101,7 @@ describe('Phoenix Game Studio publisher', () => {
     const match = /<script id="phoenix-game-manifest" type="application\/json">([\s\S]*?)<\/script>/u.exec(runnable)
     const raw = match?.[1]
     if (raw === undefined) throw new Error('Missing test metadata')
-    const missing = runnable.replace(match[0], '')
+    const missing = runnable.replace(match?.[0] ?? '', '')
     expect(() => preparePhoenixGameSubmission(missing)).toThrow('manifest_json')
     expect(() => preparePhoenixGameSubmission(runnable, JSON.stringify({ schemaVersion: 1, title: 'Other', genre: 'puzzle' })))
       .toThrow('no coincide')
@@ -118,7 +118,7 @@ describe('Phoenix Game Studio publisher', () => {
     const tool = createPhoenixGameTool()
     const incomplete = runnable.replace('"controls":{"interact":"Enter"},', '')
     await expect(tool.execute({ title: 'Missing controls', html: incomplete }, execution())).rejects.toThrow('controls')
-    const withoutAudio = runnable.replace('"audio":{"cues":["click"]}', '')
+    const withoutAudio = runnable.replace(',"audio":{"cues":["click"]}', '')
     await expect(tool.execute({ title: 'Missing audio', html: withoutAudio }, execution())).rejects.toThrow('audio')
   })
 
