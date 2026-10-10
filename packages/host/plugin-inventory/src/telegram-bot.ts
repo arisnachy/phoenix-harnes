@@ -13,6 +13,7 @@ export const TELEGRAM_BOT_TOKEN_REF = 'PHOENIX_TELEGRAM_BOT_TOKEN'
 const OWNER_REF = 'PHOENIX_TELEGRAM_OWNER_CHAT_ID'
 const OFFSET_REF = 'PHOENIX_TELEGRAM_UPDATE_OFFSET'
 const SESSION_REF = 'PHOENIX_TELEGRAM_SESSION_ID'
+const PAIR_REF = 'PHOENIX_TELEGRAM_PAIRING'
 const BOT_TOKEN_PATTERN = /^[0-9]{6,16}:[A-Za-z0-9_-]{25,}$/
 const USERNAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{4,31}$/
 const POLL_WAIT_SECONDS = 15
@@ -115,8 +116,6 @@ export class TelegramInbox {
   private phase: 'idle' | 'polling' | 'failed' = 'idle'
   private failure: string | undefined
   private lastPoll = 0
-  private pairCode: string | undefined
-  private pairUntil = 0
   private pairFailures = 0
   private agent: Agent | undefined
   private agentPromise: Promise<Agent> | undefined
@@ -153,16 +152,29 @@ export class TelegramInbox {
     if (prior === undefined) this.start()
     else void prior.finally(() => { if (this.worker === undefined) this.start() })
   }
-  /** Not activated just because an old user has chatted with the bot. */
+  /** A code survives Host restarts but expires after fifteen minutes. */
   async pairing(): Promise<string> {
     const creds = vault(this.ctx)
     if (creds === undefined || await stored(creds, TELEGRAM_BOT_TOKEN_REF) === undefined) {
       throw new Error('telegram-not-configured')
     }
-    this.pairCode = String(randomInt(100_000, 1_000_000))
-    this.pairUntil = Date.now() + PAIR_TTL_MS
+    const code = String(randomInt(100_000, 1_000_000))
+    await persist(creds, PAIR_REF, JSON.stringify({ code, expiresAt: Date.now() + PAIR_TTL_MS }))
     this.pairFailures = 0
-    return this.pairCode
+    this.start()
+    return code
+  }
+  private async validPairing(creds: Credentials): Promise<string | undefined> {
+    const saved = await stored(creds, PAIR_REF)
+    if (saved === undefined) return undefined
+    try {
+      const result: unknown = JSON.parse(saved)
+      if (result !== null && typeof result === 'object' && 'code' in result && 'expiresAt' in result
+        && typeof result.code === 'string' && /^\d{6}$/.test(result.code)
+        && typeof result.expiresAt === 'number' && Date.now() < result.expiresAt) return result.code
+    } catch { /* discard broken pairing */ }
+    await creds.unset(ref(PAIR_REF))
+    return undefined
   }
   isPolling(): boolean {
     return this.phase === 'polling' && Date.now() - this.lastPoll < 50_000
@@ -235,12 +247,14 @@ export class TelegramInbox {
     if (incoming === undefined) return
     const owner = await stored(creds, OWNER_REF)
     if (owner === undefined) {
-      if (this.pairCode === undefined || Date.now() > this.pairUntil || this.pairFailures >= 5) return
-      const match = /^\/(?:start|vincular)\s+(\d{6})$/i.exec(incoming.text)
+      if (this.pairFailures >= 5) return
+      const match = /^\/(?:start|vincular)\s+(\d{6})(?:@\w+)?$/i.exec(incoming.text)
       if (match === null) return
-      if (match[1] !== this.pairCode) { this.pairFailures += 1; return }
+      const expected = await this.validPairing(creds)
+      if (expected === undefined) return
+      if (match[1] !== expected) { this.pairFailures += 1; return }
       await persist(creds, OWNER_REF, String(incoming.id))
-      this.pairCode = undefined
+      await creds.unset(ref(PAIR_REF))
       await this.send(token, incoming.id, 'Vinculación confirmada. Soy Kira en Phoenix. Puedes enviarme instrucciones por escrito.')
       return
     }
@@ -294,7 +308,7 @@ export class TelegramInbox {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown'
       // No secrets, model traces or stack details should be sent to Telegram.
-      this.ctx.logger('telegram').warn('Telegram dispatch failed: ' + message.replace(/\d{6,}:[A-Za-z0-9_-]+/g, '[redacted]'))
+      this.ctx.logger.warn('Telegram dispatch failed: ' + message.replace(/\d{6,}:[A-Za-z0-9_-]+/g, '[redacted]'))
       try { await this.send(token, chat, 'No pude completar esta orden en Phoenix. Comprueba que el harness y tu proveedor de modelos estén operativos.') } catch { /* no recursive retry */ }
       this.agent = undefined
       this.agentPromise = undefined
@@ -312,12 +326,12 @@ export function telegramInbox(ctx: Context): TelegramInbox {
   }
   return inbox
 }
-export async function readTelegramBotState(ctx: Context): Promise<TelegramBotSnapshot> {
+export async function readTelegramBotState(ctx: Context, receiver?: TelegramInbox): Promise<TelegramBotSnapshot> {
   const creds = vault(ctx)
   if (creds === undefined) return { configured: false, verified: false, phase: 'credentials-unavailable', inboxActive: false, paired: false }
   const token = await stored(creds, TELEGRAM_BOT_TOKEN_REF)
   if (token === undefined) return { configured: false, verified: false, phase: 'unconfigured', inboxActive: false, paired: false }
-  const worker = telegramInbox(ctx)
+  const worker = receiver ?? telegramInbox(ctx)
   const paired = await worker.isPaired()
   const reason = worker.error()
   try {
@@ -329,23 +343,25 @@ export async function readTelegramBotState(ctx: Context): Promise<TelegramBotSna
       ...(reason === undefined ? {} : { reason }) }
   }
 }
-export async function saveTelegramBot(ctx: Context, value: string): Promise<TelegramBotSnapshot> {
+export async function saveTelegramBot(ctx: Context, value: string, receiver?: TelegramInbox): Promise<TelegramBotSnapshot> {
   const creds = vault(ctx)
   if (creds === undefined) throw new Error('Telegram credential storage unavailable')
   const token = value.trim()
   const verified = await verifyTelegramBotToken(token)
   const previous = await stored(creds, TELEGRAM_BOT_TOKEN_REF)
   if (previous !== token) {
-    for (const key of [OWNER_REF, OFFSET_REF, SESSION_REF]) await creds.unset(ref(key))
+    for (const key of [OWNER_REF, OFFSET_REF, SESSION_REF, PAIR_REF]) await creds.unset(ref(key))
   }
   await persist(creds, TELEGRAM_BOT_TOKEN_REF, token)
-  telegramInbox(ctx).restart()
-  return { configured: true, verified: true, phase: 'verified', inboxActive: false, paired: previous === token && await telegramInbox(ctx).isPaired(), ...verified }
+  const worker = receiver ?? telegramInbox(ctx)
+  worker.restart()
+  return { configured: true, verified: true, phase: 'verified', inboxActive: worker.isPolling(),
+    paired: previous === token && await worker.isPaired(), ...verified }
 }
-export async function removeTelegramBot(ctx: Context): Promise<TelegramBotSnapshot> {
+export async function removeTelegramBot(ctx: Context, receiver?: TelegramInbox): Promise<TelegramBotSnapshot> {
   const creds = vault(ctx)
   if (creds === undefined) throw new Error('Telegram credential storage unavailable')
-  telegramInbox(ctx).stop()
-  for (const key of [TELEGRAM_BOT_TOKEN_REF, OWNER_REF, OFFSET_REF, SESSION_REF]) await creds.unset(ref(key))
+  ;(receiver ?? telegramInbox(ctx)).stop()
+  for (const key of [TELEGRAM_BOT_TOKEN_REF, OWNER_REF, OFFSET_REF, SESSION_REF, PAIR_REF]) await creds.unset(ref(key))
   return { configured: false, verified: false, phase: 'unconfigured', inboxActive: false, paired: false }
 }
