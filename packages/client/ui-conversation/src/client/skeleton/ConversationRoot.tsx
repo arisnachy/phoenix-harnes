@@ -338,7 +338,7 @@ export function ConversationRoot({
 
   return (
     <div ref={rootRef} className={css.root} data-phase={phase} data-header-compact={headerCompact ? 'true' : undefined}>
-      <div className={css.unifiedHeader} aria-label="Barra superior de Phoenix"
+      <div className={css.unifiedHeader} aria-label="Barra superior de la conversación"
         onMouseEnter={() => { setHeaderHovered(true) }}
         onMouseLeave={() => { setHeaderHovered(false) }}
         onFocusCapture={() => { setHeaderFocused(true) }}
