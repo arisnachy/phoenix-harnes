@@ -24,6 +24,39 @@ const html = '<html><body><canvas id="game"></canvas>'
   + 'const ctx=document.querySelector("canvas").getContext("2d");ctx.drawImage(hero,0,0);ctx.drawImage(bg,0,0);</script>'
   + '</body></html>'
 
+const roster = [
+  { family: 'backgrounds', id: 'hills', imageId: 'hills-art' },
+  { family: 'backgrounds', id: 'front', imageId: 'front-art' },
+  { family: 'enemies', id: 'scout', imageId: 'scout-art',
+    frameWidth: 16, frameHeight: 16, animations: { move: [0], attack: [1], hurt: [2], death: [3] } },
+  { family: 'bosses', id: 'warden', imageId: 'warden-art',
+    frameWidth: 16, frameHeight: 16,
+    animations: { idle: [0], attack: [1], hurt: [2], death: [3] },
+    phaseAnimations: { approach: [0], barrage: [1] } },
+  { family: 'weapons', id: 'rifle', imageId: 'rifle-art' },
+  { family: 'projectiles', id: 'bullet', imageId: 'bullet-art' },
+  { family: 'powers', id: 'shield', imageId: 'shield-art' },
+  { family: 'props', id: 'supply-crate', imageId: 'crate-art' },
+  { family: 'effects', id: 'explosion', imageId: 'explosion-art' },
+  { family: 'effects', id: 'dust', imageId: 'dust-art' },
+]
+const full = {
+  ...production,
+  enemies: [{ id: 'scout', states: ['move', 'attack', 'hurt', 'death'] }],
+  bosses: [{ id: 'warden', phases: ['approach', 'barrage'] }],
+  level: { layers: [{ id: 'sky', scrollFactor: 0 }, { id: 'hills', scrollFactor: .5 }, { id: 'front', scrollFactor: .9 }] },
+  art: {
+    ...production.art,
+    backgrounds: [{ id: 'sky', imageId: 'jungle-background' }, ...roster.filter(item => item.family === 'backgrounds')],
+    ...Object.fromEntries(['enemies', 'bosses', 'weapons', 'projectiles', 'powers', 'props', 'effects']
+      .map(family => [family, roster.filter(item => item.family === family)])),
+  },
+}
+const worldHtml = html.replace('</body>', roster.map((entry, i) =>
+  '<img hidden id="' + entry.imageId + '" src="' + atlas + '">'
+  + '<script>const art' + i + '=document.getElementById("' + entry.imageId
+  + '");ctx.drawImage(art' + i + ',0,0);</script>').join('') + '</body>')
+
 describe('Phoenix Game Studio visual asset binding', () => {
   it('requires explicit honest art intent for representational action games', () => {
     expect(() => validateGameArt(html, { genre: 'run-and-gun' })).toThrow('art.mode')
@@ -32,7 +65,19 @@ describe('Phoenix Game Studio visual asset binding', () => {
   })
 
   it('accepts production packaging only when the real designed hero atlas and background are embedded and used', () => {
-    expect(validateGameArt(html, production)).toBe('production-structure')
+    expect(validateGameArt(worldHtml, full)).toBe('production-structure')
+  })
+
+  it('blocks a production run-and-gun when any part of the cast or environment is absent', () => {
+    for (const family of ['enemies', 'bosses', 'weapons', 'projectiles', 'powers', 'props', 'effects', 'backgrounds']) {
+      const art = { ...full.art, [family]: [] }
+      expect(() => validateGameArt(worldHtml, { ...full, art })).toThrow('art.' + family)
+    }
+    expect(() => validateGameArt(worldHtml, { ...full, art: { ...full.art, bosses: [
+      { ...roster.find(item => item.family === 'bosses'), phaseAnimations: { approach: [0] } ] } }))
+      .toThrow('fase')
+    expect(() => validateGameArt(worldHtml.replace('ctx.drawImage(art4,0,0);', ''), full))
+      .toThrow('drawImage')
   })
 
   it('rejects concept art that is present but not rendered in the game', () => {
