@@ -6,6 +6,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, join, resolve } from 'node:path'
 import process from 'node:process'
 import { classifyPreparedActivation, isManagedReleaseBranch } from './phoenix-update-policy.mjs'
+import { assertPromotedStableTarget } from './phoenix-stable-freshness.mjs'
 import { writePhoenixUpdateState } from './phoenix-update-state.mjs'
 
 const EXPECTED_REPOSITORY = process.env.PHOENIX_UPDATE_REPOSITORY ?? 'arisnachy/phoenix-harnes'
@@ -169,6 +170,10 @@ function validatePrepared(root) {
   if (git(stage, ['rev-parse', 'HEAD']).stdout !== prepared.target) {
     throw new Error('prepared staging HEAD no longer matches the requested target')
   }
+
+  // The release pointer can advance AFTER the watcher finished preflight.
+  // Reverify at activation time so an older UI cannot overwrite the theme.
+  assertPromotedStableTarget(root, prepared.target, STABLE_SOURCE_BRANCH)
 
   // The supervisor normally reanchors a prepared record before invoking this
   // activator. A stale updater/bridge can race that write and restore the old
