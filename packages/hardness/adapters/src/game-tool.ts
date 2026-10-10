@@ -71,18 +71,19 @@ function validatePremiumProduction(html: string, manifest: Record<string, unknow
       if (!asObject(actor) || !filled(actor.id)) continue
       const match = assets.find(a => asObject(a) && a.role === roleName && a.entityId === actor.id)
       if (!match) errors.push('unbound-' + roleName + ':' + actor.id)
-      else if (asObject(match) && Array.isArray(actor.states)
-        && (!Array.isArray(match.states) || actor.states.some(s => !match.states.includes(s)))) {
-        errors.push('animation-mismatch:' + actor.id)
+      else if (asObject(match) && Array.isArray(actor.states)) {
+        const actualStates: readonly unknown[] = Array.isArray(match.states) ? match.states : []
+        if (actor.states.some(s => !actualStates.includes(s))) errors.push('animation-mismatch:' + actor.id)
       }
     }
   }
   requiredActors('enemies', 'enemy')
   requiredActors('bosses', 'boss')
   const hero = assets.find(a => asObject(a) && a.role === 'player')
-  if (representational && asObject(manifest.player) && Array.isArray(manifest.player.states)
-    && (!asObject(hero) || !Array.isArray(hero.states)
-      || manifest.player.states.some(s => !hero.states.includes(s)))) errors.push('unbound-player-animations')
+  if (representational && asObject(manifest.player) && Array.isArray(manifest.player.states)) {
+    const heroStates: readonly unknown[] = asObject(hero) && Array.isArray(hero.states) ? hero.states : []
+    if (manifest.player.states.some(s => !heroStates.includes(s))) errors.push('unbound-player-animations')
+  }
   const bindings = Array.isArray(p.audioBindings) ? p.audioBindings : []
   const cues = asObject(manifest.audio) ? manifest.audio.cues : undefined
   for (const cue of Array.isArray(cues) ? cues : []) {
