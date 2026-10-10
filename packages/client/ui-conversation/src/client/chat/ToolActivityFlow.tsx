@@ -51,6 +51,7 @@ type ActivityItem =
 
 type FlowItem =
   | { readonly kind: 'browser'; readonly key: string; readonly userKey: string }
+  | { readonly kind: 'game-reopen'; readonly key: string; readonly gameNodeKey?: string }
   | { readonly kind: 'node'; readonly key: string }
   | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
@@ -284,6 +285,92 @@ export function addBrowserCards(
   return result
 }
 
+/** A return-to-game gesture is not a request for an image or a text-only link. */
+export function isGameReopenPrompt(text: string): boolean {
+  const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
+  if (/\b(?:no|nunca)\s+(?:abras|abrir|muestres|mostrar|juegues|jugar)\b/u.test(normalized)) return false
+  const action = /\b(?:abre|abrir|abreme|muestra|muestrame|mostrar|ensena|ensename|ver|verlo|verla|veamos|dejame|jugar|juguemos|play|open|show)\b/u
+  const game = /\b(?:juego|juegos|videojuego|videojuegos|game|games|game studio|pac[\s-]?man|tetris|snake|pong|arkanoid|contra|minecraft|sudoku|ajedrez)\b/u
+  return action.test(normalized) && game.test(normalized)
+}
+
+function userText(node: OrderedChatNode): string {
+  if (node.kind !== 'user' && node.kind !== 'steering') return ''
+  const content = (node.data as { content?: unknown }).content
+  if (!Array.isArray(content)) return ''
+  return content.map((block: unknown) => {
+    if (typeof block !== 'object' || block === null) return ''
+    const item = block as { type?: unknown; text?: unknown }
+    return item.type === 'text' && typeof item.text === 'string' ? item.text : ''
+  }).join('')
+}
+
+function gameArtifact(node: OrderedChatNode): { key: string; title: string } | undefined {
+  if (node.kind !== 'hardness-artifact') return undefined
+  const data = node.data as { mime?: unknown; title?: unknown; data?: unknown }
+  if (data.mime !== 'application/vnd.phoenix.game+html'
+    || typeof data.title !== 'string' || typeof data.data !== 'string' || data.data.trim() === '') return undefined
+  return { key: node.key, title: data.title }
+}
+
+function compactName(text: string): string {
+  return text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().replace(/[^a-z0-9]/gu, '')
+}
+
+/** Keep a named game request from silently opening a different existing game. */
+function namedGame(text: string): string | undefined {
+  const compact = compactName(text)
+  return ['pacman', 'tetris', 'snake', 'pong', 'arkanoid', 'contra', 'minecraft', 'sudoku', 'ajedrez']
+    .find(name => compact.includes(name))
+}
+
+/**
+ * An actual previously published HTML game can be mounted again next to the
+ * follow-up user gesture. Never synthesize a playable artifact from Kira's
+ * prose, and never say "scroll up" for an absent game.
+ *
+ * If this same turn already produced a new game, its original durable
+ * artifact renderer is used instead (avoid two copies of a live game).
+ */
+export function addGameReopenCards(
+  flow: FlowItem[],
+  nodes: readonly OrderedChatNode[],
+): FlowItem[] {
+  const indexByKey = new Map(nodes.map((node, i) => [node.key, i]))
+  const output: FlowItem[] = []
+  for (const item of flow) {
+    output.push(item)
+    const text = item.kind === 'optimistic'
+      ? item.text
+      : item.kind === 'node'
+        ? userText(nodes[indexByKey.get(item.key) ?? -1] ?? { key: '', kind: '', data: null })
+        : ''
+    if (!isGameReopenPrompt(text)) continue
+    const index = item.kind === 'optimistic' ? nodes.length : (indexByKey.get(item.key) ?? -1)
+    if (index < 0) continue
+    const nextUserOffset = nodes.slice(index + 1)
+      .findIndex(node => node.kind === 'user' || node.kind === 'steering')
+    const nextUser = nextUserOffset < 0 ? nodes.length : index + 1 + nextUserOffset
+    const name = namedGame(text)
+    if (nodes.slice(index + 1, nextUser).some(node => {
+      const published = gameArtifact(node)
+      return published !== undefined && (name === undefined || compactName(published.title).includes(name))
+    })) continue
+    const previous = nodes.slice(0, index).flatMap(node => {
+      const game = gameArtifact(node)
+      return game === undefined ? [] : [game]
+    })
+    const matching = name === undefined ? previous
+      : previous.filter(game => compactName(game.title).includes(name))
+    output.push({
+      kind: 'game-reopen',
+      key: 'game-reopen:' + item.key,
+      ...matching.at(-1) === undefined ? {} : { gameNodeKey: matching.at(-1)?.key },
+    })
+  }
+  return output
+}
+
 function ToolActivityIcon() {
   return (
     <svg className={css.icon} viewBox="0 0 20 20" aria-hidden="true">
@@ -461,7 +548,7 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
  * @returns The grouped transcript flow.
  */
 export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
-  const flow = useMemo(() => addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), [nodes, optimisticSubmit])
+  const flow = useMemo(() => addGameReopenCards(addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), nodes), [nodes, optimisticSubmit])
   const browserKeys = flow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
   const newestBrowserKey = browserKeys.at(-1)
@@ -488,7 +575,15 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
               t={seatProps.t}
             />
           )}
-          {item.kind === 'browser'
+          {item.kind === 'game-reopen'
+            ? item.gameNodeKey === undefined
+              ? <p role="status" className={chatCss.hint} data-phoenix-game-unavailable="true">
+                  No hay un juego ejecutable publicado entre los mensajes disponibles. Kira debe publicarlo mediante phoenix_game; una respuesta de texto no abre el juego.
+                </p>
+              : <div data-phoenix-game-reopened="true">
+                  <ChatNodeSeat nodeKey={item.gameNodeKey} {...seatProps} />
+                </div>
+            : item.kind === 'browser'
             ? <MiniBrowser
               requested
               active={item.userKey === activeBrowserKey}
