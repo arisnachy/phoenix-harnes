@@ -480,7 +480,11 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
   // conversation's first pending answer, never to a continuing transcript.
   const centeredPreparing = turnStatus?.progress.phase === 'preparing'
     && nodes.filter(node => node.kind === 'user' || node.kind === 'steering').length <= 1
-    && !nodes.some(node => node.kind === 'assistant-step' || node.kind === 'hardness-artifact')
+    && !nodes.some(node => {
+      const assistant = assistantData(node)
+      return node.kind === 'hardness-artifact'
+        || (assistant !== null && hasAssistantSurface(assistant))
+    })
     && (nodes.some(node => node.kind === 'user' || node.kind === 'steering')
       || flow.some(item => item.kind === 'optimistic'))
   const statusBeforeIndex = turnStatus === undefined || flow.at(-1)?.kind !== 'activity'
