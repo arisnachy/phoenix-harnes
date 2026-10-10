@@ -24,3 +24,10 @@ Open either `jungle-echo.html` or `lumen-circuit.html` in a modern browser, or p
 - Source or metadata checks **do not constitute** visual QA, animation comparisons or audible playback tests. Verify any new game using real browser/device screenshots, animation recordings, audio listening, input and performance measurements.
 - Procedural character shapes, oscillator audio and simple opponent decisions are technical references, not a substitute for consistent authored sprite atlases, detailed scenery, multi-layer sound mixes, licensed or original character art and polished gameplay balancing.
 - Kira's `.agents/skills/phoenix-game-studio/SKILL.md` describes genre routing, actual source research, specialist collaboration, animation and assets, game QA and stopping conditions.
+
+
+## Premium production contract
+
+For new finished-game requests, Kira uses `productionTier: "polished"`, a required inventory of original/licensed art, characters/enemies/bosses, appropriate weapons, world, title/intro/pause/death/victory screens, story, soundtrack and event-bound SFX. Every `runtimeRef` needs an identifier in executable JavaScript outside manifest JSON, and enemy/boss IDs and animation states must match the runtime asset register. The `phoenix_game` publisher rejects an incomplete premium inventory; the UI preflight also reports specific deficits. See [premium asset pipeline](../../.agents/skills/phoenix-game-studio/references/premium-asset-pipeline.md).
+
+**Important:** Existing Jungle Echo / Lumen Circuit are intentionally `prototype`-level technical baselines. An art inventory with function names can still be fake or ugly: only captured rendering, animation, gameplay and audio checks establish finish quality. A `polished` tier is not an automatic game generator or a quality certification.
