@@ -20,7 +20,7 @@ import {
 } from './local-model/index.ts'
 import { searchOfficialMcpRegistry } from './mcp-registry.ts'
 import { OpenClawConnectorBridge } from './openclaw-connectors.ts'
-import { readTelegramBotState, saveTelegramBot, removeTelegramBot, telegramInbox } from './telegram-bot.ts'
+import { readTelegramBotState, saveTelegramBot, removeTelegramBot, TelegramInbox } from './telegram-bot.ts'
 import {
   BINANCE_AGENT_OS_SERVER_NAME,
   BINANCE_AGENT_OS_URL,
@@ -118,6 +118,7 @@ export class PluginInventoryGateway extends TypertRemoteService {
   private readonly chatGptWeb: ChatGptWebIntegration
   private readonly managedMcp: ManagedMcpController
   private readonly openClawConnectors: OpenClawConnectorBridge
+  private readonly telegram: TelegramInbox
 
   constructor(ctx: Context) {
     super(ctx, 'pluginInventory')
@@ -125,12 +126,10 @@ export class PluginInventoryGateway extends TypertRemoteService {
     this.chatGptWeb = createChatGptWebIntegration()
     this.managedMcp = new ManagedMcpController(ctx.loader)
     this.openClawConnectors = new OpenClawConnectorBridge()
-    // Run the inbound Telegram receiver in the Host, not in a browser tab.
-    ctx.effect(() => {
-      const inbox = telegramInbox(ctx)
-      inbox.start()
-      return () => { inbox.stop() }
-    }, 'telegram inbound message receiver')
+    // One receiver owned by this Host service, shared by all Settings RPCs.
+    this.telegram = new TelegramInbox(ctx)
+    this.telegram.start()
+    ctx.effect(() => () => { this.telegram.stop() }, 'telegram inbound message receiver')
     void ctx.effect(async () => {
       try {
         await this.managedMcp.retireJev()
@@ -342,25 +341,27 @@ export class PluginInventoryGateway extends TypertRemoteService {
   /** Describe the configured Telegram bot without revealing its token. */
   @Remote('telegramBotState')
   async telegramBotState(): Promise<TelegramBotSnapshot> {
-    return readTelegramBotState(this.ctx)
+    this.telegram.start()
+    return readTelegramBotState(this.ctx, this.telegram)
   }
 
   /** Verify with Telegram getMe *before* persisting the supplied bot token. */
   @Remote('configureTelegramBot')
   async configureTelegramBot(request: { token: string }): Promise<TelegramBotSnapshot> {
-    return saveTelegramBot(this.ctx, request.token)
+    return saveTelegramBot(this.ctx, request.token, this.telegram)
   }
 
   /** Issue an ephemeral owner-linking code; only a private chat presenting it may issue tasks. */
   @Remote('telegramPairingCode')
   async telegramPairingCode(): Promise<{ code: string; expiresInSeconds: number }> {
-    return { code: await telegramInbox(this.ctx).pairing(), expiresInSeconds: 900 }
+    this.telegram.start()
+    return { code: await this.telegram.pairing(), expiresInSeconds: 900 }
   }
 
   /** Forget the local Telegram credential without issuing a Telegram-side token revocation. */
   @Remote('disconnectTelegramBot')
   async disconnectTelegramBot(): Promise<TelegramBotSnapshot> {
-    return removeTelegramBot(this.ctx)
+    return removeTelegramBot(this.ctx, this.telegram)
   }
 
   /**
