@@ -139,7 +139,6 @@ export class TelegramInbox {
   private failure: string | undefined
   private lastPoll = 0
   private pairFailures = 0
-  private agent: Agent | undefined
   private agentPromise: Promise<Agent> | undefined
   constructor(private readonly ctx: Context) {}
 
@@ -311,7 +310,6 @@ export class TelegramInbox {
       const reusableId = gatewayId === priorId ? priorId : undefined
       const existing = reusableId === undefined ? undefined : agents.get(SessionId(reusableId))
       if (existing !== undefined && existing.options.provider && existing.options.model) {
-        this.agent = existing
         return existing
       }
       let sessionId = SessionId(reusableId === undefined
@@ -335,7 +333,6 @@ export class TelegramInbox {
       // leaves a mismatched marker, which safely triggers fresh migration.
       await persist(creds, SESSION_REF, String(sessionId))
       await persist(creds, SESSION_GATEWAY_REF, String(sessionId))
-      this.agent = agent
       return agent
     })()
     this.agentPromise = task
@@ -391,7 +388,6 @@ export class TelegramInbox {
         ? 'admitir el mensaje' : 'ejecutar la solicitud'
       try { await this.send(token, chat, 'Kira no pudo ' + description
         + ' en Phoenix (' + code + '). Revisa el estado del Host y el modelo configurado.') } catch { /* no recursive retry */ }
-      this.agent = undefined
       this.agentPromise = undefined
     }
   }
