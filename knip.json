@@ -8,6 +8,7 @@
     "codex",
     "icacls",
     "musl-gcc",
+    "powershell.exe",
     "python3",
     "sandbox-exec",
     "tar",

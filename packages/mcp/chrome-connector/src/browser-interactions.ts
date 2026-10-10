@@ -13,12 +13,14 @@ export type BrowserTarget = {
   placeholder?: string | undefined
   text?: string | undefined
 }
+/** Bounded, typed DOM operation and locator accepted by the Chrome connector. */
 export type BrowserInteraction = BrowserTarget & {
   operation: 'inspect' | 'fill' | 'select' | 'check' | 'click' | 'submit' | 'scroll' | 'wait'
   value?: string | undefined
   checked?: boolean | undefined
   expectedText?: string | undefined
 }
+/** Redacted success/failure receipt for a real browser interaction. */
 export type BrowserInteractionResult = {
   ok: boolean
   reason?: string | undefined
@@ -41,6 +43,8 @@ export type BrowserInteractionResult = {
  * This function is serialized to a CDP Runtime.evaluate expression. It must
  * not reference any module variables; everything it uses is browser DOM.
  * Keep results bounded and never return sensitive field values.
+ * @param input - Validated locator, operation and bounded user-intended value.
+ * @returns A sanitized DOM action result without credentials or field secrets.
  */
 export function executeBrowserInteraction(input: BrowserInteraction): BrowserInteractionResult {
   const doc = document
@@ -224,7 +228,10 @@ export function executeBrowserInteraction(input: BrowserInteraction): BrowserInt
   }
 }
 
-/** Execute several fields in one CDP round-trip, stopping at the first mismatch. */
+/** Execute several fields in one CDP round-trip, stopping at the first mismatch.
+ * @param inputs - One to thirty validated DOM interactions.
+ * @returns Self-contained CDP expression that stops at the first failed action.
+ */
 export function browserBatchExpression(inputs: BrowserInteraction[]): string {
   if (inputs.length === 0 || inputs.length > 30) throw new Error('Expected 1–30 bounded browser actions')
   return '(() => { const run = (' + executeBrowserInteraction.toString() + '); '
@@ -234,7 +241,10 @@ export function browserBatchExpression(inputs: BrowserInteraction[]): string {
     + 'return {ok:true,completed:results.length,results}; })()'
 }
 
-/** Accepts typed, bounded action input only, never model-supplied JavaScript. */
+/** Accepts typed, bounded action input only, never model-supplied JavaScript.
+ * @param input - Validated single DOM operation and locator.
+ * @returns Serializable expression for a single real browser action.
+ */
 export function browserInteractionExpression(input: BrowserInteraction): string {
   return '(' + executeBrowserInteraction.toString() + ')(' + JSON.stringify(input) + ')'
 }

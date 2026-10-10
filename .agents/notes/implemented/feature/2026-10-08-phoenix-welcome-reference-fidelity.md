@@ -1,11 +1,27 @@
-# 2026-10-08 — Phoenix welcome reference fidelity
+# Agent Note: Phoenix welcome reference fidelity
 
-The first quick-actions implementation reproduced the cards but omitted the surrounding navigation, top bar, and content alignment from the approved third-image reference. This change extends the actual application instead of adding a static illustration.
+Status: implemented
 
-The expanded sidebar now shows Inicio, Descubrir, Conectores, Equipo, and Biblioteca. Inicio reuses `startSession`; the next three open existing registered Settings sections through an in-browser navigation event; Biblioteca and the welcome search open the existing workspace-session search, including the narrow-sidebar expansion path. The existing collapsed rail and workspaces stay mounted.
+## Problem
 
-The welcome toolbar renders the real model selector in a hero slot. It shares the exact session model directory and selection path with the composer, which moves its own selector to the left only during a blank hero phase. The avatar's profile button navigates to Profile. No second textarea, fabricated model label, or replacement agent action is created.
+An earlier quick-action implementation reproduced cards but omitted navigation, the top bar and the content alignment of the approved reference.
 
-The hero column no longer inherits the Kira floating-team counter-offset, which moved the approved centered layout toward the sidebar by about 112px at the default 280px sidebar width. Active session geometry is unchanged. The original official monochrome phoenix logo is retained rather than inventing a new brand asset; the profile button uses initials rather than an unsupported portrait.
+## Decision
 
-Verification: compile and focused UI tests on the exact SHA, inspect actual browser at desktop and mobile widths, and check model menu, Settings section navigation, workspace search, and composer before claiming full fidelity. Preserve accessibility and dark-mode behavior.
+The real expanded sidebar contains Inicio, Descubrir, Conectores, Equipo and Biblioteca. Inicio reuses `startSession`; the next three open registered destinations, and Biblioteca or welcome search invokes the existing workspace-session search. Collapsing the sidebar preserves the workspace and navigation paths.
+
+The welcome toolbar mounts the actual model selector from the existing session model directory. The active composer moves its selector only during the blank hero phase; no second textarea or fabricated model action is introduced. The avatar opens the real Profile section.
+
+The centered hero no longer inherits the floating team counter-offset (roughly 112px with a 280px sidebar). The real monochrome Phoenix emblem and initials-only avatar are retained.
+
+## Alternatives considered
+
+**Add static navigation illustrations.** Rejected because they cannot open actual destinations and would imply nonfunctional controls.
+
+**Duplicate the model selector and composer logic.** Rejected because that would create competing sources of truth for session state and available models.
+
+**Use an invented portrait in the Profile control.** Rejected in favor of the actual supported initials avatar.
+
+## Consequences
+
+The welcome screen more closely follows the approved reference without introducing shadow navigation or session state. Final confidence still depends on exact-SHA builds and real desktop/mobile testing of model menus, Settings navigation, workspace search, focus behavior and both light and dark themes.

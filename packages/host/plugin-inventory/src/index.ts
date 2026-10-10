@@ -112,7 +112,9 @@ function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalM
 
 /** Remote service exposing trusted Host diagnostics, updater controls, and Phoenix Local lifecycle. */
 export class PluginInventoryGateway extends TypertRemoteService {
-  static inject = ['loader', 'apiProxy']
+  // Diagnostics and managed MCPs require Loader; apiProxy is not used by this service.
+  // Do not leave inventory pending when the optional API bridge is unavailable.
+  static inject = ['loader']
 
   private readonly localModel: Promise<LocalModelRuntimeManager>
   private readonly chatGptWeb: ChatGptWebIntegration
@@ -338,27 +340,36 @@ export class PluginInventoryGateway extends TypertRemoteService {
     return this.managedMcp.repair(request)
   }
 
-  /** Describe the configured Telegram bot without revealing its token. */
+  /** Describe the configured Telegram bot without revealing its token.
+   * @returns Secret-free Telegram bot status.
+   */
   @Remote('telegramBotState')
   async telegramBotState(): Promise<TelegramBotSnapshot> {
     this.telegram.start()
     return readTelegramBotState(this.ctx, this.telegram)
   }
 
-  /** Verify with Telegram getMe *before* persisting the supplied bot token. */
+  /** Verify with Telegram getMe *before* persisting the supplied bot token.
+   * @param request - Bot token submitted to the secure configuration endpoint.
+   * @returns Verified Telegram bot status without exposing the token.
+   */
   @Remote('configureTelegramBot')
   async configureTelegramBot(request: { token: string }): Promise<TelegramBotSnapshot> {
     return saveTelegramBot(this.ctx, request.token, this.telegram)
   }
 
-  /** Issue an ephemeral owner-linking code; only a private chat presenting it may issue tasks. */
+  /** Issue an ephemeral owner-linking code; only a private chat presenting it may issue tasks.
+   * @returns One-time pairing code and its validity in seconds.
+   */
   @Remote('telegramPairingCode')
   async telegramPairingCode(): Promise<{ code: string; expiresInSeconds: number }> {
     this.telegram.start()
     return { code: await this.telegram.pairing(), expiresInSeconds: 900 }
   }
 
-  /** Forget the local Telegram credential without issuing a Telegram-side token revocation. */
+  /** Forget the local Telegram credential without issuing a Telegram-side token revocation.
+   * @returns Disconnected Telegram bot status.
+   */
   @Remote('disconnectTelegramBot')
   async disconnectTelegramBot(): Promise<TelegramBotSnapshot> {
     return removeTelegramBot(this.ctx, this.telegram)

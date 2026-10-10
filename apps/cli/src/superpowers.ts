@@ -25,7 +25,7 @@ const SOURCE_BRANCH = 'main'
 const SKILLS_PATH = 'skills'
 const STATE_SCHEMA = 1
 
-export interface SuperpowersSkillRecord {
+interface SuperpowersSkillRecord {
   sourceName: string
   alias: string
   description: string
