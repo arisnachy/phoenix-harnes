@@ -39,10 +39,11 @@ function comparable(value: unknown): string {
  * @returns Game HTML with exactly one validated canonical manifest binding.
  */
 export function preparePhoenixGameSubmission(html: string, manifestJson?: string): string {
+  if (html.trim().length === 0) throw new ToolArgsError(['El videojuego HTML está vacío.'])
   const supplied = manifestJson === undefined ? undefined : jsonValue(manifestJson)
   const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)]
   const canonical = scripts.filter(match => /\bid\s*=\s*["']phoenix-game-manifest["']/iu.test(match[1] ?? ''))
-  if (canonical.length > 1) throw new ToolArgsError(['Manifiesto de Game Studio duplicado: deja un solo bloque JSON.'])
+  if (canonical.length > 1) throw new ToolArgsError(['Hay más de un manifiesto de Game Studio: deja un solo bloque JSON.'])
   if (canonical.length === 1) {
     const match = canonical[0]
     if (!/\btype\s*=\s*["']application\/json["']/iu.test(match?.[1] ?? '')) {
@@ -78,7 +79,7 @@ export function preparePhoenixGameSubmission(html: string, manifestJson?: string
   }
   if (candidates.length > 1) throw new ToolArgsError(['Hay varios contratos JSON ambiguos. Identifica uno como phoenix-game-manifest.'])
   if (supplied === undefined) {
-    throw new ToolArgsError(['Antes de publicar, pasa manifest_json con el contrato real del juego o incluye <script id="phoenix-game-manifest" type="application/json"> en HTML. Kira debe preparar esto desde el principio.'])
+    throw new ToolArgsError(['Falta el manifiesto: antes de publicar, pasa manifest_json con el contrato real del juego o incluye <script id="phoenix-game-manifest" type="application/json"> en HTML. Kira debe preparar esto desde el principio.'])
   }
   if (!/<\/body\s*>/iu.test(html)) throw new ToolArgsError(['Game Studio necesita HTML completo con </body> para insertar el contrato.'])
   const escaped = JSON.stringify(supplied).replace(/</gu, '\\u003c')
