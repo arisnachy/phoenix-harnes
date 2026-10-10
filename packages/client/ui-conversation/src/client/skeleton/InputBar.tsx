@@ -32,7 +32,8 @@ import { PermissionSelect } from './PermissionSelect.tsx'
 import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
   configureCodexRealtimeUserTranscriptHandler,
-  createVoiceRecognition, getVoiceAssistantSnapshot, hasVoiceRecognition, interruptVoiceAssistantSpeech,
+  createVoiceRecognition, getVoiceAssistantSnapshot, hasCodexRealtimeVoiceSupport, hasVoiceRecognition,
+  interruptVoiceAssistantSpeech,
   isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
   tryStartCodexRealtimeVoice,
   type VoiceInputState, type VoiceRecognitionLike,
@@ -1010,7 +1011,7 @@ export function InputBar({
             {rightItems}
             {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
-            {voiceState !== 'unsupported' && (
+            {(voiceState !== 'unsupported' || hasCodexRealtimeVoiceSupport()) && (
               <Tooltip
                 label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
