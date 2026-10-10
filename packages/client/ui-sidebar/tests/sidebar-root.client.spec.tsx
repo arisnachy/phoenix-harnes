@@ -177,6 +177,31 @@ describe('SidebarRoot shell', () => {
     expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeTruthy()
   })
 
+  it('keeps original navigation actions available while the sidebar is closed', () => {
+    const b = mountShell({ collapsed: true, width: 72 })
+    const received: string[] = []
+    const onFeature = (e: Event) => { received.push((e as CustomEvent<{ destination: string }>).detail.destination) }
+    const onLibrary = () => { received.push('library') }
+    const onTeam = () => { received.push('team') }
+    window.addEventListener('phoenix:open-feature', onFeature)
+    window.addEventListener('phoenix:open-workspace-library', onLibrary)
+    window.addEventListener('phoenix:toggle-team-directory', onTeam)
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Home' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Discover' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Connectors' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Team' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Library' }))
+      expect(b.startSession).toHaveBeenCalledOnce()
+      expect(received).toEqual(['discover', 'connectors', 'team', 'library'])
+      expect(screen.queryByText('Discover')).toBeNull()
+    } finally {
+      window.removeEventListener('phoenix:open-feature', onFeature)
+      window.removeEventListener('phoenix:open-workspace-library', onLibrary)
+      window.removeEventListener('phoenix:toggle-team-directory', onTeam)
+    }
+  })
+
   it('renders statically collapsed on a cold start (no crossfade classes)', () => {
     const b = mountShell({ collapsed: true })
     expect(b.regionOwner().wide).toBe(false)
