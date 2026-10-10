@@ -294,7 +294,6 @@ export class TelegramInbox {
     return gateway
   }
   private async liveAgent(creds: Credentials): Promise<Agent> {
-    if (this.agent !== undefined && this.agent.options.provider && this.agent.options.model) return this.agent
     if (this.agentPromise !== undefined) return this.agentPromise
     const task = (async () => {
       const agents = (this.ctx.get as (name: string) => unknown)('agents') as
@@ -304,6 +303,10 @@ export class TelegramInbox {
       const gateway = this.gateway()
       const existingId = await stored(creds, SESSION_REF)
       const existing = existingId === undefined ? undefined : agents.get(SessionId(existingId))
+      if (existing !== undefined && existing.options.provider && existing.options.model) {
+        this.agent = existing
+        return existing
+      }
       // Earlier Telegram versions created a naked Agent without a model or
       // preset. Never reuse that live instance: move to a properly composed
       // gateway session, keeping its old history intact.
