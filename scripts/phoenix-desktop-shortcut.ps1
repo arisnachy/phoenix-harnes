@@ -54,45 +54,79 @@ try {
 finally {
   $sha256.Dispose()
 }
-$iconRevision = 'v4'
+$iconRevision = 'v5'
 $iconPath = Join-Path $phoenixState "phoenix-browser-$iconRevision-$iconHash.ico"
 if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
   $sourceImage = $null
-  $bitmap = $null
-  $graphics = $null
-  $icon = $null
   $stream = $null
+  $writer = $null
   try {
     Add-Type -AssemblyName System.Drawing
     $sourceImage = [Drawing.Image]::FromFile($logoAssetPath)
-    $bitmap = New-Object -TypeName Drawing.Bitmap -ArgumentList 256, 256
-    $graphics = [Drawing.Graphics]::FromImage($bitmap)
-    $graphics.Clear([Drawing.Color]::Transparent)
-    $graphics.CompositingQuality = [Drawing.Drawing2D.CompositingQuality]::HighQuality
-    $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-    $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::HighQuality
+    # Multi-resolution PNG-backed ICO preserves the emblem's transparency and
+    # sharpness in Explorer, Start, taskbar, and high-DPI desktop shortcuts.
+    $sizes = @(16, 24, 32, 48, 64, 128, 256)
+    $images = New-Object 'System.Collections.Generic.List[byte[]]'
+    foreach ($size in $sizes) {
+      $bitmap = $null
+      $graphics = $null
+      $pngStream = $null
+      try {
+        $bitmap = New-Object -TypeName Drawing.Bitmap -ArgumentList $size, $size
+        $graphics = [Drawing.Graphics]::FromImage($bitmap)
+        $graphics.Clear([Drawing.Color]::Transparent)
+        $graphics.CompositingQuality = [Drawing.Drawing2D.CompositingQuality]::HighQuality
+        $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $graphics.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::HighQuality
+        $scale = [Math]::Min([double]$size / $sourceImage.Width, [double]$size / $sourceImage.Height)
+        $width = [Math]::Max(1, [int][Math]::Round($sourceImage.Width * $scale))
+        $height = [Math]::Max(1, [int][Math]::Round($sourceImage.Height * $scale))
+        $x = [int][Math]::Floor(($size - $width) / 2.0)
+        $y = [int][Math]::Floor(($size - $height) / 2.0)
+        $graphics.DrawImage($sourceImage, $x, $y, $width, $height)
+        $pngStream = New-Object IO.MemoryStream
+        $bitmap.Save($pngStream, [Drawing.Imaging.ImageFormat]::Png)
+        $images.Add([byte[]]$pngStream.ToArray())
+      }
+      finally {
+        if ($null -ne $pngStream) { $pngStream.Dispose() }
+        if ($null -ne $graphics) { $graphics.Dispose() }
+        if ($null -ne $bitmap) { $bitmap.Dispose() }
+      }
+    }
 
-    $scale = [Math]::Min(256.0 / [double]$sourceImage.Width, 256.0 / [double]$sourceImage.Height)
-    $renderWidth = [Math]::Max(1, [int][Math]::Round($sourceImage.Width * $scale))
-    $renderHeight = [Math]::Max(1, [int][Math]::Round($sourceImage.Height * $scale))
-    $x = [int][Math]::Floor((256 - $renderWidth) / 2.0)
-    $y = [int][Math]::Floor((256 - $renderHeight) / 2.0)
-    $graphics.DrawImage($sourceImage, $x, $y, $renderWidth, $renderHeight)
-
-    $icon = [Drawing.Icon]::FromHandle($bitmap.GetHicon())
-    $stream = [IO.File]::Open($iconPath, [IO.FileMode]::Create, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    $icon.Save($stream)
+    # ICO directory: header (6 bytes), 16-byte entries, then PNG payloads.
+    $stream = [IO.File]::Open($iconPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    $writer = [IO.BinaryWriter]::new($stream)
+    $writer.Write([uint16]0)
+    $writer.Write([uint16]1)
+    $writer.Write([uint16]$sizes.Count)
+    $offset = 6 + (16 * $sizes.Count)
+    for ($i = 0; $i -lt $sizes.Count; $i++) {
+      $dimension = if ($sizes[$i] -eq 256) { [byte]0 } else { [byte]$sizes[$i] }
+      $writer.Write($dimension)
+      $writer.Write($dimension)
+      $writer.Write([byte]0)
+      $writer.Write([byte]0)
+      $writer.Write([uint16]1)
+      $writer.Write([uint16]32)
+      $writer.Write([uint32]$images[$i].Length)
+      $writer.Write([uint32]$offset)
+      $offset += $images[$i].Length
+    }
+    foreach ($pngBytes in $images) { $writer.Write([byte[]]$pngBytes) }
+    $writer.Flush()
   }
   catch {
+    if ($null -ne $writer) { $writer.Dispose(); $writer = $null }
+    if ($null -ne $stream) { $stream.Dispose(); $stream = $null }
     Remove-Item -LiteralPath $iconPath -Force -ErrorAction SilentlyContinue
     throw "PHOENIX could not render its modern shortcut emblem: $($_.Exception.Message)"
   }
   finally {
+    if ($null -ne $writer) { $writer.Dispose() }
     if ($null -ne $stream) { $stream.Dispose() }
-    if ($null -ne $icon) { $icon.Dispose() }
-    if ($null -ne $graphics) { $graphics.Dispose() }
-    if ($null -ne $bitmap) { $bitmap.Dispose() }
     if ($null -ne $sourceImage) { $sourceImage.Dispose() }
   }
 }
@@ -102,10 +136,10 @@ Get-ChildItem -LiteralPath $phoenixState -Filter 'phoenix-browser-*.ico' -File -
 
 $powerShellExe = Join-Path $PSHOME 'powershell.exe'
 $targetPath = $powerShellExe
-$arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$launcherPath`""
+$arguments = "-NoLogo -NoProfile -ExecutionPolicy Bypass -NoExit -File `"$launcherPath`""
 $workingDirectory = $rootPath
 $iconLocation = "$iconPath,0"
-$windowStyle = 7
+$windowStyle = 1
 $shell = New-Object -ComObject WScript.Shell
 
 function Remove-LegacyPhoenixShortcut([string]$ShortcutPath) {

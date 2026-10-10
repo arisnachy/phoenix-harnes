@@ -30,7 +30,8 @@ function Write-LaunchFailure([string]$Message) {
 try {
   Set-Location -LiteralPath $rootPath
   $env:PHOENIX_DESKTOP_LAUNCH = '1'
-  $env:PHOENIX_DESKTOP_CONSOLE = '0'
+  $env:PHOENIX_DESKTOP_CONSOLE = '1'
+  Write-Host '[PHOENIX] Iniciando con PowerShell visible. El registro se guarda en:' $logPath
 
   # Prefer the installed native shell so Computer/Agent Desktop executes in the
   # interactive user's desktop. PHOENIX_SOURCE_ROOT keeps its managed runtime
@@ -38,7 +39,8 @@ try {
   $installedPhoenixExe = Join-Path $localAppData 'Programs\Phoenix\Phoenix.exe'
   if (Test-Path -LiteralPath $installedPhoenixExe -PathType Leaf) {
     $env:PHOENIX_SOURCE_ROOT = $rootPath
-    Start-Process -FilePath $installedPhoenixExe | Out-Null
+    Write-Host '[PHOENIX] Abriendo Phoenix Desktop...'
+    Start-Process -FilePath $installedPhoenixExe -Wait | Out-Null
     exit 0
   }
 
@@ -51,7 +53,7 @@ try {
   }
 
   if ($null -ne $corepack) {
-    & $corepack.Source pnpm phoenix @launchArgs *>> $logPath
+    & $corepack.Source pnpm phoenix @launchArgs 2>&1 | Tee-Object -FilePath $logPath -Append
     $exitCode = $LASTEXITCODE
   }
   else {
@@ -62,7 +64,7 @@ try {
     if ($null -eq $pnpm) {
       throw 'No se encontró Corepack ni pnpm en PATH. Abre PowerShell, instala/activa pnpm y vuelve a intentar.'
     }
-    & $pnpm.Source phoenix @launchArgs *>> $logPath
+    & $pnpm.Source phoenix @launchArgs 2>&1 | Tee-Object -FilePath $logPath -Append
     $exitCode = $LASTEXITCODE
   }
 
