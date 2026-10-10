@@ -362,10 +362,11 @@ export function addGameReopenCards(
     })
     const matching = name === undefined ? previous
       : previous.filter(game => compactName(game.title).includes(name))
+    const latest = matching.at(-1)
     output.push({
       kind: 'game-reopen',
       key: 'game-reopen:' + item.key,
-      ...matching.at(-1) === undefined ? {} : { gameNodeKey: matching.at(-1)?.key },
+      ...latest === undefined ? {} : { gameNodeKey: latest.key },
     })
   }
   return output
