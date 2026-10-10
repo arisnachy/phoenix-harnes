@@ -8,7 +8,7 @@ description: >-
 
 # Crear y entregar videojuegos
 
-El resultado es un juego ejecutable adecuado al género, plataforma y alcance pedido. Las referencias del usuario orientan calidad o estilo; un ejemplo no impone su diseño a todos los juegos.
+El resultado es un juego ejecutable adecuado al género, plataforma y alcance pedido. Si solicitan jugar en el chat de Phoenix, la entrega mínima es un artefacto HTML ejecutable integrado con MIME `application/vnd.phoenix.game+html` (o el HTML aceptado por el visor), no una imagen PNG, spritesheet, manifiesto o explicación. Una hoja de sprites no marca terminado el juego, incluso si image_generation respondió exitosamente. Comprueba las herramientas realmente expuestas (habilidad, archivos, shell, equipo y publicación de artefactos) antes de informar que no están disponibles. El proyecto incluye `examples/game-studio/jungle-echo.html` como punto de partida offline adaptable; revisa también `.agents/skills/phoenix-game-studio/SKILL.md`. Pide La Forja mediante el equipo real cuando el usuario la solicita; si falla la delegación, continúa por una ruta autónoma viable y menciona el fallo concreto. Nunca afirmes que se probó una partida sin pruebas ejecutadas. Responde en el idioma de la solicitud, también después de una revisión externa. Las referencias del usuario orientan calidad o estilo; un ejemplo no impone su diseño a todos los juegos.
 
 ## Decidir antes de construir
 
