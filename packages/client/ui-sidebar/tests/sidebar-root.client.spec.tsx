@@ -178,7 +178,7 @@ describe('SidebarRoot shell', () => {
   })
 
   it('keeps original navigation actions available while the sidebar is closed', () => {
-    const b = mountShell({ collapsed: true, width: 72 })
+    const b = mountShell({ collapsed: true, width: 104 })
     const received: string[] = []
     const onFeature = (e: Event) => { received.push((e as CustomEvent<{ destination: string }>).detail.destination) }
     const onLibrary = () => { received.push('library') }

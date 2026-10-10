@@ -27,21 +27,24 @@ function declarations(selector: string): Map<string, string> | undefined {
 }
 
 describe('ConversationRoot premium header', () => {
-  it('uses a compact conversation bar with resilient long titles', () => {
-    expect(css).toContain('min-height: 56px;')
+  it('uses the approved 90px two-row header, not an overlapping floating tab strip', () => {
+    expect(declarations('.unifiedHeader')?.get('min-height')).toBe('90px')
+    expect(declarations('.unifiedHeader')?.get('grid-template-columns')).toBe('minmax(0, 1fr) auto')
+    expect(css).toContain('.unifiedHeader .sessionNavRow')
     expect(css).toContain('.unifiedHeader .crumbCurrent')
     expect(css).toContain('text-overflow: ellipsis;')
     expect(css).toContain('.unifiedHeader .headerUtilities')
+    expect(css).toContain('position: static;')
     expect(css).toContain('@media (max-width: 720px)')
   })
 
-  it('never hides active chrome and balances the hero title against global controls', () => {
-    expect(css).toContain(".root[data-header-compact='true']:not([data-phase='hero']) .sessionChrome")
+  it('keeps all live header controls and separates hero from active sessions', () => {
+    expect(css).toContain(".root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader")
     expect(css).toContain(".root[data-phase='hero'] .sessionChrome { display: none; }")
     expect(css).toContain('.headerBrand {')
-    expect(css).toContain('align-self: stretch;')
-    expect(css).toContain('left: 50%;')
-    expect(css).toContain('@media (max-width: 1400px)')
+    expect(css).toContain('.unifiedHeader .titleRow')
+    expect(css).toContain('.unifiedHeader .headerActions')
+    expect(css).toContain('.unifiedHeader .tabs')
   })
 
   it('uses compact shell geometry', () => {
@@ -56,9 +59,9 @@ describe('ConversationRoot premium header', () => {
     expect(declarations('.tabs')?.get('gap')).toBe('24px')
   })
 
-  it('keeps the selected tab monochrome-first', () => {
+  it('uses Phoenix orange for the active conversation tab', () => {
     expect(declarations('.tabActive')?.get('color')).toBe('var(--dsw-alias-label-primary)')
-    expect(declarations('.tabActive::after')?.get('background')).toBe('var(--dsw-alias-label-primary)')
+    expect(declarations('.unifiedHeader .tabActive::after')?.get('background')).toBe('#ef5c20')
   })
 })
 

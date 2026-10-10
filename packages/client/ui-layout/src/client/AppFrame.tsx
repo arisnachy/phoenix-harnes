@@ -214,7 +214,7 @@ export function AppFrame({
     ? 0
     : panels.sidebar === 0 ? SIDEBAR_DEFAULT : panels.sidebar
   const solvedCols = computeColumns(viewport, sidebarPreference, detailsSession === undefined ? 0 : panels.details)
-  // Ordinary collapse keeps a 72px control rail. Left Cordis borrows that
+  // Ordinary collapse keeps a 104px column for the 88px rounded icon rail. Left Cordis borrows that
   // physical edge too, so make it a true 0px track and return the rail width
   // to center instead of overlaying the conversation.
   const cols = cordisOnLeft

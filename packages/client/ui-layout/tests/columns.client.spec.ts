@@ -17,8 +17,8 @@ describe('clampWidth', () => {
 })
 
 describe('computeColumns', () => {
-  it('keeps a 72px icon rail in the compact layout', () => {
-    expect(SIDEBAR_COLLAPSED).toBe(72)
+  it('keeps a 104px column for the 88px premium icon rail', () => {
+    expect(SIDEBAR_COLLAPSED).toBe(104)
   })
 
   it('step 1: everything fits at preferred widths', () => {
