@@ -85,8 +85,23 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
     .map(match => match[2] ?? '').join('\n')
   const imageBindings = [...runtime.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*document\.getElementById\(\s*(["'])([^"']+)\2\s*\)/gu)]
   const drawnVariables = new Set([...runtime.matchAll(/\.drawImage\s*\(\s*([A-Za-z_$][\w$]*)\s*,/gu)].map(match => match[1]))
+  // Support legitimate articulated PNG integration. A production character can
+  // be rendered via PhoenixRiggedArt.actor(...).draw(...) rather than a direct
+  // ctx.drawImage(imageVariable, ...). The bridge itself invokes drawImage for
+  // every authored sprite piece. Reject an unused sprite / merely named rig.
+  const riggedCalls = [...runtime.matchAll(
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*PhoenixRiggedArt\.actor\s*\(\s*\{([\s\S]{0,1200}?)\}\s*\)/gu)]
+  const riggedActors = new Set(riggedCalls
+    .filter(call => {
+      const actorName = call[1]
+      return actorName !== undefined && new RegExp('\\b' + actorName + '\\.draw\\s*\\(', 'u').test(runtime)
+    })
+    .flatMap(call => {
+      const identifier = /\bimage\s*:\s*([A-Za-z_$][\w$]*)\b/u.exec(call[2] ?? '')?.[1]
+      return identifier === undefined ? [] : [identifier]
+    }))
   const usedByDraw = (id: string): boolean => imageBindings.some(match =>
-    match[3] === id && drawnVariables.has(match[1] ?? ''))
+    match[3] === id && (drawnVariables.has(match[1] ?? '') || riggedActors.has(match[1] ?? '')))
   if (!usedByDraw(hero.imageId)) failed('el sprite del protagonista no se carga y dibuja con drawImage en el juego.')
   for (const item of art.backgrounds) {
     if (record(item) && nonempty(item.imageId) && !usedByDraw(item.imageId)) {
