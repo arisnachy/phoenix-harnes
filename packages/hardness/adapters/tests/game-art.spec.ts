@@ -74,7 +74,7 @@ describe('Phoenix Game Studio visual asset binding', () => {
       expect(() => validateGameArt(worldHtml, { ...full, art })).toThrow('art.' + family)
     }
     expect(() => validateGameArt(worldHtml, { ...full, art: { ...full.art, bosses: [
-      { ...roster.find(item => item.family === 'bosses'), phaseAnimations: { approach: [0] } ] } }))
+      { ...roster.find(item => item.family === 'bosses'), phaseAnimations: { approach: [0] } } ] } }))
       .toThrow('fase')
     expect(() => validateGameArt(worldHtml.replace('ctx.drawImage(art4,0,0);', ''), full))
       .toThrow('drawImage')
