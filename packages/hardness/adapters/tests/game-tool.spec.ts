@@ -88,3 +88,49 @@ describe('Phoenix Game Studio publisher', () => {
       .rejects.toThrow('schemaVersion:1')
   })
 })
+
+
+describe('Phoenix Game Studio polished publication gate', () => {
+  const manifest = {
+    schemaVersion: 1, title: 'Garden Keys', genre: 'puzzle', gameType: 'puzzle',
+    productionTier: 'polished',
+    references: [
+      { title: 'Puzzle readability', url: 'https://example.org/puzzle-1' },
+      { title: 'Puzzle accessibility', url: 'https://example.org/puzzle-2' },
+    ],
+    level: { layers: [{ id: 'board', scrollFactor: 0 }], puzzles: [{ id: 'first' }] },
+    controls: { interact: 'Enter' }, audio: { cues: ['click'], music: 'original' },
+    sources: [{ path: 'game.html', license: 'original' }],
+    production: {
+      artDirection: { style: 'illustrated original', camera: 'top-down', palette: ['red', 'blue', 'green'] },
+      story: { premise: 'A closed garden', goal: 'Unlock paths', ending: 'A blooming garden' },
+      screens: ['title', 'intro', 'pause', 'game-over', 'victory'].map(id =>
+        ({ id, runtimeRef: 'screen_' + id.replace(/-/gu, '_') })),
+      assets: ['background', 'ui', 'music', 'sfx'].map(role =>
+        ({ id: role, role, origin: 'original', runtimeRef: 'draw_' + role })),
+      audioBindings: ['click', 'music'].map(cue => ({ cue, runtimeRef: 'play_' + cue })),
+    },
+  }
+  const refs = [
+    ...manifest.production.screens.map(item => item.runtimeRef),
+    ...manifest.production.assets.map(item => item.runtimeRef),
+    ...manifest.production.audioBindings.map(item => item.runtimeRef),
+  ]
+  const render = (code: string, production = manifest.production) =>
+    '<canvas id="game"></canvas><script id="phoenix-game-manifest" type="application/json">'
+    + JSON.stringify({ ...manifest, production }) + '</script><script>' + code + '</script>'
+  const published = async (html: string): Promise<unknown> =>
+    createPhoenixGameTool().execute({ title: 'Garden Keys', html }, execution())
+
+  it('blocks polished publication when only a title or disconnected image is provided', async () => {
+    await expect(published(render('const game = true;', { ...manifest.production, assets: [] })))
+      .rejects.toThrow('asset-role:background')
+    await expect(published(render('const game = true;'))).rejects.toThrow('runtimeRef:screen_title')
+  })
+
+  it('accepts structurally bound premium HTML without claiming a real playtest', async () => {
+    const stubs = refs.map(name => 'function ' + name + '() {}').join('\n')
+    const outcome = await published(render(stubs)) as { preflight: string }
+    expect(outcome.preflight).toBe('packaging-only')
+  })
+})
