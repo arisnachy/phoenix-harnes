@@ -18,6 +18,9 @@ function fixture() {
     'packages/client/ui-theme/src/client/styles.ts':
       'installThemeStyles const leases = new Map lease.owners += 1',
     'packages/client/ui-theme/src/styles/base.css': ':root { color-scheme: light; }',
+    'packages/client/ui-sidebar/lib/client.js': 'const css = "--phoenix-side-ember:#e76020;--phoenix-side-outline:orange";',
+    'packages/client/ui-conversation/lib/client.js': 'const css = "--dsh-chat-content-width:768px"; const classes = { unifiedHeader: "hashed" };',
+    'packages/client/ui-theme/lib/client.js': 'const css = "--dsw-font-family:Arial;--ds-ease-in-out:ease";',
     'apps/web/dist/index.html': '<!doctype html><html><head><title>PHOENIX</title></head><body><main>Valid compiled Phoenix frontend entry</main></body></html>',
   }
   for (const [relative, body] of Object.entries(files)) {
@@ -38,6 +41,23 @@ describe('PHOENIX visual release integrity', () => {
     const path = join(root, 'packages/client/ui-sidebar/src/client/SidebarRoot.module.css')
     writeFileSync(path, readFileSync(path, 'utf8').replace('--phoenix-side-ember: #e76020', ''))
     expect(() => verifyPhoenixVisualBaseline(root)).toThrow('visual integrity check failed')
+  })
+  it('rejects a client bundle with an outdated sidebar even when source CSS is current', () => {
+    const root = fixture()
+    const path = join(root, 'packages/client/ui-sidebar/lib/client.js')
+    writeFileSync(path, 'const css = "old neutral sidebar";')
+    expect(() => verifyPhoenixVisualBaseline(root)).toThrow('missing compiled style --phoenix-side-ember')
+  })
+  it('rejects an incomplete conversation bundle instead of replacing the approved top bar', () => {
+    const root = fixture()
+    const path = join(root, 'packages/client/ui-conversation/lib/client.js')
+    writeFileSync(path, 'const css = "--dsh-chat-content-width:768px";')
+    expect(() => verifyPhoenixVisualBaseline(root)).toThrow('missing compiled style unifiedHeader')
+  })
+  it('rejects a client build without its theme module even if the web entry exists', () => {
+    const root = fixture()
+    rmSync(join(root, 'packages/client/ui-theme/lib/client.js'))
+    expect(() => verifyPhoenixVisualBaseline(root)).toThrow('missing compiled browser theme')
   })
   it('rejects an incomplete web build rather than promoting a white fallback UI', () => {
     const root = fixture()
