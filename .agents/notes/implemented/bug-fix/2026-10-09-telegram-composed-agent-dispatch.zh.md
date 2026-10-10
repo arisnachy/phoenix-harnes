@@ -1,0 +1,25 @@
+# Agent Note：Telegram 使用完整配置的 Phoenix 会话
+
+Status: implemented
+
+[English](2026-10-09-telegram-composed-agent-dispatch.md) | 中文
+
+## 问题
+
+Telegram 的 Host 接收器只凭会话标识直接创建 Agent，绕过了 Phoenix 聊天网关。因此 Agent 缺少选定的提供商、模型和 Kira 的会话预设。执行循环吞下失败并结束回合，Telegram 随即显示“执行结束但没有文字回复”，实际却没有完成正常的模型调用。
+
+## 决策
+
+Telegram 必须通过已有的 apiProxy.sessions.create 创建或恢复会话，再由 apiProxy.sessions.prompt 发送文本。网关负责模型选择、预设挂载、持久化消息归属和输入校验。对于已附着但缺少提供商或模型的旧 Telegram Agent，建立配置完整的新会话，并保留旧历史记录。机器人将模型执行错误、阻塞和中止与成功的文本回复明确区分。
+
+## 考虑过的替代方案
+
+不在 Telegram 内独立复制默认模型选择和预设挂载逻辑：这会与聊天网关形成重复实现，并在路由或工作区策略变化时产生偏差。也不只是修改空回复文案，因为那会掩盖配置缺失而不能恢复实际执行。
+
+## 影响
+
+Telegram 文本任务改用与 Phoenix 聊天相同的正常执行路径，不再运行无模型的 Agent。原有机器人所有者绑定不变。运行中的旧版 Telegram 会话可能更换会话标识，但不会删除之前的日志。原生通话和语音消息仍是独立功能；收到文本不会开启实时音频。
+
+## 测试
+
+Telegram 接收器测试覆盖使用网关创建含模型配置的会话、正常提示词入口、模型错误反馈，以及替换旧版活动会话。Windows 端到端运行仍需 Host 实测。

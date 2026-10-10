@@ -4,7 +4,6 @@
 import { randomInt, randomUUID } from 'node:crypto'
 import type { Context } from '@phoenix-ai/cordis'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
-import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import { SessionId } from '@phoenix-ai/dsh-session'
 import type { Agent } from '@phoenix-ai/dsh-agent'
 import type { TelegramBotSnapshot } from './types.ts'
@@ -46,6 +45,25 @@ interface TelegramUpdate {
     text?: string
     from?: { id?: number; is_bot?: boolean }
     chat?: { id?: number; type?: string }
+  }
+}
+
+/** Use the same gateway as the Phoenix chat: it owns model selection, session presets,
+ * persistence, admission and user-message attribution. A raw agents.create() omits
+ * that setup and produces a model-less Agent that silently ends with no reply.
+ */
+interface TelegramGateway {
+  sessions: {
+    create(request: { rpcId: string; payload: { sessionId: ReturnType<typeof SessionId> } }): Promise<{
+      result: { ok: true; value: { sessionId: ReturnType<typeof SessionId> } } | { ok: false; error: { code: string } }
+    }>
+    prompt(request: { rpcId: string; payload: {
+      sessionId: ReturnType<typeof SessionId>
+      mode: 'queue'
+      content: Array<{ type: 'text'; text: string }>
+    } }): Promise<{
+      result: { ok: true; value: { accepted: true } } | { ok: false; error: { code: string } }
+    }>
   }
 }
 
@@ -270,27 +288,39 @@ export class TelegramInbox {
     // we never mark an instruction consumed before the harness has settled.
     await this.dispatch(incoming.id, incoming.text, token, creds)
   }
+  private gateway(): TelegramGateway {
+    const gateway = (this.ctx.get as (name: string) => unknown)('apiProxy') as TelegramGateway | undefined
+    if (gateway === undefined) throw new Error('telegram-phoenix-gateway-unavailable')
+    return gateway
+  }
   private async liveAgent(creds: Credentials): Promise<Agent> {
-    if (this.agent !== undefined) return this.agent
     if (this.agentPromise !== undefined) return this.agentPromise
     const task = (async () => {
       const agents = (this.ctx.get as (name: string) => unknown)('agents') as
-        | { get(id: ReturnType<typeof SessionId>): Agent | undefined; create(options: { sessionId: ReturnType<typeof SessionId> }): Promise<{ agent: Agent; dispose(): Promise<void> }>; resume(options: { resumeSessionId: ReturnType<typeof SessionId> }): Promise<{ agent: Agent }> }
+        | { get(id: ReturnType<typeof SessionId>): Agent | undefined }
         | undefined
-      if (agents === undefined) throw new Error('Phoenix Agent registry unavailable')
+      if (agents === undefined) throw new Error('telegram-phoenix-agents-unavailable')
+      if (this.agent !== undefined && agents.get(this.agent.id) === this.agent
+        && this.agent.options.provider && this.agent.options.model) return this.agent
+      const gateway = this.gateway()
       const existingId = await stored(creds, SESSION_REF)
-      if (existingId !== undefined) {
-        const current = agents.get(SessionId(existingId))
-        if (current !== undefined) { this.agent = current; return current }
-        const resumed = await agents.resume({ resumeSessionId: SessionId(existingId) })
-        this.agent = resumed.agent
-        return resumed.agent
+      const existing = existingId === undefined ? undefined : agents.get(SessionId(existingId))
+      if (existing !== undefined && existing.options.provider && existing.options.model) {
+        this.agent = existing
+        return existing
       }
-      const sessionId = SessionId(randomUUID())
-      const created = await agents.create({ sessionId })
-      this.agent = created.agent
-      await persist(creds, SESSION_REF, String(sessionId))
-      return created.agent
+      // Earlier Telegram versions created a naked Agent without a model or
+      // preset. Never reuse that live instance: move to a properly composed
+      // gateway session, keeping its old history intact.
+      const legacy = existing !== undefined && (!existing.options.provider || !existing.options.model)
+      const sessionId = SessionId(existingId === undefined || legacy ? randomUUID() : existingId)
+      const created = await gateway.sessions.create({ rpcId: randomUUID(), payload: { sessionId } })
+      if (!created.result.ok) throw new Error('telegram-session-' + created.result.error.code)
+      const agent = agents.get(sessionId)
+      if (agent === undefined) throw new Error('telegram-session-not-attached')
+      this.agent = agent
+      if (existingId !== String(sessionId)) await persist(creds, SESSION_REF, String(sessionId))
+      return agent
     })()
     this.agentPromise = task
     try { return await task } finally { this.agentPromise = undefined }
@@ -299,14 +329,37 @@ export class TelegramInbox {
     try {
       const agent = await this.liveAgent(creds)
       const before = agent.session.deriveMessages().length
-      agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] }))
+      const eventStart = agent.session.events.length
+      const accepted = await this.gateway().sessions.prompt({
+        rpcId: randomUUID(),
+        payload: { sessionId: agent.id, mode: 'queue', content: [{ type: 'text', text }] },
+      })
+      if (!accepted.result.ok) throw new Error('telegram-prompt-' + accepted.result.error.code)
       await this.send(token, chat, 'Recibido. Kira está trabajando en tu solicitud.')
       await agent.whenIdle()
-      const lastAnswer = agent.session.deriveMessages().slice(before)
-        .filter(m => m.role === 'assistant' && m.source.kind === 'model').at(-1)
-      const result = lastAnswer?.content.filter(part => part.type === 'text')
-        .map(part => part.text).join('\n').trim() ?? ''
-      await this.send(token, chat, result || 'La ejecución terminó sin una respuesta de texto. Revisa el historial de Phoenix.')
+      const events = agent.session.events.slice(eventStart)
+      const lastTurn = events.findLast(event => event.type === 'turn/end')
+      if (lastTurn?.type === 'turn/end') {
+        const reason = lastTurn.data.reason
+        if (reason.kind === 'error') {
+          const code = reason.error.code
+          await this.send(token, chat, 'Kira no pudo completar la solicitud: falló el modelo o una herramienta'
+            + (/^[A-Z][A-Z_]{1,39}$/.test(code) ? ' (' + code + ').' : '.')
+            + ' Comprueba el proveedor seleccionado y los errores de Phoenix.')
+          return
+        }
+        if (reason.kind === 'aborted' || reason.kind === 'blocked') {
+          await this.send(token, chat, 'La solicitud quedó interrumpida o bloqueada en Phoenix. Revisa el estado de la sesión.')
+          return
+        }
+      }
+      const answers = agent.session.deriveMessages().slice(before)
+        .filter(m => m.role === 'assistant' && m.source.kind === 'model')
+        .map(m => m.content.filter(part => part.type === 'text').map(part => part.text).join('\n').trim())
+        .filter(Boolean)
+      const answer = answers.at(-1)
+      await this.send(token, chat, answer
+        ?? 'Phoenix procesó la solicitud, pero no generó una respuesta visible. Revisa la sesión y el proveedor del modelo.')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown'
       // No secrets, model traces or stack details should be sent to Telegram.
