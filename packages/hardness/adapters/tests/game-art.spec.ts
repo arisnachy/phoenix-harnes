@@ -37,10 +37,10 @@ describe('Phoenix Game Studio visual asset binding', () => {
 
   it('rejects concept art that is present but not rendered in the game', () => {
     expect(() => validateGameArt(html.replace('ctx.drawImage(hero,0,0);', ''), production))
-      .not.toThrow()
+      .toThrow('drawImage')
     expect(() => validateGameArt(html.replace('hero-art', 'lost-hero'), production)).toThrow('falta un <img>')
     expect(() => validateGameArt(html.replace('const hero=document.getElementById("hero-art");', ''), production))
-      .not.toThrow()
+      .toThrow('drawImage')
     expect(() => validateGameArt(html.replaceAll('hero-art', 'different-hero'), production))
       .toThrow('falta un <img>')
   })
