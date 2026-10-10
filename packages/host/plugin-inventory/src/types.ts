@@ -91,7 +91,9 @@ export interface McpConnectorRuntimeEntry {
   readonly transport: 'stdio' | 'streamable-http'
   readonly status: 'starting' | 'ready' | 'disconnected' | 'failed' | 'auth-required'
   readonly toolNames: readonly string[]
-  readonly reasonCode?: 'connection-failed' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
+  // This must include every McpConnectorReasonCode published by mcp-registry;
+  // a missing literal is rejected at the generated Typert Remote result boundary.
+  readonly reasonCode?: 'connection-failed' | 'endpoint-not-found' | 'connection-lost' | 'authorization-required' | 'retry-exhausted'
 }
 
 /** Trusted reconstruction source for one PHOENIX-managed MCP. */
