@@ -340,27 +340,36 @@ export class PluginInventoryGateway extends TypertRemoteService {
     return this.managedMcp.repair(request)
   }
 
-  /** Describe the configured Telegram bot without revealing its token. */
+  /** Describe the configured Telegram bot without revealing its token.
+   * @returns Secret-free Telegram bot status.
+   */
   @Remote('telegramBotState')
   async telegramBotState(): Promise<TelegramBotSnapshot> {
     this.telegram.start()
     return readTelegramBotState(this.ctx, this.telegram)
   }
 
-  /** Verify with Telegram getMe *before* persisting the supplied bot token. */
+  /** Verify with Telegram getMe *before* persisting the supplied bot token.
+   * @param request - Bot token submitted to the secure configuration endpoint.
+   * @returns Verified Telegram bot status without exposing the token.
+   */
   @Remote('configureTelegramBot')
   async configureTelegramBot(request: { token: string }): Promise<TelegramBotSnapshot> {
     return saveTelegramBot(this.ctx, request.token, this.telegram)
   }
 
-  /** Issue an ephemeral owner-linking code; only a private chat presenting it may issue tasks. */
+  /** Issue an ephemeral owner-linking code; only a private chat presenting it may issue tasks.
+   * @returns One-time pairing code and its validity in seconds.
+   */
   @Remote('telegramPairingCode')
   async telegramPairingCode(): Promise<{ code: string; expiresInSeconds: number }> {
     this.telegram.start()
     return { code: await this.telegram.pairing(), expiresInSeconds: 900 }
   }
 
-  /** Forget the local Telegram credential without issuing a Telegram-side token revocation. */
+  /** Forget the local Telegram credential without issuing a Telegram-side token revocation.
+   * @returns Disconnected Telegram bot status.
+   */
   @Remote('disconnectTelegramBot')
   async disconnectTelegramBot(): Promise<TelegramBotSnapshot> {
     return removeTelegramBot(this.ctx, this.telegram)
