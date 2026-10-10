@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 import { gitSafeDirectoryEnvironment, persistGitSafeDirectory } from './phoenix-git-safe-directory.mjs'
 import { isManagedReleaseBranch } from './phoenix-update-policy.mjs'
+import { assertPromotedStableTarget } from './phoenix-stable-freshness.mjs'
 import { hydratePhoenixEnvironment } from './phoenix-windows-environment.mjs'
 import { ensurePhoenixDesktopShortcut } from './phoenix-windows-shortcut.mjs'
 
@@ -922,6 +923,10 @@ function activatePreparedRuntime(target) {
 
   const stage = preparedStageForTarget(target)
   if (stage === undefined) throw new Error(`prepared staging candidate ${target.slice(0, 12)} is missing or no longer valid`)
+
+  // A fresh build is not proof that its SHA is STILL the promoted stable.
+  // Refuse stale handoffs rather than showing an earlier UI after an update.
+  assertPromotedStableTarget(root, target, STABLE_SOURCE_BRANCH)
 
   const runtime = persistentRuntime(target)
   if (existsSync(runtime) && !sameRepository(runtime)) {
