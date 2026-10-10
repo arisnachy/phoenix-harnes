@@ -228,7 +228,7 @@ const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|par
 const AUTO_SHORT_PENDING_PROMISE = /\b(?:lo|la)\s+(?:har[eé]|revisar[eé]|probar[eé]|verificar[eé])\s+(?:ahora|enseguida)\b/iu
 /** Bare future-tense commitments (without "voy a") still promise pending action. */
 // oxlint-disable-next-line @stylistic/max-len -- One bounded pattern for outstanding first-person commitments.
-const AUTO_FUTURE_ACTION = /\b(?:comprobar[eé]|verificar[eé]|confirmar[eé]|consultar[eé]|inspeccionar[eé]|revisar[eé]|probar[eé]|buscar[eé]|ejecutar[eé])\b/iu
+const AUTO_FUTURE_ACTION = /\b(?:comprobar[eé]|verificar[eé]|confirmar[eé]|consultar[eé]|inspeccionar[eé]|revisar[eé]|probar[eé]|buscar[eé]|ejecutar[eé])(?=$|[^\p{L}\p{N}_])/iu
 function phoenixAutoUnfinishedAction(text: string): boolean {
   return AUTO_UNFINISHED_ACTION.test(text)
     || AUTO_SHORT_PENDING_PROMISE.test(text)
