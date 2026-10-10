@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /**
  * Product visual baseline for automatic Windows updates. A runtime that loses
@@ -18,7 +19,7 @@ export function verifyPhoenixVisualBaseline(root) {
       ['export const SIDEBAR_COLLAPSED = 72']],
     ['packages/client/ui-theme/src/client/styles.ts',
       ['installThemeStyles', 'const leases = new Map', 'lease.owners += 1']],
-    ['packages/client/ui-theme/styles/base.css', [':root']],
+    ['packages/client/ui-theme/src/styles/base.css', [':root']],
   ]
   const missing = []
   for (const [path, fragments] of required) {
@@ -42,7 +43,7 @@ export function verifyPhoenixVisualBaseline(root) {
   return true
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   verifyPhoenixVisualBaseline(resolve(process.cwd()))
   console.log('[PHOENIX THEME] verified approved colors, collapsed icon rail, compact header and web build')
 }
