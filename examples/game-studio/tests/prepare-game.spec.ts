@@ -33,7 +33,7 @@ describe('Phoenix Game Studio publication handshake', () => {
   it('rejects incomplete game contracts without silently inventing entities', () => {
     const metadata = readGameManifest(shooter) as Record<string, unknown>
     const html = shooter.replace(manifestScript, '')
-    expect(() => prepareGameHtml(html, { ...metadata, player: undefined, bosses: [] })).toThrow('player-state')
+    expect(() => prepareGameHtml(html, { ...metadata, player: undefined, bosses: [] })).toThrow('missing-player')
     expect(() => prepareGameHtml(html, { ...metadata, bosses: [] })).toThrow('missing-boss')
     expect(() => prepareGameHtml('some/file.html', metadata)).toThrow('complete game HTML')
   })
