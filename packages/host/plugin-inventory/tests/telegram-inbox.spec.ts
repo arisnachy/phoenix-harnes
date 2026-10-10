@@ -193,6 +193,19 @@ describe('Telegram owner-paired Host inbox', () => {
     expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, 'Phoenix terminó: Hola')
   })
 
+  it('reports a safe session-stage code without exposing provider exceptions to Telegram', async () => {
+    const f = fixture()
+    f.values.set('PHOENIX_TELEGRAM_OWNER_CHAT_ID', '12345')
+    f.sessions.create.mockRejectedValueOnce(new Error('sensitive-provider-exception'))
+    await f.internal.process(makeMessage(12345, 'Hola'), TOKEN, f.creds)
+    const replies = f.sent.mock.calls.map(call => call[2])
+    expect(replies).toContain(
+      'Kira no pudo abrir la sesión en Phoenix (telegram-unexpected-error). Revisa el estado del Host y el modelo configurado.',
+    )
+    expect(replies.join('\n')).not.toContain('sensitive-provider-exception')
+    expect(replies.join('\n')).not.toContain('Recibido.')
+  })
+
   it('ignores attempts to pair after five incorrect codes', async () => {
     const f = fixture()
     const code = await f.inbox.pairing()
