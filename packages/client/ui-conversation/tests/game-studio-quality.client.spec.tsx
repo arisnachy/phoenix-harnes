@@ -128,4 +128,28 @@ describe('Phoenix Game Studio cross-genre contracts', () => {
     expect(auditGameManifest({ ...base, genre: 'avant-garde', gameType: 'unsupported-type' }).issues)
       .toContain('unsupported-game-type')
   })
+  it('distinguishes missing JSON from actual game boot failure and warns on provisional art', () => {
+    const html = gameHtml()
+    const absent = html.replace(/<script id="phoenix-game-manifest"[^>]*>[^]*?<\/script>/u, '')
+    expect(auditGameHtml(absent).issues).toContain('game-manifest-missing')
+    const broken = html.replace(JSON.stringify(manifest), '{oops')
+    expect(auditGameHtml(broken).issues).toContain('game-manifest-invalid-json-or-type')
+    const duplicate = html + '<script id="phoenix-game-manifest" type="application/json">'
+      + JSON.stringify(manifest) + '</script>'
+    expect(auditGameHtml(duplicate).issues).toContain('game-manifest-duplicated')
+    const prototype = { ...manifest, art: { mode: 'prototype' } }
+    expect(auditGameManifest(prototype).warnings).toContain('character-art-prototype-not-final')
+  })
+
+  it('reserves playable iframe height and injects a visible startup error diagnostic', () => {
+    const artifact = normalizeHardnessArtifact({
+      id: 'broken', title: 'Game diagnostics', mime: 'application/vnd.phoenix.game+html',
+      data: gameHtml(),
+    })
+    render(<UniversalArtifactSurface artifact={artifact} onStop={() => {}} />)
+    const frame = screen.getByTitle('Game diagnostics')
+    expect(frame.getAttribute('srcdoc')).toContain('data-phoenix-game-error')
+    expect(frame.getAttribute('style')).toContain('height: 460px')
+  })
+
 })

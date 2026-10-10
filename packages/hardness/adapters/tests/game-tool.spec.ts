@@ -87,4 +87,21 @@ describe('Phoenix Game Studio publisher', () => {
     await expect(attempt(runnable.replace('"schemaVersion":1', '"schemaVersion":9')))
       .rejects.toThrow('schemaVersion:1')
   })
+  it('does not silently publish a box character as finished professional game art', async () => {
+    const tool = createPhoenixGameTool()
+    const shooter = runnable.replace('"genre":"puzzle","gameType":"puzzle"',
+      '"genre":"run-and-gun","gameType":"run-and-gun"')
+    await expect(tool.execute({ title: 'Hero mismatch', html: shooter }, execution()))
+      .rejects.toThrow('art.mode')
+    const prototype = shooter.replace('"level":{"layers"', '"art":{"mode":"prototype"},"level":{"layers"')
+    const receipt = await tool.execute({ title: 'Prototype only', html: prototype }, execution()) as {
+      preflight: string
+    }
+    expect(receipt.preflight).toBe('prototype-only')
+    const duplicated = runnable.replace('</body>',
+      '<script id="phoenix-game-manifest" type="application/json">{}</script></body>')
+    await expect(tool.execute({ title: 'Duplicate', html: duplicated }, execution()))
+      .rejects.toThrow('más de un')
+  })
+
 })

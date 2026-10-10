@@ -18,6 +18,16 @@ Open either `jungle-echo.html` or `lumen-circuit.html` in a modern browser, or p
 - The game artifact audit supports genre-specific `gameType` profiles (run-and-gun, platformer, top-down action, racing, puzzle, strategy, RPG, rhythm, simulation, 3D and custom) and does not require a boss or gun in puzzle and racing games.
 - The examples exercise two actual game loops: shooter combat and a puzzle connectivity/rotation ruleset. Profiles for other genres validate structure but do not create their gameplay automatically.
 
+## Publisher manifest and art assets
+
+Game Studio uses the **real** `phoenix_game` model tool to publish playable self-contained HTML in the Phoenix chat. Its `phoenix-game-manifest` JSON must truthfully describe the shipped game; a missing manifest is a **structural error**, not proof that JavaScript failed to start. A blank view must be diagnosed using the game runtime and browser console.
+
+- Reference metadata files: `jungle-echo.manifest.json` (shooter) and `lumen-circuit.manifest.json` (puzzle). They describe real example implementations; do not copy a shooter manifest into a racing or puzzle game.
+- For sprites, prepare a local `images.json` like `{"images":[{"id":"hero-art","path":"assets/hero-atlas.png"},{"id":"jungle-bg","path":"assets/jungle.png"}]}` and run `node examples/game-studio/embed-game-assets.mjs input.html images.json with-assets.html`. PNG bytes are embedded before gameplay code in the offline HTML.
+- Use `pnpm exec tsx examples/game-studio/prepare-game.ts with-assets.html manifest.json publishable.html` for structural preflight and one correct embedded manifest. The tool rejects mismatched/duplicated metadata and does not invent missing behavior.
+- Illustrated character games explicitly declare `art.mode`: `prototype` when sprites/animation are not ready, or `production` when the approved hero and background PNGs are embedded. Production art declares `art.designReference`, `art.hero.imageId`, `frameWidth`, `frameHeight`, frame indices for idle/run/jump/fall/shoot/hurt/death, and `art.backgrounds[].imageId`. The game tool rejects art files that are missing, unrelated to the runtime or never used by `drawImage`.
+- A high-quality concept portrait does **not** count as an animated playable hero. Cut actual transparent sprite atlas frames, bind them to animation states, execute the game and compare screenshots from running/aiming/shooting against the approved character design.
+
 ## Verification and limits
 
 - Deterministic JavaScript frame and input smokes exercise the supplied source code, including directional character motion and puzzle interactions.
