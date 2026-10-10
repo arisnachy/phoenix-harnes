@@ -76,7 +76,10 @@ async function botApi(
   }
   const parsed = payload as TelegramApiResponse
   if (parsed.ok !== true) {
-    if (parsed.error_code === 409) throw new Error('telegram-webhook-conflict')
+    if (parsed.error_code === 409) {
+      throw new Error(typeof parsed.description === 'string' && /webhook/i.test(parsed.description)
+        ? 'telegram-webhook-active' : 'telegram-polling-conflict')
+    }
     throw new Error(method === 'getUpdates' ? 'telegram-poll-failed' : 'telegram-unreachable')
   }
   if (!response.ok) throw new Error('telegram-unreachable')
@@ -161,7 +164,6 @@ export class TelegramInbox {
     const code = String(randomInt(100_000, 1_000_000))
     await persist(creds, PAIR_REF, JSON.stringify({ code, expiresAt: Date.now() + PAIR_TTL_MS }))
     this.pairFailures = 0
-    this.start()
     return code
   }
   private async validPairing(creds: Credentials): Promise<string | undefined> {
@@ -233,7 +235,7 @@ export class TelegramInbox {
         if (signal.aborted) return
         this.phase = 'failed'
         this.failure = error instanceof Error ? error.message : 'telegram-poll-failed'
-        await this.sleep(signal, this.failure === 'telegram-webhook-conflict' ? 15_000 : 3_000)
+        await this.sleep(signal, this.failure === 'telegram-webhook-active' || this.failure === 'telegram-polling-conflict' ? 15_000 : 3_000)
       }
     }
   }

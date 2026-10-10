@@ -94,7 +94,17 @@ export function TelegramConnectorSetup({ client }: { client?: TelegramBotClient 
         {snapshot?.inboxActive ? ' · receptor activo' : ' · receptor no confirmado'}
         {snapshot?.paired ? ' · usuario vinculado' : ' · falta vincular usuario'}
       </p>
-      {snapshot?.reason ? <p role="alert" style={{ margin: 0, fontSize: 11 }}>Receptor: {snapshot.reason}</p> : null}
+      {snapshot?.reason ? (
+        <p role="alert" style={{ margin: 0, fontSize: 11 }}>
+          {snapshot.reason === 'telegram-webhook-active'
+            ? 'Hay un webhook activado en Telegram. Desactívalo en el otro servicio.'
+            : snapshot.reason === 'telegram-polling-conflict'
+              ? 'Otro programa está leyendo este bot. Solo puede funcionar un receptor.'
+              : snapshot.reason === 'telegram-unreachable'
+                ? 'El receptor no logra consultar Telegram. Revisa Internet, firewall o proxy.'
+                : `Receptor: ${snapshot.reason}`}
+        </p>
+      ) : null}
       {snapshot?.configured && !snapshot.paired ? (
         <div style={{ display: 'grid', gap: 6 }}>
           <button type="button" disabled={busy} onClick={pair}>Generar código de vinculación (15 min)</button>
