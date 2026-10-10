@@ -364,15 +364,15 @@ export function isCodexRealtimeVoiceActive(): boolean {
   return codexRealtimeVoiceSession !== undefined
 }
 
-/** Result of one attempt to enter the native Codex realtime voice path. */
+/** Result of one attempt to enter native Codex voice independently of the task model. */
 export type CodexRealtimeVoiceStartResult =
   | { readonly kind: 'started' }
-  | { readonly kind: 'not-codex' }
+  | { readonly kind: 'not-codex' } // retained for backwards-compatible callers
   | { readonly kind: 'failed'; readonly reason: string }
 
 /**
- * Prefer native Codex realtime when the selected PHOENIX provider is
- * openai-codex. Startup failures remain classified so the caller can deliberately
+ * Prefer native Codex realtime even when PHOENIX Auto or another text provider
+ * owns the agent. Startup failures remain classified so the caller can deliberately
  * enter the documented Kokoro -> platform fallback without mislabeling that
  * fallback as native Codex Realtime.
  * @param sessionKey Conversation whose selected model route determines the voice provider.
@@ -384,16 +384,18 @@ export async function tryStartCodexRealtimeVoice(
   // The user may close a call while the route/capability probe is in flight.
   // A late probe must not reacquire the microphone and resurrect voice mode.
   const startFence = codexRealtimeVoiceGeneration
-  const resolveRoute = voiceModelRouteResolver
-  if (resolveRoute === undefined) return { kind: 'failed', reason: 'route-unavailable' }
-
+  // Codex Live is the microphone/speaker selected for PHOENIX, independent of
+  // the agent's current text model (including Phoenix Auto / Fénix Eclipse).
+  // The optional resolver supplies a *text-model hint* only for direct Codex
+  // routes. A missing resolver or a non-Codex execution route must NEVER
+  // prevent probing the separately authenticated Codex voice service.
   let route: VoiceModelRoute | undefined
   try {
-    route = await resolveRoute(sessionKey)
+    route = await voiceModelRouteResolver?.(sessionKey)
   } catch {
-    return { kind: 'failed', reason: 'route-unavailable' }
+    // Routing metadata is best-effort. The Host owns Codex voice authentication.
   }
-  if (route?.provider !== 'openai-codex') return { kind: 'not-codex' }
+  const codexTextModel = route?.provider === 'openai-codex' ? route.model : undefined
 
   const remote = voiceAssistantRemote
   if (remote === undefined || remote.conversationRealtimeStatus === undefined
@@ -500,7 +502,7 @@ export async function tryStartCodexRealtimeVoice(
     const result = await remote.conversationRealtimeStart({
       key: sessionKey,
       offerSdp,
-      model: route.model,
+      ...(codexTextModel === undefined ? {} : { model: codexTextModel }),
     })
     if (!result.ok) throw new Error(result.error.code)
     if (!result.value.accepted || result.value.answerSdp === undefined) {
