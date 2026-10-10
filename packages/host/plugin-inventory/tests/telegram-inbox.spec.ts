@@ -35,6 +35,7 @@ function fixture() {
     session: { deriveMessages: () => messages, events },
   }
   const registered = new Map<string, typeof agent>()
+  const conflicts = new Set<string>()
   const agents = {
     get: vi.fn((sessionId: string) => registered.get(String(sessionId))),
     create: vi.fn(async (options: { sessionId: string; agentOptions: typeof agent.options }) => {
@@ -47,6 +48,9 @@ function fixture() {
   const sessions = {
     create: vi.fn(async (request: { payload: { sessionId: string } }) => {
       const sessionId = request.payload.sessionId
+      if (conflicts.has(String(sessionId))) {
+        return { result: { ok: false as const, error: { code: 'session-conflict' } } }
+      }
       if (!registered.has(String(sessionId))) {
         await agents.create({ sessionId, agentOptions: { provider: 'openai-codex', model: 'gpt-6-luna' } })
       }
@@ -69,7 +73,7 @@ function fixture() {
     process(update: ReturnType<typeof makeMessage>, token: string, credentials: typeof creds): Promise<void>
   }
   internal.send = sent
-  return { inbox, internal, creds, values, agent, agents, sessions, sent, followup, events, messages, registered }
+  return { inbox, internal, creds, values, agent, agents, sessions, sent, followup, events, messages, registered, conflicts }
 }
 
 describe('Telegram owner-paired Host inbox', () => {
@@ -146,6 +150,46 @@ describe('Telegram owner-paired Host inbox', () => {
     await f.internal.process(makeMessage(12345, 'Hola'), TOKEN, f.creds)
     expect(f.values.get('PHOENIX_TELEGRAM_SESSION_ID')).not.toBe('legacy-session')
     expect(f.sessions.create).toHaveBeenCalledOnce()
+    expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, 'Phoenix terminó: Hola')
+  })
+
+  it('recovers a cold legacy session instead of reopening it with the wrong cwd', async () => {
+    const f = fixture()
+    f.values.set('PHOENIX_TELEGRAM_OWNER_CHAT_ID', '12345')
+    f.values.set('PHOENIX_TELEGRAM_SESSION_ID', 'legacy-cold-session')
+    f.conflicts.add('legacy-cold-session')
+    await f.internal.process(makeMessage(12345, 'Hola'), TOKEN, f.creds)
+    expect(f.sessions.create).toHaveBeenCalledTimes(1)
+    const requested = f.sessions.create.mock.calls[0]![0].payload.sessionId
+    expect(requested).not.toBe('legacy-cold-session')
+    expect(f.values.get('PHOENIX_TELEGRAM_SESSION_GATEWAY_ID')).toBe(requested)
+    expect(f.values.get('PHOENIX_TELEGRAM_SESSION_ID')).toBe(requested)
+    expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, 'Phoenix terminó: Hola')
+  })
+
+  it('resumes a composed cold session across Host restarts', async () => {
+    const f = fixture()
+    f.values.set('PHOENIX_TELEGRAM_OWNER_CHAT_ID', '12345')
+    f.values.set('PHOENIX_TELEGRAM_SESSION_ID', 'modern-session')
+    f.values.set('PHOENIX_TELEGRAM_SESSION_GATEWAY_ID', 'modern-session')
+    await f.internal.process(makeMessage(12345, 'Hola'), TOKEN, f.creds)
+    expect(f.sessions.create.mock.calls[0]![0].payload.sessionId).toBe('modern-session')
+    expect(f.values.get('PHOENIX_TELEGRAM_SESSION_ID')).toBe('modern-session')
+    expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, 'Phoenix terminó: Hola')
+  })
+
+  it('recovers from a composed session whose original workspace no longer matches', async () => {
+    const f = fixture()
+    f.values.set('PHOENIX_TELEGRAM_OWNER_CHAT_ID', '12345')
+    f.values.set('PHOENIX_TELEGRAM_SESSION_ID', 'moved-session')
+    f.values.set('PHOENIX_TELEGRAM_SESSION_GATEWAY_ID', 'moved-session')
+    f.conflicts.add('moved-session')
+    await f.internal.process(makeMessage(12345, 'Hola'), TOKEN, f.creds)
+    expect(f.sessions.create).toHaveBeenCalledTimes(2)
+    expect(f.sessions.create.mock.calls[0]![0].payload.sessionId).toBe('moved-session')
+    const nextId = f.sessions.create.mock.calls[1]![0].payload.sessionId
+    expect(nextId).not.toBe('moved-session')
+    expect(f.values.get('PHOENIX_TELEGRAM_SESSION_ID')).toBe(nextId)
     expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, 'Phoenix terminó: Hola')
   })
 
