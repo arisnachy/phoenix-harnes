@@ -45,6 +45,7 @@ import { withFileLock, writeFileAtomic } from '@phoenix-ai/dsh-atomic-write'
 import { canonicalizeWatchPath, resolveDshHome } from '@phoenix-ai/dsh-home-paths'
 import { launchEnvironmentOf } from '@phoenix-ai/dsh-launch-environment'
 import { CredentialProvider, credentialRef, parseCredentialKey } from '@phoenix-ai/dsh-credentials'
+import { protectWebLoginAtRest, unprotectWebLoginAtRest, webLoginNeedsProtection } from './windows-dpapi.ts'
 import type {
   ApiKeyRecord,
   CredentialInfo,
@@ -614,14 +615,28 @@ export class LocalCredentialProvider extends CredentialProvider {
     /* jscpd:ignore-end */
   }
 
-  override resolve(ref: CredentialRef): Promise<ResolvedCredential | undefined> {
+  override async resolve(ref: CredentialRef): Promise<ResolvedCredential | undefined> {
     const inherited = this.inherited(ref)
-    if (inherited !== undefined) return Promise.resolve({ value: inherited, source: 'env' })
+    if (inherited !== undefined) return { value: inherited, source: 'env' }
     const stored = this.values.get(ref)
-    if (stored !== undefined) return Promise.resolve({ value: stored, source: 'file' })
+    if (stored !== undefined) {
+      if (webLoginNeedsProtection(ref, stored)) {
+        // Migrate a pre-DPAPI web login only if the original value still owns
+        // the document row under the cross-process lock. Never persist the
+        // plaintext again or overwrite a concurrently rotated credential.
+        const ciphertext = await protectWebLoginAtRest(ref, stored)
+        await this.write(ref, ciphertext, stored)
+      }
+      const current = this.values.get(ref)
+      if (current === undefined) return undefined
+      if (webLoginNeedsProtection(ref, current)) {
+        throw new Error('Windows website credential upgrade is pending. Retry securely.')
+      }
+      return { value: await unprotectWebLoginAtRest(ref, current), source: 'file' }
+    }
     const fallback = this.dotenvFallback(ref)
-    if (fallback !== undefined) return Promise.resolve({ value: fallback.value, source: fallback.source })
-    return Promise.resolve(undefined)
+    if (fallback !== undefined) return { value: fallback.value, source: fallback.source }
+    return undefined
   }
 
   override describe(ref: CredentialRef): Promise<CredentialInfo> {
@@ -642,7 +657,9 @@ export class LocalCredentialProvider extends CredentialProvider {
     if (value.length === 0) {
       throw new Error(`credentials-local: an empty value cannot be stored for "${ref}"; use unset`)
     }
-    await this.write(ref, value)
+    // Origin-bound accounts/passwords never enter the local file unencrypted
+    // on Windows. A missing DPAPI capability fails closed before any write.
+    await this.write(ref, await protectWebLoginAtRest(ref, value))
   }
 
   override async unset(ref: CredentialRef): Promise<void> {
@@ -750,7 +767,7 @@ export class LocalCredentialProvider extends CredentialProvider {
   /* jscpd:ignore-end */
 
   /** Queue one line edit; entry checks reject early, the queue re-judges them at run time. */
-  private async write(ref: CredentialRef, value: string | undefined): Promise<void> {
+  private async write(ref: CredentialRef, value: string | undefined, expectedValue?: string): Promise<void> {
     const verb = value === undefined ? 'unset' : 'set'
     if (this.isClosed()) {
       throw new Error(`credentials-local is disposed: cannot ${verb} "${ref}"`)
@@ -772,6 +789,7 @@ export class LocalCredentialProvider extends CredentialProvider {
         // so the line edit below can never resurrect a stale document.
         await this.reconcileFromDisk()
         const existing = this.values.get(ref)
+        if (expectedValue !== undefined && existing !== expectedValue) return
         if (value === undefined && existing === undefined) return
         const nextText = renderRef(this.text, ref, value)
         // 0600: a document holding secrets is never world-readable.

@@ -6,7 +6,7 @@ The secret vault adds the human-only `/secret` command over `ctx.credentials`. U
 
 Consumers such as LLM adapters still resolve the named `CredentialRef` internally for a provider operation. The Windows browser broker derives login refs from the canonical page origin, verifies the live origin again immediately before DOM injection, and receives login values only inside the trusted execution path. The vault does not expose a secret-reading tool or put secret values in model context.
 
-The default local provider stores the value in its owner-only credentials document. On Windows, filesystem ACL protection remains the responsibility of the account and deployment; this package's guarantee is that the command value is not included in the model request or durable command input.
+For website login account/password references, the local credential provider now encrypts values at rest with Windows DPAPI (CurrentUser), failing closed if encryption is unavailable. It migrates previously stored plaintext web login entries on their next resolved use. On non-Windows systems, the credentials file remains protected by owner-only filesystem permissions. Other provider secrets are not newly encrypted by this web-login feature. The private lock button beside the Phoenix composer offers an HTTPS, password-masked, consent-gated form that calls the human-only command without putting its contents in the chat draft, session history, or model arguments.
 
 ## Model Experience
 

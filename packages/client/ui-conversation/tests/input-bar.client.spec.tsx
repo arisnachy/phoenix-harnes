@@ -19,7 +19,7 @@ import type {
   ComposerAttachment, ComposerAttachmentsOwnerProps,
 } from '../src/client/contract/slots.ts'
 import type { DraftAttachmentId } from '../src/client/input/contract.ts'
-import { InputBar } from '../src/client/skeleton/InputBar.tsx'
+import { InputBar, secureLoginVaultCommand } from '../src/client/skeleton/InputBar.tsx'
 import type { InputBarProps } from '../src/client/skeleton/InputBar.tsx'
 import { zh } from '../src/client/locales.ts'
 import * as voiceAdapter from '../src/client/voice.ts'
@@ -234,6 +234,37 @@ function attachmentOwner(slotCalls: readonly { key: string; owner: unknown }[]):
   }
   throw new Error('attachment slot was not rendered')
 }
+
+describe('private origin-bound login Vault intake', () => {
+  it('builds only an HTTPS-bound private command and rejects unsafe inputs', () => {
+    expect(secureLoginVaultCommand('https://brandpoll.brandinstitute.com/login', 'study@example.com', 'A unique test phrase'))
+      .toBe('/secret login-set https://brandpoll.brandinstitute.com study@example.com A unique test phrase')
+    expect(() => secureLoginVaultCommand('http://brandpoll.brandinstitute.com', 'tester', 'secret')).toThrow(/HTTPS/)
+    expect(() => secureLoginVaultCommand('https://evil:pass@example.com', 'tester', 'secret')).toThrow(/HTTPS/)
+    expect(() => secureLoginVaultCommand('https://brandpoll.brandinstitute.com', 'bad user', 'secret')).toThrow(/espacios/)
+    expect(() => secureLoginVaultCommand('https://brandpoll.brandinstitute.com', 'tester', 'hello\nother')).toThrow(/saltos/)
+  })
+
+  it('keeps the password outside chat drafts and requires an origin grant', async () => {
+    const command = vi.fn(async () => true)
+    const screen = bench({ command })
+    const trigger = screen.view.getByRole('button', { name: /guardar usuario y contraseña en Vault privado/i })
+    fireEvent.click(trigger)
+    const dialog = screen.view.container.querySelector('dialog')!
+    expect(dialog).not.toBeNull()
+    fireEvent.change(dialog.querySelector('#phoenix-vault-origin')!, { target: { value: 'https://brandpoll.brandinstitute.com/login' } })
+    fireEvent.change(dialog.querySelector('#phoenix-vault-account')!, { target: { value: 'study@example.com' } })
+    fireEvent.change(dialog.querySelector('#phoenix-vault-password')!, { target: { value: 'private-test-pass' } })
+    const button = dialog.querySelector<HTMLButtonElement>('button[type=submit]')!
+    expect(button.hasAttribute('disabled')).toBe(true)
+    fireEvent.click(dialog.querySelector('input[type=checkbox]')!)
+    await act(async () => { fireEvent.submit(dialog.querySelector('form')!) })
+    expect(command).toHaveBeenCalledWith('/secret login-set https://brandpoll.brandinstitute.com study@example.com private-test-pass')
+    expect(screen.shell.snapshot.draft).toBe('')
+    expect(screen.sink).not.toHaveBeenCalled()
+    expect(screen.view.container.querySelector('#phoenix-vault-password')).toBeNull()
+  })
+})
 
 describe('image draft rail', () => {
   it('offers a visible file picker for arbitrary attachments', () => {
