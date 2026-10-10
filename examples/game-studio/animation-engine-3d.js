@@ -64,9 +64,10 @@ const PhoenixArticulation3D = (() => {
     if(!hinge)return qNorm(q);
     const axis=norm(hinge.axis);
     const projected=dot(q.slice(0,3),axis);
-    const twist=qNorm([...scale(axis,projected),q[3]]);
-    const angle=Math.atan2(Math.sin(2*Math.atan2(projected,twist[3])),
-      Math.cos(2*Math.atan2(projected,twist[3])));
+    const twistLength=Math.hypot(projected,q[3]);
+    if(twistLength<1e-9)return quat(); // 180° swing, zero twist
+    const signed=Math.atan2(projected/twistLength,q[3]/twistLength)*2;
+    const angle=Math.atan2(Math.sin(signed),Math.cos(signed));
     return qAxis(axis,clamp(angle,hinge.min,hinge.max));
   }
   function createRig(input){
