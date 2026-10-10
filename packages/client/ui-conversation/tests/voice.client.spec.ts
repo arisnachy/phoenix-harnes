@@ -59,18 +59,28 @@ describe('browser voice adapter', () => {
     expect(createVoiceRecognition(() => {}, () => {}, 'en-US', {})).toBeUndefined()
   })
 
-  it('allows legacy fallback only for a genuinely non-Codex route', async () => {
+  it('attempts Codex voice for a Phoenix Auto/non-Codex task route instead of skipping it', async () => {
     const disposeRoute = configureVoiceModelRouteResolver(async () => ({
-      provider: 'deepseek',
-      model: 'deepseek-chat',
+      provider: 'phoenix-auto',
+      model: 'phoenix-auto',
     }))
     try {
-      await expect(tryStartCodexRealtimeVoice('session-non-codex')).resolves.toEqual({
-        kind: 'not-codex',
+      // This fixture has no Host remote: the failure must describe the missing
+      // voice service, NOT reject the selected Phoenix Auto execution model.
+      await expect(tryStartCodexRealtimeVoice('session-auto')).resolves.toEqual({
+        kind: 'failed',
+        reason: 'host-realtime-unavailable',
       })
     } finally {
       disposeRoute()
     }
+  })
+
+  it('probes Codex voice even without an optional text-model resolver', async () => {
+    await expect(tryStartCodexRealtimeVoice('session-no-route')).resolves.toEqual({
+      kind: 'failed',
+      reason: 'host-realtime-unavailable',
+    })
   })
 
   it('keeps Codex realtime failures explicit instead of silently using fallback speech', async () => {
