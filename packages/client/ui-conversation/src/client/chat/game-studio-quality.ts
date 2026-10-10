@@ -153,6 +153,18 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
     if (!nonempty(value.audio.music)) warnings.push('missing-music-plan')
   }
   if (object(value.art)) {
+    if (value.art.mode === 'production' && profile === 'run-and-gun') {
+      const required = ['enemies', 'bosses', 'backgrounds', 'weapons', 'projectiles', 'powers', 'props', 'effects']
+      for (const group of required) {
+        if (!Array.isArray(value.art[group]) || value.art[group].length === 0) {
+          issues.push('missing-production-art:' + group)
+        }
+      }
+      if (Array.isArray(value.art.backgrounds) && object(value.level) && Array.isArray(value.level.layers)
+        && value.art.backgrounds.length < value.level.layers.length) {
+        issues.push('production-scenery-incomplete')
+      }
+    }
     if (value.art.mode === 'prototype') warnings.push('character-art-prototype-not-final')
     if (value.art.mode === 'production' && !nonempty(value.art.designReference) && profile === 'run-and-gun') {
       warnings.push('approved-character-design-reference-missing')
