@@ -218,7 +218,7 @@ function isToolAcquisitionRequest(text: string): boolean {
  * GPT-6 tier should handle the next step.
  */
 // oxlint-disable-next-line @stylistic/max-len -- Keep the deterministic routing vocabulary auditable as one regex literal.
-const AUTO_TASK_ACTION = /\b(?:fix|repair|debug|implement|edit|modify|update|create|build|run|execute|test|inspect|review|audit|refactor|deploy|install|remove|delete|rename|commit|merge|revert|resolve|diagnose|search|research|investigate|browse|compare|fill|submit|schedule|automate|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*|busc\p{L}*|investig\p{L}*|compar\p{L}*|llen\p{L}*|envi\p{L}*|program\p{L}*|automatiz\p{L}*)\b/iu
+const AUTO_TASK_ACTION = /\b(?:fix|repair|debug|implement|edit|modify|update|create|build|run|execute|test|inspect|review|audit|refactor|deploy|install|remove|delete|rename|commit|merge|revert|resolve|diagnose|search|research|investigate|browse|compare|fill|submit|schedule|automate|check|verify|confirm|arregl\p{L}*|repar\p{L}*|corrig\p{L}*|implement\p{L}*|modific\p{L}*|actualiz\p{L}*|crea\p{L}*|ejecut\p{L}*|prueb\p{L}*|revis\p{L}*|audit\p{L}*|refactor\p{L}*|despleg\p{L}*|instal\p{L}*|elimin\p{L}*|renombr\p{L}*|fusion\p{L}*|resuelv\p{L}*|diagnostic\p{L}*|busc\p{L}*|investig\p{L}*|compar\p{L}*|llen\p{L}*|envi\p{L}*|program\p{L}*|automatiz\p{L}*|comprob\p{L}*|comprueb\p{L}*|verific\p{L}*|confirm\p{L}*|consult\p{L}*|inspeccion\p{L}*|cheque\p{L}*|averigu\p{L}*)\b/iu
 // oxlint-disable-next-line @stylistic/max-len -- Compact reply-depth vocabulary is easier to audit in one literal.
 const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|deep|analiz\p{L}*|razon\p{L}*|explic\p{L}*\s+en\s+detalle|profund\p{L}*)\b/iu
 /** A stopped operational reply that still announces the next action rather than performing it. */
@@ -226,8 +226,13 @@ const AUTO_DEEP_REPLY = /\b(?:analy[sz]e|analysis|reason|explain\s+in\s+detail|d
 const AUTO_UNFINISHED_ACTION = /(?:\b(?:ahora|a\s+continuaci[oó]n|enseguida|para\s+ir\s+m[aá]s\s+r[aá]pido)\b.{0,180}\b(?:voy\s+a|usar[eé]|har[eé]|comprobar[eé]|revisar[eé]|abrir[eé]|ejecutar[eé]|probar[eé]|verificar[eé]|continuar[eé]|seguir[eé])|\bvoy\s+a\s+(?:comprobar|revisar|abrir|ejecutar|probar|verificar|usar|hacer|continuar|seguir|navegar|inspeccionar)|\b(?:i(?:'|’)ll|i\s+will|i(?:'|’)m\s+going\s+to|let\s+me|next\s+i(?:'|’)ll)\s+(?:check|review|open|run|test|verify|use|continue|inspect|try|fix|update|change|browse|navigate))/isu
 /** Short explicit promises are not final answers either. */
 const AUTO_SHORT_PENDING_PROMISE = /\b(?:lo|la)\s+(?:har[eé]|revisar[eé]|probar[eé]|verificar[eé])\s+(?:ahora|enseguida)\b/iu
+/** Bare future-tense commitments (without "voy a") still promise pending action. */
+// oxlint-disable-next-line @stylistic/max-len -- One bounded pattern for outstanding first-person commitments.
+const AUTO_FUTURE_ACTION = /\b(?:comprobar[eé]|verificar[eé]|confirmar[eé]|consultar[eé]|inspeccionar[eé]|revisar[eé]|probar[eé]|buscar[eé]|ejecutar[eé])(?=$|[^\p{L}\p{N}_])/iu
 function phoenixAutoUnfinishedAction(text: string): boolean {
-  return AUTO_UNFINISHED_ACTION.test(text) || AUTO_SHORT_PENDING_PROMISE.test(text)
+  return AUTO_UNFINISHED_ACTION.test(text)
+    || AUTO_SHORT_PENDING_PROMISE.test(text)
+    || AUTO_FUTURE_ACTION.test(text)
 }
 
 /** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
@@ -859,7 +864,16 @@ export function installModelSelection(
     const autoStep = isPhoenixCodexAutoSelection(selected) && scopedAgent !== undefined
       ? nextPhoenixAutoAssemblyStep(scopedAgent)
       : undefined
-    const autoPolicy = autoStep === 1 ? AUTO_VISIBLE_PLAN_POLICY
+    const currentTurn = scopedAgent?.session.events.findLast(event => event.type === 'turn/start')
+    const currentTurnNumber = (currentTurn?.data as { readonly turn?: number } | undefined)?.turn
+    const currentRequest = scopedAgent !== undefined && currentTurnNumber !== undefined
+      ? directUserTextForTurn(scopedAgent, currentTurnNumber) : ''
+    // Never inject a "stop after the plan" instruction into a Luna quick-answer
+    // route whose request was not classified as an operational task. Otherwise
+    // the model can emit a plan that the turn-stopping gate never resumes.
+    const autoPolicy = autoStep === 1
+      && phoenixAutoTaskRequest(currentRequest)
+      && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
       : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_EXECUTION_POLICY : undefined
     return {
       ...assembled,
@@ -968,10 +982,11 @@ export function installModelSelection(
       if (event.type !== 'tool/call' && event.type !== 'tool/result') return false
       return (event.data as { readonly step?: number }).step === latest.step
     })
-    // The actual visible assistant text is the Sol->Luna handoff. Never invent
-    // a hidden plan or wait for a second planning call to repeat it.
+    // The actual visible assistant text is the Sol->Luna handoff. A persisted
+    // assistant source may omit the model: the explicit visible plan plus the
+    // active Phoenix Auto route is authoritative; never silently stop here.
     if (latest.step === 1 && !latestStepHasToolActivity
-      && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL && hasVisibleSolPlan(latest.text)) {
+      && hasVisibleSolPlan(latest.text) && !phoenixAutoExplicitlyClosed(latest.text)) {
       // Once the plan was handed off, do not re-enter Team admission for the
       // exact same stopping step. It would manufacture a second coordination turn.
       if (phoenixAutoState.lastContinuationStep === latest.step) return
