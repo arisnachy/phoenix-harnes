@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MECH MOTION — Phoenix Rig Lab</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif}*{box-sizing:border-box}
+body{margin:0;background:#091626;color:#d2eaff;padding:10px;max-width:1100px}
+header{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap;margin-bottom:7px}
+h1{font-size:17px;letter-spacing:.07em;margin:0;color:#bbfff0}
+small{font-size:11px;color:#97b5c9}
+button{border:1px solid #568fa2;background:#16394c;color:#eafff5;border-radius:8px;padding:9px 13px;font-weight:700;cursor:pointer}
+button:focus-visible,canvas:focus-visible{outline:3px solid #ffffbc;outline-offset:1px}
+canvas{display:block;width:100%;height:auto;border-radius:11px;border:1px solid #50849a;outline:none}
+#touch{display:flex;gap:7px;justify-content:center;margin-top:8px;flex-wrap:wrap;touch-action:none}
+#touch button{min-width:74px;touch-action:none;user-select:none}#status{min-height:18px;font-size:12px;color:#a5dacc;margin:8px 0}
+</style></head><body><header><div><h1>MECH MOTION</h1><small>Motor articulado 2D · muestra técnica original y jugable, no arte final AAA</small></div>
+<div><button id="start">INICIAR</button> <button id="reset">REINICIAR</button> <button id="mute" aria-pressed="false">ACTIVAR SONIDO</button></div></header>
+<canvas id="game" width="960" height="540" tabindex="0" aria-label="Juego de prueba de motor articulado"></canvas>
+<div id="touch" aria-label="Controles táctiles"><button data-key="ArrowLeft">◀</button><button data-key="ArrowRight">▶</button>
+<button data-key="Space">SALTAR</button><button data-key="KeyJ">DISPARAR</button></div>
+<div id="status" role="status">Presiona INICIAR o ENTER para probar la animación articulada.</div>
+<script id="phoenix-game-manifest" type="application/json">{"schemaVersion":1,"title":"MECH MOTION • Phoenix Rig Lab","genre":"articulated platformer laboratory","gameType":"platformer","productionTier":"prototype","player":{"states":["idle","run","jump","fall","shoot","hurt","death"],"animations":{"idle":4,"run":8,"jump":2,"fall":2,"shoot":3,"hurt":2,"death":4}},"enemies":[{"id":"sentry","states":["move","attack","hurt","death"]},{"id":"skitter","states":["move","attack","hurt","death"]}],"bosses":[{"id":"colossus","phases":["pursuit","overdrive"]}],"level":{"layers":[{"id":"sky","scrollFactor":0},{"id":"city","scrollFactor":0.24},{"id":"front","scrollFactor":0.67}],"platforms":[{"x":0,"y":460,"width":2380}]},"controls":{"move":"A/D or arrows","jump":"Space/W","shoot":"J","pause":"P","mute":"M"},"audio":{"cues":["jump","shoot","hit","explosion","boss"],"music":"small original procedural ambient pulse after user gesture"},"sources":[{"path":"examples/game-studio/articulated-arena.html","license":"original"}],"mechanics":["hierarchical 2D skeletal animation","CCD IK aiming","keyframe crossfades","masked shoot overlay","sockets weapon attachment","action combat","boss two phases"]}</script>
+<script>/* Phoenix Articulation Engine — original, offline, engine-agnostic 2D skeletal runtime.
+ * FK, CCD-IK, joint limits, keyframes, clip transitions, masked/additive layers,
+ * frame events, socket attachments and sprite rendering.
+ * Real textured character assets must be supplied by the game; debug bones are not final art.
+ * Input coordinates are in world units, angles are in radians, delta times in seconds.
+ */
+const PhoenixArticulation = (() => {
+  'use strict';
+  const TAU = Math.PI * 2;
+  const finite = n => typeof n === 'number' && Number.isFinite(n);
+  const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+  const normalize = angle => Math.atan2(Math.sin(angle), Math.cos(angle));
+  const mix = (a, b, t) => a + (b - a) * t;
+  const mixAngle = (a, b, t) => a + normalize(b - a) * t;
+  const point = (x = 0, y = 0) => ({ x, y });
+  const rotate = (p, a) => point(p.x * Math.cos(a) - p.y * Math.sin(a),
+    p.x * Math.sin(a) + p.y * Math.cos(a));
+  const assert = (ok, message) => { if (!ok) throw new Error('PhoenixArticulation: ' + message); };
+  const isObject = v => typeof v === 'object' && v !== null && !Array.isArray(v);
+  const clone = pose => ({
+    root: { ...pose.root },
+    angles: { ...pose.angles },
+  });
+
+  function createRig(definition) {
+    assert(isObject(definition) && Array.isArray(definition.bones)
+      && definition.bones.length > 0 && definition.bones.length <= 256, 'rig needs 1..256 bones');
+    const original = new Map();
+    for (const item of definition.bones) {
+      assert(isObject(item) && typeof item.id === 'string' && /^[a-zA-Z][\w-]*$/.test(item.id)
+        && !original.has(item.id), 'invalid or duplicate bone id');
+      assert(finite(item.length) && item.length > 0 && item.length <= 100000, 'invalid bone length ' + item.id);
+      const angle = item.angle ?? 0;
+      const min = item.minAngle ?? -Math.PI * 4;
+      const max = item.maxAngle ?? Math.PI * 4;
+      assert([angle, min, max].every(finite) && min <= max, 'invalid angle limits ' + item.id);
+      const offset = item.offset ?? { x: 0, y: 0 };
+      assert(isObject(offset) && finite(offset.x) && finite(offset.y), 'invalid offset ' + item.id);
+      original.set(item.id, {
+        id: item.id, parent: item.parent ?? null, length: item.length, angle: clamp(angle, min, max),
+        minAngle: min, maxAngle: max, offset: point(offset.x, offset.y),
+        depth: Number.isInteger(item.depth) ? item.depth : 0,
+      });
+    }
+    const sorted = [], visited = new Set(), active = new Set();
+    function visit(id) {
+      assert(original.has(id), 'missing bone parent ' + id);
+      assert(!active.has(id), 'cyclic rig hierarchy');
+      if (visited.has(id)) return;
+      active.add(id);
+      const bone = original.get(id);
+      if (bone.parent !== null) visit(bone.parent);
+      active.delete(id);
+      visited.add(id);
+      sorted.push(bone);
+    }
+    for (const id of original.keys()) visit(id);
+    const bones = sorted.map(bone => Object.freeze({ ...bone, offset: Object.freeze(bone.offset) }));
+    const index = Object.create(null);
+    for (const bone of bones) index[bone.id] = bone;
+    const sockets = Object.create(null);
+    for (const socket of definition.sockets ?? []) {
+      assert(isObject(socket) && typeof socket.id === 'string' && socket.id.length > 0
+        && !Object.hasOwn(sockets, socket.id) && Object.hasOwn(index, socket.bone),
+      'invalid or duplicate socket');
+      const x = socket.x ?? 0, y = socket.y ?? 0, angle = socket.angle ?? 0;
+      assert([x, y, angle].every(finite), 'invalid socket coordinates');
+      sockets[socket.id] = Object.freeze({ id: socket.id, bone: socket.bone, x, y, angle });
+    }
+    return Object.freeze({ bones: Object.freeze(bones), index: Object.freeze(index),
+      sockets: Object.freeze(sockets) });
+  }
+
+  function restPose(rig) {
+    const angles = Object.create(null);
+    for (const bone of rig.bones) angles[bone.id] = bone.angle;
+    return { root: { x: 0, y: 0, rotation: 0 }, angles };
+  }
+
+  function forwardKinematics(rig, pose) {
+    const root = pose.root ?? {};
+    const x = root.x ?? 0, y = root.y ?? 0, rotation = root.rotation ?? 0;
+    assert([x, y, rotation].every(finite), 'invalid root transform');
+    const out = Object.create(null);
+    for (const bone of rig.bones) {
+      const parent = bone.parent === null ? null : out[bone.parent];
+      const base = parent === null ? point(x, y) : parent.end;
+      const parentAngle = parent === null ? rotation : parent.angle;
+      const offset = rotate(bone.offset, parentAngle);
+      const start = point(base.x + offset.x, base.y + offset.y);
+      const local = clamp(pose.angles?.[bone.id] ?? bone.angle, bone.minAngle, bone.maxAngle);
+      assert(finite(local), 'nonfinite bone angle ' + bone.id);
+      const angle = parentAngle + local;
+      const end = point(start.x + bone.length * Math.cos(angle), start.y + bone.length * Math.sin(angle));
+      out[bone.id] = { start, end, angle, length: bone.length, depth: bone.depth };
+    }
+    return out;
+  }
+
+  function socketTransform(rig, world, socketId) {
+    const s = rig.sockets[socketId];
+    assert(s, 'unknown socket ' + socketId);
+    const bone = world[s.bone];
+    assert(bone, 'socket bone missing from world pose');
+    const local = rotate(point(s.x, s.y), bone.angle);
+    return { x: bone.start.x + local.x, y: bone.start.y + local.y, angle: bone.angle + s.angle };
+  }
+
+  function solveIK(rig, pose, tipId, target, options = {}) {
+    assert(Object.hasOwn(rig.index, tipId), 'unknown IK tip ' + tipId);
+    assert(isObject(target) && finite(target.x) && finite(target.y), 'invalid IK target');
+    const chain = [], maxBones = clamp(Math.floor(options.maxBones ?? 6), 1, rig.bones.length);
+    for (let id = tipId; id !== null && chain.length < maxBones; id = rig.index[id].parent) chain.push(id);
+    const passes = clamp(Math.floor(options.iterations ?? 14), 1, 64);
+    const tolerance = Math.max(0.001, options.tolerance ?? 0.5);
+    const stiffness = clamp(options.stiffness ?? 1, 0, 1);
+    if (!pose.angles) pose.angles = Object.create(null);
+    let world = forwardKinematics(rig, pose), distance = Infinity, iterations = 0;
+    for (let pass = 0; pass < passes; pass++) {
+      const tip = world[tipId].end;
+      distance = Math.hypot(target.x - tip.x, target.y - tip.y);
+      if (distance <= tolerance) break;
+      for (const id of chain) {
+        const joint = world[id].start, effector = world[tipId].end;
+        const start = Math.atan2(effector.y - joint.y, effector.x - joint.x);
+        const end = Math.atan2(target.y - joint.y, target.x - joint.x);
+        const bone = rig.index[id];
+        const original = pose.angles[id] ?? bone.angle;
+        pose.angles[id] = clamp(original + normalize(end - start) * stiffness,
+          bone.minAngle, bone.maxAngle);
+        world = forwardKinematics(rig, pose);
+      }
+      iterations++;
+    }
+    distance = Math.hypot(target.x - world[tipId].end.x, target.y - world[tipId].end.y);
+    return { reached: distance <= tolerance, distance, iterations, world };
+  }
+
+  function createClip(definition) {
+    assert(isObject(definition) && typeof definition.id === 'string' && definition.id.length > 0,
+      'clip id required');
+    assert(finite(definition.duration) && definition.duration > 0, 'clip duration must be positive');
+    const tracks = Object.create(null);
+    const input = definition.tracks ?? {};
+    assert(isObject(input), 'clip tracks must be an object');
+    for (const [id, frames] of Object.entries(input)) {
+      assert(Array.isArray(frames) && frames.length > 0, 'empty clip track ' + id);
+      const sorted = frames.map(frame => {
+        assert(isObject(frame) && finite(frame.time) && frame.time >= 0
+          && frame.time <= definition.duration && finite(frame.angle), 'invalid keyframe ' + id);
+        return Object.freeze({ time: frame.time, angle: frame.angle,
+          ease: frame.ease === 'smooth' ? 'smooth' : 'linear' });
+      }).sort((a, b) => a.time - b.time);
+      assert(sorted.every((frame, index) => index === 0 || frame.time > sorted[index - 1].time),
+        'duplicate keyframe time ' + id);
+      tracks[id] = Object.freeze(sorted);
+    }
+    const root = {};
+    for (const axis of ['x', 'y', 'rotation']) {
+      if (!Array.isArray(definition.root?.[axis])) continue;
+      root[axis] = Object.freeze(definition.root[axis].map(frame => {
+        assert(isObject(frame) && finite(frame.time) && frame.time >= 0
+          && frame.time <= definition.duration && finite(frame.value), 'invalid root keyframe');
+        return Object.freeze({ time: frame.time, value: frame.value,
+          ease: frame.ease === 'smooth' ? 'smooth' : 'linear' });
+      }).sort((a, b) => a.time - b.time));
+    }
+    const events = [...(definition.events ?? [])].map(e => {
+      assert(isObject(e) && finite(e.time) && e.time >= 0 && e.time < definition.duration
+        && typeof e.name === 'string' && e.name.length > 0, 'invalid clip event');
+      return Object.freeze({ time: e.time, name: e.name, data: e.data ?? null });
+    }).sort((a, b) => a.time - b.time);
+    return Object.freeze({ id: definition.id, duration: definition.duration, loop: definition.loop !== false,
+      tracks: Object.freeze(tracks), root: Object.freeze(root), events: Object.freeze(events) });
+  }
+
+  function sampleKeys(keys, time, fallback, angular = false) {
+    if (!keys?.length) return fallback;
+    if (time <= keys[0].time) return angular ? (keys[0].angle ?? keys[0].value) : (keys[0].value ?? keys[0].angle);
+    const last = keys[keys.length - 1];
+    if (time >= last.time) return angular ? (last.angle ?? last.value) : (last.value ?? last.angle);
+    let lo = 0, hi = keys.length - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (keys[mid].time <= time) lo = mid; else hi = mid;
+    }
+    const a = keys[lo], b = keys[hi];
+    let t = (time - a.time) / (b.time - a.time);
+    if (b.ease === 'smooth') t = t * t * (3 - 2 * t);
+    const start = a.angle ?? a.value, end = b.angle ?? b.value;
+    return angular ? mixAngle(start, end, t) : mix(start, end, t);
+  }
+
+  function sampleClip(rig, clip, seconds) {
+    assert(finite(seconds), 'invalid sample time');
+    const t = clip.loop ? ((seconds % clip.duration) + clip.duration) % clip.duration
+      : clamp(seconds, 0, clip.duration);
+    const pose = restPose(rig);
+    for (const [id, keys] of Object.entries(clip.tracks)) {
+      assert(Object.hasOwn(rig.index, id), 'animation targets unknown bone ' + id);
+      pose.angles[id] = clamp(sampleKeys(keys, t, pose.angles[id], true),
+        rig.index[id].minAngle, rig.index[id].maxAngle);
+    }
+    for (const key of ['x', 'y', 'rotation']) {
+      pose.root[key] = sampleKeys(clip.root[key], t, pose.root[key], key === 'rotation');
+    }
+    return pose;
+  }
+
+  function blendPoses(rig, from, to, weight, mask = null, mode = 'override') {
+    const alpha = clamp(weight, 0, 1), pose = clone(from);
+    for (const bone of rig.bones) {
+      if (mask !== null && !mask.has(bone.id)) continue;
+      const base = from.angles[bone.id] ?? bone.angle;
+      const target = to.angles[bone.id] ?? bone.angle;
+      const angle = mode === 'additive' ? base + normalize(target - bone.angle) * alpha
+        : mixAngle(base, target, alpha);
+      pose.angles[bone.id] = clamp(angle, bone.minAngle, bone.maxAngle);
+    }
+    if (mask === null) for (const key of ['x', 'y', 'rotation']) {
+      pose.root[key] = key === 'rotation'
+        ? mixAngle(from.root[key], to.root[key], alpha)
+        : mix(from.root[key], to.root[key], alpha);
+    }
+    return pose;
+  }
+
+  function eventsBetween(clip, from, to) {
+    if (to <= from) return [];
+    const result = [];
+    const duration = clip.duration;
+    const left = clip.loop ? Math.floor(from / duration) : 0;
+    const right = clip.loop ? Math.min(Math.floor(to / duration), left + 8) : 0;
+    for (let cycle = left; cycle <= right; cycle++) {
+      for (const event of clip.events) {
+        const at = event.time + cycle * duration;
+        if (at > from && at <= to && (clip.loop || at < duration)) {
+          result.push({ ...event, clip: clip.id, cycle });
+        }
+      }
+    }
+    return result;
+  }
+
+  function createAnimator(rig, clips, initial, onEvent = () => {}) {
+    const lookup = Object.create(null);
+    for (const spec of clips) {
+      const clip = createClip(spec);
+      assert(!Object.hasOwn(lookup, clip.id), 'duplicate clip ' + clip.id);
+      for (const boneId of Object.keys(clip.tracks)) assert(Object.hasOwn(rig.index, boneId),
+        'unknown tracked bone ' + boneId);
+      lookup[clip.id] = clip;
+    }
+    assert(lookup[initial], 'initial state missing from clips');
+    let state = initial, seconds = 0, speed = 1, fade = null;
+    const layers = new Map();
+    function getPose() {
+      let pose = sampleClip(rig, lookup[state], seconds);
+      if (fade) {
+        const t = fade.duration === 0 ? 1 : clamp(fade.elapsed / fade.duration, 0, 1);
+        pose = blendPoses(rig, fade.pose, pose, t * t * (3 - 2 * t));
+      }
+      for (const layer of layers.values()) {
+        const clipPose = sampleClip(rig, lookup[layer.clip], layer.time);
+        pose = blendPoses(rig, pose, clipPose, layer.weight, layer.mask, layer.mode);
+      }
+      return pose;
+    }
+    return Object.freeze({
+      play(next, options = {}) {
+        assert(lookup[next], 'unknown state ' + next);
+        if (next === state && !options.reset) return;
+        const original = getPose();
+        state = next; seconds = 0;
+        speed = options.speed ?? 1;
+        assert(finite(speed) && speed > 0, 'invalid animation speed');
+        const duration = options.fade ?? 0.16;
+        assert(finite(duration) && duration >= 0, 'invalid transition duration');
+        fade = duration > 0 ? { pose: original, duration, elapsed: 0 } : null;
+      },
+      layer(name, clipId, options = {}) {
+        assert(lookup[clipId], 'unknown layer clip ' + clipId);
+        const mode = options.mode ?? 'override';
+        assert(mode === 'additive' || mode === 'override', 'invalid layer blend mode');
+        const mask = options.mask ? new Set(options.mask) : null;
+        if (mask !== null) for (const bone of mask) assert(Object.hasOwn(rig.index, bone),
+          'unknown layer mask bone ' + bone);
+        layers.set(name, { clip: clipId, time: 0, mask,
+          weight: clamp(options.weight ?? 1, 0, 1), mode });
+      },
+      removeLayer(name) { layers.delete(name); },
+      update(dt) {
+        assert(finite(dt) && dt >= 0 && dt <= 1, 'invalid animation delta time');
+        const previous = seconds;
+        seconds += dt * speed;
+        const queued = eventsBetween(lookup[state], previous, seconds);
+        for (const layer of layers.values()) {
+          const old = layer.time;
+          layer.time += dt;
+          queued.push(...eventsBetween(lookup[layer.clip], old, layer.time));
+        }
+        if (fade) {
+          fade.elapsed += dt;
+          if (fade.elapsed >= fade.duration) fade = null;
+        }
+        for (const event of queued) onEvent(event);
+        return queued;
+      },
+      pose: getPose,
+      world() { return forwardKinematics(rig, getPose()); },
+      state() { return state; },
+      time() { return seconds; },
+      seek(time) { assert(finite(time) && time >= 0, 'invalid seek'); seconds = time; },
+    });
+  }
+
+  function createSpring(options = {}) {
+    let value = options.value ?? 0, velocity = 0;
+    const stiffness = options.stiffness ?? 180, damping = options.damping ?? 24;
+    assert([value, stiffness, damping].every(finite) && stiffness >= 0 && damping >= 0,
+      'invalid spring settings');
+    return Object.freeze({
+      update(target, dt) {
+        assert(finite(target) && finite(dt) && dt >= 0 && dt <= 1, 'invalid spring step');
+        // Fixed bounded substeps improve stability at variable frame rates.
+        const count = Math.max(1, Math.ceil(dt / (1 / 120))), step = dt / count;
+        for (let i = 0; i < count; i++) {
+          velocity += ((target - value) * stiffness - velocity * damping) * step;
+          value += velocity * step;
+        }
+        return value;
+      },
+      value() { return value; },
+      reset(next = 0) { assert(finite(next), 'invalid spring reset'); value = next; velocity = 0; },
+    });
+  }
+
+  /**
+   * Choose an authored atlas cell by timeline. Frame sequencing is independent
+   * of bone rotation, allowing textured hand-drawn and skeletal animation together.
+   */
+  function spriteFrame(frames, fps, seconds, loop = true) {
+    assert(Array.isArray(frames) && frames.length > 0, 'sprite atlas needs frames');
+    assert(finite(fps) && fps > 0 && finite(seconds) && seconds >= 0,
+      'invalid sprite animation time');
+    const index = Math.floor(seconds * fps);
+    return frames[loop ? index % frames.length : Math.min(index, frames.length - 1)];
+  }
+
+  function drawSprites(ctx, rig, pose, skins = {}, attachments = {}, options = {}) {
+    assert(ctx && typeof ctx.save === 'function' && typeof ctx.drawImage === 'function',
+      'a Canvas 2D context is required');
+    const world = forwardKinematics(rig, pose);
+    const ordered = rig.bones.slice().sort((a, b) => a.depth - b.depth);
+    for (const bone of ordered) {
+      const skin = skins[bone.id];
+      if (!skin) continue;
+      const w = world[bone.id];
+      ctx.save(); ctx.translate(w.start.x, w.start.y); ctx.rotate(w.angle);
+      if (typeof skin.draw === 'function') skin.draw(ctx, w, bone);
+      else if (skin.image) {
+        const frames = skin.states?.[options.state] ?? skin.frames;
+        const src = frames
+          ? spriteFrame(frames, skin.fps ?? 12, options.seconds ?? 0, skin.loop !== false)
+          : skin.frame ?? { x: 0, y: 0, width: skin.image.width, height: skin.image.height };
+        const width = skin.width ?? bone.length, height = skin.height ?? src.height;
+        ctx.drawImage(skin.image, src.x, src.y, src.width, src.height,
+          -(skin.pivotX ?? 0), -(skin.pivotY ?? height / 2), width, height);
+      }
+      ctx.restore();
+    }
+    for (const [socketId, item] of Object.entries(attachments)) {
+      if (!item) continue;
+      const t = socketTransform(rig, world, socketId);
+      ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.angle);
+      if (typeof item.draw === 'function') item.draw(ctx, t);
+      else if (item.image) ctx.drawImage(item.image, -(item.pivotX ?? 0), -(item.pivotY ?? 0));
+      ctx.restore();
+    }
+    return world;
+  }
+
+  function drawDebug(ctx, rig, pose, options = {}) {
+    const world = forwardKinematics(rig, pose);
+    ctx.save();
+    for (const bone of rig.bones) {
+      const part = world[bone.id];
+      ctx.strokeStyle = options.color ?? '#7be4da';
+      ctx.lineWidth = options.width ?? 3;
+      ctx.beginPath(); ctx.moveTo(part.start.x, part.start.y);
+      ctx.lineTo(part.end.x, part.end.y); ctx.stroke();
+      ctx.fillStyle = options.jointColor ?? '#fff3a0';
+      ctx.beginPath(); ctx.arc(part.start.x, part.start.y, 3, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+    return world;
+  }
+
+  return Object.freeze({
+    createRig, restPose, forwardKinematics, socketTransform, solveIK,
+    createClip, sampleClip, blendPoses, createAnimator, createSpring,
+    drawSprites, drawDebug, spriteFrame, clamp, normalize, mixAngle,
+  });
+})();
+
+
+(() => {
+'use strict';
+const A=PhoenixArticulation, cv=document.getElementById('game'), ctx=cv.getContext('2d'),
+status=document.getElementById('status'), startBtn=document.getElementById('start'),
+resetBtn=document.getElementById('reset'), muteBtn=document.getElementById('mute');
+const W=960,H=540,FLOOR=460,WORLD=2380, keys=new Set(), bullets=[], sparks=[];
+let mode='menu',t=0,last=0,camera=0,audio=null,muted=true,shake=0;
+const random=(x)=>((Math.sin(x*12.9898+78.233)*43758.5453)%1+1)%1;
+const P={x:95,y:FLOOR-48,vx:0,vy:0,face:1,hp:5,fire:0,onGround:true};
+function tone(freq,duration=0.07,type='sine',volume=0.04){
+ if(muted||!audio) return;
+ try{
+  if(audio.state==='suspended') audio.resume();
+  const o=audio.createOscillator(),gain=audio.createGain(),now=audio.currentTime;
+  o.type=type;o.frequency.setValueAtTime(freq,now);
+  gain.gain.setValueAtTime(volume,now);gain.gain.exponentialRampToValueAtTime(.0001,now+duration);
+  o.connect(gain).connect(audio.destination);o.start();o.stop(now+duration);
+ }catch(_){} 
+}
+function soundOn(){
+ if(!audio){const ctor=window.AudioContext||window.webkitAudioContext;if(ctor) audio=new ctor();}
+ if(audio && audio.state==='suspended') audio.resume();
+}
+const heroRig=A.createRig({
+ bones:[
+  {id:'torso',length:40,angle:-Math.PI/2,depth:2,minAngle:-2,maxAngle:-1.1},
+  {id:'head',parent:'torso',length:15,angle:0,depth:3,minAngle:-.45,maxAngle:.45},
+  {id:'backArm',parent:'torso',length:24,angle:-1.8,depth:0,minAngle:-2.9,maxAngle:1.3},
+  {id:'backForearm',parent:'backArm',length:21,angle:.6,depth:0,minAngle:-2,maxAngle:2},
+  {id:'frontArm',parent:'torso',length:25,angle:1.7,depth:5,minAngle:-2.8,maxAngle:2.8},
+  {id:'frontForearm',parent:'frontArm',length:22,angle:-.9,depth:6,minAngle:-2.6,maxAngle:2.6},
+  {id:'backThigh',length:28,angle:1.95,depth:1,minAngle:.35,maxAngle:2.9},
+  {id:'backShin',parent:'backThigh',length:21,angle:-.5,depth:1,minAngle:-2,maxAngle:.5},
+  {id:'frontThigh',length:28,angle:1.2,depth:4,minAngle:.35,maxAngle:2.9},
+  {id:'frontShin',parent:'frontThigh',length:21,angle:.3,depth:4,minAngle:-.5,maxAngle:2}
+ ],
+ sockets:[{id:'muzzle',bone:'frontForearm',x:27,y:0},{id:'blade',bone:'backForearm',x:20,y:0}]
+});
+const frames=(a,b,c,d)=>[{time:0,angle:a},{time:.18,angle:b,ease:'smooth'},{time:.36,angle:c,ease:'smooth'},{time:.54,angle:d,ease:'smooth'}];
+function heroClip(id,period,tracks,loop=true){
+ const t={}; for(const [name,values] of Object.entries(tracks)){
+ t[name]=values.map((angle,i)=>({time:i*period/(values.length-1),angle,ease:'smooth'}));
+ } return {id,duration:period,loop,tracks:t};
+}
+const clips=[
+ heroClip('idle',1.4,{torso:[-1.57,-1.62,-1.57],frontThigh:[1.20,1.18,1.20],backThigh:[1.95,1.94,1.95]}),
+ heroClip('run',.54,{torso:[-1.43,-1.62,-1.43],frontThigh:[.45,2.45,.45],frontShin:[.1,-1.4,.1],
+ backThigh:[2.45,.45,2.45],backShin:[-1.3,.15,-1.3],backArm:[-2.3,-.8,-2.3],
+ frontArm:[1.05,2.25,1.05],frontForearm:[-.6,-1.2,-.6]}),
+ heroClip('jump',.8,{frontThigh:[.9,.52,.9],backThigh:[2.2,2.5,2.2],
+ frontShin:[.2,1.0,.2],backShin:[-1,-1.5,-1]}),
+ heroClip('fall',.8,{frontThigh:[1.3,1.6,1.3],backThigh:[1.65,1.9,1.65],
+ frontArm:[1.4,.9,1.4]}),
+ heroClip('shoot',.23,{frontArm:[1.25,1.45,1.25],frontForearm:[-1.25,-1.48,-1.25]}),
+ heroClip('hurt',.24,{torso:[-1.55,-1.9,-1.55]}),
+ heroClip('death',.65,{torso:[-1.57,-1.2,-1.05]},false),
+ heroClip('aim',.6,{frontArm:[1.55,1.45,1.55],frontForearm:[-1.1,-.95,-1.1]})
+];
+const hero=A.createAnimator(heroRig,clips,'idle',e=>{if(e.name==='footfall')tone(90,.025)});
+hero.layer('upperBodyAim','aim',{mask:['frontArm','frontForearm'],weight:.16});
+const recoil=A.createSpring({value:0,stiffness:240,damping:31});
+const unitRig=A.createRig({bones:[
+ {id:'core',length:19,angle:-Math.PI/2,minAngle:-2.4,maxAngle:-.7,depth:2},
+ {id:'eye',parent:'core',length:8,angle:0,depth:4},
+ {id:'leftArm',parent:'core',length:22,angle:-1.6,minAngle:-3,maxAngle:3,depth:1},
+ {id:'leftClaw',parent:'leftArm',length:15,angle:-.3,minAngle:-2,maxAngle:2,depth:1},
+ {id:'rightArm',parent:'core',length:22,angle:1.6,minAngle:-3,maxAngle:3,depth:5},
+ {id:'rightClaw',parent:'rightArm',length:15,angle:.3,minAngle:-2,maxAngle:2,depth:5},
+ {id:'leftLeg',length:27,angle:2.2,minAngle:.3,maxAngle:3,depth:1},
+ {id:'rightLeg',length:27,angle:.9,minAngle:.3,maxAngle:3,depth:4}
+],sockets:[{id:'eyeSocket',bone:'eye',x:8}]});
+const foeClips=[
+ {id:'stride',duration:.72,tracks:{
+ leftLeg:[{time:0,angle:.6},{time:.36,angle:2.6},{time:.72,angle:.6}],
+ rightLeg:[{time:0,angle:2.6},{time:.36,angle:.6},{time:.72,angle:2.6}],
+ leftArm:[{time:0,angle:-2},{time:.36,angle:-.7},{time:.72,angle:-2}],
+ rightArm:[{time:0,angle:2},{time:.36,angle:.7},{time:.72,angle:2}]}},
+ {id:'attack',duration:.42,tracks:{rightArm:[{time:0,angle:1.6},{time:.18,angle:.4},{time:.42,angle:1.6}]}},
+ {id:'death',duration:.5,loop:false,tracks:{core:[{time:0,angle:-1.57},{time:.5,angle:-.75}]}}
+];
+const units=[
+ {id:'sentry',x:490,y:FLOOR-28,health:3,maxHealth:3,speed:25,color:'#f56b9c',hit:0,attack:1.8,phase:0},
+ {id:'skitter',x:1025,y:FLOOR-28,health:2,maxHealth:2,speed:42,color:'#ffcf68',hit:0,attack:1.5,phase:1},
+ {id:'sentry',x:1475,y:FLOOR-28,health:3,maxHealth:3,speed:32,color:'#8fd3ff',hit:0,attack:1.1,phase:2},
+ {id:'colossus',x:2180,y:FLOOR-55,health:14,maxHealth:14,speed:13,color:'#a88bff',hit:0,attack:1,phase:0,isBoss:true}
+].map(u=>({...u,anim:A.createAnimator(unitRig,foeClips,'stride')}));
+function begin(){
+ soundOn();mode='playing';t=0;bullets.length=0;sparks.length=0;
+ Object.assign(P,{x:95,y:FLOOR-48,vx:0,vy:0,face:1,hp:5,fire:0,onGround:true});
+ for(const u of units){u.health=u.maxHealth;u.attack=1.2;u.hit=0;u.anim.play('stride',{fade:0,reset:true})}
+ hero.play('idle',{fade:0,reset:true});startBtn.textContent='REINICIAR MISIÓN';tone(640,.2);
+ cv.focus();
+}
+startBtn.addEventListener('click',begin);
+resetBtn.addEventListener('click',begin);
+muteBtn.addEventListener('click',()=>{muted=!muted; if(!muted) soundOn();
+ muteBtn.textContent=muted?'ACTIVAR SONIDO':'SILENCIAR';
+ muteBtn.setAttribute('aria-pressed',String(!muted));tone(550,.05)});
+const controlled = new Set(['ArrowLeft','ArrowRight','KeyA','KeyD','KeyW','Space','ArrowUp','KeyJ','KeyP','KeyM','Enter']);
+document.addEventListener('keydown',e=>{
+ if(controlled.has(e.code))e.preventDefault();
+ if(e.code==='Enter'&&mode!=='playing'){begin();return;}
+ if(e.code==='KeyM'){muted=!muted;if(!muted)soundOn();muteBtn.textContent=muted?'ACTIVAR SONIDO':'SILENCIAR';return;}
+ if(e.code==='KeyP'&& (mode==='playing'||mode==='paused')){mode=mode==='playing'?'paused':'playing';return;}
+ keys.add(e.code);
+});
+document.addEventListener('keyup',e=>keys.delete(e.code));
+window.addEventListener('blur',()=>keys.clear());
+document.querySelectorAll('[data-key]').forEach(btn=>{
+ const k=btn.getAttribute('data-key');
+ btn.addEventListener('pointerdown',e=>{e.preventDefault();keys.add(k);btn.setPointerCapture?.(e.pointerId)});
+ for(const event of ['pointerup','pointercancel','pointerleave'])btn.addEventListener(event,()=>keys.delete(k));
+});
+function burst(x,y,color,n=12){
+ for(let i=0;i<n;i++){const angle=i*6.283/n,sp=65+random(t+i)*145;
+ sparks.push({x,y,vx:Math.cos(angle)*sp,vy:Math.sin(angle)*sp,ttl:.5,life:.5,color});}
+}
+function fire(){
+ const pose=hero.pose();pose.root.x=0;pose.root.y=0;pose.root.rotation=0;
+ A.solveIK(heroRig,pose,'frontForearm',{x:53,y:-25},{maxBones:2,iterations:12,tolerance:2});
+ const muzzle=A.socketTransform(heroRig,A.forwardKinematics(heroRig,pose),'muzzle');
+ bullets.push({x:P.x+P.face*muzzle.x,y:P.y+muzzle.y,vx:P.face*680,ttl:1.1,enemy:false});
+ recoil.reset(-7);shake=2.2;tone(600,.07,'sawtooth',.025);
+ if(bullets.length>120)bullets.shift();
+}
+function update(dt){
+ t+=dt;shake=Math.max(0,shake-12*dt);
+ if(mode!=='playing'){if(mode==='lost')hero.update(dt);return;}
+ const left=keys.has('KeyA')||keys.has('ArrowLeft');
+ const right=keys.has('KeyD')||keys.has('ArrowRight');
+ const jump=keys.has('Space')||keys.has('KeyW')||keys.has('ArrowUp');
+ const move=Number(right)-Number(left);
+ P.vx=move*230;if(move)P.face=move;
+ if(jump&&P.onGround){P.vy=-475;P.onGround=false;tone(480,.09,'triangle')}
+ P.vy=Math.min(800,P.vy+1200*dt);
+ P.x=A.clamp(P.x+P.vx*dt,36,WORLD-45);P.y+=P.vy*dt;
+ if(P.y>=FLOOR-48){P.y=FLOOR-48;P.vy=0;P.onGround=true;}
+ P.fire-=dt;
+ if((keys.has('KeyJ')||keys.has('KeyK'))&&P.fire<=0){fire();P.fire=.18;}
+ const state=P.hp<=0?'death':!P.onGround?(P.vy<0?'jump':'fall'):move?'run':'idle';
+ hero.play(state,{fade:.11});hero.update(dt);recoil.update(0,dt);
+ for(const u of units){
+  if(u.health<=0){u.anim.update(dt);continue;}
+  const dist=P.x-u.x;
+  if(Math.abs(dist)<460)u.x+=Math.sign(dist)*u.speed*dt;
+  u.attack-=dt;u.hit=Math.max(0,u.hit-dt);
+  const attackable=Math.abs(dist)<440;
+  if(attackable&&u.attack<=0){
+    u.anim.play('attack',{fade:.1});
+    const fireAt=Math.sign(dist)||-1;
+    bullets.push({x:u.x+fireAt*(u.isBoss?43:15),y:u.y-(u.isBoss?39:13),
+      vx:fireAt*(u.isBoss?280:230),ttl:3,enemy:true});
+    u.attack=(u.isBoss?(u.health<=u.maxHealth/2?.42:1.15):1.9);
+    tone(u.isBoss?90:180,.09,'triangle',.02);
+  } else if(u.anim.state()==='attack'&&u.anim.time()>.35)u.anim.play('stride',{fade:.1});
+  u.anim.update(dt);
+ }
+ for(let i=bullets.length-1;i>=0;i--){
+  const b=bullets[i];b.x+=b.vx*dt;b.ttl-=dt;
+  if(b.ttl<=0||b.x<0||b.x>WORLD){bullets.splice(i,1);continue;}
+  if(b.enemy){
+   if(Math.abs(P.x-b.x)<17&&Math.abs(P.y-12-b.y)<35){
+    P.hp--;burst(b.x,b.y,'#86f9ef',14);bullets.splice(i,1);shake=7;tone(130,.18,'square',.03);
+    if(P.hp<=0){mode='lost';hero.play('death',{fade:.15});}
+   }
+  }else{
+   const hit=units.find(u=>u.health>0&&Math.abs(u.x-b.x)<(u.isBoss?60:27)&&Math.abs(u.y-b.y)<(u.isBoss?54:33));
+   if(hit){
+    hit.health--;hit.hit=.14;burst(b.x,b.y,hit.color,10);bullets.splice(i,1);tone(260,.05,'triangle');
+    if(hit.health<=0){burst(hit.x,hit.y,hit.color,24);shake=5;hit.anim.play('death',{fade:0})}
+   }
+  }
+ }
+ for(let i=sparks.length-1;i>=0;i--){
+  const s=sparks[i];s.x+=s.vx*dt;s.y+=s.vy*dt;s.vy+=240*dt;s.ttl-=dt;
+  if(s.ttl<=0)sparks.splice(i,1);
+ }
+ if(units.every(u=>u.health<=0)&&P.x>WORLD-300)mode='won';
+ camera=A.clamp(P.x-310,0,WORLD-W);
+ status.textContent='Escudo '+Math.max(0,P.hp)+'/5 · Drones '+units.filter(u=>u.health>0&&!u.isBoss).length
+  +' · Jefe '+Math.max(0,units[3].health)+'/'+units[3].maxHealth;
+}
+function segment(color,highlight){
+ return (c,w,b)=>{
+  const len=b.length, g=c.createLinearGradient(0,-8,len,8);
+  g.addColorStop(0,'#13182e');g.addColorStop(.25,color);g.addColorStop(.78,color);g.addColorStop(1,'#121a34');
+  c.fillStyle=g;c.strokeStyle=highlight;c.lineWidth=1.5;
+  c.beginPath();c.moveTo(0,-6);c.lineTo(len-5,-7);c.lineTo(len,0);
+  c.lineTo(len-5,7);c.lineTo(0,6);c.closePath();c.fill();c.stroke();
+  c.fillStyle='#e4fbff';c.beginPath();c.arc(0,0,3,0,Math.PI*2);c.fill();
+  c.fillStyle='rgba(255,255,255,.45)';c.fillRect(7,-4,Math.max(0,len-13),2);
+ };
+}
+const heroSkin=Object.fromEntries(heroRig.bones.map(b=>[b.id,{draw:segment(
+  b.id==='head'?'#a1f5dc':b.id.includes('Thigh')||b.id.includes('Shin')?'#3fb0d8':'#56dfbb',
+  b.id==='head'?'#fff6ad':'#c5fdff') }]));
+heroSkin.torso={draw:(c,w,b)=>{
+ segment('#197da4','#d0feff')(c,w,b);
+ c.fillStyle='#cffff7';c.fillRect(12,-5,18,10);c.fillStyle='#00ffc2';c.fillRect(16,-3,10,6);
+}};
+heroSkin.head={draw:(c,w,b)=>{
+ segment('#93f4d0','#ffffff')(c,w,b);
+ c.fillStyle='#102b3e';c.fillRect(6,-9,9,18);c.fillStyle='#ffcc66';c.fillRect(9,-6,3,13);
+}};
+const enemySkin=Object.fromEntries(unitRig.bones.map(b=>[b.id,{draw:segment('#cc5e82','#ffc6da')}]));
+function sky(){
+ const bg=ctx.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#071024');bg.addColorStop(.7,'#173156');bg.addColorStop(1,'#103340');
+ ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+ for(let i=0;i<90;i++){
+  const x=random(i)*W,y=random(i*9+20)*270;
+  ctx.fillStyle='rgba(190,239,255,'+(.12+random(i+24)*.5)+')';ctx.fillRect(x,y,1.5,1.5);
+ }
+ ctx.fillStyle='#89e4fc';ctx.shadowColor='#64e6ff';ctx.shadowBlur=30;
+ ctx.beginPath();ctx.arc(760,100,43,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;
+ for(let layer=0;layer<3;layer++){
+  ctx.fillStyle=['#0a1e3a','#102943','#102f44'][layer];
+  const step=[130,98,66][layer],factor=[.18,.36,.6][layer];
+  for(let i=-2;i<Math.ceil(W/step)+4;i++){
+   const x=i*step-(camera*factor)%step,h=70+random(i+layer*37)*130;
+   ctx.fillRect(x,FLOOR-32-h+layer*12,step-5,h+30);
+   if(layer>0){
+    ctx.fillStyle=layer===1?'#326985':'#36777d';
+    for(let j=0;j<3;j++)ctx.fillRect(x+20+j*21,FLOOR-15-h+layer*12,5,4);
+    ctx.fillStyle=['#0a1e3a','#102943','#102f44'][layer];
+   }
+  }
+ }
+}
+function renderUnit(u){
+ const boss=Boolean(u.isBoss),factor=boss?2.1:u.id==='skitter'?.78:1,face=P.x<u.x?-1:1;
+ ctx.save();ctx.translate(u.x,u.y);ctx.scale(face*factor,factor);
+ const pose=u.anim.pose();
+ const offset=boss? .12*Math.sin(t*3) : .14*Math.sin(t*6+u.phase);
+ pose.angles.leftArm-=offset;pose.angles.rightArm+=offset;
+ const palette=boss?'#a485ec':u.id==='skitter'?'#ffc663':u.color;
+ const skins=Object.fromEntries(unitRig.bones.map(b=>[b.id,{draw:segment(palette,'#fff1f5')}]));
+ if(u.hit>0){ctx.globalAlpha=.55;}
+ A.drawSprites(ctx,unitRig,pose,skins,{eyeSocket:{draw:c=>{
+  c.fillStyle=boss?'#ffdd61':'#fff2aa';c.shadowColor='#fff09a';c.shadowBlur=14;
+  c.fillRect(-4,-3,11,6);c.shadowBlur=0;
+ }}});
+ ctx.restore();
+ if(boss&&u.health>0){
+  ctx.fillStyle='#192439';ctx.fillRect(u.x-72,u.y-145,144,10);
+  ctx.fillStyle='#f4b9f8';ctx.fillRect(u.x-72,u.y-145,144*(u.health/u.maxHealth),10);
+ }
+}
+function renderHero(){
+ ctx.save();ctx.translate(P.x,P.y);ctx.scale(P.face,1);
+ const pose=hero.pose();const bob=P.onGround?Math.sin(t*8)*.6:0;pose.root.y+=bob;
+ A.solveIK(heroRig,pose,'frontForearm',{x:52,y:-27+recoil.value()},{maxBones:2,iterations:9,tolerance:2});
+ A.drawSprites(ctx,heroRig,pose,heroSkin,{muzzle:{draw:c=>{
+  c.fillStyle='#1a314f';c.fillRect(-5,-5,28,10);
+  c.fillStyle='#e7ebff';c.fillRect(0,-3,19,3);
+  c.fillStyle='#ffdf77';c.fillRect(18,-2,8,4);
+ }}});
+ ctx.restore();
+}
+function render(){
+ ctx.clearRect(0,0,W,H);sky();
+ ctx.save();ctx.translate(-camera+(Math.sin(t*81)*shake),0);
+ ctx.fillStyle='#142d3b';ctx.fillRect(0,FLOOR,WORLD,80);
+ ctx.fillStyle='#387a84';ctx.fillRect(0,FLOOR,WORLD,7);
+ for(let x=0;x<WORLD;x+=56){ctx.strokeStyle='#1e5160';ctx.strokeRect(x,FLOOR+13,53,26)}
+ for(const u of units)if(u.health>0||u.anim.time()<.5)renderUnit(u);
+ renderHero();
+ for(const b of bullets){
+  ctx.fillStyle=b.enemy?'#ff8ac2':'#a3fff2';
+  ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=15;
+  ctx.fillRect(b.x-7,b.y-3,14,6);ctx.shadowBlur=0;
+ }
+ for(const p of sparks){ctx.globalAlpha=Math.max(0,p.ttl/p.life);
+  ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,4,4)}
+ ctx.globalAlpha=1;ctx.restore();
+ ctx.fillStyle='#e4f8ff';ctx.font='bold 16px system-ui';ctx.fillText('MECH MOTION  //  PHOENIX ARTICULATION',22,34);
+ ctx.fillStyle='#5feacc';ctx.fillRect(22,47,Math.max(0,P.hp)*32,5);
+ ctx.fillStyle='#9bb8cd';ctx.font='12px system-ui';
+ ctx.fillText('10 HUESOS • IK CCD • BLENDING • SOCKETS • ENEMIGOS ANIMADOS',22,H-23);
+ if(mode!=='playing'){
+  ctx.fillStyle='rgba(4,12,28,.84)';ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center';ctx.fillStyle='#e8fdff';ctx.font='bold 48px system-ui';
+  ctx.fillText(mode==='won'?'MISIÓN COMPLETADA':mode==='lost'?'MISIÓN FALLIDA':
+    mode==='paused'?'PAUSA':'MECH MOTION',W/2,215);
+  ctx.fillStyle='#7feadf';ctx.font='18px system-ui';
+  ctx.fillText(mode==='menu'?'Un laboratorio jugable de animación articulada original':
+    mode==='paused'?'Pulsa P para continuar':'Pulsa ENTER para reiniciar',W/2,257);
+  ctx.fillStyle='#a8bccf';ctx.font='15px system-ui';
+  ctx.fillText('A/D mover · ESPACIO saltar · J disparar · P pausa · M sonido',W/2,296);
+  ctx.textAlign='left';
+ }
+}
+function frame(ms){
+ const dt=last?Math.min((ms-last)/1000,.05):1/60;last=ms;
+ update(dt);render();requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+})();
+</script></body></html>
