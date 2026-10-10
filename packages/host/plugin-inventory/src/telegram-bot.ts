@@ -384,7 +384,7 @@ export class TelegramInbox {
       const message = error instanceof Error ? error.message : 'unknown'
       // No secrets, model traces or stack details should be sent to Telegram.
       this.ctx.logger.warn('Telegram dispatch failed during ' + stage + ': '
-        + message.replace(/\\d{6,}:[A-Za-z0-9_-]+/g, '[redacted]'))
+        + message.replace(/\d{6,}:[A-Za-z0-9_-]+/g, '[redacted]'))
       // Never send raw exception text, paths, OAuth data or model traces.
       const code = /^telegram-[a-z-]{3,80}$/.test(message) ? message : 'telegram-unexpected-error'
       const description = stage === 'session' ? 'abrir la sesión' : stage === 'admission'
