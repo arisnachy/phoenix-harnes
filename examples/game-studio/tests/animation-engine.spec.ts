@@ -32,8 +32,9 @@ interface Engine {
   sampleClip: (rig: Rig, clip: unknown, time: number) => Pose
   createAnimator: (rig: Rig, clips: unknown[], initial: string, onEvent?: (evt: { name: string }) => void) => Animated
   createSpring: (options?: { value?: number; stiffness?: number; damping?: number }) => { update: (target: number, dt: number) => number; reset: (v?: number) => void }
-  drawSprites: (ctx: object, rig: Rig, pose: Pose, skins: object, attachments?: object) => World
+  drawSprites: (ctx: object, rig: Rig, pose: Pose, skins: object, attachments?: object, options?: object) => World
   drawDebug: (ctx: object, rig: Rig, pose: Pose) => World
+  spriteFrame: (frames: unknown[], fps: number, seconds: number, loop?: boolean) => unknown
 }
 const engine = runInNewContext(engineSource + '\nPhoenixArticulation;', {}) as Engine
 const rig = engine.createRig({
@@ -155,6 +156,23 @@ describe('Phoenix Articulation Engine - deterministic 2D core', () => {
     }, { muzzle: { image: { width: 9, height: 6 } } })
     expect(draws).toBe(3)
     expect(transforms).toBe(3)
+  })
+
+  it('selects imported sprite-atlas cells by time and skeletal state', () => {
+    const frames = [{ x: 0, y: 0, width: 16, height: 16 }, { x: 16, y: 0, width: 16, height: 16 }]
+    expect(engine.spriteFrame(frames, 10, .01)).toEqual(frames[0])
+    expect(engine.spriteFrame(frames, 10, .15)).toEqual(frames[1])
+    expect(engine.spriteFrame(frames, 10, .21)).toEqual(frames[0])
+    expect(engine.spriteFrame(frames, 10, .21, false)).toEqual(frames[1])
+    let cropX = -1
+    const noop = (): void => {}
+    const ctx = { save: noop, restore: noop, translate: noop, rotate: noop,
+      drawImage: (_image: unknown, x: number) => { cropX = x } }
+    engine.drawSprites(ctx, rig, engine.restPose(rig), {
+      arm: { image: { width: 32, height: 16 }, fps: 10,
+        states: { attack: frames, idle: [frames[0]] }, height: 16 },
+    }, {}, { state: 'attack', seconds: .15 })
+    expect(cropX).toBe(16)
   })
 
   it('uses stable bounded spring substeps for recoil and secondary motion', () => {
