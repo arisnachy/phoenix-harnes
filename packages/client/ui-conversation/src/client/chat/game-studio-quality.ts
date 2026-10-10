@@ -203,8 +203,8 @@ export function readGameManifest(html: string): unknown {
 export function auditGameHtml(html: string): GameStudioAudit {
   // A missing manifest fails metadata preflight but does NOT prevent the iframe
   // from attempting to execute. Never misdiagnose a blank game as a JSON error.
-  const manifestTags = [...html.matchAll(/<script\\b([^>]*)>[\\s\\S]*?<\\/script\\s*>/giu)]
-    .filter(match => /\\bid\\s*=\\s*["']phoenix-game-manifest["']/iu.test(match[1] ?? ''))
+  const manifestTags = [...html.matchAll(/<script\b([^>]*)>[\s\S]*?<\/script\s*>/giu)]
+    .filter(match => /\bid\s*=\s*["']phoenix-game-manifest["']/iu.test(match[1] ?? ''))
   const parsed = readGameManifest(html)
   const result = parsed === undefined ? undefined : auditGameManifest(parsed)
   const issues = result === undefined ? [manifestTags.length === 0
