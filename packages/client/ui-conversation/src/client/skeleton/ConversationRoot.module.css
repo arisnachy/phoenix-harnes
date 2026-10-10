@@ -625,14 +625,6 @@
   min-height: 78px;
   padding-block: 5px;
 }
-.headerBrand {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: #e75e24;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: .12em;
-}
 .root[data-phase='hero'] .unifiedHeader {
   min-height: 68px;
 }
