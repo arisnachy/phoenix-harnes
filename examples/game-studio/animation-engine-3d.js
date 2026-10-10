@@ -206,8 +206,9 @@ const PhoenixArticulation3D = (() => {
   }
   function blend(rig,a,b,weight,mask=null){
     const t=clamp(weight,0,1),out=restPose(rig);
-    out.root.position=a.root.position.map((v,i)=>v+(b.root.position[i]-v)*t);
-    out.root.rotation=slerp(a.root.rotation,b.root.rotation,t);
+    out.root.position=mask ? copy(a.root.position)
+      : a.root.position.map((v,i)=>v+(b.root.position[i]-v)*t);
+    out.root.rotation=mask ? copy(a.root.rotation) : slerp(a.root.rotation,b.root.rotation,t);
     for(const bone of rig.bones)out.rotations[bone.id]=mask&& !mask.has(bone.id)
       ? copy(a.rotations[bone.id]) : hingeLimit(slerp(a.rotations[bone.id],b.rotations[bone.id],t),bone.hinge);
     return out;
