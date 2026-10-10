@@ -29,7 +29,6 @@ import {
   CodexRealtimeBridge,
   type CodexRealtimeInitialItem,
   type CodexRealtimeTranscript,
-  type CodexRealtimeVoice,
 } from './codex-realtime.ts'
 
 export type * from './types.ts'
@@ -186,7 +185,6 @@ type RealtimeAssistantGender = 'masculine' | 'feminine' | 'neutral'
 interface RealtimeAssistantIdentity {
   readonly name: string
   readonly gender: RealtimeAssistantGender
-  readonly voice: CodexRealtimeVoice
 }
 
 interface RealtimeTranscriptTurn {
@@ -487,7 +485,6 @@ export class VoiceRuntime extends TypertRemoteService {
         ...(initialItems.length === 0 ? {} : { initialItems }),
         assistantName: identity.name,
         assistantGender: identity.gender,
-        voice: identity.voice,
         onTranscript: (transcript) => {
           this.appendRealtimeTranscript(key, model, transcript)
         },
@@ -938,9 +935,7 @@ function realtimeAssistantIdentity(ctx: Context): RealtimeAssistantIdentity {
   return {
     name,
     gender,
-    // Codex V1/V3 currently share this voice family. Pinning a voice prevents
-    // provider defaults from silently changing the configured presentation.
-    voice: gender === 'feminine' ? 'juniper' : gender === 'masculine' ? 'cove' : 'breeze',
+    // The Realtime bridge chooses a compatible voice for V3 or legacy V1.
   }
 }
 
