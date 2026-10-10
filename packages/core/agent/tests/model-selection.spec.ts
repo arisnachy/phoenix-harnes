@@ -224,7 +224,11 @@ describe('installModelSelection()', () => {
   it('exposes the first-step Sol plan policy, then switches to a single Luna execution brief', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
-    const events: { type: string; data: unknown }[] = [{ type: 'turn/start', data: { turn: 1 } }]
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Comprueba Phoenix Game Studio y verifica su disponibilidad' }] } },
+    ]
     const agent = { options: {}, session: { events } } as unknown as Agent
     ctx.agent = agent
     const selection: ModelSelectionRef = {
@@ -241,6 +245,20 @@ describe('installModelSelection()', () => {
       const secondPolicy = second.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text
       expect(secondPolicy).toContain('already-approved execution brief')
       expect(secondPolicy).not.toContain('FIRST step')
+      events.push(
+        { type: 'turn/start', data: { turn: 2 } },
+        { type: 'user/message', data: { source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Hola, ¿qué tal?' }] } },
+      )
+      const social = await ctx.systemPrompt.assemble()
+      expect(social.sections.some(item => item.name === 'phoenix:auto-visible-handoff')).toBe(false)
+      events.push(
+        { type: 'turn/start', data: { turn: 3 } },
+        { type: 'user/message', data: { source: { kind: 'user' },
+          content: [{ type: 'text', text: 'Crea una gráfica de línea ficticia de ejemplo' }] } },
+      )
+      const preview = await ctx.systemPrompt.assemble()
+      expect(preview.sections.some(item => item.name === 'phoenix:auto-visible-handoff')).toBe(false)
       selection.current = { provider: 'deepseek', model: 'deepseek-v4-pro' }
       const external = await ctx.systemPrompt.assemble()
       expect(external.sections.some(item => item.name === 'phoenix:auto-visible-handoff')).toBe(false)
