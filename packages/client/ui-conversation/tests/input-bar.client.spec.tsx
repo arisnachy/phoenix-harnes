@@ -242,7 +242,7 @@ describe('private origin-bound login Vault intake', () => {
     expect(() => secureLoginVaultCommand('http://brandpoll.brandinstitute.com', 'tester', 'secret')).toThrow(/HTTPS/)
     expect(() => secureLoginVaultCommand('https://evil:pass@example.com', 'tester', 'secret')).toThrow(/HTTPS/)
     expect(() => secureLoginVaultCommand('https://brandpoll.brandinstitute.com', 'bad user', 'secret')).toThrow(/espacios/)
-    expect(() => secureLoginVaultCommand('https://brandpoll.brandinstitute.com', 'tester', 'hello\\nother')).toThrow(/saltos/)
+    expect(() => secureLoginVaultCommand('https://brandpoll.brandinstitute.com', 'tester', 'hello\nother')).toThrow(/saltos/)
   })
 
   it('keeps the password outside chat drafts and requires an origin grant', async () => {
