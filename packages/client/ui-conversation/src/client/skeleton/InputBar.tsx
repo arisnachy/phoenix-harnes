@@ -81,6 +81,27 @@ function editRangeOf(pending: PendingEdit | null, prevLength: number, nextLength
   return undefined
 }
 
+/** Construct one host-only /secret command. The value must never touch the draft. */
+export function secureLoginVaultCommand(originText: string, accountText: string, password: string): string {
+  let url: URL
+  try {
+    url = new URL(originText.trim())
+  } catch {
+    throw new Error('Introduce una URL HTTPS válida.')
+  }
+  if (url.protocol !== 'https:' || url.username !== '' || url.password !== '' || url.hostname === '') {
+    throw new Error('El Vault solo acepta un sitio HTTPS sin credenciales en la URL.')
+  }
+  const account = accountText.trim()
+  if (account.length < 1 || account.length > 4096 || /\\s/u.test(account)) {
+    throw new Error('El usuario o correo no puede estar vacío ni contener espacios.')
+  }
+  if (password.length < 1 || password.length > 16384 || /^\\s|[\\r\\n\\0]/u.test(password)) {
+    throw new Error('La contraseña no puede estar vacía ni comenzar con espacios o contener saltos de línea.')
+  }
+  return `/secret login-set ${url.origin} ${account} ${password}`
+}
+
 export type InputBarProps = ComposerBarProps
 
 export function InputBar({
@@ -123,6 +144,47 @@ export function InputBar({
     setToast({ seq: toastSeq.current, text })
   }, [])
   const dismissToast = useCallback(() => { setToast(null) }, [])
+  const [vaultOpen, setVaultOpen] = useState(false)
+  const [vaultOrigin, setVaultOrigin] = useState('')
+  const [vaultAccount, setVaultAccount] = useState('')
+  const [vaultPassword, setVaultPassword] = useState('')
+  const [vaultAllowed, setVaultAllowed] = useState(false)
+  const [vaultSaving, setVaultSaving] = useState(false)
+  const closeVault = (): void => {
+    if (vaultSaving) return
+    setVaultOpen(false)
+    setVaultPassword('')
+    setVaultAccount('')
+    setVaultAllowed(false)
+  }
+  const storeVaultLogin = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    if (command === undefined || !vaultAllowed || vaultSaving) return
+    let line: string
+    try {
+      line = secureLoginVaultCommand(vaultOrigin, vaultAccount, vaultPassword)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Datos inválidos.')
+      return
+    }
+    setVaultSaving(true)
+    try {
+      // Only the human-only /secret command receives the value; its
+      // recordInput:false contract keeps it out of the durable session/model.
+      const matched = await command(line)
+      if (!matched) throw new Error('El Vault no está disponible en esta sesión.')
+      setVaultPassword('')
+      setVaultAccount('')
+      setVaultAllowed(false)
+      setVaultOpen(false)
+      showToast('Solicitud enviada al Vault privado. Comprueba el aviso de confirmación antes de iniciar sesión.')
+    } catch {
+      showToast('No se pudo registrar el acceso; revisa el Vault. No se envió al modelo.')
+    } finally {
+      setVaultSaving(false)
+    }
+  }
+
   // The deployment's image-intake limits (absent while no attachment service
   // is composed — the pre-check below then defers entirely to the host).
   const imageLimits = useProjection('imageLimits')
@@ -979,6 +1041,22 @@ export function InputBar({
                 <IconPlusOutline16 size={14} />
               </button>
             </Tooltip>
+            {command !== undefined && !inert && (
+              <Tooltip label="Guardar acceso en Vault privado" side="top" delayMs={500}>
+                <button
+                  type="button"
+                  className={css.add}
+                  aria-label="Guardar usuario y contraseña en Vault privado"
+                  title="Credenciales: nunca se envían como mensaje al modelo"
+                  onClick={() => { setVaultOpen(true) }}
+                >
+                  <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+                    <rect x="4" y="9" width="12" height="9" rx="2" />
+                    <path d="M6.5 9V6a3.5 3.5 0 0 1 7 0v3" />
+                  </svg>
+                </button>
+              </Tooltip>
+            )}
             <Tooltip label={t('input.attachments')} side="top" delayMs={500}>
               <button
                 type="button"
@@ -1071,6 +1149,43 @@ export function InputBar({
           </div>
         </div>
       </div>
+      {vaultOpen && (
+        <div className={css.vaultOverlay}>
+          <form
+            className={css.vaultCard}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Guardar acceso seguro"
+            autoComplete="off"
+            onSubmit={(event) => { void storeVaultLogin(event) }}
+            onKeyDown={(event) => { if (event.key === 'Escape') closeVault() }}
+          >
+            <strong>Guardar acceso para Kira</strong>
+            <p>Solo para el sitio indicado. La contraseña no aparece en el chat ni se envía al modelo.</p>
+            <label htmlFor="phoenix-vault-origin">Sitio web (HTTPS)</label>
+            <input id="phoenix-vault-origin" required type="url" value={vaultOrigin}
+              placeholder="https://brandpoll.brandinstitute.com"
+              onChange={(event) => { setVaultOrigin(event.target.value) }} disabled={vaultSaving} />
+            <label htmlFor="phoenix-vault-account">Usuario o correo</label>
+            <input id="phoenix-vault-account" required type="text" autoComplete="off"
+              value={vaultAccount} onChange={(event) => { setVaultAccount(event.target.value) }} disabled={vaultSaving} />
+            <label htmlFor="phoenix-vault-password">Contraseña</label>
+            <input id="phoenix-vault-password" required type="password" autoComplete="new-password"
+              value={vaultPassword} onChange={(event) => { setVaultPassword(event.target.value) }} disabled={vaultSaving} />
+            <label className={css.vaultConsent}>
+              <input type="checkbox" checked={vaultAllowed} disabled={vaultSaving}
+                onChange={(event) => { setVaultAllowed(event.target.checked) }} />
+              Autorizo a Kira a utilizar este acceso para iniciar sesión solo en el origen indicado.
+            </label>
+            <div className={css.vaultActions}>
+              <button type="button" disabled={vaultSaving} onClick={closeVault}>Cancelar</button>
+              <button type="submit" disabled={vaultSaving || !vaultAllowed || !vaultOrigin || !vaultAccount || !vaultPassword}>
+                {vaultSaving ? 'Guardando…' : 'Guardar en Vault'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
       {footer}
     </div>
   )
