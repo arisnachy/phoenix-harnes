@@ -356,7 +356,19 @@ const PhoenixArticulation = (() => {
     });
   }
 
-  function drawSprites(ctx, rig, pose, skins = {}, attachments = {}) {
+  /**
+   * Choose an authored atlas cell by timeline. Frame sequencing is independent
+   * of bone rotation, allowing textured hand-drawn and skeletal animation together.
+   */
+  function spriteFrame(frames, fps, seconds, loop = true) {
+    assert(Array.isArray(frames) && frames.length > 0, 'sprite atlas needs frames');
+    assert(finite(fps) && fps > 0 && finite(seconds) && seconds >= 0,
+      'invalid sprite animation time');
+    const index = Math.floor(seconds * fps);
+    return frames[loop ? index % frames.length : Math.min(index, frames.length - 1)];
+  }
+
+  function drawSprites(ctx, rig, pose, skins = {}, attachments = {}, options = {}) {
     assert(ctx && typeof ctx.save === 'function' && typeof ctx.drawImage === 'function',
       'a Canvas 2D context is required');
     const world = forwardKinematics(rig, pose);
@@ -368,7 +380,10 @@ const PhoenixArticulation = (() => {
       ctx.save(); ctx.translate(w.start.x, w.start.y); ctx.rotate(w.angle);
       if (typeof skin.draw === 'function') skin.draw(ctx, w, bone);
       else if (skin.image) {
-        const src = skin.frame ?? { x: 0, y: 0, width: skin.image.width, height: skin.image.height };
+        const frames = skin.states?.[options.state] ?? skin.frames;
+        const src = frames
+          ? spriteFrame(frames, skin.fps ?? 12, options.seconds ?? 0, skin.loop !== false)
+          : skin.frame ?? { x: 0, y: 0, width: skin.image.width, height: skin.image.height };
         const width = skin.width ?? bone.length, height = skin.height ?? src.height;
         ctx.drawImage(skin.image, src.x, src.y, src.width, src.height,
           -(skin.pivotX ?? 0), -(skin.pivotY ?? height / 2), width, height);
@@ -405,10 +420,9 @@ const PhoenixArticulation = (() => {
   return Object.freeze({
     createRig, restPose, forwardKinematics, socketTransform, solveIK,
     createClip, sampleClip, blendPoses, createAnimator, createSpring,
-    drawSprites, drawDebug, clamp, normalize, mixAngle,
+    drawSprites, drawDebug, spriteFrame, clamp, normalize, mixAngle,
   });
 })();
-
 
 
 (() => {
