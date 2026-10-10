@@ -94,6 +94,7 @@
     "apps/web/stress-tests/reasoning-chunks.stress.ts",
     "apps/cli/tests/**/*.ts",
     "examples/*/src/**/*.ts",
+    "examples/game-studio/prepare-game.ts",
     "examples/*/start.ts",
     "examples/*/tests/**/*.ts",
     "packages/*/*/tests/**/*.ts",

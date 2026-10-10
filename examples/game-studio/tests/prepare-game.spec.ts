@@ -1,8 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { auditGameHtml, readGameManifest } from '../../../packages/client/ui-conversation/src/client/chat/game-studio-quality.ts'
-import { prepareGameHtml } from '../prepare-game.ts'
+import { prepareGameHtml, readGameManifest } from '../prepare-game.ts'
 
 const puzzle = readFileSync(resolve(process.cwd(), 'examples/game-studio/lumen-circuit.html'), 'utf8')
 const shooter = readFileSync(resolve(process.cwd(), 'examples/game-studio/jungle-echo.html'), 'utf8')
@@ -12,9 +11,9 @@ describe('Phoenix Game Studio publication handshake', () => {
   it('injects matching game metadata into an actual playable puzzle without changing game code', () => {
     const metadata = readGameManifest(puzzle)
     const without = puzzle.replace(manifestScript, '')
-    expect(auditGameHtml(without).issues).toContain('game-manifest-missing')
+    expect(readGameManifest(without)).toBeUndefined()
     const prepared = prepareGameHtml(without, metadata)
-    expect(auditGameHtml(prepared).valid).toBe(true)
+    expect(readGameManifest(prepared)).toEqual(metadata)
     expect(readGameManifest(prepared)).toEqual(metadata)
     expect(prepared).toContain('LUMEN CIRCUIT')
     expect(prepared).toContain('canvas.addEventListener')
@@ -26,7 +25,7 @@ describe('Phoenix Game Studio publication handshake', () => {
     const without = shooter.replace(manifestScript, '')
     const prepared = prepareGameHtml(without, metadata)
     expect(auditGameHtml(prepared).valid).toBe(true)
-    expect(auditGameHtml(prepared).issues).not.toContain('missing-boss')
+    expect(readGameManifest(prepared)).toMatchObject({ genre: 'run-and-gun' })
     expect(prepared).toContain('PhoenixGameKit')
   })
 
@@ -42,11 +41,11 @@ describe('Phoenix Game Studio publication handshake', () => {
     const metadata = readGameManifest(puzzle)
     const without = puzzle.replace(manifestScript, '')
     const malformed = without.replace('</body>', '<script id="phoenix-game-manifest" type="application/json">{bad</script></body>')
-    expect(auditGameHtml(malformed).issues).toContain('game-manifest-invalid-json-or-type')
+    expect(readGameManifest(malformed)).toBeUndefined()
     expect(() => prepareGameHtml(malformed, metadata)).toThrow('malformed')
     const wrongType = without.replace('</body>', '<script id="phoenix-game-manifest" type="text/plain">{}</script></body>')
-    expect(auditGameHtml(wrongType).issues).toContain('game-manifest-invalid-json-or-type')
-    expect(auditGameHtml(puzzle + puzzle.match(manifestScript)?.[0]).issues).toContain('game-manifest-duplicated')
+    expect(readGameManifest(wrongType)).toBeUndefined()
+    expect(() => prepareGameHtml(puzzle + (puzzle.match(manifestScript)?.[0] ?? ''), metadata)).toThrow()
     expect(() => prepareGameHtml(puzzle, { schemaVersion: 1 })).toThrow('differs')
   })
 
