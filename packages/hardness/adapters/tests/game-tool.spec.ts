@@ -81,7 +81,7 @@ describe('Phoenix Game Studio publisher', () => {
     const source = runnable.replace(/<script id="phoenix-game-manifest" type="application\/json">[\s\S]*?<\/script>/u, '')
     const args = { title: 'Luz de selva', html: source, manifest_json: manifest }
     const receipt = await tool.execute(args, execution()) as { artifactId: string; title: string; preflight: string }
-    const output = tool.output.presentationMeta?.(args, receipt as never)
+    const output = tool.output.presentationMeta?.(args, receipt as never) as { artifact?: { data?: string } } | undefined
     expect(receipt.preflight).toBe('packaging-only')
     expect(output?.artifact?.data).toContain('id="phoenix-game-manifest" type="application/json"')
     expect(output?.artifact?.data).toContain('canvas.getContext')
