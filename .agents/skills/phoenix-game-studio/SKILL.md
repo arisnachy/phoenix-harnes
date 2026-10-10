@@ -16,6 +16,17 @@ When the user says "game like X", verify actual gameplay reference footage/scree
 
 Mandatory order: references -> style/story/audio bible -> cast/environment/weapon/UI asset register -> independently produced assets -> rig/atlas/import -> **bind every resource to in-game rendering and real gameplay** -> QA screenshots/audio/playthrough -> publish and stop. Keep original art and licensed provenance; never copy proprietary game assets. When a production backend isn't available, report the actual blocker and honestly label the runnable fallback as prototype.
 
+
+## Phoenix Articulation Engine — mandatory capability discovery
+
+For **articulated characters, enemies, creatures, bosses, weapons and cutscenes**, first read `examples/game-studio/ANIMATION_ENGINE.md`. The reusable offline source-controlled runtimes are:
+
+- `examples/game-studio/animation-engine.js` = multi-bone **2D hierarchy/FK/CCD-IK**, per-joint constraints, keyframed clips, layered/masked animations, transitions, frame events, spring recoil, sprite skins and sockets. Use **real authored sprite assets/atlas pieces** and test that they render as body parts, not just collision shapes.
+- `examples/game-studio/animation-engine-3d.js` = **3D quaternions/FK/CCD-IK**, hinge limits, blending, socket transforms, retarget bone mapping, Three.js-like bone adapter. It is a **math/controller core**, not skinned-mesh renderer, GLB importer or replacement for native Blender/Godot/Unity/Unreal armatures and animation controllers. Use the selected 3D engine for vertex weights, deformation, facial rigs, physics and animation graphs.
+- `examples/game-studio/articulated-arena.html` = a complete **offline playable technical example** with embedded engine, hero+enemy rigs, aim IK, attached weapon and boss phases. Copy its *integration pattern*, not its visual style or prototype-quality art.
+
+Kira must route each genre to its animation needs: platformers use root movement/jump/contact; fighters use synchronized attacks, hit reactions and cancel windows; shooters use aim layers/recoil/weapon sockets; RPGs use directional locomotion, interaction and NPC gestures; 3D games use **actual skinned meshes** and appropriate runtime engine. Puzzle/racing/strategy games use rigs only when an articulated actor actually needs animation. Collect gameplay frame captures and audio evidence before claiming professional polish. Preserve the existing Game Studio publication manifest and offline iframe constraints. **Never generate only a pose atlas without wiring it to active in-game actors.**
+
 ## 1. Research before art
 
 - If the user references a game such as Contra, search for publicly available original gameplay footage and screenshots (not just its cover): protagonist proportions, animations/poses, run/jump/shoot/aim, enemy taxonomy, boss telegraphs and phases, parallax, scrolling, encounter pacing, HUD, explosion timing, soundtrack and sound effects.
