@@ -209,6 +209,7 @@ export function InputBar({
     getVoiceAssistantSnapshot,
   )
   const voiceEnabled = voiceAssistant.active
+  const [codexVoiceFailure, setCodexVoiceFailure] = useState<string | null>(null)
   const voiceRef = useRef<VoiceRecognitionLike | null>(null)
   const voiceSubmitPendingRef = useRef(false)
   const voiceStartingRef = useRef(false)
@@ -279,9 +280,11 @@ export function InputBar({
       setVoiceAssistantActive(false)
       voiceRef.current?.stop()
       voiceRef.current = null
+      setCodexVoiceFailure(null)
       return
     }
 
+    setCodexVoiceFailure(null)
     voiceStartingRef.current = true
     try {
       // Codex Live + the profile voice (Juniper for Kira's feminine profile)
@@ -292,8 +295,9 @@ export function InputBar({
       // Agent.followup then owns normal chat/session persistence and the harness.
       const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
       if (realtime.kind === 'started') return
+      if (realtime.kind === 'failed') setCodexVoiceFailure(realtime.reason)
 
-      // A non-Codex route, exhausted/unavailable Codex Realtime, or an older
+      // Unavailable Codex Realtime or an older
       // browser uses the same recognizer as its input path. Output still prefers
       // the Host chain Kokoro -> platform voice before browser speech.
       const recognition = ensureHarnessVoiceRecognition()
@@ -1013,7 +1017,9 @@ export function InputBar({
             <ContextMeter useProjection={useProjection} t={t} />
             {(voiceState !== 'unsupported' || hasCodexRealtimeVoiceSupport()) && (
               <Tooltip
-                label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
+                label={voiceEnabled && codexVoiceFailure !== null
+                  ? `Codex Live no disponible: ${codexVoiceFailure} · voz alternativa`
+                  : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
                 delayMs={500}
               >
@@ -1023,6 +1029,7 @@ export function InputBar({
                   aria-label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                   aria-pressed={voiceEnabled}
                   data-voice-state={voiceState}
+                  data-codex-voice-failure={codexVoiceFailure ?? undefined}
                   disabled={locked || machineBusy}
                   onMouseDown={keepFocus}
                   onClick={() => { void toggleVoice() }}
