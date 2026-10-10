@@ -420,7 +420,7 @@
 }
 @media (prefers-reduced-motion: reduce) { .navLink { transition: none; } }
 
-/* Warm Phoenix sidebar — approved cream/orange design, 320px open / 56px rail.
+/* Warm Phoenix sidebar — approved cream/orange design, 320px open / 104px closed column.
    These rules deliberately style the existing actions instead of replacing them. */
 .root {
   --phoenix-side-ember: #e76020;
