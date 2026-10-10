@@ -864,7 +864,16 @@ export function installModelSelection(
     const autoStep = isPhoenixCodexAutoSelection(selected) && scopedAgent !== undefined
       ? nextPhoenixAutoAssemblyStep(scopedAgent)
       : undefined
-    const autoPolicy = autoStep === 1 ? AUTO_VISIBLE_PLAN_POLICY
+    const currentTurn = scopedAgent?.session.events.findLast(event => event.type === 'turn/start')
+    const currentTurnNumber = (currentTurn?.data as { readonly turn?: number } | undefined)?.turn
+    const currentRequest = scopedAgent !== undefined && currentTurnNumber !== undefined
+      ? directUserTextForTurn(scopedAgent, currentTurnNumber) : ''
+    // Never inject a "stop after the plan" instruction into a Luna quick-answer
+    // route whose request was not classified as an operational task. Otherwise
+    // the model can emit a plan that the turn-stopping gate never resumes.
+    const autoPolicy = autoStep === 1
+      && phoenixAutoTaskRequest(currentRequest)
+      && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
       : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_EXECUTION_POLICY : undefined
     return {
       ...assembled,
