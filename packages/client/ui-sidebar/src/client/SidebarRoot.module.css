@@ -549,67 +549,120 @@
   .root:not(.collapsed) .navLink { transition: none; }
 }
 
-/* Approved compact rail: original Phoenix icons, modern touch targets. */
-.root.collapsed { padding: 8px 13px 8px 14px; }
-.collapsed .logoRow { height: 44px; padding: 0; margin-bottom: 8px; }
-.collapsed .iconButton { width: 44px; height: 44px; border-radius: 14px; }
-.collapsed .newSession {
-  width: 44px;
-  height: 44px;
-  margin-bottom: 7px;
-  border-radius: 14px;
-  background: var(--phoenix-side-peach);
-  color: var(--phoenix-side-ember);
+/* Phoenix Light icon rail: 88px rounded card in a 104px column.
+   Keep original DOM buttons, their navigation, accessible labels and tooltips. */
+.root.collapsed {
+  --dsh-sidebar-inline-padding: 7px;
+  box-sizing: border-box;
+  width: calc(100% - 18px);
+  height: calc(100% - 24px);
+  margin: 12px 6px 12px 12px;
+  padding: 9px 14px 10px;
+  border: 1px solid #ecdccf;
+  border-radius: 24px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 5px 22px rgba(107, 68, 39, .035);
 }
+.collapsed .logoRow {
+  display: flex;
+  justify-content: center;
+  height: 55px;
+  min-height: 55px;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.collapsed .toggle,
+.collapsed .iconButton {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 17px;
+}
+.collapsed .railMark { display: inline-flex; }
+.collapsed .railMark > img,
+.collapsed .railMark img {
+  width: 36px;
+  height: 36px;
+  filter: brightness(0) saturate(100%) invert(50%) sepia(90%) saturate(2365%) hue-rotate(347deg) brightness(102%) contrast(94%);
+}
+.collapsed .newSession {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 54px;
+  height: 54px;
+  margin: 0 0 12px;
+  padding: 0;
+  border: 1px solid #e75317;
+  border-radius: 17px;
+  background: #ee5c1e;
+  color: #fff;
+  box-shadow: 0 4px 11px rgba(227, 90, 30, .16);
+}
+.collapsed .newSession svg { width: 25px; height: 25px; color: #fff; }
 .collapsed .newSession:hover,
 .collapsed .newSession:focus-visible {
+  border-color: #d44d18;
+  background: #d94e19;
   color: #fff;
-  background: var(--phoenix-side-ember);
 }
 .collapsed .primaryNavigation {
   display: flex;
   flex: none;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-  width: 44px;
-  padding: 0 0 8px;
+  align-items: center;
+  gap: 5px;
+  width: 54px;
+  padding: 0 0 10px;
   margin: 0 0 8px;
-  border-bottom: 1px solid var(--phoenix-side-outline);
+  border-bottom: 1px solid #f0dfd2;
 }
 .collapsed .navLink {
   display: grid;
   place-items: center;
   box-sizing: border-box;
-  flex: none;
-  width: 44px;
-  height: 44px;
-  min-height: 44px;
+  width: 54px;
+  height: 54px;
+  min-height: 54px;
   padding: 0;
   border: 1px solid transparent;
-  border-radius: 14px;
+  border-radius: 16px;
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: #545252;
   cursor: pointer;
 }
-.collapsed .navLink svg { width: 20px; height: 20px; }
-.collapsed .navLink:first-child { color: var(--phoenix-side-ember); }
+.collapsed .navLink svg { width: 24px; height: 24px; color: inherit; }
+.collapsed .navLink:first-child {
+  background: #fff0e5;
+  color: #ed5b21;
+}
 .collapsed .navLink:hover,
 .collapsed .navLink:focus-visible {
-  background: var(--phoenix-side-peach);
-  color: var(--phoenix-side-ember);
+  background: #fff0e5;
+  color: #ed5b21;
 }
 .collapsed .navLink:focus-visible {
-  outline: 2px solid var(--phoenix-side-ember);
+  outline: 2px solid #ed5b21;
   outline-offset: -2px;
 }
-.collapsed .regionArea { flex: 1 1 0; min-height: 0; }
-@media (max-height: 660px) {
-  .root.collapsed { padding-top: 3px; }
-  .collapsed .logoRow { margin-bottom: 3px; }
-  .collapsed .newSession { margin-bottom: 3px; }
-  .collapsed .primaryNavigation { gap: 0; padding-bottom: 3px; margin-bottom: 3px; }
-  .collapsed .navLink { height: 39px; min-height: 39px; }
+.collapsed .regionArea {
+  flex: 1 1 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+}
+.collapsed .footArea {
+  padding-top: 7px;
+  border-top: 1px solid #f0dfd2;
+}
+@media (max-height: 750px) {
+  .root.collapsed { padding-top: 4px; padding-bottom: 5px; }
+  .collapsed .logoRow { height: 46px; min-height: 46px; margin-bottom: 3px; }
+  .collapsed .toggle, .collapsed .iconButton { height: 44px; }
+  .collapsed .newSession { height: 46px; margin-bottom: 5px; }
+  .collapsed .primaryNavigation { gap: 0; padding-bottom: 4px; margin-bottom: 4px; }
+  .collapsed .navLink { height: 44px; min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .collapsed .navLink { transition: none; }
