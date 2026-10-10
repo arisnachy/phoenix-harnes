@@ -18,7 +18,10 @@ interface WindowsProbeOptions {
   readonly execute?: ProbeExecutor
 }
 
-/** Translate only validated local prerequisites into actionable, bounded model context. */
+/** Translate only validated local prerequisites into actionable, bounded model context.
+ * @param raw - Read-only capability probe response to validate.
+ * @returns Safe platform guidance, or an empty string for invalid probes.
+ */
 export function windowsCapabilityGuidance(raw: unknown): string {
   if (typeof raw !== 'object' || raw === null || !('probe' in raw) || raw.probe !== 'completed'
     || !('executables' in raw) || typeof raw.executables !== 'object' || raw.executables === null) return ''
@@ -39,6 +42,9 @@ export function windowsCapabilityGuidance(raw: unknown): string {
 /**
  * Run the free inventory outside the critical startup path. The caller reads
  * an empty context until a validated inspection arrives; errors stay silent.
+ * @param onChange - Called when a valid discovery result is available.
+ * @param options - Optional injected platform and execution prerequisites.
+ * @returns Accessor for the latest validated, non-secret platform guidance.
  */
 export function startWindowsCapabilityDiscovery(
   onChange: () => void,
