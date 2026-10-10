@@ -12,6 +12,7 @@ export const TELEGRAM_BOT_TOKEN_REF = 'PHOENIX_TELEGRAM_BOT_TOKEN'
 const OWNER_REF = 'PHOENIX_TELEGRAM_OWNER_CHAT_ID'
 const OFFSET_REF = 'PHOENIX_TELEGRAM_UPDATE_OFFSET'
 const SESSION_REF = 'PHOENIX_TELEGRAM_SESSION_ID'
+const SESSION_GATEWAY_REF = 'PHOENIX_TELEGRAM_SESSION_GATEWAY_ID'
 const PAIR_REF = 'PHOENIX_TELEGRAM_PAIRING'
 const BOT_TOKEN_PATTERN = /^[0-9]{6,16}:[A-Za-z0-9_-]{25,}$/
 const USERNAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{4,31}$/
@@ -300,41 +301,60 @@ export class TelegramInbox {
         | { get(id: ReturnType<typeof SessionId>): Agent | undefined }
         | undefined
       if (agents === undefined) throw new Error('telegram-phoenix-agents-unavailable')
-      if (this.agent !== undefined && agents.get(this.agent.id) === this.agent
-        && this.agent.options.provider && this.agent.options.model) return this.agent
       const gateway = this.gateway()
-      const existingId = await stored(creds, SESSION_REF)
-      const existing = existingId === undefined ? undefined : agents.get(SessionId(existingId))
+      const priorId = await stored(creds, SESSION_REF)
+      const gatewayId = await stored(creds, SESSION_GATEWAY_REF)
+      // The old Telegram implementation persisted its id without a workspace
+      // cwd, model or preset. After a Host restart that Agent is no longer in
+      // the live registry, so testing its options cannot detect the legacy
+      // session. Only an id committed by this gateway is safe to resume.
+      const reusableId = gatewayId === priorId ? priorId : undefined
+      const existing = reusableId === undefined ? undefined : agents.get(SessionId(reusableId))
       if (existing !== undefined && existing.options.provider && existing.options.model) {
         this.agent = existing
         return existing
       }
-      // Earlier Telegram versions created a naked Agent without a model or
-      // preset. Never reuse that live instance: move to a properly composed
-      // gateway session, keeping its old history intact.
-      const legacy = existing !== undefined && (!existing.options.provider || !existing.options.model)
-      const sessionId = SessionId(existingId === undefined || legacy ? randomUUID() : existingId)
-      const created = await gateway.sessions.create({ rpcId: randomUUID(), payload: { sessionId } })
+      let sessionId = SessionId(reusableId === undefined
+        || (existing !== undefined && (!existing.options.provider || !existing.options.model))
+        ? randomUUID() : reusableId)
+      let created = await gateway.sessions.create({ rpcId: randomUUID(), payload: { sessionId } })
+      if (!created.result.ok && created.result.error.code === 'session-conflict') {
+        // A previously composed session may have moved to another workspace.
+        // Do not overwrite it or remain permanently wedged: start a fresh
+        // Telegram session, preserving the incompatible session's history.
+        sessionId = SessionId(randomUUID())
+        created = await gateway.sessions.create({ rpcId: randomUUID(), payload: { sessionId } })
+      }
       if (!created.result.ok) throw new Error('telegram-session-' + created.result.error.code)
       const agent = agents.get(sessionId)
       if (agent === undefined) throw new Error('telegram-session-not-attached')
+      if (!agent.options.provider || !agent.options.model) {
+        throw new Error('telegram-session-model-unavailable')
+      }
+      // Mark provenance only AFTER gateway admission. A crash between writes
+      // leaves a mismatched marker, which safely triggers fresh migration.
+      await persist(creds, SESSION_REF, String(sessionId))
+      await persist(creds, SESSION_GATEWAY_REF, String(sessionId))
       this.agent = agent
-      if (existingId !== String(sessionId)) await persist(creds, SESSION_REF, String(sessionId))
       return agent
     })()
     this.agentPromise = task
     try { return await task } finally { this.agentPromise = undefined }
   }
+
   private async dispatch(chat: number, text: string, token: string, creds: Credentials): Promise<void> {
+    let stage: 'session' | 'admission' | 'execution' = 'session'
     try {
       const agent = await this.liveAgent(creds)
       const before = agent.session.deriveMessages().length
       const eventStart = agent.session.events.length
+      stage = 'admission'
       const accepted = await this.gateway().sessions.prompt({
         rpcId: randomUUID(),
         payload: { sessionId: agent.id, mode: 'queue', content: [{ type: 'text', text }] },
       })
       if (!accepted.result.ok) throw new Error('telegram-prompt-' + accepted.result.error.code)
+      stage = 'execution'
       await this.send(token, chat, 'Recibido. Kira está trabajando en tu solicitud.')
       await agent.whenIdle()
       const events = agent.session.events.slice(eventStart)
@@ -363,8 +383,14 @@ export class TelegramInbox {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown'
       // No secrets, model traces or stack details should be sent to Telegram.
-      this.ctx.logger.warn('Telegram dispatch failed: ' + message.replace(/\d{6,}:[A-Za-z0-9_-]+/g, '[redacted]'))
-      try { await this.send(token, chat, 'No pude completar esta orden en Phoenix. Comprueba que el harness y tu proveedor de modelos estén operativos.') } catch { /* no recursive retry */ }
+      this.ctx.logger.warn('Telegram dispatch failed during ' + stage + ': '
+        + message.replace(/\d{6,}:[A-Za-z0-9_-]+/g, '[redacted]'))
+      // Never send raw exception text, paths, OAuth data or model traces.
+      const code = /^telegram-[a-z-]{3,80}$/.test(message) ? message : 'telegram-unexpected-error'
+      const description = stage === 'session' ? 'abrir la sesión' : stage === 'admission'
+        ? 'admitir el mensaje' : 'ejecutar la solicitud'
+      try { await this.send(token, chat, 'Kira no pudo ' + description
+        + ' en Phoenix (' + code + '). Revisa el estado del Host y el modelo configurado.') } catch { /* no recursive retry */ }
       this.agent = undefined
       this.agentPromise = undefined
     }
@@ -405,7 +431,7 @@ export async function saveTelegramBot(ctx: Context, value: string, receiver?: Te
   const verified = await verifyTelegramBotToken(token)
   const previous = await stored(creds, TELEGRAM_BOT_TOKEN_REF)
   if (previous !== token) {
-    for (const key of [OWNER_REF, OFFSET_REF, SESSION_REF, PAIR_REF]) await creds.unset(ref(key))
+    for (const key of [OWNER_REF, OFFSET_REF, SESSION_REF, SESSION_GATEWAY_REF, PAIR_REF]) await creds.unset(ref(key))
   }
   await persist(creds, TELEGRAM_BOT_TOKEN_REF, token)
   const worker = receiver ?? telegramInbox(ctx)
@@ -417,6 +443,6 @@ export async function removeTelegramBot(ctx: Context, receiver?: TelegramInbox):
   const creds = vault(ctx)
   if (creds === undefined) throw new Error('Telegram credential storage unavailable')
   ;(receiver ?? telegramInbox(ctx)).stop()
-  for (const key of [TELEGRAM_BOT_TOKEN_REF, OWNER_REF, OFFSET_REF, SESSION_REF, PAIR_REF]) await creds.unset(ref(key))
+  for (const key of [TELEGRAM_BOT_TOKEN_REF, OWNER_REF, OFFSET_REF, SESSION_REF, SESSION_GATEWAY_REF, PAIR_REF]) await creds.unset(ref(key))
   return { configured: false, verified: false, phase: 'unconfigured', inboxActive: false, paired: false }
 }

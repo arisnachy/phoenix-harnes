@@ -112,7 +112,7 @@ function publicLocalSnapshot(snapshot: LocalModelRuntimeSnapshot): PhoenixLocalM
 
 /** Remote service exposing trusted Host diagnostics, updater controls, and Phoenix Local lifecycle. */
 export class PluginInventoryGateway extends TypertRemoteService {
-  static inject = ['loader']
+  static inject = ['loader', 'apiProxy']
 
   private readonly localModel: Promise<LocalModelRuntimeManager>
   private readonly chatGptWeb: ChatGptWebIntegration
