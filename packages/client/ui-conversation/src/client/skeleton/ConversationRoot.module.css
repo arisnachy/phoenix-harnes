@@ -707,6 +707,6 @@
 
 /* Keep the title as the only title in the top bar; never reserve a branding
    column. Preserve long-session truncation and the live global controls. */
-.unifiedHeader .sessionChrome { min-width: 0; overflow: hidden; }
+.unifiedHeader .sessionChrome { min-width: 0; }
 .unifiedHeader .headerGlobal { flex-shrink: 0; }
 .unifiedHeader .titleCluster { min-width: 0; max-width: 100%; }
