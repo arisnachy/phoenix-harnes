@@ -200,8 +200,15 @@ function auditRuntimeBindings(html: string, manifest: unknown, issues: string[])
     if (Array.isArray(entries)) for (const entry of entries) if (object(entry)) refs.push(entry.runtimeRef)
   }
   for (const ref of refs) {
-    if (!nonempty(ref) || !/^[a-zA-Z_$][\w$]*$/u.test(ref)
-      || !new RegExp('\\b' + ref.replace(/\$/gu, '\\
+    if (!nonempty(ref) || !/^[a-zA-Z_][a-zA-Z0-9_]*$/u.test(ref)
+      || !new RegExp('\\b' + ref + '\\b', 'u').test(runtime)) {
+      issues.push('missing-runtime-binding:' + String(ref))
+    }
+  }
+}
+
+/**
+ * Audit a game manifest without executing the contained game.
  * @param value - Untrusted game manifest supplied with the artifact.
  * @returns Structural issues and verification limits, not a gameplay verdict.
  */
