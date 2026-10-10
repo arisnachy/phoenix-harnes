@@ -152,6 +152,26 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
     if (!Array.isArray(value.audio.cues) || value.audio.cues.length === 0) warnings.push('audio-cues-not-declared')
     if (!nonempty(value.audio.music)) warnings.push('missing-music-plan')
   }
+  if (object(value.art)) {
+    if (value.art.mode === 'production' && profile === 'run-and-gun') {
+      const required = ['enemies', 'bosses', 'backgrounds', 'weapons', 'projectiles', 'powers', 'props', 'effects']
+      for (const group of required) {
+        if (!Array.isArray(value.art[group]) || value.art[group].length === 0) {
+          issues.push('missing-production-art:' + group)
+        }
+      }
+      if (Array.isArray(value.art.backgrounds) && object(value.level) && Array.isArray(value.level.layers)
+        && value.art.backgrounds.length < value.level.layers.length) {
+        issues.push('production-scenery-incomplete')
+      }
+    }
+    if (value.art.mode === 'prototype') warnings.push('character-art-prototype-not-final')
+    if (value.art.mode === 'production' && !nonempty(value.art.designReference) && profile === 'run-and-gun') {
+      warnings.push('approved-character-design-reference-missing')
+    }
+  } else if (['run-and-gun', 'platformer', 'top-down-action', 'rpg'].includes(profile)) {
+    warnings.push('visual-art-status-not-declared')
+  }
   if (profile === 'run-and-gun') {
     if (!object(value.motion) || !object(value.motion.rig)) warnings.push('articulated-character-rig-not-declared')
     if (!object(value.motion) || !Array.isArray(value.motion.aimDirections)
@@ -201,9 +221,17 @@ export function readGameManifest(html: string): unknown {
  * @returns Issues and warnings requiring attention before publication.
  */
 export function auditGameHtml(html: string): GameStudioAudit {
-  const result = auditGameManifest(readGameManifest(html))
-  const issues = [...result.issues]
-  const warnings = [...result.warnings]
+  // A missing manifest fails metadata preflight but does NOT prevent the iframe
+  // from attempting to execute. Never misdiagnose a blank game as a JSON error.
+  const manifestTags = [...html.matchAll(/<script\b([^>]*)>[\s\S]*?<\/script\s*>/giu)]
+    .filter(match => /\bid\s*=\s*["']phoenix-game-manifest["']/iu.test(match[1] ?? ''))
+  const parsed = readGameManifest(html)
+  const result = parsed === undefined ? undefined : auditGameManifest(parsed)
+  const issues = result === undefined ? [manifestTags.length === 0
+    ? 'game-manifest-missing'
+    : 'game-manifest-invalid-json-or-type'] : [...result.issues]
+  if (manifestTags.length > 1) issues.push('game-manifest-duplicated')
+  const warnings = [...(result?.warnings ?? [])]
   if (/(<script\b[^>]*\bsrc\s*=|<link\b[^>]*\bhref\s*=)/iu.test(html)) issues.push('external-script-or-stylesheet-blocked')
   if (/(<img\b[^>]*\bsrc\s*=\s*["']https?:|\bfetch\s*\(|\bXMLHttpRequest\b)/iu.test(html)) warnings.push('network-assets-blocked-in-game-sandbox')
   if (!/<canvas\b/iu.test(html)) warnings.push('no-canvas-found')
@@ -212,6 +240,8 @@ export function auditGameHtml(html: string): GameStudioAudit {
     valid: issues.length === 0,
     issues: [...new Set(issues)],
     warnings: [...new Set(warnings)],
-    summary: issues.length ? 'Game preview requires repairs' : result.summary,
+    summary: issues.length
+      ? 'Game Studio structural preflight needs repairs; the isolated preview still attempts to run HTML, so diagnose blank screens separately'
+      : result?.summary ?? 'Game Studio manifest requires repair',
   }
 }
