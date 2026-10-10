@@ -134,16 +134,17 @@ export function ConversationSessionHeader({
                 })}
                 {ancestry.length === 0 && <span className={css.crumbCurrent}>{sessionId}</span>}
               </nav>
-              <div className={css.headerActions}>
-                {renderSlot('conversation.session.header.actions', {})}
-              </div>
             </div>
             <div className={css.headerUtilities}>
               {renderSlot('conversation.session.header.utilities', {})}
             </div>
           </div>
-          {tabs.length > 1 && (
-            <div className={css.tabs} role="tablist">
+          <div className={css.sessionNavRow}>
+            <div className={css.headerActions}>
+              {renderSlot('conversation.session.header.actions', {})}
+            </div>
+            {tabs.length > 1 && (
+              <div className={css.tabs} role="tablist">
               {tabs.map(viewTab => (
                 <button
                   key={viewTab.id}
@@ -156,8 +157,9 @@ export function ConversationSessionHeader({
                   {viewTab.label}
                 </button>
               ))}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </>
       )}
     </header>
