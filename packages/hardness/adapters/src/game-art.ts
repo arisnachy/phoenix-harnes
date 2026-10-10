@@ -23,7 +23,10 @@ function imageById(html: string, id: string): { width: number; height: number; c
   if (png === null) failed('"' + id + '" debe ser un atlas PNG incrustado (data:image/png;base64), no una ruta inaccesible.')
   const bytes = Buffer.from(png[1], 'base64')
   const header = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
-  if (bytes.length < 33 || !bytes.subarray(0, 8).equals(header)) failed('"' + id + '" no contiene PNG válido.')
+  if (bytes.length < 45 || !bytes.subarray(0, 8).equals(header)
+    || !bytes.includes(Buffer.from('IDAT')) || !bytes.includes(Buffer.from('IEND'))) {
+    failed('"' + id + '" no contiene un PNG completo con IDAT e IEND.')
+  }
   const width = bytes.readUInt32BE(16)
   const height = bytes.readUInt32BE(20)
   const colorType = bytes[25] ?? -1
