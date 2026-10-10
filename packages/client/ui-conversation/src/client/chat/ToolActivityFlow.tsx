@@ -478,7 +478,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
   const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
   // The screenshot-like centered preparation state is confined to a blank
   // conversation's first pending answer, never to a continuing transcript.
-  const centeredPreparing = turnStatus?.progress.phase === 'preparing'
+  const centeredPreparing = turnStatus?.progress?.phase === 'preparing'
     && nodes.filter(node => node.kind === 'user' || node.kind === 'steering').length <= 1
     && !nodes.some(node => {
       const assistant = assistantData(node)
