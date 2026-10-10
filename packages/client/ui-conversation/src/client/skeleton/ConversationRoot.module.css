@@ -649,3 +649,147 @@
   .unifiedHeader .headerUtilities { margin-left: auto; }
   .unifiedHeader .tabs { margin-top: 0; }
 }
+
+/* Phoenix balanced header: preserve ALL active-session controls when compact.
+   The tab strip floats over a generous middle lane only on wide viewports. */
+.unifiedHeader,
+.root[data-phase='hero'] .unifiedHeader,
+.root[data-header-compact='true'] .unifiedHeader {
+  position: relative;
+  display: flex;
+  box-sizing: border-box;
+  align-self: stretch;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 8px;
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  min-height: 56px;
+  margin: 8px 12px 0;
+  padding: 4px 12px;
+  border-radius: 16px;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 7%, transparent);
+}
+.sessionChrome {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.unifiedHeader .header {
+  display: flex;
+  position: static;
+  align-items: center;
+  flex: 1 1 0;
+  gap: 8px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}
+.unifiedHeader .header::after { display: none; }
+.unifiedHeader .titleRow {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  min-height: 42px;
+  height: auto;
+}
+.unifiedHeader .titleCluster {
+  flex: 1 1 0;
+  flex-wrap: nowrap;
+  min-width: 0;
+  gap: 6px;
+  overflow: hidden;
+}
+.unifiedHeader .crumbs { flex: 1 1 0; max-width: 100%; min-width: 0; overflow: hidden; }
+.unifiedHeader .crumbSeg { min-width: 0; }
+.unifiedHeader .crumbSeg:last-child { flex: 1 1 auto; min-width: 0; }
+.unifiedHeader .crumbCurrent {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unifiedHeader .crumb { max-width: 100%; }
+.unifiedHeader .headerActions { flex: 0 0 auto; flex-wrap: nowrap; }
+.unifiedHeader .headerUtilities { flex: 0 0 auto; margin-left: auto; }
+.unifiedHeader .tabs {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  height: 42px;
+  margin: 0;
+  padding: 0;
+  transform: translate(-50%, -50%);
+}
+.unifiedHeader .tab { padding: 9px 0; }
+.unifiedHeader .tabActive::after { height: 2px; background: var(--dsw-specific-phoenix-accent); }
+.headerGlobal {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  gap: 5px;
+  min-height: 42px;
+  margin-left: 8px;
+}
+.headerToggle { width: 32px; height: 32px; }
+.unifiedHeader .heroTopIcon { width: 34px; height: 34px; }
+.unifiedHeader .heroTopProfile { width: 36px; height: 36px; flex-basis: 36px; }
+.headerBrand {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: .025em;
+  color: var(--dsw-alias-label-primary);
+}
+/* Compact mode reduces density, but never hides the conversation title/tabs.
+   The hero uses a left-aligned Phoenix label so its toolbar never floats alone. */
+.root[data-header-compact='true']:not([data-phase='hero']) .sessionChrome { display: block; }
+.root[data-phase='hero'] .sessionChrome { display: none; }
+.root[data-phase='hero'] .headerGlobal,
+.root[data-header-compact='true'] .headerGlobal { min-height: 42px; }
+@media (max-width: 1400px) {
+  .unifiedHeader .header { flex-direction: column; align-items: stretch; gap: 0; }
+  .unifiedHeader .titleRow { min-height: 36px; }
+  .unifiedHeader .tabs {
+    position: static;
+    height: 25px;
+    justify-content: flex-start;
+    padding-left: 4px;
+    transform: none;
+  }
+  .unifiedHeader .tab { padding: 2px 0 5px; }
+}
+@media (max-width: 920px) {
+  .unifiedHeader .titleRow { flex-wrap: wrap; align-items: flex-start; gap: 2px; }
+  .unifiedHeader .titleCluster { flex: 1 1 100%; min-height: 28px; }
+  .unifiedHeader .headerUtilities { flex: 0 1 auto; flex-wrap: wrap; margin-left: 0; }
+  .headerGlobal { align-self: flex-start; gap: 2px; margin-left: 2px; }
+}
+@media (max-width: 720px) {
+  .unifiedHeader,
+  .root[data-phase='hero'] .unifiedHeader,
+  .root[data-header-compact='true'] .unifiedHeader {
+    min-height: 52px;
+    margin: 6px 8px 0;
+    padding: 4px 8px;
+    border-radius: 14px;
+  }
+  .unifiedHeader .crumb { font-size: 13px; padding: 4px 2px; }
+  .unifiedHeader .tabs { gap: 15px; }
+  .headerGlobal { gap: 1px; }
+  .unifiedHeader .heroTopIcon { width: 30px; height: 34px; }
+  .unifiedHeader .heroTopProfile { flex-basis: 32px; width: 32px; height: 32px; }
+}

@@ -28,11 +28,20 @@ function declarations(selector: string): Map<string, string> | undefined {
 
 describe('ConversationRoot premium header', () => {
   it('uses a compact conversation bar with resilient long titles', () => {
-    expect(css).toContain('min-height: 68px;')
+    expect(css).toContain('min-height: 56px;')
     expect(css).toContain('.unifiedHeader .crumbCurrent')
     expect(css).toContain('text-overflow: ellipsis;')
     expect(css).toContain('.unifiedHeader .headerUtilities')
     expect(css).toContain('@media (max-width: 720px)')
+  })
+
+  it('never hides active chrome and balances the hero title against global controls', () => {
+    expect(css).toContain(".root[data-header-compact='true']:not([data-phase='hero']) .sessionChrome")
+    expect(css).toContain(".root[data-phase='hero'] .sessionChrome { display: none; }")
+    expect(css).toContain('.headerBrand {')
+    expect(css).toContain('align-self: stretch;')
+    expect(css).toContain('left: 50%;')
+    expect(css).toContain('@media (max-width: 1400px)')
   })
 
   it('uses compact shell geometry', () => {
