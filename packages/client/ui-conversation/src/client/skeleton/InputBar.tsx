@@ -7,7 +7,7 @@
  * (running/removed/promptError) are self-selected via useSession. */
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import type { ChangeEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
+import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent, ReactNode } from 'react'
 import clsx from 'clsx'
 import {
   IconPaperclipOutline16, IconPlusOutline16, IconWarningOutline16, Toast, Tooltip,
@@ -165,7 +165,7 @@ export function InputBar({
     setVaultAccount('')
     setVaultAllowed(false)
   }
-  const storeVaultLogin = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+  const storeVaultLogin = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
     if (command === undefined || !vaultAllowed || vaultSaving) return
     let line: string
