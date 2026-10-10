@@ -25,6 +25,7 @@
 - **Falta vincular usuario**: genera un código nuevo, envía `/start CODIGO`, pulsa actualizar. En bots recién creados también debes iniciar el chat privado.
 - **telegram-webhook-active**: otro servicio registró un webhook; `getUpdates` no funciona hasta desactivarlo en ese servicio.
 - **telegram-polling-conflict**: otro proceso lee `getUpdates` con el mismo bot. Cierra ese proceso.
+- **Kira no pudo abrir la sesión (`telegram-session-*`)**: después de actualizar desde una versión antigua, el identificador guardado podía apuntar a una sesión sin directorio de trabajo ni preset. La recuperación ahora distingue sesiones creadas por el gateway, migra automáticamente las heredadas incluso tras reinicios y crea una nueva si el proyecto original cambió. No elimines ni desvincules el bot; las sesiones previas conservan su historial. El texto de error incluye un código seguro que puedes usar para el diagnóstico.
 - **Recibo confirmación, pero no respuesta final**: versiones antiguas creaban agentes Telegram sin modelo ni preset; el receptor corregido crea sesiones configuradas desde el gateway y reemplaza las sesiones activas antiguas sin borrar su historial. Actualiza y reinicia Phoenix; no hace falta revincular el bot. Si persiste, comprueba el proveedor de modelo y los registros del Host.
 - **No llega el mensaje**: comprueba que no haya otras instalaciones que estén consumiendo `getUpdates` con el mismo token. Solo una puede ser receptora.
 
