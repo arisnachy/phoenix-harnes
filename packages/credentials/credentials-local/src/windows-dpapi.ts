@@ -17,7 +17,7 @@ const PROTECT_SCRIPT = `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Security
 [Console]::InputEncoding = [Text.Encoding]::UTF8
-[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $plain = [Console]::In.ReadToEnd()
 $bytes = [Text.Encoding]::UTF8.GetBytes($plain)
 try {
@@ -30,7 +30,7 @@ const UNPROTECT_SCRIPT = `
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Security
 [Console]::InputEncoding = [Text.Encoding]::UTF8
-[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 $encoded = [Console]::In.ReadToEnd()
 $bytes = [Convert]::FromBase64String($encoded)
 try {
