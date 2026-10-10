@@ -61,10 +61,10 @@ describe('Phoenix Articulation Engine - deterministic 2D core', () => {
     expect(rig.bones.map(b => b.id)).toEqual(['arm', 'forearm', 'hand'])
     const p = engine.restPose(rig)
     const origin = engine.forwardKinematics(rig, p)
-    expect(origin.arm.start).toEqual({ x: 0, y: 0 })
-    expect(Math.hypot(origin.hand.end.x, origin.hand.end.y)).toBeCloseTo(40, 5)
+    expect(origin.arm!.start).toEqual({ x: 0, y: 0 })
+    expect(Math.hypot(origin.hand!.end.x, origin.hand!.end.y)).toBeCloseTo(40, 5)
     p.root.x = 10
-    expect(engine.forwardKinematics(rig, p).arm.start.x).toBe(10)
+    expect(engine.forwardKinematics(rig, p).arm!.start.x).toBe(10)
     expect(engine.restPose(rig).root.x).toBe(0)
   })
 
@@ -93,16 +93,16 @@ describe('Phoenix Articulation Engine - deterministic 2D core', () => {
     expect(result.reached).toBe(false)
     for (const name of ['arm', 'forearm', 'hand']) {
       expect(Number.isFinite(pose.angles[name])).toBe(true)
-      expect(Number.isFinite(result.world[name].end.x)).toBe(true)
+      expect(Number.isFinite(result.world[name]!.end.x)).toBe(true)
     }
     expect(pose.angles.hand).toBeLessThanOrEqual(0.8)
   })
 
   it('interpolates keyframes, loops without corrupting clips, and validates malformed frames', () => {
     const clip = engine.createClip(wave)
-    expect(engine.sampleClip(rig, clip, 0.25).angles.arm).toBeGreaterThan(0.4)
-    expect(engine.sampleClip(rig, clip, 1.25).angles.arm).toBeCloseTo(
-      engine.sampleClip(rig, clip, 0.25).angles.arm, 5)
+    expect(engine.sampleClip(rig, clip, 0.25).angles.arm!).toBeGreaterThan(0.4)
+    expect(engine.sampleClip(rig, clip, 1.25).angles.arm!).toBeCloseTo(
+      engine.sampleClip(rig, clip, 0.25).angles.arm!, 5)
     expect(() => engine.createClip({ id: 'bad', duration: 1,
       tracks: { arm: [{ time: 2, angle: 0 }] } })).toThrow('keyframe')
     expect(() => engine.sampleClip(rig, engine.createClip({
