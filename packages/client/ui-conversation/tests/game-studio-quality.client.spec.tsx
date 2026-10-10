@@ -129,3 +129,60 @@ describe('Phoenix Game Studio cross-genre contracts', () => {
       .toContain('unsupported-game-type')
   })
 })
+
+
+describe('Phoenix Game Studio premium production gate', () => {
+  const premium = {
+    ...manifest,
+    productionTier: 'polished',
+    references: [...manifest.references, { title: 'Level pacing study', url: 'https://example.org/level-study' }],
+    production: {
+      artDirection: { style: 'original hand-painted arcade', camera: 'side-scrolling 2D', palette: ['#123456', '#abcdef', '#fffacd'] },
+      story: { premise: 'Restore the forest', goal: 'Reach the reactor', ending: 'The forest is free' },
+      screens: ['title', 'intro', 'pause', 'game-over', 'victory'].map(id => ({
+        id, runtimeRef: 'screen_' + id.replace(/-/gu, '_'),
+      })),
+      assets: [
+        { id: 'hero', role: 'player', entityId: 'player', origin: 'original', runtimeRef: 'drawHero', states: manifest.player.states },
+        { id: 'scoutArt', role: 'enemy', entityId: 'scout', origin: 'original', runtimeRef: 'drawScout', states: manifest.enemies[0]!.states },
+        { id: 'walkerArt', role: 'boss', entityId: 'walker', origin: 'original', runtimeRef: 'drawWalker', states: ['patrol', 'barrage'] },
+        ...(['weapon', 'background', 'ui', 'vfx', 'music', 'sfx'] as const).map(role => ({
+          id: role, role, origin: 'original', runtimeRef: 'render_' + role,
+        })),
+      ],
+      audioBindings: [...manifest.audio.cues, 'music'].map(cue => ({ cue, runtimeRef: 'play_' + cue })),
+    },
+  }
+  const refs = [
+    ...premium.production.screens.map(s => s.runtimeRef),
+    ...premium.production.assets.map(a => a.runtimeRef),
+    ...premium.production.audioBindings.map(a => a.runtimeRef),
+  ]
+  const html = (runtime: string) => '<canvas></canvas><script id="phoenix-game-manifest" type="application/json">'
+    + JSON.stringify(premium) + '</script><script>' + runtime + '</script>'
+
+  it('requires a full production inventory for polished games', () => {
+    expect(auditGameManifest(premium).valid).toBe(true)
+    expect(auditGameManifest({ ...premium, production: { ...premium.production, screens: [] } }).issues)
+      .toContain('missing-production-screen:title')
+    expect(auditGameManifest({ ...premium, production: { ...premium.production, assets: [
+      ...premium.production.assets.filter(asset => asset.role !== 'enemy'),
+    ] } }).issues).toContain('unbound-enemy-art:scout')
+    expect(auditGameManifest({ ...premium, references: [] }).issues)
+      .toContain('premium-needs-two-researched-references')
+  })
+
+  it('does not mistake asset names inside the manifest for runtime implementation', () => {
+    expect(auditGameHtml(html('const game = 1;')).issues).toContain('missing-runtime-asset-binding:drawHero')
+    const stubs = refs.map(name => 'function ' + name + '() {}').join('\n')
+    const audit = auditGameHtml(html(stubs))
+    expect(audit.valid).toBe(true)
+    expect(audit.warnings).toContain('premium-needs-observed-visual-audio-gameplay-qa')
+  })
+
+  it('preserves existing prototype contracts with an explicit quality limitation', () => {
+    const audit = auditGameManifest(manifest)
+    expect(audit.valid).toBe(true)
+    expect(audit.warnings).toContain('premium-asset-integration-not-audited')
+  })
+})
