@@ -18,6 +18,12 @@ Open either `jungle-echo.html` or `lumen-circuit.html` in a modern browser, or p
 - The game artifact audit supports genre-specific `gameType` profiles (run-and-gun, platformer, top-down action, racing, puzzle, strategy, RPG, rhythm, simulation, 3D and custom) and does not require a boss or gun in puzzle and racing games.
 - The examples exercise two actual game loops: shooter combat and a puzzle connectivity/rotation ruleset. Profiles for other genres validate structure but do not create their gameplay automatically.
 
+## Complete-cast production plan
+
+Before creating any art for an illustrated run-and-gun, run `node examples/game-studio/plan-game-assets.mjs jungle-echo.manifest.json game-plan.json`. It produces a **pending** task for the hero, every declared enemy type, each boss phase, all parallax layers, weapons, projectiles, powers, props, effects and sound cues. Kira/La Forja should create and actually integrate the resulting assets; the plan does not draw them.
+
+For production run-and-gun, each `art.enemies[].id` and `art.bosses[].id` must match a real gameplay entity, have a distinct PNG sprite image, grid and animation states. Every boss phase must map to real frame indices in `phaseAnimations`. Each `level.layers[].id` needs a matching illustrated `art.backgrounds[].id`; additionally supply `art.weapons`, `art.projectiles`, `art.powers`, `art.props` and at least two illustrated `art.effects`. A PNG that is merely included in the artifact but never rendered fails the publication gate. Audio and visual polish are still verified separately in a running game.
+
 ## Publisher manifest and art assets
 
 Game Studio uses the **real** `phoenix_game` model tool to publish playable self-contained HTML in the Phoenix chat. Its `phoenix-game-manifest` JSON must truthfully describe the shipped game; a missing manifest is a **structural error**, not proof that JavaScript failed to start. A blank view must be diagnosed using the game runtime and browser console.
