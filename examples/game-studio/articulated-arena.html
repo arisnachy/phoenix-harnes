@@ -538,7 +538,7 @@ function fire(){
 }
 function update(dt){
  t+=dt;shake=Math.max(0,shake-12*dt);
- if(mode!=='playing')return;
+ if(mode!=='playing'){if(mode==='lost')hero.update(dt);return;}
  const left=keys.has('KeyA')||keys.has('ArrowLeft');
  const right=keys.has('KeyD')||keys.has('ArrowRight');
  const jump=keys.has('Space')||keys.has('KeyW')||keys.has('ArrowUp');
@@ -553,7 +553,7 @@ function update(dt){
  const state=P.hp<=0?'death':!P.onGround?(P.vy<0?'jump':'fall'):move?'run':'idle';
  hero.play(state,{fade:.11});hero.update(dt);recoil.update(0,dt);
  for(const u of units){
-  if(u.health<=0)continue;
+  if(u.health<=0){u.anim.update(dt);continue;}
   const dist=P.x-u.x;
   if(Math.abs(dist)<460)u.x+=Math.sign(dist)*u.speed*dt;
   u.attack-=dt;u.hit=Math.max(0,u.hit-dt);
