@@ -28,6 +28,7 @@ describe('HARDNESS source adapters', () => {
     expect(context.tools.get('hardness_workflow')).toBeUndefined()
     expect(context.tools.get('phoenix_visualize')).toBeUndefined()
     expect(context.tools.get('phoenix_3d')).toBeUndefined()
+    expect(context.tools.get('phoenix_game')).toBeUndefined()
     expect(hardness.get('tool:hardness_run' as never)).toBeUndefined()
     expect(hardness.get('tool:hardness_workflow' as never)).toBeUndefined()
     const assembly = await context.systemPrompt.assemble()
@@ -55,6 +56,7 @@ describe('HARDNESS source adapters', () => {
     expect(context.tools.get('hardness_workflow')).toBeDefined()
     expect(context.tools.get('phoenix_visualize')).toBeDefined()
     expect(context.tools.get('phoenix_3d')).toBeDefined()
+    expect(context.tools.get('phoenix_game')).toBeDefined()
     expect(context.tools.get('hardness_run')).toBeDefined()
     expect(handle).not.toHaveBeenCalled()
 
@@ -78,6 +80,7 @@ describe('HARDNESS source adapters', () => {
     expect(context.tools.get('hardness_workflow')).toBeUndefined()
     expect(context.tools.get('phoenix_visualize')).toBeUndefined()
     expect(context.tools.get('phoenix_3d')).toBeUndefined()
+    expect(context.tools.get('phoenix_game')).toBeUndefined()
     expect(handle).not.toHaveBeenCalled()
 
     context.provide('connection', { rpc: { handle } } as never)

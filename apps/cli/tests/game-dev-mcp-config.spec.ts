@@ -69,6 +69,7 @@ describe('game development connector pack', () => {
     for (const preset of [code, standard]) {
       expect(preset).toContain('examples/game-studio/jungle-echo.html')
       expect(preset).toContain('application/vnd.phoenix.game+html')
+      expect(preset).toContain('phoenix_game')
       expect(preset).toContain('spawn_teammate')
     }
     expect(studioSkill).toContain('a sprite sheet is an intermediate resource')

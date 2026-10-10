@@ -52,6 +52,7 @@ import { installConnectorEventBridge } from './connector-event-bridge.ts'
 import { createHardnessTool } from './hardness-tool.ts'
 import { createPhoenixVisualizerTool } from './visualize-tool.ts'
 import { createPhoenixCanvasTool } from './canvas-tool.ts'
+import { createPhoenixGameTool } from './game-tool.ts'
 import { createPhoenix3DTool } from './scene3d-tool.ts'
 import { PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 import { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
@@ -132,6 +133,7 @@ export type { HardnessMissionRpcPayload, HardnessMissionRunner, HardnessMissionR
 export { createHardnessTool } from './hardness-tool.ts'
 export { createPhoenixVisualizerTool } from './visualize-tool.ts'
 export { createPhoenixCanvasTool, PHOENIX_CANVAS_MIME } from './canvas-tool.ts'
+export { createPhoenixGameTool, PHOENIX_GAME_MIME } from './game-tool.ts'
 export { createPhoenix3DTool, PHOENIX_SCENE3D_MIME, tropicalVillaScene } from './scene3d-tool.ts'
 export { choosePhoenixDesignMedium, PHOENIX_3D_ROUTING_PROTOCOL } from './scene3d-routing.ts'
 export { createCognitiveWorkflowTool } from './cognitive-workflow-tool.ts'
@@ -368,7 +370,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       // Capability projections and the mission/proactivity runtimes are host-owned.
       // Do not repeat them when several sessions mount full presets in one process.
       disposers.push(indexOpenClawExtensions(hardness))
-      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'phoenix_visualize', 'phoenix_canvas'] }))
+      disposers.push(indexTools(tools, hardness, { events: ctx, exclude: ['hardness_run', 'hardness_workflow', 'phoenix_visualize', 'phoenix_canvas', 'phoenix_game'] }))
       disposers.push(await indexSkills(skills, hardness))
     } else if (authorization !== undefined || mcpConnectors !== undefined) {
       // A preset contributes only its scoped connector inventory/discovery
@@ -404,6 +406,7 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
       disposers.push(ctx.tools.register(createCognitiveWorkflowTool()))
       disposers.push(ctx.tools.register(createPhoenixVisualizerTool()))
       disposers.push(ctx.tools.register(createPhoenixCanvasTool()))
+      disposers.push(ctx.tools.register(createPhoenixGameTool()))
       disposers.push(ctx.tools.register(createPhoenix3DTool()))
       disposers.push(ctx.tools.register(createHardnessTool({ run: missionRunner.run })))
       disposers.push(ctx.tools.register(createRealitySnapshotTool(reality.engine, ctx)))
