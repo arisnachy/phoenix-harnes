@@ -128,6 +128,18 @@ describe('Phoenix Game Studio cross-genre contracts', () => {
     expect(auditGameManifest({ ...base, genre: 'avant-garde', gameType: 'unsupported-type' }).issues)
       .toContain('unsupported-game-type')
   })
+  it('flags every absent production art family rather than accepting a hero-only run-and-gun', () => {
+    const incomplete = auditGameManifest({ ...manifest, art: {
+      mode: 'production', designReference: 'hero-approved.png', hero: { imageId: 'hero' },
+    } })
+    for (const family of ['enemies', 'bosses', 'backgrounds', 'weapons', 'projectiles', 'powers', 'props', 'effects']) {
+      expect(incomplete.issues).toContain('missing-production-art:' + family)
+    }
+    const prototype = auditGameManifest({ ...manifest, art: { mode: 'prototype' } })
+    expect(prototype.valid).toBe(true)
+    expect(prototype.warnings).toContain('character-art-prototype-not-final')
+  })
+
   it('distinguishes missing JSON from actual game boot failure and warns on provisional art', () => {
     const html = gameHtml()
     const absent = html.replace(/<script id="phoenix-game-manifest"[^>]*>[^]*?<\/script>/u, '')
