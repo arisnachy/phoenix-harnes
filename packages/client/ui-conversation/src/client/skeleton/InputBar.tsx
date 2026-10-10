@@ -93,10 +93,10 @@ export function secureLoginVaultCommand(originText: string, accountText: string,
     throw new Error('El Vault solo acepta un sitio HTTPS sin credenciales en la URL.')
   }
   const account = accountText.trim()
-  if (account.length < 1 || account.length > 4096 || /\\s/u.test(account)) {
+  if (account.length < 1 || account.length > 4096 || /\s/u.test(account)) {
     throw new Error('El usuario o correo no puede estar vacío ni contener espacios.')
   }
-  if (password.length < 1 || password.length > 16384 || /^\\s|[\\r\\n\\0]/u.test(password)) {
+  if (password.length < 1 || password.length > 16384 || /^\s|[\r\n\0]/u.test(password)) {
     throw new Error('La contraseña no puede estar vacía ni comenzar con espacios o contener saltos de línea.')
   }
   return `/secret login-set ${url.origin} ${account} ${password}`
@@ -144,12 +144,20 @@ export function InputBar({
     setToast({ seq: toastSeq.current, text })
   }, [])
   const dismissToast = useCallback(() => { setToast(null) }, [])
+  const vaultDialogRef = useRef<HTMLDialogElement | null>(null)
   const [vaultOpen, setVaultOpen] = useState(false)
   const [vaultOrigin, setVaultOrigin] = useState('')
   const [vaultAccount, setVaultAccount] = useState('')
   const [vaultPassword, setVaultPassword] = useState('')
   const [vaultAllowed, setVaultAllowed] = useState(false)
   const [vaultSaving, setVaultSaving] = useState(false)
+  useEffect(() => {
+    const dialog = vaultDialogRef.current
+    if (dialog === null) return
+    if (vaultOpen && !dialog.open && typeof dialog.showModal === 'function') dialog.showModal()
+    if (!vaultOpen && dialog.open) dialog.close()
+    return () => { if (dialog.open) dialog.close() }
+  }, [vaultOpen])
   const closeVault = (): void => {
     if (vaultSaving) return
     setVaultOpen(false)
@@ -1150,7 +1158,7 @@ export function InputBar({
         </div>
       </div>
       {vaultOpen && (
-        <div className={css.vaultOverlay}>
+        <dialog ref={vaultDialogRef} className={css.vaultOverlay} onCancel={(event) => { event.preventDefault(); closeVault() }}>
           <form
             className={css.vaultCard}
             role="dialog"
@@ -1184,7 +1192,7 @@ export function InputBar({
               </button>
             </div>
           </form>
-        </div>
+        </dialog>
       )}
       {footer}
     </div>
