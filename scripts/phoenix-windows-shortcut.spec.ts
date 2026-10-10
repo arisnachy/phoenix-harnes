@@ -24,11 +24,14 @@ describe('PHOENIX Windows desktop shortcut', () => {
   it('uses a versioned icon path so Explorer cannot reuse the legacy icon cache', async () => {
     const { readFileSync } = await import('node:fs')
     const source = readFileSync(new URL('./phoenix-desktop-shortcut.ps1', import.meta.url), 'utf8')
-    expect(source).toContain('$iconRevision = \'v4\'')
+    expect(source).toContain('$iconRevision = \'v5\'')
     expect(source).toContain('phoenix-browser-$iconRevision-$iconHash.ico')
     expect(source).toContain('phoenix-emblem.png')
     expect(source).toContain('System.Drawing')
     expect(source).toContain('ie4uinit.exe')
+    expect(source).toContain('$sizes = @(16, 24, 32, 48, 64, 128, 256)')
+    expect(source).toContain('-NoExit -File')
+    expect(source).toContain('$windowStyle = 1')
   })
 
   it('keeps the shortcut source-aware while the launcher prefers native Agent Desktop', async () => {
@@ -40,7 +43,9 @@ describe('PHOENIX Windows desktop shortcut', () => {
     expect(launcher).toContain("Programs\\Phoenix\\Phoenix.exe")
     expect(launcher).toContain("Test-Path -LiteralPath $installedPhoenixExe")
     expect(launcher).toContain("$env:PHOENIX_SOURCE_ROOT = $rootPath")
-    expect(launcher).toContain("Start-Process -FilePath $installedPhoenixExe")
+    expect(launcher).toContain("Start-Process -FilePath $installedPhoenixExe -Wait")
+    expect(launcher).toContain("$env:PHOENIX_DESKTOP_CONSOLE = '1'")
+    expect(launcher).toContain("Tee-Object -FilePath $logPath -Append")
     expect(shortcut).not.toContain("never targets Phoenix.exe")
   })
 
