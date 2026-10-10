@@ -488,25 +488,26 @@
   min-width: 0;
 }
 .unifiedHeader .header {
-  display: flex;
+  display: grid;
   position: static;
-  flex-direction: column;
-  justify-content: center;
+  grid-template-rows: 34px 30px;
+  align-content: center;
   min-width: 0;
-  gap: 0;
+  row-gap: 3px;
   margin: 0;
   padding: 0;
   border: 0;
 }
 .unifiedHeader .header::after { display: none; }
 .unifiedHeader .titleRow {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   min-width: 0;
   min-height: 34px;
   height: 34px;
-  gap: 12px;
-  flex-wrap: nowrap;
+  column-gap: 14px;
+  overflow: hidden;
 }
 .unifiedHeader .titleCluster {
   display: flex;
@@ -537,21 +538,26 @@
 .unifiedHeader .crumbCurrent { font-weight: 600; color: var(--dsw-alias-label-primary); }
 .unifiedHeader .headerUtilities {
   display: flex;
+  justify-self: end;
   flex: 0 0 auto;
   align-items: center;
   flex-wrap: nowrap;
-  margin-left: auto;
   min-width: 0;
+  max-width: min(34vw, 220px);
+  margin-left: 0;
 }
 .unifiedHeader .sessionNavRow {
   display: flex;
   align-items: center;
-  gap: 27px;
+  gap: 24px;
   min-width: 0;
   min-height: 30px;
   height: 30px;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
 }
+.unifiedHeader .sessionNavRow::-webkit-scrollbar { display: none; }
 .unifiedHeader .headerActions {
   display: flex;
   align-items: center;
@@ -565,12 +571,13 @@
   position: static;
   align-items: center;
   justify-content: flex-start;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   gap: 30px;
   height: 30px;
   min-width: 0;
   margin: 0;
   padding: 0;
+  white-space: nowrap;
   transform: none;
 }
 .unifiedHeader .tab { padding: 2px 0 8px; }
@@ -618,14 +625,6 @@
   min-height: 78px;
   padding-block: 5px;
 }
-.headerBrand {
-  flex: 1 1 auto;
-  min-width: 0;
-  color: #e75e24;
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: .12em;
-}
 .root[data-phase='hero'] .unifiedHeader {
   min-height: 68px;
 }
@@ -642,17 +641,23 @@
 }
 @media (max-width: 720px) {
   .unifiedHeader {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
     margin: 7px 8px 0;
     padding: 8px 10px;
     min-height: 82px;
     gap: 6px;
     border-radius: 20px;
   }
+  .unifiedHeader .sessionChrome { grid-column: 1; grid-row: 1; }
+  .unifiedHeader .headerGlobal { grid-column: 1; grid-row: 2; justify-self: end; }
   .unifiedHeader .titleRow { min-height: 32px; height: 32px; }
+  .unifiedHeader .header { grid-template-rows: 32px 30px; }
   .unifiedHeader .sessionNavRow { gap: 12px; }
-  .unifiedHeader .headerUtilities { max-width: 23vw; }
+  .unifiedHeader .headerUtilities { max-width: 38vw; }
   .unifiedHeader .tabs { gap: 12px; }
   .unifiedHeader .crumb { font-size: 13px; }
   .unifiedHeader .heroTopIcon { width: 30px; height: 34px; }
   .unifiedHeader .heroTopProfile { width: 32px; height: 32px; flex-basis: 32px; }
+  .root[data-phase='hero'] .headerGlobal { grid-column: 1; grid-row: 2; }
 }

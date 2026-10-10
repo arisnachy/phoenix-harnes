@@ -24,9 +24,11 @@ describe('PHOENIX Windows desktop shortcut', () => {
   it('uses a versioned icon path so Explorer cannot reuse the legacy icon cache', async () => {
     const { readFileSync } = await import('node:fs')
     const source = readFileSync(new URL('./phoenix-desktop-shortcut.ps1', import.meta.url), 'utf8')
-    expect(source).toContain('$iconRevision = \'v5\'')
+    expect(source).toContain('$iconRevision = \'v6\'')
     expect(source).toContain('phoenix-browser-$iconRevision-$iconHash.ico')
     expect(source).toContain('phoenix-emblem.png')
+    expect(source).toContain('phoenix-shortcut-gold.png')
+    expect(source).toContain('$logoAssetPath = if (Test-Path -LiteralPath $goldLogoPath -PathType Leaf)')
     expect(source).toContain('System.Drawing')
     expect(source).toContain('ie4uinit.exe')
     expect(source).toContain('$sizes = @(16, 24, 32, 48, 64, 128, 256)')
