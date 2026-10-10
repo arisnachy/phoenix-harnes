@@ -548,3 +548,69 @@
 @media (prefers-reduced-motion: reduce) {
   .root:not(.collapsed) .navLink { transition: none; }
 }
+
+/* Approved compact rail: original Phoenix icons, modern touch targets. */
+.root.collapsed { padding: 8px 13px 8px 14px; }
+.collapsed .logoRow { height: 44px; padding: 0; margin-bottom: 8px; }
+.collapsed .iconButton { width: 44px; height: 44px; border-radius: 14px; }
+.collapsed .newSession {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 7px;
+  border-radius: 14px;
+  background: var(--phoenix-side-peach);
+  color: var(--phoenix-side-ember);
+}
+.collapsed .newSession:hover,
+.collapsed .newSession:focus-visible {
+  color: #fff;
+  background: var(--phoenix-side-ember);
+}
+.collapsed .primaryNavigation {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 44px;
+  padding: 0 0 8px;
+  margin: 0 0 8px;
+  border-bottom: 1px solid var(--phoenix-side-outline);
+}
+.collapsed .navLink {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+}
+.collapsed .navLink svg { width: 20px; height: 20px; }
+.collapsed .navLink:first-child { color: var(--phoenix-side-ember); }
+.collapsed .navLink:hover,
+.collapsed .navLink:focus-visible {
+  background: var(--phoenix-side-peach);
+  color: var(--phoenix-side-ember);
+}
+.collapsed .navLink:focus-visible {
+  outline: 2px solid var(--phoenix-side-ember);
+  outline-offset: -2px;
+}
+.collapsed .regionArea { flex: 1 1 0; min-height: 0; }
+@media (max-height: 660px) {
+  .root.collapsed { padding-top: 3px; }
+  .collapsed .logoRow { margin-bottom: 3px; }
+  .collapsed .newSession { margin-bottom: 3px; }
+  .collapsed .primaryNavigation { gap: 0; padding-bottom: 3px; margin-bottom: 3px; }
+  .collapsed .navLink { height: 39px; min-height: 39px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .collapsed .navLink { transition: none; }
+}

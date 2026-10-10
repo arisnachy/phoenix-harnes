@@ -186,25 +186,24 @@ export function SidebarRoot({
         </button>
       </Tooltip>
 
-      {wide && (
-        <nav className={css.primaryNavigation} aria-label="Navegación principal">
-          <button type="button" className={css.navLink} onClick={() => { startSession() }}>
-            <IconNewChatOutline16 size={19} /><span>{t('nav.home')}</span>
-          </button>
-          <button type="button" className={css.navLink} onClick={() => { openFeature('discover', t('nav.discover')) }}>
-            <IconGlobeOutline14 size={19} /><span>{t('nav.discover')}</span>
-          </button>
-          <button type="button" className={css.navLink} onClick={() => { openFeature('connectors', t('nav.connectors')) }}>
-            <IconPlugOutline16 size={19} /><span>{t('nav.connectors')}</span>
-          </button>
-          <button type="button" className={css.navLink} onClick={() => { window.dispatchEvent(new Event('phoenix:toggle-team-directory')) }}>
-            <IconAgentPresetOutline16 size={19} /><span>{t('nav.team')}</span>
-          </button>
-          <button type="button" className={css.navLink} onClick={openLibrary}>
-            <IconFolderOpenOutline16 size={19} /><span>{t('nav.library')}</span>
-          </button>
-        </nav>
-      )}
+      {/* Preserve exactly the existing navigation actions on the collapsed rail. */}
+      <nav className={css.primaryNavigation} aria-label="Navegación principal">
+        <button type="button" className={css.navLink} aria-label={t('nav.home')} title={wide ? undefined : t('nav.home')} onClick={() => { startSession() }}>
+          <IconNewChatOutline16 size={19} />{wide && <span>{t('nav.home')}</span>}
+        </button>
+        <button type="button" className={css.navLink} aria-label={t('nav.discover')} title={wide ? undefined : t('nav.discover')} onClick={() => { openFeature('discover', t('nav.discover')) }}>
+          <IconGlobeOutline14 size={19} />{wide && <span>{t('nav.discover')}</span>}
+        </button>
+        <button type="button" className={css.navLink} aria-label={t('nav.connectors')} title={wide ? undefined : t('nav.connectors')} onClick={() => { openFeature('connectors', t('nav.connectors')) }}>
+          <IconPlugOutline16 size={19} />{wide && <span>{t('nav.connectors')}</span>}
+        </button>
+        <button type="button" className={css.navLink} aria-label={t('nav.team')} title={wide ? undefined : t('nav.team')} onClick={() => { window.dispatchEvent(new Event('phoenix:toggle-team-directory')) }}>
+          <IconAgentPresetOutline16 size={19} />{wide && <span>{t('nav.team')}</span>}
+        </button>
+        <button type="button" className={css.navLink} aria-label={t('nav.library')} title={wide ? undefined : t('nav.library')} onClick={openLibrary}>
+          <IconFolderOpenOutline16 size={19} />{wide && <span>{t('nav.library')}</span>}
+        </button>
+      </nav>
 
       {/* The browsing region fills the column between the controls and the
           foot in both states; its rail icon column rides the same slot. */}
