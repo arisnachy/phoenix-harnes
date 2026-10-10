@@ -10,7 +10,7 @@ The Telegram Host receiver created its own Agent with only a session id, bypassi
 
 ## Decision
 
-Telegram must create or resume its session through the existing apiProxy.sessions.create path and deliver text through apiProxy.sessions.prompt, which also owns provider selection, preset mounting, durable message attribution and admission. A currently attached legacy Telegram Agent without provider/model is replaced with a new composed session; its old history is retained. The bot distinguishes model execution errors and blocked/aborted turns from a successful text answer.
+Telegram must create or resume its session through the existing apiProxy.sessions.create path and deliver text through apiProxy.sessions.prompt, which also owns provider selection, preset mounting, durable message attribution and admission. A legacy Telegram Agent is replaced even after a Host restart, when only a cold persisted session remains. A dedicated credential marker identifies the session id last committed by the normal gateway: older ids lack this marker and cannot be resumed as configured sessions. An existing gateway session that fails workspace identity checks receives one fresh-session recovery attempt without discarding the old history. The bot distinguishes model execution errors and blocked/aborted turns from a successful text answer.
 
 ## Alternatives considered
 
@@ -18,8 +18,8 @@ Teaching Telegram to copy default-model lookup and mount presets independently w
 
 ## Consequences
 
-Text requests use the same configured Phoenix execution path as its chat instead of a model-less Agent. Previously paired bots retain their owner authorization. A live legacy Telegram session may be replaced by a new session id, without deleting the previous log. Native calls and voice notes remain separate features; text receipt never activates realtime audio.
+Text requests use the same configured Phoenix execution path as its chat instead of a model-less Agent. Previously paired bots retain their owner authorization. A legacy Telegram session, including one persisted across restarts, may be replaced by a new session id, without deleting the previous log. Telegram records session provenance separately from the pairing credential, clears it on token replacement, and reports a stage-specific safe failure code without leaking exception details. Native calls and voice notes remain separate features; text receipt never activates realtime audio.
 
 ## Testing
 
-The Telegram inbox tests cover creation via the gateway with explicit model options, admission via the normal prompt path, model error reporting and replacement of legacy active sessions. Windows end-to-end operation still requires a Host runtime test.
+The Telegram inbox tests cover creation via the gateway with explicit model options, admission via the normal prompt path, model error reporting, migration of legacy active and cold sessions, durable gateway-session reuse, and recovery of moved-workspace session conflicts. Windows end-to-end operation still requires a Host runtime test.
