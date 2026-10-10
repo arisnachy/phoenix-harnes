@@ -215,7 +215,7 @@ function DeclarativeUi({ record }: { readonly record: JsonRecord }) {
   )
 }
 
-function sandboxDocument(html: string, executable: boolean): string {
+function sandboxDocument(html: string, executable: boolean, gameDiagnostics = false): string {
   // Static HTML previews cannot execute script, so allowing image fetches gives
   // them the same visual fidelity as opening the document directly without
   // granting the document any parent/app authority. Executable mini-apps keep
@@ -252,20 +252,25 @@ function sandboxDocument(html: string, executable: boolean): string {
     : ''
   const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
   const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
+  const runtimeErrors = gameDiagnostics
+    ? '<script>(function(){function alertGame(reason){if(!document.body)return;var p=document.createElement("p");p.setAttribute("role","alert");p.setAttribute("data-phoenix-game-error","true");p.style.cssText="padding:12px;background:#461e26;color:#fff;border:2px solid #eb7688;border-radius:8px";p.textContent="Game Studio: error al ejecutar el juego ("+String(reason).slice(0,180)+"). Revisa el script, los recursos y la consola. El manifiesto JSON no causa por sí solo este error.";document.body.insertBefore(p,document.body.firstChild)}window.addEventListener("error",function(e){alertGame(e.message||"JavaScript error")});window.addEventListener("unhandledrejection",function(e){alertGame(e.reason&&e.reason.message||"unhandled rejection")})})()<\/script>'
+    : ''
   const heightReporter = '<script>(function(){function height(){var root=document.documentElement,body=document.body;return Math.max(root?root.scrollHeight:0,root?root.offsetHeight:0,body?body.scrollHeight:0,body?body.offsetHeight:0,1)}function report(){parent.postMessage({type:\'phoenix-artifact-height\',height:height()},\'*\')}if(window.ResizeObserver){var ro=new ResizeObserver(report);ro.observe(document.documentElement);if(document.body)ro.observe(document.body)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);window.addEventListener(\'resize\',report);report()})()<\/script>'
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${dependencyNotice}${body}${heightReporter}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${dependencyNotice}${runtimeErrors}${body}${heightReporter}</body></html>`
 }
 
 interface MiniAppProps {
   readonly html: string
   readonly title: string
   readonly executable?: boolean
+  readonly minimumHeight?: number
+  readonly gameDiagnostics?: boolean
 }
 
-function MiniApp({ html, title, executable = false }: MiniAppProps) {
+function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagnostics = false }: MiniAppProps) {
   const [frameHeight, setFrameHeight] = useState(1)
   const frameRef = useRef<HTMLIFrameElement>(null)
-  const srcDoc = useMemo(() => sandboxDocument(html, executable), [html, executable])
+  const srcDoc = useMemo(() => sandboxDocument(html, executable, gameDiagnostics), [html, executable, gameDiagnostics])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -310,7 +315,7 @@ function MiniApp({ html, title, executable = false }: MiniAppProps) {
       srcDoc={srcDoc}
       sandbox={executable ? 'allow-scripts' : 'allow-same-origin'}
       referrerPolicy="no-referrer"
-      style={{ height: frameHeight }}
+      style={{ height: Math.max(frameHeight, minimumHeight) }}
       onLoad={measureStaticDocument}
     />
   )
@@ -396,6 +401,7 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
 
 function GameStudioPreview({ html, title }: { readonly html: string; readonly title: string }) {
   const audit = useMemo(() => auditGameHtml(html), [html])
+  const manifestNeedsRepair = audit.issues.some(issue => issue.startsWith('game-manifest-'))
   const exportGame = (): void => {
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
     const anchor = document.createElement('a')
@@ -410,11 +416,19 @@ function GameStudioPreview({ html, title }: { readonly html: string; readonly ti
       <div role="status" aria-label="Game Studio audit">
         <strong>Game Studio · {audit.valid ? 'structural preflight passed' : 'review required'}</strong>
         <p className={styles.note}>{audit.summary}. Not a gameplay test.</p>
+        {manifestNeedsRepair && (
+          <p className={styles.note}>
+            Falta o es incorrecto el manifiesto JSON. Kira debe añadir un único
+            {' <script id="phoenix-game-manifest" type="application/json">'} con datos reales y
+            volver a validar antes de publicar. El manifiesto NO controla el arranque:
+            si el juego está en blanco, revisa también JavaScript, recursos y CSP.
+          </p>
+        )}
         {audit.issues.length > 0 && <p className={styles.note}>Issues: {audit.issues.join(', ')}</p>}
         {audit.warnings.length > 0 && <p className={styles.note}>Review: {audit.warnings.join(', ')}</p>}
         <button className={styles.uiButton} type="button" onClick={exportGame}>Exportar juego (.html)</button>
       </div>
-      <MiniApp html={html} title={title} executable />
+      <MiniApp html={html} title={title} executable minimumHeight={460} gameDiagnostics />
     </div>
   )
 }
