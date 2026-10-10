@@ -260,9 +260,10 @@ interface MiniAppProps {
   readonly html: string
   readonly title: string
   readonly executable?: boolean
+  readonly minimumHeight?: number
 }
 
-function MiniApp({ html, title, executable = false }: MiniAppProps) {
+function MiniApp({ html, title, executable = false, minimumHeight = 1 }: MiniAppProps) {
   const [frameHeight, setFrameHeight] = useState(1)
   const frameRef = useRef<HTMLIFrameElement>(null)
   const srcDoc = useMemo(() => sandboxDocument(html, executable), [html, executable])
@@ -310,7 +311,7 @@ function MiniApp({ html, title, executable = false }: MiniAppProps) {
       srcDoc={srcDoc}
       sandbox={executable ? 'allow-scripts' : 'allow-same-origin'}
       referrerPolicy="no-referrer"
-      style={{ height: frameHeight }}
+      style={{ height: Math.max(frameHeight, minimumHeight) }}
       onLoad={measureStaticDocument}
     />
   )
@@ -396,6 +397,7 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
 
 function GameStudioPreview({ html, title }: { readonly html: string; readonly title: string }) {
   const audit = useMemo(() => auditGameHtml(html), [html])
+  const manifestNeedsRepair = audit.issues.some(issue => issue.startsWith('game-manifest-'))
   const exportGame = (): void => {
     const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
     const anchor = document.createElement('a')
@@ -410,11 +412,19 @@ function GameStudioPreview({ html, title }: { readonly html: string; readonly ti
       <div role="status" aria-label="Game Studio audit">
         <strong>Game Studio · {audit.valid ? 'structural preflight passed' : 'review required'}</strong>
         <p className={styles.note}>{audit.summary}. Not a gameplay test.</p>
+        {manifestNeedsRepair && (
+          <p className={styles.note}>
+            Falta o es incorrecto el manifiesto JSON. Kira debe añadir un único
+            {' <script id="phoenix-game-manifest" type="application/json">'} con datos reales y
+            volver a validar antes de publicar. El manifiesto NO controla el arranque:
+            si el juego está en blanco, revisa también JavaScript, recursos y CSP.
+          </p>
+        )}
         {audit.issues.length > 0 && <p className={styles.note}>Issues: {audit.issues.join(', ')}</p>}
         {audit.warnings.length > 0 && <p className={styles.note}>Review: {audit.warnings.join(', ')}</p>}
         <button className={styles.uiButton} type="button" onClick={exportGame}>Exportar juego (.html)</button>
       </div>
-      <MiniApp html={html} title={title} executable />
+      <MiniApp html={html} title={title} executable minimumHeight={460} />
     </div>
   )
 }
