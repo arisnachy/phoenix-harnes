@@ -1356,7 +1356,7 @@ async function runOriginBoundBrowserLogin(
     credentials.resolve(originCredentialRef(origin, 'autonomous')),
   ])
   if (grant?.value !== '1' || account === undefined || secret === undefined) {
-    throw new Error(`No unattended login is configured for ${origin}; use /secret login-set once.`)
+    throw new Error(`No login is configured for ${origin}; ask the user to open the lock icon (Vault) beside the Phoenix chat composer and enter the site, username and password in its private form. Inspect the page fields with browser_inspect first. Never request a password in chat or type it in a model tool argument.`)
   }
   return await runEmbeddedBrowserAction(args, signal, {
     account: account.value,
@@ -1474,7 +1474,7 @@ export function registerComputerTool(ctx: Context): void {
   ctx.systemPrompt.section({
     name: 'tool:computer:embedded-browser',
     order: 106,
-    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: never ask the user to paste a stored secret and never place one in text/type arguments. A /secret login-set grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
+    text: 'On Windows Phoenix Desktop, use computer browser_open/browser_inspect/browser_fill_form/browser_click_text/browser_login for structured work in the embedded WebView2 pane. browser_login resolves an origin-bound vault login internally: first call browser_inspect to see the real visible form labels, then if no origin credential exists ask the human in their language to use the lock (Vault) control beside the Phoenix chat composer. That opens a private password-masked form, not an ordinary chat message. Never request usernames/passwords in regular chat text or place secrets in model tool arguments. Verify the live HTTPS origin against the authorized vault binding before filling. A /secret login-set grant preauthorizes open/login/form/click work only for that exact origin, so recurring authorized tasks can run without repeated workspace-write prompts; other desktop interaction keeps the normal approval policy. browser_inspect is read-only and never returns current field values. If the native Desktop browser broker is absent or stale, do not stop the task: use phoenix_browser/chrome for web work and continue using computer windows/focus/click/type/key/scroll for the real Windows desktop; general desktop control has a fixed PowerShell fallback.',
   })
 
   ctx.tools.register(defineTool({
