@@ -152,6 +152,14 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
     if (!Array.isArray(value.audio.cues) || value.audio.cues.length === 0) warnings.push('audio-cues-not-declared')
     if (!nonempty(value.audio.music)) warnings.push('missing-music-plan')
   }
+  if (object(value.art)) {
+    if (value.art.mode === 'prototype') warnings.push('character-art-prototype-not-final')
+    if (value.art.mode === 'production' && !nonempty(value.art.designReference) && profile === 'run-and-gun') {
+      warnings.push('approved-character-design-reference-missing')
+    }
+  } else if (['run-and-gun', 'platformer', 'top-down-action', 'rpg'].includes(profile)) {
+    warnings.push('visual-art-status-not-declared')
+  }
   if (profile === 'run-and-gun') {
     if (!object(value.motion) || !object(value.motion.rig)) warnings.push('articulated-character-rig-not-declared')
     if (!object(value.motion) || !Array.isArray(value.motion.aimDirections)
