@@ -72,7 +72,7 @@ if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
       $graphics = $null
       $pngStream = $null
       try {
-        $bitmap = New-Object Drawing.Bitmap($size, $size)
+        $bitmap = New-Object -TypeName Drawing.Bitmap -ArgumentList $size, $size
         $graphics = [Drawing.Graphics]::FromImage($bitmap)
         $graphics.Clear([Drawing.Color]::Transparent)
         $graphics.CompositingQuality = [Drawing.Drawing2D.CompositingQuality]::HighQuality
@@ -98,7 +98,7 @@ if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
 
     # ICO directory: header (6 bytes), 16-byte entries, then PNG payloads.
     $stream = [IO.File]::Open($iconPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
-    $writer = New-Object IO.BinaryWriter($stream)
+    $writer = [IO.BinaryWriter]::new($stream)
     $writer.Write([uint16]0)
     $writer.Write([uint16]1)
     $writer.Write([uint16]$sizes.Count)
