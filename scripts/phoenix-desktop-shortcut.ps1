@@ -17,9 +17,9 @@ else {
 }
 $launcherPath = Join-Path $rootPath 'scripts\phoenix-desktop-launch.ps1'
 $markdownOpenPath = Join-Path $rootPath 'scripts\phoenix-markdown-open.ps1'
-$logoAssetPath = Join-Path $assetRootPath 'apps\web\public\phoenix-emblem.png'
+$fallbackLogoAssetPath = Join-Path $assetRootPath 'apps\web\public\phoenix-emblem.png'
 
-foreach ($required in @($launcherPath, $markdownOpenPath, $logoAssetPath)) {
+foreach ($required in @($launcherPath, $markdownOpenPath, $fallbackLogoAssetPath)) {
   if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
     throw "PHOENIX shell integration file is missing: $required"
   }
@@ -44,6 +44,17 @@ if ([string]::IsNullOrWhiteSpace($localAppData)) {
 $phoenixState = Join-Path $localAppData 'Phoenix'
 New-Item -ItemType Directory -Force -Path $phoenixState | Out-Null
 
+# The user's desktop icon is a separate brand asset, not the orange web emblem.
+# The installer stores the approved gold phoenix here. Prefer it on every
+# automatic update so the shortcut cannot silently revert to the web image.
+$goldLogoPath = Join-Path $phoenixState 'phoenix-shortcut-gold.png'
+$logoAssetPath = if (Test-Path -LiteralPath $goldLogoPath -PathType Leaf) {
+  $goldLogoPath
+}
+else {
+  $fallbackLogoAssetPath
+}
+
 # Render the exact Phoenix product emblem used by the web UI into a real ICO.
 # Hashing the source plus a revisioned path forces Explorer to abandon stale icon cache entries.
 $logoBytes = [IO.File]::ReadAllBytes($logoAssetPath)
@@ -54,7 +65,7 @@ try {
 finally {
   $sha256.Dispose()
 }
-$iconRevision = 'v5'
+$iconRevision = 'v6'
 $iconPath = Join-Path $phoenixState "phoenix-browser-$iconRevision-$iconHash.ico"
 if (-not (Test-Path -LiteralPath $iconPath -PathType Leaf)) {
   $sourceImage = $null
