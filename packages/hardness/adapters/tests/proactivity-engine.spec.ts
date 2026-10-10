@@ -38,6 +38,33 @@ describe('HARDNESS ProactivityEngine', () => {
       .toEqual(['Visible follow-up', 'Hidden surprise'])
   })
 
+  it('does not duplicate a Phoenix-initiated standing mission after another turn', async () => {
+    const store = new MemoryProactivityStore()
+    const first = new ProactivityEngine(store, { execute: async () => ({}) }, { id: fixedIds('one') })
+    const input = {
+      title: 'Monitor the project',
+      instruction: 'Only report material changes.',
+      runAt: '2026-11-10T10:00:00.000Z',
+      createdBy: 'harness' as const,
+      delivery: 'work' as const,
+      targetAgentId: 'session-a',
+      recurrence: { kind: 'calendar' as const, unit: 'week' as const, every: 1, timezone: 'America/Santo_Domingo' },
+    }
+    const initial = await first.create(input)
+    const second = new ProactivityEngine(store, { execute: async () => ({}) }, { id: fixedIds('two') })
+    const repeat = await second.create({ ...input, runAt: '2026-11-17T10:00:00.000Z' })
+    expect(repeat.id).toBe(initial.id)
+    expect((await second.list({ includeHidden: true })).map(task => task.id)).toEqual(['one'])
+  })
+
+  it('allows the user to explicitly create two reminders with similar content', async () => {
+    const engine = new ProactivityEngine(new MemoryProactivityStore(), { execute: async () => ({}) }, { id: fixedIds('a', 'b') })
+    const input = { title: 'Reminder', instruction: 'Tell me.', runAt: '2026-11-10T10:00:00.000Z', createdBy: 'user' as const }
+    await engine.create(input)
+    await engine.create(input)
+    expect((await engine.list()).map(task => task.id)).toEqual(['a', 'b'])
+  })
+
   it('runs an overdue one-shot once after restart and records completion', async () => {
     const store = new MemoryProactivityStore()
     const firstExecutor = { execute: vi.fn(async () => ({ summary: 'sent' })) }
