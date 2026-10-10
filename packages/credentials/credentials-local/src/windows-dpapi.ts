@@ -37,7 +37,7 @@ try {
 `
 
 /** Run fixed DPAPI code without putting a secret in argv, temp files or error text. */
-function invokeDpapi(script: string, input: string): Promise<string> {
+function invokeDpapi(script: string, input: string, trimOutput: boolean): Promise<string> {
   return new Promise((resolve, reject) => {
     const encoded = Buffer.from(script, 'utf16le').toString('base64')
     const child = execFile('powershell.exe',
@@ -48,7 +48,7 @@ function invokeDpapi(script: string, input: string): Promise<string> {
           reject(new Error('Windows credential protection is unavailable for this account. Nothing was saved.'))
           return
         }
-        resolve(stdout.trim())
+        resolve(trimOutput ? stdout.trim() : stdout)
       })
     if (child.stdin === null) {
       child.kill()
@@ -63,7 +63,7 @@ function invokeDpapi(script: string, input: string): Promise<string> {
 /** Encrypt an origin login for this Windows user; non-Windows deployments retain POSIX owner-only storage. */
 export async function protectWebLoginAtRest(ref: string, value: string): Promise<string> {
   if (!isProtectedWebLoginRef(ref) || process.platform !== 'win32') return value
-  const ciphertext = await invokeDpapi(PROTECT_SCRIPT, value)
+  const ciphertext = await invokeDpapi(PROTECT_SCRIPT, value, true)
   return CIPHER_PREFIX + ciphertext
 }
 
@@ -72,7 +72,7 @@ export async function unprotectWebLoginAtRest(ref: string, value: string): Promi
   if (!isProtectedWebLoginRef(ref)) return value
   if (!value.startsWith(CIPHER_PREFIX)) return value // legacy plaintext: caller must migrate
   if (process.platform !== 'win32') throw new Error('This protected website login requires its original Windows user.')
-  return await invokeDpapi(UNPROTECT_SCRIPT, value.slice(CIPHER_PREFIX.length))
+  return await invokeDpapi(UNPROTECT_SCRIPT, value.slice(CIPHER_PREFIX.length), false)
 }
 
 /** Identify the legacy value that needs one safe write-through upgrade before use on Windows. */
