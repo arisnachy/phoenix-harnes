@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url'
 const pngHeader = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 
 export async function embedGameAssets(html, manifest, baseDirectory) {
-  if (!/<\/body\s*>/iu.test(html)) throw new Error('Game HTML must contain </body>')
+  if (!/<body\b[^>]*>/iu.test(html) || !/<\/body\s*>/iu.test(html)) throw new Error('Game HTML must contain <body> and </body>')
   if (!Array.isArray(manifest.images) || manifest.images.length === 0) throw new Error('images.json requires nonempty images list')
   let tags = ''
   const seen = new Set()
@@ -36,7 +36,8 @@ export async function embedGameAssets(html, manifest, baseDirectory) {
     tags += '<img hidden decoding="sync" id="' + id
       + '" src="data:image/png;base64,' + bytes.toString('base64') + '">\n'
   }
-  return html.replace(/<\/body\s*>/iu, tags + '</body>')
+  // Put images before executable scripts so document.getElementById can bind them.
+  return html.replace(/<body\b[^>]*>/iu, opening => opening + '\n' + tags)
 }
 
 async function main() {
