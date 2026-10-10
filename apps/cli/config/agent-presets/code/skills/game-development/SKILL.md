@@ -8,6 +8,35 @@ description: >-
 
 # Crear y entregar videojuegos
 
+## Motor nuevo de animación articulada y enlace con el arte (obligatorio)
+
+**Kira debe leer** `examples/game-studio/ANIMATION_ENGINE.md` antes de crear personajes animados o aceptar un sprite del protagonista. Están implementados:
+
+- `examples/game-studio/animation-engine.js` — motor jerárquico 2D para huesos, cinemática directa/inversa CCD, restricciones, transiciones, keyframes, animaciones superpuestas, accesorios y atlas por estado.
+- `examples/game-studio/animation-engine-3d.js` — matemáticas de esqueletos 3D, cuaterniones, IK, mezcla de poses y asignación a huesos existentes. Un videojuego 3D terminado **requiere además** mallas con pesos, deformación y un motor render/física real; esto no es un sustituto de Godot/Three/Unreal/Unity.
+- `examples/game-studio/rigged-art.js` — puente REAL entre atlas PNG original, los huesos y la ejecución del juego. Elegir `animationMode:"flipbook"` para sprites cuerpo entero o `"skeletal"` con `art.parts[boneId].states` y pivotes cuando se quiere animación articulada por piezas. Si faltan piezas, el puente falla: **jamás remplazar personajes por rectángulos de Canvas**.
+- `examples/game-studio/articulated-arena.html` — integración técnica jugable y offline, NO arte final. No publicar su estilo geométrico como videojuego profesional.
+
+**Patrón obligatorio de integración:**
+
+```js
+const heroImage = document.getElementById('hero-art'); // PNG embebido y realmente cargado
+const heroActor = PhoenixRiggedArt.actor({
+  engine: PhoenixArticulation, image: heroImage, art: manifest.art.hero,
+  rig: realCharacterRig, clips: realCharacterClips, initial: 'idle'
+});
+function update(dt) { heroActor.play(currentState, { fade: 0.14 }); heroActor.update(dt); }
+function render(ctx) { heroActor.draw(ctx, player.x, player.y, player.facing); }
+```
+
+La biblioteca debe estar **inline** con el motor dentro del HTML `phoenix_game`, nunca usar CDN ni links a archivos del repo en el visor aislado. `art.hero.imageId` debe existir como `<img hidden id="hero-art" src="data:image/png;base64,...">`. Para esqueletos 2D, segmentar el atlas en piezas coherentes, asignarlas a todos los huesos visibles y sincronizar armas/efectos con `actor.socket(...)`; para sprites frame-by-frame, no fingir que existe articulación completa. El validador `game-art.ts` reconoce PNG dibujado mediante `heroActor.draw`, pero esa comprobación de código **no demuestra** calidad artística.
+
+**GATE VISUAL para juegos similares a Contra/Metal Slug:** no aprobar si el protagonista es un bloque, los enemigos son el mismo rectángulo recoloreado, el bosque son triángulos repetidos, las armas no están vinculadas al personaje o los sprites aprobados solo están en un PNG sin entrar en la partida. Validar con capturas reales del menú, juego en movimiento, ataque, salto, varios enemigos, jefe, derrota y victoria. Entregar la versión profesional solamente cuando TODOS los PNG originales por entidad/escenario/objeto y las animaciones estén integrados, el gameplay funcione y el audio se pruebe. Si se devuelve un prototipo, mostrar explícitamente **NO TERMINADO** y no dar la tarea como completada. La Forja máximo 3 agentes; detenerse al terminar o ante bloqueo real sin bucles.
+
+
+
+El resultado es un juego ejecutable adecuado al género, plataforma y alcance pedido. Si solicitan jugar en el chat de Phoenix, la entrega mínima es invocar la herramienta `phoenix_game` con HTML5 ejecutable autónomo: publica el MIME `application/vnd.phoenix.game+html` directamente en el visor del chat, no una imagen PNG, spritesheet, manifiesto o explicación. Incluye un manifiesto JSON `phoenix-game-manifest` y script ejecutable; confirma el resultado de la herramienta antes de presentar la misión como terminada. Una hoja de sprites no marca terminado el juego, incluso si image_generation respondió exitosamente. Comprueba las herramientas realmente expuestas (habilidad, archivos, shell, equipo y publicación de artefactos) antes de informar que no están disponibles. El proyecto incluye `examples/game-studio/jungle-echo.html` como punto de partida offline adaptable; revisa también `.agents/skills/phoenix-game-studio/SKILL.md`. Pide La Forja mediante el equipo real cuando el usuario la solicita; si falla la delegación, continúa por una ruta autónoma viable y menciona el fallo concreto. Nunca afirmes que se probó una partida sin pruebas ejecutadas. Responde en el idioma de la solicitud, también después de una revisión externa. Las referencias del usuario orientan calidad o estilo; un ejemplo no impone su diseño a todos los juegos.
+
 El resultado es un juego ejecutable adecuado al género, plataforma y alcance pedido. Si solicitan jugar en el chat de Phoenix, la entrega mínima es invocar la herramienta `phoenix_game` con HTML5 ejecutable autónomo: publica el MIME `application/vnd.phoenix.game+html` directamente en el visor del chat, no una imagen PNG, spritesheet, manifiesto o explicación. Incluye un manifiesto JSON `phoenix-game-manifest` y script ejecutable; confirma el resultado de la herramienta antes de presentar la misión como terminada. Una hoja de sprites no marca terminado el juego, incluso si image_generation respondió exitosamente. Comprueba las herramientas realmente expuestas (habilidad, archivos, shell, equipo y publicación de artefactos) antes de informar que no están disponibles. El proyecto incluye `examples/game-studio/jungle-echo.html` como punto de partida offline adaptable; revisa también `.agents/skills/phoenix-game-studio/SKILL.md`. Pide La Forja mediante el equipo real cuando el usuario la solicita; si falla la delegación, continúa por una ruta autónoma viable y menciona el fallo concreto. Nunca afirmes que se probó una partida sin pruebas ejecutadas. Responde en el idioma de la solicitud, también después de una revisión externa. Las referencias del usuario orientan calidad o estilo; un ejemplo no impone su diseño a todos los juegos.
 
 ## Kira: el manifiesto y el preflight van PRIMERO, nunca después del rechazo

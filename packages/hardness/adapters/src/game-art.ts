@@ -36,6 +36,50 @@ function imageById(html: string, id: string): { width: number; height: number; c
 }
 
 /**
+ * A segmented rig needs genuine imported cutouts for every visible bone;
+ * an unsegmented portrait PNG alone cannot animate elbows or feet.
+ * @param actor - Sprite art entry with optional articulated skin declarations.
+ * @param atlas - PNG grid dimensions established by the existing bitmap gate.
+ * @param states - Required states for this game's character.
+ * @param label - Entity name to report when imported anatomy is incomplete.
+ * @param rigBones - Names of declared skeleton bones, when available.
+ */
+function validateArticulatedSkin(
+  actor: RecordValue,
+  atlas: { width: number; height: number },
+  states: readonly string[],
+  label: string,
+  rigBones: readonly string[] = [],
+): void {
+  if (actor.animationMode === undefined || actor.animationMode === 'flipbook') return
+  if (actor.animationMode !== 'skeletal') failed(label + ': animationMode debe ser flipbook o skeletal.')
+  if (!record(actor.parts) || Object.keys(actor.parts).length < 2) {
+    failed(label + ': faltan sprites recortados por hueso (art.parts), no basta una figura completa.')
+  }
+  const frameWidth = actor.frameWidth
+  const frameHeight = actor.frameHeight
+  if (!Number.isInteger(frameWidth) || !Number.isInteger(frameHeight)
+    || (frameWidth as number) <= 0 || (frameHeight as number) <= 0) {
+    failed(label + ': el atlas articulado necesita una cuadrícula de frames.')
+  }
+  const total = atlas.width / (frameWidth as number) * atlas.height / (frameHeight as number)
+  const requiredBones = rigBones.length > 0 ? rigBones : Object.keys(actor.parts)
+  for (const bone of requiredBones) {
+    const part = actor.parts[bone]
+    if (!record(part) || !record(part.states)) {
+      failed(label + ': falta la imagen articulada del hueso ' + bone + '.')
+    }
+    for (const state of states) {
+      const frames = part.states[state]
+      if (!Array.isArray(frames) || frames.length === 0
+        || frames.some(i => !Number.isInteger(i) || i < 0 || i >= total)) {
+        failed(label + ': faltan fotogramas PNG válidos para ' + bone + '/' + state + '.')
+      }
+    }
+  }
+}
+
+/**
  * Enforce a deliberate prototype-vs-production game art contract. An illustrated
  * hero must be loaded and drawn at runtime, never replaced with a box-based
  * mock while the generated hero remains an unused concept image.
@@ -66,6 +110,10 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
     failed('art.hero.frameWidth/frameHeight deben dividir exactamente el tamaño del atlas PNG.')
   }
   const total = atlas.width / (hero.frameWidth as number) * atlas.height / (hero.frameHeight as number)
+  const bones = record(manifest.motion) && record(manifest.motion.rig) && Array.isArray(manifest.motion.rig.bones)
+    ? manifest.motion.rig.bones.filter(record).map(b => b.id).filter(nonempty) : []
+  validateArticulatedSkin(hero, atlas, ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death'],
+    'protagonista', bones)
   if (!record(hero.animations)) failed('falta art.hero.animations con índices de frames reales.')
   for (const state of ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death']) {
     const frames = hero.animations[state]
@@ -85,8 +133,23 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
     .map(match => match[2] ?? '').join('\n')
   const imageBindings = [...runtime.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*document\.getElementById\(\s*(["'])([^"']+)\2\s*\)/gu)]
   const drawnVariables = new Set([...runtime.matchAll(/\.drawImage\s*\(\s*([A-Za-z_$][\w$]*)\s*,/gu)].map(match => match[1]))
+  // Support legitimate articulated PNG integration. A production character can
+  // be rendered via PhoenixRiggedArt.actor(...).draw(...) rather than a direct
+  // ctx.drawImage(imageVariable, ...). The bridge itself invokes drawImage for
+  // every authored sprite piece. Reject an unused sprite / merely named rig.
+  const riggedCalls = [...runtime.matchAll(
+    /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*PhoenixRiggedArt\.actor\s*\(\s*\{([\s\S]{0,1200}?)\}\s*\)/gu)]
+  const riggedActors = new Set(riggedCalls
+    .filter(call => {
+      const actorName = call[1]
+      return actorName !== undefined && new RegExp('\\b' + actorName + '\\.draw\\s*\\(', 'u').test(runtime)
+    })
+    .flatMap(call => {
+      const identifier = /\bimage\s*:\s*([A-Za-z_$][\w$]*)\b/u.exec(call[2] ?? '')?.[1]
+      return identifier === undefined ? [] : [identifier]
+    }))
   const usedByDraw = (id: string): boolean => imageBindings.some(match =>
-    match[3] === id && drawnVariables.has(match[1] ?? ''))
+    match[3] === id && (drawnVariables.has(match[1] ?? '') || riggedActors.has(match[1] ?? '')))
   if (!usedByDraw(hero.imageId)) failed('el sprite del protagonista no se carga y dibuja con drawImage en el juego.')
   for (const item of art.backgrounds) {
     if (record(item) && nonempty(item.imageId) && !usedByDraw(item.imageId)) {
@@ -109,6 +172,7 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
         if (ids.has(entry.id) || images.has(entry.imageId)) failed('art.' + name + ' reutiliza un id/atlas en papeles diferentes.')
         ids.add(entry.id); images.add(entry.imageId)
         const atlas = imageById(html, entry.imageId)
+        if (states.length > 0) validateArticulatedSkin(entry, atlas, states, name + '/' + entry.id)
         if (!usedByDraw(entry.imageId)) failed('art.' + name + ' no se dibuja con drawImage: ' + entry.id)
         if (states.length === 0) continue
         if (!Number.isInteger(entry.frameWidth) || !Number.isInteger(entry.frameHeight)
