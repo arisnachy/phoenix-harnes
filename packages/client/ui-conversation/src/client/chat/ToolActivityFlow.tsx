@@ -289,7 +289,7 @@ export function addBrowserCards(
 export function isGameReopenPrompt(text: string): boolean {
   const normalized = text.normalize('NFD').replace(/[\u0300-\u036f]/gu, '').toLowerCase()
   if (/\b(?:no|nunca)\s+(?:abras|abrir|muestres|mostrar|juegues|jugar)\b/u.test(normalized)) return false
-  const action = /\b(?:abre|abrir|abreme|muestra|muestrame|mostrar|ensena|ensename|ver|verlo|verla|veamos|dejame|jugar|juguemos|juego|play|open|show)\b/u
+  const action = /\b(?:abre|abrir|abreme|muestra|muestrame|mostrar|ensena|ensename|ver|verlo|verla|veamos|dejame|jugar|juguemos|play|open|show)\b/u
   const game = /\b(?:juego|juegos|videojuego|videojuegos|game|games|game studio|pac[\s-]?man|tetris|snake|pong|arkanoid|contra|minecraft|sudoku|ajedrez)\b/u
   return action.test(normalized) && game.test(normalized)
 }
@@ -351,12 +351,15 @@ export function addGameReopenCards(
     const nextUserOffset = nodes.slice(index + 1)
       .findIndex(node => node.kind === 'user' || node.kind === 'steering')
     const nextUser = nextUserOffset < 0 ? nodes.length : index + 1 + nextUserOffset
-    if (nodes.slice(index + 1, nextUser).some(node => gameArtifact(node) !== undefined)) continue
+    const name = namedGame(text)
+    if (nodes.slice(index + 1, nextUser).some(node => {
+      const published = gameArtifact(node)
+      return published !== undefined && (name === undefined || compactName(published.title).includes(name))
+    })) continue
     const previous = nodes.slice(0, index).flatMap(node => {
       const game = gameArtifact(node)
       return game === undefined ? [] : [game]
     })
-    const name = namedGame(text)
     const matching = name === undefined ? previous
       : previous.filter(game => compactName(game.title).includes(name))
     output.push({
