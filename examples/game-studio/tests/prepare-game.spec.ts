@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { validateGameHtml } from '../../../packages/hardness/adapters/src/game-tool.ts'
 import { prepareGameHtml, readGameManifest } from '../prepare-game.ts'
 
 const puzzle = readFileSync(resolve(process.cwd(), 'examples/game-studio/lumen-circuit.html'), 'utf8')
@@ -24,7 +25,7 @@ describe('Phoenix Game Studio publication handshake', () => {
     const metadata = readGameManifest(shooter)
     const without = shooter.replace(manifestScript, '')
     const prepared = prepareGameHtml(without, metadata)
-    expect(auditGameHtml(prepared).valid).toBe(true)
+    expect(validateGameHtml(prepared)).toMatchObject({ schemaVersion: 1, genre: 'run-and-gun' })
     expect(readGameManifest(prepared)).toMatchObject({ genre: 'run-and-gun' })
     expect(prepared).toContain('PhoenixGameKit')
   })
