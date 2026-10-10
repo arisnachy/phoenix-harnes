@@ -21,7 +21,7 @@ function imageById(html: string, id: string): { width: number; height: number; c
   const src = /\bsrc\s*=\s*(["'])(.*?)\1/iu.exec(entry[0])?.[2]
   const png = /^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/u.exec(src ?? '')
   if (png === null) failed('"' + id + '" debe ser un atlas PNG incrustado (data:image/png;base64), no una ruta inaccesible.')
-  const bytes = Buffer.from(png[1], 'base64')
+  const bytes = Buffer.from(png[1] ?? '', 'base64')
   const header = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
   if (bytes.length < 45 || !bytes.subarray(0, 8).equals(header)
     || !bytes.includes(Buffer.from('IDAT')) || !bytes.includes(Buffer.from('IEND'))) {
