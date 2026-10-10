@@ -61,10 +61,12 @@ async function handleLogin(ctx: Context, parsed: RegExpExecArray): Promise<Comma
         return failure(`Login for ${origin} cannot be stored because one of its vault slots is read-only.`)
       }
 
+      // Revoke any older unattended grant before rotating either field. A
+      // failed DPAPI write must never leave an authorized mixed credential pair.
+      await ctx.credentials.unset(refs.autonomous)
       await ctx.credentials.set(refs.account, account)
       await ctx.credentials.set(refs.secret, secret)
-      // This origin-bound marker is the user's one-time authorization for
-      // unattended login and form work on this exact origin.
+      // Restore the exact-origin grant only after both vault writes succeeded.
       await ctx.credentials.set(refs.autonomous, '1')
       return { kind: 'success', text: `Login for ${origin} stored for unattended Phoenix browser use.` }
     }
