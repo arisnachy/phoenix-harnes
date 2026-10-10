@@ -83,11 +83,23 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
   const runtime = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)]
     .filter(match => !/\btype\s*=\s*["']application\/json["']/iu.test(match[1] ?? ''))
     .map(match => match[2] ?? '').join('\n')
-  if (!/\.drawImage\s*\(/u.test(runtime)) failed('no se llama a canvas.drawImage: el diseño no está realmente dibujado en gameplay.')
+  const usedByDraw = (id: string): boolean => {
+    const escaped = id.replace(/[.*+?^${}()|[\]\\]/gu, '\\  if (!/\.drawImage\s*\(/u.test(runtime)) failed('no se llama a canvas.drawImage: el diseño no está realmente dibujado en gameplay.')
   if (!runtime.includes(hero.imageId)) failed('JavaScript no referencia art.hero.imageId; el protagonista diseñado quedó desconectado.')
   for (const item of art.backgrounds) {
     if (record(item) && nonempty(item.imageId) && !runtime.includes(item.imageId)) {
       failed('JavaScript no carga el escenario ilustrado "' + item.imageId + '".')
+    }
+  }')
+    const loaded = new RegExp('\\b(?:const|let|var)\\s+([A-Za-z_$][\\w$]*)\\s*=\\s*document\\.getElementById\\(\\s*["\\']' + escaped + '["\\']\\s*\\)', 'u').exec(runtime)
+    if (loaded?.[1] === undefined) return false
+    const variable = loaded[1]
+    return new RegExp('\\.drawImage\\s*\\(\\s*' + variable + '\\s*,', 'u').test(runtime)
+  }
+  if (!usedByDraw(hero.imageId)) failed('el sprite del protagonista no se carga y dibuja con drawImage en el juego.')
+  for (const item of art.backgrounds) {
+    if (record(item) && nonempty(item.imageId) && !usedByDraw(item.imageId)) {
+      failed('JavaScript no carga ni dibuja con drawImage el escenario ilustrado "' + item.imageId + '".')
     }
   }
   return 'production-structure'
