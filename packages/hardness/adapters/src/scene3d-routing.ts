@@ -1,5 +1,9 @@
 /** Deterministic media choice for Phoenix apps: 3D only adds value for spatial interaction. */
 export type DesignMedium='scene3d'|'image'|'chart'|'app'|'undetermined'
+/** Classify the requested artifact medium using explicit spatial and UI intent.
+ * @param request - User's requested design or application.
+ * @returns The supported artifact medium, or undetermined when unclear.
+ */
 export function choosePhoenixDesignMedium(request:string):DesignMedium{
   const text=request.normalize('NFKD').replace(/[\u0300-\u036f]/gu,'').toLowerCase()
   const spatial=/\b(?:3d|tridimensional|orbitar?|rotar|girarl[oa]?|girable|recorrid[oa]|model[oa]|malla|gltf|glb|blender|cad|mesh|arquitectura|interior|habitacion|muebl\w*|volumen|planta|maqueta|showroom|configurador)\b/u.test(text)
@@ -18,6 +22,7 @@ export function choosePhoenixDesignMedium(request:string):DesignMedium{
   if(spatial&&/\b(?:3d|tridimensional|gltf|glb)\b/u.test(text))return 'scene3d'
   return 'undetermined'
 }
+/** Instructions preventing accidental 3D renders for non-spatial tasks. */
 export const PHOENIX_3D_ROUTING_PROTOCOL =
   'Phoenix design routing: select the artifact medium based on user intent and spatial value, not visual fashion. '+
   'Use phoenix_3d when a request needs orbit/zoom/rotation, spatial volume, a walkable/showroom/product configurator, '+

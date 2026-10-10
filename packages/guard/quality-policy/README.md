@@ -37,8 +37,23 @@ The artifact domain is inferred from touched paths: code, web, docs, data, confi
 
 ### Unresolved-tool recovery
 
+#### What the model sees
+
 If the last tool attempt failed or was blocked and no subsequent tool call succeeded, the turn-stop guard injects a single source-attributed recovery instruction. It also detects a narrow class of premature user handoffs after a technically successful but unhelpful search: the assistant reports that it found no source and asks the user to supply ordinary research inputs instead of delivering a usable answer. That path gets the same bounded recovery steer, without treating ordinary uncertainty or a request for indispensable credentials as an automatic failure. The model must inspect the failure, try a materially different relevant source/tool, or disclose an actual external blocker and deliver the best supported partial result. An unrelated account activation is never a recovery step. No notice is added for a successful alternative, and the same per-human-task `maxStopNudges` limit applies. This may add one model step only on a premature stop following a failure; normal successful turns add no cost.
 
+#### Token effect
+
+The recovery steer adds one bounded notice only when the last tool result was unsuccessful and no successful alternative was observed. Normal turns add none.
+
+#### KV Cache effect
+
+The correction appends new context after the existing prefix, preserving reusable prompt and tool-schema cache entries.
+
+##### Example recovery notice
+
+```markdown
+The previous tool attempt failed. Inspect the failure, try a materially different relevant source, or report the actual blocker and best supported partial result.
+```
 
 ### Post-mutation context
 

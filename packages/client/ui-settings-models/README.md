@@ -33,6 +33,8 @@ A pi-ai profile's `models` list is edited on the card: one row per model showing
 
 **Add a custom provider** declares a route pi-ai does not ship. It is its own card rather than the editor with extra fields, because the route id is being chosen here and the settings address does not exist until it is: one `settings.mutate` sets the whole profile at `providers.<route>`, and the key travels separately through `credentials.set` under the same `<ROUTE>_API_KEY` derivation an existing provider uses. What a hand-declared route cannot default gates the create button — a unique **Provider ID**, an endpoint, a protocol, and at least one uniquely-identified model — so the failure names the field while the user is still looking at it. The id must start with a lowercase letter, because it is also the stem of the derived credential reference and a reference is a POSIX shell identifier: a digit-leading id otherwise passes every check this card makes and then fails at the credential seam with a raw regular expression. Capacities do not gate it: the adapter's fallbacks size a model the endpoint described by id alone, which is what most listings return. The protocol choices are read out of the namespace's own schema rather than a wire field or a constant, so they cannot drift from the ones the adapter accepts. The card records the conventional `apiKeyEnv` reference only when a key is typed, the same rule the editor applies, so a route declared for provider-native authentication is not born pointing at a reference nothing will ever set. When the profile write lands but the key write fails, the provider already exists: the card settles the fields describing it, retries the credential alone — re-running the profile write would carry the revision that write just superseded, so the Host would answer `settings-conflict` and the key could never be stored from here — and reports the created provider even if the user then cancels.
 
+Authorization polling survives panel refreshes and uses the latest completion callback. Provider preparation notices are also displayed in the reserved tab.
+
 ## Model Experience
 
 None, as the section renders a browser configuration UI; nothing here reaches a model request.
@@ -40,8 +42,6 @@ None, as the section renders a browser configuration UI; nothing here reaches a 
 #### KV Cache effect
 
 None; this package neither assembles nor sends a provider request.
-
-Authorization polling survives panel refreshes and uses the latest completion callback. Provider preparation notices are also displayed in the reserved tab.
 
 ## Known Limitations and Deferred Work
 

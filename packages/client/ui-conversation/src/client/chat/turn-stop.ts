@@ -3,7 +3,11 @@ import type { zh } from '../locales.ts'
 
 type StopNoticeKey = Extract<keyof typeof zh, `message.stop.${string}`>
 
-/** Resolve a factual stop notice without asking a failed model to generate prose. */
+/** Resolve a factual stop notice without asking a failed model to generate prose.
+ * @param reason - The actual turn termination reason.
+ * @param hasClosingText - Whether a meaningful final response was already presented.
+ * @returns The appropriate localized stop-notice key, or none when no notice is warranted.
+ */
 export function turnStopNotice(reason: TurnEndReason, hasClosingText: boolean): StopNoticeKey | undefined {
   if (reason.kind === 'completed') return hasClosingText ? undefined : 'message.stop.noFinal'
   if (reason.kind === 'aborted') {

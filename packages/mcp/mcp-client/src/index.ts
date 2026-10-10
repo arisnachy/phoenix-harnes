@@ -157,13 +157,6 @@ const Reconnect: z<ReconnectConfig> = z.object({
   maxAttempts: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(RECONNECT_DEFAULTS.maxAttempts),
 })
 
-const ConnectionConfigFields = {
-  toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
-  failOnStartupError: z.boolean().default(false),
-  startupTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STARTUP_TIMEOUT_MS),
-  reconnect: Reconnect,
-}
-
 export const Config = z.union([
   z.object({
     transport: z.const('stdio'),
@@ -174,7 +167,10 @@ export const Config = z.union([
     envCredentialRefs: z.dict(String).default({}),
     cwd: z.string().default(''),
     supportedPlatforms: z.array(String).default([]),
-    ...ConnectionConfigFields,
+    toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
+    failOnStartupError: z.boolean().default(false),
+    startupTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STARTUP_TIMEOUT_MS),
+    reconnect: Reconnect,
   }),
   z.object({
     transport: z.const('streamable-http'),
@@ -191,7 +187,10 @@ export const Config = z.union([
       z.const('client_secret_post'),
       z.const('client_secret_basic'),
     ]),
-    ...ConnectionConfigFields,
+    toolCallTimeoutMs: z.number().default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
+    failOnStartupError: z.boolean().default(false),
+    startupTimeoutMs: z.number().step(1).min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_STARTUP_TIMEOUT_MS),
+    reconnect: Reconnect,
   }),
 ]) as unknown as z<Config>
 
