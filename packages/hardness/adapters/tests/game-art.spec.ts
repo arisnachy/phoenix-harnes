@@ -80,6 +80,15 @@ describe('Phoenix Game Studio visual asset binding', () => {
       .toThrow('drawImage')
   })
 
+  it('recognizes a linked articulated actor with an actual draw call as using its PNG atlas', () => {
+    const integration = 'const heroActor=PhoenixRiggedArt.actor({engine:PhoenixArticulation,'
+      + 'image:hero,art:manifest.art.hero,rig:rig,clips:clips});heroActor.draw(ctx,0,0);'
+    const articulated = worldHtml.replace('ctx.drawImage(hero,0,0);', integration)
+    expect(validateGameArt(articulated, full)).toBe('production-structure')
+    const unused = articulated.replace('heroActor.draw(ctx,0,0);', '')
+    expect(() => validateGameArt(unused, full)).toThrow('drawImage')
+  })
+
   it('rejects concept art that is present but not rendered in the game', () => {
     expect(() => validateGameArt(html.replace('ctx.drawImage(hero,0,0);', ''), production))
       .toThrow('drawImage')
