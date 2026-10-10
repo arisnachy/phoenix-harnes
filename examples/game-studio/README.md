@@ -31,3 +31,13 @@ Open either `jungle-echo.html` or `lumen-circuit.html` in a modern browser, or p
 For new finished-game requests, Kira uses `productionTier: "polished"`, a required inventory of original/licensed art, characters/enemies/bosses, appropriate weapons, world, title/intro/pause/death/victory screens, story, soundtrack and event-bound SFX. Every `runtimeRef` needs an identifier in executable JavaScript outside manifest JSON, and enemy/boss IDs and animation states must match the runtime asset register. The `phoenix_game` publisher rejects an incomplete premium inventory; the UI preflight also reports specific deficits. See [premium asset pipeline](../../.agents/skills/phoenix-game-studio/references/premium-asset-pipeline.md).
 
 **Important:** Existing Jungle Echo / Lumen Circuit are intentionally `prototype`-level technical baselines. An art inventory with function names can still be fake or ugly: only captured rendering, animation, gameplay and audio checks establish finish quality. A `polished` tier is not an automatic game generator or a quality certification.
+
+
+## Phoenix Articulation Engine (2D + 3D)
+
+- [Architecture, API, genre routing and limitations](ANIMATION_ENGINE.md)
+- `animation-engine.js`: multibone skeletal FK/IK with joint limits, animation crossfades, masking/additive overlay, timeline events, weapon sockets, sprite skin attachments and secondary-motion springs.
+- `animation-engine-3d.js`: hierarchical quaternion skeletons, CCD IK, hinge limits, pose blending, rig retarget mapping and bindings for existing Three.js-like skinned bone objects. This math layer is **not** an entire 3D renderer or skinned-mesh importer.
+- `articulated-arena.html`: offline runnable original animation demonstration with a moving/jumping/shooting hero, articulated enemies, phased boss, and scene/audio interactions. It deliberately remains a **technical prototype** pending premium artwork and full browser/device QA.
+
+Use the 2D engine inline in Phoenix's `phoenix_game` sandbox; source files or remote script links cannot be fetched from within the game viewer. Use Godot/Blender or another actual 3D game engine for skinned GLB models, deformation, physics and production animation graphs.
