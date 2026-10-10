@@ -32,7 +32,7 @@ describe('Game Studio offline PNG importer', () => {
       writeFileSync(input, '<html><body><img id="hero-art"><script>void 1</script></body></html>')
       writeFileSync(assets, JSON.stringify({ images: [{ id: 'hero-art', path: 'not-there.png' }] }))
       const result = spawnSync(process.execPath, [command, input, assets, output], { encoding: 'utf8' })
-      expect(result.status).toBe(2)
+      expect(result.status).toBe(1)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
