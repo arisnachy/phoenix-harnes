@@ -10,11 +10,15 @@ function fixture() {
   roots.push(root)
   const files = {
     'packages/client/ui-conversation/src/client/skeleton/ConversationRoot.module.css':
-      '.unifiedHeader { min-height: 68px; } .unifiedHeader .crumbCurrent { text-overflow: ellipsis; }',
+      '.unifiedHeader { min-height: 90px; } .unifiedHeader .sessionNavRow {} .unifiedHeader .crumbCurrent { text-overflow: ellipsis; }',
     'packages/client/ui-sidebar/src/client/SidebarRoot.module.css':
       '.root.collapsed {} .collapsed .primaryNavigation {} .collapsed .navLink {} --phoenix-side-ember: #e76020;',
     'packages/client/ui-layout/src/client/columns.ts':
-      'export const SIDEBAR_COLLAPSED = 72',
+      'export const SIDEBAR_COLLAPSED = 104',
+    'packages/client/ui-conversation/src/client/chat/ChatView.module.css':
+      '.turnStatusBrand { color: #ea5b22; } .phoenixActivity::before {}',
+    'packages/client/ui-theme/src/theme-settings.ts':
+      "export const DEFAULT_PREFERENCE: ThemePreference = 'light'",
     'packages/client/ui-theme/src/client/styles.ts':
       'installThemeStyles const leases = new Map lease.owners += 1',
     'packages/client/ui-theme/src/styles/base.css': ':root { color-scheme: light; }',
