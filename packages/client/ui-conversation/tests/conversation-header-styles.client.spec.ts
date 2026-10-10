@@ -10,6 +10,10 @@ const heroCss = readFileSync(
   fileURLToPath(new URL('../src/client/skeleton/HeroShell.module.css', import.meta.url)),
   'utf8',
 )
+const conversationRoot = readFileSync(
+  fileURLToPath(new URL('../src/client/skeleton/ConversationRoot.tsx', import.meta.url)),
+  'utf8',
+)
 
 function declarations(selector: string): Map<string, string> | undefined {
   const withoutComments = css.replace(/\/\*[\s\S]*?\*\//g, ' ')
@@ -31,6 +35,9 @@ describe('ConversationRoot premium header', () => {
     expect(declarations('.unifiedHeader')?.get('min-height')).toBe('90px')
     expect(declarations('.unifiedHeader')?.get('grid-template-columns')).toBe('minmax(0, 1fr) auto')
     expect(css).toContain('.unifiedHeader .sessionNavRow')
+    expect(declarations('.unifiedHeader .header')?.get('grid-template-rows')).toBe('34px 30px')
+    expect(declarations('.unifiedHeader .titleRow')?.get('grid-template-columns')).toBe('minmax(0, 1fr) auto')
+    expect(declarations('.unifiedHeader .sessionNavRow')?.get('overflow-x')).toBe('auto')
     expect(css).toContain('.unifiedHeader .crumbCurrent')
     expect(css).toContain('text-overflow: ellipsis;')
     expect(css).toContain('.unifiedHeader .headerUtilities')
@@ -41,7 +48,9 @@ describe('ConversationRoot premium header', () => {
   it('keeps all live header controls and separates hero from active sessions', () => {
     expect(css).toContain(".root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader")
     expect(css).toContain(".root[data-phase='hero'] .sessionChrome { display: none; }")
-    expect(css).toContain('.headerBrand {')
+    expect(css).not.toContain('.headerBrand {')
+    expect(conversationRoot).not.toContain('{hero && <span className={css.headerBrand}>PHOENIX</span>}')
+    expect(conversationRoot).toContain('className={css.headerGlobal}')
     expect(css).toContain('.unifiedHeader .titleRow')
     expect(css).toContain('.unifiedHeader .headerActions')
     expect(css).toContain('.unifiedHeader .tabs')
