@@ -24,7 +24,7 @@ function fixture() {
   })
   const agent = { followup, whenIdle: async () => undefined, session: { deriveMessages: () => messages } }
   const agents = { get: vi.fn(() => undefined), create: vi.fn(async () => ({ agent, dispose: async () => undefined })), resume: vi.fn(async () => ({ agent, dispose: async () => undefined })) }
-  const context = { get: (name: string) => name === 'credentials' ? creds : name === 'agents' ? agents : undefined, logger: () => ({ warn: vi.fn() }) }
+  const context = { get: (name: string) => name === 'credentials' ? creds : name === 'agents' ? agents : undefined, logger: { warn: vi.fn() } }
   const inbox = new TelegramInbox(context as never)
   const sent = vi.fn(async (_token: string, _chat: number, _text: string) => undefined)
   const internal = inbox as unknown as {
@@ -50,6 +50,20 @@ describe('Telegram owner-paired Host inbox', () => {
     expect(await f.inbox.isPaired()).toBe(true)
     expect(f.values.get('PHOENIX_TELEGRAM_OWNER_CHAT_ID')).toBe('12345')
     expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, expect.stringContaining('Vinculación confirmada'))
+  })
+
+  it('preserves the same pairing code across Host receiver restarts', async () => {
+    const f = fixture()
+    const code = await f.inbox.pairing()
+    const newReceiver = new TelegramInbox({
+      get: (name: string) => name === 'credentials' ? f.creds : undefined,
+      logger: { warn: vi.fn() },
+    } as never)
+    const internal = newReceiver as unknown as { send: typeof f.sent; process: typeof f.internal.process }
+    internal.send = f.sent
+    await internal.process(makeMessage(12345, `/start ${code}`), TOKEN, f.creds)
+    expect(f.values.get('PHOENIX_TELEGRAM_OWNER_CHAT_ID')).toBe('12345')
+    expect(f.values.has('PHOENIX_TELEGRAM_PAIRING')).toBe(false)
   })
 
   it('sends an authorized text to the real Agent.followup seam and returns its result', async () => {
