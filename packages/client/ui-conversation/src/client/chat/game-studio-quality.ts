@@ -201,9 +201,17 @@ export function readGameManifest(html: string): unknown {
  * @returns Issues and warnings requiring attention before publication.
  */
 export function auditGameHtml(html: string): GameStudioAudit {
-  const result = auditGameManifest(readGameManifest(html))
-  const issues = [...result.issues]
-  const warnings = [...result.warnings]
+  // A missing manifest fails metadata preflight but does NOT prevent the iframe
+  // from attempting to execute. Never misdiagnose a blank game as a JSON error.
+  const manifestTags = [...html.matchAll(/<script\\b([^>]*)>[\\s\\S]*?<\\/script\\s*>/giu)]
+    .filter(match => /\\bid\\s*=\\s*["']phoenix-game-manifest["']/iu.test(match[1] ?? ''))
+  const parsed = readGameManifest(html)
+  const result = parsed === undefined ? undefined : auditGameManifest(parsed)
+  const issues = result === undefined ? [manifestTags.length === 0
+    ? 'game-manifest-missing'
+    : 'game-manifest-invalid-json-or-type'] : [...result.issues]
+  if (manifestTags.length > 1) issues.push('game-manifest-duplicated')
+  const warnings = [...(result?.warnings ?? [])]
   if (/(<script\b[^>]*\bsrc\s*=|<link\b[^>]*\bhref\s*=)/iu.test(html)) issues.push('external-script-or-stylesheet-blocked')
   if (/(<img\b[^>]*\bsrc\s*=\s*["']https?:|\bfetch\s*\(|\bXMLHttpRequest\b)/iu.test(html)) warnings.push('network-assets-blocked-in-game-sandbox')
   if (!/<canvas\b/iu.test(html)) warnings.push('no-canvas-found')
@@ -212,6 +220,8 @@ export function auditGameHtml(html: string): GameStudioAudit {
     valid: issues.length === 0,
     issues: [...new Set(issues)],
     warnings: [...new Set(warnings)],
-    summary: issues.length ? 'Game preview requires repairs' : result.summary,
+    summary: issues.length
+      ? 'Game Studio structural preflight needs repairs; the isolated preview still attempts to run HTML, so diagnose blank screens separately'
+      : result?.summary ?? 'Game Studio manifest requires repair',
   }
 }
