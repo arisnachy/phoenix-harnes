@@ -109,7 +109,7 @@ export function ConversationSessionHeader({
                     ...last ? {} : { openTitle: () => { open(summary.id) } },
                   }
                   return (
-                    <span key={summary.id} className={css.crumbSeg}>
+                    <span key={summary.id} className={css.crumbSeg} title={summary.displayTitle}>
                       {index > 0 && <span className={css.crumbSep}>/</span>}
                       {lineage
                         ? summary.subagent

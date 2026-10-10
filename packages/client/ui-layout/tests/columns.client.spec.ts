@@ -17,6 +17,10 @@ describe('clampWidth', () => {
 })
 
 describe('computeColumns', () => {
+  it('keeps a 72px icon rail in the compact layout', () => {
+    expect(SIDEBAR_COLLAPSED).toBe(72)
+  })
+
   it('step 1: everything fits at preferred widths', () => {
     const cols = computeColumns(1920, open(SIDEBAR_DEFAULT), open(DETAILS_DEFAULT))
     expect(cols).toEqual({ sidebar: 280, center: 1920 - 280 - 360, details: 360 })

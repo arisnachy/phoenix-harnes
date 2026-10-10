@@ -27,6 +27,14 @@ function declarations(selector: string): Map<string, string> | undefined {
 }
 
 describe('ConversationRoot premium header', () => {
+  it('uses a compact conversation bar with resilient long titles', () => {
+    expect(css).toContain('min-height: 68px;')
+    expect(css).toContain('.unifiedHeader .crumbCurrent')
+    expect(css).toContain('text-overflow: ellipsis;')
+    expect(css).toContain('.unifiedHeader .headerUtilities')
+    expect(css).toContain('@media (max-width: 720px)')
+  })
+
   it('uses compact shell geometry', () => {
     expect(declarations('.header')?.get('padding')).toBe('8px 16px 0')
     expect(declarations('.titleRow')?.get('min-height')).toBe('36px')
