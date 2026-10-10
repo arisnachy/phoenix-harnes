@@ -17,6 +17,11 @@ Para cualquier juego final/pulido, lee la guía `.agents/skills/phoenix-game-stu
 
 Al publicar con `phoenix_game`, configura `productionTier: "polished"`, `production.artDirection`, `story`, `screens`, `assets` y `audioBindings`. IDs de enemigos/jefe y estados de animación deben enlazarse a los elementos del manifiesto, y las referencias JavaScript deben existir fuera del JSON. La puerta estática comprueba esa integridad; comprueba con **ejecución real** además las pantallas, llamadas a dibujo, sprites visibles, animaciones, sonidos y trama. No presentes un modo `prototype` como juego premium. Evita copiar assets reconocibles sin permiso.
 
+
+## Motor articulado Phoenix (2D y 3D)
+
+Antes de crear movimientos, criaturas, jefes, combate o cinemáticas, consulta `examples/game-studio/ANIMATION_ENGINE.md`: hay dos runtimes reales en `examples/game-studio/animation-engine.js` (2D FK/CCD-IK, restricciones, clips, blending, capas, sprites y sockets) y `examples/game-studio/animation-engine-3d.js` (cuaterniones, 3D FK/IK, retarget, enlaces con esqueletos Three.js). Usa el motor 2D integrado en `examples/game-studio/articulated-arena.html` como ejemplo jugable; copia el código embebido al artefacto Phoenix sin CDN. Mantén el estilo del juego pedido, con **sprites o mallas finales auténticos**, no huesos de depuración como arte profesional. Los juegos 3D complejos requieren además un motor real para *skinning*, deformación, importación GLB/glTF y física. Prueba poses, transiciones, enemigos, accesorios, colisiones y rendimiento mediante fotogramas reales antes de entregar un juego terminado.
+
 ## Decidir antes de construir
 
 Inspecciona el proyecto y conserva su motor. Registra un breve `GAME_PLAN.md`: género y bucle jugable; plataforma y formato de entrega; motor y versión; dirección artística; controles de teclado/mando/táctil; contenido y criterios de aceptación; presupuesto de rendimiento; herramientas disponibles; prueba técnica, visual y de juego; instrucciones de ejecución.
