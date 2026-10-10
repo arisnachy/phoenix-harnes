@@ -183,6 +183,17 @@ function main(): void {
     runScript('build:lib:client', buildEnvironment)
   }
   runScript('build:web', buildEnvironment)
+  // The updater must never promote a technically buildable runtime whose
+  // Phoenix visual chrome/theme was accidentally removed during an upgrade.
+  const visualGuard = spawnSync(process.execPath, [resolve(root, 'scripts', 'phoenix-visual-baseline.mjs')], {
+    cwd: root,
+    env: buildEnvironment,
+    stdio: 'inherit',
+  })
+  if (visualGuard.error !== undefined) throw visualGuard.error
+  if (visualGuard.status !== 0) {
+    throw new Error('build: Phoenix approved visual baseline is missing; refusing to publish client artifacts')
+  }
   const record = writeClientBuildRecord(root, clientEnvironment)
   console.log(
     `build: ${scope} recorded ${String(record.artifacts.fileCount)} client artifact(s) with ${String(Object.keys(record.environment).length)} public value(s)`,
