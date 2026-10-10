@@ -11,8 +11,11 @@ interface GameManifest {
   readonly artPreflight: 'production-structure' | 'prototype' | 'not-required'
 }
 
-/** Validate source packaging without executing untrusted game HTML or claiming gameplay QA. */
-function validateGameHtml(html: string): GameManifest {
+/** Validate source packaging without executing untrusted game HTML or claiming gameplay QA.
+ * @param html - Self-contained HTML from Kira's actual game output.
+ * @returns Parsed manifest basics and art preflight classification.
+ */
+export function validateGameHtml(html: string): GameManifest {
   if (html.trim().length === 0) throw new ToolArgsError(['El videojuego HTML está vacío.'])
   if (/<script\b[^>]*\bsrc\s*=|<link\b[^>]*\bhref\s*=/iu.test(html)) {
     throw new ToolArgsError(['El juego debe incluir su JavaScript y CSS directamente: el visor aislado no carga CDN ni scripts externos.'])
