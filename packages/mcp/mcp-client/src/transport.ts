@@ -35,6 +35,10 @@ function buildChildEnv(extra: Record<string, string>): Record<string, string> {
  *
  * Admit only a verified local Node + npm installation. This deliberately does
  * not install packages, change system PATH, or alter other/user MCP servers.
+ * @param config - MCP transport metadata identifying the curated Fetch server.
+ * @param environment - Sanitized environment for its child process.
+ * @param options - Injectable platform and filesystem probes.
+ * @returns Safe environment with verified local Node tooling when available.
  */
 export function hydrateFetchMcpNodeEnvironment(
   config: { readonly serverName: string; readonly command: string; readonly args: readonly string[] },
