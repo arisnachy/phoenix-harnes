@@ -7,7 +7,7 @@ import VoiceRuntime, {
   type VoiceImportantEvent,
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
-import { CodexRealtimeBridge } from '../src/codex-realtime.ts'
+import { CodexRealtimeBridge, realtimeVoiceForGender } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
   ctx: Context
@@ -408,6 +408,51 @@ describe('Codex realtime app-server notifications', () => {
   })
 })
 
+describe('Codex realtime voice protocol compatibility', () => {
+  it('selects female, male and neutral voices per Codex protocol', () => {
+    expect(realtimeVoiceForGender('feminine', 'v3')).toBe('marin')
+    expect(realtimeVoiceForGender('masculine', 'v3')).toBe('cedar')
+    expect(realtimeVoiceForGender('neutral', 'v3')).toBe('alloy')
+    expect(realtimeVoiceForGender('feminine', 'v1')).toBe('juniper')
+    expect(realtimeVoiceForGender('masculine', 'v1')).toBe('cove')
+    expect(realtimeVoiceForGender('neutral', 'v1')).toBe('breeze')
+  })
+
+  it('starts a fresh thread before retrying legacy V1 after an unsupported V3', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      ensureStarted(): Promise<void>
+      stop(key: string): Promise<boolean>
+      startVoiceThread(model?: string): Promise<string>
+      negotiateRealtime(threadId: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
+      request(method: string, params?: unknown): Promise<unknown>
+    }
+    vi.spyOn(internal, 'ensureStarted').mockResolvedValue()
+    vi.spyOn(internal, 'stop').mockResolvedValue(false)
+    const threads = vi.spyOn(internal, 'startVoiceThread')
+      .mockResolvedValueOnce('v3-thread')
+      .mockResolvedValueOnce('v1-thread')
+    const negotiations = vi.spyOn(internal, 'negotiateRealtime')
+      .mockRejectedValueOnce(new Error('v3 unsupported'))
+      .mockResolvedValueOnce('v=0\\r\\nanswer\\r\\n')
+    const stop = vi.spyOn(internal, 'request').mockResolvedValue({})
+    try {
+      await expect(bridge.start({
+        key: 'kira-live',
+        offerSdp: 'v=0\\r\\noffer\\r\\n',
+        assistantGender: 'feminine',
+      })).resolves.toMatchObject({ threadId: 'v1-thread' })
+      expect(threads).toHaveBeenCalledTimes(2)
+      expect(negotiations.mock.calls.map(call => [call[0], call[2]])).toEqual([
+        ['v3-thread', 'v3'], ['v1-thread', 'v1'],
+      ])
+      expect(stop).toHaveBeenCalledWith('thread/realtime/stop', { threadId: 'v3-thread' })
+    } finally {
+      bridge.close()
+    }
+  })
+})
+
 describe('Codex realtime optional session context', () => {
   it('starts native Codex Realtime even when SessionStore is not injected into the voice plugin', async () => {
     const { voice } = await mountVoice()
@@ -444,7 +489,6 @@ describe('Codex realtime optional session context', () => {
       model: 'gpt-6-luna',
       assistantName: 'KIRA',
       assistantGender: 'feminine',
-      voice: 'juniper',
     }))
   })
 })
@@ -519,7 +563,6 @@ describe('Codex realtime profile identity', () => {
     expect(start).toHaveBeenCalledWith(expect.objectContaining({
       assistantName: 'Marco',
       assistantGender: 'masculine',
-      voice: 'cove',
     }))
   })
 })
