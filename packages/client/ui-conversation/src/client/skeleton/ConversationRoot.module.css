@@ -464,332 +464,195 @@
   .root[data-phase='hero'] .heroWorkspaceRow { padding-left: 12px; }
 }
 
-/* Single responsive conversation command surface: the existing session
-   breadcrumbs/actions/utilities and view tabs remain the owners of their own
-   live actions. Only the search/discovery/profile controls are new chrome. */
+/* PHOENIX LIGHT — approved 2026-10-10 reference.
+   One canonical two-row conversation header: the title never competes with
+   toolbar controls and every functional slot remains in the DOM. */
 .unifiedHeader {
   box-sizing: border-box;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
+  align-items: center;
+  column-gap: 18px;
   flex: 0 0 auto;
   min-width: 0;
-  margin: 10px 14px 0;
-  padding: 8px 16px 0;
-  /* Match the chat canvas; only the delicate frame defines the header. */
-  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 90%, var(--dsw-static-amber-600) 10%);
-  border-radius: 24px;
-  background: var(--dsw-alias-bg-base);
-  box-shadow: 0 4px 18px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 10%, transparent);
+  min-height: 90px;
+  margin: 12px 14px 0 12px;
+  padding: 10px 20px 9px 26px;
+  border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 78%, #e8c9b1 22%);
+  border-radius: 28px;
+  background: var(--dsw-alias-bg-layer-1);
+  box-shadow: 0 4px 18px rgba(87, 59, 37, 0.035);
 }
-.sessionChrome { min-width: 0; }
-.unifiedHeader .header {
+.sessionChrome {
+  grid-column: 1;
   min-width: 0;
+}
+.unifiedHeader .header {
+  display: flex;
+  position: static;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  gap: 0;
+  margin: 0;
   padding: 0;
   border: 0;
 }
 .unifiedHeader .header::after { display: none; }
-.unifiedHeader .titleRow { min-height: 43px; gap: 12px; }
-.unifiedHeader .titleCluster { flex-wrap: wrap; column-gap: 10px; row-gap: 3px; }
-.unifiedHeader .headerActions { flex-wrap: wrap; row-gap: 4px; }
-.unifiedHeader .headerUtilities { margin-left: auto; }
-.unifiedHeader .crumbCurrent { color: var(--dsw-alias-label-primary); font-weight: 600; }
-.unifiedHeader .tabs { gap: 22px; margin-top: 3px; padding-left: 9px; }
-.unifiedHeader .tab { padding-bottom: 11px; }
-.unifiedHeader .tabActive::after {
-  height: 3px;
-  background: var(--dsw-specific-phoenix-accent);
-}
-.headerGlobal {
+.unifiedHeader .titleRow {
   display: flex;
   align-items: center;
+  min-width: 0;
+  min-height: 34px;
+  height: 34px;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+.unifiedHeader .titleCluster {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  min-width: 0;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+.unifiedHeader .crumbs {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.unifiedHeader .crumbSeg { flex-shrink: 1; min-width: 0; }
+.unifiedHeader .crumbSeg:last-child { flex: 1 1 auto; min-width: 0; }
+.unifiedHeader .crumb, .unifiedHeader .crumbCurrent {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unifiedHeader .crumbCurrent { font-weight: 600; color: var(--dsw-alias-label-primary); }
+.unifiedHeader .headerUtilities {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-wrap: nowrap;
+  margin-left: auto;
+  min-width: 0;
+}
+.unifiedHeader .sessionNavRow {
+  display: flex;
+  align-items: center;
+  gap: 27px;
+  min-width: 0;
+  min-height: 30px;
+  height: 30px;
+  overflow: hidden;
+}
+.unifiedHeader .headerActions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  gap: 9px;
+  min-width: 0;
+}
+.unifiedHeader .tabs {
+  display: flex;
+  position: static;
+  align-items: center;
+  justify-content: flex-start;
+  flex: 0 1 auto;
+  gap: 30px;
+  height: 30px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  transform: none;
+}
+.unifiedHeader .tab { padding: 2px 0 8px; }
+.unifiedHeader .tabActive::after {
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: #ef5c20;
+}
+.headerGlobal {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  justify-self: end;
+  align-self: center;
+  flex: 0 0 auto;
+  align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: 11px;
   min-height: 43px;
-  flex: none;
+  min-width: 0;
 }
 .headerToggle {
   display: grid;
   place-items: center;
+  flex: 0 0 auto;
   width: 34px;
   height: 34px;
   padding: 0;
   border: 0;
   border-radius: 12px;
-  color: var(--dsw-alias-label-secondary);
   background: transparent;
+  color: var(--dsw-alias-label-secondary);
   cursor: pointer;
 }
 .headerToggle:hover, .heroTopIcon:hover, .heroTopProfile:hover {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 .headerToggle:focus-visible, .heroTopIcon:focus-visible, .heroTopProfile:focus-visible {
-  outline: 2px solid var(--dsw-specific-phoenix-accent);
+  outline: 2px solid #ef5c20;
   outline-offset: 2px;
 }
-/* On the welcome screen there is no session title/tabs. Keep the global
-   tools in a compact floating toolbar instead of an empty full-width card. */
-.root[data-phase='hero'] .unifiedHeader,
-.root[data-header-compact='true'] .unifiedHeader {
-  display: flex;
-  align-items: center;
-  align-self: flex-end;
-  width: max-content;
-  max-width: calc(100% - 28px);
-  min-height: 0;
-  margin-left: auto;
-  padding: 7px 10px;
-  border-radius: 22px;
-  box-shadow: 0 3px 14px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 8%, transparent);
+.unifiedHeader .heroTopIcon { width: 38px; height: 38px; }
+.unifiedHeader .heroTopProfile { width: 48px; height: 48px; flex-basis: 48px; }
+.root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader {
+  min-height: 78px;
+  padding-block: 5px;
 }
-.root[data-phase='hero'] .headerGlobal,
-.root[data-header-compact='true'] .headerGlobal {
-  min-height: 38px;
-}
-.root[data-phase='hero'] .sessionChrome,
-.root[data-header-compact='true'] .sessionChrome { display: none; }
-@media (max-width: 1120px) {
-  .unifiedHeader { grid-template-columns: minmax(0, 1fr); }
-  .headerGlobal { grid-row: 1; justify-self: end; }
-  .sessionChrome { grid-row: 2; min-width: 0; }
-  .root[data-phase='hero'] .unifiedHeader { grid-template-columns: minmax(0, 1fr) auto; }
-  .root[data-phase='hero'] .headerGlobal { grid-row: 1; grid-column: 2; }
-}
-@media (max-width: 720px) {
-  .unifiedHeader { margin: 6px 8px 0; padding: 6px 9px 0; border-radius: 15px; }
-  .headerGlobal { gap: 4px; }
-  .unifiedHeader .titleRow { align-items: flex-start; flex-wrap: wrap; }
-  .unifiedHeader .titleCluster { flex-wrap: wrap; }
-  .unifiedHeader .headerUtilities { margin: 0; }
-  .unifiedHeader .tabs { margin-top: 7px; }
-}
-
-/* Approved Phoenix shell: slim ~68px chat header proportionate to the
-   72px closed sidebar, with the original utilities and tabs intact. */
-.unifiedHeader {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: 10px;
-  min-height: 68px;
-  margin: 8px 12px 0;
-  padding: 5px 12px 4px;
-  border-radius: 21px;
-}
-.sessionChrome { min-width: 0; }
-.unifiedHeader .header { display: flex; flex-direction: column; min-width: 0; }
-.unifiedHeader .titleRow {
-  min-height: 32px;
-  height: 32px;
-  gap: 6px;
-  min-width: 0;
-  flex-wrap: nowrap;
-}
-.unifiedHeader .titleCluster {
-  flex-wrap: nowrap;
-  column-gap: 7px;
-  row-gap: 0;
-  min-width: 0;
-  overflow: hidden;
-}
-.unifiedHeader .crumbs {
-  min-width: 0;
-  max-width: 100%;
-  flex: 0 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.unifiedHeader .crumbSeg { min-width: 0; }
-.unifiedHeader .crumbSeg:last-child { flex: 0 1 auto; min-width: 0; }
-.unifiedHeader .crumbCurrent {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.unifiedHeader .headerActions { flex: none; flex-wrap: nowrap; row-gap: 0; }
-.unifiedHeader .headerUtilities { flex: none; margin-left: auto; }
-.unifiedHeader .tabs {
-  display: flex;
-  align-items: flex-end;
-  height: 24px;
-  gap: 24px;
-  margin: 0;
-  padding-left: 5px;
-}
-.unifiedHeader .tab { padding-bottom: 5px; }
-.headerGlobal {
-  grid-row: 1;
-  justify-self: end;
-  align-self: center;
-  flex-wrap: nowrap;
-  gap: 5px;
-  min-height: 36px;
-}
-.headerToggle { width: 32px; height: 32px; }
-.unifiedHeader .heroTopIcon { width: 34px; height: 34px; }
-.unifiedHeader .heroTopProfile { width: 36px; height: 36px; flex-basis: 36px; }
-@media (min-width: 721px) and (max-width: 1120px) {
-  .unifiedHeader { grid-template-columns: minmax(0, 1fr) auto; }
-  .sessionChrome { grid-row: 1; grid-column: 1; min-width: 0; }
-  .headerGlobal { grid-row: 1; grid-column: 2; justify-self: end; }
-}
-@media (max-width: 720px) {
-  .unifiedHeader {
-    grid-template-columns: minmax(0, 1fr);
-    margin: 6px 8px 0;
-    padding: 6px 9px;
-    border-radius: 16px;
-  }
-  .sessionChrome { grid-row: 1; grid-column: 1; }
-  .headerGlobal { grid-row: 2; grid-column: 1; justify-self: end; }
-  .unifiedHeader .titleRow { height: 32px; min-height: 32px; flex-wrap: nowrap; align-items: center; }
-  .unifiedHeader .titleCluster { flex-wrap: nowrap; }
-  .unifiedHeader .headerUtilities { margin-left: auto; }
-  .unifiedHeader .tabs { margin-top: 0; }
-}
-
-/* Phoenix balanced header: preserve ALL active-session controls when compact.
-   The tab strip floats over a generous middle lane only on wide viewports. */
-.unifiedHeader,
-.root[data-phase='hero'] .unifiedHeader,
-.root[data-header-compact='true'] .unifiedHeader {
-  position: relative;
-  display: flex;
-  box-sizing: border-box;
-  align-self: stretch;
-  align-items: center;
-  flex: 0 0 auto;
-  gap: 8px;
-  width: auto;
-  max-width: none;
-  min-width: 0;
-  min-height: 56px;
-  margin: 8px 12px 0;
-  padding: 4px 12px;
-  border-radius: 16px;
-  box-shadow: 0 2px 10px color-mix(in srgb, var(--dsw-alias-bg-mask-1) 7%, transparent);
-}
-.sessionChrome {
-  display: block;
-  flex: 1 1 0;
-  min-width: 0;
-}
-.unifiedHeader .header {
-  display: flex;
-  position: static;
-  align-items: center;
-  flex: 1 1 0;
-  gap: 8px;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-}
-.unifiedHeader .header::after { display: none; }
-.unifiedHeader .titleRow {
-  display: flex;
-  flex: 1 1 0;
-  align-items: center;
-  flex-wrap: nowrap;
-  gap: 6px;
-  min-width: 0;
-  min-height: 42px;
-  height: auto;
-}
-.unifiedHeader .titleCluster {
-  flex: 1 1 0;
-  flex-wrap: nowrap;
-  min-width: 0;
-  gap: 6px;
-  overflow: hidden;
-}
-.unifiedHeader .crumbs { flex: 1 1 0; max-width: 100%; min-width: 0; overflow: hidden; }
-.unifiedHeader .crumbSeg { min-width: 0; }
-.unifiedHeader .crumbSeg:last-child { flex: 1 1 auto; min-width: 0; }
-.unifiedHeader .crumbCurrent {
-  display: block;
-  min-width: 0;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.unifiedHeader .crumb { max-width: 100%; }
-.unifiedHeader .headerActions { flex: 0 0 auto; flex-wrap: nowrap; }
-.unifiedHeader .headerUtilities { flex: 0 0 auto; margin-left: auto; }
-.unifiedHeader .tabs {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  height: 42px;
-  margin: 0;
-  padding: 0;
-  transform: translate(-50%, -50%);
-}
-.unifiedHeader .tab { padding: 9px 0; }
-.unifiedHeader .tabActive::after { height: 2px; background: var(--dsw-specific-phoenix-accent); }
-.headerGlobal {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex: 0 0 auto;
-  gap: 5px;
-  min-height: 42px;
-  margin-left: 8px;
-}
-.headerToggle { width: 32px; height: 32px; }
-.unifiedHeader .heroTopIcon { width: 34px; height: 34px; }
-.unifiedHeader .heroTopProfile { width: 36px; height: 36px; flex-basis: 36px; }
 .headerBrand {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 14px;
-  font-weight: 650;
-  letter-spacing: .025em;
-  color: var(--dsw-alias-label-primary);
+  color: #e75e24;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .12em;
 }
-/* Compact mode reduces density, but never hides the conversation title/tabs.
-   The hero uses a left-aligned Phoenix label so its toolbar never floats alone. */
-.root[data-header-compact='true']:not([data-phase='hero']) .sessionChrome { display: block; }
+.root[data-phase='hero'] .unifiedHeader {
+  min-height: 68px;
+}
 .root[data-phase='hero'] .sessionChrome { display: none; }
-.root[data-phase='hero'] .headerGlobal,
-.root[data-header-compact='true'] .headerGlobal { min-height: 42px; }
-@media (max-width: 1400px) {
-  .unifiedHeader .header { flex-direction: column; align-items: stretch; gap: 0; }
-  .unifiedHeader .titleRow { min-height: 36px; }
-  .unifiedHeader .tabs {
-    position: static;
-    height: 25px;
-    justify-content: flex-start;
-    padding-left: 4px;
-    transform: none;
-  }
-  .unifiedHeader .tab { padding: 2px 0 5px; }
-}
-@media (max-width: 920px) {
-  .unifiedHeader .titleRow { flex-wrap: wrap; align-items: flex-start; gap: 2px; }
-  .unifiedHeader .titleCluster { flex: 1 1 100%; min-height: 28px; }
-  .unifiedHeader .headerUtilities { flex: 0 1 auto; flex-wrap: wrap; margin-left: 0; }
-  .headerGlobal { align-self: flex-start; gap: 2px; margin-left: 2px; }
+.root[data-phase='hero'] .headerGlobal { grid-column: 2; }
+@media (max-width: 980px) {
+  .unifiedHeader { gap: 8px; padding-inline: 14px; }
+  .unifiedHeader .headerActions { gap: 5px; }
+  .unifiedHeader .sessionNavRow { gap: 15px; }
+  .unifiedHeader .tabs { gap: 15px; }
+  .unifiedHeader .headerUtilities { max-width: 32vw; overflow: hidden; }
+  .headerGlobal { gap: 3px; }
+  .unifiedHeader .heroTopProfile { width: 38px; height: 38px; flex-basis: 38px; }
 }
 @media (max-width: 720px) {
-  .unifiedHeader,
-  .root[data-phase='hero'] .unifiedHeader,
-  .root[data-header-compact='true'] .unifiedHeader {
-    min-height: 52px;
-    margin: 6px 8px 0;
-    padding: 4px 8px;
-    border-radius: 14px;
+  .unifiedHeader {
+    margin: 7px 8px 0;
+    padding: 8px 10px;
+    min-height: 82px;
+    gap: 6px;
+    border-radius: 20px;
   }
-  .unifiedHeader .crumb { font-size: 13px; padding: 4px 2px; }
-  .unifiedHeader .tabs { gap: 15px; }
-  .headerGlobal { gap: 1px; }
+  .unifiedHeader .titleRow { min-height: 32px; height: 32px; }
+  .unifiedHeader .sessionNavRow { gap: 12px; }
+  .unifiedHeader .headerUtilities { max-width: 23vw; }
+  .unifiedHeader .tabs { gap: 12px; }
+  .unifiedHeader .crumb { font-size: 13px; }
   .unifiedHeader .heroTopIcon { width: 30px; height: 34px; }
-  .unifiedHeader .heroTopProfile { flex-basis: 32px; width: 32px; height: 32px; }
+  .unifiedHeader .heroTopProfile { width: 32px; height: 32px; flex-basis: 32px; }
 }
