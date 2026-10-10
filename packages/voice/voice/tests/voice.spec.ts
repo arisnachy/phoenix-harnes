@@ -427,7 +427,7 @@ describe('Codex realtime voice protocol compatibility', () => {
       negotiateRealtime(threadId: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
       request(method: string, params?: unknown): Promise<unknown>
     }
-    vi.spyOn(internal, 'ensureStarted').mockResolvedValue()
+    vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
     vi.spyOn(internal, 'stop').mockResolvedValue(false)
     const threads = vi.spyOn(internal, 'startVoiceThread')
       .mockResolvedValueOnce('v3-thread')
