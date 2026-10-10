@@ -38,10 +38,30 @@ export interface CodexRealtimeInitialItem {
   readonly text: string
 }
 
-/** Voices accepted by Codex Realtime V1/V3 WebRTC. */
+/** Voices accepted by current Codex Realtime V3 and the legacy V1 path. */
 export type CodexRealtimeVoice =
+  | 'marin' | 'cedar' | 'alloy'
   | 'juniper' | 'maple' | 'spruce' | 'ember' | 'vale'
   | 'breeze' | 'arbor' | 'sol' | 'cove'
+
+/** Pick Kira's voice for the negotiated protocol, not the text model.
+ * @param gender - Persisted assistant presentation.
+ * @param version - Codex Realtime protocol selected by negotiation.
+ * @returns A supported voice identifier for this protocol generation.
+ */
+export function realtimeVoiceForGender(
+  gender: 'masculine' | 'feminine' | 'neutral' = 'feminine',
+  version: 'v3' | 'v1' = 'v3',
+): CodexRealtimeVoice {
+  if (version === 'v1') {
+    if (gender === 'masculine') return 'cove'
+    if (gender === 'neutral') return 'breeze'
+    return 'juniper'
+  }
+  if (gender === 'masculine') return 'cedar'
+  if (gender === 'neutral') return 'alloy'
+  return 'marin'
+}
 
 /** One finalized realtime transcript segment. */
 export interface CodexRealtimeTranscript {
@@ -63,8 +83,6 @@ export interface CodexRealtimeStartOptions {
   readonly assistantName?: string
   /** Persisted Phoenix assistant presentation used for identity wording. */
   readonly assistantGender?: 'masculine' | 'feminine' | 'neutral'
-  /** Explicit realtime voice selected from the persisted presentation. */
-  readonly voice?: CodexRealtimeVoice
   /** Final transcript callback used to mirror the live call into Phoenix chat. */
   readonly onTranscript?: (transcript: CodexRealtimeTranscript) => void
 }
@@ -152,7 +170,11 @@ export class CodexRealtimeBridge {
         // installations can expose the experimental API before they understand
         // V3/Frameless Bidi. Stay inside authenticated Codex Realtime and retry
         // the older AVAS WebRTC protocol instead of falling back to browser TTS.
+        // Stopped Codex threads cannot be reused for another WebRTC negotiation.
         await this.request('thread/realtime/stop', { threadId }).catch(() => {})
+        this.transcriptListeners.delete(threadId)
+        threadId = await this.startVoiceThread(options.model)
+        if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
         answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
       }
       this.sessions.set(options.key, threadId)
@@ -217,6 +239,7 @@ export class CodexRealtimeBridge {
     ])
 
     try {
+      const voice = realtimeVoiceForGender(options.assistantGender, version)
       await this.request('thread/realtime/start', version === 'v3'
         ? {
           threadId,
@@ -235,7 +258,7 @@ export class CodexRealtimeBridge {
             options.assistantName,
             options.assistantGender,
           ),
-          ...(options.voice === undefined ? {} : { voice: options.voice }),
+          voice,
           transport: { type: 'webrtc', sdp: options.offerSdp },
           version,
         }
@@ -246,7 +269,7 @@ export class CodexRealtimeBridge {
             options.assistantName,
             options.assistantGender,
           ),
-          ...(options.voice === undefined ? {} : { voice: options.voice }),
+          voice,
           transport: { type: 'webrtc', sdp: options.offerSdp },
           version,
         })
