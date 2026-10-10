@@ -58,6 +58,24 @@ describe('game development connector pack', () => {
     }
   })
 
+  it('prevents Spanish Game Studio missions from ending with one PNG or an unsupported capability denial', () => {
+    const code = readFileSync(codePreset, 'utf8')
+    const standard = readFileSync(standardPreset, 'utf8')
+    const studioSkill = readFileSync(resolve(root, '.agents/skills/phoenix-game-studio/SKILL.md'), 'utf8')
+    const fallbackGame = resolve(root, 'examples/game-studio/jungle-echo.html')
+
+    expect(code).toContain('Responde en español natural cuando el usuario escribe en español')
+    expect(standard).toContain('Responde en español natural cuando el usuario escriba en español')
+    for (const preset of [code, standard]) {
+      expect(preset).toContain('examples/game-studio/jungle-echo.html')
+      expect(preset).toContain('application/vnd.phoenix.game+html')
+      expect(preset).toContain('spawn_teammate')
+    }
+    expect(studioSkill).toContain('a sprite sheet is an intermediate resource')
+    expect(studioSkill).toContain('Before any "tools unavailable" conclusion')
+    expect(readFileSync(fallbackGame, 'utf8')).toContain('phoenix-game-manifest')
+  })
+
   it('teaches engine routing and both modern-retro and native-retro workflows', () => {
     const directory = resolve(skill, '..')
     const source = ['SKILL.md', 'references/production-art.md', 'references/browser-games.md', 'references/godot-games.md', 'references/native-retro.md'].map(resource => readFileSync(resolve(directory, resource), 'utf8')).join('\n')

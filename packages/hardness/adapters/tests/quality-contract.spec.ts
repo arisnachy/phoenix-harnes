@@ -76,6 +76,16 @@ describe('qualityRequirementsForNeed', () => {
     expect(requirements.length).toBeGreaterThanOrEqual(15)
   })
 
+  it('does not allow a sprite sheet to complete an in-chat playable run-and-gun mission', () => {
+    const requirements = qualityRequirementsForNeed({
+      kind: 'creative',
+      description: 'Kira, crea un videojuego 2D tipo Contra jugable dentro del chat, con La Forja, animaciones, enemigos, jefe y sonido',
+    }).join(' ')
+    expect(requirements).toContain('actual executable integrated game artifact')
+    expect(requirements).toContain('single image-generation receipt cannot close the mission')
+    expect(requirements).toContain('available game skills, runtime, team and artifact-publishing tools')
+  })
+
   it('keeps a strong domain-neutral baseline for unknown capability kinds', () => {
     const requirements = qualityRequirementsForNeed(need('future-capability'))
     expect(requirements.length).toBeGreaterThanOrEqual(3)
