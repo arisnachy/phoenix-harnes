@@ -564,3 +564,88 @@
   .unifiedHeader .headerUtilities { margin: 0; }
   .unifiedHeader .tabs { margin-top: 7px; }
 }
+
+/* Approved Phoenix shell: slim ~68px chat header proportionate to the
+   72px closed sidebar, with the original utilities and tabs intact. */
+.unifiedHeader {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  min-height: 68px;
+  margin: 8px 12px 0;
+  padding: 5px 12px 4px;
+  border-radius: 21px;
+}
+.sessionChrome { min-width: 0; }
+.unifiedHeader .header { display: flex; flex-direction: column; min-width: 0; }
+.unifiedHeader .titleRow {
+  min-height: 32px;
+  height: 32px;
+  gap: 6px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.unifiedHeader .titleCluster {
+  flex-wrap: nowrap;
+  column-gap: 7px;
+  row-gap: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.unifiedHeader .crumbs {
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.unifiedHeader .crumbSeg { min-width: 0; }
+.unifiedHeader .crumbSeg:last-child { flex: 0 1 auto; min-width: 0; }
+.unifiedHeader .crumbCurrent {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unifiedHeader .headerActions { flex: none; flex-wrap: nowrap; row-gap: 0; }
+.unifiedHeader .headerUtilities { flex: none; margin-left: auto; }
+.unifiedHeader .tabs {
+  display: flex;
+  align-items: flex-end;
+  height: 24px;
+  gap: 24px;
+  margin: 0;
+  padding-left: 5px;
+}
+.unifiedHeader .tab { padding-bottom: 5px; }
+.headerGlobal {
+  grid-row: 1;
+  justify-self: end;
+  align-self: center;
+  flex-wrap: nowrap;
+  gap: 5px;
+  min-height: 36px;
+}
+.headerToggle { width: 32px; height: 32px; }
+.unifiedHeader .heroTopIcon { width: 34px; height: 34px; }
+.unifiedHeader .heroTopProfile { width: 36px; height: 36px; flex-basis: 36px; }
+@media (min-width: 721px) and (max-width: 1120px) {
+  .unifiedHeader { grid-template-columns: minmax(0, 1fr) auto; }
+  .sessionChrome { grid-row: 1; grid-column: 1; min-width: 0; }
+  .headerGlobal { grid-row: 1; grid-column: 2; justify-self: end; }
+}
+@media (max-width: 720px) {
+  .unifiedHeader {
+    grid-template-columns: minmax(0, 1fr);
+    margin: 6px 8px 0;
+    padding: 6px 9px;
+    border-radius: 16px;
+  }
+  .sessionChrome { grid-row: 1; grid-column: 1; }
+  .headerGlobal { grid-row: 2; grid-column: 1; justify-self: end; }
+  .unifiedHeader .titleRow { height: 32px; min-height: 32px; flex-wrap: nowrap; align-items: center; }
+  .unifiedHeader .titleCluster { flex-wrap: nowrap; }
+  .unifiedHeader .headerUtilities { margin-left: auto; }
+  .unifiedHeader .tabs { margin-top: 0; }
+}
