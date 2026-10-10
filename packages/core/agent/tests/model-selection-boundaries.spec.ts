@@ -64,6 +64,50 @@ describe('continuation admission from replayed routing evidence', () => {
     try { r.events.push(user('Fix router.ts'), answer(1, 'I will inspect it')); await r.stop(); expect(r.messages).toEqual([]) } finally { await r.close() }
   })
 
+  it.each([
+    'comprobar la disponibilidad de Phoenix Game Studio',
+    'Verifica si está disponible Phoenix Game Studio',
+    'Confirma qué herramientas funcionan en Phoenix',
+    'Consulta el estado de las funciones de Kira',
+    'Check whether Phoenix Game Studio is available',
+  ])('hands a plan-only availability check to Luna exactly once: %s', async (request) => {
+    const r = await router()
+    try {
+      r.events.push(user(request), answer(1,
+        'Plan: Comprobaré si Phoenix Game Studio está disponible en esta sesión '
+        + 'y te diré el resultado con la evidencia visible.'))
+      expect(await r.request()).toMatchObject({ model: 'gpt-6.1-sol' })
+
+      // A real assistant/message can omit source.model. Do not mistake a plan
+      // for successful completion or require another user message to resume.
+      await r.stop()
+      await r.stop()
+      expect(r.messages).toHaveLength(1)
+      expect(JSON.stringify(r.messages[0])).toContain('visible **Plan:**')
+      expect(await r.request(2)).toMatchObject({ model: 'gpt-6-luna' })
+
+      r.events.push(
+        { type: 'tool/call', data: { step: 2, name: 'read', arguments: '{"path":"status"}' } },
+        { type: 'tool/result', data: { step: 2 } },
+        answer(2, 'Resultado: comprobación ejecutada; aquí está la evidencia.'),
+      )
+      await r.stop()
+      expect(r.messages).toHaveLength(1)
+    } finally { await r.close() }
+  })
+
+  it('rescues an unexecuted bare future-tense verification promise without a Plan heading', async () => {
+    const r = await router()
+    try {
+      r.events.push(user('Comprueba el estado de Game Studio'),
+        answer(1, 'Comprobaré las herramientas y después te daré el resultado.'))
+      await r.stop()
+      expect(r.messages).toHaveLength(1)
+      expect(JSON.stringify(r.messages[0])).toContain('Execute the next concrete action')
+      expect(await r.request(2)).toMatchObject({ model: 'gpt-6-luna' })
+    } finally { await r.close() }
+  })
+
   it('treats an incomplete durable stopping reply as no executed action rather than claiming completion', async () => {
     const r = await router()
     try { r.events.push(user('Fix router.ts'), { type: 'assistant/message', data: { turn: 1, step: 1 } }); await r.stop(); expect(r.messages).toHaveLength(1) } finally { await r.close() }
