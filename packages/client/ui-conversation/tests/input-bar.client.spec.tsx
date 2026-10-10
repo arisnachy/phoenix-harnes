@@ -1696,6 +1696,19 @@ describe('command launcher chrome and control seats', () => {
     expect((live.view.getByLabelText(/^访问模式/) as HTMLButtonElement).disabled).toBe(false)
   })
 
+  it('keeps the Codex Live microphone available without browser SpeechRecognition', () => {
+    const browser = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(false)
+    const codex = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    try {
+      const { view } = bench()
+      expect(view.getByRole('button', { name: '开始语音助手' })).toBeDefined()
+    } finally {
+      cleanup()
+      browser.mockRestore()
+      codex.mockRestore()
+    }
+  })
+
   it('does not open a competing browser microphone while Codex Live owns transcript input', async () => {
     class FakeRecognition implements VoiceRecognitionLike {
       static instance: FakeRecognition | undefined
