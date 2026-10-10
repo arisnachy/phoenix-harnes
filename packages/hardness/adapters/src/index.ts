@@ -485,7 +485,9 @@ export async function apply(ctx: Context, config: Config): Promise<() => void> {
         new AttentionStore(`${taskLedgerPath(config)}.attention.json`),
         () => mailbox.attention(),
       ))
-      wake.bindExecutor(createWakeExecutor(agents))
+      wake.bindExecutor(createWakeExecutor(agents, {
+        composeResumedAgent: (agentCtx: Context) => composeResumedScheduledAgent(ctx, agentCtx),
+      }))
       disposers.push(installWakeRuntime(ctx, wake.engine))
       disposers.push(installConnectorEventBridge(ctx, mcpConnectors))
     }

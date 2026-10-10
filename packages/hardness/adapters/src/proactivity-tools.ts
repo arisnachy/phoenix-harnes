@@ -29,6 +29,10 @@ function positiveInteger(value: number | undefined, field: string): number | und
 function recurrenceView(recurrence: ProactivityRecurrence): JsonValue {
   if (recurrence.kind === 'once') return { kind: 'once' }
   if (recurrence.kind === 'interval') return { kind: 'interval', every_ms: recurrence.everyMs }
+  if (recurrence.kind === 'calendar') return {
+    kind: 'calendar', unit: recurrence.unit, every: recurrence.every,
+    ...(recurrence.timezone === undefined ? {} : { timezone: recurrence.timezone }),
+  }
   return {
     kind: 'yearly',
     every_years: recurrence.everyYears,
@@ -96,11 +100,15 @@ async function emailRecipient(
   return resolved
 }
 
-function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone?: string }): ProactivityRecurrence | undefined {
+function recurrence(args: {
+  everyMinutes?: number; everyWeeks?: number; everyMonths?: number; everyYears?: number; timezone?: string
+}): ProactivityRecurrence | undefined {
   const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')
+  const everyWeeks = positiveInteger(args.everyWeeks, 'everyWeeks')
+  const everyMonths = positiveInteger(args.everyMonths, 'everyMonths')
   const everyYears = positiveInteger(args.everyYears, 'everyYears')
-  if (everyMs !== undefined && everyYears !== undefined) {
-    throw new ToolArgsError(['everyMinutes and everyYears are mutually exclusive'])
+  if ([everyMs, everyWeeks, everyMonths, everyYears].filter(value => value !== undefined).length > 1) {
+    throw new ToolArgsError(['only one of everyMinutes, everyWeeks, everyMonths and everyYears may be set'])
   }
   // One-shot and interval tasks are anchored by runAt itself. If runAt already
   // carries an explicit UTC offset, a supplied timezone is harmless context
@@ -108,6 +116,14 @@ function recurrence(args: { everyMinutes?: number; everyYears?: number; timezone
   // are only persisted for yearly recurrence, where local wall-clock time must
   // survive DST/rule changes.
   if (everyMs !== undefined) return { kind: 'interval', everyMs }
+  if (everyWeeks !== undefined) {
+    return { kind: 'calendar', unit: 'week', every: everyWeeks,
+      ...(args.timezone === undefined ? {} : { timezone: args.timezone }) }
+  }
+  if (everyMonths !== undefined) {
+    return { kind: 'calendar', unit: 'month', every: everyMonths,
+      ...(args.timezone === undefined ? {} : { timezone: args.timezone }) }
+  }
   if (everyYears !== undefined) {
     return { kind: 'yearly', everyYears, ...(args.timezone === undefined ? {} : { timezone: args.timezone }) }
   }
@@ -133,8 +149,10 @@ export function createProactivityCreateTool(
       runAt: { type: 'string', required: true, description: 'ISO-8601 date-time for the next delivery occurrence, including the intended UTC offset when known.' },
       requestedByUser: { type: 'boolean', description: 'True when the user explicitly requested this task; false/omitted for Phoenix-initiated work.' },
       everyMinutes: { type: 'number', description: 'Optional anchored recurrence interval in minutes, for example 1440 for daily or 21600 for every 15 days.' },
+      everyWeeks: { type: 'number', description: 'Optional weekly recurrence at the same local clock time, e.g. 1 for every Monday when runAt is a Monday. Supply timezone to handle DST.' },
+      everyMonths: { type: 'number', description: 'Optional monthly recurrence at the same local clock time and original day of month; a 31st is clamped to shorter months without losing the original anchor.' },
       everyYears: { type: 'number', description: 'Optional calendar recurrence in years. Use 1 for birthdays and anniversaries. Mutually exclusive with everyMinutes.' },
-      timezone: { type: 'string', description: 'Optional IANA timezone, for example America/Santo_Domingo. Persisted for everyYears calendar recurrence; accepted but not required for one-shot/interval tasks because runAt defines the exact instant.' },
+      timezone: { type: 'string', description: 'IANA timezone for weekly, monthly and yearly calendar recurrences (for example America/Santo_Domingo). Preserves local wall-clock time across DST. Optional for one-shot/interval tasks.' },
       catchUp: { type: 'string', enum: ['latest', 'all', 'skip'] },
       visibility: { type: 'string', enum: ['visible', 'surprise'] },
       revealAt: { type: 'string', description: 'Optional ISO-8601 time before which an unrevealed surprise is omitted from ordinary task listings. For recurring surprises, omit this to hide each occurrence until its own delivery time.' },
