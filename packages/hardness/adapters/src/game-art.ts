@@ -93,5 +93,92 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
       failed('JavaScript no carga ni dibuja con drawImage el escenario ilustrado "' + item.imageId + '".')
     }
   }
+
+  // A production shooter is a complete illustrated world, not an isolated hero
+  // atlas pasted over placeholder enemies, props, weapons and mountains.
+  if (/run.and.gun|shooter|shoot.em.up/u.test(genre)) {
+    const group = (name: string, min: number, states: readonly string[] = []): RecordValue[] => {
+      const entries = art[name]
+      if (!Array.isArray(entries) || entries.length < min || !entries.every(record)) {
+        failed('falta art.' + name + ': crea e integra todos los diseños antes de declarar arte de producción.')
+      }
+      const images = new Set<string>()
+      const ids = new Set<string>()
+      for (const entry of entries) {
+        if (!nonempty(entry.id) || !nonempty(entry.imageId)) failed('art.' + name + ' requiere id e imageId reales.')
+        if (ids.has(entry.id) || images.has(entry.imageId)) failed('art.' + name + ' reutiliza un id/atlas en papeles diferentes.')
+        ids.add(entry.id); images.add(entry.imageId)
+        const atlas = imageById(html, entry.imageId)
+        if (!usedByDraw(entry.imageId)) failed('art.' + name + ' no se dibuja con drawImage: ' + entry.id)
+        if (states.length === 0) continue
+        if (!Number.isInteger(entry.frameWidth) || !Number.isInteger(entry.frameHeight)
+          || (entry.frameWidth as number) < 8 || (entry.frameHeight as number) < 8
+          || atlas.width % (entry.frameWidth as number) !== 0
+          || atlas.height % (entry.frameHeight as number) !== 0) {
+          failed('art.' + name + ' tiene recortes de sprites inválidos: ' + entry.id)
+        }
+        const count = atlas.width / (entry.frameWidth as number) * atlas.height / (entry.frameHeight as number)
+        if (!record(entry.animations)) failed('art.' + name + ' necesita animaciones para ' + entry.id)
+        for (const state of states) {
+          const frames = entry.animations[state]
+          if (!Array.isArray(frames) || frames.length < 1 || frames.some(index =>
+            !Number.isInteger(index) || index < 0 || index >= count)) {
+            failed('art.' + name + ': faltan frames reales "' + state + '" de ' + entry.id)
+          }
+        }
+      }
+      return entries
+    }
+    const roster = (visual: string, game: string, states: readonly string[]): RecordValue[] => {
+      const declared = manifest[game]
+      if (!Array.isArray(declared) || declared.length === 0 || !declared.every(record)) {
+        failed('faltan ' + game + ' jugables declarados en el manifiesto.')
+      }
+      const characters = group(visual, declared.length, states)
+      for (const entity of declared) {
+        if (!nonempty(entity.id) || !characters.some(entry => entry.id === entity.id)) {
+          failed('el ' + game + ' "' + String(entity.id) + '" no tiene diseño animado propio en art.' + visual)
+        }
+      }
+      return characters
+    }
+    const enemies = roster('enemies', 'enemies', ['move', 'attack', 'hurt', 'death'])
+    const bosses = roster('bosses', 'bosses', ['idle', 'attack', 'hurt', 'death'])
+    for (const boss of bosses) {
+      const declared = (manifest.bosses as RecordValue[]).find(item => item.id === boss.id)
+      if (!Array.isArray(declared?.phases) || !record(boss.phaseAnimations)) {
+        failed('el jefe ' + String(boss.id) + ' necesita diseños para cada fase de combate.')
+      }
+      const animated = boss.animations as RecordValue
+      for (const phase of declared.phases) {
+        const frames: unknown = nonempty(phase) ? boss.phaseAnimations[phase] : undefined
+        if (!Array.isArray(frames) || frames.length === 0
+          || frames.some((frame: unknown) => !Number.isInteger(frame)
+            || (frame as number) < 0
+            || !Object.values(animated).some(value => Array.isArray(value) && value.includes(frame)))) {
+          failed('falta el atlas de animación para la fase "' + String(phase) + '" del jefe ' + String(boss.id))
+        }
+      }
+    }
+    // Backdrops represent the distinct camera layers, not a single generic flat rectangle.
+    const expectedLayers = record(manifest.level) && Array.isArray(manifest.level.layers)
+      ? manifest.level.layers.filter(record) : []
+    if (expectedLayers.length < 3) failed('escenario de producción necesita capas parallax reales.')
+    const backdrops = group('backgrounds', expectedLayers.length)
+    for (const layer of expectedLayers) if (!backdrops.some(entry => entry.id === layer.id)) {
+      failed('falta ilustrar la capa del escenario ' + String(layer.id) + '.')
+    }
+    group('weapons', 1)
+    group('projectiles', 1)
+    group('powers', 1)
+    group('props', 1)
+    group('effects', 2)
+    // No independent family may secretly reuse the same PNG as the hero or
+    // substitute one picture for every enemy, boss, weapon and environment.
+    const all = [art.hero, ...enemies, ...bosses,
+      ...['backgrounds','weapons','projectiles','powers','props','effects'].flatMap(name => art[name] as RecordValue[])]
+    const ids = all.filter(record).map(item => item.imageId).filter(nonempty)
+    if (new Set(ids).size !== ids.length) failed('el protagonista y los elementos del mundo deben tener recursos visuales distintos.')
+  }
   return 'production-structure'
 }

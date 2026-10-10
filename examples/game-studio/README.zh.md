@@ -18,6 +18,12 @@
 - 游戏工件检查支持按类型配置的 `gameType`（横版射击、平台、俯视动作、竞速、解谜、策略、RPG、节奏、模拟、3D 和自定义），因此解谜与竞速游戏无需伪造首领或枪械。
 - 示例包含两种实际游戏循环：射击战斗和连接/旋转谜题。其他类型的配置只验证结构，不会自动生成该类型的实际游戏玩法。
 
+## 全角色与场景的制作计划
+
+制作具象横版射击游戏前，先运行 `node examples/game-studio/plan-game-assets.mjs jungle-echo.manifest.json game-plan.json`。该工具为主角、所有声明的敌人类型、首领各阶段、视差背景层、武器、弹丸、能力、道具、特效和音效创建**待办**任务。Kira 与 La Forja 必须真正制作并整合相应资产；此工具不会自动绘图。
+
+达到制作完成标准的横版射击游戏中，每个 `art.enemies[].id` 和 `art.bosses[].id` 都必须对应真实的游戏实体，并有不同的 PNG 图集、帧网格和动画。首领的每个阶段需要通过 `phaseAnimations` 关联实际帧索引。每个 `level.layers[].id` 都需要对应 `art.backgrounds[].id`；此外需要 `art.weapons`、`art.projectiles`、`art.powers`、`art.props` 和至少两种不同的 `art.effects`。仅将图片嵌入 HTML 却未真正绘制，不能通过发布检查。音质和视觉完成度仍须在实际运行的游戏中验证。
+
 ## 发布清单与美术资源
 
 Game Studio 通过真正的模型工具 `phoenix_game`，在 Phoenix 聊天中发布可玩的独立 HTML。其 `phoenix-game-manifest` JSON 必须如实描述游戏；缺少清单是**结构错误**，并不能证明 JavaScript 启动失败。白屏问题还需通过运行时和浏览器控制台排查。

@@ -22,6 +22,10 @@ A local asset packer copies verified PNG bytes into `<img>` data URI elements be
 
 **Require a hero sprite in every puzzle or racing game.** Rejected because abstract games need no character and may have excellent geometric art.
 
+## Extended full-game production gate
+
+The first diagnosis exposed a wider pattern: Kira generated only a hero sprite sheet and did not create or integrate enemy families, boss phases, backgrounds, weapons, powers, interactive props or effects. The publisher now checks these categories for `art.mode=production` run-and-gun and requires each declared enemy/boss/layer to have a separately identified, actually drawn image. Boss phases must link to real atlas frames. `plan-game-assets.mjs` derives a finite, **pending** cross-discipline task list from the real game manifest; it does not fake artwork. The canonical and standard/code Game Studio skills require finishing these tasks and visual gameplay QA before delivery. Other genres retain appropriately scoped requirements.
+
 ## Consequences
 
 The publisher no longer silently classifies representational box art as professional. Authors must supply real atlases and backgrounds, and transparent/prototype classification remains honest. The checks constrain the supported inline game HTML authoring pattern; native engines need their own import verification. The gate does not prove visual identity, smooth animation, correct alpha pixels, sound fidelity or real-device performance.
