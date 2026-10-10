@@ -24,7 +24,8 @@ describe('Phoenix approved header and thinking reference', () => {
   })
 
   it('centers only first-turn genuine preparation without affecting later messages', () => {
-    expect(toolFlow).toContain("turnStatus?.progress.phase === 'preparing'")
+    expect(toolFlow).toContain("turnStatus?.progress?.phase === 'preparing'")
+    expect(toolFlow).not.toContain("turnStatus?.progress.phase === 'preparing'")
     expect(toolFlow).toContain('hasAssistantSurface(assistant)')
     expect(toolFlow).toContain("data-centered={centered ? 'true' : undefined}")
     expect(toolFlow.match(/centered={centeredPreparing}/g)).toHaveLength(2)
