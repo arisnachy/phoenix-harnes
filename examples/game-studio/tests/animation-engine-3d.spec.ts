@@ -42,7 +42,7 @@ describe('Phoenix Articulation 3D quaternion core', () => {
   it('sorts complex skeleton hierarchies and rejects cyclic topology', () => {
     expect(rig.bones.map(b => b.id)).toEqual(['arm', 'forearm', 'finger'])
     const p = E.restPose(rig)
-    expect(E.fk(rig, p).finger.tip[1]).toBeCloseTo(3.25)
+    expect(E.fk(rig, p).finger!.tip[1]!).toBeCloseTo(3.25)
     expect(() => E.createRig({ bones: [
       { id: 'a', parent: 'b', length: 1 }, { id: 'b', parent: 'a', length: 1 },
     ] })).toThrow('cyclic')
@@ -61,8 +61,8 @@ describe('Phoenix Articulation 3D quaternion core', () => {
     const before = E.socket(rig, E.fk(rig, pose), 'gun')
     pose.rotations.arm = q(Math.PI / 2)
     const after = E.socket(rig, E.fk(rig, pose), 'gun')
-    expect(after.position[0]).toBeLessThan(before.position[0])
-    expect(after.position[1]).toBeLessThan(before.position[1])
+    expect(after.position[0]!).toBeLessThan(before.position[0]!)
+    expect(after.position[1]!).toBeLessThan(before.position[1]!)
   })
 
   it('slerps normalized orientations across clips and masked blends', () => {
@@ -70,12 +70,12 @@ describe('Phoenix Articulation 3D quaternion core', () => {
       arm: [{ time: 0, rotation: q(0) }, { time: 1, rotation: q(Math.PI / 2) }],
     } })
     const middle = E.sample(rig, clip, .5)
-    const length = Math.hypot(...middle.rotations.arm)
+    const length = Math.hypot(...middle.rotations.arm!)
     expect(length).toBeCloseTo(1, 6)
-    expect(middle.rotations.arm[2]).toBeCloseTo(Math.sin(Math.PI / 8))
+    expect(middle.rotations.arm![2]!).toBeCloseTo(Math.sin(Math.PI / 8))
     const rest = E.restPose(rig)
     const masked = E.blend(rig, rest, middle, 1, new Set(['arm']))
-    expect(masked.rotations.arm[2]).toBeCloseTo(middle.rotations.arm[2])
+    expect(masked.rotations.arm![2]!).toBeCloseTo(middle.rotations.arm![2]!)
     expect(masked.rotations.forearm).toEqual([0, 0, 0, 1])
   })
 
@@ -89,7 +89,7 @@ describe('Phoenix Articulation 3D quaternion core', () => {
     const output = E.retarget(rig, dest, sourcePose,
       { shoulder: 'arm', elbow: 'forearm' }, 2)
     expect(output.root.position[0]).toBe(4)
-    expect(output.rotations.shoulder[2]).toBeCloseTo(q(.6)[2] ?? 0)
+    expect(output.rotations.shoulder![2]!).toBeCloseTo(q(.6)[2] ?? 0)
   })
 
   it('integrates with compatible Three.js-like bone objects without requiring an import', () => {
@@ -109,7 +109,7 @@ describe('Phoenix Articulation 3D quaternion core', () => {
     const actor = E.createAnimator(rig, [rest, turn], 'rest', listener)
     actor.play('turn', { fade: .2 })
     actor.update(.3)
-    expect(actor.pose().rotations.arm[2]).toBeGreaterThan(0)
+    expect(actor.pose().rotations.arm![2]!).toBeGreaterThan(0)
     actor.layer('upper', 'turn', { mask: ['arm'], weight: .4 })
     actor.update(.2)
     expect(listener).toHaveBeenCalled()
