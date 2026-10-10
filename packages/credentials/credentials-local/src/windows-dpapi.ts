@@ -15,7 +15,9 @@ export function isProtectedWebLoginRef(ref: string): boolean {
 /** Fixed PowerShell program: script travels as encoded constant argv; input travels on stdin. */
 const PROTECT_SCRIPT = `
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Security
 [Console]::InputEncoding = [Text.Encoding]::UTF8
+[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
 $plain = [Console]::In.ReadToEnd()
 $bytes = [Text.Encoding]::UTF8.GetBytes($plain)
 try {
@@ -26,7 +28,9 @@ try {
 `
 const UNPROTECT_SCRIPT = `
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Security
 [Console]::InputEncoding = [Text.Encoding]::UTF8
+[Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
 $encoded = [Console]::In.ReadToEnd()
 $bytes = [Convert]::FromBase64String($encoded)
 try {
