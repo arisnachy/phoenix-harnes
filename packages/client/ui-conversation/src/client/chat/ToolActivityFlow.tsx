@@ -438,7 +438,11 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t }: {
       <span className={chatCss.phoenixActivity} data-activity={progress.activity} aria-hidden="true">
         <PhoenixLogo size={28} />
       </span>
-      <span className={chatCss.turnStatusText}>{label}</span>
+      <span className={chatCss.turnStatusText}>
+        {label.startsWith('Phoenix ') || label.startsWith('PHOENIX ')
+          ? <><strong className={chatCss.turnStatusBrand}>{label.split(' ')[0]}</strong>{label.slice(label.indexOf(' '))}</>
+          : label}
+      </span>
       {showClock && (
         <span className={chatCss.turnStatusClock} aria-hidden>
           {formatRunDuration(elapsedMs, t)}

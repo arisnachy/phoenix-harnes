@@ -476,3 +476,55 @@
 .modalAction {
   min-width: 72px;
 }
+
+/* Phoenix Light: match approved warm orange activity indicator (real runtime
+   state only; no fake timers, fake thinking messages, or extra agent turns). */
+.turnStatus {
+  height: 38px;
+  align-items: center;
+  gap: 12px;
+  color: var(--dsw-alias-label-primary);
+  font-size: 16px;
+  font-weight: 500;
+}
+.turnStatusText {
+  color: var(--dsw-alias-label-primary);
+  font-weight: 500;
+  font-size: 16px;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
+}
+.turnStatusBrand {
+  margin-right: 0;
+  color: #ea5b22;
+  font-weight: 650;
+  -webkit-text-fill-color: #ea5b22;
+}
+.phoenixActivity {
+  width: 44px;
+  height: 44px;
+}
+.phoenixActivity > img {
+  width: 34px;
+  height: 34px;
+  filter: brightness(0) saturate(100%) invert(47%) sepia(92%) saturate(2370%)
+    hue-rotate(347deg) brightness(100%) contrast(95%) drop-shadow(0 1px 2px rgba(222, 102, 33, .18));
+}
+.phoenixActivity::before {
+  inset: 2px;
+  background: conic-gradient(from 15deg, transparent 0deg, #e96125 77deg,
+    #f8b24d 150deg, #f6d69a 230deg, #e96125 304deg, transparent 360deg);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px));
+}
+.phoenixActivity::after {
+  inset: 7px;
+  background: radial-gradient(circle, rgba(250, 192, 130, .3), transparent 80%);
+  opacity: .5;
+}
+@media (prefers-reduced-motion: reduce) {
+  .phoenixActivity::before, .phoenixActivity::after {
+    animation: none;
+  }
+}
