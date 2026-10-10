@@ -126,5 +126,8 @@
       "path": "examples/game-studio/jungle-echo.html",
       "license": "original"
     }
-  ]
+  ],
+  "art": {
+    "mode": "prototype"
+  }
 }
