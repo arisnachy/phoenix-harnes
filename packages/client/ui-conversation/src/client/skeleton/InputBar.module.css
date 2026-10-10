@@ -534,12 +534,15 @@
 .vaultOverlay {
   position: fixed;
   inset: 0;
-  z-index: 200;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-  background: rgba(15, 23, 42, 0.56);
+  margin: auto;
+  padding: 0;
+  max-width: min(480px, calc(100vw - 32px));
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--dsw-alias-label-primary);
 }
+.vaultOverlay::backdrop { background: rgba(15, 23, 42, .56); }
 .vaultCard {
   box-sizing: border-box;
   display: flex;
