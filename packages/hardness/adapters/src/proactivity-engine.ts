@@ -618,6 +618,21 @@ export class ProactivityEngine {
         status: 'scheduled',
         history: [],
       }
+      // Phoenix-created follow-ups are idempotent while the same mission is
+      // active. User-requested copies remain deliberate and are not collapsed.
+      if (task.createdBy !== 'user') {
+        const equivalent = snapshot.tasks.find(candidate =>
+          candidate.createdBy !== 'user'
+          && (candidate.status === 'scheduled' || candidate.status === 'running' || candidate.status === 'paused')
+          && candidate.title === task.title
+          && candidate.instruction === task.instruction
+          && candidate.condition === task.condition
+          && candidate.delivery === task.delivery
+          && candidate.recipient === task.recipient
+          && candidate.targetAgentId === task.targetAgentId
+          && JSON.stringify(candidate.recurrence) === JSON.stringify(task.recurrence))
+        if (equivalent !== undefined) return cloneTask(equivalent)
+      }
       if (snapshot.tasks.some(candidate => candidate.id === task.id)) throw new Error(`duplicate proactivity task id: ${task.id}`)
       await this.commit([...snapshot.tasks, task])
       return cloneTask(task)
