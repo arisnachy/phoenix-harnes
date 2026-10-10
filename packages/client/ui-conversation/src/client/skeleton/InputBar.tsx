@@ -1017,7 +1017,7 @@ export function InputBar({
             <ContextMeter useProjection={useProjection} t={t} />
             {(voiceState !== 'unsupported' || hasCodexRealtimeVoiceSupport()) && (
               <Tooltip
-                label={voiceEnabled && codexVoiceFailure !== null
+                label={codexVoiceFailure !== null
                   ? `Codex Live no disponible: ${codexVoiceFailure} · voz alternativa`
                   : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
