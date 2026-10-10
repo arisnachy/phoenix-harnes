@@ -7,6 +7,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { auditGameHtml, readGameManifest } from '../../packages/client/ui-conversation/src/client/chat/game-studio-quality.ts'
+import { validateGameArt } from '../../packages/hardness/adapters/src/game-art.ts'
 
 const marker = /<script\b[^>]*\bid\s*=\s*["']phoenix-game-manifest["'][^>]*>/iu
 
@@ -39,6 +40,10 @@ export function prepareGameHtml(source: string, manifest: unknown): string {
   if (!audit.valid) {
     throw new Error('Game Studio structural preflight failed: ' + audit.issues.join(', ')
       + '. Correct the real game/manifest before publishing.')
+  }
+  if (manifest !== null && typeof manifest === 'object' && !Array.isArray(manifest)) {
+    // Match the actual publisher's structural art checks before consuming a tool call.
+    validateGameArt(embedded, manifest as Record<string, unknown>)
   }
   return embedded
 }
