@@ -90,6 +90,7 @@ const PhoenixRiggedArt = (() => {
     const sockets = config.attachments ?? {};
     let state = config.initial ?? 'idle';
     let elapsed = 0;
+    let aimRequest = null;
     return Object.freeze({
       rig, animator, art, image,
       animationMode: type,
@@ -109,8 +110,10 @@ const PhoenixRiggedArt = (() => {
       aim(tip, target, options) {
         assert(type === 'skeletal', 'IK aiming requires individually drawn bone sprites');
         assert(object(target) && finite(target.x) && finite(target.y), 'invalid IK target');
+        aimRequest = { tip, target: { x: target.x, y: target.y }, ...options };
         return engine.solveIK(rig, animator.pose(), tip, target, options);
       },
+      clearAim() { aimRequest = null; },
       draw(ctx, x, y, face = 1, options = {}) {
         assert(ctx && typeof ctx.drawImage === 'function' && typeof ctx.save === 'function',
           'Canvas 2D context required');
@@ -121,10 +124,11 @@ const PhoenixRiggedArt = (() => {
         try {
           if (type === 'skeletal') {
             const pose = animator.pose();
-            if (options.ik) {
-              const target = options.ik.target;
+            const activeAim = options.ik ?? aimRequest;
+            if (activeAim) {
+              const target = activeAim.target;
               assert(object(target) && finite(target.x) && finite(target.y), 'invalid IK aim target');
-              engine.solveIK(rig, pose, options.ik.tip, target, options.ik);
+              engine.solveIK(rig, pose, activeAim.tip, target, activeAim);
             }
             world = engine.drawSprites(ctx, rig, pose, skins, sockets,
               { state, seconds: elapsed });
@@ -147,7 +151,9 @@ const PhoenixRiggedArt = (() => {
         }
       },
       socket(id, origin = { x: 0, y: 0 }, face = 1) {
-        const world = engine.forwardKinematics(rig, animator.pose());
+        const pose = animator.pose();
+        if (aimRequest) engine.solveIK(rig, pose, aimRequest.tip, aimRequest.target, aimRequest);
+        const world = engine.forwardKinematics(rig, pose);
         const position = engine.socketTransform(rig, world, id);
         return { x: origin.x + face * position.x, y: origin.y + position.y,
           angle: face === -1 ? Math.PI - position.angle : position.angle };
