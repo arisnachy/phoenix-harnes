@@ -182,7 +182,7 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
   }
   if (object(value.art)) {
     if (value.art.mode === 'production' && profile === 'beat-em-up') {
-      for (const family of ['enemies', 'bosses', 'backgrounds', 'weapons', 'props', 'effects']) {
+      for (const family of ['enemies', 'bosses', 'backgrounds', 'zones', 'weapons', 'props', 'effects']) {
         if (!Array.isArray(value.art[family]) || value.art[family].length === 0)
           issues.push('missing-production-art:' + family)
       }
