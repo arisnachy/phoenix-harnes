@@ -9,6 +9,7 @@ import {
   parseStableVersion,
   pruneManagedCodexVersions,
   readActiveCodexRuntime,
+  readCodexLiveRepairRequest,
 } from './phoenix-codex-cli-update.mjs'
 
 const temporaryPaths: string[] = []
@@ -89,6 +90,32 @@ describe('PHOENIX managed Codex CLI updater', () => {
       bin: '../../outside.js',
     }))
     expect(readActiveCodexRuntime(home)).toBeUndefined()
+  })
+
+  it('recognizes fresh Live repair requests and ignores stale or damaged markers', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-codex-live-repair-'))
+    temporaryPaths.push(home)
+    const dir = join(home, 'codex-cli')
+    mkdirSync(dir, { recursive: true })
+    const marker = join(dir, 'live-repair-request.json')
+    writeFileSync(marker, JSON.stringify({
+      schema: 1, reason: 'quicksilver-v2', requestedAt: new Date().toISOString(),
+    }))
+    expect(readCodexLiveRepairRequest(home)?.reason).toBe('quicksilver-v2')
+    writeFileSync(marker, JSON.stringify({
+      schema: 1, reason: 'quicksilver-v2',
+      requestedAt: new Date(Date.now() - 35 * 60_000).toISOString(),
+    }))
+    expect(readCodexLiveRepairRequest(home)).toBeUndefined()
+    writeFileSync(marker, '{broken')
+    expect(readCodexLiveRepairRequest(home)).toBeUndefined()
+  })
+
+  it('wakes the existing updater for Live rather than waiting for the six-hour poll', () => {
+    const script = readFileSync(join(process.cwd(), 'scripts', 'phoenix-codex-cli-update.mjs'), 'utf8')
+    expect(script).toContain('request.requestedAt !== handledRepairAt')
+    expect(script).toContain('await waitForPollOrParentExit(parentPid, pollInterval(), home, handledRepairAt)')
+    expect(script).toContain("status: options.repair === true ? 'waiting-upstream' : 'current'")
   })
 
   it('prunes obsolete managed versions and incomplete staging directories', () => {
