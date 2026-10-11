@@ -29,7 +29,7 @@ import {
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
-import { presentModel, providerBrandMark, providerInitial } from './presentation.ts'
+import { isPhoenixAutoRouting, presentModel, providerBrandMark, providerInitial } from './presentation.ts'
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
@@ -312,7 +312,9 @@ export function ModelSelect(
 
   const modelLabel = currentChoice === undefined
     ? t('trigger.fallback')
-    : presentModel(currentChoice.model.name).displayName
+    : isPhoenixAutoRouting(currentChoice.model.id, currentChoice.model.name)
+      ? t('trigger.auto')
+      : presentModel(currentChoice.model.name).displayName
   const triggerAria = currentChoice === undefined
     ? t('trigger.selectAria')
     : effortLabel === undefined
@@ -447,7 +449,9 @@ export function ModelSelect(
                       </button>
                       {expanded && group.models.map((model) => {
                         const selected = state.current?.provider === group.id && state.current.model === model.id
-                        const presentation = presentModel(model.name, model.description)
+                        const presentation = isPhoenixAutoRouting(model.id, model.name)
+                          ? { displayName: t('trigger.auto'), description: t('trigger.autoDetail') }
+                          : presentModel(model.name, model.description)
                         return (
                           <button
                             ref={itemRef()}
