@@ -144,8 +144,11 @@ function main() {
   }
   if (operation !== 'plan' && operation !== 'install' && operation !== 'ensure') throw new Error('Unknown game-tool operation.')
   const platform = values['--platform'] ?? process.platform
-  const plan = installation(target, platform)
-  if (operation === 'plan') { console.log(JSON.stringify({ target, platform, ...plan })); return }
+  if (operation === 'plan') {
+    const plan = installation(target, platform)
+    console.log(JSON.stringify({ target, platform, ...plan }))
+    return
+  }
   const before = readiness(target)
   if (before.ready) {
     console.log(JSON.stringify({ target, ...before, installed: false, action: 'reused-existing' }))
@@ -153,6 +156,7 @@ function main() {
   }
   // The user must have authorized toolchain provisioning in the active game mission.
   // Allowlisted package IDs + no shell + current OS protect against model-supplied commands.
+  const plan = installation(target, platform)
   const result = execute(plan.command, plan.args, 600_000)
   if (result.status !== 0) {
     throw new Error(`Package-manager installation failed (${result.error?.code ?? result.status}); check the verified manager/installation logs. No ready state is claimed.`)
