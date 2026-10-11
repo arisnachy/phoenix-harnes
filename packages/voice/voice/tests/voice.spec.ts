@@ -822,6 +822,63 @@ describe('Codex Live launch regression', () => {
     }
   })
 
+  it('initializes a managed Codex stdio child without acquiring any API key', async () => {
+    const dsh = mkdtempSync(join(tmpdir(), 'phoenix-live-managed-'))
+    const codexHome = join(dsh, 'codex-home')
+    const managed = join(dsh, 'codex-cli')
+    mkdirSync(managed, { recursive: true })
+    mkdirSync(codexHome, { recursive: true })
+    const script = join(managed, 'codex-mock.cjs')
+    writeFileSync(script, [
+      "let input = ''",
+      "process.stdin.setEncoding('utf8')",
+      "process.stdin.on('data', chunk => {",
+      "  input += chunk",
+      "  while (input.includes('\\\\n')) {",
+      "    const end = input.indexOf('\\\\n')",
+      "    const line = input.slice(0, end); input = input.slice(end + 1)",
+      "    if (!line.trim()) continue",
+      "    const request = JSON.parse(line)",
+      "    if (request.id === undefined) continue",
+      "    const args = process.argv.slice(2)",
+      "    const ok = process.env.CODEX_SQLITE_HOME === process.env.CODEX_HOME",
+      "      && args.includes('sqlite_home=' + JSON.stringify(process.env.CODEX_HOME))",
+      "      && args.slice(-2).join(',') === 'app-server,--stdio'",
+      "      && process.env.OPENAI_API_KEY === undefined",
+      "      && request.method !== 'initialize' || false",
+      "    if (request.method === 'initialize') {",
+      "      const valid = process.env.CODEX_SQLITE_HOME === process.env.CODEX_HOME",
+      "        && args.includes('sqlite_home=' + JSON.stringify(process.env.CODEX_HOME))",
+      "        && args.slice(-2).join(',') === 'app-server,--stdio'",
+      "        && process.env.OPENAI_API_KEY === undefined",
+      "        && request.params.capabilities.requestAttestation === false",
+      "      process.stdout.write(JSON.stringify({id: request.id, ...(valid ? {result: {}} : {error: {message: 'invalid startup'}})}) + '\\\\n')",
+      "    } else if (request.method === 'account/read') {",
+      "      process.stdout.write(JSON.stringify({id: request.id, result: {account: {type: 'chatgpt'}}}) + '\\\\n')",
+      "    }",
+      "  }",
+      "})",
+    ].join('\\n'))
+    writeFileSync(join(managed, 'active.json'), JSON.stringify({
+      schema: 1, version: '1.2.3', bin: 'codex-mock.cjs',
+    }))
+    vi.stubEnv('DSH_HOME', dsh)
+    vi.stubEnv('CODEX_HOME', codexHome)
+    vi.stubEnv('CODEX_SQLITE_HOME', 'C:\\stale-runtime\\voice')
+    vi.stubEnv('PHOENIX_CODEX_SQLITE_HOME', 'C:\\stale-runtime')
+    vi.stubEnv('OPENAI_API_KEY', 'not-allowed')
+    const bridge = new CodexRealtimeBridge()
+    try {
+      await expect(bridge.probe()).resolves.toMatchObject({
+        available: true, authenticated: true,
+      })
+    } finally {
+      bridge.close()
+      vi.unstubAllEnvs()
+      rmSync(dsh, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+    }
+  })
+
   it('preserves direct managed and non-Windows launching', () => {
     expect(codexRealtimeLaunchCommand('C:\\managed\\codex.js', 'win32').args[0])
       .toBe('C:\\managed\\codex.js')
