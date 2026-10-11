@@ -174,6 +174,17 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(restartBridgeSource).toContain("value.source === 'updater-ready-state'")
   })
 
+  it('prevents restart loops when a configured Windows port is already occupied', () => {
+    expect(source).toContain("const portIndex = hostArgs.indexOf('--port')")
+    expect(source).toContain("hostArgs.find(arg => arg.startsWith('--port='))")
+    expect(source).toContain('?? process.env.PHOENIX_PORT')
+    expect(source).toContain('?? process.env.PORT')
+    expect(source).toContain("?? '3080'")
+    expect(source).toContain('Number.isInteger(port) && port > 0 && port <= 65535')
+    expect(source).toContain('if (port !== undefined && await existingHostOnPort(port))')
+    expect(source).toContain('No se iniciará un segundo Host')
+  })
+
   it('checks actual TCP bind availability and waits after a Windows Host handoff', () => {
     expect(source).toContain('function existingHostOnPort(port)')
     expect(source).toContain("probe.listen({ host: '127.0.0.1', port, exclusive: true }")
