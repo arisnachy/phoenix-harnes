@@ -381,7 +381,7 @@ export function codexRealtimeStatusFailureReason(
 /** Only Codex's explicit expired/revoked credentials call for a new login. */
 export function codexRealtimeRequiresLogin(reason: string): boolean {
   return reason === 'codex-login-required'
-    || /(?:refresh[\\s_-]*token[^\\r\\n]{0,120}expired|access token could not be refreshed|chatgpt login required|not authenticated|please log out and sign in again)/iu.test(reason)
+    || /(?:refresh[\s_-]*token[^\r\n]{0,120}expired|access token could not be refreshed|chatgpt login required|not authenticated|please log out and sign in again)/iu.test(reason)
 }
 
 /** Show the existing native Codex connection window; never navigate to guessed OAuth URLs. */

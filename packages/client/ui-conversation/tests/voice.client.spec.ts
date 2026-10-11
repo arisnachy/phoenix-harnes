@@ -85,6 +85,8 @@ describe('browser voice adapter', () => {
     try {
       expect(codexRealtimeRequiresLogin('codex-login-required')).toBe(true)
       expect(codexRealtimeRequiresLogin('refresh token has expired')).toBe(true)
+      expect(codexRealtimeRequiresLogin('refresh token has expired')).toBe(true)
+      expect(codexRealtimeRequiresLogin('refresh_token_has_expired')).toBe(true)
       expect(codexRealtimeRequiresLogin('experimental-unavailable')).toBe(false)
       expect(codexRealtimeRequiresLogin('ETIMEDOUT')).toBe(false)
       openCodexReconnection()
