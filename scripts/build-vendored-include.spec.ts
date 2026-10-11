@@ -9,6 +9,7 @@ import {
 const root = resolve('C:/phoenix-runtime-fixture')
 const source = resolve(root, 'vendor/include/src/index.ts')
 const declaration = resolve(root, 'vendor/include/lib/types/index.d.ts')
+const includeJs = resolve(root, 'vendor/include/lib/types/index.js')
 const cordisSource = resolve(root, 'vendor/cordis/src/index.ts')
 const cordisJs = resolve(root, 'vendor/cordis/lib/types/index.js')
 const cordisDeclaration = resolve(root, 'vendor/cordis/lib/types/index.d.ts')
@@ -16,13 +17,18 @@ const cliLink = resolve(root, 'apps/cli/node_modules/@phoenix-ai/cordis-plugin-i
 const bootLink = resolve(root, 'packages/boot/app-boot/node_modules/@phoenix-ai/cordis-plugin-include')
 
 describe('cold isolated Windows build: vendored include repair', () => {
-  it('does not force a rebuild when the generated declaration already exists', () => {
-    const files = new Set([source, declaration])
+  it('does not force a rebuild when both Include JS and declaration entries exist', () => {
+    const files = new Set([source, includeJs, declaration])
     expect(vendoredIncludeTypeRepairNeeded(root, path => files.has(path))).toBe(false)
   })
 
-  it('rebuilds only if include source exists but generated declarations disappeared', () => {
-    const files = new Set([source])
+  it('rebuilds if the Include JS entry vanished but its declaration survived', () => {
+    const files = new Set([source, declaration])
+    expect(vendoredIncludeTypeRepairNeeded(root, path => files.has(path))).toBe(true)
+  })
+
+  it('rebuilds if the Include declaration disappeared but its JS entry survived', () => {
+    const files = new Set([source, includeJs])
     expect(vendoredIncludeTypeRepairNeeded(root, path => files.has(path))).toBe(true)
   })
 
