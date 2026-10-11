@@ -181,9 +181,69 @@ export function validateGameHtml(html: string): GameManifest {
   if (!/<canvas\b|<button\b|<svg\b|<input\b|\brole\s*=\s*["']application["']/iu.test(html)) {
     throw new ToolArgsError(['Falta una superficie interactiva para jugar (Canvas o controles DOM).'])
   }
+  validateBrawlerContract(manifest)
   validateRecordedAudio(html, manifest)
   return { schemaVersion: 1, title: manifest.title, genre: manifest.genre,
     artPreflight: validateGameArt(html, manifest) }
+}
+
+
+/** Enforce beat-em-up production semantics at the publishing boundary, not only in the client preview.
+ * A prototype can still be published for iterative review, but is never reported as completed.
+ */
+function validateBrawlerContract(manifest: Record<string, unknown>): void {
+  const genre = String(manifest.gameType ?? manifest.genre ?? '').toLowerCase()
+  if (!/beat.em.up|beat.?em.?up|brawler|double.dragon|street.fight|pelea.{0,9}callej|lucha.{0,9}callej/u.test(genre)) return
+  const art = manifest.art as Record<string, unknown> | undefined
+  if (!art || typeof art !== 'object' || art.mode !== 'production') return
+  const validObject = (value: unknown): value is Record<string, unknown> =>
+    typeof value === 'object' && value !== null && !Array.isArray(value)
+  const controls = manifest.controls as Record<string, unknown>
+  for (const name of ['move', 'punch', 'kick', 'jump', 'grab']) {
+    if (typeof controls[name] !== 'string' || !String(controls[name]).trim())
+      throw new ToolArgsError(['Game Studio beat-em-up: control necesario ' + name])
+  }
+  const hero = manifest.player as Record<string, unknown> | undefined
+  for (const state of ['idle', 'run', 'jump', 'punch', 'kick', 'grab', 'hurt', 'death']) {
+    if (!validObject(hero?.animations) || !Number.isInteger(hero.animations[state])
+      || (hero.animations[state] as number) < (['punch','kick','grab','run'].includes(state) ? 2 : 1)) {
+      throw new ToolArgsError(['Game Studio beat-em-up: falta animación jugable ' + state])
+    }
+  }
+  const enemies = manifest.enemies
+  if (!Array.isArray(enemies) || enemies.length < 3 || enemies.some(enemy =>
+    !validObject(enemy) || typeof enemy.id !== 'string' || !enemy.id.trim())
+    || new Set(enemies.map(enemy => enemy.id)).size !== enemies.length) {
+    throw new ToolArgsError(['Game Studio beat-em-up: producción exige al menos 3 enemigos originales diferentes.'])
+  }
+  const bosses = manifest.bosses
+  if (!Array.isArray(bosses) || !bosses.length || bosses.some(boss =>
+    !validObject(boss) || !Array.isArray(boss.phases) || boss.phases.length < 2
+      || !Array.isArray(boss.attacks) || boss.attacks.length < 2 || boss.attacks.some((attack: unknown) =>
+        !validObject(attack) || typeof attack.id !== 'string'
+          || typeof attack.telegraphSeconds !== 'number' || attack.telegraphSeconds <= 0))) {
+    throw new ToolArgsError(['Game Studio beat-em-up: jefe necesita 2 fases y 2 ataques con anticipación.'])
+  }
+  const combat = manifest.combat
+  if (!validObject(combat) || combat.depthAxis !== true || combat.knockback !== true
+    || !validObject(combat.hitboxes) || !Array.isArray(combat.combos) || combat.combos.length < 2
+    || !Array.isArray(combat.grapples) || combat.grapples.length < 1) {
+    throw new ToolArgsError(['Game Studio beat-em-up: faltan profundidad, hitboxes, knockback, combos y agarres reales.'])
+  }
+  const level = manifest.level
+  if (!validObject(level) || !validObject(level.belt)
+    || typeof level.belt.minY !== 'number' || typeof level.belt.maxY !== 'number'
+    || level.belt.maxY <= level.belt.minY || !Array.isArray(level.zones) || level.zones.length < 2
+    || !Array.isArray(level.layers) || level.layers.length < 3
+    || typeof level.scrollLength !== 'number' || level.scrollLength < 1200) {
+    throw new ToolArgsError(['Game Studio beat-em-up: crea escenario lateral con profundidad, dos zonas y tres capas.'])
+  }
+  const audio = manifest.audio
+  if (!validObject(audio) || audio.mode !== 'sampled-production'
+    || !Array.isArray(audio.cues)
+    || ['punch', 'kick', 'hit', 'grab', 'boss', 'pickup'].some(cue => !audio.cues.includes(cue))) {
+    throw new ToolArgsError(['Game Studio beat-em-up: audio final requiere samples originales con golpes, agarres, jefe, pickups y música.'])
+  }
 }
 
 /**
@@ -194,7 +254,7 @@ export function validateGameHtml(html: string): GameManifest {
 export function createPhoenixGameTool(): ToolDefinition {
   return defineTool({
     name: 'phoenix_game',
-    description: 'Publish a COMPLETE self-contained PLAYABLE browser game directly inside this PHOENIX chat (Game Studio). Use for any in-chat 2D/2.5D/3D game, arcade, shooter, platformer, puzzle, racing, rhythm or simulation. This is the actual in-chat game publisher; image_generation produces assets only and phoenix_canvas is for non-game apps. Supply HTML with inline CSS and executable JavaScript and interactive Canvas/DOM. ALWAYS author the genuine game manifest FIRST and pass it as manifest_json (a JSON string) alongside HTML; Phoenix inserts the required <script id="phoenix-game-manifest" type="application/json"> automatically if it is absent. The only supported auto-repair is JSON packaging, never made-up gameplay/entities/assets. A correctly typed existing JSON block without id is recovered. Check schemaVersion:1, title, genre, controls, level, audio and genre-specific player/enemies/animations before invoking phoenix_game. The legacy embedded-only manifest remains supported. No "upload rejected, adding manifest" loop. A JSON phoenix-game-manifest (schemaVersion:1, title, genre, controls, level, audio, and genre-appropriate player/enemies/animations). No external CDN, network requests, or remote assets. For representational 2D character games, declare art.mode: production with art.designReference, art.hero sprite PNG atlas frame grid, art.hero.animations and art.backgrounds with actual inline data PNG images referenced by drawImage. A concept/portrait PNG alone is NOT an animated playable character; do not replace an approved character with boxes or primitives. If art is missing, explicitly set art.mode: prototype and say the graphics are UNFINISHED; never present that as a completed professional game. Use the real saved assets and verify screenshot vs approved character. A production run-and-gun requires the COMPLETE independently designed cast and world: art.enemies matching every manifest enemy id, art.bosses with animated frames for EVERY boss phase, art.backgrounds matching each level layer, art.weapons, art.projectiles, art.powers, art.props, and two different art.effects. Create these first, use real images in the running Canvas and never stop after hero-only concept art. Use the finite checklist from examples/game-studio/plan-game-assets.mjs before creation. For a shooter with no art object, publishing is rejected. Use real source/graphics/audio assets only if embed-ready. A game declaring audio.mode=sampled-production MUST embed original/licensed audio clips with ids phoenix-audio-<cue> for every audio.cues entry, phoenix-audio-music for the soundtrack, and phoenix-audio-voice-<name> for audio.voices entries, plus an actual playback call. Missing samples make publication fail; procedural tones are prototypes. The tool emits application/vnd.phoenix.game+html, which PHOENIX already renders in its sandboxed Game Studio player with export and structural preflight. The publication receipt is NOT proof of gameplay, audio or visual quality: run independent tests, report what was actually verified, and never call a PNG-only response a finished game. When La Forja is requested, delegate via the real spawn_teammate tool before publishing if available. No automatic mission termination: do not close a broader game mission until mandatory verification is complete.',
+    description: 'Publish a COMPLETE self-contained PLAYABLE browser game directly inside this PHOENIX chat (Game Studio). Use for any in-chat 2D/2.5D/3D game, arcade, beat-em-up, shooter, platformer, puzzle, racing, rhythm or simulation. This is the actual in-chat game publisher; image_generation produces assets only and phoenix_canvas is for non-game apps. Supply HTML with inline CSS and executable JavaScript and interactive Canvas/DOM. ALWAYS author the genuine game manifest FIRST and pass it as manifest_json (a JSON string) alongside HTML; Phoenix inserts the required <script id="phoenix-game-manifest" type="application/json"> automatically if it is absent. The only supported auto-repair is JSON packaging, never made-up gameplay/entities/assets. A correctly typed existing JSON block without id is recovered. Check schemaVersion:1, title, genre, controls, level, audio and genre-specific player/enemies/animations before invoking phoenix_game. The legacy embedded-only manifest remains supported. No "upload rejected, adding manifest" loop. A JSON phoenix-game-manifest (schemaVersion:1, title, genre, controls, level, audio, and genre-appropriate player/enemies/animations). No external CDN, network requests, or remote assets. For representational 2D character games, declare art.mode: production with art.designReference, art.hero sprite PNG atlas frame grid, art.hero.animations and art.backgrounds with actual inline data PNG images referenced by drawImage. A concept/portrait PNG alone is NOT an animated playable character; do not replace an approved character with boxes or primitives. If art is missing, explicitly set art.mode: prototype and say the graphics are UNFINISHED; never present that as a completed professional game. Use the real saved assets and verify screenshot vs approved character. For Double Dragon-inspired beat-em-up games use gameType=beat-em-up, distinct attack/grab/jump sprites, three original enemy archetypes, a mobile boss with two telegraphed attacks, a walkable depth belt, multi-zone streets, hitboxes, combos, pickups and recorded punch/kick/grab/hit samples. A character-only geometric brawler is art.mode=prototype and MUST NOT be called final. A production run-and-gun requires the COMPLETE independently designed cast and world: art.enemies matching every manifest enemy id, art.bosses with animated frames for EVERY boss phase, art.backgrounds matching each level layer, art.weapons, art.projectiles, art.powers, art.props, and two different art.effects. Create these first, use real images in the running Canvas and never stop after hero-only concept art. Use the finite checklist from examples/game-studio/plan-game-assets.mjs before creation. For a shooter with no art object, publishing is rejected. Use real source/graphics/audio assets only if embed-ready. A game declaring audio.mode=sampled-production MUST embed original/licensed audio clips with ids phoenix-audio-<cue> for every audio.cues entry, phoenix-audio-music for the soundtrack, and phoenix-audio-voice-<name> for audio.voices entries, plus an actual playback call. Missing samples make publication fail; procedural tones are prototypes. The tool emits application/vnd.phoenix.game+html, which PHOENIX already renders in its sandboxed Game Studio player with export and structural preflight. The publication receipt is NOT proof of gameplay, audio or visual quality: run independent tests, report what was actually verified, and never call a PNG-only response a finished game. When La Forja is requested, delegate via the real spawn_teammate tool before publishing if available. No automatic mission termination: do not close a broader game mission until mandatory verification is complete.',
     parameters: {
       title: { type: 'string', required: true, description: 'Human-facing game title.' },
       html: { type: 'string', required: true, description: 'Complete offline HTML5 game with inline JS/CSS and working input/animation/gameplay; separate manifest_json is accepted and embedded automatically.' },
