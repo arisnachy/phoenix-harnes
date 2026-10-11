@@ -6,6 +6,7 @@ import {
   configureCodexRealtimeUserTranscriptHandler,
   configureVoiceAssistantRemote,
   configureVoiceModelRouteResolver,
+  codexRealtimeStatusFailureReason,
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
@@ -57,6 +58,24 @@ describe('browser voice adapter', () => {
   it('reports unsupported browsers without constructing a recognizer', () => {
     expect(hasVoiceRecognition({})).toBe(false)
     expect(createVoiceRecognition(() => {}, () => {}, 'en-US', {})).toBeUndefined()
+  })
+
+  it('reads optional Codex status diagnostics with stale generated Remote types', () => {
+    // The source Host supports `detail` but an incremental client may still
+    // see the previous generated Remote declaration with only `reason`.
+    const legacyStatus = { reason: 'experimental-unavailable' } as const
+    expect(codexRealtimeStatusFailureReason(legacyStatus)).toBe('experimental-unavailable')
+    const extendedStatus = {
+      reason: 'experimental-unavailable',
+      detail: 'Codex CLI native realtime feature is unavailable',
+    } as const
+    expect(codexRealtimeStatusFailureReason(extendedStatus))
+      .toBe('Codex CLI native realtime feature is unavailable')
+    expect(codexRealtimeStatusFailureReason({
+      reason: 'codex-login-required',
+      detail: '  ',
+    })).toBe('codex-login-required')
+    expect(codexRealtimeStatusFailureReason({})).toBe('codex-realtime-unavailable')
   })
 
   it('attempts Codex voice for a Phoenix Auto/non-Codex task route instead of skipping it', async () => {

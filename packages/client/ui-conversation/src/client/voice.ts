@@ -364,6 +364,20 @@ export function isCodexRealtimeVoiceActive(): boolean {
   return codexRealtimeVoiceSession !== undefined
 }
 
+/** Resolve Codex CLI startup errors across old/new generated Host Remote types.
+ * The Host may send a new diagnostic before the client-side generated
+ * declaration is rebuilt. Do not statically access status.detail.
+ * @param status Host status using the minimum common Remote wire contract.
+ * @returns Sanitized Host diagnostic when present, otherwise the status reason.
+ */
+export function codexRealtimeStatusFailureReason(
+  status: Pick<VoiceConversationRealtimeStatus, 'reason'> & { readonly detail?: unknown },
+): string {
+  const detail = 'detail' in status && typeof status.detail === 'string'
+    ? status.detail.trim() : ''
+  return detail || status.reason || 'codex-realtime-unavailable'
+}
+
 /** Result of one attempt to enter native Codex voice independently of the task model. */
 export type CodexRealtimeVoiceStartResult =
   | { readonly kind: 'started' }
@@ -406,7 +420,11 @@ export async function tryStartCodexRealtimeVoice(
     if (!capability.value.enabled || !capability.value.available || !capability.value.authenticated) {
       return {
         kind: 'failed',
-        reason: capability.value.detail ?? capability.value.reason ?? 'codex-realtime-unavailable',
+        // Incremental client builds may still hold the previous generated
+        // @phoenix-ai/dsh-api-remotes/client status declaration without
+        // "detail". Detect this optional wire extension structurally so both
+        // old and new Remote contracts compile and report the right failure.
+        reason: codexRealtimeStatusFailureReason(capability.value),
       }
     }
   } catch {
