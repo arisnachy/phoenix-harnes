@@ -110,7 +110,7 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
     match[3] === id && drawnVariables.has(match[1] ?? ''))
     || (family === 'backgrounds' && dynamicBackdrop)
     || (['hero', 'enemies', 'bosses'].includes(family) && dynamicAtlas && callsFamily('drawArt', family))
-    || (['weapons', 'projectiles', 'powers', 'props', 'effects'].includes(family)
+    || (['weapons', 'projectiles', 'powers', 'props', 'effects', 'zones'].includes(family)
       && dynamicWorld && callsFamily('drawWorldAsset', family))
   if (!usedByDraw(hero.imageId, 'hero')) failed('el sprite del protagonista no se carga y dibuja con drawImage en el juego.')
   for (const item of art.backgrounds) {
@@ -175,9 +175,20 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
         failed('el jefe ' + String(boss.id) + ' necesita diseños para cada fase de combate.')
       }
       const animated = boss.animations as RecordValue
+      if (isBrawler) {
+        if (!Array.isArray(declared.attacks) || declared.attacks.length < 2)
+          failed('el jefe beat-em-up necesita dos ataques distintos y animados.')
+        for (const attack of declared.attacks) {
+          if (!record(attack) || !nonempty(attack.id)) failed('ataque de jefe sin identificador.')
+          const sequence = animated[attack.id]
+          if (!Array.isArray(sequence) || new Set(sequence).size < 2)
+            failed('el ataque de jefe ' + attack.id + ' requiere al menos dos fotogramas diferentes.')
+        }
+      }
       for (const phase of declared.phases) {
         const frames: unknown = nonempty(phase) ? boss.phaseAnimations[phase] : undefined
-        if (!Array.isArray(frames) || frames.length === 0
+        if (!Array.isArray(frames) || frames.length < (isBrawler ? 2 : 1)
+          || (isBrawler && new Set(frames).size < 2)
           || frames.some((frame: unknown) => !Number.isInteger(frame)
             || (frame as number) < 0
             || !Object.values(animated).some(value => Array.isArray(value) && value.includes(frame)))) {
@@ -193,6 +204,14 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
     for (const layer of expectedLayers) if (!backdrops.some(entry => entry.id === layer.id)) {
       failed('falta ilustrar la capa del escenario ' + String(layer.id) + '.')
     }
+    if (isBrawler) {
+      const zones = record(manifest.level) && Array.isArray(manifest.level.zones)
+        ? manifest.level.zones.filter(record) : []
+      if (zones.length < 2) failed('beat-em-up requiere dos zonas de escenario distintas.')
+      const zoneArt = group('zones', zones.length)
+      for (const zone of zones) if (!zoneArt.some(entry => entry.id === zone.id))
+        failed('falta el arte original de la zona ' + String(zone.id))
+    }
     group('weapons', 1)
     if (isShooter) { group('projectiles', 1); group('powers', 1) }
     group('props', 1)
@@ -200,7 +219,7 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
     // All required families have distinct PNG bindings; optional genre-specific families are excluded.
     const families = isShooter
       ? ['backgrounds', 'weapons', 'projectiles', 'powers', 'props', 'effects']
-      : ['backgrounds', 'weapons', 'props', 'effects']
+      : ['backgrounds', 'zones', 'weapons', 'props', 'effects']
     const all = [art.hero, ...enemies, ...bosses,
       ...families.flatMap(name => art[name] as RecordValue[])]
     const ids = all.filter(record).map(item => item.imageId).filter(nonempty)
