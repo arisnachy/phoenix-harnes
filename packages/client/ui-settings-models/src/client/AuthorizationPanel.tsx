@@ -525,7 +525,7 @@ function accountGrantConnectsCatalogEntry(account: Entry | undefined): boolean {
   return scopedConnectors === undefined || scopedConnectors.length === 0
 }
 
-function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, telegram, connected, t, authorizationProgress,
+function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw, telegram, connected, reauthorizeCodex, t, authorizationProgress,
   onAuthorize, onDisconnect, onConfigure, onInstallCurated, onFindOfficial, onFindRegistry, onReconnect, onRepair, onRemove,
   pending, installingCurated, reconnecting,
   repairing, removing }: {
@@ -537,6 +537,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
   openClaw?: OpenClawConnectorView | undefined
   telegram?: TelegramBotClient | undefined
   connected: boolean
+  reauthorizeCodex?: boolean
   t: ConnectorsSettingsSectionProps['connectorT']
   authorizationProgress?: ReactNode
   onAuthorize: (entry: Entry) => void
@@ -582,7 +583,8 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     : undefined
   // MCP state is authoritative whenever installed: a gh CLI session cannot
   // hide a failed or unauthenticated GitHub MCP.
-  const status = (managed !== undefined || mcpRuntime !== undefined ? mcpStatus : undefined)
+  const status = (reauthorizeCodex ? { text: t('reconnectRequiredStatus'), className: connectorStyles['connectorStatusWarn'] ?? '' } : undefined)
+    ?? (managed !== undefined || mcpRuntime !== undefined ? mcpStatus : undefined)
     ?? openClawStatus ?? mcpStatus ?? liveStatus ?? (connectedByAccount
     ? { text: t('connectedStatus'), className: connectorStyles['connectorStatusReady'] ?? '' }
     : definition.id === 'binance'
@@ -607,7 +609,9 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     && authorizationAccount?.stored !== undefined
   const openClawRuntimeMissing = definition.id === 'github' && openClaw?.phase === 'missing-runtime'
   const shouldShowAuthorization = authorizationAccount !== undefined
-    && !connectedByAccount
+    // Stored Codex OAuth credentials are not proof that their refresh token works.
+    // Native Live must always offer reauthorization, including expired grants.
+    && (definition.id === 'codex' || !connectedByAccount)
     && (openClaw?.connected !== true || managed !== undefined || mcpRuntime !== undefined)
     && (!openClawRuntimeMissing || managed !== undefined || mcpRuntime !== undefined)
     && (definition.id === 'codex' || authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required'
@@ -1938,6 +1942,7 @@ export function ConnectorsSettingsSection({ api,
                   openClaw={row.openClaw}
                   telegram={telegram}
                   connected={row.connected}
+                  reauthorizeCodex={launchContext === 'codex-reconnect' && row.definition.id === 'codex'}
                   t={connectorT}
                   authorizationProgress={preparingKey !== undefined && preparingKey === authorizationKey ? (
                     <p role="status" className={styles['advancedHint']}>Iniciando autorización…</p>
