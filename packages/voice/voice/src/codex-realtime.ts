@@ -238,21 +238,21 @@ export class CodexRealtimeBridge {
     try {
       threadId = await this.startVoiceThread(options.model)
       if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
+      // Restore Kira's original Codex CLI Juniper voice (legacy V1).
+      // The newer Frameless V3 uses another voice (Marin). If the installed
+      // CLI no longer supports V1, transparently retry V3 using a fresh thread.
+      // Neither attempt uses browser or system speech synthesis.
       let answerSdp: string
       try {
-        answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
+        answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
       } catch (error) {
         if (!isRealtimeVersionCompatibilityError(error)) throw error
-        // Realtime V3 is the preferred native Codex Live path. Older Codex
-        // installations can expose the experimental API before they understand
-        // V3/Frameless Bidi. Stay inside authenticated Codex Realtime and retry
-        // the older AVAS WebRTC protocol instead of falling back to browser TTS.
-        // Stopped Codex threads cannot be reused for another WebRTC negotiation.
+        // Codex realtime threads cannot be reused after a failed negotiation.
         await this.request('thread/realtime/stop', { threadId }).catch(() => {})
         this.transcriptListeners.delete(threadId)
         threadId = await this.startVoiceThread(options.model)
         if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
-        answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
+        answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
       }
       this.sessions.set(options.key, threadId)
       this.armCallExpiry(options.key)
@@ -734,7 +734,7 @@ function isThreadModelCompatibilityError(value: unknown): boolean {
 function isRealtimeVersionCompatibilityError(value: unknown): boolean {
   const message = errorText(value)
   // oxlint-disable-next-line @stylistic/max-len -- Keep the protocol compatibility matcher auditable as one literal.
-  return /notification timed out: thread\/realtime\/sdp|\b(?:400|404)\b|bad request|(?:v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v3|frameless|gpt-live-1-codex)/iu.test(message)
+  return /notification timed out: thread\/realtime\/sdp|\b(?:400|404)\b|bad request|(?:v1|legacy|avas|v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v1|legacy|avas|v3|frameless|gpt-live-1-codex)/iu.test(message)
 }
 
 function realtimeNotificationMessage(value: unknown, fallback: string): string {
