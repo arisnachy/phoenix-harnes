@@ -7,6 +7,7 @@ const updater = readFileSync(resolve('scripts/phoenix-auto-update.mjs'), 'utf8')
 const supervisor = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
 const managedUpdater = readFileSync(resolve('scripts/phoenix-managed-update.mjs'), 'utf8')
 const updatePowerShell = readFileSync(resolve('update-phoenix.ps1'), 'utf8')
+const storageRepair = readFileSync(resolve('scripts/phoenix-windows-storage-repair.ps1'), 'utf8')
 const desktop = readFileSync(resolve('apps/desktop-windows/Program.cs'), 'utf8')
 const build = readFileSync(resolve('scripts/build.ts'), 'utf8')
 const stableWorkflow = readFileSync(resolve('.github/workflows/phoenix-stable-update-channel.yml'), 'utf8')
@@ -155,12 +156,12 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
   it('offline repair uses the owning checkout identity and never reports a locked 3/3 as success', () => {
-    expect(updatePowerShell).toContain('rev-parse --git-common-dir')
-    expect(updatePowerShell).toContain('[System.Security.Cryptography.SHA256]::Create()')
-    expect(updatePowerShell).toContain("[regex]::Escape($identity)")
-    expect(updatePowerShell).toContain('if ($after.Count -ge $configuredLimit)')
-    expect(updatePowerShell).toContain('cleanup could not free runtime capacity')
-    expect(updatePowerShell).toContain("Close Phoenix normally before -Apply")
+    expect(storageRepair).toContain('rev-parse --git-common-dir')
+    expect(storageRepair).toContain('[System.Security.Cryptography.SHA256]::Create()')
+    expect(storageRepair).toContain("[regex]::Escape($identity)")
+    expect(storageRepair).toContain('if ($after.Count -ge $configuredLimit)')
+    expect(storageRepair).toContain('cleanup could not free runtime capacity')
+    expect(storageRepair).toContain("Close Phoenix normally before -Apply")
   })
 
   it('caps runtime copies while keeping age-based staging cleanup', () => {
