@@ -154,6 +154,15 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(runtimeDirectoriesForCleanup()).toEqual([join('p', names[0]!)])
   })
 
+  it('offline repair uses the owning checkout identity and never reports a locked 3/3 as success', () => {
+    expect(updatePowerShell).toContain('rev-parse --git-common-dir')
+    expect(updatePowerShell).toContain('[System.Security.Cryptography.SHA256]::Create()')
+    expect(updatePowerShell).toContain("[regex]::Escape($identity)")
+    expect(updatePowerShell).toContain('if ($after.Count -ge $configuredLimit)')
+    expect(updatePowerShell).toContain('cleanup could not free runtime capacity')
+    expect(updatePowerShell).toContain("Close Phoenix normally before -Apply")
+  })
+
   it('caps runtime copies while keeping age-based staging cleanup', () => {
     expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000')
     expect(supervisor).toContain('PHOENIX_UPDATE_STORAGE_RETENTION_MS')
