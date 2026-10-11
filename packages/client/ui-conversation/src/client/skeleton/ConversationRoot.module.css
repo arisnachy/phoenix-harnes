@@ -687,7 +687,7 @@
   .root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-rows: auto;
-    min-height: 54px;
+    min-height: var(--phoenix-shell-bar-size, 72px);
     padding: 6px 8px;
   }
   .root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader .sessionChrome {

@@ -25,7 +25,7 @@ describe('Phoenix compact golden rail', () => {
   it('uses one authoritative compact scale with centered controls', () => {
     expect(finalRail).toContain('.root.collapsed {')
     expect(finalRail).toContain('padding: 8px 6px 10px;')
-    expect(finalRail).toContain('width: calc(100% - 12px);')
+    expect(finalRail).toContain('width: calc(100% - 10px);')
     expect(finalRail).toContain('align-self: center;')
     expect(finalRail).toContain('width: 46px;')
     expect(finalRail).toContain('height: 46px;')
