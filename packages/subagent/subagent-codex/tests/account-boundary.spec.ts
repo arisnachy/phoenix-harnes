@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { codexAccountTelemetry, mergeCodexRateLimitsUpdate } from '../src/account.ts'
+import { codexAccountTelemetry, codexRefreshTokenExpired, mergeCodexRateLimitsUpdate } from '../src/account.ts'
 
 const accountSource = readFileSync(
   fileURLToPath(new URL('../src/account.ts', import.meta.url)),
@@ -15,6 +15,21 @@ describe('native Codex managed-account boundary', () => {
     expect(accountSource).toContain('account/read')
     expect(accountSource).toContain('account/rateLimits/read')
     expect(accountSource).toContain('account/usage/read')
+  })
+
+  it('recognizes an expired official refresh credential but not offline or temporary failures', () => {
+    expect(codexRefreshTokenExpired(new Error(
+      'Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again.',
+    ))).toBe(true)
+    expect(codexRefreshTokenExpired(new Error('RefreshTokenExpired'))).toBe(true)
+    expect(codexRefreshTokenExpired(new Error('Network connection refused'))).toBe(false)
+    expect(codexRefreshTokenExpired(new Error('HTTP 429: rate limit exceeded'))).toBe(false)
+    expect(codexRefreshTokenExpired(new Error('access token expired but renewal still possible'))).toBe(false)
+    expect(accountSource).toContain("connection.request('account/read', { refreshToken }, signal)")
+    expect(accountSource).toContain('await readAccount(connection, session.signal, true)')
+    expect(accountSource).toContain('if (!codexRefreshTokenExpired(error)) throw error')
+    expect(accountSource).toContain("connection.request('account/logout', {}, session.signal)")
+    expect(accountSource).toContain('await ctx.credentials.deleteRecord(CODEX_ACCOUNT_KEY)')
   })
 
   it('isolates native account probes and coalesces repeated inspection work', () => {
