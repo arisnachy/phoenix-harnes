@@ -870,9 +870,16 @@ export default class GoogleApiBroker extends Service {
     })
     if (!response.ok) {
       if (await revokedGoogleRefreshToken(response)) {
-        // A concurrent authorization could have replaced the failing grant.
-        // Never erase its new durable credential from a stale refresh attempt.
-        if (this.grant?.refreshToken === refreshToken) {
+        // Side-by-side old/new Hosts may have rotated the refresh token in
+        // the same durable store. Adopt that newer grant instead of deleting
+        // the account or telling the user to authorize again.
+        const persisted = await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
+        const durable = persisted?.kind === 'grant' ? durableGoogleGrant(persisted.payload) : undefined
+        if (durable !== undefined && durable.refreshToken !== refreshToken) {
+          this.grant = durable
+          return durable
+        }
+        if (durable?.refreshToken === refreshToken && this.grant?.refreshToken === refreshToken) {
           this.grant = undefined
           this.accountEmail = undefined
           await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
