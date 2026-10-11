@@ -7,6 +7,9 @@
  */
 
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join, resolve, sep } from 'node:path'
 
 interface RpcPending {
   readonly resolve: (value: unknown) => void
@@ -111,6 +114,55 @@ const IDLE_CLOSE_MS = 60_000
 // Even if the browser dies without a hangup RPC, no remote voice thread may
 // retain the Codex app-server indefinitely. A call can be reopened explicitly.
 const MAX_REALTIME_CALL_MS = 60 * 60_000
+
+/**
+ * Locate the exact managed Codex CLI that PHOENIX model discovery already
+ * installs. Voice previously executed ambient 'codex' only, which can be
+ * missing from PATH even when the authenticated PHOENIX Codex route works.
+ * @param dshHome - PHOENIX profile root containing codex-cli/active.json.
+ * @returns Validated entrypoint, or undefined when no managed runtime exists.
+ */
+export function findManagedCodexRealtimeBin(dshHome: string): string | undefined {
+  const runtimeRoot = join(resolve(dshHome), 'codex-cli')
+  const markerPath = join(runtimeRoot, 'active.json')
+  if (!existsSync(markerPath)) return undefined
+  try {
+    const marker = JSON.parse(readFileSync(markerPath, 'utf8')) as {
+      schema?: unknown
+      version?: unknown
+      bin?: unknown
+    }
+    if (marker.schema !== 1 || typeof marker.version !== 'string'
+      || !/^\d+\.\d+\.\d+$/u.test(marker.version) || typeof marker.bin !== 'string') return undefined
+    const candidate = resolve(runtimeRoot, marker.bin)
+    const boundary = runtimeRoot.endsWith(sep) ? runtimeRoot : `${runtimeRoot}${sep}`
+    if (!candidate.startsWith(boundary)) return undefined
+    return existsSync(candidate) ? candidate : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Keep voice's SQLite state separate from model discovery, while sharing Codex login. */
+function codexRealtimeEnvironment(): NodeJS.ProcessEnv {
+  const env = { ...process.env }
+  // Subscription-backed ChatGPT account only, never paid API-key fallback.
+  delete env.OPENAI_API_KEY
+  const home = process.env.CODEX_HOME?.trim()
+    ? resolve(process.env.CODEX_HOME)
+    : join(homedir(), '.codex')
+  const phoenixRoot = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
+  const codexRoot = process.env.CODEX_SQLITE_HOME?.trim()
+  const sqliteHome = phoenixRoot
+    ? resolve(phoenixRoot, 'voice')
+    : codexRoot
+      ? resolve(codexRoot, 'phoenix-runtime', 'voice')
+      : join(home, 'phoenix-runtime', 'sqlite', 'voice')
+  mkdirSync(sqliteHome, { recursive: true })
+  env.CODEX_HOME = home
+  env.CODEX_SQLITE_HOME = sqliteHome
+  return env
+}
 
 /** Small JSON-RPC client around `codex app-server --listen stdio://`. */
 export class CodexRealtimeBridge {
@@ -378,13 +430,17 @@ export class CodexRealtimeBridge {
       '--config', 'skills.bundled.enabled=false',
       'app-server', '--listen', 'stdio://',
     ]
-    const command = process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : 'codex'
-    const args = process.platform === 'win32'
-      ? ['/d', '/s', '/c', 'codex', ...codexArgs]
-      : codexArgs
-    const env = { ...process.env }
-    // Never allow this voice path to fall back to a separately billed API key.
-    delete env.OPENAI_API_KEY
+    const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+    const managed = findManagedCodexRealtimeBin(dshHome)
+    const command = managed !== undefined
+      ? process.execPath
+      : process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : 'codex'
+    const args = managed !== undefined
+      ? [managed, ...codexArgs]
+      : process.platform === 'win32'
+        ? ['/d', '/s', '/c', 'codex', ...codexArgs]
+        : codexArgs
+    const env = codexRealtimeEnvironment()
 
     let child: ChildProcessWithoutNullStreams
     try {
