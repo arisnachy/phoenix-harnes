@@ -494,8 +494,30 @@ describe('Codex Live authentication recovery', () => {
     expect(codexRealtimeNeedsLogin(new Error(
       'Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again.',
     ))).toBe(true)
+    expect(codexRealtimeNeedsLogin(new Error('refresh token has expired'))).toBe(true)
+    expect(codexRealtimeNeedsLogin(new Error('refresh_token_has_expired'))).toBe(true)
     expect(codexRealtimeNeedsLogin(new Error('connect ETIMEDOUT'))).toBe(false)
     expect(codexRealtimeNeedsLogin(new Error('429 Too Many Requests'))).toBe(false)
+  })
+
+  it('does not report Live authenticated when a successful Codex account refresh returns no grant', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      child?: { killed: boolean }
+      ensureStarted(): Promise<void>
+      request(method: string, params?: unknown): Promise<unknown>
+    }
+    internal.child = { killed: true }
+    vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
+    const read = vi.spyOn(internal, 'request').mockResolvedValue({ account: null })
+    try {
+      await expect(bridge.probe()).resolves.toMatchObject({
+        available: true, authenticated: false, reason: 'codex-login-required',
+      })
+      expect(read).toHaveBeenCalledWith('account/read', { refreshToken: true })
+    } finally {
+      bridge.close()
+    }
   })
 
   it('classifies expired credentials as reconnect-needed on explicit Live probe', async () => {
