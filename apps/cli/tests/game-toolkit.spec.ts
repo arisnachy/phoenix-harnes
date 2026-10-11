@@ -103,6 +103,18 @@ describe('shipped game toolkit', () => {
     } finally { rmSync(directory, { recursive: true, force: true }) }
   })
 
+  it('supports Astral uvx for authenticated Godot AI MCP, with official Windows package ID', () => {
+    const plan = run(['plan', '--target', 'uv', '--platform', 'win32'])
+    expect(plan.status).toBe(0)
+    expect(record(plan.stdout).args).toEqual(expect.arrayContaining([
+      '--id', 'astral-sh.uv', '--source', 'winget',
+    ]))
+    const missing = run(['doctor', '--target', 'uv'], {
+      PHOENIX_UVX_BIN: `${root}absent-uvx`,
+    })
+    expect(record(missing.stdout)).toMatchObject({ target: 'uv', ready: false })
+  })
+
   it('never installs a missing engine without an explicit install grant', () => {
     const result = run(['ensure', '--target', 'godot'],
       { PHOENIX_GODOT_BIN: `${root}missing-godot` })
