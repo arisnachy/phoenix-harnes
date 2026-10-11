@@ -220,7 +220,7 @@ export interface AuthorizationPanelProps {
 
 export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps {
   /** Direct-launch mode from the main Phoenix navigation. */
-  launchContext?: 'discover' | 'connectors' | 'team'
+  launchContext?: 'discover' | 'connectors' | 'team' | 'codex-reconnect'
   assistantMail?: AssistantMailClient
   connectorT: (key: ConnectorKey) => string
   chatGptWeb?: ChatGptWebBridgeClient
