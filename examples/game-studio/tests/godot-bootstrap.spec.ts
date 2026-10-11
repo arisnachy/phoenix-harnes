@@ -85,7 +85,7 @@ describe('PHOENIX Godot Game Studio native engine provisioning', () => {
     const target = join(temporary(), 'my-project')
     mkdirSync(join(target, 'scripts'), { recursive: true })
     writeFileSync(join(target, 'scripts', 'hero.gd'), '# user script')
-    expect(() => scaffoldGodotProject(target)).toThrow('Refusing to overwrite')
+    expect(() => scaffoldGodotProject(target)).toThrow('Refusing to scaffold')
     expect(readFileSync(join(target, 'scripts', 'hero.gd'), 'utf8')).toBe('# user script')
     writeFileSync(join(target, 'project.godot'), 'user app')
     expect(scaffoldGodotProject(target).reused).toBe(true)
