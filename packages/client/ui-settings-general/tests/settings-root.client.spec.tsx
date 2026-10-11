@@ -187,6 +187,20 @@ describe('SettingsPanel navigation', () => {
   })
 
 
+  it('opens the real Codex reconnect surface without a second OAuth implementation', () => {
+    const { renderSlot } = mount({ rows: [
+      { id: 'connectors', order: 30, label: 'Connectors' },
+    ] })
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoenix:open-feature', {
+        detail: { destination: 'connectors', label: 'Reconectar Codex' },
+      }))
+    })
+    expect(screen.getByRole('dialog', { name: 'Reconectar Codex' })).toBeTruthy()
+    expect(renderSlot).toHaveBeenCalledWith('settings.section',
+      expect.objectContaining({ launchContext: 'codex-reconnect' }), { only: 'connectors' })
+  })
+
   it('opens Discover as a focused MCP catalog, without the Settings section menu', () => {
     const { renderSlot } = mount({ rows: [
       { id: 'general', order: 0, label: 'General' },
