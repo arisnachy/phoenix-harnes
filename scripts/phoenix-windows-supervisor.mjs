@@ -14,7 +14,7 @@ import {
   existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { createConnection, createServer } from 'node:net'
+import { createServer } from 'node:net'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
@@ -47,6 +47,9 @@ const WATCHER_RESTART_DELAY_MS = 1000
 const WATCHER_MAX_RESTART_DELAY_MS = 60_000
 const WATCHER_STABLE_MS = 60_000
 const HOST_RESTART_DELAY_MS = 1000
+// Windows can report a child exit before the old TCP listener is reusable.
+// Wait for an actual bind (not just a successful/failed HTTP connection).
+const HOST_PORT_RELEASE_WAIT_MS = 20_000
 const CONTROL_POLL_MS = 500
 const DEFAULT_CRASH_UPDATE_RECOVERY_WAIT_MS = 5 * 60 * 1000
 const configuredCrashUpdateRecoveryWaitMs = Number.parseInt(
@@ -1232,19 +1235,38 @@ function defaultPhoenixPort() {
 }
 
 function existingHostOnPort(port) {
-  return new Promise(resolve => {
-    const socket = createConnection({ host: '127.0.0.1', port })
+  // Connection probes can return ECONNREFUSED while an old listener is still
+  // closing. A temporary bind is the authoritative check for EADDRINUSE.
+  // Never connect to, kill, or inspect another application's process.
+  return new Promise(resolveOccupied => {
+    const probe = createServer()
     let settled = false
     const finish = occupied => {
       if (settled) return
       settled = true
-      socket.destroy()
-      resolve(occupied)
+      resolveOccupied(occupied)
     }
-    socket.once('connect', () => finish(true))
-    socket.once('error', () => finish(false))
-    socket.setTimeout(600, () => finish(false))
+    probe.once('error', () => { finish(true) })
+    try {
+      probe.listen({ host: '127.0.0.1', port, exclusive: true }, () => {
+        // Wait for close completion, so this guard cannot block the next Host.
+        probe.close(() => { finish(false) })
+      })
+    } catch {
+      finish(true)
+    }
   })
+}
+
+/** During a supervised handoff, allow Windows to release the old HTTP socket. */
+async function waitForHostPortRelease(port, timeoutMs = HOST_PORT_RELEASE_WAIT_MS) {
+  const deadline = Date.now() + timeoutMs
+  while (!shutdownRequested) {
+    if (!await existingHostOnPort(port)) return true
+    if (Date.now() >= deadline) return false
+    await sleep(Math.min(250, Math.max(0, deadline - Date.now())))
+  }
+  return false
 }
 
 function startHost() {
@@ -1654,6 +1676,25 @@ while (true) {
   activeHost = undefined
 
   if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()
+
+  // The old Host child has exited, but Windows may still hold port 3080 for
+  // a short time. Do not attempt a replacement boot until a real bind succeeds.
+  // This also detects an unrelated process on that port without killing it.
+  if (plannedHostRestart && !shutdownRequested) {
+    const handoffPort = defaultPhoenixPort()
+    if (handoffPort !== undefined) {
+      const released = await waitForHostPortRelease(handoffPort)
+      if (!released && !shutdownRequested) {
+        console.error(
+          `[PHOENIX RECOVERY] Host handoff blocked: 127.0.0.1:${String(handoffPort)} `
+          + 'is still occupied after the old Host exited. Refusing a duplicate listener; '
+          + 'the prepared runtime remains available for the next launch.',
+        )
+        finalCode = 1
+        break
+      }
+    }
+  }
 
   if (shutdownRequested) {
     finalCode = hostExit.code ?? (hostExit.signal === null ? 0 : 0)
