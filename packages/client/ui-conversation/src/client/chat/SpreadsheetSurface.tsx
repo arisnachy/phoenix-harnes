@@ -198,7 +198,8 @@ export function parseSheetCsv(csv: string, width: number): string[][] | null {
 }
 const csvEscape = (cell: string): string => {
   // CSV is not an executable spreadsheet format; mitigate formula injection upon opening in Excel.
-  const safe = /^[=+\-@]/.test(cell) ? "'" + cell : cell
+  const safe = /^[=+\-@]/.test(cell) && !/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(cell)
+    ? "'" + cell : cell
   return '"' + safe.replace(/"/g, '""') + '"'
 }
 export function exportSheetCsv(columns: readonly string[], rows: readonly (readonly string[])[]): string {
