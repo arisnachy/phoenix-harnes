@@ -29,7 +29,7 @@ import {
 } from '@phoenix-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@phoenix-ai/dsh-client-ui-slots'
 import type { ModelSelectInjected } from './slots.ts'
-import { isPhoenixAutoRouting, presentModel, providerBrandMark, providerInitial } from './presentation.ts'
+import { isPhoenixAutoRouting, presentModel, providerBrandMark, providerInitial, type ModelPresentation } from './presentation.ts'
 import css from './ModelSelect.module.css'
 
 /** Which pane the dropdown shows: the two-row root or one drilled-in list. */
@@ -449,7 +449,7 @@ export function ModelSelect(
                       </button>
                       {expanded && group.models.map((model) => {
                         const selected = state.current?.provider === group.id && state.current.model === model.id
-                        const presentation = isPhoenixAutoRouting(model.id, model.name)
+                        const presentation: ModelPresentation = isPhoenixAutoRouting(model.id, model.name)
                           ? { displayName: t('trigger.auto'), description: t('trigger.autoDetail') }
                           : presentModel(model.name, model.description)
                         return (
