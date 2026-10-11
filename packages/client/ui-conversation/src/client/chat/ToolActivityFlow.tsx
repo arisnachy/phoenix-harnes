@@ -601,12 +601,6 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserT
               seatProps={seatProps}
               turnStatus={turnStatus}
             />
-            : item.kind === 'browser'
-            ? <MiniBrowser
-              requested
-              active={item.userKey === activeBrowserKey}
-              onActivate={() => { setSelectedBrowserKey(item.userKey) }}
-            />
             : item.kind === 'node'
               ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
               : item.kind === 'optimistic'
