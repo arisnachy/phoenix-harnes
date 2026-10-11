@@ -158,9 +158,9 @@ const PhoenixBrawlerKit = (() => {
     const target = clamp(player.x - viewportWidth * .38, 0, Math.max(0, worldWidth - viewportWidth));
     return current + (target - current) * clamp(dt * 5, 0, 1);
   }
-  function drawActorsByDepth(ctx, actors, atlasFor, camera, clock) {
-    if (!globalThis.PhoenixGameKit || typeof globalThis.PhoenixGameKit.drawSpriteState !== 'function')
-      throw new Error('Load PhoenixGameKit before PhoenixBrawlerKit');
+  function drawActorsByDepth(ctx, actors, atlasFor, camera, clock, motionKit) {
+    if (!motionKit || typeof motionKit.drawSpriteState !== 'function')
+      throw new Error('Pass the real PhoenixGameKit renderer to drawActorsByDepth');
     // Y-sorting guarantees foreground enemies occlude actors behind them.
     const sorted = [...actors].sort((a, b) => a.y - b.y);
     for (const actor of sorted) {
@@ -168,7 +168,7 @@ const PhoenixBrawlerKit = (() => {
       if (!art || !art.image || !art.atlas) continue;
       const state = actor.hp <= 0 ? 'death' : actor.action ? actor.action.name : actor.mode;
       // Approved atlas is mandatory; no box/cartoon fallback.
-      globalThis.PhoenixGameKit.drawSpriteState(ctx, art.image, art.atlas, state, clock,
+      motionKit.drawSpriteState(ctx, art.image, art.atlas, state, clock,
         actor.x - camera - art.width / 2, actor.y - art.height, art.width, art.height, actor.face);
     }
   }
