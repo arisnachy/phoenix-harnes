@@ -81,7 +81,7 @@ describe('PHOENIX Godot Game Studio native engine provisioning', () => {
     expect(readFileSync(join(target, 'GAME_PLAN.md'), 'utf8')).toContain('PROTOTYPE')
   })
 
-  it('never overwrites unrelated existing project files and never silently changes a user's Godot project', () => {
+  it('never overwrites unrelated existing project files and never silently changes a user-owned Godot project', () => {
     const target = join(temporary(), 'my-project')
     mkdirSync(join(target, 'scripts'), { recursive: true })
     writeFileSync(join(target, 'scripts', 'hero.gd'), '# user script')
