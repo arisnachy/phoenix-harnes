@@ -236,7 +236,7 @@ export class CodexRealtimeBridge {
       if (/not found|enoent|could not start|spawn/i.test(message)) {
         return { available: false, authenticated: false, reason: 'codex-unavailable', detail }
       }
-      if (codexRealtimeNeedsLogin(error) || /chatgpt login|required|not authenticated|account/i.test(message)) {
+      if (codexRealtimeNeedsLogin(error) || /(?:chatgpt (?:login|sign-in) required|login required|not authenticated)/iu.test(message)) {
         // Expired official login is not a missing/unsupported voice feature.
         // Drop only the idle voice sidecar; the next explicit request starts
         // with credentials produced by the normal Codex reauthorization flow.
