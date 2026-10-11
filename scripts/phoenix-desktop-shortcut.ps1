@@ -172,8 +172,8 @@ function Remove-LegacyPhoenixShortcut([string]$ShortcutPath) {
 
 $taskbarDirectory = Join-Path $env:APPDATA 'Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar'
 
-# Remove only obsolete PHOENIX HARDNESS aliases. The canonical Phoenix.lnk may
-# legitimately point at the installed native Phoenix.exe when Agent Desktop is available.
+# Remove only obsolete PHOENIX HARDNESS aliases. Canonical Phoenix.lnk
+# is rewritten below to launch the updated source checkout via PowerShell.
 $legacyLocations = @(
   (Join-Path $desktopPath 'Phoenix.lnk'),
   (Join-Path $desktopPath 'PHOENIX HARDNESS.lnk'),
@@ -206,10 +206,9 @@ function Set-PhoenixShortcut([string]$ShortcutPath) {
   $shortcut.Save()
 }
 
-# One canonical shortcut name everywhere. The launcher prefers the installed
-# native shell (bound to this exact source checkout) so Agent Desktop/Computer
-# runs in the interactive Windows session; it falls back to the browser runtime
-# only when Phoenix.exe is not installed.
+# One canonical shortcut name everywhere. Always target the checked-out
+# Phoenix PowerShell launcher, not a possibly outdated installed Phoenix.exe.
+# The launcher uses the supervised source checkout and keeps its console visible.
 $shortcutPath = Join-Path $desktopPath 'Phoenix.lnk'
 $startMenuShortcutPath = Join-Path $programsPath 'Phoenix.lnk'
 $taskbarShortcutPath = Join-Path $taskbarDirectory 'Phoenix.lnk'

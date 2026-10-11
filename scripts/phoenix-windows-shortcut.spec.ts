@@ -36,19 +36,19 @@ describe('PHOENIX Windows desktop shortcut', () => {
     expect(source).toContain('$windowStyle = 1')
   })
 
-  it('keeps the shortcut source-aware while the launcher prefers native Agent Desktop', async () => {
+  it('launches the updated checkout and never delegates to an outdated installed EXE', async () => {
     const { readFileSync } = await import('node:fs')
     const shortcut = readFileSync(new URL('./phoenix-desktop-shortcut.ps1', import.meta.url), 'utf8')
     const launcher = readFileSync(new URL('./phoenix-desktop-launch.ps1', import.meta.url), 'utf8')
     expect(shortcut).toContain("$targetPath = $powerShellExe")
-    expect(shortcut).toContain('Agent Desktop/Computer')
-    expect(launcher).toContain("Programs\\Phoenix\\Phoenix.exe")
-    expect(launcher).toContain("Test-Path -LiteralPath $installedPhoenixExe")
+    expect(shortcut).toContain('updated source checkout via PowerShell')
     expect(launcher).toContain("$env:PHOENIX_SOURCE_ROOT = $rootPath")
-    expect(launcher).toContain("Start-Process -FilePath $installedPhoenixExe -Wait")
+    expect(launcher).toContain("Set-Location -LiteralPath $rootPath")
     expect(launcher).toContain("$env:PHOENIX_DESKTOP_CONSOLE = '1'")
     expect(launcher).toContain("Tee-Object -FilePath $logPath -Append")
-    expect(shortcut).not.toContain("never targets Phoenix.exe")
+    expect(launcher).toContain("& $corepack.Source pnpm phoenix @launchArgs")
+    expect(launcher).not.toContain("Start-Process -FilePath $installedPhoenixExe")
+    expect(launcher).not.toContain("Programs\\\\Phoenix\\\\Phoenix.exe")
   })
 
   it('invokes the setup script without exposing a console window', () => {

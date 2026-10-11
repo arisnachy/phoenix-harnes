@@ -33,16 +33,11 @@ try {
   $env:PHOENIX_DESKTOP_CONSOLE = '1'
   Write-Host '[PHOENIX] Iniciando con PowerShell visible. El registro se guarda en:' $logPath
 
-  # Prefer the installed native shell so Computer/Agent Desktop executes in the
-  # interactive user's desktop. PHOENIX_SOURCE_ROOT keeps its managed runtime
-  # bound to this exact checkout instead of an older bundled installer revision.
-  $installedPhoenixExe = Join-Path $localAppData 'Programs\Phoenix\Phoenix.exe'
-  if (Test-Path -LiteralPath $installedPhoenixExe -PathType Leaf) {
-    $env:PHOENIX_SOURCE_ROOT = $rootPath
-    Write-Host '[PHOENIX] Abriendo Phoenix Desktop...'
-    Start-Process -FilePath $installedPhoenixExe -Wait | Out-Null
-    exit 0
-  }
+  # Always start the current checkout through its supervised pnpm entrypoint.
+  # An outdated Phoenix.exe under LocalAppData can boot a different runtime
+  # and compete for 127.0.0.1:3080. Never auto-delegate to that executable.
+  $env:PHOENIX_SOURCE_ROOT = $rootPath
+  Write-Host '[PHOENIX] Iniciando Phoenix desde el repositorio actualizado; no se usará el EXE antiguo.'
 
   $launchArgs = @()
   if ($Background) { $launchArgs = @('--no-open') }
