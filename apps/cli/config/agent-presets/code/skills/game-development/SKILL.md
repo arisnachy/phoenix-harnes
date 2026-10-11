@@ -10,6 +10,19 @@ description: >-
 
 El resultado es un juego ejecutable adecuado al género, plataforma y alcance pedido. Si solicitan jugar en el chat de Phoenix, la entrega mínima es invocar la herramienta `phoenix_game` con HTML5 ejecutable autónomo: publica el MIME `application/vnd.phoenix.game+html` directamente en el visor del chat, no una imagen PNG, spritesheet, manifiesto o explicación. Incluye un manifiesto JSON `phoenix-game-manifest` y script ejecutable; confirma el resultado de la herramienta antes de presentar la misión como terminada. Una hoja de sprites no marca terminado el juego, incluso si image_generation respondió exitosamente. Comprueba las herramientas realmente expuestas (habilidad, archivos, shell, equipo y publicación de artefactos) antes de informar que no están disponibles. El proyecto incluye `examples/game-studio/jungle-echo.html` como punto de partida offline adaptable; revisa también `.agents/skills/phoenix-game-studio/SKILL.md`. Pide La Forja mediante el equipo real cuando el usuario la solicita; si falla la delegación, continúa por una ruta autónoma viable y menciona el fallo concreto. Nunca afirmes que se probó una partida sin pruebas ejecutadas. Responde en el idioma de la solicitud, también después de una revisión externa. Las referencias del usuario orientan calidad o estilo; un ejemplo no impone su diseño a todos los juegos.
 
+## Godot Game Studio: instalación y uso real obligatorios cuando corresponda
+
+Kira debe abrir primero `.agents/skills/phoenix-game-studio/SKILL.md` y usar el router real `game-tools.mjs route`. Para juegos de acción, lucha o 3D de calidad de producción, el motor de autoría es **Godot**, incluso si el resultado debe jugarse dentro del chat en HTML5 independiente. No basta con mencionar el motor ni publicar una imagen. Ejecuta realmente el flujo oficial para un proyecto nuevo:
+
+```sh
+node examples/game-studio/godot/bootstrap.mjs doctor
+node examples/game-studio/godot/bootstrap.mjs setup --project "RUTA/NUEVO-JUEGO" --allow-install
+```
+
+`setup` instala Godot por un gestor autorizado solo si falta, verifica `--version`, crea escenas/scripts reales y ejecuta importación, prueba `tests/smoke.gd` y 120 fotogramas headless. Requiere permiso para instalar herramientas concedido por la misión; no se ejecuta al inicio de Phoenix. Con un proyecto existente el generador **no sobrescribe archivos**. Si la misión no autoriza software nuevo, ejecuta `doctor` y solicita autorización antes de usar `--allow-install`. Si la verificación devuelve bloqueo, no digas «Godot instalado y funcionando».
+
+La demo nativa es un andamiaje técnico con animaciones procedurales, héroe y jefe de dos fases; no contiene arte ni audio de producción. Transforma los presets ilustrados de todos los actores, ataques, escenarios y efectos en `AnimatedSprite2D/AnimationPlayer`, escenas, colisiones y sonidos realmente utilizados; ejecuta el editor y prueba visual/sonoramente. Si Godot AI MCP está conectado, utiliza las herramientas verdaderas de Godot AI; si no, usa el CLI de Godot, sin fingir que hay MCP. Para juegos dentro del chat, entrega **además** HTML5 autocontenido, porque la exportación de Godot usa varios archivos.
+
 ## Kira: el manifiesto y el preflight van PRIMERO, nunca después del rechazo
 
 Antes de generar o publicar un videojuego en el chat, **escribe el manifiesto JSON real** del juego según el género: `schemaVersion:1`, `title`, `genre`, `gameType`, `controls`, `level`, `audio` y las entidades realmente implementadas (protagonista, enemigos, jefes, animaciones, escenarios, armas, poderes, objetos y efectos cuando procedan). Usa como referencias de esquema `examples/game-studio/jungle-echo.manifest.json` y `lumen-circuit.manifest.json`, sin copiar personajes ni afirmar que algo existe si no está creado.
