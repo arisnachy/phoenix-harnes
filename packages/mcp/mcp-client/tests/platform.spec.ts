@@ -17,15 +17,40 @@ describe('MCP stdio platform compatibility', () => {
     })
   })
 
-  it('wraps the official Filesystem MCP NPX launcher with cmd on Windows', () => {
-    expect(normalizeWindowsNpxMcpLaunch(
+  it('starts curated Filesystem MCP using a bundled entrypoint or an explicit NPX fallback', () => {
+    const officialPackage = '@modelcontextprotocol/server-filesystem'
+    const result = normalizeWindowsNpxMcpLaunch(
       'npx',
-      ['-y', '@modelcontextprotocol/server-filesystem', '.'],
+      ['-y', officialPackage, '.'],
       'win32',
-    )).toEqual({
-      command: 'cmd.exe',
-      args: ['/d', '/c', 'npx', '-y', '@modelcontextprotocol/server-filesystem', '.'],
-    })
+    )
+    if (result.command === process.execPath) {
+      expect(result.args[0]?.replace(/\\/gu, '/')).toMatch(/server-filesystem.*\\/dist\\/index\\.js$/u)
+      expect(result.args.slice(1)).toEqual(['.'])
+    } else {
+      expect(result).toEqual({
+        command: 'cmd.exe',
+        args: ['/d', '/c', 'npx', '-y', officialPackage, '.'],
+      })
+    }
+  })
+
+  it('never retries a bare missing Filesystem Windows shim', () => {
+    const result = normalizeWindowsNpxMcpLaunch(
+      'mcp-server-filesystem',
+      ['C:\\\\Users\\\\example\\\\Documents'],
+      'win32',
+    )
+    expect(result.command).not.toBe('mcp-server-filesystem')
+    if (result.command === process.execPath) {
+      expect(result.args[0]?.replace(/\\/gu, '/')).toMatch(/server-filesystem.*\\/dist\\/index\\.js$/u)
+    } else {
+      expect(result).toEqual({
+        command: 'cmd.exe',
+        args: ['/d', '/c', 'npx', '-y', '@modelcontextprotocol/server-filesystem',
+          'C:\\\\Users\\\\example\\\\Documents'],
+      })
+    }
   })
 
   it('does not introduce a shell for arbitrary registry NPX packages', () => {
