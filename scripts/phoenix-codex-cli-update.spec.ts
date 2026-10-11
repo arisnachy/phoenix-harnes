@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { runInNewContext } from 'node:vm'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -23,6 +24,43 @@ describe('PHOENIX managed Codex CLI updater', () => {
     expect(compareStableVersions('0.160.0', '0.159.2')).toBe(1)
     expect(compareStableVersions('0.160.0', '0.160.0')).toBe(0)
     expect(compareStableVersions('0.159.2', '0.160.0')).toBe(-1)
+  })
+
+  it('keeps Phoenix/Codex CLI update independent from Codex login and offers a sequential manual reauth', () => {
+    const auth = readFileSync(join(process.cwd(), 'scripts', 'phoenix-codex-auth.mjs'), 'utf8')
+    const stable = readFileSync(join(process.cwd(), 'scripts', 'phoenix-auto-update.mjs'), 'utf8')
+    const cliUpdate = readFileSync(join(process.cwd(), 'scripts', 'phoenix-codex-cli-update.mjs'), 'utf8')
+    expect(stable).not.toContain('phoenix-codex-auth.mjs')
+    expect(cliUpdate).not.toContain('codex login')
+    const start = auth.indexOf('const ACTIONS = new Map([')
+    expect(start).toBeGreaterThan(-1)
+    const spawned: Array<{ bin: string; args: string[]; callbacks: Record<string, (a: unknown, b: unknown) => void> }> = []
+    const fakeProcess = {
+      argv: ['node', 'scripts/phoenix-codex-auth.mjs', 'reauth'],
+      platform: 'win32', execPath: 'node', env: {}, exitCode: undefined as number | undefined,
+      exit: () => { throw new Error('unexpected exit') },
+    }
+    runInNewContext(auth.slice(start), {
+      Map,
+      process: fakeProcess,
+      console: { error: () => {} },
+      managedCodexBin: () => 'managed/codex.js',
+      spawn: (bin: string, args: string[]) => {
+        const callbacks: Record<string, (a: unknown, b: unknown) => void> = {}
+        spawned.push({ bin, args, callbacks })
+        return { once: (event: string, cb: (a: unknown, b: unknown) => void) => {
+          callbacks[event] = cb
+        } }
+      },
+    })
+    expect(spawned.map(x => x.args)).toEqual([['managed/codex.js', 'logout']])
+    spawned[0]?.callbacks.exit?.(0, null)
+    expect(spawned.map(x => x.args)).toEqual([
+      ['managed/codex.js', 'logout'],
+      ['managed/codex.js', 'login'],
+    ])
+    spawned[1]?.callbacks.exit?.(0, null)
+    expect(fakeProcess.exitCode).toBe(0)
   })
 
   it('validates update modes', () => {
