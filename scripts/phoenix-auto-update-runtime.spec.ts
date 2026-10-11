@@ -162,6 +162,9 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(storageRepair).toContain('if ($after.Count -ge $configuredLimit)')
     expect(storageRepair).toContain('cleanup could not free runtime capacity')
     expect(storageRepair).toContain("Close Phoenix normally before -Apply")
+    expect(storageRepair).toContain("Get-CimInstance Win32_Process")
+    expect(storageRepair).toContain("Select-Object ProcessId, Name")
+    expect(storageRepair).toContain("Associated Handles")
   })
 
   it('caps runtime copies while keeping age-based staging cleanup', () => {
@@ -277,6 +280,56 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain('safe-inplace-update-handoff')
     expect(supervisor).toContain("if (hostEvent.kind === 'safe-inplace-update-handoff')")
     expect(supervisor).toContain("const activationCode = activatePrepared()")
+  })
+
+  it('defers routine Windows EBUSY cleanup quietly but exposes capacity-critical locks', () => {
+    const begin = supervisor.indexOf('const busyManagedRuntimeRetryAt = new Map()')
+    const end = supervisor.indexOf('\nfunction removeManagedWorktree(', begin)
+    expect(begin).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(begin)
+    const routines = supervisor.slice(begin, end)
+    const warnings = vi.fn()
+    const attempted: string[] = []
+    const { removeOrphanedManagedDirectory } = runInNewContext(
+      routines + '\n({ removeOrphanedManagedDirectory })',
+      {
+        runtimePathKey: (path: string) => path,
+        rmSync: (path: string) => {
+          attempted.push(path)
+          const err = new Error('Windows still holds a runtime handle') as NodeJS.ErrnoException
+          err.code = 'EBUSY'
+          throw err
+        },
+        existsSync: () => true,
+        console: { error: warnings },
+      },
+    ) as { removeOrphanedManagedDirectory: (path: string, reportBusy?: boolean) => boolean }
+    // Normal idle janitor must not fill the build console with warnings.
+    expect(removeOrphanedManagedDirectory('old-runtime', false)).toBe(false)
+    expect(warnings).not.toHaveBeenCalled()
+    // Actual full-capacity recovery still exposes the actionable lock.
+    expect(removeOrphanedManagedDirectory('critical-runtime', true)).toBe(false)
+    expect(warnings).toHaveBeenCalledTimes(1)
+    expect(String(warnings.mock.calls[0]?.[0])).toContain('EBUSY')
+    // Backoff prevents immediate repeated Windows filesystem churn.
+    expect(removeOrphanedManagedDirectory('critical-runtime', true)).toBe(false)
+    expect(attempted).toEqual(['old-runtime', 'critical-runtime'])
+  })
+
+  it('does not prune runtime files while supervised updater is preparing a build', () => {
+    const begin = supervisor.indexOf('async function waitForHostEvent(')
+    const end = supervisor.indexOf('\nif (process.argv.includes(\'--cleanup-storage\'))', begin)
+    expect(begin).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(begin)
+    const loop = supervisor.slice(begin, end)
+    expect(loop).toContain("readUpdateState()?.status !== 'preparing'")
+    expect(loop).toContain("!watcherSupervisor?.isActive()")
+    expect(supervisor).toContain("isActive() {")
+    expect(supervisor).toContain("!stopping && watcher !== undefined && watcher.exitCode === null")
+    expect(loop).toContain('cleanupObsoleteRuntimes()')
+    // Capacity checks and explicit offline repairs must still report EBUSY.
+    expect(supervisor).toContain('cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: true })')
+    expect(supervisor).toContain('cleanupObsoleteRuntimes([], { reportBusy: true })')
   })
 
   it('backs off blocked Windows storage and avoids repeating EBUSY or capacity warnings in every poll', () => {

@@ -551,7 +551,7 @@ function registeredWorktreePaths() {
 const busyManagedRuntimeRetryAt = new Map()
 const BUSY_MANAGED_RUNTIME_RETRY_MS = 5 * 60 * 1000
 
-function removeOrphanedManagedDirectory(path) {
+function removeOrphanedManagedDirectory(path, reportBusy = false) {
   const key = runtimePathKey(path)
   if ((busyManagedRuntimeRetryAt.get(key) ?? 0) > Date.now()) return false
   try {
@@ -561,14 +561,19 @@ function removeOrphanedManagedDirectory(path) {
   } catch (error) {
     const code = typeof error?.code === 'string' ? error.code : 'unknown'
     busyManagedRuntimeRetryAt.set(key, Date.now() + BUSY_MANAGED_RUNTIME_RETRY_MS)
-    console.error(
-      `[PHOENIX UPDATE] orphaned managed runtime is no longer a Git worktree but Windows still has it open; cleanup deferred for 5 minutes: ${path} (${code})`,
-    )
+    // Routine sweeps during compilation should quietly defer Windows-locked
+    // files. Warn only when storage is actually being reclaimed to make room
+    // for an update, or when the user explicitly requests offline repair.
+    if (reportBusy) {
+      console.error(
+        `[PHOENIX UPDATE] orphaned managed runtime is no longer a Git worktree but Windows still has it open; cleanup deferred for 5 minutes: ${path} (${code})`,
+      )
+    }
     return false
   }
 }
 
-function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePaths()) {
+function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePaths(), reportBusy = false) {
   // Some old runtime directories can survive after their Git worktree metadata
   // has already been pruned. Calling `git worktree remove` on those paths emits
   // the misleading fatal "is not a working tree" message forever. They are safe
@@ -576,7 +581,7 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   // applied active-runtime protection and retention-age checks.
   const key = runtimePathKey(path)
   if (registeredWorktrees !== undefined && !registeredWorktrees.has(key)) {
-    return removeOrphanedManagedDirectory(path)
+    return removeOrphanedManagedDirectory(path, reportBusy)
   }
 
   // Runtime worktrees contain very deep pnpm/node_modules paths. On Windows,
@@ -601,7 +606,7 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   const becameOrphaned = /(?:is )?not a working tree/iu.test(detail)
     || (refreshedWorktrees !== undefined && !refreshedWorktrees.has(key))
   if (becameOrphaned) {
-    return removeOrphanedManagedDirectory(path)
+    return removeOrphanedManagedDirectory(path, reportBusy)
   }
 
   // For an actually registered worktree, a failed remove usually means Windows
@@ -614,7 +619,7 @@ function removeManagedWorktree(path, registeredWorktrees = registeredWorktreePat
   return false
 }
 
-function cleanupObsoleteRuntimes(extraKeep = []) {
+function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {}) {
   const keep = new Set(extraKeep.filter(Boolean).map(runtimePathKey))
   const active = readActiveRuntimeRecord()
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
@@ -645,7 +650,7 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
       continue
     }
 
-    if (!removeManagedWorktree(candidate, registeredWorktrees)) continue
+    if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
     removedRuntimes += 1
     console.error(`[PHOENIX UPDATE] removed obsolete isolated runtime: ${candidate}`)
   }
@@ -661,7 +666,7 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
     if (key === currentStage) continue
     if (stageProtectedByOwningCheckout(candidate)) continue
     if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue
-    if (!removeManagedWorktree(candidate, registeredWorktrees)) continue
+    if (!removeManagedWorktree(candidate, registeredWorktrees, reportBusy)) continue
     removedStages += 1
     console.error(`[PHOENIX UPDATE] removed stale updater staging worktree: ${candidate}`)
   }
@@ -702,7 +707,7 @@ function reclaimInactiveBackupForCapacity(nextRuntime) {
     .sort((left, right) => managedDirectoryMtimeMs(left) - managedDirectoryMtimeMs(right))
   for (const candidate of inactive) {
     if (runtimeDirectoriesForCleanup().length < MAX_RUNTIME_DIRECTORIES) break
-    if (!removeManagedWorktree(candidate, registered)) continue
+    if (!removeManagedWorktree(candidate, registered, true)) continue
     console.error(`[PHOENIX UPDATE] reclaimed inactive rollback runtime to stay within storage limit: ${candidate}`)
   }
 }
@@ -713,7 +718,7 @@ function assertRuntimeStorageCapacity(nextRuntime) {
   // Reclaim everything safe before allocating another full dependency/build
   // tree. If stale Windows handles still prevent enough cleanup, fail closed:
   // keep the current healthy Host and retry later instead of consuming disk.
-  cleanupObsoleteRuntimes([runtimeRoot])
+  cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: true })
   if (runtimeDirectoriesForCleanup().length >= MAX_RUNTIME_DIRECTORIES) {
     reclaimInactiveBackupForCapacity(nextRuntime)
   }
@@ -1429,6 +1434,11 @@ function superviseWatcher() {
   start()
 
   return {
+    // A stale 'preparing' marker must not suppress cleanup forever after
+    // the updater exits or its supervisor is shutting down.
+    isActive() {
+      return !stopping && watcher !== undefined && watcher.exitCode === null
+    },
     async stop() {
       stopping = true
       if (restartTimer !== undefined) {
@@ -1506,7 +1516,12 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
     if (shutdownRequested) continue
 
     if (Date.now() >= nextStorageSweepAt) {
-      cleanupObsoleteRuntimes()
+      // Full preflights spawn pnpm/tsc/tsdown processes that can hold Windows
+      // runtime files open temporarily. Do not compete with a known active
+      // compilation. A later idle sweep or capacity check reclaims them.
+      if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
+        cleanupObsoleteRuntimes()
+      }
       nextStorageSweepAt = Date.now() + STORAGE_SWEEP_MS
     }
 
@@ -1606,7 +1621,7 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
 
 if (process.argv.includes('--cleanup-storage')) {
   recoverStaleStagingIndexLock()
-  cleanupObsoleteRuntimes()
+  cleanupObsoleteRuntimes([], { reportBusy: true })
   process.exit(0)
 }
 
