@@ -80,7 +80,10 @@ describe('Phoenix street beat-em-up runtime (no placeholder art)', () => {
     kit.bossAI(boss, player, .05, belt, 3200, e => events.push(e))
     expect(boss.phase).toBe('enraged')
     expect(events.some(e => e.type === 'boss-phase')).toBe(true)
-    expect(['sweep', 'charge']).toContain(boss.action?.name)
+    // The VM mutates boss.action during AI, which TypeScript cannot infer after
+    // this test explicitly cleared it above. Read the post-call runtime value.
+    const enragedMove = Reflect.get(boss, 'action') as Actor['action']
+    expect(['sweep', 'charge']).toContain(enragedMove?.name)
   })
 
   it('draws separate authored backgrounds and stage zones, but fails when an asset is missing', () => {
