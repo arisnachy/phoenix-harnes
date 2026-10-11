@@ -331,6 +331,95 @@ describe('Google Workspace API broker', () => {
     })
   })
 
+  it('keeps a durable grant on invalid_client and recovers without another Google login', async () => {
+    const ctx = await harness()
+    internals.now = () => 1_000_000
+    await authorize(ctx, { expires_in: 1 })
+    internals.now = () => 2_000_000
+    internals.fetch = async () => new Response(JSON.stringify({
+      error: 'invalid_client',
+      error_description: 'Desktop OAuth application needs configuration',
+    }), { status: 401, headers: { 'content-type': 'application/json' } })
+
+    await expect(googleApi(ctx).request({ service: 'calendar', path: 'calendars/primary/events' }))
+      .rejects.toMatchObject({ code: 'GOOGLE_REFRESH_FAILED' })
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+      kind: 'grant', payload: { refreshToken: 'refresh-token-private' },
+    })
+
+    let apiCalls = 0
+    internals.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url === 'https://oauth2.googleapis.com/token') return tokenResponse({ access_token: 'recovered-access' })
+      apiCalls += 1
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer recovered-access')
+      return new Response('{}', { status: 200 })
+    }
+    await expect(googleApi(ctx).request({ service: 'calendar', path: 'calendars/primary/events' }))
+      .resolves.toMatchObject({ status: 200, ok: true })
+    expect(apiCalls).toBe(1)
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+      kind: 'grant', payload: { accessToken: 'recovered-access', refreshToken: 'refresh-token-private' },
+    })
+  })
+
+  it('refreshes a prematurely rejected access token once and persists the replacement', async () => {
+    const ctx = await harness()
+    internals.now = () => 1_000_000
+    await authorize(ctx)
+    let apiCalls = 0
+    let refreshCalls = 0
+    internals.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url === 'https://oauth2.googleapis.com/token') {
+        refreshCalls += 1
+        return tokenResponse({ access_token: 'retry-token', refresh_token: 'rotated-refresh' })
+      }
+      apiCalls += 1
+      const token = new Headers(init?.headers).get('authorization')
+      return token === 'Bearer retry-token'
+        ? new Response('{}', { status: 200 })
+        : new Response('unauthorized', { status: 401 })
+    }
+    await expect(googleApi(ctx).request({ service: 'gmail', path: 'users/me/messages' }))
+      .resolves.toMatchObject({ ok: true, status: 200 })
+    expect(apiCalls).toBe(2)
+    expect(refreshCalls).toBe(1)
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+      kind: 'grant', payload: { accessToken: 'retry-token', refreshToken: 'rotated-refresh' },
+    })
+  })
+
+  it('removes a revoked refresh token only on explicit Google invalid_grant', async () => {
+    const ctx = await harness()
+    internals.now = () => 1_000_000
+    await authorize(ctx, { expires_in: 1 })
+    internals.now = () => 2_000_000
+    internals.fetch = async () => new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 })
+    await expect(googleApi(ctx).request({ service: 'drive', path: 'files' }))
+      .rejects.toMatchObject({ code: 'GOOGLE_REAUTH_REQUIRED' })
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toBeUndefined()
+  })
+
+  it('does not lose a grant on malformed or temporary provider errors', async () => {
+    const ctx = await harness()
+    internals.now = () => 1_000_000
+    await authorize(ctx, { expires_in: 1 })
+    internals.now = () => 2_000_000
+    for (const response of [
+      new Response('<html>proxy rejected</html>', { status: 401 }),
+      new Response(JSON.stringify({ error: 'temporarily_unavailable' }), { status: 400 }),
+      new Response('server unavailable', { status: 503 }),
+    ]) {
+      internals.fetch = async () => response
+      await expect(googleApi(ctx).request({ service: 'calendar', path: 'calendars/primary/events' }))
+        .rejects.toMatchObject({ code: 'GOOGLE_REFRESH_FAILED' })
+      expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+        kind: 'grant', payload: { refreshToken: 'refresh-token-private' },
+      })
+    }
+  })
+
   it('rechecks each caller scope after callers share one in-flight refresh', async () => {
     const ctx = await harness()
     internals.now = () => 1_000_000
