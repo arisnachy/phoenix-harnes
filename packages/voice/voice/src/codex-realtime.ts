@@ -121,6 +121,23 @@ const IDLE_CLOSE_MS = 60_000
 const MAX_REALTIME_CALL_MS = 60 * 60_000
 const LIVE_REPAIR_COOLDOWN_MS = 30 * 60_000
 
+/** A fresh updater snapshot means checking npm yet again cannot repair Live. */
+export function codexLiveCurrentCliVersion(home: string, now = Date.now()): string | undefined {
+  try {
+    const path = join(resolve(home), 'codex-cli', 'update-state.json')
+    const state = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
+    const checked = typeof state.checkedAt === 'string' ? Date.parse(state.checkedAt) : NaN
+    if (!Number.isFinite(checked) || checked > now + 60_000 || now - checked > 12 * 60 * 60_000) return undefined
+    const current = state.currentVersion
+    const latest = state.latestVersion
+    if (typeof current !== 'string' || typeof latest !== 'string'
+      || !/^\\d+\\.\\d+\\.\\d+$/u.test(current) || latest !== current) return undefined
+    return current
+  } catch {
+    return undefined
+  }
+}
+
 /** Wake the existing single-owner updater, never launch concurrent npm installs from voice. */
 export function queueCodexLiveRepair(
   home: string,
@@ -289,6 +306,7 @@ export class CodexRealtimeBridge {
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
   private launchedManagedCodexBin: string | undefined
+  private quicksilverRestartAttemptedFor: string | undefined
 
   /** Start app-server and verify that its active account is ChatGPT OAuth.
    * @returns Sidecar availability, authentication and a classified failure reason.
@@ -337,6 +355,40 @@ export class CodexRealtimeBridge {
    * @returns Negotiated answer SDP and Codex thread identity.
    */
   async start(options: CodexRealtimeStartOptions): Promise<CodexRealtimeStartResult> {
+    try {
+      return await this.startOnce(options)
+    } catch (error) {
+      if (!isCodexQuicksilverV2Required(error) || this.sessions.size > 0) throw error
+      // Quicksilver V2 is already emitted by the official Codex V3 client.
+      // Recover exactly once per binary selection from a possibly stale voice
+      // app-server. Never loop, interrupt an active call, or change login.
+      const selected = this.launchedManagedCodexBin ?? 'ambient'
+      if (this.quicksilverRestartAttemptedFor !== selected) {
+        this.quicksilverRestartAttemptedFor = selected
+        this.close()
+        try {
+          return await this.startOnce(options)
+        } catch (again) {
+          if (!isCodexQuicksilverV2Required(again)) throw again
+        }
+      }
+      const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+      const currentVersion = codexLiveCurrentCliVersion(home)
+      if (currentVersion !== undefined) {
+        throw new Error(
+          `Codex Live: CLI ${currentVersion} ya está actualizado y autenticado. El servidor continúa rechazando Quicksilver v2 incluso después de reiniciar el proceso de voz. No se necesitan más instalaciones; verifica compatibilidad del servicio o cabeceras alteradas por proxy.`,
+        )
+      }
+      const repair = queueCodexLiveRepair(home)
+      throw new Error(repair === 'queued' || repair === 'recent'
+        ? 'Codex Live: Quicksilver v2 sigue rechazado tras reiniciar su proceso. Phoenix comprobará las versiones oficiales sin reinstalaciones repetidas.'
+        : repair === 'disabled'
+          ? 'Codex Live: Quicksilver v2 sigue rechazado; la actualización de Codex está desactivada.'
+          : 'Codex Live: Quicksilver v2 sigue rechazado; no fue posible solicitar la comprobación de Codex.')
+    }
+  }
+
+  private async startOnce(options: CodexRealtimeStartOptions): Promise<CodexRealtimeStartResult> {
     await this.ensureStarted()
     await this.stop(options.key).catch(() => {})
     // stop() arms the idle reap when there was no previous call; this start
@@ -355,17 +407,9 @@ export class CodexRealtimeBridge {
         answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
       } catch (error) {
         if (isCodexQuicksilverV2Required(error)) {
-          const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
-          const repair = queueCodexLiveRepair(home)
-          if (repair === 'queued' || repair === 'recent') {
-            // The client will watch updater progress and resume its original
-            // user-requested voice call once a verified newer CLI activates.
-            // Do not repeatedly acquire the mic or start multiple npm installs.
-            throw new Error('codex-live-repair-pending')
-          }
-          throw new Error(repair === 'disabled'
-            ? 'Codex Live requiere Quicksilver v2. La actualización automática de Codex está desactivada.'
-            : 'Codex Live requiere Quicksilver v2. No se pudo solicitar la reparación automática de Codex CLI.')
+          // Preserve the exact category for the bounded bridge restart above.
+          // The official V3 app-server normally supplies this alpha header.
+          throw new Error('invalid_quicksilver_alpha_header: AVAS requiere Quicksilver v2')
         }
         if (!isRealtimeV3UnsupportedError(error)) throw error
         // Only an explicit local "V3 unsupported" error permits V1 fallback.
