@@ -164,7 +164,7 @@ export function SidebarRoot({
           >
             {!wide && (
               <span className={css.railMark} aria-hidden="true">
-                {renderSlot('sidebar.brand.mark', { size: 24 }, { fallback: <PhoenixLogo size={24} /> })}
+                {renderSlot('sidebar.brand.mark', { size: 34 }, { fallback: <PhoenixLogo size={34} /> })}
               </span>
             )}
             {/* Rail icons render at 18 (figma rail spec); expanded keeps the glyph-native sizes. */}
@@ -181,7 +181,7 @@ export function SidebarRoot({
           aria-label={t('session.new.label')}
           onClick={() => { startSession() }}
         >
-          <IconNewChatOutline16 size={wide ? 14 : 21} />
+          <IconNewChatOutline16 size={wide ? 14 : 18} />
           {wide && <span className={clsx(css.newSessionLabel, css.wide)}>{t('session.new')}</span>}
         </button>
       </Tooltip>
@@ -189,22 +189,22 @@ export function SidebarRoot({
       {/* Preserve exactly the existing navigation actions on the collapsed rail. */}
       <nav className={css.primaryNavigation} aria-label="Navegación principal">
         <button type="button" className={css.navLink} aria-label={t('nav.home')} title={wide ? undefined : t('nav.home')} onClick={() => { startSession() }}>
-          <svg viewBox="0 0 24 24" width={wide ? 19 : 21} height={wide ? 19 : 21}
+          <svg viewBox="0 0 24 24" width={wide ? 19 : 18} height={wide ? 19 : 18}
             fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z" />
           </svg>{wide && <span>{t('nav.home')}</span>}
         </button>
         <button type="button" className={css.navLink} aria-label={t('nav.discover')} title={wide ? undefined : t('nav.discover')} onClick={() => { openFeature('discover', t('nav.discover')) }}>
-          <IconGlobeOutline14 size={wide ? 19 : 21} />{wide && <span>{t('nav.discover')}</span>}
+          <IconGlobeOutline14 size={wide ? 19 : 18} />{wide && <span>{t('nav.discover')}</span>}
         </button>
         <button type="button" className={css.navLink} aria-label={t('nav.connectors')} title={wide ? undefined : t('nav.connectors')} onClick={() => { openFeature('connectors', t('nav.connectors')) }}>
-          <IconPlugOutline16 size={wide ? 19 : 21} />{wide && <span>{t('nav.connectors')}</span>}
+          <IconPlugOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.connectors')}</span>}
         </button>
         <button type="button" className={css.navLink} aria-label={t('nav.team')} title={wide ? undefined : t('nav.team')} onClick={() => { window.dispatchEvent(new Event('phoenix:toggle-team-directory')) }}>
-          <IconAgentPresetOutline16 size={wide ? 19 : 21} />{wide && <span>{t('nav.team')}</span>}
+          <IconAgentPresetOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.team')}</span>}
         </button>
         <button type="button" className={css.navLink} aria-label={t('nav.library')} title={wide ? undefined : t('nav.library')} onClick={openLibrary}>
-          <IconFolderOpenOutline16 size={wide ? 19 : 21} />{wide && <span>{t('nav.library')}</span>}
+          <IconFolderOpenOutline16 size={wide ? 19 : 18} />{wide && <span>{t('nav.library')}</span>}
         </button>
       </nav>
 
