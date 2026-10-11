@@ -677,6 +677,28 @@ function servicesOf(ctx: Context): ImageRuntimeContext {
   return ctx as unknown as ImageRuntimeContext
 }
 
+/**
+ * Windows package managers can resolve Codex to a .cmd/.bat launcher.
+ * Node spawn without a shell cannot execute it (EINVAL). Invoke cmd only
+ * for scripts, using a fixed ASCII argv allowlist, with the prompt on stdin.
+ * Native .exe and POSIX binaries always use direct process execution.
+ */
+export function codexImageInvocation(
+  executable: string,
+  argvTail: readonly string[],
+  platform: NodeJS.Platform = process.platform,
+): readonly string[] {
+  if (platform !== 'win32' || !/\.(cmd|bat)$/i.test(executable)) return [executable, ...argvTail]
+  // cmd expands %, ! and ^ even in quoted paths. Do not interpret these.
+  if (/[\r\n"%!^]/.test(executable) || argvTail.some(arg => !/^[a-z0-9._/:=-]+$/i.test(arg))) {
+    throw new Error(
+      'image_generation: unsafe Windows Codex launcher; use codex.exe via CODEX_CLI_PATH',
+    )
+  }
+  // /s strips the outer quotes and keeps the quoted launcher path intact.
+  const commandLine = '"' + executable + '" ' + argvTail.join(' ')
+  return [process.env.ComSpec?.trim() || 'cmd.exe', '/d', '/s', '/c', '"' + commandLine + '"']
+}
 async function runCodex(
   ctx: Context,
   argvTail: readonly string[],
@@ -691,7 +713,7 @@ async function runCodex(
     CODEX_SQLITE_HOME: sqliteHome,
   }, signal)
   const handle = subprocess.spawn({
-    argv: [executable, ...argvTail],
+    argv: codexImageInvocation(executable, argvTail),
     cwd: process.cwd(),
     stdio: {
       stdin: stdin === undefined ? 'ignore' : { data: stdin },
