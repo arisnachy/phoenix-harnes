@@ -97,3 +97,23 @@
   color: var(--dsw-alias-label-primary); cursor: pointer; font-size: 12px;
 }
 .mediaBar button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+
+/* Browser chrome polish: consistent tabs, restrained separators and controls.
+   Never borrow palette from the visited website. */
+.browser { border-radius: 18px; box-shadow: 0 10px 32px rgb(0 0 0 / 6%); }
+.titlebar { min-height: 46px; padding: 9px 13px; background: var(--dsw-alias-bg-layer-1); }
+.brand { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.status { border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; padding: 3px 8px; }
+.tabs { gap: 5px; padding: 8px 10px 6px; scrollbar-width: thin; }
+.tabWrap { max-width: 215px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 11px; }
+.tabWrap:has(.activeTab) { box-shadow: 0 1px 3px rgb(0 0 0 / 4%); }
+.toolbar { padding: 9px 12px; background: var(--dsw-alias-bg-layer-2); }
+.toolbar input { height: 38px; border-radius: 11px; font-size: 12px; }
+.viewport { background: var(--dsw-alias-bg-layer-1); }
+.typeRow { gap: 7px; padding: 8px 11px; background: var(--dsw-alias-bg-layer-1); }
+.typeRow input { height: 37px; }
+@media (max-width: 640px) {
+  .tabs { padding-inline: 6px; }
+  .titlebar { padding-inline: 9px; }
+  .toolbar { padding-inline: 8px; }
+}
