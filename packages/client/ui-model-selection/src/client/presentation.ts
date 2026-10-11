@@ -22,7 +22,7 @@ import {
   siZdotai,
 } from 'simple-icons'
 
-/** Phoenix Auto is an orchestration route, never the actual foundation model. */
+/** Fénix Eclipse is the display name; phoenix-auto remains the stable orchestration route ID. */
 export function isPhoenixAutoRouting(modelId: string, modelName: string): boolean {
   return modelId.toLowerCase() === 'phoenix-auto'
     || /^phoenix[\s-]+auto$/iu.test(modelName.trim())

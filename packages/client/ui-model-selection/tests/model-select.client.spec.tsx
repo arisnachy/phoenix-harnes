@@ -6,7 +6,7 @@ import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { ComponentProps } from 'react'
 import type { ModelDirectoryState } from '../src/client/directory.ts'
 import { ModelSelect } from '../src/client/ModelSelect.tsx'
-import { zh } from '../src/client/locales.ts'
+import { en, es, zh } from '../src/client/locales.ts'
 import { zh as commonZh } from '@phoenix-ai/dsh-client-locale/src/locales/zh.ts'
 
 // The seat's key domain is model ∪ common; the stub mirrors the real lookup
@@ -522,8 +522,16 @@ describe('ModelSelect provider accordion', () => {
   })
 })
 
-describe('Phoenix Auto is a routing mode, not a model name', () => {
-  it('labels automatic routing without changing the Host model selection', () => {
+describe('Fénix Eclipse is the visible name of Phoenix automatic routing', () => {
+  it('keeps the same Fénix Eclipse display name across Spanish, English and Chinese', () => {
+    expect(es['trigger.auto']).toBe('Fénix Eclipse')
+    expect(en['trigger.auto']).toBe('Fénix Eclipse')
+    expect(zh['trigger.auto']).toBe('Fénix Eclipse')
+    expect(es['trigger.autoDetail']).toContain('Sol planifica')
+    expect(es['trigger.autoDetail']).toContain('Luna ejecuta')
+  })
+
+  it('uses Fénix Eclipse in the trigger and menu without changing the Host selection', () => {
     const directory = createSnapshotStore<ModelDirectoryState>(state({
       current: { provider: 'phoenix', model: 'phoenix-auto' },
       groups: [{
@@ -534,11 +542,11 @@ describe('Phoenix Auto is a routing mode, not a model name', () => {
     }))
     const select = vi.fn()
     render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
-    expect(screen.getByRole('button', { name: /自动路由 · 模型动态选择/ })).not.toBeNull()
+    expect(screen.getByRole('button', { name: /Fénix Eclipse/ })).not.toBeNull()
     expect(screen.queryByText('Phoenix Auto')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /自动路由 · 模型动态选择/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Fénix Eclipse/ }))
     fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
-    expect(screen.getByRole('menuitemradio', { name: '自动路由 · 模型动态选择' })).not.toBeNull()
+    expect(screen.getByRole('menuitemradio', { name: 'Fénix Eclipse' })).not.toBeNull()
     expect(select).not.toHaveBeenCalled()
   })
 })
