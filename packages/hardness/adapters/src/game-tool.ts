@@ -110,6 +110,19 @@ function validateRecordedAudio(html: string, manifest: Record<string, unknown>):
     if (encoded === null || (encoded[1]?.length ?? 0) < 20) {
       throw new ToolArgsError(['Game Studio: falta sonido grabado incrustado para ' + cue + ' (id=' + id + ').'])
     }
+    const bytes = Buffer.from(encoded[1] ?? '', 'base64')
+    const isWav = (src ?? '').startsWith('data:audio/wav;base64,')
+    const isOgg = (src ?? '').startsWith('data:audio/ogg;base64,')
+    const recognized = isWav
+      ? bytes.length >= 44 && bytes.toString('ascii', 0, 4) === 'RIFF'
+        && bytes.toString('ascii', 8, 12) === 'WAVE'
+      : isOgg
+        ? bytes.length > 32 && bytes.toString('ascii', 0, 4) === 'OggS'
+        : bytes.length > 32 && (bytes.toString('ascii', 0, 3) === 'ID3'
+          || (bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0))
+    if (!recognized) {
+      throw new ToolArgsError(['Game Studio: audio inválido para ' + cue + '; no basta con un texto codificado como base64.'])
+    }
   }
   const runtime = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)]
     .filter(match => !/\btype\s*=\s*["']application\/json["']/iu.test(match[1] ?? ''))
