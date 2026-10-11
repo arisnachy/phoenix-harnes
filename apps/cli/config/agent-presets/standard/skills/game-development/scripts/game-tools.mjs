@@ -180,7 +180,7 @@ function main() {
   if (values['--genre'] || values['--delivery'] || values['--quality']) {
     throw new Error('Routing options are only allowed for route.')
   }
-  if (values['--allow-install'] && operation !== 'ensure') throw new Error('--allow-install is permitted only for ensure.')
+  if (values['--allow-install'] && !['ensure', 'install'].includes(operation)) throw new Error('--allow-install is permitted only for ensure/install.')
   const target = values['--target']
   if (!targets.has(target)) throw new Error('Unknown game target.')
   if (operation !== 'plan' && values['--platform']) throw new Error('Actual probes/installations always use the current operating system.')
@@ -205,7 +205,7 @@ function main() {
   // Missing packages need an explicit installation grant from the game mission.
   // Allowlisted package IDs + no shell + current OS protect against model-supplied commands.
   const plan = installation(target, platform)
-  if (operation === 'ensure' && !values['--allow-install']) {
+  if (!values['--allow-install']) {
     console.log(JSON.stringify({ target, ready: false, installed: false,
       action: 'authorization-required', installationPlan: plan }))
     process.exitCode = 1
