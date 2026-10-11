@@ -51,6 +51,7 @@ type ActivityItem =
 
 type FlowItem =
   | { readonly kind: 'browser'; readonly key: string; readonly userKey: string }
+  | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly items: readonly FlowItem[] }
   | { readonly kind: 'node'; readonly key: string }
   | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
@@ -257,31 +258,44 @@ export function addBrowserCards(
   flow: FlowItem[],
   nodes: readonly OrderedChatNode[],
 ): FlowItem[] {
-  const requests = nodes.filter(isBrowserRequest)
-  if (requests.length === 0 && !flow.some(item => item.kind === 'optimistic' && isBrowserPrompt(item.text))) return flow
+  const requests = new Set(nodes.filter(isBrowserRequest).map(node => node.key))
+  if (requests.size === 0 && !flow.some(item => item.kind === 'optimistic' && isBrowserPrompt(item.text))) return flow
   const result: FlowItem[] = []
-  let pendingUserKey: string | undefined
-  const byKey = new Set(requests.map(n => n.key))
-  const userKeys = new Set(nodes.filter(n => n.kind === 'user' || n.kind === 'steering').map(n => n.key))
-  const finish = (): void => {
-    if (pendingUserKey !== undefined) {
-      result.push({ kind: 'browser', key: 'browser:' + pendingUserKey, userKey: pendingUserKey })
-      pendingUserKey = undefined
-    }
-  }
   for (const item of flow) {
-    // A new user turn begins after all content from the preceding turn.
-    if (item.kind === 'node' && userKeys.has(item.key)) {
-      finish()
-      if (byKey.has(item.key)) pendingUserKey = item.key
-    } else if (item.kind === 'optimistic') {
-      finish()
-      if (isBrowserPrompt(item.text)) pendingUserKey = item.key
-    }
     result.push(item)
+    // Browser is the next transcript surface after the request, not after
+    // the answer. Assistant messages therefore continue below it on completion.
+    if (item.kind === 'node' && requests.has(item.key)
+      || item.kind === 'optimistic' && isBrowserPrompt(item.text)) {
+      result.push({ kind: 'browser', key: 'browser:' + item.key, userKey: item.key })
+    }
   }
-  finish()
   return result
+}
+
+/**
+ * Show real assistant/tool rows beside the browser ONLY while its own latest
+ * turn is active. Moving the same keyed nodes (never cloning them) back into
+ * the ordinary timeline on completion prevents duplicate assistant messages.
+ * Later user turns must never relight an older browser's activity panel.
+ */
+export function groupActiveBrowserFlow(
+  flow: FlowItem[],
+  userKey: string,
+  nodes: readonly OrderedChatNode[],
+): FlowItem[] {
+  const index = flow.findIndex(item => item.kind === 'browser' && item.userKey === userKey)
+  if (index < 0) return flow
+  const userKeys = new Set(nodes.filter(node => node.kind === 'user' || node.kind === 'steering').map(node => node.key))
+  const nextTurn = flow.slice(index + 1).some(item =>
+    item.kind === 'optimistic'
+    || item.kind === 'browser'
+    || item.kind === 'node' && userKeys.has(item.key))
+  if (nextTurn) return flow
+  return [
+    ...flow.slice(0, index),
+    { kind: 'browser-workspace', key: 'browser-workspace:' + userKey, userKey, items: flow.slice(index + 1) },
+  ]
 }
 
 function ToolActivityIcon() {
@@ -455,6 +469,65 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
   )
 }
 
+/** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
+function BrowserWorkspace({
+  userKey, items, selected, onActivate, seatProps, turnStatus,
+}: {
+  readonly userKey: string
+  readonly items: readonly FlowItem[]
+  readonly selected: boolean
+  readonly onActivate: () => void
+  readonly seatProps: SeatProps
+  readonly turnStatus: ToolActivityFlowProps['turnStatus']
+}) {
+  const [page, setPage] = useState<{ title: string; url: string } | null>(null)
+  return (
+    <div className={css.browserWorkspace} data-browser-workspace="" data-chat-flow-kind="browser-workspace">
+      <div className={css.browserPane}>
+        <MiniBrowser requested active={selected} onActivate={onActivate} autoScroll={false} onPageChange={setPage} />
+      </div>
+      <aside className={css.activityPane} aria-label="Actividad del agente en este navegador">
+        <header className={css.activityHeader}>
+          <strong>Actividad del agente</strong>
+          <span className={css.livePill}><span aria-hidden="true" /> En vivo</span>
+        </header>
+        {page !== null && (
+          <div className={css.pageInfo}>
+            <span className={css.pageCaption}>Pestaña en uso</span>
+            <strong title={page.title}>{page.title || 'Página actual'}</strong>
+            <span className={css.pageUrl} title={page.url}>{page.url}</span>
+          </div>
+        )}
+        <div className={css.activityMessages} aria-live="polite" aria-relevant="additions text">
+          {items.map(item => (
+            <Fragment key={item.key}>
+              {item.kind === 'node'
+                ? <ChatNodeSeat nodeKey={item.key} {...seatProps} />
+                : item.kind === 'activity'
+                  ? <ToolActivityGroup items={item.items} anchorKey={item.anchorKey} {...seatProps} />
+                  : item.kind === 'images'
+                    ? <div data-chat-flow-kind="generated-image">
+                      {seatProps.renderMessageImages({ images: item.images, align: 'start' })}
+                    </div>
+                    : item.kind === 'optimistic'
+                      ? <PendingSteeringBubble
+                        content={[{ type: 'text', text: item.text }]}
+                        renderMessageImages={seatProps.renderMessageImages}
+                        t={seatProps.t}
+                      />
+                      : null}
+            </Fragment>
+          ))}
+          {turnStatus?.progress != null && (
+            <TurnStatus startTime={turnStatus.startTime} progress={turnStatus.progress}
+              expiresAfterMs={turnStatus.expiresAfterMs} t={seatProps.t} />
+          )}
+        </div>
+      </aside>
+    </div>
+  )
+}
+
 /**
  * Render ordered chat nodes while collapsing model-internal/tool activity into one disclosure.
  * Visible assistant prose precedes its technical activity, and the running status precedes a trailing Tools group.
@@ -464,8 +537,8 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
  * @returns The grouped transcript flow.
  */
 export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
-  const flow = useMemo(() => addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), [nodes, optimisticSubmit])
-  const browserKeys = flow.filter(item => item.kind === 'browser').map(item => item.userKey)
+  const ordinaryFlow = useMemo(() => addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), [nodes, optimisticSubmit])
+  const browserKeys = ordinaryFlow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
   const newestBrowserKey = browserKeys.at(-1)
   const [lastBrowserKey, setLastBrowserKey] = useState<string | undefined>()
@@ -476,6 +549,13 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
     }
   }, [newestBrowserKey, lastBrowserKey])
   const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
+  const browserTurnRunning = turnStatus?.progress != null
+  const flow = useMemo(() =>
+    browserTurnRunning && newestBrowserKey !== undefined
+      ? groupActiveBrowserFlow(ordinaryFlow, newestBrowserKey, nodes)
+      : ordinaryFlow,
+    [ordinaryFlow, newestBrowserKey, nodes, browserTurnRunning])
+  const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace')
   // The screenshot-like centered preparation state is confined to a blank
   // conversation's first pending answer, never to a continuing transcript.
   const centeredPreparing = turnStatus?.progress?.phase === 'preparing'
@@ -494,7 +574,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
     <>
       {flow.map((item, index) => (
         <Fragment key={item.key}>
-          {turnStatus !== undefined && turnStatus.progress !== null && index === statusBeforeIndex && (
+          {!hasBrowserWorkspace && turnStatus !== undefined && turnStatus.progress !== null && index === statusBeforeIndex && (
             <TurnStatus
               startTime={turnStatus.startTime}
               progress={turnStatus.progress}
@@ -503,7 +583,16 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
               t={seatProps.t}
             />
           )}
-          {item.kind === 'browser'
+          {item.kind === 'browser-workspace'
+            ? <BrowserWorkspace
+              userKey={item.userKey}
+              items={item.items}
+              selected={item.userKey === activeBrowserKey}
+              onActivate={() => { setSelectedBrowserKey(item.userKey) }}
+              seatProps={seatProps}
+              turnStatus={turnStatus}
+            />
+            : item.kind === 'browser'
             ? <MiniBrowser
               requested
               active={item.userKey === activeBrowserKey}
@@ -534,7 +623,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
                   )}
         </Fragment>
       ))}
-      {turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
+      {!hasBrowserWorkspace && turnStatus !== undefined && turnStatus.progress !== null && statusBeforeIndex === -1 && (
         <TurnStatus
           startTime={turnStatus.startTime}
           progress={turnStatus.progress}
