@@ -148,9 +148,8 @@ function codexRealtimeEnvironment(): NodeJS.ProcessEnv {
   const env = { ...process.env }
   // Subscription-backed ChatGPT account only, never paid API-key fallback.
   delete env.OPENAI_API_KEY
-  const home = process.env.CODEX_HOME?.trim()
-    ? resolve(process.env.CODEX_HOME)
-    : join(homedir(), '.codex')
+  const configuredHome = process.env.CODEX_HOME?.trim()
+  const home = configuredHome ? resolve(configuredHome) : join(homedir(), '.codex')
   const phoenixRoot = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
   const codexRoot = process.env.CODEX_SQLITE_HOME?.trim()
   const sqliteHome = phoenixRoot
