@@ -220,8 +220,6 @@ export class CodexRealtimeBridge {
   private readonly callTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly transcriptListeners = new Map<string, (transcript: CodexRealtimeTranscript) => void>()
   private readonly stderrTail: string[] = []
-  // Remember this deployment's V1 header rejection: subsequent calls use native V3.
-  private quicksilverV1Unsupported = false
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -282,30 +280,24 @@ export class CodexRealtimeBridge {
     try {
       threadId = await this.startVoiceThread(options.model)
       if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
-      // Restore Kira's original Codex CLI Juniper voice (legacy V1).
-      // The newer Frameless V3 uses another voice (Marin). If the installed
-      // CLI no longer supports V1, transparently retry V3 using a fresh thread.
-      // Neither attempt uses browser or system speech synthesis.
+      // AVAS WebRTC now requires the Quicksilver v2 alpha protocol, which the
+      // authenticated Codex app-server negotiates through realtime V3. V1
+      // first caused invalid_quicksilver_alpha_header on every fresh bridge.
       let answerSdp: string
-      if (this.quicksilverV1Unsupported) {
-        // The account's AVAS backend rejected legacy Quicksilver. Keep using
-        // authenticated Codex CLI V3 directly rather than failing twice on
-        // every microphone activation. This state is scoped to this bridge.
+      try {
         answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
-      } else {
-        try {
-          answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
-        } catch (error) {
-          if (!isRealtimeVersionCompatibilityError(error)) throw error
-          if (isCodexQuicksilverV2Required(error)) this.quicksilverV1Unsupported = true
-          // A rejected V1 negotiation leaves a spent thread. Retry V3 with
-          // an entirely fresh thread; do not reuse a broken WebRTC call.
-          await this.request('thread/realtime/stop', { threadId }).catch(() => {})
-          this.transcriptListeners.delete(threadId)
-          threadId = await this.startVoiceThread(options.model)
-          if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
-          answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
+      } catch (error) {
+        if (isCodexQuicksilverV2Required(error)) {
+          throw new Error('Codex Live requiere Quicksilver v2. Actualiza Codex CLI y reinicia Phoenix para usar el protocolo WebRTC v3.')
         }
+        if (!isRealtimeV3UnsupportedError(error)) throw error
+        // Only an explicit local "V3 unsupported" error permits V1 fallback.
+        // Never downgrade a 400/403, Quicksilver, auth or network failure.
+        await this.request('thread/realtime/stop', { threadId }).catch(() => {})
+        this.transcriptListeners.delete(threadId)
+        threadId = await this.startVoiceThread(options.model)
+        if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
+        answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
       }
       this.sessions.set(options.key, threadId)
       this.armCallExpiry(options.key)
@@ -792,11 +784,12 @@ export function isCodexQuicksilverV2Required(value: unknown): boolean {
   return /invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\s*quicksilver=v2/iu.test(message)
 }
 
-function isRealtimeVersionCompatibilityError(value: unknown): boolean {
-  if (isCodexQuicksilverV2Required(value)) return true
+function isRealtimeV3UnsupportedError(value: unknown): boolean {
+  if (isCodexQuicksilverV2Required(value)) return false
   const message = errorText(value)
-  // oxlint-disable-next-line @stylistic/max-len -- Keep the protocol compatibility matcher auditable as one literal.
-  return /notification timed out: thread\/realtime\/sdp|\b(?:400|404)\b|bad request|(?:v1|legacy|avas|v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v1|legacy|avas|v3|frameless|gpt-live-1-codex)/iu.test(message)
+  // Explicit unsupported protocol only: never treat generic 400, timeouts,
+  // forbidden access or missing WebRTC permissions as version compatibility.
+  return /(?:v3|frameless|realtime version).{0,90}(?:unsupported|not supported|unknown|unrecognized)|(?:unsupported|not supported|unknown|unrecognized).{0,90}(?:v3|frameless|realtime version)/iu.test(message)
 }
 
 function realtimeNotificationMessage(value: unknown, fallback: string): string {
