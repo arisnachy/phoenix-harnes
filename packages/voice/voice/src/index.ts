@@ -28,7 +28,7 @@ import type {
   VoiceConversationStatus,
 } from './types.ts'
 import {
-  CodexRealtimeBridge, codexLiveRepairPhase, codexRealtimeNeedsLogin,
+  CodexRealtimeBridge, codexLiveCurrentCliVersion, codexLiveRepairPhase, codexRealtimeNeedsLogin,
   type CodexRealtimeInitialItem,
   type CodexRealtimeTranscript,
 } from './codex-realtime.ts'
@@ -430,7 +430,13 @@ export class VoiceRuntime extends TypertRemoteService {
       }
     }
     const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
-    const repair = codexLiveRepairPhase(dshHome)
+    // An already-current CLI cannot be repaired by a new npm poll. Do not
+    // permanently block the voice button behind a stale 'waiting-upstream'
+    // request; permit the controlled, one-time app-server recovery instead.
+    const observedRepair = codexLiveRepairPhase(dshHome)
+    const repair = observedRepair === 'waiting-upstream' && codexLiveCurrentCliVersion(dshHome) !== undefined
+      ? 'idle'
+      : observedRepair
     if (repair !== 'idle' && repair !== 'ready') {
       return {
         enabled: true, available: false, authenticated: false, provider: 'openai-codex',

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
@@ -11,7 +11,7 @@ import VoiceRuntime, {
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
 import {
-  CodexRealtimeBridge, codexLiveRepairPhase, codexRealtimeEnvironment, codexRealtimeLaunchCommand,
+  CodexRealtimeBridge, codexLiveRepairPhase, codexLiveCurrentCliVersion, codexRealtimeEnvironment, codexRealtimeLaunchCommand,
   codexRealtimeNeedsLogin, findManagedCodexRealtimeBin, isCodexQuicksilverV2Required,
   queueCodexLiveRepair, realtimeVoiceForGender,
 } from '../src/codex-realtime.ts'
@@ -539,6 +539,28 @@ describe('Codex Live on-demand updater', () => {
   })
 })
 
+describe('Codex Live Quicksilver local diagnostics', () => {
+  it('recognizes fresh managed CLI status and ignores stale or damaged snapshots', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-live-version-'))
+    const state = join(home, 'codex-cli', 'update-state.json')
+    mkdirSync(join(state, '..'), { recursive: true })
+    try {
+      writeFileSync(state, JSON.stringify({
+        currentVersion: '0.162.1', latestVersion: '0.162.1',
+        checkedAt: new Date().toISOString(),
+      }))
+      expect(codexLiveCurrentCliVersion(home)).toBe('0.162.1')
+      writeFileSync(state, JSON.stringify({
+        currentVersion: '0.162.1', latestVersion: '0.163.0',
+        checkedAt: new Date().toISOString(),
+      }))
+      expect(codexLiveCurrentCliVersion(home)).toBeUndefined()
+      writeFileSync(state, '{incomplete')
+      expect(codexLiveCurrentCliVersion(home)).toBeUndefined()
+    } finally { rmSync(home, { recursive: true, force: true }) }
+  })
+})
+
 describe('Codex realtime voice protocol compatibility', () => {
   it('uses supported gender-specific voices on V3 WebRTC', () => {
     expect(realtimeVoiceForGender('feminine', 'v3')).toBe('marin')
@@ -574,15 +596,16 @@ describe('Codex realtime voice protocol compatibility', () => {
     } finally { bridge.close() }
   })
 
-  it('fails usefully without retrying V1 when the Codex CLI still omits Quicksilver v2', async () => {
+  it('recovers a stale app-server only once per runtime and diagnoses current Codex 0.162.1', async () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
       ensureStarted(): Promise<void>; stop(key: string): Promise<boolean>
       startVoiceThread(model?: string): Promise<string>
       negotiateRealtime(id: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
       request(method: string, params?: unknown): Promise<unknown>
+      launchedManagedCodexBin?: string
     }
-    vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
+    const ensureStarted = vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
     vi.spyOn(internal, 'stop').mockResolvedValue(false)
     const started = vi.spyOn(internal, 'startVoiceThread').mockResolvedValue('stale-cli-thread')
     const negotiated = vi.spyOn(internal, 'negotiateRealtime').mockRejectedValue(
@@ -590,13 +613,31 @@ describe('Codex realtime voice protocol compatibility', () => {
     )
     const requests = vi.spyOn(internal, 'request').mockResolvedValue({})
     const home = mkdtempSync(join(tmpdir(), 'phoenix-quicksilver-test-'))
+    const state = join(home, 'codex-cli', 'update-state.json')
+    mkdirSync(join(state, '..'), { recursive: true })
+    writeFileSync(state, JSON.stringify({
+      schema: 1, status: 'current', currentVersion: '0.162.1',
+      latestVersion: '0.162.1', checkedAt: new Date().toISOString(),
+    }))
+    const binary = join(home, 'codex-cli', 'versions', '0.162.1', 'codex.js')
+    mkdirSync(join(binary, '..'), { recursive: true })
+    writeFileSync(binary, '')
+    writeFileSync(join(home, 'codex-cli', 'active.json'), JSON.stringify({
+      schema: 1, version: '0.162.1', bin: 'versions/0.162.1/codex.js',
+    }))
+    ensureStarted.mockImplementation(async () => { internal.launchedManagedCodexBin = binary })
     vi.stubEnv('DSH_HOME', home)
     try {
       await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
-        .rejects.toThrow('Quicksilver v2')
-      expect(started).toHaveBeenCalledTimes(1)
-      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3'])
+        .rejects.toThrow('CLI 0.162.1 gestionado ya está actualizado')
+      expect(started).toHaveBeenCalledTimes(2)
+      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3'])
       expect(requests).toHaveBeenCalledWith('thread/realtime/stop', { threadId: 'stale-cli-thread' })
+      await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
+        .rejects.toThrow('CLI 0.162.1 gestionado ya está actualizado')
+      expect(started).toHaveBeenCalledTimes(3)
+      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3', 'v3'])
+      expect(existsSync(join(home, 'codex-cli', 'live-repair-request.json'))).toBe(false)
     } finally {
       bridge.close()
       vi.unstubAllEnvs()
