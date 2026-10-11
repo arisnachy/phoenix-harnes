@@ -2,11 +2,27 @@ import { mkdtempSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   GODOT_STARTER_FILES, scaffoldGodotProject, verifyGodotProject, godotInvocation,
 } from '../godot/bootstrap.mjs'
-import { installation, route, windowsGodotCandidates } from '../../../apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs'
+// The game-tool CLI is a standalone .mjs skill asset, not part of the Host TS
+// source graph. Load it at test runtime rather than making an isolated Host
+// typecheck resolve the asset. Vitest still fails if the real file is missing.
+type GameToolModule = {
+  installation(target: string, platform: string): { command: string; args: string[] }
+  route(genre: string, delivery: 'chat' | 'desktop' | 'web', quality: 'prototype' | 'production'): {
+    engine: string
+    authoringEngine: string
+    tools: string[]
+    renderer: string
+    authoringRule: string
+  }
+  windowsGodotCandidates(env?: NodeJS.ProcessEnv): string[]
+}
+const gameToolScript = resolve('apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs')
+const { installation, route, windowsGodotCandidates } = await import(pathToFileURL(gameToolScript).href) as GameToolModule
 
 const temp: string[] = []
 afterEach(() => { for (const dir of temp.splice(0)) rmSync(dir, { recursive: true, force: true }) })
