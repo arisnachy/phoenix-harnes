@@ -460,12 +460,15 @@ async function openConnection(
   }
 }
 
+/** Native Codex owns the credential refresh; only explicit user sign-in may
+ * request a forced check. Passive quota telemetry must never rotate tokens. */
 async function readAccount(
   connection: CodexAccountConnection,
   signal: AbortSignal,
+  refreshToken = false,
 ): Promise<{ account: unknown; requiresOpenaiAuth: boolean }> {
   const response = object(await Promise.race([
-    connection.request('account/read', { refreshToken: false }, signal),
+    connection.request('account/read', { refreshToken }, signal),
     connection.processEnded(),
   ]), 'account/read response')
   return {
@@ -592,6 +595,15 @@ async function logoutManagedChatGpt(
   }
 }
 
+/** Only a terminal native Codex refresh-credential expiration allows an
+ * explicit user-triggered re-login to retire the obsolete official session.
+ * Do not log token data, delete arbitrary credential files or treat an offline
+ * network or temporary rate-limit error as an expired account. */
+export function codexRefreshTokenExpired(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /(?:refresh[\\s_-]*token[^\\r\\n]{0,120}expired|refresh[\\s_-]*token[\\s_-]*expired)/iu.test(message)
+}
+
 async function loginManagedChatGpt(
   ctx: Context,
   config: CodexAccountBridgeConfig,
@@ -605,12 +617,28 @@ async function loginManagedChatGpt(
   }
   session.signal.addEventListener('abort', cancelLogin, { once: true })
   try {
-    const existing = await readAccount(connection, session.signal)
-    if (existing.account !== null && existing.account !== undefined) {
+    // The passive account/read snapshot may still say "chatgpt" after the
+    // underlying refresh token has expired. A user pressing "Connect" needs
+    // an authoritative native refresh check, not a stale cached login marker.
+    let existing: Awaited<ReturnType<typeof readAccount>> | undefined
+    try {
+      existing = await readAccount(connection, session.signal, true)
+    } catch (error: unknown) {
+      if (!codexRefreshTokenExpired(error)) throw error
+      // This is an explicit sign-in request, not a background maintenance task.
+      // Ask the official Codex app-server to discard only its invalid account.
+      await Promise.race([
+        connection.request('account/logout', {}, session.signal),
+        connection.processEnded(),
+      ])
+      await ctx.credentials.deleteRecord(CODEX_ACCOUNT_KEY)
+      session.notify({ message: 'La sesión de Codex caducó. Inicia sesión de nuevo con ChatGPT para recuperarla; las actualizaciones de Phoenix siguen siendo independientes.' })
+    }
+    if (existing?.account !== null && existing?.account !== undefined) {
       const account = object(existing.account, 'account')
       if (account.type === 'chatgpt') {
         await commitManagedAccountMarker(ctx)
-        session.notify({ message: 'Codex is already connected to ChatGPT; PHOENIX will reuse that managed session.' })
+        session.notify({ message: 'Codex is already connected to ChatGPT and the native session was verified.' })
         return
       }
     }
