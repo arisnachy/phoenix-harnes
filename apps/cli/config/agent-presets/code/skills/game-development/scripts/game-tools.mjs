@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 
-const targets = new Set(['web', 'godot', 'blender', 'tiled', 'ffmpeg', 'gameboy', 'nes', 'snes', 'genesis', 'sms', 'ps1'])
+const targets = new Set(['web', 'godot', 'blender', 'tiled', 'ffmpeg', 'uv', 'gameboy', 'nes', 'snes', 'genesis', 'sms', 'ps1'])
 function execute(command, args, timeout = 8000) {
   return spawnSync(command, args, { encoding: 'utf8', shell: false, timeout, maxBuffer: 256 * 1024 })
 }
@@ -47,6 +47,9 @@ function readiness(target) {
   if (target === 'ffmpeg') return probe(process.env.PHOENIX_FFMPEG_BIN
     ? [[process.env.PHOENIX_FFMPEG_BIN, ['-version']]]
     : [['ffmpeg', ['-version']]], /^ffmpeg version\s+\S+/mu)
+  if (target === 'uv') return probe(process.env.PHOENIX_UVX_BIN
+    ? [[process.env.PHOENIX_UVX_BIN, ['--version']]]
+    : [['uvx', ['--version']]], /^uvx?\s+\d+\.\d+(?:\.\d+)?/mu)
   if (target === 'gameboy') return probe([[process.env.GBDK_HOME ? join(process.env.GBDK_HOME, 'bin', `lcc${suffix}`) : 'lcc', ['-v']]], /GBDK|gbz80|sm83|SDCC/iu)
   if (target === 'nes') return probe([['cc65', ['--version']]], /cc65/iu)
   if (target === 'ps1') {
@@ -96,6 +99,7 @@ function installation(target, platform) {
     blender: { win32: 'BlenderFoundation.Blender', darwin: 'blender', linux: 'org.blender.Blender' },
     tiled: { win32: 'Tiled.Tiled', darwin: 'tiled' },
     ffmpeg: { win32: 'Gyan.FFmpeg', darwin: 'ffmpeg' },
+    uv: { win32: 'astral-sh.uv', darwin: 'uv' },
   }
   if (!(target in packages)) throw new Error('No approved automatic installation route for this target.')
   const id = packages[target][platform]
@@ -106,7 +110,7 @@ function installation(target, platform) {
       '--accept-package-agreements', '--accept-source-agreements'],
   }
   if (platform === 'darwin') return {
-    command: 'brew', args: ['install', ...(target === 'ffmpeg' ? [] : ['--cask']), id],
+    command: 'brew', args: ['install', ...(['ffmpeg', 'uv'].includes(target) ? [] : ['--cask']), id],
   }
   if (platform === 'linux') return {
     command: 'flatpak', args: ['install', '--user', '--noninteractive', 'flathub', id],
