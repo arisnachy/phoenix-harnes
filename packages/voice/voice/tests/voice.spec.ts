@@ -489,6 +489,24 @@ describe('Codex realtime voice protocol compatibility', () => {
   })
 })
 
+describe('Codex CLI voice startup diagnostics', () => {
+  it('shows a useful failure reason without leaking authentication tokens', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as { ensureStarted(): Promise<void> }
+    vi.spyOn(internal, 'ensureStarted').mockRejectedValue(
+      new Error('realtime feature disabled, Bearer abc-private-token-value'),
+    )
+    try {
+      const result = await bridge.probe()
+      expect(result.reason).toBe('experimental-unavailable')
+      expect(result.detail).toContain('realtime feature disabled')
+      expect(result.detail).not.toContain('abc-private-token-value')
+    } finally {
+      bridge.close()
+    }
+  })
+})
+
 describe('Codex original Kira voice selection', () => {
   it('prefers Codex CLI V1 Juniper before the newer Frameless protocol', async () => {
     const bridge = new CodexRealtimeBridge()
