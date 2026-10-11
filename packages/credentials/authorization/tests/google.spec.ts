@@ -390,6 +390,39 @@ describe('Google Workspace API broker', () => {
     })
   })
 
+  it('adopts an OAuth grant rotated by the previous Host during restart', async () => {
+    const ctx = await harness()
+    internals.now = () => 1_000_000
+    await authorize(ctx, { expires_in: 1 })
+    internals.now = () => 2_000_000
+    let attempts = 0
+    internals.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (url === 'https://oauth2.googleapis.com/token') {
+        // A side-by-side old Host has already committed the rotated grant
+        // after this Host loaded its previous refresh token.
+        await ctx.credentials.modifyRecord(GOOGLE_ACCOUNT_KEY, () => Promise.resolve({
+          kind: 'grant',
+          payload: {
+            provider: 'google-oauth', version: 1,
+            accessToken: 'updated-by-old-host', refreshToken: 'newer-rotated-refresh',
+            expiresAt: 9_000_000, scopes: [...SCOPES],
+          },
+        }))
+        return new Response(JSON.stringify({ error: 'invalid_grant' }), { status: 400 })
+      }
+      attempts += 1
+      expect(new Headers(init?.headers).get('authorization')).toBe('Bearer updated-by-old-host')
+      return new Response('{}', { status: 200 })
+    }
+    await expect(googleApi(ctx).request({ service: 'drive', path: 'files' }))
+      .resolves.toMatchObject({ ok: true, status: 200 })
+    expect(attempts).toBe(1)
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+      kind: 'grant', payload: { accessToken: 'updated-by-old-host', refreshToken: 'newer-rotated-refresh' },
+    })
+  })
+
   it('removes a revoked refresh token only on explicit Google invalid_grant', async () => {
     const ctx = await harness()
     internals.now = () => 1_000_000
