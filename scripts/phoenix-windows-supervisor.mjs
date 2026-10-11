@@ -1232,8 +1232,14 @@ async function stopWatcher(watcher) {
 // Never terminate the process currently owning a port.
 // Custom host/address binds still belong to the Host configuration.
 function defaultPhoenixPort() {
-  if (hostArgs.some(arg => /^--(?:host|hostname|address)(?:=|$)/u.test(arg))) return undefined
-  if (process.env.PHOENIX_HOST) return undefined
+  // An explicit loopback host is still Phoenix's normal listener and must
+  // never disable the duplicate-Host guard. Only unknown/wildcard hosts skip it.
+  if (hostArgs.some(arg => /^--(?:hostname|address)(?:=|$)/u.test(arg))) return undefined
+  const hostIndex = hostArgs.indexOf('--host')
+  const host = hostArgs.find(arg => arg.startsWith('--host='))?.slice('--host='.length)
+    ?? (hostIndex < 0 ? undefined : hostArgs[hostIndex + 1])
+    ?? process.env.PHOENIX_HOST
+  if (host !== undefined && host !== '127.0.0.1' && host !== 'localhost') return undefined
   const portIndex = hostArgs.indexOf('--port')
   const configured = hostArgs.find(arg => arg.startsWith('--port='))?.slice('--port='.length)
     ?? (portIndex < 0 ? undefined : hostArgs[portIndex + 1])
