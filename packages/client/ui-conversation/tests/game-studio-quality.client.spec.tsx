@@ -169,3 +169,59 @@ describe('Phoenix Game Studio cross-genre contracts', () => {
   })
 
 })
+
+describe('Beat-em-up games require their own action-game profile', () => {
+  const brawler = {
+    schemaVersion: 1, title: 'Original street brawler', genre: 'beat-em-up', gameType: 'beat-em-up',
+    player: { states: ['idle', 'run', 'jump', 'punch', 'kick', 'grab', 'hurt', 'death'],
+      animations: { idle: 4, run: 8, jump: 2, punch: 3, kick: 3, grab: 2, hurt: 2, death: 3 } },
+    enemies: ['scout', 'fighter', 'bruiser'].map(id => ({ id, states: ['move', 'attack', 'hurt', 'death'] })),
+    bosses: [{ id: 'chief', phases: ['opening', 'enraged'],
+      attacks: [{ id: 'sweep', telegraphSeconds: .4 }, { id: 'charge', telegraphSeconds: .7 }] }],
+    combat: { depthAxis: true, knockback: true, hitboxes: { yTolerance: 22 },
+      combos: [{ id: 'jab-jab-kick' }, { id: 'heavy-chain' }], grapples: [{ id: 'throw' }] },
+    level: { scrollLength: 2400, belt: { minY: 260, maxY: 390 },
+      zones: [{ id: 'alley' }, { id: 'warehouse' }],
+      layers: [{ id: 'sky', scrollFactor: .1 }, { id: 'city', scrollFactor: .4 },
+        { id: 'props', scrollFactor: .8 }] },
+    controls: { move: 'WASD', punch: 'J', kick: 'K', jump: 'Space', grab: 'L' },
+    audio: { cues: ['punch', 'kick', 'hit', 'grab', 'boss', 'pickup'], music: 'original theme' },
+    sources: [{ path: 'scene.html', license: 'original' }],
+    art: { mode: 'prototype' },
+  }
+
+  it('accepts a complete brawler prototype without pretending it has finished art', () => {
+    const verdict = auditGameManifest(brawler)
+    expect(verdict.valid).toBe(true)
+    expect(verdict.warnings).toContain('character-art-prototype-not-final')
+  })
+
+  it('rejects a Double Dragon-like mock with two generic static fighters and empty audio', () => {
+    const broken = auditGameManifest({
+      ...brawler, genre: 'Double Dragon-inspired beat-em-up',
+      player: { states: ['idle'], animations: { idle: 1 } },
+      enemies: [{ id: 'clone', states: ['move', 'attack', 'hurt', 'death'] }],
+      bosses: [{ id: 'still-boss', phases: ['phase1'] }],
+      level: { layers: [{ id: 'flat', scrollFactor: 0 }] },
+      controls: { move: 'WASD', action: 'J' },
+      audio: { cues: [] },
+      combat: undefined,
+    })
+    expect(broken.valid).toBe(false)
+    for (const issue of ['player-state:punch', 'player-state:grab',
+      'beat-em-up-requires-three-enemy-archetypes',
+      'beat-em-up-boss-requires-two-telegraphed-attacks',
+      'beat-em-up-requires-depth-hitboxes-combos-grapples-knockback',
+      'beat-em-up-requires-belt-scroll-and-distinct-stage-zones',
+      'control:punch', 'control:grab', 'audio-cue:grab']) expect(broken.issues).toContain(issue)
+  })
+
+  it('refuses to badge production art and audio from a hero-only brawler', () => {
+    const verdict = auditGameManifest({ ...brawler,
+      art: { mode: 'production', designReference: 'hero.png', hero: { imageId: 'hero-img' } },
+    })
+    expect(verdict.issues).toContain('missing-production-art:enemies')
+    expect(verdict.issues).toContain('missing-production-art:bosses')
+    expect(verdict.issues).toContain('beat-em-up-production-requires-recorded-audio')
+  })
+})
