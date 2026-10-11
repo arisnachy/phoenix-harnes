@@ -80,6 +80,24 @@ describe('Phoenix Game Studio visual asset binding', () => {
       .toThrow('drawImage')
   })
 
+  it('accepts a real manifest-based renderer for every atlas and world family, but blocks unused boss art', () => {
+    const images = [...worldHtml.matchAll(/<img\\b[^>]*>/gu)].map(match => match[0]).join('')
+    const gameplay = [
+      'const gameArt=window.gameManifest.art;',
+      'const g=document.querySelector("canvas").getContext("2d");',
+      'function drawArt(kind,id,state){const spec=gameArt[kind]?.[0]||gameArt.hero;',
+      'const image=document.getElementById(spec.imageId);PhoenixGameKit.drawSpriteState(g,image,spec,state,0,0,0,32,32)}',
+      'function drawWorldAsset(kind,id){const spec=gameArt[kind][0];const image=document.getElementById(spec.imageId);g.drawImage(image,0,0)}',
+      'for(const layer of gameArt.backgrounds){const image=document.getElementById(layer.imageId);g.drawImage(image,0,0)}',
+      "drawArt('hero','hero','run');drawArt('enemies','scout','attack');drawArt('bosses','warden','attack');",
+      "drawWorldAsset('weapons','rifle');drawWorldAsset('projectiles','bullet');",
+      "drawWorldAsset('powers','shield');drawWorldAsset('props','supply-crate');drawWorldAsset('effects','explosion');",
+    ].join('')
+    const composed = '<html><body><canvas></canvas>' + images + '<script>' + gameplay + '</script></body></html>'
+    expect(validateGameArt(composed, full)).toBe('production-structure')
+    expect(() => validateGameArt(composed.replace("drawArt('bosses','warden','attack');", ''), full)).toThrow('drawImage')
+  })
+
   it('rejects concept art that is present but not rendered in the game', () => {
     expect(() => validateGameArt(html.replace('ctx.drawImage(hero,0,0);', ''), production))
       .toThrow('drawImage')
