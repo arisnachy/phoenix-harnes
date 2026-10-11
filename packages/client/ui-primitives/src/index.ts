@@ -54,3 +54,6 @@ export { MessageText } from './markdown/MessageText.tsx'
 export { extractMarkdownPlainText } from './markdown/plain-text.ts'
 export type { MarkdownPlainTextMode, MarkdownPlainTextOptions } from './markdown/plain-text.ts'
 export * from './icons/index.tsx'
+
+export { PhoenixUiIcon, PhoenixStatusPill, PhoenixAgentLine } from './SmartUi.tsx'
+export type { PhoenixUiIconName, PhoenixStatusTone } from './SmartUi.tsx'
