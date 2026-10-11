@@ -24,6 +24,8 @@ const DEFAULT_POLL_MS = 6 * 60 * 60 * 1000
 const MIN_POLL_MS = 30 * 60 * 1000
 const REGISTRY_URL = 'https://registry.npmjs.org/@openai%2fcodex/latest'
 const PACKAGE_NAME = '@openai/codex'
+const LIVE_REPAIR_REQUEST_FILE = 'live-repair-request.json'
+const LIVE_REPAIR_REQUEST_MAX_AGE_MS = 30 * 60 * 1000
 
 /** Normalize the managed Codex updater mode. */
 export function normalizeCodexUpdateMode(value) {
@@ -74,6 +76,21 @@ function markerPath(home) {
 
 function statePath(home) {
   return join(runtimeRoot(home), 'update-state.json')
+}
+
+/** Durable wakeup for Codex Live protocol incompatibility. No npm runs in the voice RPC. */
+export function readCodexLiveRepairRequest(home) {
+  const path = join(runtimeRoot(home), LIVE_REPAIR_REQUEST_FILE)
+  if (!existsSync(path)) return undefined
+  try {
+    const value = JSON.parse(readFileSync(path, 'utf8'))
+    const time = typeof value?.requestedAt === 'string' ? Date.parse(value.requestedAt) : NaN
+    if (value?.schema !== 1 || value?.reason !== 'quicksilver-v2' || !Number.isFinite(time)) return undefined
+    if (time > Date.now() + 60_000 || Date.now() - time > LIVE_REPAIR_REQUEST_MAX_AGE_MS) return undefined
+    return { requestedAt: value.requestedAt, reason: 'quicksilver-v2' }
+  } catch {
+    return undefined
+  }
 }
 
 function writeJsonAtomic(path, value) {
@@ -267,7 +284,14 @@ async function cycle(home, mode, options = {}) {
     const active = readActiveCodexRuntime(home)
     if (active !== undefined && compareStableVersions(active.version, latest) >= 0) {
       const cleaned = pruneManagedCodexVersions(home, active.version)
-      saveState(home, { mode, status: 'current', currentVersion: active.version, latestVersion: latest, cleaned })
+      saveState(home, {
+        mode,
+        status: options.repair === true ? 'waiting-upstream' : 'current',
+        currentVersion: active.version,
+        latestVersion: latest,
+        cleaned,
+        ...(options.repair === true ? { detail: 'Codex Live necesita Quicksilver v2. Aún no hay una versión estable posterior del Codex CLI; Phoenix seguirá comprobando automáticamente.' } : {}),
+      })
       if (!quiet) process.stdout.write(`PASS Codex CLI: ${active.version} is current.\n`)
       return 0
     }
@@ -321,17 +345,23 @@ function pollInterval() {
 
 const sleep = ms => new Promise(resolvePromise => setTimeout(resolvePromise, ms))
 
-async function waitForPollOrParentExit(parentPid, waitMs) {
+async function waitForPollOrParentExit(parentPid, waitMs, home, handledRepairAt) {
   const deadline = Date.now() + waitMs
   while (parentAlive(parentPid) && Date.now() < deadline) {
+    const request = readCodexLiveRepairRequest(home)
+    if (request !== undefined && request.requestedAt !== handledRepairAt) return
     await sleep(Math.min(1_000, Math.max(0, deadline - Date.now())))
   }
 }
 
 async function watch(home, mode, parentPid) {
+  let handledRepairAt
   while (parentAlive(parentPid)) {
-    await cycle(home, mode, { apply: mode === 'auto', quiet: true })
-    await waitForPollOrParentExit(parentPid, pollInterval())
+    const request = readCodexLiveRepairRequest(home)
+    const repair = request !== undefined && request.requestedAt !== handledRepairAt
+    if (repair) handledRepairAt = request.requestedAt
+    await cycle(home, mode, { apply: mode === 'auto', quiet: true, repair })
+    await waitForPollOrParentExit(parentPid, pollInterval(), home, handledRepairAt)
   }
 }
 
