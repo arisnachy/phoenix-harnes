@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
@@ -46,6 +47,23 @@ describe('Codex image generation bridge', () => {
       .toThrow(/unsafe Windows Codex launcher/)
     expect(() => codexImageInvocation('C:\\codex.cmd', [...tail, '&whoami'], 'win32'))
       .toThrow(/unsafe Windows Codex launcher/)
+  })
+  it('runs a real spaced Windows cmd shim and pipes its prompt without EINVAL', async () => {
+    if (process.platform !== 'win32') return
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-image shim '))
+    try {
+      const shim = join(root, 'codex image.cmd')
+      await writeFile(shim, '@echo off\r\nset /p INPUT=\r\necho result:%INPUT%\r\n')
+      const argv = codexImageInvocation(shim, ['exec', '-'], 'win32')
+      const processResult = spawnSync(argv[0]!, [...argv.slice(1)], {
+        input: 'raster-test\n', encoding: 'utf8', timeout: 10_000,
+      })
+      expect(processResult.error).toBeUndefined()
+      expect(processResult.status).toBe(0)
+      expect(processResult.stdout).toContain('result:raster-test')
+    } finally {
+      await rm(root, { force: true, recursive: true })
+    }
   })
   it('recognizes the current Codex doctor JSON shape with ChatGPT auth and image generation enabled', () => {
     expect(codexDoctorSupportsImageGeneration(JSON.stringify({
