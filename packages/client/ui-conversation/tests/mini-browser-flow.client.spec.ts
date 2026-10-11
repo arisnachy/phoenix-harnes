@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addBrowserCards, isBrowserPrompt } from '../src/client/chat/ToolActivityFlow.tsx'
+import { addBrowserCards, groupActiveBrowserFlow, isBrowserPrompt } from '../src/client/chat/ToolActivityFlow.tsx'
 
 type BrowserFlowNode = { key: string; kind: string; data: unknown }
 const user = (key: string, text: string): BrowserFlowNode => ({
@@ -23,7 +23,7 @@ describe('MiniBrowser chronological conversation cards', () => {
     expect(isBrowserPrompt('Hola, ¿cómo va todo?')).toBe(false)
   })
 
-  it('keeps the older browser between its assistant reply and the next request', () => {
+  it('keeps the older browser immediately after its request and its answer below', () => {
     const nodes = [
       user('user-1', 'Abre YouTube'), assistant('assistant-1'),
       user('user-2', 'Abre Listín Diario'), assistant('assistant-2'),
@@ -31,8 +31,8 @@ describe('MiniBrowser chronological conversation cards', () => {
     ]
     const output = addBrowserCards(flowNodes(...nodes.map(n => n.key)), nodes)
     expect(output.map(item => item.key)).toEqual([
-      'user-1', 'assistant-1', 'browser:user-1',
-      'user-2', 'assistant-2', 'browser:user-2',
+      'user-1', 'browser:user-1', 'assistant-1',
+      'user-2', 'browser:user-2', 'assistant-2',
       'user-3', 'assistant-3',
     ])
     expect(output.filter(item => item.kind === 'browser')).toHaveLength(2)
@@ -50,5 +50,23 @@ describe('MiniBrowser chronological conversation cards', () => {
       { kind: 'optimistic', key: 'optimistic-user:43', text: 'Abre una página nueva' },
     ], [])
     expect(result.map(item => item.key)).toEqual(['optimistic-user:43', 'browser:optimistic-user:43'])
+  })
+
+  it('puts real running messages beside the newest browser without cloning them', () => {
+    const nodes = [user('user-1', 'Abre Listín Diario'), assistant('assistant-1')]
+    const ordered = addBrowserCards(flowNodes(...nodes.map(node => node.key)), nodes)
+    const active = groupActiveBrowserFlow(ordered, 'user-1', nodes)
+    expect(active.map(item => item.kind)).toEqual(['node', 'browser-workspace'])
+    const workspace = active[1]
+    expect(workspace?.kind === 'browser-workspace' ? workspace.items.map(item => item.key) : [])
+      .toEqual(['assistant-1'])
+    expect(ordered.map(item => item.key)).toEqual(['user-1', 'browser:user-1', 'assistant-1'])
+  })
+
+  it('never relights a previous browser for a later unrelated user turn', () => {
+    const nodes = [user('user-1', 'Abre Listín Diario'), assistant('assistant-1'),
+      user('user-2', 'Gracias'), assistant('assistant-2')]
+    const ordered = addBrowserCards(flowNodes(...nodes.map(node => node.key)), nodes)
+    expect(groupActiveBrowserFlow(ordered, 'user-1', nodes)).toEqual(ordered)
   })
 })
