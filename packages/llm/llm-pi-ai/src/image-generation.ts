@@ -682,6 +682,10 @@ function servicesOf(ctx: Context): ImageRuntimeContext {
  * Node spawn without a shell cannot execute it (EINVAL). Invoke cmd only
  * for scripts, using a fixed ASCII argv allowlist, with the prompt on stdin.
  * Native .exe and POSIX binaries always use direct process execution.
+ * @param executable - Resolved Codex launcher path.
+ * @param argvTail - Static Codex arguments; visual request is sent through stdin.
+ * @param platform - OS platform, injectable for Windows-specific tests.
+ * @returns Safe executable-and-arguments array for subprocess.spawn.
  */
 export function codexImageInvocation(
   executable: string,
@@ -753,6 +757,7 @@ function generationPrompt(
 ): string {
   return [
     'You are the PHOENIX image worker.',
+    'Use the installed $imagegen skill and its default built-in image_gen tool for this image request.',
     'Use the built-in image_gen tool exactly once and generate a real raster image.',
     'Do not use the API/CLI image fallback and do not request OPENAI_API_KEY.',
     'Do not create SVG, HTML, CSS, canvas code, a placeholder, or a text-only substitute.',
