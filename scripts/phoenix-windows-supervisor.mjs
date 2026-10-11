@@ -14,7 +14,7 @@ import {
   existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
-import { createConnection } from 'node:net'
+import { createConnection, createServer } from 'node:net'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
@@ -1516,6 +1516,41 @@ function requestShutdown() {
 process.once('SIGINT', requestShutdown)
 process.once('SIGTERM', requestShutdown)
 
+// On Windows, named-pipe listeners are exclusive and disappear with their
+// owning process. Unlike a PID file, this remains safe after a hard crash and
+// prevents two launchers from passing the TCP port probe concurrently.
+function supervisorPipeName() {
+  const instanceId = createHash('sha256').update(root.toLowerCase()).digest('hex').slice(0, 24)
+  return `\\\\.\\pipe\\phoenix-supervisor-${instanceId}`
+}
+
+async function acquireSupervisorInstance() {
+  if (process.platform !== 'win32') return undefined
+  return new Promise((resolveLock, rejectLock) => {
+    const server = createServer(socket => socket.end())
+    const handleInitialError = (error) => {
+      if (error?.code === 'EADDRINUSE') {
+        console.error('[PHOENIX] Ya hay un supervisor para esta instalación. Se utilizará la instancia existente; no se iniciará otro Host.')
+        resolveLock(null)
+      } else {
+        rejectLock(error)
+      }
+    }
+    server.once('error', handleInitialError)
+    server.listen(supervisorPipeName(), () => {
+      server.off('error', handleInitialError)
+      server.on('error', (error) => {
+        console.error(`[PHOENIX] supervisor instance pipe error: ${error instanceof Error ? error.message : String(error)}`)
+        requestShutdown()
+      })
+      resolveLock(server)
+    })
+  })
+}
+
+const supervisorInstanceLock = await acquireSupervisorInstance()
+if (supervisorInstanceLock === null) process.exit(0)
+
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
 repairDesktopShortcut()
@@ -1787,4 +1822,5 @@ while (true) {
 }
 
 await stopWatcherSupervisor()
+supervisorInstanceLock?.close()
 process.exitCode = finalCode
