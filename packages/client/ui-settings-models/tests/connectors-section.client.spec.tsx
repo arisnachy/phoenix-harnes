@@ -42,6 +42,7 @@ describe('connectors settings section', () => {
       const card = document.querySelector('[data-connector-id="codex"]')
       expect(card).toBeTruthy()
       expect(card?.textContent).toContain('OpenAI Codex')
+      expect(card?.textContent).toContain(connectorEn.reconnectRequiredStatus)
       expect(card?.querySelector('button')).toBeTruthy()
     })
     const card = document.querySelector('[data-connector-id="codex"]')!
