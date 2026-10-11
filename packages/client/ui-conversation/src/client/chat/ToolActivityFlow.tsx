@@ -24,6 +24,8 @@ interface OrderedChatNode {
 
 interface ToolActivityFlowProps extends SeatProps {
   readonly nodes: readonly OrderedChatNode[]
+  /** Runtime-open browser turn, even while Kira is streaming visible prose. */
+  readonly browserTurnOpen?: boolean
   /** Ordinary prompt admitted locally but not yet present in the durable transcript. */
   readonly optimisticSubmit?: {
     readonly startedAt: number
@@ -537,7 +539,7 @@ function BrowserWorkspace({
  * @param props - Ordered nodes plus the ordinary ChatNodeSeat owner/runtime props.
  * @returns The grouped transcript flow.
  */
-export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatProps }: ToolActivityFlowProps) {
+export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, browserTurnOpen, ...seatProps }: ToolActivityFlowProps) {
   const ordinaryFlow = useMemo(() => addBrowserCards(buildAnchoredFlow(nodes, optimisticSubmit), nodes), [nodes, optimisticSubmit])
   const browserKeys = ordinaryFlow.filter(item => item.kind === 'browser').map(item => item.userKey)
   const [selectedBrowserKey, setSelectedBrowserKey] = useState<string | undefined>()
@@ -550,7 +552,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
     }
   }, [newestBrowserKey, lastBrowserKey])
   const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
-  const browserTurnRunning = turnStatus?.progress != null
+  const browserTurnRunning = browserTurnOpen ?? (turnStatus?.progress != null)
   const flow = useMemo(() => {
     const grouped = browserTurnRunning && newestBrowserKey !== undefined
       ? groupActiveBrowserFlow(ordinaryFlow, newestBrowserKey, nodes)
