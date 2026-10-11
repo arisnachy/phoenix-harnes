@@ -12,6 +12,8 @@ on:
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
       - 'scripts/phoenix-windows-supervisor.spec.ts'
+      - 'scripts/phoenix-windows-storage-repair.ps1'
+      - 'scripts/phoenix-windows-storage-repair.spec.ts'
       - 'examples/game-studio/tests/asset-plan.spec.ts'
       - 'packages/mcp/mcp-client/src/transport.ts'
       - 'packages/mcp/mcp-client/tests/platform.spec.ts'
@@ -35,6 +37,8 @@ on:
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
       - 'scripts/phoenix-windows-supervisor.spec.ts'
+      - 'scripts/phoenix-windows-storage-repair.ps1'
+      - 'scripts/phoenix-windows-storage-repair.spec.ts'
       - 'examples/game-studio/tests/asset-plan.spec.ts'
       - 'packages/mcp/mcp-client/src/transport.ts'
       - 'packages/mcp/mcp-client/tests/platform.spec.ts'
@@ -95,6 +99,7 @@ jobs:
             'installer/windows/bootstrap-runtime.ps1',
             'scripts/phoenix-desktop-shortcut.ps1',
             'scripts/phoenix-desktop-launch.ps1',
+            'scripts/phoenix-windows-storage-repair.ps1',
             'scripts/phoenix-markdown-open.ps1'
           )
           foreach ($script in $scripts) {
@@ -180,7 +185,7 @@ jobs:
       - name: Phoenix shell integration tests
         shell: pwsh
         run: |
-          pnpm exec vitest run scripts/phoenix-windows-shortcut.spec.ts scripts/windows-installer.spec.ts scripts/phoenix-markdown-reader.spec.ts
+          pnpm exec vitest run scripts/phoenix-windows-shortcut.spec.ts scripts/windows-installer.spec.ts scripts/phoenix-markdown-reader.spec.ts scripts/phoenix-windows-storage-repair.spec.ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Markdown reader smoke test
