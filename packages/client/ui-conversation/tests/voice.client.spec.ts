@@ -289,7 +289,9 @@ describe('browser voice adapter', () => {
       )).toBe(true)
       expect(channel?.send).toHaveBeenCalledTimes(2)
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
-      expect(audio?.muted).toBe(true)
+      // Generation is finished, but the WebRTC speaker may still be draining
+      // previously buffered audio. Keep Kira audible until an explicit cancel.
+      expect(audio?.muted).toBe(false)
       const attention = JSON.parse(String(channel?.send.mock.calls[2]?.[0])) as {
         type: string
         response: { instructions: string }
