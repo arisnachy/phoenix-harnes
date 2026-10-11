@@ -488,6 +488,10 @@ export async function tryStartCodexRealtimeVoice(
     const capability = await remote.conversationRealtimeStatus()
     if (!capability.ok) return { kind: 'failed', reason: capability.error.code }
     if (!capability.value.enabled || !capability.value.available || !capability.value.authenticated) {
+      const phase = codexLiveRepairFromStatus(capability.value)
+      if (phase === 'checking' || phase === 'updating' || phase === 'waiting-upstream') {
+        return { kind: 'failed', reason: 'codex-live-repair-pending' }
+      }
       return {
         kind: 'failed',
         // Incremental client builds may still hold the previous generated
