@@ -12,6 +12,19 @@ const acpPackage = JSON.parse(readFileSync(resolve('packages/examples/acp-demo/p
 const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrpc-demo/package.json'), 'utf8')) as { bin: Record<string, string> }
 
 describe('PHOENIX Windows updater supervisor resilience', () => {
+  it('reserves a crash-safe exclusive Windows named pipe before starting a second Host', () => {
+    expect(source).toContain("import { createConnection, createServer } from 'node:net'")
+    expect(source).toContain('function supervisorPipeName()')
+    expect(source).toContain("createHash('sha256').update(root.toLowerCase())")
+    expect(source).toContain("if (error?.code === 'EADDRINUSE')")
+    expect(source).toContain('const supervisorInstanceLock = await acquireSupervisorInstance()')
+    expect(source).toContain('if (supervisorInstanceLock === null) process.exit(0)')
+    expect(source.indexOf('const supervisorInstanceLock = await acquireSupervisorInstance()')).toBeLessThan(
+      source.indexOf('recoverStaleStagingIndexLock()\\nrestoreActiveRuntime()'),
+    )
+    expect(source).toContain('supervisorInstanceLock?.close()')
+  })
+
   it('retries failed updater watchers with capped backoff instead of a one-second hot loop', () => {
     expect(source).toContain('function superviseWatcher()')
     expect(source).toContain('WATCHER_MAX_RESTART_DELAY_MS')
