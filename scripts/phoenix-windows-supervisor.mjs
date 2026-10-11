@@ -539,14 +539,24 @@ function registeredWorktreePaths() {
   return paths
 }
 
+// Busy Windows runtime trees may remain locked after Git already pruned their
+// worktree entries. Throttle failures per path; periodic sweeps will retry
+// without printing EBUSY in every supervisor loop.
+const busyManagedRuntimeRetryAt = new Map()
+const BUSY_MANAGED_RUNTIME_RETRY_MS = 5 * 60 * 1000
+
 function removeOrphanedManagedDirectory(path) {
+  const key = runtimePathKey(path)
+  if ((busyManagedRuntimeRetryAt.get(key) ?? 0) > Date.now()) return false
   try {
     rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })
+    if (!existsSync(path)) busyManagedRuntimeRetryAt.delete(key)
     return !existsSync(path)
   } catch (error) {
     const code = typeof error?.code === 'string' ? error.code : 'unknown'
+    busyManagedRuntimeRetryAt.set(key, Date.now() + BUSY_MANAGED_RUNTIME_RETRY_MS)
     console.error(
-      `[PHOENIX UPDATE] orphaned managed runtime is no longer a Git worktree but Windows still has it open; cleanup deferred: ${path} (${code})`,
+      `[PHOENIX UPDATE] orphaned managed runtime is no longer a Git worktree but Windows still has it open; cleanup deferred for 5 minutes: ${path} (${code})`,
     )
     return false
   }
@@ -670,6 +680,27 @@ function cleanupObsoleteRuntimes(extraKeep = []) {
   }
 }
 
+// A busy orphan must not make the optional rollback cushion permanently block
+// all future updates. Only when the hard cap is reached, sacrifice an inactive
+// backup (oldest first). The running runtime, active marker, runtime held by
+// a different checkout, and the intended candidate remain protected.
+function reclaimInactiveBackupForCapacity(nextRuntime) {
+  const keep = new Set([runtimeRoot, nextRuntime, root].map(runtimePathKey))
+  const active = readActiveRuntimeRecord()
+  if (active?.path) keep.add(runtimePathKey(active.path))
+  const inherited = process.env.PHOENIX_RUNTIME_ROOT?.trim()
+  if (inherited) keep.add(runtimePathKey(inherited))
+  const registered = registeredWorktreePaths()
+  const inactive = runtimeDirectoriesForCleanup()
+    .filter(path => !keep.has(runtimePathKey(path)) && !runtimeProtectedByOwningCheckout(path))
+    .sort((left, right) => managedDirectoryMtimeMs(left) - managedDirectoryMtimeMs(right))
+  for (const candidate of inactive) {
+    if (runtimeDirectoriesForCleanup().length < MAX_RUNTIME_DIRECTORIES) break
+    if (!removeManagedWorktree(candidate, registered)) continue
+    console.error(`[PHOENIX UPDATE] reclaimed inactive rollback runtime to stay within storage limit: ${candidate}`)
+  }
+}
+
 function assertRuntimeStorageCapacity(nextRuntime) {
   if (existsSync(nextRuntime)) return
 
@@ -677,6 +708,9 @@ function assertRuntimeStorageCapacity(nextRuntime) {
   // tree. If stale Windows handles still prevent enough cleanup, fail closed:
   // keep the current healthy Host and retry later instead of consuming disk.
   cleanupObsoleteRuntimes([runtimeRoot])
+  if (runtimeDirectoriesForCleanup().length >= MAX_RUNTIME_DIRECTORIES) {
+    reclaimInactiveBackupForCapacity(nextRuntime)
+  }
   const runtimeCount = runtimeDirectoriesForCleanup().length
   if (runtimeCount < MAX_RUNTIME_DIRECTORIES) return
 
