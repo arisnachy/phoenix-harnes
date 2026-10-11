@@ -1823,7 +1823,7 @@ describe('command launcher chrome and control seats', () => {
       .mockImplementation(() => { throw new Error('browser microphone must stay off') })
     const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
       .mockResolvedValue({ kind: 'failed', reason: 'codex-login-required' })
-    const reconnect = vi.fn()
+    const reconnect = vi.fn((_event: Event) => {})
     window.addEventListener('phoenix:open-feature', reconnect)
     try {
       const { view } = bench({ draft: 'Hola' })
