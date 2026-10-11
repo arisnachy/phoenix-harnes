@@ -112,6 +112,23 @@ describe('Phoenix Game Studio publisher', () => {
     await expect(tool.execute({ title: 'Missing audio', html: withoutAudio }, execution())).rejects.toThrow('audio')
   })
 
+  it('requires embedded action samples, soundtrack and a playback route when claiming production sound', () => {
+    const declared = runnable.replace('"audio":{"cues":["click"]}',
+      '"audio":{"mode":"sampled-production","cues":["click"]}')
+    expect(() => validateGameHtml(declared)).toThrow('sonido grabado')
+    const wav = Buffer.alloc(48)
+    wav.write('RIFF', 0, 'ascii')
+    wav.write('WAVE', 8, 'ascii')
+    const data = wav.toString('base64')
+    const tags = ['click', 'music'].map(cue => '<audio id="phoenix-audio-' + cue
+      + '" src="data:audio/wav;base64,' + data + '"></audio>').join('')
+    const clips = declared.replace('</body>', tags + '</body>')
+    expect(() => validateGameHtml(clips)).toThrow('reproducción')
+    const played = clips.replace('ctx.fillRect(0,0,12,12);',
+      'ctx.fillRect(0,0,12,12);document.getElementById("phoenix-audio-click").play();')
+    expect(validateGameHtml(played).title).toBe('Luz de selva')
+  })
+
   it('rejects image-only, inert HTML, and game declarations without executable code', async () => {
     const tool = createPhoenixGameTool()
     const attempt = async (html: string): Promise<unknown> =>
