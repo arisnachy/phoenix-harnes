@@ -11,7 +11,7 @@ import VoiceRuntime, {
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
 import {
-  CodexRealtimeBridge, codexRealtimeLaunchCommand, findManagedCodexRealtimeBin, realtimeVoiceForGender,
+  CodexRealtimeBridge, codexRealtimeLaunchCommand, codexRealtimeNeedsLogin, findManagedCodexRealtimeBin, realtimeVoiceForGender,
 } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
@@ -483,6 +483,38 @@ describe('Codex realtime voice protocol compatibility', () => {
         ['v1-thread', 'v1'], ['v3-thread', 'v3'],
       ])
       expect(stop).toHaveBeenCalledWith('thread/realtime/stop', { threadId: 'v1-thread' })
+    } finally {
+      bridge.close()
+    }
+  })
+})
+
+describe('Codex Live authentication recovery', () => {
+  it('detects an expired native Codex token but not transient network failures', () => {
+    expect(codexRealtimeNeedsLogin(new Error(
+      'Your access token could not be refreshed because your refresh token has expired. Please log out and sign in again.',
+    ))).toBe(true)
+    expect(codexRealtimeNeedsLogin(new Error('connect ETIMEDOUT'))).toBe(false)
+    expect(codexRealtimeNeedsLogin(new Error('429 Too Many Requests'))).toBe(false)
+  })
+
+  it('classifies expired credentials as reconnect-needed on explicit Live probe', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      child?: { killed: boolean }
+      ensureStarted(): Promise<void>
+      request(method: string, params?: unknown): Promise<unknown>
+    }
+    internal.child = { killed: true }
+    vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
+    const read = vi.spyOn(internal, 'request').mockRejectedValue(
+      new Error('refresh token has expired. Please log out and sign in again'),
+    )
+    try {
+      await expect(bridge.probe()).resolves.toMatchObject({
+        available: true, authenticated: false, reason: 'codex-login-required',
+      })
+      expect(read).toHaveBeenCalledWith('account/read', { refreshToken: true })
     } finally {
       bridge.close()
     }
