@@ -543,6 +543,7 @@ export function ChatView({
             nodes={chatNodes}
             optimisticSubmit={optimisticSubmit}
             turnStatus={visibleTurnStatus}
+            browserTurnOpen={running || admissionInFlight}
             useSession={useSession}
             selectedCallId={selectedCallId}
             cwd={cwd}

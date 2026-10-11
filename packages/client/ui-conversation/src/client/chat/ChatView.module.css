@@ -562,3 +562,17 @@
   }
   .turnStatus[data-centered='true'] .turnStatusText { white-space: normal; }
 }
+
+/* A live browser uses the otherwise unused side gutters. Ordinary chat
+   messages keep their familiar centered measure before/after the activity. */
+.column:has(> [data-browser-workspace]) {
+  max-width: min(1560px, calc(100vw - 114px));
+  transform: none;
+}
+.column:has(> [data-browser-workspace]) > :not([data-browser-workspace]) {
+  width: min(100%, var(--dsh-chat-content-width));
+  margin-inline: auto;
+}
+@media (max-width: 850px) {
+  .column:has(> [data-browser-workspace]) { max-width: 100%; }
+}

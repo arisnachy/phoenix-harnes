@@ -70,3 +70,95 @@
     transition: none;
   }
 }
+
+/* Browser-native temporary agent sidecar: real ChatNodeSeat content and avatars,
+   not a synthetic status feed. It disappears when the browser turn settles. */
+.browserWorkspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+.browserWorkspace[data-activity-open='true'] {
+  grid-template-columns: minmax(0, 1.85fr) minmax(280px, 1fr);
+}
+.browserPane { min-width: 0; }
+.activityPane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-height: min(72vh, 750px);
+  overflow: hidden;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 18px;
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 5%);
+}
+.activityHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 46px;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 13px;
+}
+.livePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.livePill > span { width: 7px; height: 7px; border-radius: 50%; background: #279b66; }
+.pageInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 11px 12px 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 11px;
+  background: var(--dsw-alias-bg-layer-1);
+  padding: 10px 12px;
+  font-size: 12px;
+  min-width: 0;
+}
+.pageInfo strong, .pageUrl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pageCaption { color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.pageUrl { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.activityMessages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 12px;
+  min-height: 90px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  font-size: 13px;
+}
+.activityMessages :global([data-chat-flow-kind='assistant-step']) {
+  max-width: 100%;
+}
+.activityMessages :global([data-chat-flow-kind='assistant-step'] > [data-assistant-body]) {
+  padding: 10px 12px 13px;
+}
+.activityMessages :global([data-chat-flow-kind='assistant-step'] > [data-team-author]) {
+  padding-block: 9px;
+  min-height: 44px;
+}
+@media (max-width: 960px) {
+  .browserWorkspace { grid-template-columns: minmax(0, 1fr); }
+  .activityPane { max-height: 320px; }
+}
+@media (prefers-reduced-motion: reduce) { .browserWorkspace, .activityPane { transition: none; } }
