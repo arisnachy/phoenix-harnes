@@ -154,13 +154,25 @@ function npxPackageName(args: readonly string[]): string | undefined {
 }
 
 function bundledFilesystemMcpEntryPoint(): string | undefined {
-  try {
-    const packageJson = moduleRequire.resolve(`${FILESYSTEM_MCP_PACKAGE}/package.json`)
-    const entry = join(dirname(packageJson), 'dist', 'index.js')
-    return existsSync(entry) ? entry : undefined
-  } catch {
-    return undefined
+  // The modern Filesystem MCP package can hide its package.json via "exports".
+  // Resolve its public entrypoint FIRST; relying solely on package.json made
+  // Windows fall through to an absent mcp-server-filesystem.cmd shim.
+  for (const specifier of [
+    FILESYSTEM_MCP_PACKAGE,
+    `${FILESYSTEM_MCP_PACKAGE}/dist/index.js`,
+    `${FILESYSTEM_MCP_PACKAGE}/package.json`,
+  ]) {
+    try {
+      const located = moduleRequire.resolve(specifier)
+      const entry = located.endsWith('package.json')
+        ? join(dirname(located), 'dist', 'index.js')
+        : located
+      if (existsSync(entry) && entry.endsWith('.js')) return entry
+    } catch {
+      // Check the next public/legacy entry; do not assume package exports.
+    }
   }
+  return undefined
 }
 
 /**
@@ -192,7 +204,12 @@ export function normalizeWindowsNpxMcpLaunch(
   if (FILESYSTEM_MCP_BIN_NAMES.has(normalizedCommand)) {
     const entry = bundledFilesystemMcpEntryPoint()
     if (entry !== undefined) return { command: process.execPath, args: [entry, ...normalizedArgs] }
-    return { command, args: normalizedArgs }
+    // Never re-launch a known-missing bare Windows shim. Use the original
+    // curated NPX package route when the bundled package is unavailable.
+    return {
+      command: 'cmd.exe',
+      args: ['/d', '/c', 'npx', '-y', FILESYSTEM_MCP_PACKAGE, ...normalizedArgs],
+    }
   }
 
   if (normalizedCommand !== 'npx') return { command, args: normalizedArgs }
