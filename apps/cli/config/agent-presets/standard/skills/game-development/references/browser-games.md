@@ -4,6 +4,12 @@ Para un arcade pequeño usa una carpeta autónoma con `index.html`, `game.js`, `
 
 Sirve por HTTP local, por ejemplo `python -m http.server 8000 --bind 127.0.0.1 --directory <proyecto>`, y abre con el navegador de Phoenix. También puedes usar un servidor Node existente o Vite en el proyecto. No dependas de `file://` para módulos, audio o assets. Documenta cómo arrancar y detener el servidor.
 
+## Motor y calidad: no elijas por costumbre
+
+Antes del primer sprite, ejecuta el selector de motor del toolkit (`game-tools.mjs route --genre "beat-em-up" --delivery chat|desktop|web --quality production`) y revisa el resultado. Un juego premium con combate animado y exportación independiente debe construirse en Godot 4 cuando sea compatible con la entrega; usa Tiled y FFmpeg cuando sean necesarios y verifica con `doctor` / `ensure --allow-install` solo tras autorización. Godot requiere recursos artísticos reales: no convierte automáticamente dos muñecos vectoriales en un buen juego. Los presupuestos de sprites, sonido e integración se auditan como un trabajo aparte.
+
+Para jugar dentro de Phoenix, `phoenix_game` exige HTML ejecutable autocontenido. La exportación Godot Web no es un HTML único: necesita archivos JS/WASM/PCK, servidor y requisitos de navegador. Usa HTML5/Canvas con PNG/sonido real integrado si el destino es el chat; un proyecto Godot adicional se entrega por separado. Nunca envíes al visor de Phoenix únicamente el `index.html` exportado por Godot.
+
 ## Patrón ejecutable
 
 1. Estados separados `ready`, `playing`, `paused`, `won/game-over`; máquina de estados y reglas deterministas.
