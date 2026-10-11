@@ -28,7 +28,8 @@ function comparable(value: unknown): string {
     const fields = value as Record<string, unknown>
     return '{' + Object.keys(fields).sort().map(key => JSON.stringify(key) + ':' + comparable(fields[key])).join(',') + '}'
   }
-  return JSON.stringify(value) ?? 'undefined'
+  const encoded = JSON.stringify(value)
+  return typeof encoded === 'string' ? encoded : 'undefined'
 }
 
 /** Bind a truthfully authored manifest to the game *before* publishing.
@@ -93,15 +94,16 @@ export function preparePhoenixGameSubmission(html: string, manifestJson?: string
 function validateRecordedAudio(html: string, manifest: Record<string, unknown>): void {
   const audio = manifest.audio as Record<string, unknown>
   if (audio.mode !== 'sampled-production') return
-  const cues = Array.isArray(audio.cues) ? audio.cues : []
-  const names = [...cues, 'music', ...(Array.isArray(audio.voices) ? audio.voices.map(v => 'voice-' + String(v)) : [])]
+  const cues = Array.isArray(audio.cues) ? (audio.cues as unknown[]).filter((v): v is string => typeof v === 'string') : []
+  const voices = Array.isArray(audio.voices) ? (audio.voices as unknown[]).map(v => 'voice-' + String(v)) : []
+  const names = [...cues, 'music', ...voices]
   if (names.length < 2 || names.some(name => typeof name !== 'string' || !/^[a-z][a-z0-9_-]*$/u.test(name))) {
     throw new ToolArgsError(['Game Studio: sampled-production necesita una lista válida de señales de sonido y música.'])
   }
   const tags = [...html.matchAll(/<audio\b[^>]*>/giu)].map(match => match[0])
   for (const cue of new Set(names as string[])) {
     const id = 'phoenix-audio-' + cue
-    const tag = tags.find(value => {
+    const tag = tags.find((value) => {
       const match = /\bid\s*=\s*(["'])([^"']+)\1/iu.exec(value)
       return match?.[2] === id
     })
@@ -192,7 +194,8 @@ export function validateGameHtml(html: string): GameManifest {
  * A prototype can still be published for iterative review, but is never reported as completed.
  */
 function validateBrawlerContract(manifest: Record<string, unknown>): void {
-  const genre = String(manifest.gameType ?? manifest.genre ?? '').toLowerCase()
+  const genreValue = manifest.gameType ?? manifest.genre
+  const genre = typeof genreValue === 'string' ? genreValue.toLowerCase() : ''
   if (!/beat.em.up|beat.?em.?up|brawler|double.dragon|street.fight|pelea.{0,9}callej|lucha.{0,9}callej/u.test(genre)) return
   const art = manifest.art as Record<string, unknown> | undefined
   if (!art || typeof art !== 'object' || art.mode !== 'production') return
@@ -200,7 +203,8 @@ function validateBrawlerContract(manifest: Record<string, unknown>): void {
     typeof value === 'object' && value !== null && !Array.isArray(value)
   const controls = manifest.controls as Record<string, unknown>
   for (const name of ['move', 'punch', 'kick', 'jump', 'grab']) {
-    if (typeof controls[name] !== 'string' || !String(controls[name]).trim())
+    const value = controls[name]
+    if (typeof value !== 'string' || !value.trim())
       throw new ToolArgsError(['Game Studio beat-em-up: control necesario ' + name])
   }
   const hero = manifest.player as Record<string, unknown> | undefined
@@ -210,18 +214,18 @@ function validateBrawlerContract(manifest: Record<string, unknown>): void {
       throw new ToolArgsError(['Game Studio beat-em-up: falta animación jugable ' + state])
     }
   }
-  const enemies = manifest.enemies
-  if (!Array.isArray(enemies) || enemies.length < 3 || enemies.some(enemy =>
+  const enemies = Array.isArray(manifest.enemies) ? manifest.enemies as unknown[] : []
+  if (enemies.length < 3 || enemies.some(enemy =>
     !validObject(enemy) || typeof enemy.id !== 'string' || !enemy.id.trim())
-    || new Set(enemies.map(enemy => enemy.id)).size !== enemies.length) {
+    || new Set(enemies.map(enemy => validObject(enemy) ? enemy.id : null)).size !== enemies.length) {
     throw new ToolArgsError(['Game Studio beat-em-up: producción exige al menos 3 enemigos originales diferentes.'])
   }
-  const bosses = manifest.bosses
-  if (!Array.isArray(bosses) || !bosses.length || bosses.some(boss =>
+  const bosses = Array.isArray(manifest.bosses) ? manifest.bosses as unknown[] : []
+  if (!bosses.length || bosses.some((boss) =>
     !validObject(boss) || !Array.isArray(boss.phases) || boss.phases.length < 2
       || !Array.isArray(boss.attacks) || boss.attacks.length < 2 || boss.attacks.some((attack: unknown) =>
-        !validObject(attack) || typeof attack.id !== 'string'
-          || typeof attack.telegraphSeconds !== 'number' || attack.telegraphSeconds <= 0))) {
+      !validObject(attack) || typeof attack.id !== 'string'
+        || typeof attack.telegraphSeconds !== 'number' || attack.telegraphSeconds <= 0))) {
     throw new ToolArgsError(['Game Studio beat-em-up: jefe necesita 2 fases y 2 ataques con anticipación.'])
   }
   const combat = manifest.combat
