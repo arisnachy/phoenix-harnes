@@ -52,6 +52,9 @@ describe('phoenix_canvas tool', () => {
     expect(tool.description).toContain('.canvas.tsx')
     expect(tool.description).toContain('delivery completes the request')
     expect(tool.description).toContain('without model calls')
+    expect(tool.description).toContain('component=scale_form')
+    expect(tool.description).toContain('component=spreadsheet')
+    expect(tool.description).toContain('do not claim full XLSX support')
     expect(tool.parameters).toEqual(expect.objectContaining({
       type: 'object',
       required: ['title', 'html'],
