@@ -7,7 +7,7 @@
  */
 
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 
@@ -119,6 +119,36 @@ const IDLE_CLOSE_MS = 60_000
 // Even if the browser dies without a hangup RPC, no remote voice thread may
 // retain the Codex app-server indefinitely. A call can be reopened explicitly.
 const MAX_REALTIME_CALL_MS = 60 * 60_000
+const LIVE_REPAIR_COOLDOWN_MS = 30 * 60_000
+
+/** Wake the existing single-owner updater, never launch concurrent npm installs from voice. */
+export function queueCodexLiveRepair(
+  home: string,
+  mode = process.env.PHOENIX_CODEX_UPDATE_MODE ?? 'auto',
+  now = Date.now(),
+): 'queued' | 'recent' | 'disabled' | 'failed' {
+  if (mode.trim().toLowerCase() !== 'auto') return 'disabled'
+  const folder = join(resolve(home), 'codex-cli')
+  const path = join(folder, 'live-repair-request.json')
+  try {
+    if (existsSync(path)) {
+      const previous = JSON.parse(readFileSync(path, 'utf8')) as { requestedAt?: unknown }
+      const last = typeof previous?.requestedAt === 'string' ? Date.parse(previous.requestedAt) : NaN
+      if (Number.isFinite(last) && now - last >= 0 && now - last < LIVE_REPAIR_COOLDOWN_MS) return 'recent'
+    }
+  } catch {
+    // A corrupt or partially-written marker must never block an update.
+  }
+  try {
+    mkdirSync(folder, { recursive: true })
+    writeFileSync(path, JSON.stringify({
+      schema: 1, reason: 'quicksilver-v2', requestedAt: new Date(now).toISOString(),
+    }) + '\n', 'utf8')
+    return 'queued'
+  } catch {
+    return 'failed'
+  }
+}
 
 /**
  * Locate the exact managed Codex CLI that PHOENIX model discovery already
@@ -222,6 +252,7 @@ export class CodexRealtimeBridge {
   private readonly stderrTail: string[] = []
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
+  private launchedManagedCodexBin: string | undefined
 
   /** Start app-server and verify that its active account is ChatGPT OAuth.
    * @returns Sidecar availability, authentication and a classified failure reason.
@@ -288,7 +319,14 @@ export class CodexRealtimeBridge {
         answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
       } catch (error) {
         if (isCodexQuicksilverV2Required(error)) {
-          throw new Error('Codex Live requiere Quicksilver v2. Actualiza Codex CLI y reinicia Phoenix para usar el protocolo WebRTC v3.')
+          const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+          const repair = queueCodexLiveRepair(home)
+          if (repair === 'queued' || repair === 'recent') {
+            throw new Error('Codex Live requiere Quicksilver v2. Phoenix ha solicitado una comprobación y actualización automática de Codex CLI. Vuelve a probar la voz en unos minutos.')
+          }
+          throw new Error(repair === 'disabled'
+            ? 'Codex Live requiere Quicksilver v2. La actualización automática de Codex está desactivada.'
+            : 'Codex Live requiere Quicksilver v2. No se pudo solicitar la reparación automática de Codex CLI.')
         }
         if (!isRealtimeV3UnsupportedError(error)) throw error
         // Only an explicit local "V3 unsupported" error permits V1 fallback.
@@ -450,6 +488,7 @@ export class CodexRealtimeBridge {
     const child = this.child
     this.child = undefined
     this.startup = undefined
+    this.launchedManagedCodexBin = undefined
     this.sessions.clear()
     if (child !== undefined && !child.killed) {
       // On Windows the npm-installed Codex executable is normally a .cmd shim
@@ -481,6 +520,12 @@ export class CodexRealtimeBridge {
   }
 
   private async ensureStarted(): Promise<void> {
+    // Use a newly activated managed Codex CLI without restarting Phoenix.
+    // Never disrupt an existing live audio session during a background update.
+    if (this.child !== undefined && this.sessions.size === 0) {
+      const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+      if (findManagedCodexRealtimeBin(home) !== this.launchedManagedCodexBin) this.close()
+    }
     if (this.child !== undefined) return
     if (this.startup !== undefined) return this.startup
     const startup = this.startProcess()
@@ -495,8 +540,9 @@ export class CodexRealtimeBridge {
   private async startProcess(): Promise<void> {
     const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
     const env = codexRealtimeEnvironment()
+    const managedBin = findManagedCodexRealtimeBin(dshHome)
     const { command, args } = codexRealtimeLaunchCommand(
-      findManagedCodexRealtimeBin(dshHome), process.platform, process.env.ComSpec, env.CODEX_HOME,
+      managedBin, process.platform, process.env.ComSpec, env.CODEX_HOME,
     )
 
     let child: ChildProcessWithoutNullStreams
@@ -510,6 +556,7 @@ export class CodexRealtimeBridge {
       throw new Error(`Codex realtime could not start: ${errorText(error)}`)
     }
     this.child = child
+    this.launchedManagedCodexBin = managedBin
     this.stdoutBuffer = ''
     this.stderrTail.length = 0
 
