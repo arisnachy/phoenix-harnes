@@ -8,6 +8,7 @@ import GoogleApiBroker, {
   resolveGoogleSpec,
 } from '@phoenix-ai/dsh-authorization/google'
 import { MemoryCredentials } from './memory.ts'
+import { openClawInternals } from '../src/openclaw-workspace.ts'
 
 const originalFetch = internals.fetch
 const originalNow = internals.now
@@ -328,6 +329,27 @@ describe('Google Workspace API broker', () => {
         accessToken: 'refreshed-access',
         refreshToken: 'rotated-refresh',
       },
+    })
+  })
+
+  it('does not swap the restored native Workspace identity to an unrelated gog account', async () => {
+    const ctx = await harness()
+    internals.now = () => 1_000_000
+    await authorize(ctx)
+    const run = vi.spyOn(openClawInternals, 'run').mockResolvedValue({
+      stdout: JSON.stringify({ accounts: [{ email: 'someone-else@example.com', valid: true }] }),
+      stderr: '',
+    })
+    internals.fetch = async () => new Response(JSON.stringify({
+      emailAddress: 'owner@example.com',
+    }), { status: 200, headers: { 'content-type': 'application/json' } })
+
+    await expect(ctx.authorization.inspect(GOOGLE_ACCOUNT_KEY)).resolves.toMatchObject({
+      kind: 'account', accountType: 'oauth', email: 'owner@example.com',
+    })
+    expect(run).not.toHaveBeenCalled()
+    expect(await ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)).toMatchObject({
+      kind: 'grant', payload: { provider: 'google-oauth' },
     })
   })
 
