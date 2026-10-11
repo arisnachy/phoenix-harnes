@@ -1,4 +1,7 @@
 import type { ReactNode } from 'react'
+import { PhoenixStatusPill, PhoenixAgentLine, type PhoenixUiIconName, type PhoenixStatusTone } from '@phoenix-ai/dsh-client-ui-primitives'
+import { ScaleForm, parseScaleForm, type ScaleFormSpec } from './ScaleForm.tsx'
+import { SpreadsheetSurface, parseSpreadsheet, type SpreadsheetSpec } from './SpreadsheetSurface.tsx'
 import { GenerativeCanvas, parseCanvasSpec, type CanvasAction, type CanvasSpec } from './GenerativeCanvas.tsx'
 import css from './GenerativeUi.module.css'
 
@@ -72,7 +75,25 @@ type SmartCard = {
   }
 }
 
-export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard | CanvasSpec
+type StatusPillBlock = {
+  component: 'status_pill'
+  version: 1
+  props: { label: string; tone?: PhoenixStatusTone }
+}
+type AgentLineBlock = {
+  component: 'agent_line'
+  version: 1
+  props: { name: string; role: string; message: string; icon?: PhoenixUiIconName }
+}
+const supportedIcons: readonly PhoenixUiIconName[] = [
+  'bot', 'brain', 'code', 'check', 'alert', 'table', 'calculator',
+  'copy', 'download', 'reset', 'clipboard', 'plus', 'file', 'search',
+  'settings', 'calendar', 'activity', 'shield', 'chart', 'info',
+]
+const supportedTones: readonly PhoenixStatusTone[] = ['positive', 'warning', 'negative', 'info', 'neutral']
+
+export type GenerativeUiBlock = EventCard | MetricCard | ComparisonCard | TimelineCard | SmartCard
+  | CanvasSpec | ScaleFormSpec | SpreadsheetSpec | StatusPillBlock | AgentLineBlock
 
 export type GenerativeUiSegment =
   | { kind: 'markdown'; text: string }
@@ -195,6 +216,19 @@ export function parseGenerativeUiBlock(value: unknown): GenerativeUiBlock | null
     case 'timeline': return validateTimeline(value) ? value : null
     case 'smart_card': return validateSmartCard(value) ? value : null
     case 'ui_canvas': return parseCanvasSpec(value)
+    case 'scale_form': return parseScaleForm(value)
+    case 'spreadsheet': return parseSpreadsheet(value)
+    case 'status_pill':
+      return isRecord(value.props) && hasOnlyKeys(value.props, ['label','tone'])
+        && isText(value.props.label, 100)
+        && (value.props.tone === undefined || supportedTones.includes(value.props.tone as PhoenixStatusTone))
+        ? value as StatusPillBlock : null
+    case 'agent_line':
+      return isRecord(value.props) && hasOnlyKeys(value.props, ['name','role','message','icon'])
+        && isText(value.props.name, 80) && isText(value.props.role, 100)
+        && isText(value.props.message, 1200)
+        && (value.props.icon === undefined || supportedIcons.includes(value.props.icon as PhoenixUiIconName))
+        ? value as AgentLineBlock : null
     default: return null
   }
 }
@@ -239,7 +273,7 @@ export function splitGenerativeUiText(
       }
     }
     if (parsed === null) {
-      if (/"component"\s*:\s*"ui_canvas"/.test(body ?? ''))
+      if (/"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|status_pill|agent_line)"/.test(body ?? ''))
         segments.push({ kind: 'notice', text: 'Esta interfaz no pudo mostrarse. Pide a Kira que la actualice.' })
       else appendMarkdown(segments, raw)
     }
@@ -253,7 +287,7 @@ export function splitGenerativeUiText(
   let tail = text.slice(cursor)
   if (options.streaming === true) {
     const lastJsonFence = tail.lastIndexOf('```json')
-    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"ui_canvas"/.test(tail.slice(lastJsonFence))
+    const relevantJson = lastJsonFence >= 0 && /"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|status_pill|agent_line)"/.test(tail.slice(lastJsonFence))
       ? lastJsonFence : -1
     const unfinishedFence = Math.max(tail.lastIndexOf('```generative-ui'), relevantJson)
     if (unfinishedFence >= 0) tail = tail.slice(0, unfinishedFence)
@@ -281,7 +315,7 @@ function expandRawCanvases(segments: GenerativeUiSegment[], streaming: boolean):
       continue
     }
     const source = segment.text
-    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"ui_canvas"/gm
+    const startPattern = /^[ \t]*\{\s*"component"\s*:\s*"(?:ui_canvas|scale_form|spreadsheet|status_pill|agent_line)"/gm
     let cursor = 0
     for (const match of source.matchAll(startPattern)) {
       if (count >= MAX_UI_BLOCKS) break
@@ -355,6 +389,10 @@ const statusClass = (status: Status | undefined): string =>
 export function GenerativeUi({ block, onAction }: { block: GenerativeUiBlock; onAction?: CanvasAction | undefined }): ReactNode {
   switch (block.component) {
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
+    case 'scale_form': return <ScaleForm spec={block} />
+    case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />
+    case 'status_pill': return <PhoenixStatusPill label={block.props.label} tone={block.props.tone} />
+    case 'agent_line': return <PhoenixAgentLine {...block.props} />
     case 'event_card': {
       const { title, subtitle, badge, left, center, right, footer } = block.props
       return (
