@@ -24,15 +24,8 @@ export const AssistantNodeView = memo(function AssistantNodeView({
     ? ('title' in segment.block.props ? segment.block.props.title
       : 'label' in segment.block.props ? segment.block.props.label : 'Interfaz interactiva')
     : segment.text).join('\n').trim(), [responseText, data.status])
-  useEffect(() => {
-    if (spokenText === '') return
-    streamVoiceAssistantResponse(
-      `assistant:${data.turn}:${data.step}`,
-      spokenText,
-      data.time,
-      data.status !== 'running',
-    )
-  }, [data.status, data.step, data.time, data.turn, spokenText])
+  // The final transcript is only authorized after the owning harness turn
+  // closes. A settled assistant *step* may still be followed by tools.
   const turn = node.location.kind === 'turn' || node.location.kind === 'step'
     ? node.location.turn
     : undefined
@@ -42,6 +35,18 @@ export const AssistantNodeView = memo(function AssistantNodeView({
     if (tail?.closing?.finalNode.seq !== data.finalNode.seq) return undefined
     return { turn, seq: data.finalNode.seq, openFile }
   }, [data.finalNode, openFile, tail, turn])
+  useEffect(() => {
+    if (spokenText === '') return
+    streamVoiceAssistantResponse(
+      `assistant:${data.turn}:${data.step}`,
+      spokenText,
+      data.time,
+      data.status !== 'running',
+      // Codex Live intentionally ignores step-local replies. Authorize native
+      // speech only for the exact final assistant node of a closed turn.
+      owner !== undefined && data.status !== 'interrupted' && data.status !== 'running',
+    )
+  }, [data.status, data.step, data.time, data.turn, owner, spokenText])
   const mentions = useMemo(
     () => owner === undefined
       ? workspaceFileMentions?.({ cwd, openFile })
