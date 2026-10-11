@@ -338,6 +338,20 @@ async function readTokenResponse(response: Response): Promise<TokenResponse> {
   return parseTokenResponse(value)
 }
 
+/** Only Google's explicit invalid_grant proves that the saved refresh token
+ * cannot be reused. Other 400/401 errors (invalid_client, malformed OAuth
+ * app setup, proxy failures) must NOT delete the user's durable connection. */
+async function revokedGoogleRefreshToken(response: Response): Promise<boolean> {
+  if (response.status !== 400 && response.status !== 401) return false
+  try {
+    const body: unknown = await response.json()
+    if (typeof body !== 'object' || body === null || Array.isArray(body)) return false
+    return (body as { error?: unknown }).error === 'invalid_grant'
+  } catch {
+    return false
+  }
+}
+
 function form(fields: Readonly<Record<string, string>>): URLSearchParams {
   const body = new URLSearchParams()
   for (const [key, value] of Object.entries(fields)) body.set(key, value)
@@ -557,8 +571,12 @@ export default class GoogleApiBroker extends Service {
    */
   async inspect(): Promise<AuthorizationTelemetry | undefined> {
     await this.startupRestore
+    // A gog account is available only after the user explicitly adopted that
+    // account. Never silently switch a restored native grant to an arbitrary
+    // first account reported by a globally installed gog CLI.
     const preferredOpenClawAccount = await this.openClawMarkerAccount()
-    const openClawAccount = await findOpenClawGoogleAccount(undefined, preferredOpenClawAccount)
+    const openClawAccount = preferredOpenClawAccount === undefined
+      ? undefined : await findOpenClawGoogleAccount(undefined, preferredOpenClawAccount)
     if (openClawAccount !== undefined) {
       return {
         kind: 'account',
@@ -606,7 +624,8 @@ export default class GoogleApiBroker extends Service {
    */
   async request(request: GoogleApiRequest): Promise<GoogleApiResponse> {
     const preferredOpenClawAccount = await this.openClawMarkerAccount()
-    const openClawAccount = await findOpenClawGoogleAccount(request.signal, preferredOpenClawAccount)
+    const openClawAccount = preferredOpenClawAccount === undefined
+      ? undefined : await findOpenClawGoogleAccount(request.signal, preferredOpenClawAccount)
     if (openClawAccount !== undefined) {
       const bridged = await requestGoogleWithOpenClaw(openClawAccount, request)
       if (bridged !== undefined) return bridged
@@ -621,7 +640,15 @@ export default class GoogleApiBroker extends Service {
     const headers = callerHeaders(request.headers)
     const grant = await this.usableGrant(destination.scope, request.signal)
     headers.set('authorization', `Bearer ${grant.accessToken}`)
-    const response = await internals.fetch(destination.url, apiFetchInit(request, headers))
+    let response = await internals.fetch(destination.url, apiFetchInit(request, headers))
+    // Access tokens can be invalidated before the local expiry timestamp.
+    // Retry a 401 exactly once after a shared refresh, preserving refresh-token
+    // rotation and avoiding a false "not connected" report after a restart.
+    if (response.status === 401 && grant.refreshToken !== undefined) {
+      const refreshed = await this.refresh(grant, destination.scope, request.signal)
+      headers.set('authorization', `Bearer ${refreshed.accessToken}`)
+      response = await internals.fetch(destination.url, apiFetchInit(request, headers))
+    }
     const contentType = response.headers.get('content-type') ?? undefined
     const body = await response.text()
     return {
@@ -758,6 +785,11 @@ export default class GoogleApiBroker extends Service {
       return next
     }
     if (this.refreshInFlight !== undefined) return this.refreshInFlight.then(checkScope)
+    // A concurrent request may have already refreshed this grant. Do not
+    // re-send its superseded refresh token, which can trigger invalid_grant.
+    if (this.grant !== undefined && this.grant.accessToken !== current.accessToken) {
+      return checkScope(this.grant)
+    }
     const refreshToken = current.refreshToken
     if (refreshToken === undefined) {
       throw new AuthorizationError('Google session needs interactive authorization again', 'GOOGLE_REAUTH_REQUIRED')
@@ -837,12 +869,30 @@ export default class GoogleApiBroker extends Service {
       redirect: 'error',
     })
     if (!response.ok) {
-      if (response.status === 400 || response.status === 401) {
-        this.grant = undefined
-        await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
-        throw new AuthorizationError('Google authorization is no longer valid; reconnect Google', 'GOOGLE_REAUTH_REQUIRED')
+      if (await revokedGoogleRefreshToken(response)) {
+        // Side-by-side old/new Hosts may have rotated the refresh token in
+        // the same durable store. Adopt that newer grant instead of deleting
+        // the account or telling the user to authorize again.
+        const persisted = await this.ctx.credentials.readRecord(GOOGLE_ACCOUNT_KEY)
+        const durable = persisted?.kind === 'grant' ? durableGoogleGrant(persisted.payload) : undefined
+        if (durable !== undefined && durable.refreshToken !== refreshToken) {
+          this.grant = durable
+          return durable
+        }
+        if (durable?.refreshToken === refreshToken && this.grant?.refreshToken === refreshToken) {
+          this.grant = undefined
+          this.accountEmail = undefined
+          await this.ctx.credentials.deleteRecord(GOOGLE_ACCOUNT_KEY)
+        }
+        throw new AuthorizationError('Google revoked or expired the refresh token; reconnect Google', 'GOOGLE_REAUTH_REQUIRED')
       }
-      throw new AuthorizationError(`Google token refresh failed with HTTP ${String(response.status)}`, 'GOOGLE_REFRESH_FAILED')
+      // Retain the durable grant for invalid_client, transient failures and
+      // malformed error bodies. Fixing the OAuth app config must not require
+      // the user to grant access again.
+      throw new AuthorizationError(
+        `Google token refresh temporarily failed with HTTP ${String(response.status)}; saved authorization retained`,
+        'GOOGLE_REFRESH_FAILED',
+      )
     }
     const token = await readTokenResponse(response)
     if (token.token_type.toLowerCase() !== 'bearer') {
