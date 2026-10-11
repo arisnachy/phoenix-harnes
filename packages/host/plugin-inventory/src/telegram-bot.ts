@@ -70,7 +70,7 @@ interface TelegramGateway {
 
 /** One pinned Bot API call. Telegram requires its token in the path; never log URLs. */
 async function botApi(
-  token: string, method: 'getMe' | 'getUpdates' | 'sendMessage',
+  token: string, method: 'getMe' | 'getUpdates' | 'sendMessage' | 'sendChatAction',
   params: Record<string, unknown>, signal?: AbortSignal,
   request: typeof fetch = fetch,
 ): Promise<TelegramApiResponse> {
@@ -262,6 +262,17 @@ export class TelegramInbox {
       await botApi(token, 'sendMessage', { chat_id: chatId, text: text.slice(i, i + 3_800) })
     }
   }
+  /** Telegram's transient typing status never becomes a chat message. */
+  private async sendTyping(token: string, chatId: number, signal: AbortSignal): Promise<void> {
+    await botApi(token, 'sendChatAction', { chat_id: chatId, action: 'typing' },
+      AbortSignal.any([signal, AbortSignal.timeout(8_000)]))
+  }
+  private async keepTyping(token: string, chatId: number, signal: AbortSignal): Promise<void> {
+    while (!signal.aborted) {
+      try { await this.sendTyping(token, chatId, signal) } catch { /* typing is optional; preserve the Agent result */ }
+      await this.sleep(signal, 4_000)
+    }
+  }
   private async process(update: TelegramUpdate, token: string, creds: Credentials): Promise<void> {
     const incoming = eligible(update)
     if (incoming === undefined) return
@@ -340,6 +351,10 @@ export class TelegramInbox {
   }
 
   private async dispatch(chat: number, text: string, token: string, creds: Credentials): Promise<void> {
+    const typingController = new AbortController()
+    const signal = this.controller === undefined ? typingController.signal
+      : AbortSignal.any([typingController.signal, this.controller.signal])
+    const typing = this.keepTyping(token, chat, signal)
     let stage: 'session' | 'admission' | 'execution' = 'session'
     try {
       const agent = await this.liveAgent(creds)
@@ -352,7 +367,6 @@ export class TelegramInbox {
       })
       if (!accepted.result.ok) throw new Error('telegram-prompt-' + accepted.result.error.code)
       stage = 'execution'
-      await this.send(token, chat, 'Recibido. Kira está trabajando en tu solicitud.')
       await agent.whenIdle()
       const events = agent.session.events.slice(eventStart)
       const lastTurn = events.findLast(event => event.type === 'turn/end')
@@ -389,6 +403,9 @@ export class TelegramInbox {
       try { await this.send(token, chat, 'Kira no pudo ' + description
         + ' en Phoenix (' + code + '). Revisa el estado del Host y el modelo configurado.') } catch { /* no recursive retry */ }
       this.agentPromise = undefined
+    } finally {
+      typingController.abort()
+      await typing
     }
   }
 }

@@ -68,12 +68,15 @@ function fixture() {
     logger: { warn: vi.fn() } }
   const inbox = new TelegramInbox(context as never)
   const sent = vi.fn(async (_token: string, _chat: number, _text: string) => undefined)
+  const typing = vi.fn(async (_token: string, _chat: number, _signal: AbortSignal) => undefined)
   const internal = inbox as unknown as {
     send: typeof sent
+    sendTyping: typeof typing
     process(update: ReturnType<typeof makeMessage>, token: string, credentials: typeof creds): Promise<void>
   }
   internal.send = sent
-  return { inbox, internal, creds, values, agent, agents, sessions, sent, followup, events, messages, registered, conflicts }
+  internal.sendTyping = typing
+  return { inbox, internal, creds, values, agent, agents, sessions, sent, typing, followup, events, messages, registered, conflicts }
 }
 
 describe('Telegram owner-paired Host inbox', () => {
@@ -126,10 +129,39 @@ describe('Telegram owner-paired Host inbox', () => {
       payload: expect.objectContaining({ mode: 'queue', content: [{ type: 'text', text: 'Corrige la compilación' }] }),
     }))
     expect(f.values.get('PHOENIX_TELEGRAM_SESSION_ID')).toBeDefined()
-    expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, 'Recibido. Kira está trabajando en tu solicitud.')
+    expect(f.typing).toHaveBeenCalledWith(TOKEN, 12345, expect.any(AbortSignal))
+    expect(f.sent).not.toHaveBeenCalledWith(TOKEN, 12345, 'Recibido. Kira está trabajando en tu solicitud.')
     expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, 'Phoenix terminó: Corrige la compilación')
   })
 
+
+  it('keeps a temporary typing status until the genuine model reply is ready', async () => {
+    const f = fixture()
+    f.values.set('PHOENIX_TELEGRAM_OWNER_CHAT_ID', '12345')
+    let finish!: () => void
+    const pending = new Promise<void>(resolve => { finish = resolve })
+    f.agent.whenIdle = vi.fn(async () => pending)
+    const processing = f.internal.process(makeMessage(12345, 'Kira, revisa las herramientas'), TOKEN, f.creds)
+    await vi.waitFor(() => expect(f.typing).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => expect(f.sessions.prompt).toHaveBeenCalledTimes(1))
+    expect(f.sent).not.toHaveBeenCalled()
+    const indicatorSignal = f.typing.mock.calls[0]![2]
+    expect(indicatorSignal.aborted).toBe(false)
+    finish()
+    await processing
+    expect(f.sent).toHaveBeenCalledTimes(1)
+    expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, 'Phoenix terminó: Kira, revisa las herramientas')
+    expect(indicatorSignal.aborted).toBe(true)
+  })
+
+  it('continues normally if Telegram cannot show the typing status', async () => {
+    const f = fixture()
+    f.values.set('PHOENIX_TELEGRAM_OWNER_CHAT_ID', '12345')
+    f.typing.mockRejectedValueOnce(new Error('telegram typing temporarily unavailable'))
+    await f.internal.process(makeMessage(12345, 'Hola Kira'), TOKEN, f.creds)
+    expect(f.sent).toHaveBeenCalledTimes(1)
+    expect(f.sent).toHaveBeenCalledWith(TOKEN, 12345, 'Phoenix terminó: Hola Kira')
+  })
 
   it('reports a model failure instead of claiming a blank response succeeded', async () => {
     const f = fixture()

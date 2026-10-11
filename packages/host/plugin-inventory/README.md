@@ -14,6 +14,8 @@ Updater state lives under the checkout's Git directory, outside `$DSH_HOME`. The
 
 Public payload types live under `./types`, and Typert generates the Host and Client Remote artifacts exposed by `./typert` and `./remote`. The service is Remote-only and deliberately declares no same-process Cordis `Context` merge. Client packages consume it through the explicit [`api-remotes`](../../api/remotes/README.md) assembly rather than importing the Host implementation.
 
+Telegram owner-paired messages run through the configured Phoenix session gateway; while execution is pending, the Host emits Telegram's ephemeral `sendChatAction(typing)` indicator, not an automatic acknowledgement message. Only model-visible answers or explicit failure reports become chat text. Typing failures do not prevent the Agent from completing.
+
 ## Model Experience
 
 None, as this Host-only diagnostics and update-control service registers no prompt, tool, message, or provider request.

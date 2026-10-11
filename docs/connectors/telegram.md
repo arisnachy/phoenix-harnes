@@ -6,7 +6,7 @@
 2. En Phoenix, abre **Configuración → Conectores → Telegram · Kira**.
 3. Guarda y verifica el token. Phoenix utiliza el almacén seguro de credenciales.
 4. Pulsa **Generar código de vinculación (15 min)**. El código permanece en el vault durante esos 15 minutos, aunque se reinicie Phoenix. En el chat **privado** con tu bot escribe `/start 123456` reemplazando el número por el que aparece en Phoenix.
-5. Cuando el bot confirme la vinculación, envíale una orden por texto. Phoenix crea o recupera una sesión mediante el gateway habitual del chat, incluyendo modelo, preset y herramientas, confirma la recepción y responde con el texto visible al terminar.
+5. Cuando el bot confirme la vinculación, envíale una orden por texto. Phoenix crea o recupera una sesión mediante el gateway habitual del chat, incluyendo modelo, preset y herramientas, muestra el indicador temporal «Kira está escribiendo…» mientras el agente trabaja y envía como primer mensaje de texto la respuesta generada por Kira. Si el modelo falla, informa el fallo sin fingir una respuesta.
 6. Pulsa **Actualizar estado** para ver si la cuenta está vinculada y el receptor está operativo.
 
 ## Qué hace y qué no hace
@@ -15,7 +15,7 @@
 - Si Phoenix está cerrado, no puede ejecutar tareas ni responder. Al volver, solicita los mensajes recientes que Telegram todavía conserve.
 - Solo el ID de un usuario vinculado mediante un código temporal puede ejecutar órdenes; ignora chats grupales, bots y remitentes no autorizados.
 - El offset se conserva en credenciales locales y las entradas se procesan en orden. Se evita reconocer un update antes de procesarlo.
-- Los trabajos se envían mediante el gateway apiProxy.sessions.prompt, sin crear un agente desconfigurado. Los resultados vienen del agente y los fallos de ejecución se notifican sin confundirlos con éxito.
+- Los trabajos se envían mediante el gateway apiProxy.sessions.prompt, sin crear un agente desconfigurado. El indicador de escritura se renueva aproximadamente cada cuatro segundos y se detiene al finalizar; si Telegram no permite mostrarlo, la ejecución sigue normalmente. Los resultados vienen del agente y los fallos de ejecución se notifican sin confundirlos con éxito.
 - El modo de voz nunca se activa por un mensaje de Telegram. Las llamadas programadas y la recepción de notas de voz **no están implementadas** en este canal.
 - Al cambiar de token se borra la vinculación local anterior. «Desconectar» borra las credenciales locales; para revocarlas también en Telegram usa BotFather.
 
