@@ -13,7 +13,7 @@ const stableWorkflow = readFileSync(resolve('.github/workflows/phoenix-stable-up
 
 describe('PHOENIX supervised updater runtime isolation', () => {
   it('does not launch a duplicate web host into a busy 3080 port or kill the current listener', () => {
-    expect(supervisor).toContain("import { createConnection, createServer } from 'node:net'")
+    expect(supervisor).toContain("import { createServer } from 'node:net'")
     expect(supervisor).toContain('function existingHostOnPort(port)')
     expect(supervisor).toContain('if (port !== undefined && await existingHostOnPort(port))')
     expect(supervisor).toContain('finalCode = 0')
