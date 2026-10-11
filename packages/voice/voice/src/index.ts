@@ -952,6 +952,11 @@ function nextRealtimeTurn(events: readonly { readonly type: string; readonly dat
 
 function codexRealtimeFailureDetail(value: unknown): string {
   const message = (value instanceof Error ? value.message : String(value)).trim()
+  // A backend AVAS header rejection is protocol incompatibility, never a
+  // reason to dump a raw provider JSON payload in Phoenix's voice overlay.
+  if (/invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\s*quicksilver=v2/iu.test(message)) {
+    return 'Codex Live requiere Quicksilver v2. Actualiza Codex CLI y reinicia Phoenix para usar WebRTC v3.'
+  }
   const redacted = message
     .replace(/\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\b/gu, '[redacted]')
     .replace(/Bearer\s+[a-z0-9._~+\/-]+=*/giu, 'Bearer [redacted]')
