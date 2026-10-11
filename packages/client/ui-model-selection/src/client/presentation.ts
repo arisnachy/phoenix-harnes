@@ -22,6 +22,12 @@ import {
   siZdotai,
 } from 'simple-icons'
 
+/** Phoenix Auto is an orchestration route, never the actual foundation model. */
+export function isPhoenixAutoRouting(modelId: string, modelName: string): boolean {
+  return modelId.toLowerCase() === 'phoenix-auto'
+    || /^phoenix[\s-]+auto$/iu.test(modelName.trim())
+}
+
 /** Presentation-only metadata for one Host-advertised model row. */
 export interface ModelPresentation {
   readonly displayName: string
