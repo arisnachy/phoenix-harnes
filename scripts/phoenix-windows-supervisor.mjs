@@ -438,9 +438,15 @@ function runtimePathKey(path) {
 
 function runtimeDirectoriesForCleanup() {
   const base = runtimeBaseDirectory()
+  // The hard cap belongs to this checkout, not every Phoenix installation
+  // sharing ~/p. Counting other owners' runtimes can permanently block a
+  // healthy checkout at 3/3 even when it has ample free capacity itself.
+  // Never delete or count a different checkout's active/rollback worktrees.
+  const ownedPrefix = `phoenix-runtime-${stageIdentity()}-`
   return readdirSync(base, { withFileTypes: true })
     .filter(entry => entry.isDirectory()
-      && /^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu.test(entry.name))
+      && /^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu.test(entry.name)
+      && entry.name.toLowerCase().startsWith(ownedPrefix.toLowerCase()))
     .map(entry => join(base, entry.name))
 }
 
