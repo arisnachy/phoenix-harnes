@@ -33,12 +33,13 @@ function missing(set: Set<string>, required: readonly string[], prefix: string, 
   for (const name of required) if (!set.has(name)) issues.push(prefix + ':' + name)
 }
 
-type GameProfile = 'run-and-gun' | 'platformer' | 'top-down-action' | 'racing' | 'puzzle' | 'strategy' | 'rpg' | 'rhythm' | 'simulation' | '3d' | 'custom'
+type GameProfile = 'beat-em-up' | 'run-and-gun' | 'platformer' | 'top-down-action' | 'racing' | 'puzzle' | 'strategy' | 'rpg' | 'rhythm' | 'simulation' | '3d' | 'custom'
 
 function profileFor(manifest: RecordValue, warnings: string[], issues: string[]): GameProfile {
   const raw = nonempty(manifest.gameType) ? manifest.gameType : nonempty(manifest.genre) ? manifest.genre : 'custom'
   const value = raw.toLowerCase().trim()
   const explicit = nonempty(manifest.gameType)
+  if (/beat.em.up|beat.?em.?up|brawler|double.dragon|street.fight|pelea.{0,9}callej|lucha.{0,9}callej/u.test(value)) return 'beat-em-up'
   if (/run.and.gun|contra|shooter|shoot.em.up/u.test(value)) return 'run-and-gun'
   if (/platform|metroidvania/u.test(value)) return 'platformer'
   if (/top.down|twin.stick|arena.action/u.test(value)) return 'top-down-action'
@@ -100,6 +101,7 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
   const profile = profileFor(value, warnings, issues)
   const player = object(value.player) ? value.player : undefined
   const requiredMotion: Readonly<Partial<Record<GameProfile, readonly string[]>>> = {
+    'beat-em-up': ['idle', 'run', 'jump', 'punch', 'kick', 'grab', 'hurt', 'death'],
     'run-and-gun': ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death'],
     platformer: ['idle', 'run', 'jump', 'fall'],
     'top-down-action': ['idle', 'move', 'attack', 'hurt', 'death'],
@@ -108,18 +110,42 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
   const motion = requiredMotion[profile]
   if (motion !== undefined) animationStates(player, motion, issues)
   else if (player !== undefined && (!Array.isArray(player.states) || player.states.length === 0)) warnings.push('player-states-not-declared')
-  enemiesAndBosses(value, profile === 'run-and-gun' || profile === 'top-down-action', profile === 'run-and-gun', issues)
+  enemiesAndBosses(value, ['beat-em-up', 'run-and-gun', 'top-down-action'].includes(profile),
+    profile === 'run-and-gun' || profile === 'beat-em-up', issues)
+  if (profile === 'beat-em-up') {
+    if (!Array.isArray(value.enemies) || value.enemies.length < 3) issues.push('beat-em-up-requires-three-enemy-archetypes')
+    if (!Array.isArray(value.bosses) || value.bosses.length === 0) issues.push('beat-em-up-requires-boss')
+    else for (const boss of value.bosses) {
+      if (!object(boss) || !Array.isArray(boss.attacks) || boss.attacks.length < 2
+        || boss.attacks.some(attack => !object(attack) || !nonempty(attack.id)
+          || typeof attack.telegraphSeconds !== 'number' || attack.telegraphSeconds <= 0)) {
+        issues.push('beat-em-up-boss-requires-two-telegraphed-attacks')
+      }
+    }
+    const combat = object(value.combat) ? value.combat : undefined
+    if (!combat || !object(combat.hitboxes) || combat.depthAxis !== true || combat.knockback !== true
+      || !Array.isArray(combat.combos) || combat.combos.length < 2
+      || !Array.isArray(combat.grapples) || combat.grapples.length === 0) {
+      issues.push('beat-em-up-requires-depth-hitboxes-combos-grapples-knockback')
+    }
+  }
   if (!object(value.level)) issues.push('missing-level')
   else {
     const level = value.level
     const layers = level.layers
-    const requiredLayers = profile === 'run-and-gun' ? 3 : profile === 'platformer' ? 2 : 1
+    const requiredLayers = (profile === 'run-and-gun' || profile === 'beat-em-up') ? 3 : profile === 'platformer' ? 2 : 1
     if (!Array.isArray(layers) || layers.length < requiredLayers) issues.push('level-requires-' + (requiredLayers === 3 ? 'parallax-layers' : 'scene-layers'))
     else if (layers.some(layer => !object(layer) || !nonempty(layer.id)
       || typeof layer.scrollFactor !== 'number' || !Number.isFinite(layer.scrollFactor)
       || layer.scrollFactor < 0 || layer.scrollFactor > 1)) issues.push('invalid-parallax-layer')
     if ((profile === 'run-and-gun' || profile === 'platformer')
       && (!Array.isArray(level.platforms) || level.platforms.length === 0)) issues.push('missing-playable-platforms')
+    if (profile === 'beat-em-up' && (!object(level.belt) || typeof level.belt.minY !== 'number'
+      || typeof level.belt.maxY !== 'number' || level.belt.maxY <= level.belt.minY
+      || !Array.isArray(level.zones) || level.zones.length < 2
+      || typeof level.scrollLength !== 'number' || level.scrollLength < 1200)) {
+      issues.push('beat-em-up-requires-belt-scroll-and-distinct-stage-zones')
+    }
     if (profile === 'racing' && !object(level.track)) issues.push('missing-race-track')
     if (profile === 'puzzle' && !Array.isArray(level.puzzles)) issues.push('missing-puzzle-definitions')
     if (profile === 'strategy' && !Array.isArray(level.units)) issues.push('missing-strategy-units')
@@ -127,6 +153,7 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
     if (profile === 'simulation' && !Array.isArray(level.systems)) issues.push('missing-simulation-systems')
   }
   const controlRequirements: Record<GameProfile, readonly string[]> = {
+    'beat-em-up': ['move', 'punch', 'kick', 'jump', 'grab'],
     'run-and-gun': ['move', 'jump', 'shoot'],
     platformer: ['move', 'jump'],
     'top-down-action': ['move', 'action'],
@@ -145,14 +172,23 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
   if (profile === 'custom' && (!Array.isArray(value.mechanics) || value.mechanics.length === 0)) issues.push('missing-custom-mechanics')
   if (!object(value.audio)) issues.push('missing-audio')
   else {
-    const cues = profile === 'run-and-gun' ? ['jump', 'shoot', 'hit', 'explosion', 'boss']
-      : profile === 'racing' ? ['engine', 'collision']
-        : profile === 'rhythm' ? ['beat'] : []
+    const cues = profile === 'beat-em-up' ? ['punch', 'kick', 'hit', 'grab', 'boss', 'pickup']
+      : profile === 'run-and-gun' ? ['jump', 'shoot', 'hit', 'explosion', 'boss']
+        : profile === 'racing' ? ['engine', 'collision']
+          : profile === 'rhythm' ? ['beat'] : []
     missing(stringSet(value.audio.cues), cues, 'audio-cue', issues)
     if (!Array.isArray(value.audio.cues) || value.audio.cues.length === 0) warnings.push('audio-cues-not-declared')
     if (!nonempty(value.audio.music)) warnings.push('missing-music-plan')
   }
   if (object(value.art)) {
+    if (value.art.mode === 'production' && profile === 'beat-em-up') {
+      for (const family of ['enemies', 'bosses', 'backgrounds', 'zones', 'weapons', 'props', 'effects']) {
+        if (!Array.isArray(value.art[family]) || value.art[family].length === 0)
+          issues.push('missing-production-art:' + family)
+      }
+      if (value.audio && object(value.audio) && value.audio.mode !== 'sampled-production')
+        issues.push('beat-em-up-production-requires-recorded-audio')
+    }
     if (value.art.mode === 'production' && profile === 'run-and-gun') {
       const required = ['enemies', 'bosses', 'backgrounds', 'weapons', 'projectiles', 'powers', 'props', 'effects']
       for (const group of required) {
@@ -169,7 +205,7 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
     if (value.art.mode === 'production' && !nonempty(value.art.designReference) && profile === 'run-and-gun') {
       warnings.push('approved-character-design-reference-missing')
     }
-  } else if (['run-and-gun', 'platformer', 'top-down-action', 'rpg'].includes(profile)) {
+  } else if (['beat-em-up', 'run-and-gun', 'platformer', 'top-down-action', 'rpg'].includes(profile)) {
     warnings.push('visual-art-status-not-declared')
   }
   if (profile === 'run-and-gun') {

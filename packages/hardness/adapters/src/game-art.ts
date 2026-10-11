@@ -12,7 +12,7 @@ function failed(message: string): never {
 }
 function imageById(html: string, id: string): { width: number; height: number; colorType: number } {
   const tags = [...html.matchAll(/<img\b[^>]*>/giu)]
-  const entry = tags.find(match => {
+  const entry = tags.find((match) => {
     const tag = match[0]
     const idMatch = /\bid\s*=\s*(["'])([^"']+)\1/iu.exec(tag)
     return idMatch?.[2] === id
@@ -44,8 +44,11 @@ function imageById(html: string, id: string): { width: number; height: number; c
  * @returns Classified art readiness; does not certify visual fidelity.
  */
 export function validateGameArt(html: string, manifest: RecordValue): 'production-structure' | 'prototype' | 'not-required' {
-  const genre = String(manifest.gameType ?? manifest.genre ?? '').toLowerCase()
-  const isCharacterGame = /run.and.gun|shooter|platformer|top.down.action|\brpg\b|role.play/u.test(genre)
+  const genreValue = manifest.gameType ?? manifest.genre
+  const genre = typeof genreValue === 'string' ? genreValue.toLowerCase() : ''
+  const isBrawler = /beat.em.up|beat.?em.?up|brawler|double.dragon|street.fight|pelea.{0,9}callej|lucha.{0,9}callej/u.test(genre)
+  const isShooter = /run.and.gun|shooter|shoot.em.up/u.test(genre)
+  const isCharacterGame = isBrawler || /run.and.gun|shooter|platformer|top.down.action|\brpg\b|role.play/u.test(genre)
   const art = manifest.art
   if (!record(art)) {
     if (isCharacterGame) failed('juego con personajes sin contrato art. Declara art.mode="production" con atlas real o "prototype" y NO lo presentes como terminado.')
@@ -67,13 +70,18 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
   }
   const total = atlas.width / (hero.frameWidth as number) * atlas.height / (hero.frameHeight as number)
   if (!record(hero.animations)) failed('falta art.hero.animations con índices de frames reales.')
-  for (const state of ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death']) {
+  const requiredHeroStates = isBrawler
+    ? ['idle', 'run', 'jump', 'punch', 'kick', 'grab', 'hurt', 'death']
+    : ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death']
+  for (const state of requiredHeroStates) {
     const frames = hero.animations[state]
     if (!Array.isArray(frames) || frames.length < (state === 'run' ? 4 : 1)
       || frames.some(frame => !Number.isInteger(frame) || frame < 0 || frame >= total)) {
       failed('el protagonista no tiene frames válidos para "' + state + '".')
     }
     if (state === 'run' && new Set(frames).size < 4) failed('la animación run repite el mismo frame; requiere cuatro poses reales.')
+    if (isBrawler && ['punch', 'kick', 'grab'].includes(state) && new Set(frames).size < 2)
+      failed('un golpe/agarre no puede usar un solo fotograma estático: ' + state)
   }
   if (!Array.isArray(art.backgrounds) || art.backgrounds.length === 0) failed('faltan imágenes de escenario integradas: art.backgrounds.')
   for (const item of art.backgrounds) {
@@ -83,7 +91,8 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
   const runtime = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)]
     .filter(match => !/\btype\s*=\s*["']application\/json["']/iu.test(match[1] ?? ''))
     .map(match => match[2] ?? '').join('\n')
-  const imageBindings = [...runtime.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*document\.getElementById\(\s*(["'])([^"']+)\2\s*\)/gu)]
+  const imageBindingPattern = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*document\.getElementById\(\s*(["'])([^"']+)\2\s*\)/gu
+  const imageBindings = [...runtime.matchAll(imageBindingPattern)]
   const drawnVariables = new Set([...runtime.matchAll(/\.drawImage\s*\(\s*([A-Za-z_$][\w$]*)\s*,/gu)].map(match => match[1]))
   // Support manifest-driven renderers without mistaking embedded concept PNGs
   // for drawn gameplay assets. Every declared family needs a runtime call.
@@ -96,14 +105,22 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
   const dynamicBackdrop = /gameArt\.backgrounds/u.test(runtime)
     && /document\.getElementById\(\s*layer\.imageId\s*\)/u.test(runtime)
     && /\.drawImage\s*\(\s*image\s*,/u.test(runtime)
+  const brawlerSprites = /PhoenixBrawlerKit\.drawActorsByDepth\s*\(/u.test(runtime)
+    && /document\.getElementById\(\s*spec\.imageId\s*\)/u.test(runtime)
+    && /\.drawSpriteState\s*\(/u.test(runtime)
+  const brawlerWorld = /PhoenixBrawlerKit\.drawStage\s*\(/u.test(runtime)
+    && /document\.getElementById\(\s*spec\.imageId\s*\)/u.test(runtime)
+    && /\.drawImage\s*\(/u.test(runtime)
   const callsFamily = (renderer: string, family: string): boolean =>
     normalizedRuntime.includes(renderer + "('" + family + "'")
       || normalizedRuntime.includes(renderer + '("' + family + '"')
   const usedByDraw = (id: string, family: string): boolean => imageBindings.some(match =>
     match[3] === id && drawnVariables.has(match[1] ?? ''))
-    || (family === 'backgrounds' && dynamicBackdrop)
+    || (family === 'backgrounds' && (dynamicBackdrop || brawlerWorld))
+    || (family === 'zones' && brawlerWorld)
+    || (['hero', 'enemies', 'bosses'].includes(family) && brawlerSprites)
     || (['hero', 'enemies', 'bosses'].includes(family) && dynamicAtlas && callsFamily('drawArt', family))
-    || (['weapons', 'projectiles', 'powers', 'props', 'effects'].includes(family)
+    || (['weapons', 'projectiles', 'powers', 'props', 'effects', 'zones'].includes(family)
       && dynamicWorld && callsFamily('drawWorldAsset', family))
   if (!usedByDraw(hero.imageId, 'hero')) failed('el sprite del protagonista no se carga y dibuja con drawImage en el juego.')
   for (const item of art.backgrounds) {
@@ -112,9 +129,8 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
     }
   }
 
-  // A production shooter is a complete illustrated world, not an isolated hero
-  // atlas pasted over placeholder enemies, props, weapons and mountains.
-  if (/run.and.gun|shooter|shoot.em.up/u.test(genre)) {
+  // Character action games need a full illustrated cast, not a pasted hero atlas.
+  if (isShooter || isBrawler) {
     const group = (name: string, min: number, states: readonly string[] = []): RecordValue[] => {
       const entries = art[name]
       if (!Array.isArray(entries) || entries.length < min || !entries.every(record)) {
@@ -161,6 +177,7 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
       return characters
     }
     const enemies = roster('enemies', 'enemies', ['move', 'attack', 'hurt', 'death'])
+    if (isBrawler && enemies.length < 3) failed('beat-em-up de producción requiere al menos tres enemigos con atlas diferentes.')
     const bosses = roster('bosses', 'bosses', ['idle', 'attack', 'hurt', 'death'])
     for (const boss of bosses) {
       const declared = (manifest.bosses as RecordValue[]).find(item => item.id === boss.id)
@@ -168,9 +185,20 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
         failed('el jefe ' + String(boss.id) + ' necesita diseños para cada fase de combate.')
       }
       const animated = boss.animations as RecordValue
+      if (isBrawler) {
+        if (!Array.isArray(declared.attacks) || declared.attacks.length < 2)
+          failed('el jefe beat-em-up necesita dos ataques distintos y animados.')
+        for (const attack of declared.attacks) {
+          if (!record(attack) || !nonempty(attack.id)) failed('ataque de jefe sin identificador.')
+          const sequence = animated[attack.id]
+          if (!Array.isArray(sequence) || new Set(sequence).size < 2)
+            failed('el ataque de jefe ' + attack.id + ' requiere al menos dos fotogramas diferentes.')
+        }
+      }
       for (const phase of declared.phases) {
         const frames: unknown = nonempty(phase) ? boss.phaseAnimations[phase] : undefined
-        if (!Array.isArray(frames) || frames.length === 0
+        if (!Array.isArray(frames) || frames.length < (isBrawler ? 2 : 1)
+          || (isBrawler && new Set(frames).size < 2)
           || frames.some((frame: unknown) => !Number.isInteger(frame)
             || (frame as number) < 0
             || !Object.values(animated).some(value => Array.isArray(value) && value.includes(frame)))) {
@@ -186,15 +214,24 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
     for (const layer of expectedLayers) if (!backdrops.some(entry => entry.id === layer.id)) {
       failed('falta ilustrar la capa del escenario ' + String(layer.id) + '.')
     }
+    if (isBrawler) {
+      const zones = record(manifest.level) && Array.isArray(manifest.level.zones)
+        ? manifest.level.zones.filter(record) : []
+      if (zones.length < 2) failed('beat-em-up requiere dos zonas de escenario distintas.')
+      const zoneArt = group('zones', zones.length)
+      for (const zone of zones) if (!zoneArt.some(entry => entry.id === zone.id))
+        failed('falta el arte original de la zona ' + String(zone.id))
+    }
     group('weapons', 1)
-    group('projectiles', 1)
-    group('powers', 1)
+    if (isShooter) { group('projectiles', 1); group('powers', 1) }
     group('props', 1)
     group('effects', 2)
-    // No independent family may secretly reuse the same PNG as the hero or
-    // substitute one picture for every enemy, boss, weapon and environment.
+    // All required families have distinct PNG bindings; optional genre-specific families are excluded.
+    const families = isShooter
+      ? ['backgrounds', 'weapons', 'projectiles', 'powers', 'props', 'effects']
+      : ['backgrounds', 'zones', 'weapons', 'props', 'effects']
     const all = [art.hero, ...enemies, ...bosses,
-      ...['backgrounds','weapons','projectiles','powers','props','effects'].flatMap(name => art[name] as RecordValue[])]
+      ...families.flatMap(name => art[name] as RecordValue[])]
     const ids = all.filter(record).map(item => item.imageId).filter(nonempty)
     if (new Set(ids).size !== ids.length) failed('el protagonista y los elementos del mundo deben tener recursos visuales distintos.')
   }
