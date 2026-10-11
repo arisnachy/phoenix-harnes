@@ -15,7 +15,9 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   it('reserves a crash-safe exclusive Windows named pipe before starting a second Host', () => {
     expect(source).toContain("import { createConnection, createServer } from 'node:net'")
     expect(source).toContain('function supervisorPipeName()')
-    expect(source).toContain("createHash('sha256').update(root.toLowerCase())")
+    expect(source).toContain("createHash('sha256').update(lockScope)")
+    expect(source).toContain('const portArgIndex = hostArgs.indexOf(\'--port\')')
+    expect(source).toContain('web-port:')
     expect(source).toContain("if (error?.code === 'EADDRINUSE')")
     expect(source).toContain('const supervisorInstanceLock = await acquireSupervisorInstance()')
     expect(source).toContain('if (supervisorInstanceLock === null) process.exit(0)')
