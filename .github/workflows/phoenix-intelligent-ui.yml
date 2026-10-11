@@ -7,6 +7,7 @@ on:
       - 'packages/client/ui-conversation/src/client/chat/**'
       - 'packages/client/ui-conversation/tests/generative-canvas.client.spec.tsx'
       - 'packages/client/ui-conversation/tests/interactive-ui.client.spec.tsx'
+      - 'packages/client/ui-conversation/tests/hardness-artifact-renderer.client.spec.tsx'
       - 'packages/client/ui-primitives/src/SmartUi*'
       - 'packages/client/ui-primitives/tests/smart-ui.client.spec.tsx'
       - '.github/workflows/phoenix-intelligent-ui.yml'
@@ -40,4 +41,4 @@ jobs:
       - name: Immutable dependencies
         run: pnpm install --frozen-lockfile
       - name: Intelligent UI regression suite
-        run: pnpm exec vitest run packages/client/ui-conversation/tests/generative-canvas.client.spec.tsx packages/client/ui-conversation/tests/interactive-ui.client.spec.tsx packages/client/ui-primitives/tests/smart-ui.client.spec.tsx
+        run: pnpm exec vitest run packages/client/ui-conversation/tests/generative-canvas.client.spec.tsx packages/client/ui-conversation/tests/interactive-ui.client.spec.tsx packages/client/ui-conversation/tests/hardness-artifact-renderer.client.spec.tsx packages/client/ui-primitives/tests/smart-ui.client.spec.tsx
