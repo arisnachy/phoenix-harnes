@@ -17,7 +17,7 @@ describe('Game Studio whole-scene art plan', () => {
     expect(enemyTasks.length).toBeGreaterThan(0)
     const bossAttacks = plan.tasks.filter((task: { family: string }) => task.family === 'boss-attacks')
     expect(bossAttacks.length).toBeGreaterThanOrEqual(2)
-    expect(bossAttacks.every((task: { animations: string[] }) => task.animations.includes('impact-sfx'))).toBe(true)
+    expect(bossAttacks.every(task => task.animations.includes('impact-sfx'))).toBe(true)
     expect(plan.tasks.some((task: { family: string; id: string }) => task.family === 'abilities'
       && task.id === 'arcane-pulse')).toBe(true)
   })
