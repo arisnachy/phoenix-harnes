@@ -106,6 +106,8 @@ export interface CodexRealtimeProbe {
   readonly authenticated: boolean
   /** Stable unavailability reason for client fallback. */
   readonly reason?: 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable'
+  /** Sanitized error from the local CLI for diagnosing startup failures. */
+  readonly detail?: string
 }
 
 const RPC_TIMEOUT_MS = 30_000
@@ -213,13 +215,18 @@ export class CodexRealtimeBridge {
       return { available: true, authenticated: true }
     } catch (error) {
       const message = errorText(error)
+      const detail = message
+        .replace(/Bearer\\s+[^\\s]+/giu, 'Bearer [redacted]')
+        .replace(/\\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\\b/gu, '[redacted]')
+        .replace(/(?:access_token|refresh_token|password)\\s*[:=]\\s*[^\\s,;]+/giu, '[redacted]')
+        .slice(0, 360)
       if (/not found|enoent|could not start|spawn/i.test(message)) {
-        return { available: false, authenticated: false, reason: 'codex-unavailable' }
+        return { available: false, authenticated: false, reason: 'codex-unavailable', detail }
       }
       if (/chatgpt login|required|not authenticated|account/i.test(message)) {
-        return { available: true, authenticated: false, reason: 'codex-login-required' }
+        return { available: true, authenticated: false, reason: 'codex-login-required', detail }
       }
-      return { available: false, authenticated: false, reason: 'experimental-unavailable' }
+      return { available: false, authenticated: false, reason: 'experimental-unavailable', detail }
     }
   }
 
