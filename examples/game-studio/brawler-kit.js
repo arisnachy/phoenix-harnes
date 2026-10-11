@@ -158,6 +158,29 @@ const PhoenixBrawlerKit = (() => {
     const target = clamp(player.x - viewportWidth * .38, 0, Math.max(0, worldWidth - viewportWidth));
     return current + (target - current) * clamp(dt * 5, 0, 1);
   }
+  function drawStage(ctx, level, imageFor, camera, viewportWidth, viewportHeight) {
+    // Multiple authored parallax layers and a zone-specific scenic image.
+    // A missing illustrated zone is a failed draw, never a painted rectangle fallback.
+    if (!Array.isArray(level.layers) || !Array.isArray(level.zones)) return false;
+    for (const layer of level.layers) {
+      const image = imageFor(layer.id, 'backgrounds');
+      if (!image?.complete || !image.naturalWidth) return false;
+      const tileWidth = Math.max(1, image.naturalWidth / image.naturalHeight * viewportHeight);
+      const offset = ((camera * layer.scrollFactor) % tileWidth + tileWidth) % tileWidth;
+      for (let x = -offset; x < viewportWidth; x += tileWidth) {
+        ctx.drawImage(image, x, 0, tileWidth + .5, viewportHeight);
+      }
+    }
+    // Draw an independent streetscape for each contiguous segment; do not
+    // reuse a single alley backdrop for warehouse and industrial zones.
+    for (const zone of level.zones) {
+      if (zone.endX <= camera || zone.startX >= camera + viewportWidth) continue;
+      const image = imageFor(zone.id, 'zones');
+      if (!image?.complete || !image.naturalWidth) return false;
+      ctx.drawImage(image, zone.startX - camera, 0, zone.endX - zone.startX, viewportHeight);
+    }
+    return true;
+  }
   function drawActorsByDepth(ctx, actors, atlasFor, camera, clock, motionKit) {
     if (!motionKit || typeof motionKit.drawSpriteState !== 'function')
       throw new Error('Pass the real PhoenixGameKit renderer to drawActorsByDepth');
@@ -167,8 +190,15 @@ const PhoenixBrawlerKit = (() => {
       const art = atlasFor(actor.id);
       if (!art || !art.image || !art.atlas) continue;
       const state = actor.hp <= 0 ? 'death' : actor.action ? actor.action.name : actor.mode;
+      // Bosses change actual atlas sequences with their phase; attack IDs must
+      // also have their own sequences (sweep/charge), not a frozen idle frame.
+      const phaseFrames = actor.boss && !actor.action && ['idle', 'run'].includes(state)
+        ? art.atlas.phaseAnimations?.[actor.phase] : undefined;
+      const atlas = Array.isArray(phaseFrames) && phaseFrames.length > 0
+        ? { ...art.atlas, animations: { ...art.atlas.animations, [state]: phaseFrames } }
+        : art.atlas;
       // Approved atlas is mandatory; no box/cartoon fallback.
-      motionKit.drawSpriteState(ctx, art.image, art.atlas, state, clock,
+      motionKit.drawSpriteState(ctx, art.image, atlas, state, clock,
         actor.x - camera - art.width / 2, actor.y - art.height, art.width, art.height, actor.face);
     }
   }
@@ -193,5 +223,5 @@ const PhoenixBrawlerKit = (() => {
     };
   }
   return { fighter, moves, walk, queueAttack, advance, resolveHits, releaseGrab,
-    enemyAI, bossAI, cameraX, drawActorsByDepth, audioBus };
+    enemyAI, bossAI, cameraX, drawStage, drawActorsByDepth, audioBus };
 })();
