@@ -194,12 +194,14 @@ describe('installModelSelection()', () => {
       'Kira, convoca a tu equipo para analizar este sistema.',
       'Quiero que Kira trabaje con sus agentes en una tarea.',
       'Muéstrame a tu equipo trabajando en una prueba.',
+      'Hazlo con tu equipo, por favor.',
       'Necesito que Sol y Luna colaboren en el diagnóstico.',
     ]) expect(isExplicitKiraTeamRequest(instruction)).toBe(true)
     for (const ordinary of [
       'Hola, Kira.',
       'Por qué Kira ya no llama a su equipo?',
       'No llames a tu equipo para esta tarea.',
+      'No lo hagas con tu equipo.',
       'Corrige un título corto sin delegar.',
     ]) expect(isExplicitKiraTeamRequest(ordinary)).toBe(false)
   })
