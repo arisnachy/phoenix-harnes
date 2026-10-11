@@ -344,7 +344,7 @@ export function ConversationRoot({
           <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
         </div>
         <div className={css.headerGlobal} aria-label="Herramientas globales">
-          {<button type="button" className={css.headerToggle}
+          <button type="button" className={css.headerToggle}
             aria-label={headerPinnedOpen ? 'Activar colapso automático' : headerCompact ? 'Expandir barra superior' : 'Fijar barra superior expandida'}
             title={headerPinnedOpen ? 'Activar colapso automático' : headerCompact ? 'Expandir barra superior' : 'Fijar barra superior expandida'}
             aria-expanded={!headerCompact}
@@ -353,7 +353,7 @@ export function ConversationRoot({
             <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               {headerCompact ? <path d="m7 10 5 5 5-5" /> : <path d="m7 14 5-5 5 5" />}
             </svg>
-          </button>}
+          </button>
           <button type="button" className={css.heroTopIcon} aria-label="Buscar sesiones" onClick={openWorkspaceSearch}>
             <IconSearchOutline16 size={19} />
           </button>
