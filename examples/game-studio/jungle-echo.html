@@ -232,9 +232,31 @@ const enemies=[];
 let p,boss,camera=0,t=0,score=0,ended=false,audio=null,audioOn=true,beat=0,invuln=0;
 const audioSamples=new Map();
 function registerSoundSample(cue, decodedAudioBuffer){if(typeof cue==='string'&&decodedAudioBuffer)audioSamples.set(cue,decodedAudioBuffer)}
-function playSoundSample(cue){if(!audioOn||!audio||!audioSamples.has(cue))return false;const src=audio.createBufferSource();src.buffer=audioSamples.get(cue);src.connect(audio.destination);src.start();return true}
+function playSoundSample(cue){
+ if(!audioOn)return false;
+ if(audio&&audioSamples.has(cue)){const src=audio.createBufferSource();src.buffer=audioSamples.get(cue);src.connect(audio.destination);src.start();return true}
+ const template=document.getElementById('phoenix-audio-'+cue);
+ if(template&&typeof template.play==='function'){
+  const clip=template.cloneNode(true);clip.volume=cue.startsWith('voice-')?.8:.65;
+  const play=clip.play();if(play?.catch)play.catch(()=>{});
+  return true;
+ }
+ return false;
+}
 // Licensed voice recordings and detailed Foley may be registered as decoded buffers; oscillator fallback remains prototype audio.
 window.PhoenixRegisterGameSound=registerSoundSample;
+const manifestElement=document.getElementById('phoenix-game-manifest');
+const runtimeManifest=manifestElement?.textContent?JSON.parse(manifestElement.textContent):{};
+const gameArt=runtimeManifest.art||{};
+function drawArt(kind,id,state,seconds,x,y,w,h,face=1){
+ const spec=kind==='hero'?gameArt.hero:gameArt[kind]?.find(entry=>entry.id===id);
+ if(!spec)return false;
+ const image=document.getElementById(spec.imageId);
+ if(!image)return false;
+ const rendered=PhoenixGameKit.drawSpriteState(g,image,spec,state,seconds,x,y,w,h,face);
+ if(!rendered&&gameArt.mode==='production')status.textContent='Game Studio: atlas sin animación '+id+'/'+state;
+ return rendered;
+}
 function reset(){
  p={x:72,y:350,vx:0,vy:0,w:30,h:54,hp:8,grounded:false,face:1,shot:0,frame:0,walk:0,state:'idle',nextPowerAt:0,whipReadyAt:0,powerAnimationUntil:0,whipAnimationUntil:0};
  boss={x:3410,y:FLOOR-122,w:110,h:122,hp:30,maxHp:30,phase:'patrol',alive:true,flash:0,face:-1,action:'idle',windup:0,recovery:1,attackIndex:0,animTime:0};
@@ -246,6 +268,8 @@ function reset(){
 function unlockAudio(){
  if(audio===null){const C=window.AudioContext||window.webkitAudioContext;if(C)audio=new C();}
  if(audio!==null&&audio.state==='suspended')audio.resume().catch(()=>{});
+ const theme=document.getElementById('phoenix-audio-music');
+ if(audioOn&&theme&&theme.paused){theme.loop=true;theme.volume=.42;const play=theme.play();if(play?.catch)play.catch(()=>{})}
 }
 function noise(duration,volume,cutoff=2300){
  if(!audioOn||!audio)return;
@@ -270,10 +294,11 @@ const sound={
  power:()=>{if(!playSoundSample('power')){tone(240,.38,'sine',.14,920);tone(460,.24,'triangle',.065,1150)}},
  hit:()=>{if(!playSoundSample('hit')){noise(.11,.12,1800);tone(150,.14,'sawtooth',.08,65)}},
  explosion:()=>{if(!playSoundSample('explosion')){noise(.35,.16,900);tone(90,.33,'sawtooth',.12,27)}},
- boss:()=>{if(!playSoundSample('boss')){noise(.23,.09,1300);tone(130,.38,'sawtooth',.07,60)}}
+ boss:()=>{if(!playSoundSample('boss')){noise(.23,.09,1300);tone(130,.38,'sawtooth',.07,60)}},
+ voice:(cue)=>playSoundSample('voice-'+cue)
 };
 function music(dt){
- if(!audioOn||ended)return;
+ if(!audioOn||ended||document.getElementById('phoenix-audio-music'))return;
  beat-=dt;
  if(beat<=0){beat+=.22;const notes=[110,0,146.83,0,164.81,0,146.83,98,0,146.83,164.81,0,196,0,164.81,0];
   const note=notes[Math.floor(t/.22)%notes.length];if(note){tone(note,.18,'triangle',.037,note*.998);tone(note*2,.12,'sine',.011,note*2)}
@@ -299,7 +324,13 @@ function overlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
 function damagePlayer(){
  if(invuln>0||ended)return;
  p.hp--;invuln=.85;p.state='hurt';sound.hit();particles(p.x+15,p.y+23,'#ee6d68',14,.6);
- if(p.hp<=0){ended=true;p.state='death';sound.explosion();status.textContent='Misión fallida. Pulsa Reiniciar.'}
+ if(p.hp<=0){ended=true;p.state='death';sound.explosion();sound.voice('defeat');status.textContent='Misión fallida. Pulsa Reiniciar.'}
+}
+function defeatBoss(){
+ if(!boss.alive||boss.hp>0)return;
+ boss.alive=false;ended=true;score+=2000;particles(boss.x+55,boss.y+60,'#ffb54c',80,1.7);
+ sound.explosion();sound.voice('victory');
+ status.textContent='¡VICTORIA! Jungla liberada. Puntaje: '+score+'. Pulsa Reiniciar.';
 }
 function moveBody(o,dt,isPlayer){
  o.vy=Math.min(1150,o.vy+1700*dt);const prevBottom=o.y+o.h;
@@ -331,7 +362,7 @@ function update(dt){
   for(const e of enemies)if(e.alive&&Math.abs(e.x-p.x)<105&&Math.abs(e.y-p.y)<92){
    e.hp-=2;e.flash=.2;if(e.hp<=0){e.alive=false;score+=100;sound.explosion()}
   }
-  if(boss.alive&&Math.abs(boss.x-p.x)<125){boss.hp=Math.max(0,boss.hp-2);boss.flash=.2}
+  if(boss.alive&&Math.abs(boss.x-p.x)<125){boss.hp=Math.max(0,boss.hp-2);boss.flash=.2;defeatBoss()}
  }
  if((keys.has('KeyJ')||keys.has('KeyK'))&&p.shot<=0){
   const aim=PhoenixGameKit.direction8(p.face,keys.has('KeyI'),keys.has('KeyO'));
@@ -374,8 +405,7 @@ function update(dt){
   if(boss.alive&&b.ttl>0&&b.x>boss.x&&b.x<boss.x+boss.w&&b.y>boss.y&&b.y<boss.y+boss.h){
    boss.hp-=b.damage||1;boss.flash=.13;b.ttl=0;particles(b.x,b.y,'#fae7a1',7,.55);sound.hit();
    if(boss.hp<=15&&!boss.enraged){boss.enraged=true;particles(boss.x+55,boss.y+50,'#fba03b',32,1.1);sound.boss()}
-   if(boss.hp<=0){boss.alive=false;ended=true;score+=2000;particles(boss.x+55,boss.y+60,'#ffb54c',80,1.7);
-     sound.explosion();status.textContent='¡VICTORIA! Jungla liberada. Puntaje: '+score+'. Pulsa Reiniciar.'}
+   if(boss.hp<=0)defeatBoss()
   }
  }
  for(const b of enemyBullets){b.x+=b.vx*dt;b.y+=b.vy*dt;b.ttl-=dt;
@@ -409,6 +439,13 @@ function background(){
  g.fillStyle='#d6e7b966';g.beginPath();g.arc(775,92,36,0,Math.PI*2);g.fill();
  mountains(.12,'#1c4655',310,112,180);mountains(.23,'#214e50',367,103,130);
  treeRow(.35,440,'#173b3b',95,.8);treeRow(.62,445,'#15352d',124,1.15);
+ for(const layer of gameArt.backgrounds||[]){
+  const image=document.getElementById(layer.imageId);
+  if(!image?.complete||!image.naturalWidth)continue;
+  const depth=runtimeManifest.level?.layers?.find(entry=>entry.id===layer.id)?.scrollFactor||0;
+  const width=Math.max(W,image.naturalWidth),offset=(camera*depth)%width;
+  for(let x=-offset;x<W;x+=width)g.drawImage(image,x,0,width,H);
+ }
 }
 function world(){
  g.save();g.translate(-camera,0);
@@ -437,7 +474,7 @@ function world(){
 function drawHero(){
  const aim=PhoenixGameKit.direction8(p.face,keys.has('KeyI'),keys.has('KeyO'));
  g.save();if(p.state==='hurt')g.globalAlpha=.65;
- PhoenixGameKit.drawHumanoid(g,p.x+15,p.y+21,{
+ if(!drawArt('hero','hero',p.state,t,p.x,p.y,p.w,p.h,p.face))PhoenixGameKit.drawHumanoid(g,p.x+15,p.y+21,{
   face:p.face,walk:p.walk,running:p.state==='run',airborne:!p.grounded,
   falling:p.vy>0,aim:Math.atan2(aim.y,Math.abs(aim.x)),
   recoil:p.shot/.14*3,flash:p.shot>.09
@@ -448,7 +485,8 @@ function drawHero(){
 }
 function drawEnemy(e){
  g.save();g.translate(e.x+15,e.y+18);g.scale(.83,.75);
- PhoenixGameKit.drawHumanoid(g,0,0,{face:e.face,walk:e.walk,running:e.aiState==='chase',
+ if(!drawArt('enemies',e.type,e.flash>0?'hurt':e.telegraph>0?'attack':'move',e.walk,
+   -15,-18,44,55,e.face))PhoenixGameKit.drawHumanoid(g,0,0,{face:e.face,walk:e.walk,running:e.aiState==='chase',
   enemy:true,flash:e.telegraph>0,aim:0});
  if(e.telegraph>0){g.strokeStyle='#ffc16c';g.lineWidth=3;g.beginPath();g.arc(0,0,29+Math.sin(t*26)*3,0,Math.PI*2);g.stroke()}
  g.restore();
@@ -457,6 +495,8 @@ function drawEnemy(e){
 }
 function drawBoss(){
  const x=boss.x,y=boss.y;
+ if(drawArt('bosses','iron-stag',boss.action==='windup'?'attack':boss.phase,
+   boss.animTime,x,y,boss.w,boss.h,boss.face))return;
  g.save();g.translate(x,y);
  g.fillStyle='#151d28';g.fillRect(8,33,96,84);
  for(let k=0;k<3;k++){const stride=Math.sin(boss.animTime*7+k*2)*9;
@@ -510,7 +550,9 @@ for(const control of document.querySelectorAll('[data-key]')){
  control.addEventListener('pointerup',clear);control.addEventListener('pointercancel',clear);control.addEventListener('lostpointercapture',clear);
 }
 function toggleAudio(){
- unlockAudio();audioOn=!audioOn;document.getElementById('mute').textContent=audioOn?'Sonido: apagar':'Sonido: encender';
+ unlockAudio();audioOn=!audioOn;
+ const theme=document.getElementById('phoenix-audio-music');if(!audioOn)theme?.pause();else unlockAudio();
+ document.getElementById('mute').textContent=audioOn?'Sonido: apagar':'Sonido: encender';
  document.getElementById('mute').setAttribute('aria-pressed',String(audioOn));if(audioOn)tone(440,.15,'triangle',.1);
 }
 document.getElementById('mute').addEventListener('click',toggleAudio);
