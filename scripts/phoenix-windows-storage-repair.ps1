@@ -145,7 +145,13 @@ try {
 }
 $after = @(Get-ManagedRuntimeDirectories)
 Write-Host ('[PHOENIX STORAGE] Remaining managed runtimes: ' + $after.Count)
-$configuredLimit = 3
+# Mirror the supervisor's configured hard cap, not a hard-coded 3/3.
+$backupCount = 1
+$backupOverride = 0
+if ([int]::TryParse($priorBackups, [ref]$backupOverride)) {
+    $backupCount = [Math]::Max(0, [Math]::Min(2, $backupOverride))
+}
+$configuredLimit = [Math]::Max(2, $backupCount + 2)
 $limitOverride = 0
 if ([int]::TryParse($env:PHOENIX_UPDATE_RUNTIME_LIMIT, [ref]$limitOverride)) {
     $configuredLimit = [Math]::Max(2, [Math]::Min(6, $limitOverride))
