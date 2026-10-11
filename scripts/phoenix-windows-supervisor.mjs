@@ -438,9 +438,15 @@ function runtimePathKey(path) {
 
 function runtimeDirectoriesForCleanup() {
   const base = runtimeBaseDirectory()
+  // The hard cap belongs to this checkout, not every Phoenix installation
+  // sharing ~/p. Counting other owners' runtimes can permanently block a
+  // healthy checkout at 3/3 even when it has ample free capacity itself.
+  // Never delete or count a different checkout's active/rollback worktrees.
+  const ownedPrefix = `phoenix-runtime-${stageIdentity()}-`
   return readdirSync(base, { withFileTypes: true })
     .filter(entry => entry.isDirectory()
-      && /^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu.test(entry.name))
+      && /^phoenix-runtime-[0-9a-f]{10}-[0-9a-f]{12}$/iu.test(entry.name)
+      && entry.name.toLowerCase().startsWith(ownedPrefix.toLowerCase()))
     .map(entry => join(base, entry.name))
 }
 
@@ -1930,5 +1936,14 @@ while (true) {
 }
 
 await stopWatcherSupervisor()
+// After the Host and watcher have exited, Windows finally releases many
+// runtime DLL/cwd handles that caused EBUSY during live sweeps. Re-run the
+// ownership-aware janitor here to release storage for the next boot/update.
+// It still preserves the active runtime and every other checkout's files.
+try {
+  cleanupObsoleteRuntimes()
+} catch (error) {
+  console.error(`[PHOENIX UPDATE] final storage cleanup deferred: ${error instanceof Error ? error.message : String(error)}`)
+}
 supervisorInstanceLock?.close()
 process.exitCode = finalCode

@@ -122,6 +122,47 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
 
+  it('retries orphan cleanup after Windows releases exited Host and updater handles', () => {
+    const finish = supervisor.lastIndexOf('await stopWatcherSupervisor()')
+    const close = supervisor.indexOf('supervisorInstanceLock?.close()', finish)
+    expect(finish).toBeGreaterThan(-1)
+    expect(close).toBeGreaterThan(finish)
+    expect(supervisor.slice(finish, close)).toContain('cleanupObsoleteRuntimes()')
+    expect(supervisor.slice(finish, close)).toContain('final storage cleanup deferred')
+  })
+
+  it('does not let other checkouts exhaust this Windows runtime quota', () => {
+    const begin = supervisor.indexOf('function runtimeDirectoriesForCleanup()')
+    const end = supervisor.indexOf('\nfunction stageDirectoriesForCleanup()', begin)
+    expect(begin).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(begin)
+    const source = supervisor.slice(begin, end) + '\n({ runtimeDirectoriesForCleanup })'
+    const currentId = 'c844c9f3ab'
+    const otherId = 'abcde12345'
+    const names = [
+      `phoenix-runtime-${currentId}-0123456789ab`,
+      `phoenix-runtime-${otherId}-aaaaaaaaaaaa`,
+      `phoenix-runtime-${otherId}-bbbbbbbbbbbb`,
+      'phoenix-runtime-unmanaged',
+    ]
+    const { runtimeDirectoriesForCleanup } = runInNewContext(source, {
+      runtimeBaseDirectory: () => 'p',
+      stageIdentity: () => currentId,
+      readdirSync: () => names.map(name => ({ name, isDirectory: () => true })),
+      join,
+    }) as { runtimeDirectoriesForCleanup: () => string[] }
+    expect(runtimeDirectoriesForCleanup()).toEqual([join('p', names[0]!)])
+  })
+
+  it('offline repair uses the owning checkout identity and never reports a locked 3/3 as success', () => {
+    expect(updatePowerShell).toContain('rev-parse --git-common-dir')
+    expect(updatePowerShell).toContain('[System.Security.Cryptography.SHA256]::Create()')
+    expect(updatePowerShell).toContain("[regex]::Escape($identity)")
+    expect(updatePowerShell).toContain('if ($after.Count -ge $configuredLimit)')
+    expect(updatePowerShell).toContain('cleanup could not free runtime capacity')
+    expect(updatePowerShell).toContain("Close Phoenix normally before -Apply")
+  })
+
   it('caps runtime copies while keeping age-based staging cleanup', () => {
     expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000')
     expect(supervisor).toContain('PHOENIX_UPDATE_STORAGE_RETENTION_MS')
