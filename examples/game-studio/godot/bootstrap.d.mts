@@ -8,6 +8,7 @@ export declare function scaffoldGodotProject(project: string, options?: {
   exists?: (path: string) => boolean
   mkdir?: (path: string, options: { recursive: true }) => unknown
   read?: (path: string) => Uint8Array | string
+  list?: (path: string) => string[]
   write?: (path: string, data: Uint8Array | string, options: { flag: 'wx' }) => unknown
 }): { project: string; created: boolean; reused: boolean; files?: string[] }
 export declare function verifyGodotProject(
