@@ -165,8 +165,9 @@ function isBrowserRequest(node: OrderedChatNode): boolean {
 }
 
 /**
- * Observe real MCP Chromium navigation, even when the user's request was to
- * research, analyze a video or carry out another broader task.
+ * Observe real MCP Chromium navigation during research or another broad task.
+ * @param name - Tool name emitted by the active model or MCP bridge.
+ * @returns Whether that tool explicitly opens or navigates a Chromium page.
  */
 export function isEmbeddedNavigationTool(name: string): boolean {
   const value = name.toLowerCase()
@@ -508,7 +509,7 @@ function BrowserWorkspace({
     <div className={css.browserWorkspace} data-browser-workspace={live ? '' : undefined}
       data-activity-open={live ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
-        <MiniBrowser requested active={selected} onActivate={onActivate} autoScroll={false} onPageChange={setPage} />
+        <MiniBrowser requested active={selected} onActivate={onActivate} autoScroll={true} onPageChange={setPage} />
       </div>
       {live && <aside className={css.activityPane} aria-label="Actividad del agente en este navegador">
         <header className={css.activityHeader}>

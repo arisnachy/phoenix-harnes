@@ -6,7 +6,11 @@ export interface YoutubeCaptionTrack {
   readonly name?: string
 }
 
-/** Normalize a supplied public YouTube video URL without opening arbitrary sites. */
+/**
+ * Normalize a supplied public YouTube video URL without opening arbitrary sites.
+ * @param input - Video URL supplied by Kira or the user.
+ * @returns Canonical HTTPS YouTube watch URL.
+ */
 export function youtubeWatchUrl(input: string): string {
   const url = new URL(input)
   if (url.protocol !== 'https:' || url.username || url.password) {
@@ -25,7 +29,11 @@ export function youtubeWatchUrl(input: string): string {
   return 'https://www.youtube.com/watch?v=' + candidate
 }
 
-/** Allow captions to be fetched only from YouTube's own timed-text endpoint. */
+/**
+ * Allow captions to be fetched only from YouTube's own timed-text endpoint.
+ * @param input - Timed-text URL reported by the public video player.
+ * @returns Safe HTTPS timed-text URL.
+ */
 export function youtubeCaptionUrl(input: string): string {
   const url = new URL(input)
   if (url.protocol !== 'https:' || !['www.youtube.com', 'youtube.com', 'm.youtube.com'].includes(url.hostname)
@@ -36,7 +44,11 @@ export function youtubeCaptionUrl(input: string): string {
   return url.href
 }
 
-/** Prefer Spanish transcripts, followed by English and then available languages. */
+/**
+ * Prefer Spanish transcripts, followed by English and then other languages.
+ * @param tracks - Available public caption track metadata.
+ * @returns Chosen supported track, if any.
+ */
 export function chooseYoutubeCaptions(tracks: readonly YoutubeCaptionTrack[]): YoutubeCaptionTrack | undefined {
   const safe = tracks.filter(track => {
     try { youtubeCaptionUrl(track.baseUrl); return true } catch { return false }
@@ -73,7 +85,12 @@ function timeLabel(seconds: number): string {
 
 interface Cue { readonly startSeconds: number; readonly text: string }
 
-/** Parse captions that YouTube supplied in JSON3 or XML without guessing speech. */
+/**
+ * Parse captions that YouTube supplied in JSON3 or XML without guessing speech.
+ * @param source - Actual caption document returned by YouTube.
+ * @param maxChars - Upper bound for transcript text returned to the model.
+ * @returns Timestamped transcript and evidence of truncation.
+ */
 export function youtubeTranscript(source: string, maxChars = 60_000): { text: string; cues: number; truncated: boolean } {
   const cues: Cue[] = []
   let json: unknown

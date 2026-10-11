@@ -5,6 +5,7 @@ import { MiniBrowser } from '../src/client/chat/MiniBrowser.tsx'
 
 const originalCreateObjectUrl = Object.getOwnPropertyDescriptor(URL, 'createObjectURL')
 const originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView')
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -12,6 +13,8 @@ afterEach(() => {
   else Reflect.deleteProperty(URL, 'createObjectURL')
   if (originalRevokeObjectUrl) Object.defineProperty(URL, 'revokeObjectURL', originalRevokeObjectUrl)
   else Reflect.deleteProperty(URL, 'revokeObjectURL')
+  if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScrollIntoView)
+  else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
 })
 
 const state = {
@@ -53,6 +56,14 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(screen.queryByText(/Abrir navegador/)).toBeNull()
     expect(screen.queryByRole('region', { name: 'Navegador de Kira' })).toBeNull()
     expect(calls).toHaveLength(0)
+  })
+
+  it('scrolls a requested MiniBrowser into the visible chat when it opens', async () => {
+    const focus = vi.fn()
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: focus })
+    installBrowserMock()
+    render(<MiniBrowser requested autoScroll />)
+    await waitFor(() => { expect(focus).toHaveBeenCalled() })
   })
 
   it('automatically starts embedded Chromium for a requested page without opening desktop Chrome', async () => {
