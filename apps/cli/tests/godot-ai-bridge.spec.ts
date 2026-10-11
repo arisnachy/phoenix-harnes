@@ -27,7 +27,7 @@ const upstreamPackage = '@deepseek-ai/' + 'dsh-mcp-client'
 const official = [
   '- insert:',
   '    - id: mcp-godot-ai',
-  "      name: '${upstreamPackage}'",
+  `      name: '${upstreamPackage}'`,
   '      config:',
   '        serverName: godot-ai',
   '        transport: stdio',
