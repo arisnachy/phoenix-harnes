@@ -8,13 +8,18 @@ describe('Game Studio whole-scene art plan', () => {
     const shooter = JSON.parse(readFileSync(resolve(process.cwd(), 'examples/game-studio/jungle-echo.manifest.json'), 'utf8')) as Record<string, unknown>
     const plan = planGameAssets(shooter)
     const families = new Set(plan.tasks.map((task: { family: string }) => task.family))
-    for (const family of ['hero', 'enemies', 'bosses', 'backgrounds', 'weapons', 'projectiles', 'powers', 'props', 'effects', 'audio']) {
+    for (const family of ['hero', 'enemies', 'bosses', 'boss-attacks', 'abilities', 'backgrounds', 'weapons', 'projectiles', 'powers', 'props', 'effects', 'audio']) {
       expect(families.has(family)).toBe(true)
     }
     expect(plan.stage).toMatch(/NOT BUILT/u)
     expect(plan.tasks.every((task: { status: string }) => task.status === 'pending')).toBe(true)
     const enemyTasks = plan.tasks.filter((task: { family: string }) => task.family === 'enemies')
     expect(enemyTasks.length).toBeGreaterThan(0)
+    const bossAttacks = plan.tasks.filter((task: { family: string }) => task.family === 'boss-attacks')
+    expect(bossAttacks.length).toBeGreaterThanOrEqual(2)
+    expect(bossAttacks.every((task: { animations: string[] }) => task.animations.includes('impact-sfx'))).toBe(true)
+    expect(plan.tasks.some((task: { family: string; id: string }) => task.family === 'abilities'
+      && task.id === 'arcane-pulse')).toBe(true)
   })
 
   it('does not invent characters or bosses in a logic puzzle', () => {
