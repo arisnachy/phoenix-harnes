@@ -27,6 +27,33 @@ function renderHub(api: IApiClient['authorization'], extra: Partial<ConnectorsSe
 }
 
 describe('connectors settings section', () => {
+  it('keeps Codex reconnect visible with an expired native account marker', async () => {
+    const begin = vi.fn(async () => ok({ attemptId: 'codex-reauth' }))
+    const api = {
+      list: vi.fn(async () => ok({ entries: [{
+        key: 'subagent-codex/account', label: 'ChatGPT / Codex',
+        methods: [{ id: 'oauth', label: 'Sign in with ChatGPT' }],
+        inFlight: false, stored: { kind: 'grant' as const },
+      }] })),
+      begin, status: vi.fn(), answer: vi.fn(), cancel: vi.fn(),
+    } as unknown as IApiClient['authorization']
+    renderHub(api, { launchContext: 'codex-reconnect' })
+    await waitFor(() => {
+      const card = document.querySelector('[data-connector-id="codex"]')
+      expect(card).toBeTruthy()
+      expect(card?.textContent).toContain('OpenAI Codex')
+      expect(card?.querySelector('button')).toBeTruthy()
+    })
+    const card = document.querySelector('[data-connector-id="codex"]')!
+    const reconnect = Array.from(card.querySelectorAll('button'))
+      .find(button => /Reauthorize|Reconnect|Authorize/i.test(button.textContent ?? ''))
+    expect(reconnect).toBeTruthy()
+    fireEvent.click(reconnect!)
+    await waitFor(() => {
+      expect(begin).toHaveBeenCalledWith({ key: 'subagent-codex/account', method: 'oauth' })
+    })
+  })
+
   it('automatically presents authenticated DeepSeek and newly registered model providers in the store', async () => {
     const api = {
       list: vi.fn(async () => ok({ entries: [

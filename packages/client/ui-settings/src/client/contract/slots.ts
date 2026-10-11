@@ -136,7 +136,7 @@ export interface SettingsSectionOwnerProps {
   /** Close the settings panel (the shell owns the open state). */
   close: () => void
   /** A direct navigation entry may launch this existing action surface without opening Settings navigation. */
-  launchContext?: 'discover' | 'connectors' | 'team'
+  launchContext?: 'discover' | 'connectors' | 'team' | 'codex-reconnect'
 }
 
 /** Owner share of the currently active settings-backed onboarding step. */

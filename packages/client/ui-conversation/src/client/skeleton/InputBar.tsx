@@ -34,8 +34,8 @@ import {
   configureCodexRealtimeUserTranscriptHandler,
   createVoiceRecognition, getVoiceAssistantSnapshot, hasCodexRealtimeVoiceSupport, hasVoiceRecognition,
   interruptVoiceAssistantSpeech,
-  isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant,
-  tryStartCodexRealtimeVoice,
+  isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, openCodexReconnection, codexRealtimeRequiresLogin,
+  setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant, tryStartCodexRealtimeVoice,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -137,13 +137,16 @@ export function InputBar({
   // developer-facing and keep the raw message plus code.
   useEffect(() => {
     if (promptError === null) return
+    if (codexRealtimeRequiresLogin(promptError.error.message)) openCodexReconnection()
     showToast(promptError.error.code === 'attachment-error'
       ? attachmentErrorText(t, promptError.error.details.reason, imageLimits, fileLimits)
       : `${promptError.error.message} (${promptError.error.code})`)
   }, [promptError, showToast, t, imageLimits, fileLimits])
   useEffect(() => {
-    if (notice?.level === 'error') showToast(notice.text)
-  }, [notice, showToast])
+    if (notice?.level !== 'error') return
+    showToast(notice.text)
+    if (codexRealtimeRequiresLogin(notice.text)) openCodexReconnection()
+  }, [notice?.level, notice?.text, showToast])
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const cardRef = useRef<HTMLDivElement | null>(null)
@@ -298,7 +301,14 @@ export function InputBar({
       // Agent.followup then owns normal chat/session persistence and the harness.
       const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
       if (realtime.kind === 'started') return
-      if (realtime.kind === 'failed') setCodexVoiceFailure(realtime.reason)
+      if (realtime.kind === 'failed') {
+        setCodexVoiceFailure(codexRealtimeRequiresLogin(realtime.reason)
+          ? 'codex-login-required' : realtime.reason)
+        // A missing or expired login should display the actual Connectors
+        // dialog immediately. The user must click the official authorization
+        // button there; we never start a login or open a made-up OAuth URL.
+        if (codexRealtimeRequiresLogin(realtime.reason)) openCodexReconnection()
+      }
 
       // Report a failed Codex startup without automatically substituting
       // browser recognition and browser/system speech synthesis.
@@ -1028,11 +1038,15 @@ export function InputBar({
             {codexVoiceFailure !== null && (
               <span
                 role="status"
-                className={css.voiceFallback}
+                className={clsx(css.voiceFallback, codexRealtimeRequiresLogin(codexVoiceFailure) && css.voiceReconnect)}
                 data-codex-voice-fallback
-                title={`Codex Live no disponible: ${codexVoiceFailure}. No se ha activado la voz del navegador.`}
+                title={codexRealtimeRequiresLogin(codexVoiceFailure)
+                  ? 'Codex perdió la autenticación. Vuelve a conectar tu cuenta de ChatGPT.'
+                  : `Codex Live no disponible: ${codexVoiceFailure}. No se ha activado la voz del navegador.`}
               >
-                Codex Live: {codexVoiceFailure}
+                {codexRealtimeRequiresLogin(codexVoiceFailure)
+                  ? <>Codex desconectado · <button type="button" className={css.voiceReconnectAction} onClick={openCodexReconnection}>Reconectar</button></>
+                  : <>Codex Live: {codexVoiceFailure}</>}
               </span>
             )}
             {(voiceState !== 'unsupported' || hasCodexRealtimeVoiceSupport()) && (

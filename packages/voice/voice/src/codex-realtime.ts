@@ -191,6 +191,12 @@ function codexRealtimeEnvironment(): NodeJS.ProcessEnv {
   return env
 }
 
+/** Recognize only real Codex login failures; network hiccups must not log users out. */
+export function codexRealtimeNeedsLogin(error: unknown): boolean {
+  const message = errorText(error)
+  return /(?:refresh[\\s_-]*token[^\\r\\n]{0,120}expired|access token could not be refreshed|chatgpt login required|not authenticated|login required|please log out and sign in again)/iu.test(message)
+}
+
 /** Small JSON-RPC client around `codex app-server --listen stdio://`. */
 export class CodexRealtimeBridge {
   private child: ChildProcessWithoutNullStreams | undefined
@@ -211,6 +217,13 @@ export class CodexRealtimeBridge {
   async probe(): Promise<CodexRealtimeProbe> {
     try {
       await this.ensureStarted()
+      // The account/read snapshot at initial CLI startup does not prove that
+      // its refresh token is still valid. The user explicitly requested Live,
+      // so ask the official Codex app-server to verify it before acquiring the
+      // browser microphone. Do not refresh credentials during passive telemetry.
+      if (this.child !== undefined && this.sessions.size === 0) {
+        await this.request('account/read', { refreshToken: true })
+      }
       this.armIdleClose()
       return { available: true, authenticated: true }
     } catch (error) {
@@ -223,7 +236,11 @@ export class CodexRealtimeBridge {
       if (/not found|enoent|could not start|spawn/i.test(message)) {
         return { available: false, authenticated: false, reason: 'codex-unavailable', detail }
       }
-      if (/chatgpt login|required|not authenticated|account/i.test(message)) {
+      if (codexRealtimeNeedsLogin(error) || /(?:chatgpt (?:login|sign-in) required|login required|not authenticated)/iu.test(message)) {
+        // Expired official login is not a missing/unsupported voice feature.
+        // Drop only the idle voice sidecar; the next explicit request starts
+        // with credentials produced by the normal Codex reauthorization flow.
+        if (this.sessions.size === 0) this.close()
         return { available: true, authenticated: false, reason: 'codex-login-required', detail }
       }
       return { available: false, authenticated: false, reason: 'experimental-unavailable', detail }

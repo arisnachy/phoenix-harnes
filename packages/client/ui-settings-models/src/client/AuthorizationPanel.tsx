@@ -220,7 +220,7 @@ export interface AuthorizationPanelProps {
 
 export interface ConnectorsSettingsSectionProps extends AuthorizationPanelProps {
   /** Direct-launch mode from the main Phoenix navigation. */
-  launchContext?: 'discover' | 'connectors' | 'team'
+  launchContext?: 'discover' | 'connectors' | 'team' | 'codex-reconnect'
   assistantMail?: AssistantMailClient
   connectorT: (key: ConnectorKey) => string
   chatGptWeb?: ChatGptWebBridgeClient
@@ -610,7 +610,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     && !connectedByAccount
     && (openClaw?.connected !== true || managed !== undefined || mcpRuntime !== undefined)
     && (!openClawRuntimeMissing || managed !== undefined || mcpRuntime !== undefined)
-    && (authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required'
+    && (definition.id === 'codex' || authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required'
       || (authorizationAccount.methods.some(method => method.id === 'credentials')
         && mcpRuntime !== undefined && mcpRuntime.status !== 'ready'))
   const missingOAuthFlow = managed !== undefined && mcpRuntime?.status === 'auth-required'
@@ -1121,6 +1121,13 @@ export function ConnectorsSettingsSection({ api,
   useEffect(() => {
     if (launchContext === 'discover') {
       setFilter('available')
+      catalogSearch.current?.focus({ preventScroll: true })
+    } else if (launchContext === 'codex-reconnect') {
+      // The system opened this panel because native Codex login expired.
+      // Bring its existing official authorization card to the front; do not
+      // auto-submit a new OAuth flow without the human pressing Connect.
+      setFilter('all')
+      setQuery('codex')
       catalogSearch.current?.focus({ preventScroll: true })
     } else if (launchContext === 'connectors') {
       setFilter('all')
@@ -1804,9 +1811,11 @@ export function ConnectorsSettingsSection({ api,
               const presentation = accountPresentation(entry)
               const runtime = runtimeForEntry(entry, mcpHub.runtime)
               const status = accountStatus(entry, runtime, connectorT)
-              const actionLabel = runtime?.status === 'auth-required' && entry.stored !== undefined
+              const actionLabel = entry.key === NATIVE_CODEX_ACCOUNT_KEY && entry.stored !== undefined
                 ? connectorT('reauthorize')
-                : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
+                : runtime?.status === 'auth-required' && entry.stored !== undefined
+                  ? connectorT('reauthorize')
+                  : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
               const runtimeReconnect = entry.stored !== undefined
                 && runtime !== undefined
                 && (runtime.status === 'failed' || runtime.status === 'disconnected')
@@ -1842,7 +1851,8 @@ export function ConnectorsSettingsSection({ api,
                     <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
                     <div className={connectorStyles['connectorActions']}>
                       {preferredMethod === undefined || (entry.stored !== undefined
-                        && runtime?.status !== 'auth-required' && !runtimeReconnect) ? null : (
+                        && entry.key !== NATIVE_CODEX_ACCOUNT_KEY
+                         && runtime?.status !== 'auth-required' && !runtimeReconnect) ? null : (
                           <button
                             type="button"
                             className={connectorStyles['connectorPrimaryButton']}
