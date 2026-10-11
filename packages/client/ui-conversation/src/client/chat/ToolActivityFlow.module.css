@@ -75,11 +75,14 @@
    not a synthetic status feed. It disappears when the browser turn settles. */
 .browserWorkspace {
   display: grid;
-  grid-template-columns: minmax(0, 1.85fr) minmax(280px, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
   gap: 14px;
   width: 100%;
   min-width: 0;
+}
+.browserWorkspace[data-activity-open='true'] {
+  grid-template-columns: minmax(0, 1.85fr) minmax(280px, 1fr);
 }
 .browserPane { min-width: 0; }
 .activityPane {
