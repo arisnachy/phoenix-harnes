@@ -32,8 +32,21 @@ export function planGameAssets(manifest) {
     for (const enemy of enemies) add('enemies', enemy.id || 'unnamed-enemy', ['move', 'attack', 'hurt', 'death'], 'art/motion')
     if (isShooter && enemies.length === 0) missing.push('define enemy types and behaviors')
     const bosses = entries(manifest.bosses)
-    for (const boss of bosses) add('bosses', boss.id || 'unnamed-boss',
-      ['idle', 'attack', 'hurt', 'death', ...Array.isArray(boss.phases) ? boss.phases : []], 'art/motion')
+    for (const boss of bosses) {
+      add('bosses', boss.id || 'unnamed-boss',
+        ['idle', 'anticipation', 'attack', 'recover', 'hurt', 'death',
+          ...Array.isArray(boss.phases) ? boss.phases : []], 'art/motion')
+      for (const attack of entries(boss.attacks)) add('boss-attacks',
+        (boss.id || 'boss') + '-' + (attack.id || 'unnamed-attack'),
+        ['telegraph', 'emission', 'collision', 'recovery', 'impact-sfx'], 'gameplay/audio')
+      if (isShooter && entries(boss.attacks).length < 2) missing.push('boss '
+        + (boss.id || 'unnamed') + ' needs at least two real attacks with tell and recovery')
+    }
+    for (const ability of entries(manifest.player?.abilities)) add('abilities',
+      ability.id || 'unnamed-ability', ['startup', 'effect', 'cooldown', 'animation', 'audio-trigger'], 'combat/audio')
+    if (isShooter && entries(manifest.player?.abilities).length === 0) {
+      missing.push('design player abilities with input, damage, cooldown, VFX and sound')
+    }
     if (isShooter && bosses.length === 0) missing.push('define boss and distinct phases')
   }
   const level = manifest.level && typeof manifest.level === 'object' ? manifest.level : {}
