@@ -316,9 +316,11 @@ export function InputBar({
           voiceStartingRef.current = false
         }
       } else {
-        setCodexVoiceFailure(outcome === 'timeout'
-          ? 'Phoenix seguirá buscando una versión oficial compatible; la recuperación continuará en segundo plano.'
-          : 'La recuperación automática de Codex Live no está disponible por ahora.')
+        setCodexVoiceFailure(outcome === 'waiting-upstream'
+          ? 'Codex Live necesita soporte oficial para Quicksilver v2. No hay una versión compatible para instalar todavía.'
+          : outcome === 'timeout'
+            ? 'No se confirmó una actualización compatible de Codex Live. Puedes volver a intentarlo después.'
+            : 'La recuperación automática de Codex Live no está disponible por ahora.')
       }
     }).catch(() => {
       if (!controller.signal.aborted && voiceRepairAbortRef.current === controller) {
