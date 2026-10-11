@@ -25,6 +25,13 @@
   container-type: inline-size;
 }
 
+/* Keep long embedded questionnaires and sheets scrollable above the sticky
+   chat composer, including when the outer conversation owns scrolling. */
+.scroll:has([data-artifact-kind='html']) {
+  scroll-padding-block-end: calc(var(--dsh-composer-height, 152px) + 24px);
+  padding-bottom: calc(var(--dsh-composer-height, 152px) + 24px);
+}
+
 :global([data-conversation-scroll]) .root {
   flex: 0 0 auto;
   min-height: auto;
