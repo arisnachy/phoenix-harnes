@@ -646,13 +646,13 @@ export function isBriefTeamDemonstration(text: string): boolean {
  * @returns Whether the human explicitly asks the actual Kira Team to work.
  */
 export function isExplicitKiraTeamRequest(text: string): boolean {
-  const value = text.normalize('NFKD').replace(/[\\u0300-\\u036f]/gu, '').toLowerCase().trim()
+  const value = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
   if (value.length === 0 || value.length > 2_000) return false
-  if (/^(?:por que|porque|why|como|cuando)\\b/u.test(value)) return false
-  const people = /\\b(?:equipo|agentes|companeros|especialistas|teammates|team|la forja|sol|luna|astra|nexo|lumen)\\b/u
+  if (/^(?:por que|porque|why|como|cuando)\b/u.test(value)) return false
+  const people = /\b(?:equipo|agentes|companeros|especialistas|teammates|team|la forja|sol|luna|astra|nexo|lumen)\b/u
   if (!people.test(value)) return false
-  if (/\\b(?:no|sin|evita|deja de)\\s+(?:quiero que\\s+|necesito que\\s+)?(?:llam\\w*|convoc\\w*|deleg\\w*|us\\w*|utiliz\\w*|trabaj\\w*)/u.test(value)) return false
-  return /\\b(?:convoc\\w*|llam\\w*|deleg\\w*|asign\\w*|involucr\\w*|colabor\\w*|consult\\w*|trabaj\\w*|us\\w*|utiliz\\w*|muestr\\w*|mostrar|activa\\w*|quiero(?: que)?|necesito(?: que)?)\\b/u.test(value)
+  if (/\b(?:no|sin|evita|deja de)\s+(?:quiero que\s+|necesito que\s+)?(?:llam\w*|convoc\w*|deleg\w*|us\w*|utiliz\w*|trabaj\w*)/u.test(value)) return false
+  return /\b(?:convoc\w*|llam\w*|deleg\w*|asign\w*|involucr\w*|colabor\w*|consult\w*|trabaj\w*|us\w*|utiliz\w*|muestr\w*|mostrar|activa\w*|quiero(?: que)?|necesito(?: que)?)\b/u.test(value)
 }
 
 function phoenixAutoTaskRequest(text: string): boolean {
