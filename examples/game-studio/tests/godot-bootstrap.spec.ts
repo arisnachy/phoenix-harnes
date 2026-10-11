@@ -60,7 +60,7 @@ describe('PHOENIX Godot Game Studio native engine provisioning', () => {
     expect(hero).toContain('KEY_J')
     expect(hero).toContain('KEY_H')
     expect(hero).toContain('KEY_L')
-    expect(boss).toContain('attack_kind = "fan"')
+    expect(boss).toContain('"fan" if attack_number')
     expect(boss).toContain('"wave"')
     expect(boss).toContain('windup')
     expect(boss).toContain('phase = 2 if hp <= 12')
