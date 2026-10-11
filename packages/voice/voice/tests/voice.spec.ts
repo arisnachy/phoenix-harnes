@@ -11,7 +11,8 @@ import VoiceRuntime, {
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
 import {
-  CodexRealtimeBridge, codexRealtimeLaunchCommand, codexRealtimeNeedsLogin, findManagedCodexRealtimeBin, realtimeVoiceForGender,
+  CodexRealtimeBridge, codexRealtimeEnvironment, codexRealtimeLaunchCommand, codexRealtimeNeedsLogin,
+  findManagedCodexRealtimeBin, realtimeVoiceForGender,
 } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
@@ -785,13 +786,40 @@ describe('session-event voice mapping', () => {
 })
 
 describe('Codex Live launch regression', () => {
-  it('passes the full CLI invocation as one Windows cmd.exe /c string', () => {
+  it('uses the working Codex account stdio initialization contract on Windows', () => {
     const launch = codexRealtimeLaunchCommand(undefined, 'win32', 'C:\\Windows\\System32\\cmd.exe')
     expect(launch.command).toBe('C:\\Windows\\System32\\cmd.exe')
     expect(launch.args.slice(0, 3)).toEqual(['/d', '/s', '/c'])
     expect(launch.args).toHaveLength(4)
-    expect(launch.args[3]).toContain('codex --config')
-    expect(launch.args[3]).toContain('app-server --listen stdio://')
+    expect(launch.args[3]).toContain('codex -c')
+    expect(launch.args[3]).toContain('features.plugins=false')
+    expect(launch.args[3]).toContain('app-server --stdio')
+    expect(launch.args[3]).not.toContain('--listen stdio://')
+  })
+
+  it('keeps the same authenticated home and SQLite root as working Codex account probes', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-codex-voice-home-'))
+    try {
+      const env = codexRealtimeEnvironment({
+        CODEX_HOME: home,
+        CODEX_SQLITE_HOME: 'C:\\stale-runtime\\voice',
+        PHOENIX_CODEX_SQLITE_HOME: 'C:\\stale-runtime',
+        OPENAI_API_KEY: 'must-never-be-used',
+        PATH: 'C:\\Windows',
+      })
+      expect(env.CODEX_HOME).toBe(home)
+      expect(env.CODEX_SQLITE_HOME).toBe(home)
+      expect(env.PHOENIX_CODEX_SQLITE_HOME).toBeUndefined()
+      expect(env.OPENAI_API_KEY).toBeUndefined()
+      expect(env.PATH).toBe('C:\\Windows')
+      const launch = codexRealtimeLaunchCommand('C:\\managed\\codex.js', 'win32', undefined, home)
+      expect(launch.command).toBe(process.execPath)
+      expect(launch.args[0]).toBe('C:\\managed\\codex.js')
+      expect(launch.args).toContain(`sqlite_home=${JSON.stringify(home)}`)
+      expect(launch.args.slice(-2)).toEqual(['app-server', '--stdio'])
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 
   it('preserves direct managed and non-Windows launching', () => {
