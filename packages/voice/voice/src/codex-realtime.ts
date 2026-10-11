@@ -374,9 +374,19 @@ export class CodexRealtimeBridge {
       }
       const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
       const currentVersion = codexLiveCurrentCliVersion(home)
+      const managedBin = findManagedCodexRealtimeBin(home)
+      // A global "codex login status" or update-state.json alone does not
+      // prove which executable this voice sidecar actually launched.
+      if (currentVersion !== undefined && (
+        managedBin === undefined || this.launchedManagedCodexBin !== managedBin
+      )) {
+        throw new Error(
+          'Codex Live está utilizando un ejecutable distinto del Codex CLI gestionado. Comprueba la selección del runtime de voz y DSH_HOME; no se confirma compatibilidad Quicksilver v2.',
+        )
+      }
       if (currentVersion !== undefined) {
         throw new Error(
-          `Codex Live: CLI ${currentVersion} ya está actualizado y autenticado. El servidor continúa rechazando Quicksilver v2 incluso después de reiniciar el proceso de voz. No se necesitan más instalaciones; verifica compatibilidad del servicio o cabeceras alteradas por proxy.`,
+          `Codex Live: CLI ${currentVersion} gestionado ya está actualizado y autenticado. El servidor continúa rechazando Quicksilver v2 incluso después de reiniciar el proceso de voz. No se necesitan más instalaciones; verifica compatibilidad del servicio o cabeceras alteradas por proxy.`,
         )
       }
       const repair = queueCodexLiveRepair(home)
