@@ -223,7 +223,7 @@ const PhoenixGameKit = (() => {
 
   return { clamp, direction8, twoBone, animationFrame, parallaxX, humanPose, drawHumanoid, enemyDecision, distance,
     drawSpriteState, advanceBoss, activateAbility };
-})();;
+})();
 
 const canvas=document.getElementById('game'),g=canvas.getContext('2d'),status=document.getElementById('status');
 const W=960,H=500,FLOOR=440,WORLD=3800,keys=new Set(),sparks=[],bullets=[],enemyBullets=[];
@@ -253,7 +253,9 @@ function drawArt(kind,id,state,seconds,x,y,w,h,face=1){
  if(!spec)return false;
  const image=document.getElementById(spec.imageId);
  if(!image)return false;
- const rendered=PhoenixGameKit.drawSpriteState(g,image,spec,state,seconds,x,y,w,h,face);
+ const atlas=kind==='bosses'&&spec.phaseAnimations?.[state]
+  ?{...spec,animations:{...spec.animations,[state]:spec.phaseAnimations[state]}}:spec;
+ const rendered=PhoenixGameKit.drawSpriteState(g,image,atlas,state,seconds,x,y,w,h,face);
  if(!rendered&&gameArt.mode==='production')status.textContent='Game Studio: atlas sin animación '+id+'/'+state;
  return rendered;
 }
