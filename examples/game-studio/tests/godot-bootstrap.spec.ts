@@ -1,4 +1,5 @@
 import { mkdtempSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -34,6 +35,17 @@ describe('PHOENIX Godot Game Studio native engine provisioning', () => {
     expect(plan.args).toContain('--source')
     expect(plan.args).not.toContain('powershell')
     expect(plan.args).not.toContain('curl')
+  })
+
+  it('never executes a legacy install command without an explicit installation grant', () => {
+    const script = resolve('apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs')
+    const result = spawnSync(process.execPath, [script, 'install', '--target', 'godot'], {
+      encoding: 'utf8', timeout: 15_000, env: { ...process.env, PHOENIX_GODOT_BIN: 'does-not-exist-godot.exe' },
+    })
+    expect(result.status).toBe(1)
+    expect(JSON.parse(result.stdout.trim())).toMatchObject({
+      target: 'godot', ready: false, installed: false, action: 'authorization-required',
+    })
   })
 
   it('finds Godot in user-local WinGet executable folders when Windows PATH is stale', () => {
