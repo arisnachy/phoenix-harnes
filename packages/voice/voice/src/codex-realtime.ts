@@ -789,7 +789,7 @@ function isThreadModelCompatibilityError(value: unknown): boolean {
 /** A specific server-side AVAS protocol rejection, not a credential failure. */
 export function isCodexQuicksilverV2Required(value: unknown): boolean {
   const message = errorText(value)
-  return /invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\\s*quicksilver=v2/iu.test(message)
+  return /invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\s*quicksilver=v2/iu.test(message)
 }
 
 function isRealtimeVersionCompatibilityError(value: unknown): boolean {
