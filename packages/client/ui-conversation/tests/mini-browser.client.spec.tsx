@@ -55,6 +55,30 @@ describe('MiniBrowser in Phoenix conversation', () => {
     expect(calls).toHaveLength(0)
   })
 
+  it('automatically starts embedded Chromium for a requested page without opening desktop Chrome', async () => {
+    const requests: string[] = []
+    const absent = { available: false, tabs: [] }
+    vi.stubGlobal('fetch', vi.fn(async (input: string, options?: { body?: string }) => {
+      if (input.endsWith('/action') && options?.body) {
+        const request = JSON.parse(options.body) as { type: string }
+        requests.push(request.type)
+        return new Response(JSON.stringify(state), { status: 200, headers: { 'content-type': 'application/json' } })
+      }
+      if (input.endsWith('/frame')) {
+        return new Response(new Uint8Array([255, 216, 255, 217]), {
+          status: 200, headers: { 'content-type': 'image/jpeg' },
+        })
+      }
+      return new Response(JSON.stringify(absent), { status: 200, headers: { 'content-type': 'application/json' } })
+    }))
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:phoenix-browser-test') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    render(<MiniBrowser requested />)
+    await waitFor(() => { expect(requests).toContain('start') })
+    await screen.findByRole('tab', { name: 'YouTube' })
+    expect(requests).not.toContain('open-external')
+  })
+
   it('only opens desktop Chrome when the user presses the footer button', async () => {
     const calls = installBrowserMock()
     render(<MiniBrowser />)

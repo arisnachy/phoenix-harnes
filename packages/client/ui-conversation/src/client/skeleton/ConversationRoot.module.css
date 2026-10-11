@@ -623,7 +623,8 @@
 .unifiedHeader .heroTopIcon { width: 38px; height: 38px; }
 .unifiedHeader .heroTopProfile { width: 48px; height: 48px; flex-basis: 48px; }
 .root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader {
-  min-height: 54px;
+  box-sizing: border-box;
+  min-height: var(--phoenix-shell-bar-size, 72px);
   padding-block: 6px;
   border-radius: 19px;
 }

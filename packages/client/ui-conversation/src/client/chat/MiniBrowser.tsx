@@ -142,19 +142,42 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
       ? command({ type: 'select-tab', tabId: cardTabId.current }).then(() => undefined, () => undefined)
       : Promise.resolve()
     previousActive.current = active
+    // A requested browser is an instruction to start the embedded Chromium,
+    // not merely to show a disconnected card with a manual Connect button.
+    // One poll at a time avoids competing CDP sessions during slow Windows boots.
+    let polling = false
+    let nextStartAt = 0
     const poll = async (): Promise<void> => {
+      if (polling) return
+      polling = true
       try {
         await selection
         if (first.signal.aborted) return
-        const state = await inspect(first.signal)
+        let state: Snapshot | undefined
+        let inspectError: unknown
+        try {
+          state = await inspect(first.signal)
+        } catch (reason) {
+          inspectError = reason
+        }
         if (first.signal.aborted) return
+        if (requested && (!state || !state.available) && Date.now() >= nextStartAt) {
+          // Retry a failed/missing CDP instance without hot-looping, and keep
+          // the original card alive across Host restarts.
+          nextStartAt = Date.now() + 10_000
+          state = await command({ type: 'start' })
+        }
+        if (first.signal.aborted) return
+        if (state === undefined) throw inspectError ?? new Error('Chromium no respondió.')
         setConnectionError(undefined)
         if (state.tabId !== undefined) cardTabId.current = state.tabId
         setSnapshot(state)
       } catch (reason) {
-        if (first.signal.aborted) return
-        // Missing host routes must not make a requested browser disappear.
-        setConnectionError(reason instanceof Error ? reason.message : String(reason))
+        if (!first.signal.aborted) {
+          setConnectionError(reason instanceof Error ? reason.message : String(reason))
+        }
+      } finally {
+        polling = false
       }
     }
     void poll()
@@ -165,7 +188,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
       first.abort()
       window.clearInterval(timer)
     }
-  }, [active, dismissed])
+  }, [active, dismissed, requested])
 
   useEffect(() => {
     if (!active || !show || !snapshot.available || collapsed || playingVideo) return

@@ -142,13 +142,13 @@ export function ConversationRoot({
     if (scroller == null || typeof MutationObserver === 'undefined') return
     const refresh = (): void => {
       setVisualActive(scroller.querySelector(
-        '[data-mini-browser-focus="true"], [data-phoenix-visual-qa]:not([data-phoenix-visual-qa="fail"])',
+        '[data-mini-browser-focus="true"], [data-phoenix-visual-qa]:not([data-phoenix-visual-qa="fail"]), [data-universal-artifact], [data-phoenix-scene3d], [data-phoenix-visual-kind]',
       ) !== null)
     }
     const observer = new MutationObserver(refresh)
     observer.observe(scroller, {
       childList: true, subtree: true, attributes: true,
-      attributeFilter: ['data-mini-browser-focus', 'data-phoenix-visual-qa'],
+      attributeFilter: ['data-mini-browser-focus', 'data-phoenix-visual-qa', 'data-universal-artifact', 'data-phoenix-scene3d', 'data-phoenix-visual-kind'],
     })
     refresh()
     return () => { observer.disconnect() }
@@ -318,8 +318,11 @@ export function ConversationRoot({
     || (!firstSendGuard.current.armed
       && (summaryBlank === false || !firstSendGuard.current.wasBlank))
   )
-  const headerCompact = hero || (headerAutoCompact
-    && !headerPinnedOpen && !headerHovered && !headerFocused)
+  // An active browser, game or visualization takes precedence over a stale
+  // pointer/focus hover state. A deliberate user pin still expands the header.
+  const headerCompact = hero || (!headerPinnedOpen && (
+    visualActive || (headerAutoCompact && !headerHovered && !headerFocused)
+  ))
   const composer = renderSlotChain(
     'conversation.composer',
     { interactions: pending, session },

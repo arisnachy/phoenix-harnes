@@ -17,8 +17,8 @@ describe('clampWidth', () => {
 })
 
 describe('computeColumns', () => {
-  it('keeps a 104px column for the 88px premium icon rail', () => {
-    expect(SIDEBAR_COLLAPSED).toBe(104)
+  it('aligns the collapsed icon column to the compact conversation header', () => {
+    expect(SIDEBAR_COLLAPSED).toBe(72)
   })
 
   it('step 1: everything fits at preferred widths', () => {

@@ -58,7 +58,7 @@ describe('ConversationRoot premium header', () => {
 
   it('collapses to one real row without discarding controls or accessibility', () => {
     const compact = ".root[data-header-compact='true']:not([data-phase='hero']) .unifiedHeader"
-    expect(declarations(compact)?.get('min-height')).toBe('54px')
+    expect(declarations(compact)?.get('min-height')).toBe('var(--phoenix-shell-bar-size, 72px)')
     expect(declarations(compact + ' .header')?.get('grid-template-rows')).toBe('34px')
     expect(declarations(compact + ' .sessionNavRow')?.get('display')).toBe('none')
     expect(declarations(compact + ' .headerGlobal')?.get('min-height')).toBe('36px')
@@ -67,6 +67,8 @@ describe('ConversationRoot premium header', () => {
     expect(conversationRoot).toContain('onMouseEnter')
     expect(conversationRoot).toContain('onFocusCapture')
     expect(conversationRoot).toContain('aria-pressed={headerPinnedOpen}')
+    expect(conversationRoot).toContain('visualActive || (headerAutoCompact && !headerHovered && !headerFocused)')
+    expect(conversationRoot).toContain('[data-universal-artifact], [data-phoenix-scene3d], [data-phoenix-visual-kind]')
   })
 
   it('uses compact shell geometry', () => {
