@@ -11,7 +11,8 @@ import VoiceRuntime, {
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
 import {
-  CodexRealtimeBridge, codexRealtimeLaunchCommand, codexRealtimeNeedsLogin, findManagedCodexRealtimeBin, realtimeVoiceForGender,
+  CodexRealtimeBridge, codexRealtimeEnvironment, codexRealtimeLaunchCommand, codexRealtimeNeedsLogin,
+  findManagedCodexRealtimeBin, realtimeVoiceForGender,
 } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
@@ -785,13 +786,98 @@ describe('session-event voice mapping', () => {
 })
 
 describe('Codex Live launch regression', () => {
-  it('passes the full CLI invocation as one Windows cmd.exe /c string', () => {
+  it('uses the working Codex account stdio initialization contract on Windows', () => {
     const launch = codexRealtimeLaunchCommand(undefined, 'win32', 'C:\\Windows\\System32\\cmd.exe')
     expect(launch.command).toBe('C:\\Windows\\System32\\cmd.exe')
     expect(launch.args.slice(0, 3)).toEqual(['/d', '/s', '/c'])
     expect(launch.args).toHaveLength(4)
-    expect(launch.args[3]).toContain('codex --config')
-    expect(launch.args[3]).toContain('app-server --listen stdio://')
+    expect(launch.args[3]).toContain('codex -c')
+    expect(launch.args[3]).toContain('features.plugins=false')
+    expect(launch.args[3]).toContain('app-server --stdio')
+    expect(launch.args[3]).not.toContain('--listen stdio://')
+    // cmd.exe strips TOML quotation marks, so never embed a quoted Windows
+    // file path inside its command string. The env supplies the SQLite home.
+    const withSqliteHome = codexRealtimeLaunchCommand(
+      undefined, 'win32', 'C:\\Windows\\System32\\cmd.exe', 'C:\\Users\\Phoenix Voice',
+    )
+    expect(withSqliteHome.args[3]).not.toContain('sqlite_home=')
+  })
+
+  it('keeps the same authenticated home and SQLite root as working Codex account probes', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-codex-voice-home-'))
+    try {
+      const env = codexRealtimeEnvironment({
+        CODEX_HOME: home,
+        CODEX_SQLITE_HOME: 'C:\\stale-runtime\\voice',
+        PHOENIX_CODEX_SQLITE_HOME: 'C:\\stale-runtime',
+        OPENAI_API_KEY: 'must-never-be-used',
+        PATH: 'C:\\Windows',
+      })
+      expect(env.CODEX_HOME).toBe(home)
+      expect(env.CODEX_SQLITE_HOME).toBe(home)
+      expect(env.PHOENIX_CODEX_SQLITE_HOME).toBeUndefined()
+      expect(env.OPENAI_API_KEY).toBeUndefined()
+      expect(env.PATH).toBe('C:\\Windows')
+      const launch = codexRealtimeLaunchCommand('C:\\managed\\codex.js', 'win32', undefined, home)
+      expect(launch.command).toBe(process.execPath)
+      expect(launch.args[0]).toBe('C:\\managed\\codex.js')
+      expect(launch.args).toContain(`sqlite_home=${JSON.stringify(home)}`)
+      expect(launch.args.slice(-2)).toEqual(['app-server', '--stdio'])
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('initializes a managed Codex stdio child without acquiring any API key', async () => {
+    const dsh = mkdtempSync(join(tmpdir(), 'phoenix-live-managed-'))
+    const codexHome = join(dsh, 'codex-home')
+    const managed = join(dsh, 'codex-cli')
+    mkdirSync(managed, { recursive: true })
+    mkdirSync(codexHome, { recursive: true })
+    const script = join(managed, 'codex-mock.cjs')
+    writeFileSync(script, [
+      "let input = ''",
+      "process.stdin.setEncoding('utf8')",
+      "process.stdin.on('data', chunk => {",
+      "  input += chunk",
+      "  while (input.includes('\\n')) {",
+      "    const end = input.indexOf('\\n')",
+      "    const line = input.slice(0, end); input = input.slice(end + 1)",
+      "    if (!line.trim()) continue",
+      "    const request = JSON.parse(line)",
+      "    if (request.id === undefined) continue",
+      "    const args = process.argv.slice(2)",
+      "    if (request.method === 'initialize') {",
+      "      const valid = process.env.CODEX_SQLITE_HOME === process.env.CODEX_HOME",
+      "        && args.includes('sqlite_home=' + JSON.stringify(process.env.CODEX_HOME))",
+      "        && args.slice(-2).join(',') === 'app-server,--stdio'",
+      "        && process.env.OPENAI_API_KEY === undefined",
+      "        && request.params.capabilities.requestAttestation === false",
+      "      process.stdout.write(JSON.stringify({id: request.id, ...(valid ? {result: {}} : {error: {message: 'invalid startup'}})}) + '\\n')",
+      "    } else if (request.method === 'account/read') {",
+      "      process.stdout.write(JSON.stringify({id: request.id, result: {account: {type: 'chatgpt'}}}) + '\\n')",
+      "    }",
+      "  }",
+      "})",
+    ].join('\n'))
+    writeFileSync(join(managed, 'active.json'), JSON.stringify({
+      schema: 1, version: '1.2.3', bin: 'codex-mock.cjs',
+    }))
+    vi.stubEnv('DSH_HOME', dsh)
+    vi.stubEnv('CODEX_HOME', codexHome)
+    vi.stubEnv('CODEX_SQLITE_HOME', 'C:\\stale-runtime\\voice')
+    vi.stubEnv('PHOENIX_CODEX_SQLITE_HOME', 'C:\\stale-runtime')
+    vi.stubEnv('OPENAI_API_KEY', 'not-allowed')
+    const bridge = new CodexRealtimeBridge()
+    try {
+      await expect(bridge.probe()).resolves.toMatchObject({
+        available: true, authenticated: true,
+      })
+    } finally {
+      bridge.close()
+      vi.unstubAllEnvs()
+      rmSync(dsh, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+    }
   })
 
   it('preserves direct managed and non-Windows launching', () => {

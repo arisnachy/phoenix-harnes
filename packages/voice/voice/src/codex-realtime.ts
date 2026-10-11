@@ -111,6 +111,9 @@ export interface CodexRealtimeProbe {
 }
 
 const RPC_TIMEOUT_MS = 30_000
+// Account metadata allows 45s for Codex's state-db startup/backfill on Windows.
+// Initialize must not fail sooner than that proven account path.
+const CODEX_INITIALIZE_TIMEOUT_MS = 45_000
 const SDP_TIMEOUT_MS = 30_000
 const IDLE_CLOSE_MS = 60_000
 // Even if the browser dies without a hangup RPC, no remote voice thread may
@@ -155,13 +158,21 @@ export function codexRealtimeLaunchCommand(
   managed: string | undefined,
   platform: NodeJS.Platform = process.platform,
   comSpec: string | undefined = process.env.ComSpec,
+  sqliteHome?: string,
 ): { readonly command: string; readonly args: readonly string[] } {
+  // Match the already-working Codex account app-server launch contract.
+  // Its legacy voice-only SQLite root can enter Codex's 30s migration gate
+  // during initialize; pin the canonical account home for both commands.
   const codexArgs = [
-    '--config', "forced_login_method='chatgpt'",
-    '--config', 'features.realtime_conversation=true',
-    '--config', 'features.plugins=false',
-    '--config', 'skills.bundled.enabled=false',
-    'app-server', '--listen', 'stdio://',
+    '-c', "forced_login_method='chatgpt'",
+    '-c', 'features.realtime_conversation=true',
+    '-c', 'features.plugins=false',
+    '-c', 'skills.bundled.enabled=false',
+    // Windows cmd.exe strips nested TOML quotes; for the PATH fallback the
+    // sanitized CODEX_SQLITE_HOME environment is authoritative instead.
+    ...(sqliteHome === undefined || (managed === undefined && platform === 'win32')
+      ? [] : ['-c', `sqlite_home=${JSON.stringify(sqliteHome)}`]),
+    'app-server', '--stdio',
   ]
   if (managed !== undefined) return { command: process.execPath, args: [managed, ...codexArgs] }
   if (platform === 'win32') {
@@ -171,23 +182,24 @@ export function codexRealtimeLaunchCommand(
   return { command: 'codex', args: codexArgs }
 }
 
-/** Keep voice's SQLite state separate from model discovery, while sharing Codex login. */
-function codexRealtimeEnvironment(): NodeJS.ProcessEnv {
-  const env = { ...process.env }
-  // Subscription-backed ChatGPT account only, never paid API-key fallback.
+/**
+ * Reuse Codex's authenticated home AND its proven metadata SQLite location.
+ * Voice used to create a new SQLite profile on every Phoenix runtime variant;
+ * Codex's migration/backfill lock could then exceed the 30s initialize RPC
+ * budget while the standard Codex account connection was already healthy.
+ * Separate voice threads/sessions remain isolated by their RPC identity.
+ * @param parent Process environment, injectable for regression tests.
+ */
+export function codexRealtimeEnvironment(parent: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env = { ...parent }
+  // ChatGPT subscription auth only: never silently bill OPENAI_API_KEY.
   delete env.OPENAI_API_KEY
-  const configuredHome = process.env.CODEX_HOME?.trim()
+  delete env.PHOENIX_CODEX_SQLITE_HOME
+  const configuredHome = parent.CODEX_HOME?.trim()
   const home = configuredHome ? resolve(configuredHome) : join(homedir(), '.codex')
-  const phoenixRoot = process.env.PHOENIX_CODEX_SQLITE_HOME?.trim()
-  const codexRoot = process.env.CODEX_SQLITE_HOME?.trim()
-  const sqliteHome = phoenixRoot
-    ? resolve(phoenixRoot, 'voice')
-    : codexRoot
-      ? resolve(codexRoot, 'phoenix-runtime', 'voice')
-      : join(home, 'phoenix-runtime', 'sqlite', 'voice')
-  mkdirSync(sqliteHome, { recursive: true })
+  mkdirSync(home, { recursive: true })
   env.CODEX_HOME = home
-  env.CODEX_SQLITE_HOME = sqliteHome
+  env.CODEX_SQLITE_HOME = home
   return env
 }
 
@@ -479,8 +491,10 @@ export class CodexRealtimeBridge {
 
   private async startProcess(): Promise<void> {
     const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
-    const { command, args } = codexRealtimeLaunchCommand(findManagedCodexRealtimeBin(dshHome))
     const env = codexRealtimeEnvironment()
+    const { command, args } = codexRealtimeLaunchCommand(
+      findManagedCodexRealtimeBin(dshHome), process.platform, process.env.ComSpec, env.CODEX_HOME,
+    )
 
     let child: ChildProcessWithoutNullStreams
     try {
@@ -528,8 +542,8 @@ export class CodexRealtimeBridge {
           title: 'Phoenix Codex Voice',
           version: '1',
         },
-        capabilities: { experimentalApi: true },
-      })
+        capabilities: { experimentalApi: true, requestAttestation: false },
+      }, CODEX_INITIALIZE_TIMEOUT_MS)
       this.notify('initialized')
 
       // The stored ChatGPT session may already be valid. Forcing an OAuth refresh
