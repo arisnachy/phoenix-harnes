@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { join, resolve } from 'node:path'
+import { runInNewContext } from 'node:vm'
+import { describe, expect, it, vi } from 'vitest'
 
 const updater = readFileSync(resolve('scripts/phoenix-auto-update.mjs'), 'utf8')
 const supervisor = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
@@ -150,6 +151,56 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain('/^phoenix-stage-[0-9a-f]{10}(?:-conflict-\\d+-\\d+)?$/iu')
     expect(supervisor).toContain('if (managedDirectoryAgeMs(candidate) < STAGE_STORAGE_RETENTION_MS) continue')
     expect(supervisor).toContain('removed stale updater staging worktree')
+  })
+
+  it('actually releases a spare backup after EBUSY without touching the running Host or locked orphan', () => {
+    const begin = updater.indexOf('function cleanupUpdaterRuntimeStorage(root,')
+    const end = updater.indexOf('\\nfunction sameRepositoryWorktree(root,', begin)
+    expect(begin).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(begin)
+    const routines = updater.slice(begin, end)
+
+    const base = join('phoenix', 'p')
+    const active = join(base, 'phoenix-runtime-sim-active')
+    const backup = join(base, 'phoenix-runtime-sim-backup')
+    const busy = join(base, 'phoenix-runtime-sim-busy')
+    const paths = new Set([active, backup, busy])
+    const attempts: string[] = []
+    const warnings = vi.fn()
+    const environment = {
+      MAX_INACTIVE_RUNTIME_BACKUPS: 1,
+      MAX_RUNTIME_DIRECTORIES: 3,
+      STORAGE_WARNING_INTERVAL_MS: 15 * 60 * 1000,
+      stageBaseDirectory: () => base,
+      stageIdentity: () => 'sim',
+      join,
+      existsSync: () => false,
+      runtimePathKey: (path: string) => path.toLowerCase(),
+      readActiveRuntime: () => ({ path: active }),
+      updaterRegisteredWorktrees: () => new Set(paths),
+      updaterRuntimeDirectories: () => [...paths],
+      updaterRuntimeMtimeMs: (path: string) => path === backup ? 300 : path === busy ? 100 : 400,
+      removeUpdaterRuntime: (_root: string, path: string) => {
+        attempts.push(path)
+        if (path === busy) return false // EBUSY from the attached diagnostic log
+        paths.delete(path)
+        return true
+      },
+      git: () => ({ ok: true }),
+      process: { env: { PHOENIX_RUNTIME_ROOT: active } },
+      console: { error: warnings },
+    }
+    const source = 'let lastStorageWarningAt = Number.NEGATIVE_INFINITY;\\n'
+      + routines + '\\n({ updaterRuntimeStorageHasCapacity })'
+    const { updaterRuntimeStorageHasCapacity } = runInNewContext(source, environment) as {
+      updaterRuntimeStorageHasCapacity: (root: string, target: string) => boolean
+    }
+    expect(updaterRuntimeStorageHasCapacity('checkout', 'a'.repeat(40))).toBe(true)
+    expect(paths.has(active)).toBe(true)
+    expect(paths.has(busy)).toBe(true)
+    expect(paths.has(backup)).toBe(false)
+    expect(attempts).not.toContain(active)
+    expect(warnings.mock.calls.some(call => String(call[0]).includes('reclaimed inactive rollback'))).toBe(true)
   })
 
   it('recovers from a busy orphan at 3/3 by evicting ONLY an unprotected inactive backup', () => {
