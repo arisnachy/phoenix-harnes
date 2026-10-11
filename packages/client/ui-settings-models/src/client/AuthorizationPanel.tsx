@@ -1122,6 +1122,13 @@ export function ConnectorsSettingsSection({ api,
     if (launchContext === 'discover') {
       setFilter('available')
       catalogSearch.current?.focus({ preventScroll: true })
+    } else if (launchContext === 'codex-reconnect') {
+      // The system opened this panel because native Codex login expired.
+      // Bring its existing official authorization card to the front; do not
+      // auto-submit a new OAuth flow without the human pressing Connect.
+      setFilter('all')
+      setQuery('codex')
+      catalogSearch.current?.focus({ preventScroll: true })
     } else if (launchContext === 'connectors') {
       setFilter('all')
     }
