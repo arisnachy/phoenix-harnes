@@ -220,6 +220,8 @@ export class CodexRealtimeBridge {
   private readonly callTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly transcriptListeners = new Map<string, (transcript: CodexRealtimeTranscript) => void>()
   private readonly stderrTail: string[] = []
+  // Remember this deployment's V1 header rejection: subsequent calls use native V3.
+  private quicksilverV1Unsupported = false
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
 
@@ -285,16 +287,25 @@ export class CodexRealtimeBridge {
       // CLI no longer supports V1, transparently retry V3 using a fresh thread.
       // Neither attempt uses browser or system speech synthesis.
       let answerSdp: string
-      try {
-        answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
-      } catch (error) {
-        if (!isRealtimeVersionCompatibilityError(error)) throw error
-        // Codex realtime threads cannot be reused after a failed negotiation.
-        await this.request('thread/realtime/stop', { threadId }).catch(() => {})
-        this.transcriptListeners.delete(threadId)
-        threadId = await this.startVoiceThread(options.model)
-        if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
+      if (this.quicksilverV1Unsupported) {
+        // The account's AVAS backend rejected legacy Quicksilver. Keep using
+        // authenticated Codex CLI V3 directly rather than failing twice on
+        // every microphone activation. This state is scoped to this bridge.
         answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
+      } else {
+        try {
+          answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
+        } catch (error) {
+          if (!isRealtimeVersionCompatibilityError(error)) throw error
+          if (isCodexQuicksilverV2Required(error)) this.quicksilverV1Unsupported = true
+          // A rejected V1 negotiation leaves a spent thread. Retry V3 with
+          // an entirely fresh thread; do not reuse a broken WebRTC call.
+          await this.request('thread/realtime/stop', { threadId }).catch(() => {})
+          this.transcriptListeners.delete(threadId)
+          threadId = await this.startVoiceThread(options.model)
+          if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
+          answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
+        }
       }
       this.sessions.set(options.key, threadId)
       this.armCallExpiry(options.key)
@@ -775,7 +786,14 @@ function isThreadModelCompatibilityError(value: unknown): boolean {
   return /(?:model|deployment).*(?:not found|unknown|unsupported|unavailable|invalid)|(?:not found|unknown|unsupported|unavailable|invalid).*(?:model|deployment)/iu.test(message)
 }
 
+/** A specific server-side AVAS protocol rejection, not a credential failure. */
+export function isCodexQuicksilverV2Required(value: unknown): boolean {
+  const message = errorText(value)
+  return /invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\\s*quicksilver=v2/iu.test(message)
+}
+
 function isRealtimeVersionCompatibilityError(value: unknown): boolean {
+  if (isCodexQuicksilverV2Required(value)) return true
   const message = errorText(value)
   // oxlint-disable-next-line @stylistic/max-len -- Keep the protocol compatibility matcher auditable as one literal.
   return /notification timed out: thread\/realtime\/sdp|\b(?:400|404)\b|bad request|(?:v1|legacy|avas|v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v1|legacy|avas|v3|frameless|gpt-live-1-codex)/iu.test(message)
@@ -784,7 +802,12 @@ function isRealtimeVersionCompatibilityError(value: unknown): boolean {
 function realtimeNotificationMessage(value: unknown, fallback: string): string {
   if (!isRecord(value)) return fallback
   const message = typeof value.message === 'string' ? value.message.trim() : ''
-  if (message !== '') return message.slice(0, 1_024)
+  // Codex sometimes forwards a backend JSON error as a single message.
+  // Never surface its unbounded raw response in Phoenix's compact voice UI.
+  if (isCodexQuicksilverV2Required(message)) {
+    return 'invalid_quicksilver_alpha_header: AVAS requiere Quicksilver V2'
+  }
+  if (message !== '') return message.slice(0, 360)
   const reason = typeof value.reason === 'string' ? value.reason.trim() : ''
   return reason === '' ? fallback : reason.slice(0, 1_024)
 }
