@@ -1038,14 +1038,14 @@ export function InputBar({
             {codexVoiceFailure !== null && (
               <span
                 role="status"
-                className={css.voiceFallback}
+                className={clsx(css.voiceFallback, codexRealtimeRequiresLogin(codexVoiceFailure) && css.voiceReconnect)}
                 data-codex-voice-fallback
                 title={codexRealtimeRequiresLogin(codexVoiceFailure)
                   ? 'Codex perdió la autenticación. Vuelve a conectar tu cuenta de ChatGPT.'
                   : `Codex Live no disponible: ${codexVoiceFailure}. No se ha activado la voz del navegador.`}
               >
                 {codexRealtimeRequiresLogin(codexVoiceFailure)
-                  ? <>Codex desconectado · <button type="button" onClick={openCodexReconnection}>Reconectar</button></>
+                  ? <>Codex desconectado · <button type="button" className={css.voiceReconnectAction} onClick={openCodexReconnection}>Reconectar</button></>
                   : <>Codex Live: {codexVoiceFailure}</>}
               </span>
             )}
