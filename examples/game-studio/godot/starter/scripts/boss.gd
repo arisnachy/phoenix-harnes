@@ -7,7 +7,7 @@ var elapsed = 0.0
 var recovery = 1.0
 var windup = 0.0
 var attack_number = 0
-var attack_kind = "bolt"
+var attack_kind = ""
 var alive = true
 
 func take_damage(damage: int) -> void:
