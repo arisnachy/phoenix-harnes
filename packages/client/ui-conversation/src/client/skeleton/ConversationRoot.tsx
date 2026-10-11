@@ -79,17 +79,14 @@ export function ConversationRoot({
   } else if (composerPhase === 'blank') {
     firstSendGuard.current.wasBlank = true
   }
-  // The header responds to pointer/keyboard attention; the user can pin it open
-  // without disabling automatic compact mode for the next conversation.
+  // Compact chrome lives on the right until someone starts composing.
+  // Explicit pinning is the sole override: hovering a tiny right-aligned pill
+  // must never expand it and cause the pointer to enter/leave repeatedly.
   const [headerPinnedOpen, setHeaderPinnedOpen] = useState(false)
-  const [headerHovered, setHeaderHovered] = useState(false)
-  const [headerFocused, setHeaderFocused] = useState(false)
 
   useEffect(() => {
     setVisualActive(false)
     setHeaderPinnedOpen(false)
-    setHeaderHovered(false)
-    setHeaderFocused(false)
   }, [sessionId])
 
   const pendingSubmitAt = inputState?.pendingSubmit?.startedAt
@@ -311,18 +308,19 @@ export function ConversationRoot({
   )
 
   const phase = settling ? 'settling' : hero ? 'hero' : 'active'
-  // Existing sessions start compact. A first send stays expanded until the
-  // optimistic bubble has painted, avoiding the layout jump during submission.
-  const headerAutoCompact = !hero && (
-    visualActive || firstBubbleSettledFor === sessionId
-    || (!firstSendGuard.current.armed
-      && (summaryBlank === false || !firstSendGuard.current.wasBlank))
-  )
-  // An active browser, game or visualization takes precedence over a stale
-  // pointer/focus hover state. A deliberate user pin still expands the header.
-  const headerCompact = hero || (!headerPinnedOpen && (
-    visualActive || (headerAutoCompact && !headerHovered && !headerFocused)
-  ))
+  // Blank home and existing conversations initially show only the right-side
+  // tools. Typing (including a restored draft) expands the complete header.
+  // The first send waits for the painted user bubble so the header doesn't
+  // jump during admission, then any real content/visualizer collapses it again.
+  const hasDraft = (inputState?.draft ?? '').trim().length > 0
+  const firstSendPending = firstSendGuard.current.armed && firstBubbleSettledFor !== sessionId
+  const headerAutoCompact = hero
+    ? !firstSendPending
+    : firstBubbleSettledFor === sessionId
+      || (!firstSendPending && (summaryBlank === false || !firstSendGuard.current.wasBlank))
+  // Browser, game and visual surfaces take priority over typing; the manual
+  // pin remains available for users who need the whole navigation bar.
+  const headerCompact = !headerPinnedOpen && (visualActive || (!hasDraft && headerAutoCompact))
   const composer = renderSlotChain(
     'conversation.composer',
     { interactions: pending, session },
@@ -341,20 +339,12 @@ export function ConversationRoot({
 
   return (
     <div ref={rootRef} className={css.root} data-phase={phase} data-header-compact={headerCompact ? 'true' : undefined}>
-      <div className={css.unifiedHeader} aria-label="Barra superior de la conversación"
-        onMouseEnter={() => { setHeaderHovered(true) }}
-        onMouseLeave={() => { setHeaderHovered(false) }}
-        onFocusCapture={() => { setHeaderFocused(true) }}
-        onBlurCapture={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            setHeaderFocused(false)
-          }
-        }}>
+      <div className={css.unifiedHeader} aria-label="Barra superior de la conversación">
         <div className={css.sessionChrome}>
           <SessionHeaderOutlet sessionId={sessionId} renderSlot={renderSlot} />
         </div>
         <div className={css.headerGlobal} aria-label="Herramientas globales">
-          {!hero && <button type="button" className={css.headerToggle}
+          {<button type="button" className={css.headerToggle}
             aria-label={headerPinnedOpen ? 'Activar colapso automático' : headerCompact ? 'Expandir barra superior' : 'Fijar barra superior expandida'}
             title={headerPinnedOpen ? 'Activar colapso automático' : headerCompact ? 'Expandir barra superior' : 'Fijar barra superior expandida'}
             aria-expanded={!headerCompact}
