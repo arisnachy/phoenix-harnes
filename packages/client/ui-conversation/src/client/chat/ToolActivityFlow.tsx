@@ -147,7 +147,10 @@ export function isBrowserPrompt(text: string): boolean {
   // "abre el archivo" is not browser navigation; a web context overrides it.
   const localObject = /\b(?:archivo|carpeta|documento|pdf|chat|conversacion|configuracion|terminal|proyecto|aplicacion|app)\b/u
   if (/\b(?:no|nunca)\s+(?:abras|abres|abrir|entres|entrar|navegues|navegar|visites|visitar)\b/u.test(normalized)) return false
-  return target.test(normalized) || (verb.test(normalized) && (webContext.test(normalized) || !localObject.test(normalized)))
+  const youtubeReview = /\b(?:youtube|youtu\.be)\b/u.test(normalized)
+    && /\b(?:video|tutorial|mira|ver|ve|revisa|analiza|estudia|reproduce)\b/u.test(normalized)
+  return target.test(normalized) || youtubeReview
+    || (verb.test(normalized) && (webContext.test(normalized) || !localObject.test(normalized)))
 }
 function isBrowserRequest(node: OrderedChatNode): boolean {
   if (node.kind !== 'user' && node.kind !== 'steering') return false
@@ -159,6 +162,16 @@ function isBrowserRequest(node: OrderedChatNode): boolean {
     return block.type === 'text' && typeof block.text === 'string' ? block.text : ''
   }).join('')
   return isBrowserPrompt(text)
+}
+
+/**
+ * Observe real MCP Chromium navigation, even when the user's request was to
+ * research, analyze a video or carry out another broader task.
+ */
+export function isEmbeddedNavigationTool(name: string): boolean {
+  const value = name.toLowerCase()
+  return /(?:^|[_:./-])(?:browser|chrome)(?:[_:./-]|$)/u.test(value)
+    && /(?:^|[_:./-])(?:navigate|youtube_search|youtube_video_inspect|open_tab)(?:[_:./-]|$)/u.test(value)
 }
 
 function buildFlow(nodes: readonly OrderedChatNode[]): FlowItem[] {
@@ -261,6 +274,14 @@ export function addBrowserCards(
   nodes: readonly OrderedChatNode[],
 ): FlowItem[] {
   const requests = new Set(nodes.filter(isBrowserRequest).map(node => node.key))
+  let currentUserKey: string | undefined
+  for (const node of nodes) {
+    if (node.kind === 'user' || node.kind === 'steering') currentUserKey = node.key
+    if (node.kind === 'tool-call' && currentUserKey !== undefined) {
+      const callName = (node.data as ToolChatData).root.call?.name
+      if (typeof callName === 'string' && isEmbeddedNavigationTool(callName)) requests.add(currentUserKey)
+    }
+  }
   if (requests.size === 0 && !flow.some(item => item.kind === 'optimistic' && isBrowserPrompt(item.text))) return flow
   const result: FlowItem[] = []
   for (const item of flow) {

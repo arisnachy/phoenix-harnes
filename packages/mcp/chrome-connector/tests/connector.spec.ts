@@ -27,5 +27,6 @@ describe('Chrome/Edge MCP connector entry', () => {
 
   it('keeps headless mode explicit instead of forcing it on visual verification', () => {
     expect(buildDedicatedBrowserArgs('/tmp/phoenix-browser-test', true)).toContain('--headless=new')
+    expect(buildDedicatedBrowserArgs('/tmp/phoenix-browser-test', true)).toContain('--mute-audio')
   })
 })

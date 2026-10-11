@@ -88,7 +88,7 @@ export function buildDedicatedBrowserArgs(profileDir: string, headless = false):
     '--no-default-browser-check',
     '--disable-sync',
     '--window-size=1280,820', '--force-device-scale-factor=1',
-    ...(headless ? ['--headless=new'] : []),
+    ...(headless ? ['--headless=new', '--mute-audio'] : []),
     'about:blank',
   ]
 }
