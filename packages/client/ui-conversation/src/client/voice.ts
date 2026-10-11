@@ -684,10 +684,13 @@ function updateCodexRealtimePhase(payload: string): void {
     return
   }
   if (type === 'response.done') {
-    session.audio.muted = true
+    // Realtime signals the end of generation before WebRTC finishes playing
+    // buffered audio. Muting here truncated Kira's voice, and short answers
+    // could be completely silent. The next unsolicited response.created still
+    // mutes immediately; interruption/stop also mute or dispose the stream.
     delete session.activeUtterance
     publishVoiceIdle()
-    // Serialize speech until the preceding audio response really finished.
+    // Serialize speech until the preceding response finishes generating.
     flushCodexRealtimeUtterances(session)
     return
   }
