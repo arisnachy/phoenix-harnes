@@ -603,8 +603,9 @@ describe('Codex realtime voice protocol compatibility', () => {
       startVoiceThread(model?: string): Promise<string>
       negotiateRealtime(id: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
       request(method: string, params?: unknown): Promise<unknown>
+      launchedManagedCodexBin?: string
     }
-    vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
+    const ensureStarted = vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
     vi.spyOn(internal, 'stop').mockResolvedValue(false)
     const started = vi.spyOn(internal, 'startVoiceThread').mockResolvedValue('stale-cli-thread')
     const negotiated = vi.spyOn(internal, 'negotiateRealtime').mockRejectedValue(
@@ -618,15 +619,22 @@ describe('Codex realtime voice protocol compatibility', () => {
       schema: 1, status: 'current', currentVersion: '0.162.1',
       latestVersion: '0.162.1', checkedAt: new Date().toISOString(),
     }))
+    const binary = join(home, 'codex-cli', 'versions', '0.162.1', 'codex.js')
+    mkdirSync(join(binary, '..'), { recursive: true })
+    writeFileSync(binary, '')
+    writeFileSync(join(home, 'codex-cli', 'active.json'), JSON.stringify({
+      schema: 1, version: '0.162.1', bin: 'versions/0.162.1/codex.js',
+    }))
+    ensureStarted.mockImplementation(async () => { internal.launchedManagedCodexBin = binary })
     vi.stubEnv('DSH_HOME', home)
     try {
       await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
-        .rejects.toThrow('CLI 0.162.1 ya está actualizado')
+        .rejects.toThrow('CLI 0.162.1 gestionado ya está actualizado')
       expect(started).toHaveBeenCalledTimes(2)
       expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3'])
       expect(requests).toHaveBeenCalledWith('thread/realtime/stop', { threadId: 'stale-cli-thread' })
       await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
-        .rejects.toThrow('CLI 0.162.1 ya está actualizado')
+        .rejects.toThrow('CLI 0.162.1 gestionado ya está actualizado')
       expect(started).toHaveBeenCalledTimes(3)
       expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3', 'v3'])
       expect(existsSync(join(home, 'codex-cli', 'live-repair-request.json'))).toBe(false)
