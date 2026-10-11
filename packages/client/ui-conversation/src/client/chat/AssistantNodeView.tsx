@@ -20,7 +20,9 @@ export const AssistantNodeView = memo(function AssistantNodeView({
   // Voice must never read declarative machine payloads aloud.
   const spokenText = useMemo(() => splitGenerativeUiText(
     responseText, { streaming: data.status === 'running' },
-  ).map(segment => segment.kind === 'ui' ? segment.block.props.title
+  ).map(segment => segment.kind === 'ui'
+    ? ('title' in segment.block.props ? segment.block.props.title
+      : 'label' in segment.block.props ? segment.block.props.label : 'Interfaz interactiva')
     : segment.text).join('\n').trim(), [responseText, data.status])
   useEffect(() => {
     if (spokenText === '') return

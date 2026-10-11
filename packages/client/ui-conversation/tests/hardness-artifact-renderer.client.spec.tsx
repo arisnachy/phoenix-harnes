@@ -115,6 +115,41 @@ describe('HARDNESS inline artifact renderer', () => {
     expect(frame.style.height).toBe('760px')
   })
 
+  it('keeps interactive questionnaires in the Phoenix palette and preserves iframe sandboxing', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'medical-form-1',
+      mime: 'application/vnd.phoenix.canvas+html',
+      title: 'Formulario clínico de muestra',
+      data: '<main style="background:#d6efd9"><form><label>Pregunta <input type="text"></label><button>Continuar</button></form></main>',
+      executable: true,
+    })} />)
+    const frame = screen.getByTitle('Formulario clínico de muestra') as HTMLIFrameElement
+    expect(frame.getAttribute('sandbox')).toBe('allow-scripts')
+    expect(frame.getAttribute('srcdoc')).toContain('data-phoenix-form-theme="true"')
+    expect(frame.getAttribute('srcdoc')).toContain('phoenix-artifact-theme')
+    expect(frame.getAttribute('srcdoc')).toContain('--phoenix-ui-bg')
+    expect(frame.getAttribute('srcdoc')).toContain('color-scheme:dark')
+    expect(frame.getAttribute('srcdoc')).not.toContain('allow-same-origin')
+    const bridge = vi.spyOn(frame.contentWindow!, 'postMessage')
+    fireEvent.load(frame)
+    expect(bridge).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'phoenix-artifact-theme',
+      colors: expect.objectContaining({ text: expect.any(String), border: expect.any(String) }),
+    }), '*')
+  })
+
+  it('does not theme a game scene as a form', () => {
+    render(<HardnessArtifactNodeView {...props({
+      artifactId: 'game-scene-1',
+      mime: 'application/vnd.phoenix.game+html',
+      title: 'Game scene',
+      data: '<canvas></canvas><form><input type="text"></form>',
+      executable: true,
+    })} />)
+    const frame = screen.getByTitle('Game scene') as HTMLIFrameElement
+    expect(frame.getAttribute('srcdoc')).not.toContain('data-phoenix-form-theme="true"')
+  })
+
   it('shows MCP status rows from record-shaped visual data instead of blank cells', () => {
     render(<HardnessArtifactNodeView {...props({
       artifactId: 'mcp-rows-1',
