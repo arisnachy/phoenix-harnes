@@ -28,15 +28,175 @@ canvas{display:block;width:100%;height:auto;border-radius:11px;border:1px solid 
 <div id="status" role="status">Haz clic en el juego. A/D o flechas: mover · Espacio: saltar · J: disparar · L: magia · H: látigo · I/O: apuntar · M: sonido (actívalo con tecla o clic)</div>
 <script id="phoenix-game-manifest" type="application/json">
 {
-  "schemaVersion":1,"title":"Jungle Echo","genre":"original run-and-gun",
-  "gameType":"run-and-gun","art":{"mode":"prototype"},"motion":{"rig":{"type":"two-bone IK","legs":2,"arms":2},"aimDirections":["horizontal","diagonal-up","diagonal-down"]},
-  "player":{"states":["idle","run","jump","fall","shoot","hurt","death"],"animations":{"idle":4,"run":8,"jump":2,"fall":2,"shoot":3,"hurt":2,"death":6}},
-  "enemies":[{"id":"scout","states":["move","attack","hurt","death"]},{"id":"turret","states":["move","attack","hurt","death"]}],
-  "bosses":[{"id":"iron-stag","phases":["patrol","barrage"]}],
-  "level":{"layers":[{"id":"sky","scrollFactor":0},{"id":"mountains","scrollFactor":0.16},{"id":"forest","scrollFactor":0.38},{"id":"foreground","scrollFactor":0.8}],"platforms":[{"x":0,"y":440,"width":3800},{"x":465,"y":370,"width":180},{"x":1160,"y":352,"width":190},{"x":2080,"y":365,"width":240}]},
-  "controls":{"move":"A/D or ArrowLeft/ArrowRight","jump":"Space","shoot":"J"},
-  "audio":{"cues":["jump","shoot","hit","explosion","boss"],"music":"original WebAudio procedural loop, user gesture unlock"},
-  "sources":[{"path":"examples/game-studio/jungle-echo.html","license":"original"}]
+  "schemaVersion": 1,
+  "title": "Jungle Echo",
+  "genre": "original run-and-gun",
+  "gameType": "run-and-gun",
+  "motion": {
+    "rig": {
+      "type": "two-bone IK",
+      "legs": 2,
+      "arms": 2
+    },
+    "aimDirections": [
+      "horizontal",
+      "diagonal-up",
+      "diagonal-down"
+    ]
+  },
+  "player": {
+    "states": [
+      "idle",
+      "run",
+      "jump",
+      "fall",
+      "shoot",
+      "hurt",
+      "death"
+    ],
+    "animations": {
+      "idle": 4,
+      "run": 8,
+      "jump": 2,
+      "fall": 2,
+      "shoot": 3,
+      "hurt": 2,
+      "death": 6
+    },
+    "abilities": [
+      {
+        "id": "arcane-pulse",
+        "input": "L",
+        "kind": "magic",
+        "damage": 4,
+        "cooldownSeconds": 4.5
+      },
+      {
+        "id": "whip",
+        "input": "H",
+        "kind": "melee",
+        "damage": 2,
+        "cooldownSeconds": 0.7
+      }
+    ]
+  },
+  "enemies": [
+    {
+      "id": "scout",
+      "states": [
+        "move",
+        "attack",
+        "hurt",
+        "death"
+      ]
+    },
+    {
+      "id": "turret",
+      "states": [
+        "move",
+        "attack",
+        "hurt",
+        "death"
+      ]
+    }
+  ],
+  "bosses": [
+    {
+      "id": "iron-stag",
+      "phases": [
+        "patrol",
+        "barrage"
+      ],
+      "attacks": [
+        {
+          "id": "bolt",
+          "telegraphSeconds": 0.82,
+          "phase": "patrol"
+        },
+        {
+          "id": "fan",
+          "telegraphSeconds": 0.58,
+          "phase": "barrage"
+        },
+        {
+          "id": "ground-wave",
+          "telegraphSeconds": 0.58,
+          "phase": "barrage"
+        }
+      ]
+    }
+  ],
+  "level": {
+    "layers": [
+      {
+        "id": "sky",
+        "scrollFactor": 0
+      },
+      {
+        "id": "mountains",
+        "scrollFactor": 0.16
+      },
+      {
+        "id": "forest",
+        "scrollFactor": 0.38
+      },
+      {
+        "id": "foreground",
+        "scrollFactor": 0.8
+      }
+    ],
+    "platforms": [
+      {
+        "x": 0,
+        "y": 440,
+        "width": 3800
+      },
+      {
+        "x": 465,
+        "y": 370,
+        "width": 180
+      },
+      {
+        "x": 1160,
+        "y": 352,
+        "width": 190
+      },
+      {
+        "x": 2080,
+        "y": 365,
+        "width": 240
+      }
+    ]
+  },
+  "controls": {
+    "move": "A/D or ArrowLeft/ArrowRight",
+    "jump": "Space",
+    "shoot": "J",
+    "melee": "H",
+    "power": "L"
+  },
+  "audio": {
+    "cues": [
+      "jump",
+      "shoot",
+      "hit",
+      "explosion",
+      "boss",
+      "power",
+      "whip"
+    ],
+    "music": "original WebAudio procedural loop, user gesture unlock",
+    "mode": "prototype-procedural-with-recorded-sample-hooks"
+  },
+  "sources": [
+    {
+      "path": "examples/game-studio/jungle-echo.html",
+      "license": "original"
+    }
+  ],
+  "art": {
+    "mode": "prototype"
+  }
 }
 </script>
 <script>
