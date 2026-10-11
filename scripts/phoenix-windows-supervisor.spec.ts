@@ -13,7 +13,7 @@ const jsonrpcPackage = JSON.parse(readFileSync(resolve('packages/examples/jsonrp
 
 describe('PHOENIX Windows updater supervisor resilience', () => {
   it('reserves a crash-safe exclusive Windows named pipe before starting a second Host', () => {
-    expect(source).toContain("import { createConnection, createServer } from 'node:net'")
+    expect(source).toContain("import { createServer } from 'node:net'")
     expect(source).toContain('function supervisorPipeName()')
     expect(source).toContain("createHash('sha256').update(lockScope)")
     expect(source).toContain('const portArgIndex = hostArgs.indexOf(\'--port\')')
@@ -172,6 +172,21 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('clearHostRestartRequest()')
     expect(restartBridgeSource).toContain("join(controlDir, 'phoenix-host-restart-request.json')")
     expect(restartBridgeSource).toContain("value.source === 'updater-ready-state'")
+  })
+
+  it('checks actual TCP bind availability and waits after a Windows Host handoff', () => {
+    expect(source).toContain('function existingHostOnPort(port)')
+    expect(source).toContain("probe.listen({ host: '127.0.0.1', port, exclusive: true }")
+    expect(source).toContain('probe.close(() => { finish(false) })')
+    expect(source).not.toContain("createConnection({ host: '127.0.0.1', port })")
+    expect(source).toContain('async function waitForHostPortRelease(port, timeoutMs = HOST_PORT_RELEASE_WAIT_MS)')
+    expect(source).toContain('const released = await waitForHostPortRelease(handoffPort)')
+    expect(source).toContain('if (!released && !shutdownRequested)')
+    expect(source).toContain('Host handoff blocked:')
+    const wait = source.indexOf('const released = await waitForHostPortRelease(handoffPort)')
+    const nextLaunch = source.indexOf('const host = startHost()', wait)
+    expect(wait).toBeGreaterThan(-1)
+    expect(nextLaunch).toBe(-1) // next launch occurs at the top of the following loop, after this guard
   })
 
   it('keeps the current Host online until the replacement runtime is fully prewarmed', () => {
