@@ -434,6 +434,7 @@ export class VoiceRuntime extends TypertRemoteService {
       authenticated: probe.authenticated,
       provider: 'openai-codex',
       ...(probe.reason === undefined ? {} : { reason: probe.reason }),
+      ...(probe.detail === undefined ? {} : { detail: probe.detail }),
     }
   }
 

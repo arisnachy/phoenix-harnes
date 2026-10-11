@@ -192,6 +192,9 @@ export function InputBar({
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
+  // The conversation microphone uses authenticated Codex CLI Live only.
+  // Do not switch to browser-generated speech without an explicit user choice.
+  const nativeCodexVoiceOnly = true
   // Voice is an input/output layer over the ordinary PHOENIX execution path.
   // For an OpenAI Codex route, native Realtime owns microphone/audio and its
   // finalized transcript is admitted through this same composer path as typed
@@ -297,9 +300,10 @@ export function InputBar({
       if (realtime.kind === 'started') return
       if (realtime.kind === 'failed') setCodexVoiceFailure(realtime.reason)
 
-      // Unavailable Codex Realtime or an older
-      // browser uses the same recognizer as its input path. Output still prefers
-      // the Host chain Kokoro -> platform voice before browser speech.
+      // Report a failed Codex startup without automatically substituting
+      // browser recognition and browser/system speech synthesis.
+      if (nativeCodexVoiceOnly) return
+      // Legacy alternative path is kept for explicit future opt-in only.
       const recognition = ensureHarnessVoiceRecognition()
       if (recognition === undefined) return
       setVoiceAssistantActive(true)
@@ -315,6 +319,12 @@ export function InputBar({
   useEffect(() => {
     if (!voiceAssistant.active || isCodexRealtimeVoiceActive()
       || voiceRef.current !== null || voiceStartingRef.current) return
+    if (nativeCodexVoiceOnly) {
+      // A remounted composer must not acquire SpeechRecognition after a
+      // temporary WebRTC loss or a previous fallback-owned snapshot.
+      setVoiceAssistantActive(false)
+      return
+    }
     const recognition = ensureHarnessVoiceRecognition()
     if (recognition === undefined) {
       setVoiceAssistantActive(false)
@@ -1020,7 +1030,7 @@ export function InputBar({
                 role="status"
                 className={css.voiceFallback}
                 data-codex-voice-fallback
-                title={`Codex Live no disponible: ${codexVoiceFailure}. La voz alternativa está activa si el navegador la admite.`}
+                title={`Codex Live no disponible: ${codexVoiceFailure}. No se ha activado la voz del navegador.`}
               >
                 Codex Live: {codexVoiceFailure}
               </span>
@@ -1028,7 +1038,7 @@ export function InputBar({
             {(voiceState !== 'unsupported' || hasCodexRealtimeVoiceSupport()) && (
               <Tooltip
                 label={codexVoiceFailure !== null
-                  ? `Codex Live no disponible: ${codexVoiceFailure} · voz alternativa`
+                  ? `Codex Live no disponible: ${codexVoiceFailure} · sin voz del navegador`
                   : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
                 delayMs={500}

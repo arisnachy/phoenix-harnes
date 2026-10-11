@@ -83,6 +83,18 @@ describe('browser voice adapter', () => {
     })
   })
 
+  it('starts the Codex voice probe without waiting for an unrelated model catalog', async () => {
+    const dispose = configureVoiceModelRouteResolver(async () => new Promise<undefined>(() => {}))
+    try {
+      await expect(tryStartCodexRealtimeVoice('voice-catalog-slow')).resolves.toEqual({
+        kind: 'failed',
+        reason: 'host-realtime-unavailable',
+      })
+    } finally {
+      dispose()
+    }
+  })
+
   it('keeps Codex realtime failures explicit instead of silently using fallback speech', async () => {
     const disposeRoute = configureVoiceModelRouteResolver(async () => ({
       provider: 'openai-codex',

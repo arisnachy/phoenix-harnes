@@ -384,18 +384,12 @@ export async function tryStartCodexRealtimeVoice(
   // The user may close a call while the route/capability probe is in flight.
   // A late probe must not reacquire the microphone and resurrect voice mode.
   const startFence = codexRealtimeVoiceGeneration
-  // Codex Live is the microphone/speaker selected for PHOENIX, independent of
-  // the agent's current text model (including Phoenix Auto / Fénix Eclipse).
-  // The optional resolver supplies a *text-model hint* only for direct Codex
-  // routes. A missing resolver or a non-Codex execution route must NEVER
-  // prevent probing the separately authenticated Codex voice service.
-  let route: VoiceModelRoute | undefined
-  try {
-    route = await voiceModelRouteResolver?.(sessionKey)
-  } catch {
-    // Routing metadata is best-effort. The Host owns Codex voice authentication.
-  }
-  const codexTextModel = route?.provider === 'openai-codex' ? route.model : undefined
+  // Codex CLI Live is its own voice service, independent of task routing.
+  // Do not await session.models here: a slow or failed catalog refresh used
+  // to block microphone startup even though the ChatGPT voice account was
+  // authenticated. The app-server chooses its native Realtime voice model.
+  // Keep the legacy resolver registration for compatibility, but do not
+  // require its result in this transport.
 
   const remote = voiceAssistantRemote
   if (remote === undefined || remote.conversationRealtimeStatus === undefined
@@ -412,7 +406,7 @@ export async function tryStartCodexRealtimeVoice(
     if (!capability.value.enabled || !capability.value.available || !capability.value.authenticated) {
       return {
         kind: 'failed',
-        reason: capability.value.reason ?? 'codex-realtime-unavailable',
+        reason: capability.value.detail ?? capability.value.reason ?? 'codex-realtime-unavailable',
       }
     }
   } catch {
@@ -502,7 +496,6 @@ export async function tryStartCodexRealtimeVoice(
     const result = await remote.conversationRealtimeStart({
       key: sessionKey,
       offerSdp,
-      ...(codexTextModel === undefined ? {} : { model: codexTextModel }),
     })
     if (!result.ok) throw new Error(result.error.code)
     if (!result.value.accepted || result.value.answerSdp === undefined) {

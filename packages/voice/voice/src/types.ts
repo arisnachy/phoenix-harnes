@@ -41,6 +41,8 @@ export interface VoiceConversationRealtimeStatus {
   readonly authenticated: boolean
   readonly provider: 'openai-codex'
   readonly reason?: 'disabled' | 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable'
+  /** Sanitized diagnostic from Codex CLI on failed native startup. */
+  readonly detail?: string
 }
 
 /** Browser WebRTC offer for one PHOENIX session using its current Codex route. */

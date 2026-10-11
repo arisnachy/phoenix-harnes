@@ -106,6 +106,8 @@ export interface CodexRealtimeProbe {
   readonly authenticated: boolean
   /** Stable unavailability reason for client fallback. */
   readonly reason?: 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable'
+  /** Sanitized error from the local CLI for diagnosing startup failures. */
+  readonly detail?: string
 }
 
 const RPC_TIMEOUT_MS = 30_000
@@ -213,13 +215,18 @@ export class CodexRealtimeBridge {
       return { available: true, authenticated: true }
     } catch (error) {
       const message = errorText(error)
+      const detail = message
+        .replace(/Bearer\s+[^\s]+/giu, 'Bearer [redacted]')
+        .replace(/\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\b/gu, '[redacted]')
+        .replace(/(?:access_token|refresh_token|password)\s*[:=]\s*[^\s,;]+/giu, '[redacted]')
+        .slice(0, 360)
       if (/not found|enoent|could not start|spawn/i.test(message)) {
-        return { available: false, authenticated: false, reason: 'codex-unavailable' }
+        return { available: false, authenticated: false, reason: 'codex-unavailable', detail }
       }
       if (/chatgpt login|required|not authenticated|account/i.test(message)) {
-        return { available: true, authenticated: false, reason: 'codex-login-required' }
+        return { available: true, authenticated: false, reason: 'codex-login-required', detail }
       }
-      return { available: false, authenticated: false, reason: 'experimental-unavailable' }
+      return { available: false, authenticated: false, reason: 'experimental-unavailable', detail }
     }
   }
 
@@ -238,21 +245,21 @@ export class CodexRealtimeBridge {
     try {
       threadId = await this.startVoiceThread(options.model)
       if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
+      // Restore Kira's original Codex CLI Juniper voice (legacy V1).
+      // The newer Frameless V3 uses another voice (Marin). If the installed
+      // CLI no longer supports V1, transparently retry V3 using a fresh thread.
+      // Neither attempt uses browser or system speech synthesis.
       let answerSdp: string
       try {
-        answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
+        answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
       } catch (error) {
         if (!isRealtimeVersionCompatibilityError(error)) throw error
-        // Realtime V3 is the preferred native Codex Live path. Older Codex
-        // installations can expose the experimental API before they understand
-        // V3/Frameless Bidi. Stay inside authenticated Codex Realtime and retry
-        // the older AVAS WebRTC protocol instead of falling back to browser TTS.
-        // Stopped Codex threads cannot be reused for another WebRTC negotiation.
+        // Codex realtime threads cannot be reused after a failed negotiation.
         await this.request('thread/realtime/stop', { threadId }).catch(() => {})
         this.transcriptListeners.delete(threadId)
         threadId = await this.startVoiceThread(options.model)
         if (options.onTranscript !== undefined) this.transcriptListeners.set(threadId, options.onTranscript)
-        answerSdp = await this.negotiateRealtime(threadId, options, 'v1')
+        answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
       }
       this.sessions.set(options.key, threadId)
       this.armCallExpiry(options.key)
@@ -734,7 +741,7 @@ function isThreadModelCompatibilityError(value: unknown): boolean {
 function isRealtimeVersionCompatibilityError(value: unknown): boolean {
   const message = errorText(value)
   // oxlint-disable-next-line @stylistic/max-len -- Keep the protocol compatibility matcher auditable as one literal.
-  return /notification timed out: thread\/realtime\/sdp|\b(?:400|404)\b|bad request|(?:v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v3|frameless|gpt-live-1-codex)/iu.test(message)
+  return /notification timed out: thread\/realtime\/sdp|\b(?:400|404)\b|bad request|(?:v1|legacy|avas|v3|frameless|gpt-live-1-codex).*(?:unknown|unsupported|not supported|unavailable|invalid)|(?:unknown|unsupported|not supported|unavailable|invalid).*(?:v1|legacy|avas|v3|frameless|gpt-live-1-codex)/iu.test(message)
 }
 
 function realtimeNotificationMessage(value: unknown, fallback: string): string {
