@@ -162,6 +162,9 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(storageRepair).toContain('if ($after.Count -ge $configuredLimit)')
     expect(storageRepair).toContain('cleanup could not free runtime capacity')
     expect(storageRepair).toContain("Close Phoenix normally before -Apply")
+    expect(storageRepair).toContain("Get-CimInstance Win32_Process")
+    expect(storageRepair).toContain("Select-Object ProcessId, Name")
+    expect(storageRepair).toContain("Associated Handles")
   })
 
   it('caps runtime copies while keeping age-based staging cleanup', () => {
