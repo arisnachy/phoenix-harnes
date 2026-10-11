@@ -1,5 +1,6 @@
 /** On-demand game toolchains: route -> doctor -> ensure; never install at startup. */
 import { spawnSync } from 'node:child_process'
+import { existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 const targets = new Set(['web', 'godot', 'blender', 'tiled', 'ffmpeg', 'uv', 'gameboy', 'nes', 'snes', 'genesis', 'sms', 'ps1'])
@@ -18,6 +19,38 @@ function probe(candidates, pattern) {
   }
   return unavailable ?? { ready: false, reason: 'Required executable is unavailable; install the selected toolchain.' }
 }
+// winget's current process PATH can lag behind package installation, and
+// a portable Godot zip may expose Godot_v4.x_stable_win64.exe, not godot.exe.
+// Scan ONLY the official user-local winget Godot directories (no whole-drive
+// search) so a successful install can be verified in the same game mission.
+export function windowsGodotCandidates(env = process.env) {
+  if (!env.LOCALAPPDATA) return []
+  const local = env.LOCALAPPDATA
+  const prefix = join(local, 'Microsoft', 'WinGet')
+  const candidates = [
+    join(prefix, 'Links', 'godot.exe'),
+    join(prefix, 'Links', 'godot4.exe'),
+    ...(env.ProgramFiles ? [join(env.ProgramFiles, 'Godot', 'Godot.exe')] : []),
+  ]
+  const packages = join(prefix, 'Packages')
+  if (existsSync(packages)) {
+    for (const name of readdirSync(packages).filter(v => /^GodotEngine\.GodotEngine(?:_|$)/iu.test(v))) {
+      const dir = join(packages, name)
+      try {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isFile() && (/^Godot_v4\..*_win64\.exe$/iu.test(entry.name)
+            || /^godot(?:4)?\.exe$/iu.test(entry.name))) {
+            candidates.push(join(dir, entry.name))
+          }
+        }
+      } catch {
+        // A package-manager upgrade may replace a folder while we inspect it.
+      }
+    }
+  }
+  return candidates.filter((item, index) => candidates.indexOf(item) === index)
+}
+
 function readiness(target) {
   const suffix = process.platform === 'win32' ? '.exe' : ''
   if (target === 'web') return { ready: true, command: process.execPath, version: process.version }
@@ -25,7 +58,7 @@ function readiness(target) {
     const candidates = process.env.PHOENIX_GODOT_BIN ? [[process.env.PHOENIX_GODOT_BIN, ['--version']]] : [
       ['godot', ['--version']], ['godot4', ['--version']],
       ...(process.platform === 'darwin' ? [['/Applications/Godot.app/Contents/MacOS/Godot', ['--version']]] : []),
-      ...(process.platform === 'win32' && process.env.LOCALAPPDATA ? [[join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'godot.exe'), ['--version']]] : []),
+      ...(process.platform === 'win32' ? windowsGodotCandidates().map(path => [path, ['--version']]) : []),
       ['flatpak', ['run', 'org.godotengine.Godot', '--version']],
     ]
     return probe(candidates, /^4\.\d+(?:\.\d+)?(?:\.|\s|$)/mu)
@@ -79,13 +112,17 @@ function route(genre, delivery, quality) {
   const simple = /snake|pong|tetris|2048|logic.puzzle|juego.de.tablero/u.test(normalized)
   const complexity = brawler || is3d || (!simple && quality === 'production')
   const engine = delivery === 'chat' || !complexity ? 'html5' : 'godot'
-  const tools = engine === 'godot'
+  const authoringEngine = complexity ? 'godot' : 'html5'
+  const tools = authoringEngine === 'godot'
     ? ['godot', ...(is3d ? ['blender'] : ['tiled']), 'ffmpeg']
     : (simple ? [] : ['tiled', 'ffmpeg'])
   return {
-    genre, delivery, quality, engine, tools,
+    genre, delivery, quality, engine, authoringEngine, tools,
     action: tools.length ? 'Run doctor for each tool; ensure missing tools only during an authorized game build.' : 'No external editor is required.',
     renderer: delivery === 'chat' ? 'phoenix_game-single-file-html' : 'native-project-or-hosted-export',
+    authoringRule: authoringEngine === 'godot'
+      ? 'Run Godot Game Studio bootstrap and real engine smoke; for chat also publish a separate tested standalone HTML5 game.'
+      : 'Keep the small browser game standalone and test it in the chat renderer.',
     godotWebNote: delivery === 'web' && engine === 'godot'
       ? 'Godot HTML5 export requires matching templates, JS/WASM/PCK files and real HTTP hosting; never present its index.html alone as an in-chat game.'
       : undefined,
