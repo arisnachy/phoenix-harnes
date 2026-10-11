@@ -168,7 +168,10 @@ export function codexRealtimeLaunchCommand(
     '-c', 'features.realtime_conversation=true',
     '-c', 'features.plugins=false',
     '-c', 'skills.bundled.enabled=false',
-    ...(sqliteHome === undefined ? [] : ['-c', `sqlite_home=${JSON.stringify(sqliteHome)}`]),
+    // Windows cmd.exe strips nested TOML quotes; for the PATH fallback the
+    // sanitized CODEX_SQLITE_HOME environment is authoritative instead.
+    ...(sqliteHome === undefined || (managed === undefined && platform === 'win32')
+      ? [] : ['-c', `sqlite_home=${JSON.stringify(sqliteHome)}`]),
     'app-server', '--stdio',
   ]
   if (managed !== undefined) return { command: process.execPath, args: [managed, ...codexArgs] }
