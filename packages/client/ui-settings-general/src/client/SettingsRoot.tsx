@@ -104,7 +104,10 @@ function SettingsPanel({ rows, renderSlot, activeId, onSelect, onClose, focus }:
             {renderedActive !== undefined
               ? renderSlot('settings.section', {
                 close: onClose,
-                ...(focus === undefined ? {} : { launchContext: focus.destination === 'connectors' && focus.label === 'Reconectar Codex' ? 'codex-reconnect' : focus.destination }),
+                ...(focus === undefined ? {} : {
+                  launchContext: focus.destination === 'connectors' && focus.label === 'Reconectar Codex'
+                    ? 'codex-reconnect' : focus.destination,
+                }),
               }, { only: renderedActive })
               : focus !== undefined ? <p role="status">Esta función todavía no está disponible en esta instalación de Phoenix.</p> : null}
           </div>
