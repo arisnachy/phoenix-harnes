@@ -972,7 +972,7 @@ function codexRealtimeFailureDetail(value: unknown): string {
   // A backend AVAS header rejection is protocol incompatibility, never a
   // reason to dump a raw provider JSON payload in Phoenix's voice overlay.
   if (/invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\s*quicksilver=v2/iu.test(message)) {
-    return 'Codex Live está comprobando y actualizando automáticamente su compatibilidad con Quicksilver v2.'
+    return 'Codex Live: el servicio exige Quicksilver v2. El actualizador comprobará si existe una versión oficial compatible; no se ha confirmado una reparación.'
   }
   const redacted = message
     .replace(/\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\b/gu, '[redacted]')
