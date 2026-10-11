@@ -1936,5 +1936,14 @@ while (true) {
 }
 
 await stopWatcherSupervisor()
+// After the Host and watcher have exited, Windows finally releases many
+// runtime DLL/cwd handles that caused EBUSY during live sweeps. Re-run the
+// ownership-aware janitor here to release storage for the next boot/update.
+// It still preserves the active runtime and every other checkout's files.
+try {
+  cleanupObsoleteRuntimes()
+} catch (error) {
+  console.error(`[PHOENIX UPDATE] final storage cleanup deferred: ${error instanceof Error ? error.message : String(error)}`)
+}
 supervisorInstanceLock?.close()
 process.exitCode = finalCode
