@@ -263,6 +263,15 @@ const AUTO_LUNA_EXECUTION_POLICY =
   'Never simulate coworker messages or claim a tool ran before its real result. ' +
   'Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
 
+const AUTO_EXPLICIT_TEAM_POLICY =
+  'The user explicitly requested real Kira Team collaboration in this turn. ' +
+  'On the first permitted execution step, call spawn_teammate with one bounded, useful assignment; ' +
+  'reuse a suitable active teammate through followup_task rather than spawning duplicates. ' +
+  'Do not replace this action with a claim that the team was called or simulated dialogue. ' +
+  'Check the actual roster/assignment receipt and deliver the teammate evidence in the existing chat. ' +
+  'If Team tools are missing or a spawn fails, name the real blocker and continue what can be done. ' +
+  'Keep the normal maximum of three specialists, without needless extra participants.'
+
 const AUTO_VISIBLE_PLAN_HANDOFF =
   'The visible **Plan:** from the immediately preceding Sol step is Kira\'s authoritative execution plan. ' +
   'Continue the current user request as Kira on Luna Max; execute the next concrete action now, ' +
@@ -629,10 +638,28 @@ export function isBriefTeamDemonstration(text: string): boolean {
   return !/(?:https?:\/\/|[a-z]:\\|\b(?:github|repo|codigo|script|archivo\w*|implementa|despliega|production|produccion|email|correo|compra|borra|elimina|contrato|paciente|sql|api|web|sitio|site|investigacion|research)\b)/u.test(request)
 }
 
+/**
+ * A real request to involve Kira's colleagues is an operational request even
+ * when phrased without a traditional implementation verb ("quiero a tu equipo").
+ * Questions asking WHY team use changed are diagnostic, not spawn commands.
+ * @param text - Latest direct human turn text, not a generated peer message.
+ * @returns Whether the human explicitly asks the actual Kira Team to work.
+ */
+export function isExplicitKiraTeamRequest(text: string): boolean {
+  const value = text.normalize('NFKD').replace(/[\\u0300-\\u036f]/gu, '').toLowerCase().trim()
+  if (value.length === 0 || value.length > 2_000) return false
+  if (/^(?:por que|porque|why|como|cuando)\\b/u.test(value)) return false
+  const people = /\\b(?:equipo|agentes|companeros|especialistas|teammates|team|la forja|sol|luna|astra|nexo|lumen)\\b/u
+  if (!people.test(value)) return false
+  if (/\\b(?:no|sin|evita|deja de)\\s+(?:quiero que\\s+|necesito que\\s+)?(?:llam\\w*|convoc\\w*|deleg\\w*|us\\w*|utiliz\\w*|trabaj\\w*)/u.test(value)) return false
+  return /\\b(?:convoc\\w*|llam\\w*|deleg\\w*|asign\\w*|involucr\\w*|colabor\\w*|consult\\w*|trabaj\\w*|us\\w*|utiliz\\w*|muestr\\w*|mostrar|activa\\w*|quiero(?: que)?|necesito(?: que)?)\\b/u.test(value)
+}
+
 function phoenixAutoTaskRequest(text: string): boolean {
   const candidate = text.trim()
   return CONTEXTUAL_CONTINUATION.test(candidate)
     || isToolAcquisitionRequest(candidate)
+    || isExplicitKiraTeamRequest(candidate)
     || AUTO_TASK_ACTION.test(candidate)
 }
 
@@ -874,7 +901,9 @@ export function installModelSelection(
     const autoPolicy = autoStep === 1
       && phoenixAutoTaskRequest(currentRequest)
       && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
-      : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_EXECUTION_POLICY : undefined
+      : autoStep !== undefined && autoStep > 1
+        ? AUTO_LUNA_EXECUTION_POLICY + (isExplicitKiraTeamRequest(currentRequest) ? ' ' + AUTO_EXPLICIT_TEAM_POLICY : '')
+        : undefined
     return {
       ...assembled,
       ...autoPolicy === undefined ? {} : {
