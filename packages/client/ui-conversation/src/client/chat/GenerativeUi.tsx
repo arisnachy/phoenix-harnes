@@ -391,7 +391,7 @@ export function GenerativeUi({ block, onAction }: { block: GenerativeUiBlock; on
     case 'ui_canvas': return <GenerativeCanvas spec={block} onAction={onAction} />
     case 'scale_form': return <ScaleForm spec={block} />
     case 'spreadsheet': return <SpreadsheetSurface key={block.props.id} spec={block} />
-    case 'status_pill': return <PhoenixStatusPill label={block.props.label} tone={block.props.tone} />
+    case 'status_pill': return <PhoenixStatusPill label={block.props.label} {...block.props.tone === undefined ? {} : { tone: block.props.tone }} />
     case 'agent_line': return <PhoenixAgentLine {...block.props} />
     case 'event_card': {
       const { title, subtitle, badge, left, center, right, footer } = block.props
