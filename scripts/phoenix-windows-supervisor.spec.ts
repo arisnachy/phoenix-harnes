@@ -175,6 +175,8 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('prevents restart loops when a configured Windows port is already occupied', () => {
+    expect(source).toContain("const hostIndex = hostArgs.indexOf('--host')")
+    expect(source).toContain("host !== '127.0.0.1' && host !== 'localhost'")
     expect(source).toContain("const portIndex = hostArgs.indexOf('--port')")
     expect(source).toContain("hostArgs.find(arg => arg.startsWith('--port='))")
     expect(source).toContain('?? process.env.PHOENIX_PORT')
