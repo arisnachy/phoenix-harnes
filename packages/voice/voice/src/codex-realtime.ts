@@ -194,7 +194,7 @@ function codexRealtimeEnvironment(): NodeJS.ProcessEnv {
 /** Recognize only real Codex login failures; network hiccups must not log users out. */
 export function codexRealtimeNeedsLogin(error: unknown): boolean {
   const message = errorText(error)
-  return /(?:refresh[\\s_-]*token[^\\r\\n]{0,120}expired|access token could not be refreshed|chatgpt login required|not authenticated|login required|please log out and sign in again)/iu.test(message)
+  return /(?:refresh[\s_-]*token[^\r\n]{0,120}expired|access token could not be refreshed|chatgpt login required|not authenticated|login required|please log out and sign in again)/iu.test(message)
 }
 
 /** Small JSON-RPC client around `codex app-server --listen stdio://`. */
@@ -222,7 +222,13 @@ export class CodexRealtimeBridge {
       // so ask the official Codex app-server to verify it before acquiring the
       // browser microphone. Do not refresh credentials during passive telemetry.
       if (this.child !== undefined && this.sessions.size === 0) {
-        await this.request('account/read', { refreshToken: true })
+        const refreshed = await this.request('account/read', { refreshToken: true })
+        // A successful RPC can still report an invalidated ChatGPT grant.
+        // Require an actual ChatGPT account instead of reporting Live ready.
+        if (!isRecord(refreshed) || !isRecord(refreshed.account) || refreshed.account.type !== 'chatgpt') {
+          this.close()
+          return { available: true, authenticated: false, reason: 'codex-login-required' }
+        }
       }
       this.armIdleClose()
       return { available: true, authenticated: true }
