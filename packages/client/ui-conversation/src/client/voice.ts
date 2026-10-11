@@ -406,7 +406,7 @@ export async function tryStartCodexRealtimeVoice(
     if (!capability.value.enabled || !capability.value.available || !capability.value.authenticated) {
       return {
         kind: 'failed',
-        reason: capability.value.reason ?? 'codex-realtime-unavailable',
+        reason: capability.value.detail ?? capability.value.reason ?? 'codex-realtime-unavailable',
       }
     }
   } catch {
