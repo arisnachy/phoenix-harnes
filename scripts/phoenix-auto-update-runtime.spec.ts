@@ -155,7 +155,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
 
   it('actually releases a spare backup after EBUSY without touching the running Host or locked orphan', () => {
     const begin = updater.indexOf('function cleanupUpdaterRuntimeStorage(root,')
-    const end = updater.indexOf('\\nfunction sameRepositoryWorktree(root,', begin)
+    const end = updater.indexOf('\nfunction sameRepositoryWorktree(root,', begin)
     expect(begin).toBeGreaterThan(-1)
     expect(end).toBeGreaterThan(begin)
     const routines = updater.slice(begin, end)
@@ -190,8 +190,8 @@ describe('PHOENIX supervised updater runtime isolation', () => {
       process: { env: { PHOENIX_RUNTIME_ROOT: active } },
       console: { error: warnings },
     }
-    const source = 'let lastStorageWarningAt = Number.NEGATIVE_INFINITY;\\n'
-      + routines + '\\n({ updaterRuntimeStorageHasCapacity })'
+    const source = 'let lastStorageWarningAt = Number.NEGATIVE_INFINITY;\n'
+      + routines + '\n({ updaterRuntimeStorageHasCapacity })'
     const { updaterRuntimeStorageHasCapacity } = runInNewContext(source, environment) as {
       updaterRuntimeStorageHasCapacity: (root: string, target: string) => boolean
     }
