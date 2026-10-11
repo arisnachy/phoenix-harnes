@@ -24,13 +24,14 @@ export function parseSpreadsheet(value: unknown): SpreadsheetSpec | null {
   if (!isRecord(value) || !keys(value, ['component', 'version', 'props'])
     || value.component !== 'spreadsheet' || value.version !== 1 || !isRecord(value.props)) return null
   const p = value.props
+  const columns = p.columns
   if (!keys(p, ['id', 'title', 'columns', 'rows'])
     || typeof p.id !== 'string' || !/^[a-z][a-z0-9_-]{1,63}$/.test(p.id)
     || typeof p.title !== 'string' || !p.title.trim() || p.title.length > 120
-    || !Array.isArray(p.columns) || p.columns.length < 1 || p.columns.length > 16
-    || !p.columns.every(c => typeof c === 'string' && c.trim() && c.length <= 60)
+    || !Array.isArray(columns) || columns.length < 1 || columns.length > 16
+    || !columns.every(c => typeof c === 'string' && c.trim() && c.length <= 60)
     || !Array.isArray(p.rows) || p.rows.length > 200
-    || !p.rows.every(row => Array.isArray(row) && row.length === p.columns.length
+    || !p.rows.every(row => Array.isArray(row) && row.length === columns.length
       && row.every(cell => typeof cell === 'string' && cell.length <= 300))) return null
   return value as unknown as SpreadsheetSpec
 }
