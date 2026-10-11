@@ -1225,13 +1225,23 @@ async function stopWatcher(watcher) {
   }
 }
 
-// Avoid a second independent supervisor fighting an already-running Phoenix
-// Host for the default loopback port. Never terminate the process owning it.
-// Custom bind options are left to the underlying Host configuration.
+// Avoid another supervisor or a legacy Phoenix Host fighting for the same
+// loopback port. Explicit --port/PHOENIX_PORT/PORT must be checked too: the
+// previous guard skipped ALL checks when these were present, which let a
+// duplicated Host fail repeatedly with EADDRINUSE on 127.0.0.1:3080.
+// Never terminate the process currently owning a port.
+// Custom host/address binds still belong to the Host configuration.
 function defaultPhoenixPort() {
-  if (hostArgs.some(arg => /^--(?:port|host|hostname|address)(?:=|$)/u.test(arg))) return undefined
-  if (process.env.PORT || process.env.PHOENIX_PORT || process.env.PHOENIX_HOST) return undefined
-  return 3080
+  if (hostArgs.some(arg => /^--(?:host|hostname|address)(?:=|$)/u.test(arg))) return undefined
+  if (process.env.PHOENIX_HOST) return undefined
+  const portIndex = hostArgs.indexOf('--port')
+  const configured = hostArgs.find(arg => arg.startsWith('--port='))?.slice('--port='.length)
+    ?? (portIndex < 0 ? undefined : hostArgs[portIndex + 1])
+    ?? process.env.PHOENIX_PORT
+    ?? process.env.PORT
+    ?? '3080'
+  const port = Number(configured)
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined
 }
 
 function existingHostOnPort(port) {
