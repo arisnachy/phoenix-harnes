@@ -24,6 +24,37 @@ Before creating any art for an illustrated run-and-gun, run `node examples/game-
 
 For production run-and-gun, each `art.enemies[].id` and `art.bosses[].id` must match a real gameplay entity, have a distinct PNG sprite image, grid and animation states. Every boss phase must map to real frame indices in `phaseAnimations`. Each `level.layers[].id` needs a matching illustrated `art.backgrounds[].id`; additionally supply `art.weapons`, `art.projectiles`, `art.powers`, `art.props` and at least two illustrated `art.effects`. A PNG that is merely included in the artifact but never rendered fails the publication gate. Audio and visual polish are still verified separately in a running game.
 
+## Godot native Game Studio (automatic on demand)
+
+For complex action / 2.5D / 3D games, Phoenix now has a **real** Godot starter
+and CLI bootstrap, plus a separate HTML5 chat delivery path.
+
+```sh
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs route --genre "beat-em-up" --delivery desktop --quality production
+node examples/game-studio/godot/bootstrap.mjs doctor
+node examples/game-studio/godot/bootstrap.mjs setup --project "PATH/TO/NEW/GAME" --allow-install
+node examples/game-studio/godot/bootstrap.mjs verify --project "PATH/TO/NEW/GAME"
+```
+
+- Detects an existing Godot 4 executable first; otherwise, with the user's
+  installation authorization, invokes allowlisted WinGet/Homebrew/Flatpak
+  install and verifies the real executable. Windows WinGet package locations
+  work even if the current terminal PATH has not refreshed.
+- Creates the source project from `examples/game-studio/godot/starter` **only in
+  a new game directory**. Never overwrites existing Godot scenes and art.
+- Verifies an actual Godot `--headless --import`, `res://tests/smoke.gd`, and
+  120-frame headless run, not just a version string or a static JSON manifest.
+- The Godot starter has basic interactive hero/boss combat states but is an
+  **art/audio prototype**; Kira must replace geometric drawings with approved
+  actor atlases, bosses, effects, scenery, recorded sounds and music, then run
+  actual in-editor/capture/listening QA. No sampled voice/audio ships here.
+- For complex **in-chat** games, Godot is the authoring tool while the playable
+  Phoenix message remains a separate single-file HTML5/Canvas artifact.
+  A Godot Web export's HTML alone lacks its JS/WASM/PCK dependencies.
+- Godot AI is optional: on Godot 4.7+ use the pinned addon and the authenticated
+  dock-created MCP bridge; the setup command does **not** falsely declare a
+  Godot AI editor connected just because the native engine works.
+
 ## Reusable animated gameplay + sampled audio (October 2026)
 
 The shooter reference now includes an interactive magic pulse (L, cooldown), short-range whip attack (H), moving/telegraphing multi-phase boss AI with aimed bolts, fan volleys and ground waves, extra audiovisual combat feedback and a soundtrack with percussion. This remains an **illustrated-art prototype**, not a commercial-grade soundtrack or professional voices.
