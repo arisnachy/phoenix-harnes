@@ -173,6 +173,32 @@ function sendCodexRealtimeUtterance(
   return true
 }
 
+/** Keep browser output audible after asynchronous WebRTC authorization.
+ * A muted autoplay may start before speech; after the harness authorizes a
+ * response, retry play on the same attached track and report a blocked output.
+ */
+function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
+  try {
+    const playback = audio.play()
+    if (playback === undefined || typeof playback.catch !== 'function') return
+    void playback.then(() => {
+      audio.dataset.phoenixAudioPlayback = 'playing'
+    }, () => {
+      audio.dataset.phoenixAudioPlayback = 'blocked'
+      console.warn('[PHOENIX VOICE] The browser blocked native Codex Live audio playback.')
+    })
+  } catch {
+    audio.dataset.phoenixAudioPlayback = 'blocked'
+    console.warn('[PHOENIX VOICE] The browser could not start native Codex Live audio playback.')
+  }
+}
+
+function allowAuthorizedCodexAudio(session: CodexRealtimeVoiceSession): void {
+  session.audio.muted = false
+  session.audio.volume = 1
+  if (session.audio.srcObject !== null) playCodexRealtimeAudio(session.audio)
+}
+
 function queueCodexRealtimeUtterance(utterance: PendingCodexRealtimeUtterance): void {
   const existing = pendingCodexRealtimeUtterances.findIndex(candidate =>
     candidate.sessionKey === utterance.sessionKey && candidate.key === utterance.key)
@@ -550,7 +576,7 @@ export async function tryStartCodexRealtimeVoice(
       if (codexRealtimeVoiceGeneration !== generation || audio === undefined) return
       const stream = event.streams[0] ?? new MediaStream([event.track])
       audio.srcObject = stream
-      void audio.play().catch(() => {})
+      playCodexRealtimeAudio(audio)
     }
     events.onmessage = (event) => {
       if (codexRealtimeVoiceGeneration !== generation || typeof event.data !== 'string') return
@@ -770,7 +796,7 @@ function updateCodexRealtimePhase(payload: string): void {
     return
   }
   if (type === 'response.created' && session.activeUtterance !== undefined) {
-    session.audio.muted = false
+    allowAuthorizedCodexAudio(session)
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
     return
   }
@@ -789,8 +815,11 @@ function updateCodexRealtimePhase(payload: string): void {
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'listening' })
     return
   }
-  if ((type === 'response.created' || type.includes('output_audio'))
+  // Some native V3 transports emit audio frames before a response.created
+  // event. Only an already-authorized harness utterance may unmute them.
+  if ((type.includes('output_audio') || type.startsWith('response.audio.'))
     && session.activeUtterance !== undefined) {
+    allowAuthorizedCodexAudio(session)
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
     return
   }
