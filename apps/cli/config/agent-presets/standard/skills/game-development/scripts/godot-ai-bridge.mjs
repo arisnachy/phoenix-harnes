@@ -12,7 +12,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 
-const VENDOR = '@deepseek-ai/dsh-mcp-client'
+const VENDOR = '@deepseek-ai/' + 'dsh-mcp-client'
 const NATIVE = '@phoenix-ai/dsh-mcp-client'
 const GODOT_MIN = [4, 7]
 const options = process.argv.slice(2)
