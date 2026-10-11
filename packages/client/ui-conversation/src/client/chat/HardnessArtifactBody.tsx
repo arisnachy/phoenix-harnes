@@ -263,10 +263,10 @@ function sandboxDocument(html: string, executable: boolean, gameDiagnostics = fa
     ? '<style data-phoenix-form-theme="true">'
       + ':root{--phoenix-ui-bg:#faf8f5;--phoenix-ui-surface:#fcfaf7;--phoenix-ui-muted:#f2ede7;'
       + '--phoenix-ui-text:#292420;--phoenix-ui-secondary:#746961;--phoenix-ui-border:#dfd6ce;'
-      + '--phoenix-ui-accent:#ea5b22;color-scheme:light}'
+      + '--phoenix-ui-accent:#ea5b22;--phoenix-ui-scheme:light;color-scheme:var(--phoenix-ui-scheme)}'
       + '@media(prefers-color-scheme:dark){:root{--phoenix-ui-bg:#1d1b1a;'
       + '--phoenix-ui-surface:#282523;--phoenix-ui-muted:#332e2b;--phoenix-ui-text:#f4eee8;'
-      + '--phoenix-ui-secondary:#c5b7a9;--phoenix-ui-border:#514840;--phoenix-ui-accent:#f39a5c;color-scheme:dark}}'
+      + '--phoenix-ui-secondary:#c5b7a9;--phoenix-ui-border:#514840;--phoenix-ui-accent:#f39a5c;--phoenix-ui-scheme:dark;color-scheme:var(--phoenix-ui-scheme)}}'
       + 'html,body{background:var(--phoenix-ui-bg)!important;color:var(--phoenix-ui-text)!important}'
       + 'body{padding:clamp(12px,2.2vw,22px)!important;line-height:1.5}'
       + 'body :where(main,article,section,form,header,footer,[class*="card"],[class*="panel"],'
@@ -299,7 +299,7 @@ function sandboxDocument(html: string, executable: boolean, gameDiagnostics = fa
   // Theme updates carry palette values only. The opaque-origin iframe does not
   // acquire access to parent DOM, accounts, tools, cookies or credentials.
   const themeBridge = themedForm
-    ? '<script>(function(){var names={bg:1,surface:1,muted:1,text:1,secondary:1,border:1,accent:1};'
+    ? '<script>(function(){var names={bg:1,surface:1,muted:1,text:1,secondary:1,border:1,accent:1,scheme:1};'
       + 'window.addEventListener("message",function(event){if(event.source!==parent)return;'
       + 'var packet=event.data;if(!packet||packet.type!=="phoenix-artifact-theme"||!packet.colors)return;'
       + 'Object.keys(names).forEach(function(name){var color=packet.colors[name];'
@@ -353,6 +353,9 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
       secondary: token('--dsw-alias-label-secondary', '#746961'),
       border: token('--dsw-alias-border-subtle', '#dfd6ce'),
       accent: token('--dsw-alias-state-info-primary', '#ea5b22'),
+      scheme: (document.documentElement.getAttribute('data-theme') ?? document.body?.getAttribute('data-theme')
+        ?? document.documentElement.getAttribute('data-appearance') ?? '').toLowerCase().includes('dark')
+        || root.colorScheme.includes('dark') ? 'dark' : 'light',
     }
     frame.contentWindow?.postMessage({ type: 'phoenix-artifact-theme', colors }, '*')
     // Static previews have no script privileges and are same-origin sandboxed.
@@ -367,6 +370,9 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
   useEffect(() => {
     const observer = new MutationObserver(syncTheme)
     observer.observe(document.documentElement, {
+      attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-appearance'],
+    })
+    if (document.body) observer.observe(document.body, {
       attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-appearance'],
     })
     return () => observer.disconnect()
