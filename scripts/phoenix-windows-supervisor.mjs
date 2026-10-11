@@ -1520,7 +1520,19 @@ process.once('SIGTERM', requestShutdown)
 // owning process. Unlike a PID file, this remains safe after a hard crash and
 // prevents two launchers from passing the TCP port probe concurrently.
 function supervisorPipeName() {
-  const instanceId = createHash('sha256').update(root.toLowerCase()).digest('hex').slice(0, 24)
+  // A staging checkout and the durable checkout can have different roots but
+  // still contend for the same Web Host port. Use the port as the lock identity.
+  const portArgIndex = hostArgs.indexOf('--port')
+  const portValue = hostArgs.find(argument => argument.startsWith('--port='))?.slice('--port='.length)
+    ?? (portArgIndex < 0 ? undefined : hostArgs[portArgIndex + 1])
+    ?? process.env.PHOENIX_PORT
+    ?? process.env.PORT
+    ?? '3080'
+  const numericPort = Number(portValue)
+  const lockScope = Number.isInteger(numericPort) && numericPort > 0 && numericPort <= 65535
+    ? `web-port:${numericPort}`
+    : `checkout:${root.toLowerCase()}`
+  const instanceId = createHash('sha256').update(lockScope).digest('hex').slice(0, 24)
   return `\\\\.\\pipe\\phoenix-supervisor-${instanceId}`
 }
 
