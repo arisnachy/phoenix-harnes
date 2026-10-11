@@ -16,7 +16,7 @@ export function verifyPhoenixVisualBaseline(root) {
     ['packages/client/ui-sidebar/src/client/SidebarRoot.module.css',
       ['--phoenix-side-ember: #e76020', '.root.collapsed', '.collapsed .primaryNavigation', '.collapsed .navLink']],
     ['packages/client/ui-layout/src/client/columns.ts',
-      ['export const SIDEBAR_COLLAPSED = 104']],
+      ['export const SIDEBAR_COLLAPSED = 72']],
     ['packages/client/ui-conversation/src/client/chat/ChatView.module.css',
       ['.turnStatusBrand', 'color: #ea5b22;', '.phoenixActivity::before']],
     ['packages/client/ui-theme/src/theme-settings.ts',
