@@ -11,6 +11,10 @@ on:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'scripts/phoenix-windows-supervisor.spec.ts'
+      - 'examples/game-studio/tests/asset-plan.spec.ts'
+      - 'packages/mcp/mcp-client/src/transport.ts'
+      - 'packages/mcp/mcp-client/tests/platform.spec.ts'
       - 'scripts/phoenix-windows-shortcut.mjs'
       - 'scripts/phoenix-windows-shortcut.d.mts'
       - 'scripts/phoenix-windows-icon.ico.b64'
@@ -30,6 +34,10 @@ on:
       - 'apps/desktop-windows/**'
       - 'installer/windows/**'
       - 'scripts/phoenix-windows-supervisor.mjs'
+      - 'scripts/phoenix-windows-supervisor.spec.ts'
+      - 'examples/game-studio/tests/asset-plan.spec.ts'
+      - 'packages/mcp/mcp-client/src/transport.ts'
+      - 'packages/mcp/mcp-client/tests/platform.spec.ts'
       - 'update-phoenix.ps1'
       - 'package.json'
       - 'scripts/windows-installer.spec.ts'
@@ -193,6 +201,12 @@ jobs:
           pnpm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node scripts/build-windows-runtime-seed.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Guard Windows Host handoff, Game Studio build and Filesystem MCP
+        shell: pwsh
+        run: |
+          pnpm exec vitest run scripts/phoenix-windows-supervisor.spec.ts examples/game-studio/tests/asset-plan.spec.ts packages/mcp/mcp-client/tests/platform.spec.ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Desktop contract tests
