@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { PhoenixStatusPill, PhoenixUiIcon, type PhoenixUiIconName } from '@phoenix-ai/dsh-client-ui-primitives'
 import css from './GenerativeCanvas.module.css'
 // Actual ready-made React components from the MIT-licensed react-generative-ui library.
 // Imported from the upstream shadcn-style vendor copies, not rewritten templates.
@@ -21,6 +22,7 @@ type CanvasNode =
   | { type: 'text' | 'heading' | 'caption'; text: string }
   | { type: 'divider' }
   | { type: 'badge'; text: string; status?: Status }
+  | { type: 'icon'; name: PhoenixUiIconName; label: string }
   | { type: 'metric'; label: string; value: string; detail?: string; status?: Status }
   | { type: 'progress'; label: string; value: number; max?: number }
   | { type: 'alert'; title?: string; message: string; status?: Status }
@@ -60,6 +62,22 @@ const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFi
 const id = (x: unknown): x is string => typeof x === 'string' && /^[a-z][a-z0-9_-]{0,39}$/.test(x)
 const labels = (x: unknown, max: number): x is string[] =>
   Array.isArray(x) && x.length > 0 && x.length <= max && x.every(item => text(item))
+const AVAILABLE_ICONS: readonly PhoenixUiIconName[] = [
+  'bot', 'brain', 'code', 'check', 'alert', 'table', 'calculator',
+  'copy', 'download', 'reset', 'clipboard', 'plus', 'file', 'search',
+  'settings', 'calendar', 'activity', 'shield', 'chart', 'info',
+]
+const statusCell = (value: unknown): ReactNode => {
+  const label = String(value ?? '')
+  const normalized = label.trim().toLocaleLowerCase()
+  if (['normal','listo','conectado','activo','completado'].includes(normalized))
+    return <PhoenixStatusPill label={label} tone="positive" />
+  if (['revisar','pendiente','requiere autorización','advertencia'].includes(normalized))
+    return <PhoenixStatusPill label={label} tone="warning" />
+  if (['error','fallido','bloqueado'].includes(normalized))
+    return <PhoenixStatusPill label={label} tone="negative" />
+  return label
+}
 const MAX_NODES = 64
 const MAX_DEPTH = 6
 
@@ -79,6 +97,9 @@ function validateNode(value: unknown, depth: number, count: { n: number }, ids: 
       return keys(value, ['type'])
     case 'badge':
       return keys(value, ['type','text','status']) && text(value.text) && status(value.status)
+    case 'icon':
+      return keys(value, ['type','name','label']) && AVAILABLE_ICONS.includes(value.name as PhoenixUiIconName)
+        && text(value.label, 120)
     case 'metric':
       return keys(value, ['type','label','value','detail','status'])
         && text(value.label) && text(value.value) && optionalText(value.detail) && status(value.status)
@@ -293,7 +314,8 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
     case 'text': return <p className={css.text}>{node.text}</p>
     case 'caption': return <p className={css.caption}>{node.text}</p>
     case 'divider': return <hr className={css.divider} />
-    case 'badge': return <span className={css.badge} data-status={node.status}>{node.text}</span>
+    case 'badge': return <PhoenixStatusPill label={node.text} tone={node.status ?? 'neutral'} />
+    case 'icon': return <span className={css.iconLabel}><PhoenixUiIcon name={node.name} />{node.label}</span>
     case 'metric':
       return <div className={css.prebuiltMetric} data-status={node.status}>
         <StatCard title={node.label} value={node.value} detail={node.detail} />
@@ -311,7 +333,7 @@ function Node({ node, values, setValue, onAction, onFilter, filters }: RendererP
       const visible = node.rows.filter(row => matchesTable(row, node.columns, filters))
       const rows = visible.map(row => Object.fromEntries(node.columns.map((header, i) => [header, row[i] ?? ''])))
       return <div className={css.tableScroll}>
-        <DataTable headers={node.columns} rows={rows} />
+        <DataTable headers={node.columns} rows={rows} cellRenderer={statusCell} />
         {visible.length === 0 && <p role="status">Sin resultados para los filtros seleccionados.</p>}
       </div>
     }
