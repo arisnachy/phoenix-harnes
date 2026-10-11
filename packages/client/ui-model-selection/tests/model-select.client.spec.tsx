@@ -537,7 +537,7 @@ describe('Phoenix Auto is a routing mode, not a model name', () => {
     expect(screen.getByRole('button', { name: /自动路由 · 模型动态选择/ })).not.toBeNull()
     expect(screen.queryByText('Phoenix Auto')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /自动路由 · 模型动态选择/ }))
-    fireEvent.click(screen.getByRole('menuitem', { name: '模型' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /^模型/ }))
     expect(screen.getByRole('menuitemradio', { name: '自动路由 · 模型动态选择' })).not.toBeNull()
     expect(select).not.toHaveBeenCalled()
   })
