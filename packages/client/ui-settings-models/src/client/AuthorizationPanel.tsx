@@ -1804,9 +1804,11 @@ export function ConnectorsSettingsSection({ api,
               const presentation = accountPresentation(entry)
               const runtime = runtimeForEntry(entry, mcpHub.runtime)
               const status = accountStatus(entry, runtime, connectorT)
-              const actionLabel = runtime?.status === 'auth-required' && entry.stored !== undefined
+              const actionLabel = entry.key === NATIVE_CODEX_ACCOUNT_KEY && entry.stored !== undefined
                 ? connectorT('reauthorize')
-                : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
+                : runtime?.status === 'auth-required' && entry.stored !== undefined
+                  ? connectorT('reauthorize')
+                  : entry.stored === undefined ? connectorT('authorize') : connectorT('reconnect')
               const runtimeReconnect = entry.stored !== undefined
                 && runtime !== undefined
                 && (runtime.status === 'failed' || runtime.status === 'disconnected')
@@ -1842,7 +1844,8 @@ export function ConnectorsSettingsSection({ api,
                     <span className={`${connectorStyles['connectorStatus'] ?? ''} ${status.className}`.trim()}>{status.text}</span>
                     <div className={connectorStyles['connectorActions']}>
                       {preferredMethod === undefined || (entry.stored !== undefined
-                        && runtime?.status !== 'auth-required' && !runtimeReconnect) ? null : (
+                        && entry.key !== NATIVE_CODEX_ACCOUNT_KEY
+                         && runtime?.status !== 'auth-required' && !runtimeReconnect) ? null : (
                           <button
                             type="button"
                             className={connectorStyles['connectorPrimaryButton']}
