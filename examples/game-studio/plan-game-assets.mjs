@@ -67,8 +67,12 @@ export function planGameAssets(manifest) {
   const layers = entries(level.layers)
   for (const layer of layers) add('backgrounds', layer.id || 'unnamed-layer', ['parallax', 'lighting'], 'world-design')
   if ((isShooter || isBrawler) && layers.length < 3) missing.push('design at least 3 independently illustrated parallax layers')
-  if (isBrawler && (!Array.isArray(level.zones) || level.zones.length < 2 || !level.belt))
-    missing.push('design two distinct street-stage zones and a walkable depth belt')
+  if (isBrawler) {
+    for (const zone of entries(level.zones)) add('zones', zone.id || 'unnamed-zone',
+      ['backdrop', 'foreground-props', 'lighting', 'camera-transition'], 'world-design')
+    if (!Array.isArray(level.zones) || level.zones.length < 2 || !level.belt)
+      missing.push('design two distinct street-stage zones and a walkable depth belt')
+  }
   if (isShooter) {
     for (const [family, id, animations] of [
       ['weapons', 'primary-weapon', ['idle', 'shoot', 'reload']],
