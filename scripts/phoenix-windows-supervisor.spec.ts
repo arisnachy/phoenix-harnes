@@ -20,7 +20,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('const supervisorInstanceLock = await acquireSupervisorInstance()')
     expect(source).toContain('if (supervisorInstanceLock === null) process.exit(0)')
     expect(source.indexOf('const supervisorInstanceLock = await acquireSupervisorInstance()')).toBeLessThan(
-      source.indexOf('recoverStaleStagingIndexLock()\\nrestoreActiveRuntime()'),
+      source.indexOf('recoverStaleStagingIndexLock()\nrestoreActiveRuntime()'),
     )
     expect(source).toContain('supervisorInstanceLock?.close()')
   })
