@@ -121,7 +121,12 @@ const IDLE_CLOSE_MS = 60_000
 const MAX_REALTIME_CALL_MS = 60 * 60_000
 const LIVE_REPAIR_COOLDOWN_MS = 30 * 60_000
 
-/** A fresh updater snapshot means checking npm yet again cannot repair Live. */
+/**
+ * Detect a freshly confirmed latest managed Codex CLI without another npm poll.
+ * @param home Managed Phoenix DSH profile root.
+ * @param now Current epoch time for staleness validation.
+ * @returns Current stable version, or undefined when its update state is stale or mismatched.
+ */
 export function codexLiveCurrentCliVersion(home: string, now = Date.now()): string | undefined {
   try {
     const path = join(resolve(home), 'codex-cli', 'update-state.json')
@@ -138,7 +143,13 @@ export function codexLiveCurrentCliVersion(home: string, now = Date.now()): stri
   }
 }
 
-/** Wake the existing single-owner updater, never launch concurrent npm installs from voice. */
+/**
+ * Wake the existing single-owner updater without concurrent npm installs.
+ * @param home Managed Phoenix DSH profile root.
+ * @param mode Configured updater mode (auto, notify or off).
+ * @param now Epoch timestamp used for deduplication.
+ * @returns Whether the wakeup was queued, recently submitted, disabled or failed.
+ */
 export function queueCodexLiveRepair(
   home: string,
   mode = process.env.PHOENIX_CODEX_UPDATE_MODE ?? 'auto',
