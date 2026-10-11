@@ -7,7 +7,7 @@ import {
   configureVoiceAssistantRemote,
   configureVoiceModelRouteResolver,
   codexRealtimeStatusFailureReason, codexRealtimeRequiresLogin, codexLiveRepairFromStatus,
-  isCodexLiveRepairPending, openCodexReconnection,
+  isCodexLiveRepairPending, openCodexReconnection, waitForCodexLiveRepair,
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
@@ -88,6 +88,36 @@ describe('browser voice adapter', () => {
     expect(codexLiveRepairFromStatus({ reason: 'experimental-unavailable' })).toBeUndefined()
     expect(codexLiveRepairFromStatus({ repair: 'unknown-version' })).toBeUndefined()
     expect(codexLiveRepairFromStatus(null)).toBeUndefined()
+  })
+
+  it('stops the repair spinner immediately when the updater is waiting on official support', async () => {
+    const remote = {
+      conversationStatus: vi.fn(async () => ({
+        ok: true as const, value: { enabled: true, natural: false },
+      })),
+      conversationSpeak: vi.fn(async () => ({
+        ok: true as const, value: { accepted: false, reason: 'disabled' as const },
+      })),
+      conversationCancel: vi.fn(async () => ({
+        ok: true as const, value: { cancelled: 0 },
+      })),
+      conversationRealtimeStatus: vi.fn(async () => ({
+        ok: true as const,
+        value: {
+          enabled: true, available: false, authenticated: false,
+          provider: 'openai-codex' as const, repair: 'waiting-upstream' as const,
+        },
+      })),
+    }
+    const dispose = configureVoiceAssistantRemote(remote)
+    try {
+      await expect(waitForCodexLiveRepair(new AbortController().signal, {
+        timeoutMs: 100, pollMs: 1,
+      })).resolves.toBe('waiting-upstream')
+      expect(remote.conversationRealtimeStatus).toHaveBeenCalledTimes(1)
+    } finally {
+      dispose()
+    }
   })
 
   it('opens the existing Codex connector window for expired credentials only', () => {
