@@ -5,7 +5,7 @@
  * Authorization for installing a program is the explicit --allow-install flag.
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -32,8 +32,14 @@ export function godotInvocation(inspection) {
 }
 
 export function scaffoldGodotProject(project, { exists = existsSync, mkdir = mkdirSync,
-  read = readFileSync, write = writeFileSync } = {}) {
+  read = readFileSync, list = readdirSync, write = writeFileSync } = {}) {
   const target = resolve(project)
+  if (exists(join(target, 'project.godot'))) {
+    return { project: target, created: false, reused: true }
+  }
+  if (exists(target) && list(target).length > 0) {
+    throw new Error('Refusing to scaffold inside a non-empty directory without project.godot')
+  }
   const present = GODOT_STARTER_FILES.filter(path => exists(join(target, path)))
   if (present.length) {
     if (exists(join(target, 'project.godot'))) {
