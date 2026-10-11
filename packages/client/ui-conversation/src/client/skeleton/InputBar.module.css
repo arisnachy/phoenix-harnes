@@ -391,6 +391,28 @@
   color: var(--dsw-alias-state-error-primary);
 }
 
+.voiceReconnect {
+  max-width: 240px;
+  overflow: visible;
+  white-space: normal;
+}
+
+.voiceReconnectAction {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.voiceReconnectAction:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
 /* Native voice input: quiet secondary chrome until the browser is listening. */
 .voice {
   display: grid;
