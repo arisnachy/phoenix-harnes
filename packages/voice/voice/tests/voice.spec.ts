@@ -11,8 +11,9 @@ import VoiceRuntime, {
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
 import {
-  CodexRealtimeBridge, codexRealtimeEnvironment, codexRealtimeLaunchCommand, codexRealtimeNeedsLogin,
-  findManagedCodexRealtimeBin, isCodexQuicksilverV2Required, queueCodexLiveRepair, realtimeVoiceForGender,
+  CodexRealtimeBridge, codexLiveRepairPhase, codexRealtimeEnvironment, codexRealtimeLaunchCommand,
+  codexRealtimeNeedsLogin, findManagedCodexRealtimeBin, isCodexQuicksilverV2Required,
+  queueCodexLiveRepair, realtimeVoiceForGender,
 } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
@@ -446,6 +447,42 @@ describe('Codex managed runtime voice recovery', () => {
 })
 
 describe('Codex Live on-demand updater', () => {
+  it('reports progress from verified updater state, not from a stale repair request', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-live-progress-'))
+    const dir = join(home, 'codex-cli')
+    mkdirSync(dir, { recursive: true })
+    const now = Date.now()
+    const requested = new Date(now - 10_000).toISOString()
+    const newer = new Date(now - 5_000).toISOString()
+    const requestFile = join(dir, 'live-repair-request.json')
+    const stateFile = join(dir, 'update-state.json')
+    const activeFile = join(dir, 'active.json')
+    const write = (path: string, value: Record<string, unknown>): void => {
+      writeFileSync(path, JSON.stringify(value))
+    }
+    try {
+      expect(codexLiveRepairPhase(home, now)).toBe('idle')
+      write(requestFile, { schema: 1, reason: 'quicksilver-v2', requestedAt: requested })
+      expect(codexLiveRepairPhase(home, now)).toBe('checking')
+      write(stateFile, { schema: 1, status: 'applied', mode: 'auto', checkedAt: newer })
+      expect(codexLiveRepairPhase(home, now)).toBe('checking')
+      write(activeFile, { schema: 1, version: '0.300.0', activatedAt: newer })
+      expect(codexLiveRepairPhase(home, now)).toBe('ready')
+      write(stateFile, { schema: 1, status: 'waiting-upstream', mode: 'auto', checkedAt: newer })
+      expect(codexLiveRepairPhase(home, now)).toBe('waiting-upstream')
+      write(stateFile, { schema: 1, status: 'available', mode: 'auto', checkedAt: newer })
+      expect(codexLiveRepairPhase(home, now)).toBe('updating')
+      write(stateFile, { schema: 1, status: 'blocked', mode: 'auto', checkedAt: newer })
+      expect(codexLiveRepairPhase(home, now)).toBe('blocked')
+      write(stateFile, { schema: 1, status: 'current', mode: 'off', checkedAt: newer })
+      expect(codexLiveRepairPhase(home, now)).toBe('disabled')
+      write(requestFile, { schema: 1, reason: 'quicksilver-v2', requestedAt: new Date(now - 31 * 60_000).toISOString() })
+      expect(codexLiveRepairPhase(home, now)).toBe('idle')
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
   it('queues an immediate repair once and throttles identical failures', () => {
     const home = mkdtempSync(join(tmpdir(), 'phoenix-live-auto-update-'))
     try {
