@@ -66,6 +66,16 @@ describe('Phoenix Godot AI v4 integration', () => {
     expect(run(bridge, 'sync', '--home', home, '--allow-config-edit').status).toBe(0)
   })
 
+  it('preserves Windows CRLF and every unrelated MCP row during an authorized alias sync', () => {
+    const { home } = workspace()
+    const path = join(home, 'cordis.patch.yml')
+    const before = official.replaceAll('\n', '\r\n')
+    writeFileSync(path, before)
+    expect(run(bridge, 'sync', '--home', home, '--allow-config-edit').status).toBe(0)
+    expect(readFileSync(path, 'utf8')).toBe(before.replace(
+      `name: '${upstreamPackage}'`, "name: '@phoenix-ai/dsh-mcp-client'"))
+  })
+
   it('rejects raw HTTP, duplicates and malformed connector entries without touching user config', () => {
     const { home } = workspace()
     const path = join(home, 'cordis.patch.yml')
