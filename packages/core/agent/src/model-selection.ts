@@ -649,9 +649,12 @@ export function isExplicitKiraTeamRequest(text: string): boolean {
   const value = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
   if (value.length === 0 || value.length > 2_000) return false
   if (/^(?:por que|porque|why|como|cuando)\b/u.test(value)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable direct Team identity vocabulary.
   const people = /\b(?:equipo|agentes|companeros|especialistas|teammates|team|la forja|sol|luna|astra|nexo|lumen)\b/u
   if (!people.test(value)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Suppress explicitly negated Team delegation.
   if (/\b(?:no|sin|evita|deja de)\s+(?:quiero que\s+|necesito que\s+)?(?:llam\w*|convoc\w*|deleg\w*|us\w*|utiliz\w*|trabaj\w*)/u.test(value)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual Team work request grammar auditable.
   return /\b(?:convoc\w*|llam\w*|deleg\w*|asign\w*|involucr\w*|colabor\w*|consult\w*|trabaj\w*|us\w*|utiliz\w*|muestr\w*|mostrar|activa\w*|quiero(?: que)?|necesito(?: que)?)\b/u.test(value)
 }
 
