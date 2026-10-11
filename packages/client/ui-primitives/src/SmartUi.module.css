@@ -1,9 +1,17 @@
-.statusPill {display:inline-flex; align-items:center; justify-content:center; width:fit-content; max-width:100%; padding:4px 12px; border-radius:999px; font-size:12px; line-height:1.25; font-weight:650; white-space:normal; }
-.statusPill[data-tone="positive"] {background:#d9f4e5; color:#087842;}
-.statusPill[data-tone="warning"] {background:#ffe5d6; color:#bc4710;}
-.statusPill[data-tone="negative"] {background:#ffe0e4; color:#a82838;}
-.statusPill[data-tone="info"] {background:#e0edff; color:#2458a1;}
-.statusPill[data-tone="neutral"] {background:var(--dsw-alias-interactive-bg-hover, #edf0f2);color:var(--dsw-alias-label-secondary,#505d67);}
+.statusPill {
+  --phoenix-status-color: var(--dsw-alias-label-secondary, #62666d);
+  display:inline-flex;align-items:center;justify-content:center;
+  width:fit-content;max-width:100%;padding:4px 12px;
+  border:1px solid color-mix(in srgb, var(--phoenix-status-color) 20%, transparent);
+  border-radius:999px;font-size:12px;line-height:1.25;font-weight:650;
+  white-space:normal;color:var(--phoenix-status-color);
+  background:color-mix(in srgb, var(--phoenix-status-color) 13%, var(--dsw-alias-surface-primary, #fff));
+}
+.statusPill[data-tone="positive"] {--phoenix-status-color:var(--dsw-alias-state-success-primary,#087842);}
+.statusPill[data-tone="warning"] {--phoenix-status-color:var(--dsw-alias-state-warning-primary,#bc4710);}
+.statusPill[data-tone="negative"] {--phoenix-status-color:var(--dsw-alias-state-error-primary,#a82838);}
+.statusPill[data-tone="info"] {--phoenix-status-color:var(--dsw-alias-state-info-primary,#2458a1);}
+.statusPill[data-tone="neutral"] {--phoenix-status-color:var(--dsw-alias-label-secondary,#505d67);}
 .agentRow {display:flex; gap:12px; align-items:flex-start; padding:12px 0; border-bottom:1px solid var(--dsw-alias-border-subtle,rgba(120,120,120,.16)); min-width:0;}
 .agentRow:last-child {border-bottom:0;}
 .avatar {width:36px;height:36px;display:grid;place-items:center;flex:0 0 36px;border-radius:50%;background:var(--dsw-alias-interactive-bg-hover,rgba(120,120,120,.07));color:var(--dsw-alias-label-primary,inherit);}
