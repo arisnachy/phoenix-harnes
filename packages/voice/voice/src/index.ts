@@ -497,7 +497,7 @@ export class VoiceRuntime extends TypertRemoteService {
       }
     } catch (error) {
       const message = String(error)
-      if (codexRealtimeNeedsLogin(error) || /chatgpt login|required|not authenticated|account/i.test(message)) {
+      if (codexRealtimeNeedsLogin(error) || /(?:chatgpt (?:login|sign-in) required|login required|not authenticated)/iu.test(message)) {
         return { accepted: false, reason: 'codex-login-required' }
       }
       if (/not found|enoent|could not start|spawn/i.test(message)) {
