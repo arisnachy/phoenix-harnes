@@ -20,6 +20,20 @@ El instalador usa IDs `winget --exact --source winget` en Windows, `brew` en mac
 
 En Godot 4, comprueba que el binario corresponde a la versión del proyecto y que las plantillas de exportación están instaladas antes de exportar: la instalación del editor por sí sola no lo garantiza. Un export Web contiene archivos HTML/JS/WASM/PCK y necesita un servidor y navegador reales; no copies únicamente el HTML al chat. Crea una compilación nativa o una URL web alojada y comprueba la ejecución; si el usuario exige jugar dentro del chat, proporciona además una versión autocontenida HTML5 que pase las puertas de presets y gameplay.
 
+## Comando único de preparación y verificación de un proyecto Godot
+
+En Phoenix Game Studio existe un bootstrap real, sin suscripción ni API de pago. Un juego de lucha/disparos/3D complejo debe ejecutar el motor nativo al crear el proyecto, no limitarse a generar conceptos.
+
+```sh
+node examples/game-studio/godot/bootstrap.mjs doctor
+node examples/game-studio/godot/bootstrap.mjs setup --project "RUTA/NUEVO-JUEGO" --allow-install
+node examples/game-studio/godot/bootstrap.mjs verify --project "RUTA/NUEVO-JUEGO"
+```
+
+El bootstrap utiliza `game-tools.mjs ensure --target godot --allow-install` cuando falta el editor y resuelve las rutas de instalación oficiales WinGet aunque el `PATH` de la sesión Windows esté desactualizado. No ejecuta instaladores al iniciar Phoenix; `--allow-install` se limita a trabajos expresamente autorizados. No sobrescribe escenas ni scripts de proyectos existentes. El comando `verify` devuelve `verified:true` **solamente** después de importar el proyecto, ejecutar `tests/smoke.gd` (marca `PHOENIX_GODOT_SMOKE_OK`) y lanzar una sesión headless acotada. Esto verifica infraestructura, no estética, habilidades, audio real ni calidad final.
+
+El proyecto inicial de `examples/game-studio/godot/starter` contiene movimiento, disparo, látigo, magia y un jefe de dos fases; dibuja primitivas animadas temporales y **no contiene sonido de producción**. Kira debe generar/importar los presets aprobados y los sonidos originales/licenciados y sustituirlos, crear al menos los enemigos y escenarios pedidos, exportar y playtestear. Para editor remoto vía Godot AI requiere instalar addon compatible (Godot 4.7+) y completar la autorización en el editor; no equivale a que MCP esté conectado. Para un juego pedido en el chat, también generar y probar un HTML5 independiente.
+
 ## Godot AI MCP: editor real, no sustituto de los assets
 
 El usuario puede pedir que Kira utilice [Godot AI](https://github.com/hi-godot/godot-ai), un complemento comunitario MIT. El recurso [Asset Library #5050](https://godotengine.org/asset-library/asset/5050) es **v3.2.1 para Godot 4.5+**; el protocolo v4 no es intercambiable con v3. El instalador fijado de Phoenix apunta a **v4.3.0 para Godot 4.7+**, verificado por SHA-256, y no debe pisar un addon anterior ni su migración firmada.
