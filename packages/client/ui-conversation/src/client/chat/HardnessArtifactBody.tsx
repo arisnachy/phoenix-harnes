@@ -256,11 +256,61 @@ function sandboxDocument(html: string, executable: boolean, gameDiagnostics = fa
     : ''
   const head = /<head\b[^>]*>([\s\S]*?)<\/head>/i.exec(html)?.[1] ?? ''
   const body = /<body\b[^>]*>([\s\S]*?)<\/body>/i.exec(html)?.[1] ?? html
+  // Isolated iframe documents cannot inherit Phoenix theme CSS custom properties.
+  // Reconcile genuine forms with the Host palette, without touching games or art.
+  const themedForm = !gameDiagnostics && /<(?:form|input|select|textarea|fieldset)\b/i.test(html)
+  const themeStyle = themedForm
+    ? '<style data-phoenix-form-theme="true">'
+      + ':root{--phoenix-ui-bg:#faf8f5;--phoenix-ui-surface:#fcfaf7;--phoenix-ui-muted:#f2ede7;'
+      + '--phoenix-ui-text:#292420;--phoenix-ui-secondary:#746961;--phoenix-ui-border:#dfd6ce;'
+      + '--phoenix-ui-accent:#ea5b22;color-scheme:light}'
+      + '@media(prefers-color-scheme:dark){:root{--phoenix-ui-bg:#1d1b1a;'
+      + '--phoenix-ui-surface:#282523;--phoenix-ui-muted:#332e2b;--phoenix-ui-text:#f4eee8;'
+      + '--phoenix-ui-secondary:#c5b7a9;--phoenix-ui-border:#514840;--phoenix-ui-accent:#f39a5c;color-scheme:dark}}'
+      + 'html,body{background:var(--phoenix-ui-bg)!important;color:var(--phoenix-ui-text)!important}'
+      + 'body{padding:clamp(12px,2.2vw,22px)!important;line-height:1.5}'
+      + 'body :where(main,article,section,form,header,footer,[class*="card"],[class*="panel"],'
+      + '[class*="hero"],[class*="intro"],[class*="container"]){'
+      + 'background-color:var(--phoenix-ui-surface)!important;color:var(--phoenix-ui-text)!important;'
+      + 'border-color:var(--phoenix-ui-border)!important;box-shadow:none!important}'
+      + 'body :where([class*="notice"],[class*="info"],[class*="hint"]){'
+      + 'background-color:var(--phoenix-ui-muted)!important;border-color:var(--phoenix-ui-border)!important}'
+      + 'body :where(h1,h2,h3,h4,label,legend){color:var(--phoenix-ui-text)!important}'
+      + 'body :where(p,small){color:var(--phoenix-ui-secondary)!important}'
+      + 'body :where(input:not([type=checkbox]):not([type=radio]):not([type=range]),textarea,select){'
+      + 'box-sizing:border-box;max-width:100%;min-height:40px;border-radius:11px!important;'
+      + 'border:1px solid var(--phoenix-ui-border)!important;background:var(--phoenix-ui-surface)!important;'
+      + 'color:var(--phoenix-ui-text)!important;padding:9px 12px;font:inherit!important}'
+      + 'body :where(input[type=checkbox],input[type=radio],input[type=range]){'
+      + 'accent-color:var(--phoenix-ui-accent)!important}'
+      + 'body :where(button,[role=button]){border-radius:11px!important;'
+      + 'border:1px solid var(--phoenix-ui-border)!important;'
+      + 'background:var(--phoenix-ui-muted)!important;color:var(--phoenix-ui-text)!important;'
+      + 'font:inherit!important;min-height:38px;cursor:pointer}'
+      + 'body :where(button,[role=button]):hover{border-color:var(--phoenix-ui-accent)!important}'
+      + 'body :where(button,input,select,textarea,[role=button]):focus-visible{'
+      + 'outline:2px solid var(--phoenix-ui-accent)!important;outline-offset:2px!important}'
+      + 'body :where(table){width:100%;border-collapse:collapse;color:var(--phoenix-ui-text)}'
+      + 'body :where(th,td){border-bottom:1px solid var(--phoenix-ui-border)!important;padding:8px}'
+      + 'body :where(th){background:var(--phoenix-ui-muted)!important}'
+      + '@media(max-width:600px){body{padding:10px!important}body :where(main,article,section){max-width:100%}}'
+      + '</style>'
+    : ''
+  // Theme updates carry palette values only. The opaque-origin iframe does not
+  // acquire access to parent DOM, accounts, tools, cookies or credentials.
+  const themeBridge = themedForm
+    ? '<script>(function(){var names={bg:1,surface:1,muted:1,text:1,secondary:1,border:1,accent:1};'
+      + 'window.addEventListener("message",function(event){if(event.source!==parent)return;'
+      + 'var packet=event.data;if(!packet||packet.type!=="phoenix-artifact-theme"||!packet.colors)return;'
+      + 'Object.keys(names).forEach(function(name){var color=packet.colors[name];'
+      + 'if(typeof color==="string"&&color.length<160&&color.length>0)'
+      + 'document.documentElement.style.setProperty("--phoenix-ui-"+name,color)})})})()<\/script>'
+    : ''
   const runtimeErrors = gameDiagnostics
     ? '<script>(function(){function alertGame(reason){if(!document.body)return;var p=document.createElement("p");p.setAttribute("role","alert");p.setAttribute("data-phoenix-game-error","true");p.style.cssText="padding:12px;background:#461e26;color:#fff;border:2px solid #eb7688;border-radius:8px";p.textContent="Game Studio: error al ejecutar el juego ("+String(reason).slice(0,180)+"). Revisa el script, los recursos y la consola. El manifiesto JSON no causa por sí solo este error.";document.body.insertBefore(p,document.body.firstChild)}window.addEventListener("error",function(e){alertGame(e.message||"JavaScript error")});window.addEventListener("unhandledrejection",function(e){alertGame(e.reason&&e.reason.message||"unhandled rejection")})})()<\/script>'
     : ''
   const heightReporter = '<script>(function(){function height(){var root=document.documentElement,body=document.body;return Math.max(root?root.scrollHeight:0,root?root.offsetHeight:0,body?body.scrollHeight:0,body?body.offsetHeight:0,1)}function report(){parent.postMessage({type:\'phoenix-artifact-height\',height:height()},\'*\')}if(window.ResizeObserver){var ro=new ResizeObserver(report);ro.observe(document.documentElement);if(document.body)ro.observe(document.body)}new MutationObserver(report).observe(document.documentElement,{subtree:true,childList:true,attributes:true,characterData:true});window.addEventListener(\'load\',report);window.addEventListener(\'resize\',report);report()})()<\/script>'
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style></head><body>${dependencyNotice}${runtimeErrors}${body}${heightReporter}</body></html>`
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="${csp}">${head}<style>html,body{margin:0;padding:0;min-height:0;height:auto;font-family:system-ui,sans-serif}body{padding:16px;box-sizing:border-box}</style>${themeStyle}</head><body>${dependencyNotice}${runtimeErrors}${body}${themeBridge}${heightReporter}</body></html>`
 }
 
 interface MiniAppProps {
@@ -287,6 +337,40 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
     window.addEventListener('message', onMessage)
     return () => { window.removeEventListener('message', onMessage) }
   }, [])
+
+  const syncTheme = (): void => {
+    const frame = frameRef.current
+    if (frame === null) return
+    const source = window.getComputedStyle(frame.closest('[data-universal-artifact]') ?? document.documentElement)
+    const root = window.getComputedStyle(document.documentElement)
+    const token = (name: string, fallback: string): string =>
+      source.getPropertyValue(name).trim() || root.getPropertyValue(name).trim() || fallback
+    const colors: Record<string, string> = {
+      bg: token('--dsw-alias-bg-layer-1', '#faf8f5'),
+      surface: token('--dsw-alias-surface-primary', '#fcfaf7'),
+      muted: token('--dsw-alias-interactive-bg-hover', '#f2ede7'),
+      text: token('--dsw-alias-label-primary', '#292420'),
+      secondary: token('--dsw-alias-label-secondary', '#746961'),
+      border: token('--dsw-alias-border-subtle', '#dfd6ce'),
+      accent: token('--dsw-alias-state-info-primary', '#ea5b22'),
+    }
+    frame.contentWindow?.postMessage({ type: 'phoenix-artifact-theme', colors }, '*')
+    // Static previews have no script privileges and are same-origin sandboxed.
+    if (!executable) {
+      const rootElement = frame.contentDocument?.documentElement
+      if (rootElement) {
+        for (const [name, color] of Object.entries(colors))
+          rootElement.style.setProperty('--phoenix-ui-' + name, color)
+      }
+    }
+  }
+  useEffect(() => {
+    const observer = new MutationObserver(syncTheme)
+    observer.observe(document.documentElement, {
+      attributes: true, attributeFilter: ['class', 'style', 'data-theme', 'data-appearance'],
+    })
+    return () => observer.disconnect()
+  }, [executable])
 
   const measureStaticDocument = (): void => {
     if (executable) return
@@ -320,7 +404,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
       sandbox={executable ? 'allow-scripts' : 'allow-same-origin'}
       referrerPolicy="no-referrer"
       style={{ height: Math.max(frameHeight, minimumHeight) }}
-      onLoad={measureStaticDocument}
+      onLoad={() => { measureStaticDocument(); syncTheme() }}
     />
   )
 }
