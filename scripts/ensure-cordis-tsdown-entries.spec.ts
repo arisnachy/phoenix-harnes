@@ -4,7 +4,9 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   CORDIS_TSDOWN_ENTRY_NAMES,
   ensureCordisTsdownEntries,
+  ensureIncludeTsdownEntries,
   missingCordisTsdownEntries,
+  missingIncludeTsdownEntries,
 } from './ensure-cordis-tsdown-entries.mjs'
 
 const root = resolve('C:/phoenix-runtime-test')
@@ -13,6 +15,58 @@ const tsc = resolve(root, 'node_modules', 'typescript', 'bin', 'tsc')
 const entry = (name: string, extension: string): string =>
   resolve(vendor, 'lib', 'types', name + extension)
 const source = (name: string): string => resolve(vendor, 'src', name + '.ts')
+
+describe('isolated Windows Include plugin tsdown entry recovery', () => {
+  const included = resolve(root, 'vendor', 'include')
+  const includeSource = resolve(included, 'src', 'index.ts')
+  const includeJs = resolve(included, 'lib', 'types', 'index.js')
+  const includeTypes = resolve(included, 'lib', 'types', 'index.d.ts')
+
+  it('detects a missing Include index.js even when index.d.ts survives an incremental build', () => {
+    const files = new Set([includeSource, includeTypes])
+    expect(missingIncludeTsdownEntries(root, path => files.has(path)))
+      .toEqual(['lib/types/index.js'])
+  })
+
+  it('forces Include re-emission in the current isolated runtime before tsdown', () => {
+    const files = new Set([includeSource, includeTypes, tsc])
+    const spawn = vi.fn((_node: string, _args: string[], _options: object) => {
+      files.add(includeJs)
+      return { status: 0 }
+    })
+    expect(ensureIncludeTsdownEntries(root, {
+      exists: path => files.has(path),
+      spawn: spawn as never,
+      node: 'node.exe',
+      log: () => {},
+    })).toEqual({ repaired: true, missing: ['lib/types/index.js'] })
+    expect(spawn).toHaveBeenCalledWith('node.exe', [tsc, '-b', 'vendor/include', '--force'],
+      expect.objectContaining({ cwd: root, windowsHide: true, stdio: 'inherit' }))
+  })
+
+  it('does not rebuild a complete Include package', () => {
+    const files = new Set([includeSource, includeJs, includeTypes])
+    const spawn = vi.fn()
+    expect(ensureIncludeTsdownEntries(root, {
+      exists: path => files.has(path), spawn: spawn as never,
+    })).toEqual({ repaired: false, missing: [] })
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  it('rejects a partial Include repair, retaining the running Host', () => {
+    const files = new Set([includeSource, includeTypes, tsc])
+    expect(() => ensureIncludeTsdownEntries(root, {
+      exists: path => files.has(path),
+      spawn: (() => ({ status: 0 })) as never,
+      log: () => {},
+    })).toThrow('include entry repair did not emit: lib/types/index.js')
+  })
+
+  it('refuses to synthesize missing tracked Include source', () => {
+    expect(() => missingIncludeTsdownEntries(root, () => false))
+      .toThrow('tracked vendor/include/src/index.ts is missing')
+  })
+})
 
 describe('isolated Windows Cordis tsdown entry recovery', () => {
   it('requires the tracked Cordis source rather than masking damaged source checkouts', () => {
