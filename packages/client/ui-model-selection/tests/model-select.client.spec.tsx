@@ -521,3 +521,24 @@ describe('ModelSelect provider accordion', () => {
     expect(screen.queryByRole('menuitemradio', { name: 'Beta One' })).toBeNull()
   })
 })
+
+describe('Phoenix Auto is a routing mode, not a model name', () => {
+  it('labels automatic routing without changing the Host model selection', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      current: { provider: 'phoenix', model: 'phoenix-auto' },
+      groups: [{
+        id: 'phoenix',
+        name: 'Phoenix',
+        models: [{ id: 'phoenix-auto', name: 'Phoenix Auto' }],
+      }],
+    }))
+    const select = vi.fn()
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    expect(screen.getByRole('button', { name: /自动路由 · 模型动态选择/ })).not.toBeNull()
+    expect(screen.queryByText('Phoenix Auto')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /自动路由 · 模型动态选择/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: '模型' }))
+    expect(screen.getByRole('menuitemradio', { name: '自动路由 · 模型动态选择' })).not.toBeNull()
+    expect(select).not.toHaveBeenCalled()
+  })
+})
