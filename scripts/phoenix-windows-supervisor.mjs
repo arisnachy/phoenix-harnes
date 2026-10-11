@@ -718,7 +718,11 @@ function assertRuntimeStorageCapacity(nextRuntime) {
   // Reclaim everything safe before allocating another full dependency/build
   // tree. If stale Windows handles still prevent enough cleanup, fail closed:
   // keep the current healthy Host and retry later instead of consuming disk.
-  cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: true })
+  // Only surface Windows EBUSY as a warning when the hard storage limit is
+  // actually obstructing the next runtime. Ordinary locked orphans are safe
+  // to defer silently; repeat warnings otherwise look like restart failures.
+  const storageAtHardCap = runtimeDirectoriesForCleanup().length >= MAX_RUNTIME_DIRECTORIES
+  cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: storageAtHardCap })
   if (runtimeDirectoriesForCleanup().length >= MAX_RUNTIME_DIRECTORIES) {
     reclaimInactiveBackupForCapacity(nextRuntime)
   }
