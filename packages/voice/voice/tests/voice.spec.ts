@@ -484,8 +484,8 @@ describe('Codex Live on-demand updater', () => {
       internal.child = { killed: true }
       internal.launchedManagedCodexBin = firstBin
       const close = vi.spyOn(internal, 'close').mockImplementation(() => {
-        internal.child = undefined
-        internal.launchedManagedCodexBin = undefined
+        delete internal.child
+        delete internal.launchedManagedCodexBin
       })
       const start = vi.spyOn(internal, 'startProcess').mockResolvedValue(undefined)
       await internal.ensureStarted()
@@ -495,7 +495,7 @@ describe('Codex Live on-demand updater', () => {
       expect(close).toHaveBeenCalledTimes(1)
       expect(start).toHaveBeenCalledTimes(1)
     } finally {
-      internal.child = undefined
+      delete internal.child
       vi.unstubAllEnvs()
       rmSync(home, { recursive: true, force: true })
     }
