@@ -103,5 +103,80 @@ const PhoenixGameKit = (() => {
     return 'cover';
   }
 
-  return { clamp, direction8, twoBone, animationFrame, parallaxX, humanPose, drawHumanoid, enemyDecision, distance };
+
+  // Bind a real embedded sprite atlas to the requested state. Missing artwork is
+  // NOT replaced by a pretend animation; callers must flag a prototype instead.
+  function drawSpriteState(ctx, image, atlas, state, seconds, x, y, width, height, face = 1) {
+    const fw = atlas?.frameWidth, fh = atlas?.frameHeight;
+    const sequence = atlas?.animations?.[state];
+    if (!image?.complete || !(image.naturalWidth > 0 && image.naturalHeight > 0)
+      || !(fw > 0 && fh > 0) || !Array.isArray(sequence) || !sequence.length) return false;
+    const cols = Math.floor(image.naturalWidth / fw);
+    const rows = Math.floor(image.naturalHeight / fh);
+    if (cols < 1 || rows < 1 || image.naturalWidth % fw || image.naturalHeight % fh) return false;
+    const index = sequence[animationFrame(seconds, atlas.fps || 10, sequence.length)];
+    if (!Number.isInteger(index) || index < 0 || index >= cols * rows) return false;
+    ctx.save();
+    ctx.translate(x + (face < 0 ? width : 0), y);
+    if (face < 0) ctx.scale(-1, 1);
+    ctx.drawImage(image, index % cols * fw, Math.floor(index / cols) * fh, fw, fh, 0, 0, width, height);
+    ctx.restore();
+    return true;
+  }
+
+  // Attack animation is a state machine: anticipation -> projectile(s) -> recovery.
+  // Each bullet is emitted only AFTER a visible, avoidable warning.
+  function advanceBoss(boss, player, dt, fire) {
+    if (!boss.alive || !Number.isFinite(dt) || dt <= 0) return;
+    const step = Math.min(dt, 0.05);
+    boss.animTime = (boss.animTime || 0) + step;
+    boss.phase = boss.hp <= (boss.maxHp || 30) * 0.5 ? 'barrage' : 'patrol';
+    const delta = player.x - boss.x;
+    boss.face = delta >= 0 ? 1 : -1;
+    if (Math.abs(delta) > 800) { boss.action = 'idle'; boss.windup = 0; return; }
+    if (boss.action === 'windup') {
+      boss.windup -= step;
+      if (boss.windup > 0) return;
+      const origin = { x: boss.x + boss.w / 2 + boss.face * 42, y: boss.y + 42 };
+      const dx = player.x + (player.w || 30) / 2 - origin.x;
+      const dy = player.y + (player.h || 54) / 2 - origin.y;
+      const angle = Math.atan2(dy, dx);
+      const advanced = boss.phase === 'barrage';
+      const attack = advanced && boss.attackIndex % 2 === 0 ? 'ground-wave'
+        : advanced ? 'fan' : 'bolt';
+      const offsets = attack === 'fan' ? [-0.36, 0, 0.36] : [0];
+      for (const offset of offsets) {
+        const theta = attack === 'ground-wave' ? (boss.face > 0 ? 0 : Math.PI) : angle + offset;
+        const speed = attack === 'ground-wave' ? 325 : advanced ? 315 : 255;
+        fire({ x: origin.x, y: attack === 'ground-wave' ? 425 : origin.y,
+          vx: Math.cos(theta) * speed, vy: Math.sin(theta) * speed,
+          r: attack === 'ground-wave' ? 13 : 8, ttl: 2, kind: attack });
+      }
+      boss.lastAttack = attack;
+      boss.action = 'recover';
+      boss.recovery = advanced ? 0.65 : 1.05;
+      return;
+    }
+    if (boss.recovery > 0) {
+      boss.recovery = Math.max(0, boss.recovery - step);
+      boss.action = 'recover';
+      return;
+    }
+    // An actual animated body translation, unlike moving a static boss bitmap.
+    const velocity = boss.phase === 'barrage' ? 30 : 14;
+    boss.x = clamp(boss.x + Math.sin(boss.animTime * 1.4) * velocity * step, 3300, 3500);
+    boss.attackIndex = (boss.attackIndex || 0) + 1;
+    boss.windup = boss.phase === 'barrage' ? 0.58 : 0.82;
+    boss.action = 'windup';
+  }
+
+  function activateAbility(actor, seconds, cooldown = 4.5) {
+    if (!Number.isFinite(seconds) || seconds < (actor.nextPowerAt || 0)) return false;
+    actor.nextPowerAt = seconds + cooldown;
+    actor.powerAnimationUntil = seconds + 0.42;
+    return true;
+  }
+
+  return { clamp, direction8, twoBone, animationFrame, parallaxX, humanPose, drawHumanoid, enemyDecision, distance,
+    drawSpriteState, advanceBoss, activateAbility };
 })();
