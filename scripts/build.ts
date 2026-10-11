@@ -180,6 +180,50 @@ function ensureVendoredIncludeWorkspaceLinks(root: string, environment: NodeJS.P
   }
 }
 
+/**
+ * A persistent Windows updater worktree can keep a valid TypeScript build
+ * cache while losing ignored JavaScript outputs. tsdown then fails resolving
+ * Cordis's lib/types/{index,invariant,startup}.js entry glob even when the
+ * source tree and dependency links are intact. The JS entry (not just its .d.ts)
+ * must exist before the Host bundle starts.
+ *
+ * @param root - Root of the *isolated* runtime being prepared.
+ * @param exists - Injectable file probe for cold-runtime regression tests.
+ * @returns Whether Cordis must regenerate its emitted bundle entry.
+ */
+export function vendoredCordisBundleRepairNeeded(
+  root: string,
+  exists: (file: string) => boolean = existsSync,
+): boolean {
+  const source = resolve(root, 'vendor', 'cordis', 'src', 'index.ts')
+  if (!exists(source)) {
+    throw new Error('build: vendored Cordis source is missing; restore tracked vendor/cordis before building')
+  }
+  return !exists(resolve(root, 'vendor', 'cordis', 'lib', 'types', 'index.js'))
+    || !exists(resolve(root, 'vendor', 'cordis', 'lib', 'types', 'index.d.ts'))
+}
+
+/**
+ * Regenerate Cordis from its own project references before tsdown enumerates
+ * workspace entries. This touches only the prepared worktree, never the active
+ * Host. --force deliberately bypasses stale .tsbuildinfo from older stages.
+ */
+function ensureVendoredCordisBundle(root: string, environment: NodeJS.ProcessEnv): void {
+  if (!vendoredCordisBundleRepairNeeded(root)) return
+  console.log('build: Cordis JS bundle entry is missing; repairing vendor/cordis TypeScript outputs...')
+  const invocation = buildPnpmInvocation(['exec', 'tsc', '-b', 'vendor/cordis', '--force'], environment)
+  const repaired = spawnSync(invocation.command, invocation.args, {
+    cwd: root,
+    env: environment,
+    stdio: 'inherit',
+    windowsHide: true,
+  })
+  if (repaired.error !== undefined) throw repaired.error
+  if (repaired.status !== 0 || vendoredCordisBundleRepairNeeded(root)) {
+    throw new Error('build: cannot restore vendor/cordis/lib/types/index.js; keeping current Host online')
+  }
+}
+
 /** Repair only a missing generated include declaration on cold runtime builds. */
 function ensureVendoredIncludeTypes(root: string, environment: NodeJS.ProcessEnv): void {
   if (!vendoredIncludeTypeRepairNeeded(root)) return
@@ -251,6 +295,7 @@ function main(): void {
   if (scope === 'full') {
     ensureVendoredIncludeWorkspaceLinks(root, buildEnvironment)
     ensureVendoredIncludeTypes(root, buildEnvironment)
+    ensureVendoredCordisBundle(root, buildEnvironment)
     runScript('build:lib', buildEnvironment)
     verifyProfileRuntimeArtifacts(root)
   } else {
