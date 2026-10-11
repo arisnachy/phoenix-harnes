@@ -87,6 +87,38 @@ export function preparePhoenixGameSubmission(html: string, manifestJson?: string
     '<script id="phoenix-game-manifest" type="application/json">' + escaped + '</script></body>')
 }
 
+/** A sampled-production claim must carry real embedded sound bytes, not cue names only.
+ * Structural check only; real playback/quality still require browser listening.
+ */
+function validateRecordedAudio(html: string, manifest: Record<string, unknown>): void {
+  const audio = manifest.audio as Record<string, unknown>
+  if (audio.mode !== 'sampled-production') return
+  const cues = Array.isArray(audio.cues) ? audio.cues : []
+  const names = [...cues, 'music', ...(Array.isArray(audio.voices) ? audio.voices.map(v => 'voice-' + String(v)) : [])]
+  if (names.length < 2 || names.some(name => typeof name !== 'string' || !/^[a-z][a-z0-9_-]*$/u.test(name))) {
+    throw new ToolArgsError(['Game Studio: sampled-production necesita una lista válida de señales de sonido y música.'])
+  }
+  const tags = [...html.matchAll(/<audio\b[^>]*>/giu)].map(match => match[0])
+  for (const cue of new Set(names as string[])) {
+    const id = 'phoenix-audio-' + cue
+    const tag = tags.find(value => {
+      const match = /\bid\s*=\s*(["'])([^"']+)\1/iu.exec(value)
+      return match?.[2] === id
+    })
+    const src = tag === undefined ? undefined : /\bsrc\s*=\s*(["'])(.*?)\1/iu.exec(tag)?.[2]
+    const encoded = /^data:audio\/(?:wav|ogg|mpeg);base64,([A-Za-z0-9+/]+={0,2})$/u.exec(src ?? '')
+    if (encoded === null || (encoded[1]?.length ?? 0) < 20) {
+      throw new ToolArgsError(['Game Studio: falta sonido grabado incrustado para ' + cue + ' (id=' + id + ').'])
+    }
+  }
+  const runtime = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)]
+    .filter(match => !/\btype\s*=\s*["']application\/json["']/iu.test(match[1] ?? ''))
+    .map(match => match[2] ?? '').join('\n')
+  if (!/\b(?:playSoundSample|playSound|\.play)\s*\(/u.test(runtime)) {
+    throw new ToolArgsError(['Game Studio: el audio de producción se incrustó pero no tiene reproducción desde los eventos del juego.'])
+  }
+}
+
 /** Validate source packaging without executing untrusted game HTML or claiming gameplay QA.
  * @param html - Self-contained HTML from Kira's actual game output.
  * @returns Parsed manifest basics and art preflight classification.
@@ -136,6 +168,7 @@ export function validateGameHtml(html: string): GameManifest {
   if (!/<canvas\b|<button\b|<svg\b|<input\b|\brole\s*=\s*["']application["']/iu.test(html)) {
     throw new ToolArgsError(['Falta una superficie interactiva para jugar (Canvas o controles DOM).'])
   }
+  validateRecordedAudio(html, manifest)
   return { schemaVersion: 1, title: manifest.title, genre: manifest.genre,
     artPreflight: validateGameArt(html, manifest) }
 }
