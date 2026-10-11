@@ -371,7 +371,7 @@ export function isCodexRealtimeVoiceActive(): boolean {
  * @returns Sanitized Host diagnostic when present, otherwise the status reason.
  */
 export function codexRealtimeStatusFailureReason(
-  status: Pick<VoiceConversationRealtimeStatus, 'reason'>,
+  status: Pick<VoiceConversationRealtimeStatus, 'reason'> & { readonly detail?: unknown },
 ): string {
   const detail = 'detail' in status && typeof status.detail === 'string'
     ? status.detail.trim() : ''
