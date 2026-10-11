@@ -152,6 +152,37 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain('removed stale updater staging worktree')
   })
 
+  it('recovers from a busy orphan at 3/3 by evicting ONLY an unprotected inactive backup', () => {
+    expect(updater).toContain('const rollbackCandidates = []')
+    expect(updater).toContain('if (retained < MAX_INACTIVE_RUNTIME_BACKUPS)')
+    expect(updater).toContain('rollbackCandidates.push(candidate)')
+    expect(updater).toContain('if (ensureCapacity) {')
+    expect(updater).toContain('for (const candidate of rollbackCandidates.reverse())')
+    expect(updater).toContain('if (updaterRuntimeDirectories(root).length < MAX_RUNTIME_DIRECTORIES) break')
+    expect(updater).toContain('cleanupUpdaterRuntimeStorage(root, { ensureCapacity: true })')
+    expect(updater).toContain("if (active?.path !== undefined) keep.add(runtimePathKey(active.path))")
+    expect(updater).toContain("process.env.PHOENIX_RUNTIME_ROOT?.trim()")
+    expect(updater).toContain('if (existsSync(targetRuntime)) return true')
+    expect(supervisor).toContain('function reclaimInactiveBackupForCapacity(nextRuntime)')
+    expect(supervisor).toContain("!runtimeProtectedByOwningCheckout(path)")
+    expect(supervisor).toContain('if (runtimeDirectoriesForCleanup().length < MAX_RUNTIME_DIRECTORIES) break')
+    expect(supervisor).toContain('reclaimInactiveBackupForCapacity(nextRuntime)')
+    expect(supervisor).toContain("if (active?.path) keep.add(runtimePathKey(active.path))")
+  })
+
+  it('backs off blocked Windows storage and avoids repeating EBUSY or capacity warnings in every poll', () => {
+    expect(updater).toContain('const STORAGE_RETRY_MS = 5 * 60 * 1000')
+    expect(updater).toContain('const STORAGE_WARNING_INTERVAL_MS = 15 * 60 * 1000')
+    expect(updater).toContain('now - lastStorageWarningAt >= STORAGE_WARNING_INTERVAL_MS')
+    expect(updater).toContain('blockedStorageTarget === inspection.target && Date.now() < nextStorageRetryAt')
+    expect(updater).toContain('nextStorageRetryAt = Date.now() + STORAGE_RETRY_MS')
+    expect(updater).toContain('blockedStorageTarget = undefined')
+    expect(supervisor).toContain('const busyManagedRuntimeRetryAt = new Map()')
+    expect(supervisor).toContain('BUSY_MANAGED_RUNTIME_RETRY_MS = 5 * 60 * 1000')
+    expect(supervisor).toContain('busyManagedRuntimeRetryAt.set(key, Date.now() + BUSY_MANAGED_RUNTIME_RETRY_MS)')
+    expect(supervisor).toContain('busyManagedRuntimeRetryAt.delete(key)')
+  })
+
   it('prunes ignored stale workspace shells before reusing persistent staging', () => {
     expect(updater).toContain('function pruneStaleWorkspaceShells(stage)')
     expect(updater).toContain("git(stage, ['ls-files', '--', relativePath]")
