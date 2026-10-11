@@ -1,7 +1,8 @@
 /** On-demand game toolchains: route -> doctor -> ensure; never install at startup. */
 import { spawnSync } from 'node:child_process'
 import { existsSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const targets = new Set(['web', 'godot', 'blender', 'tiled', 'ffmpeg', 'uv', 'gameboy', 'nes', 'snes', 'genesis', 'sms', 'ps1'])
 function execute(command, args, timeout = 8000) {
@@ -102,7 +103,7 @@ function readiness(target) {
  * Godot's multi-file HTML5 WebAssembly export is NOT a valid single-file
  * phoenix_game payload. A Godot project can still be delivered separately.
  */
-function route(genre, delivery, quality) {
+export function route(genre, delivery, quality) {
   if (!['chat', 'desktop', 'web'].includes(delivery)) throw new Error('Delivery must be chat, desktop or web.')
   if (!['prototype', 'production'].includes(quality)) throw new Error('Quality must be prototype or production.')
   if (!genre.trim()) throw new Error('Genre cannot be empty.')
@@ -130,7 +131,7 @@ function route(genre, delivery, quality) {
   }
 }
 
-function installation(target, platform) {
+export function installation(target, platform) {
   const packages = {
     godot: { win32: 'GodotEngine.GodotEngine', darwin: 'godot', linux: 'org.godotengine.Godot' },
     blender: { win32: 'BlenderFoundation.Blender', darwin: 'blender', linux: 'org.blender.Blender' },
@@ -220,7 +221,9 @@ function main() {
     reason: after.ready ? undefined : 'Reopen the terminal or configure the PHOENIX_*_BIN executable path, then run doctor again.' }))
   process.exitCode = after.ready ? 0 : 1
 }
-try { main() } catch (error) {
-  console.error(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }))
-  process.exitCode = 2
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try { main() } catch (error) {
+    console.error(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }))
+    process.exitCode = 2
+  }
 }
