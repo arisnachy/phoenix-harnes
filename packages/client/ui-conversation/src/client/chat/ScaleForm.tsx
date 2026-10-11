@@ -46,11 +46,14 @@ export function parseScaleForm(value: unknown): ScaleFormSpec | null {
       || !Array.isArray(item.options) || item.options.length < 2 || item.options.length > 12) return null
     ids.add(item.id)
     const labels = new Set<string>()
+    const scores = new Set<number>()
     for (const option of item.options) {
       if (!record(option) || !allowed(option, ['label', 'score']) || !text(option.label, 160)
         || typeof option.score !== 'number' || !Number.isSafeInteger(option.score)
-        || option.score < -1000 || option.score > 1000 || labels.has(option.label)) return null
+        || option.score < -1000 || option.score > 1000 || labels.has(option.label)
+        || scores.has(option.score)) return null
       labels.add(option.label)
+      scores.add(option.score)
     }
   }
   if (props.bands !== undefined) {
