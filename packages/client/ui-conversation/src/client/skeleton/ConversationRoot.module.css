@@ -711,3 +711,40 @@
 .unifiedHeader .sessionChrome { min-width: 0; }
 .unifiedHeader .headerGlobal { flex-shrink: 0; }
 .unifiedHeader .titleCluster { min-width: 0; max-width: 100%; }
+
+/* The compact header is a real right-aligned toolbar pill, not a 100%-width
+   header with hidden tabs. Hero/home and conversation/visual states share it.
+   Using self-alignment (not absolute positioning) preserves chat layout and
+   lets the complete header return on the first draft character. */
+.root[data-header-compact='true']:is([data-phase='hero'], [data-phase='active'], [data-phase='settling']) .unifiedHeader {
+  align-self: flex-end;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  min-height: 54px;
+  margin-left: auto;
+  padding: 5px 9px;
+  grid-template-columns: auto;
+  grid-template-rows: auto;
+  column-gap: 0;
+  border-radius: 19px;
+}
+.root[data-header-compact='true'] .unifiedHeader .sessionChrome {
+  display: none;
+}
+.root[data-header-compact='true'] .unifiedHeader .headerGlobal {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  min-height: 40px;
+  gap: 5px;
+}
+.root[data-header-compact='true'] .unifiedHeader .headerToggle,
+.root[data-header-compact='true'] .unifiedHeader .heroTopIcon {
+  width: 34px;
+  height: 34px;
+}
+.root[data-header-compact='true'] .unifiedHeader .heroTopProfile {
+  width: 38px;
+  height: 38px;
+  flex-basis: 38px;
+}
