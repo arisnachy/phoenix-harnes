@@ -716,7 +716,8 @@ function assertRuntimeStorageCapacity(nextRuntime) {
 
   throw new Error(
     `runtime storage safety limit reached (${String(runtimeCount)}/${String(MAX_RUNTIME_DIRECTORIES)} managed runtime directories); `
-    + `refusing to create another runtime at ${nextRuntime}. PHOENIX will keep the current Host alive and retry cleanup automatically.`,
+    + `refusing to create another runtime at ${nextRuntime}. PHOENIX will keep the current Host alive and retry cleanup automatically. `
+    + 'If Windows keeps a stale runtime locked, close PHOENIX and run scripts/phoenix-windows-storage-repair.ps1 -Apply from your checkout.',
   )
 }
 

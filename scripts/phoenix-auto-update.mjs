@@ -562,7 +562,8 @@ function updaterRuntimeStorageHasCapacity(root, target) {
   if (now - lastStorageWarningAt >= STORAGE_WARNING_INTERVAL_MS) {
     console.error(
       `[PHOENIX UPDATE] runtime storage safety limit reached (${String(remaining)}/${String(MAX_RUNTIME_DIRECTORIES)}); `
-      + 'the current Host will stay online and storage cleanup will be retried before another runtime is created.',
+      + 'the current Host will stay online and storage cleanup will be retried before another runtime is created. '
+      + 'If it remains blocked, close PHOENIX and run scripts/phoenix-windows-storage-repair.ps1 -Apply from your checkout.',
     )
     lastStorageWarningAt = now
   }

@@ -223,6 +223,8 @@ describe('PHOENIX supervised updater runtime isolation', () => {
 
   it('backs off blocked Windows storage and avoids repeating EBUSY or capacity warnings in every poll', () => {
     expect(updater).toContain('const STORAGE_RETRY_MS = 5 * 60 * 1000')
+    expect(updater).toContain('scripts/phoenix-windows-storage-repair.ps1 -Apply')
+    expect(supervisor).toContain('scripts/phoenix-windows-storage-repair.ps1 -Apply')
     expect(updater).toContain('const STORAGE_WARNING_INTERVAL_MS = 15 * 60 * 1000')
     expect(updater).toContain('now - lastStorageWarningAt >= STORAGE_WARNING_INTERVAL_MS')
     expect(updater).toContain('blockedStorageTarget === inspection.target && Date.now() < nextStorageRetryAt')
