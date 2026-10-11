@@ -116,6 +116,11 @@ function installation(target, platform) {
 function main() {
   const [operation, ...options] = process.argv.slice(2)
   const values = {}
+  if (options.includes('--allow-install')) {
+    if (options.filter(value => value === '--allow-install').length !== 1) throw new Error('Duplicate --allow-install.')
+    values['--allow-install'] = true
+    options.splice(options.indexOf('--allow-install'), 1)
+  }
   for (let i = 0; i < options.length; i += 2) {
     const key = options[i]
     if (!['--target', '--platform', '--genre', '--delivery', '--quality'].includes(key)
@@ -125,7 +130,7 @@ function main() {
     values[key] = options[i + 1]
   }
   if (operation === 'route') {
-    if (values['--target'] || values['--platform']) throw new Error('Route only supports genre, delivery and quality.')
+    if (values['--allow-install'] || values['--target'] || values['--platform']) throw new Error('Route only supports genre, delivery and quality.')
     console.log(JSON.stringify(route(values['--genre'] ?? '',
       values['--delivery'] ?? 'chat', values['--quality'] ?? 'production')))
     return
@@ -133,6 +138,7 @@ function main() {
   if (values['--genre'] || values['--delivery'] || values['--quality']) {
     throw new Error('Routing options are only allowed for route.')
   }
+  if (values['--allow-install'] && operation !== 'ensure') throw new Error('--allow-install is permitted only for ensure.')
   const target = values['--target']
   if (!targets.has(target)) throw new Error('Unknown game target.')
   if (operation !== 'plan' && values['--platform']) throw new Error('Actual probes/installations always use the current operating system.')
@@ -154,9 +160,15 @@ function main() {
     console.log(JSON.stringify({ target, ...before, installed: false, action: 'reused-existing' }))
     return
   }
-  // The user must have authorized toolchain provisioning in the active game mission.
+  // Missing packages need an explicit installation grant from the game mission.
   // Allowlisted package IDs + no shell + current OS protect against model-supplied commands.
   const plan = installation(target, platform)
+  if (operation === 'ensure' && !values['--allow-install']) {
+    console.log(JSON.stringify({ target, ready: false, installed: false,
+      action: 'authorization-required', installationPlan: plan }))
+    process.exitCode = 1
+    return
+  }
   const result = execute(plan.command, plan.args, 600_000)
   if (result.status !== 0) {
     throw new Error(`Package-manager installation failed (${result.error?.code ?? result.status}); check the verified manager/installation logs. No ready state is claimed.`)
