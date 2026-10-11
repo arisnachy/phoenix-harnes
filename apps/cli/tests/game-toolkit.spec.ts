@@ -103,6 +103,17 @@ describe('shipped game toolkit', () => {
     } finally { rmSync(directory, { recursive: true, force: true }) }
   })
 
+  it('never installs a missing engine without an explicit install grant', () => {
+    const result = run(['ensure', '--target', 'godot'],
+      { PHOENIX_GODOT_BIN: `${root}missing-godot` })
+    expect(result.status).toBe(1)
+    expect(record(result.stdout)).toMatchObject({
+      ready: false, installed: false, action: 'authorization-required',
+    })
+    expect(record(result.stdout).installationPlan).toBeDefined()
+    expect(run(['doctor', '--target', 'godot', '--allow-install']).status).toBe(2)
+  })
+
   it('blocks unsupported on-demand installation and malformed routes', () => {
     expect(run(['plan', '--target', 'ffmpeg', '--platform', 'linux']).status).toBe(2)
     expect(run(['route', '--genre', 'brawler', '--delivery', 'unknown']).status).toBe(2)
