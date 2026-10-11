@@ -1,5 +1,5 @@
 /**
- * Inline exact local PNG atlas/background bytes in a sandboxed game HTML.
+ * Inline local PNG sprites and WAV/OGG/MP3 audio clips, voices and music in offline game HTML.
  * This is a transport helper. It cannot turn a concept portrait into run frames.
  *
  * node examples/game-studio/embed-game-assets.mjs game.html images.json output.html
@@ -12,10 +12,12 @@ const pngHeader = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 
 export async function embedGameAssets(html, manifest, baseDirectory) {
   if (!/<body\b[^>]*>/iu.test(html) || !/<\/body\s*>/iu.test(html)) throw new Error('Game HTML must contain <body> and </body>')
-  if (!Array.isArray(manifest.images) || manifest.images.length === 0) throw new Error('images.json requires nonempty images list')
+  const images = Array.isArray(manifest.images) ? manifest.images : []
+  const audio = Array.isArray(manifest.audio) ? manifest.audio : []
+  if (images.length + audio.length === 0) throw new Error('Asset manifest requires nonempty images or audio list')
   let tags = ''
   const seen = new Set()
-  for (const image of manifest.images) {
+  for (const image of images) {
     const id = image?.id
     const path = image?.path
     if (typeof id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/u.test(id)
@@ -36,7 +38,30 @@ export async function embedGameAssets(html, manifest, baseDirectory) {
     tags += '<img hidden decoding="sync" id="' + id
       + '" src="data:image/png;base64,' + bytes.toString('base64') + '">\n'
   }
-  // Put images before executable scripts so document.getElementById can bind them.
+  // Audio is embedded as data URIs, never loaded from a CDN. Licensed voice
+  // samples and detailed Foley are genuinely imported, not claimed or synthesized.
+  for (const clip of audio) {
+    const id = clip?.id, path = clip?.path
+    if (typeof id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/u.test(id)
+      || typeof path !== 'string' || !path.trim() || /^https?:\\/\\//iu.test(path) || path.includes('\\0')) {
+      throw new Error('Audio entries require safe id and local WAV/OGG/MP3 path')
+    }
+    if (seen.has(id) || new RegExp('<audio\\\\b[^>]*\\\\bid\\\\s*=\\\\s*["\\\\x27]' + id + '["\\\\x27]', 'iu').test(html)) {
+      throw new Error('Duplicate audio asset id: ' + id)
+    }
+    seen.add(id)
+    const bytes = await readFile(resolve(baseDirectory, path))
+    if (bytes.length < 12 || bytes.length > 12 * 1024 * 1024) throw new Error('Audio size invalid (max 12 MiB): ' + path)
+    const wav = bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WAVE'
+    const ogg = bytes.toString('ascii', 0, 4) === 'OggS'
+    const mp3 = bytes.toString('ascii', 0, 3) === 'ID3'
+      || (bytes[0] === 0xff && ((bytes[1] ?? 0) & 0xe0) === 0xe0)
+    const mime = wav ? 'audio/wav' : ogg ? 'audio/ogg' : mp3 ? 'audio/mpeg' : undefined
+    if (mime === undefined) throw new Error('Unsupported or invalid WAV/OGG/MP3 data: ' + path)
+    tags += '<audio hidden preload="auto" id="' + id
+      + '" src="data:' + mime + ';base64,' + bytes.toString('base64') + '"></audio>\\n'
+  }
+  // Put images and audio before executable scripts so document.getElementById can bind them.
   return html.replace(/<body\b[^>]*>/iu, opening => opening + '\n' + tags)
 }
 
