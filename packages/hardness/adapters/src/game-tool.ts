@@ -239,9 +239,10 @@ function validateBrawlerContract(manifest: Record<string, unknown>): void {
     throw new ToolArgsError(['Game Studio beat-em-up: crea escenario lateral con profundidad, dos zonas y tres capas.'])
   }
   const audio = manifest.audio
+  const cues = validObject(audio) ? audio.cues : undefined
   if (!validObject(audio) || audio.mode !== 'sampled-production'
-    || !Array.isArray(audio.cues)
-    || ['punch', 'kick', 'hit', 'grab', 'boss', 'pickup'].some(cue => !audio.cues.includes(cue))) {
+    || !Array.isArray(cues)
+    || ['punch', 'kick', 'hit', 'grab', 'boss', 'pickup'].some(cue => !cues.includes(cue))) {
     throw new ToolArgsError(['Game Studio beat-em-up: audio final requiere samples originales con golpes, agarres, jefe, pickups y música.'])
   }
 }
