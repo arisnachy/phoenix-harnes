@@ -552,13 +552,19 @@ describe('Codex realtime voice protocol compatibility', () => {
       new Error('Codex realtime startup failed: {"error":{"message":"AVAS requires OpenAI-Alpha: quicksilver=v2.","code":"invalid_quicksilver_alpha_header"}}'),
     )
     const requests = vi.spyOn(internal, 'request').mockResolvedValue({})
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-quicksilver-test-'))
+    vi.stubEnv('DSH_HOME', home)
     try {
       await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
         .rejects.toThrow('Quicksilver v2')
       expect(started).toHaveBeenCalledTimes(1)
       expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3'])
       expect(requests).toHaveBeenCalledWith('thread/realtime/stop', { threadId: 'stale-cli-thread' })
-    } finally { bridge.close() }
+    } finally {
+      bridge.close()
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 
   it('falls back once to V1 only when V3 itself is explicitly unsupported', async () => {
