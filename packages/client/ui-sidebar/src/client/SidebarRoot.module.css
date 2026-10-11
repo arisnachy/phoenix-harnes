@@ -555,9 +555,9 @@
 .root.collapsed {
   --dsh-sidebar-inline-padding: 0px;
   box-sizing: border-box;
-  width: calc(100% - 12px);
+  width: calc(100% - 10px);
   height: calc(100% - 24px);
-  margin: 12px 6px;
+  margin: 12px 5px;
   padding: 8px 6px 10px;
   border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 60%, #e6cbb3 40%);
   border-radius: 24px;
