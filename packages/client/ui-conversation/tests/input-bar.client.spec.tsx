@@ -1818,44 +1818,25 @@ describe('command launcher chrome and control seats', () => {
     }
   })
 
-  it('submits each final browser speech fragment automatically in assistant mode', async () => {
-    class FakeRecognition implements VoiceRecognitionLike {
-      static instance: FakeRecognition | undefined
-      lang = ''
-      continuous = false
-      interimResults = true
-      maxAlternatives = 0
-      onstart: (() => void) | null = null
-      onend: (() => void) | null = null
-      onerror: VoiceRecognitionLike['onerror'] = null
-      onresult: VoiceRecognitionLike['onresult'] = null
-      constructor() { FakeRecognition.instance = this }
-      start(): void {}
-      stop(): void { this.onend?.() }
-      abort(): void {}
-    }
-    const descriptor = Object.getOwnPropertyDescriptor(window, 'SpeechRecognition')
-    Object.defineProperty(window, 'SpeechRecognition', { configurable: true, value: FakeRecognition })
+  it('never opens browser speech recognition when Codex CLI Live fails', async () => {
+    const browser = vi.spyOn(voiceAdapter, 'createVoiceRecognition')
+      .mockImplementation(() => { throw new Error('browser microphone must stay off') })
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'codex-login-required' })
     try {
-      const { view, sink } = bench({ draft: 'Hola' })
+      const { view } = bench({ draft: 'Hola' })
       fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
-      // Voice now probes native Codex Realtime first. This test has no Codex
-      // route resolver, so let that classified failure settle before exercising
-      // the browser-recognition fallback.
       await act(async () => { await Promise.resolve() })
-      await act(async () => {
-        FakeRecognition.instance?.onstart?.()
-        FakeRecognition.instance?.onresult?.({
-          resultIndex: 0,
-          results: [{ isFinal: false, 0: { transcript: 'ignored' } }, { isFinal: true, 0: { transcript: 'mundo' } }],
-        })
-      })
-      expect(sink).toHaveBeenCalledWith('Hola mundo', [], 'queue', expect.any(AbortSignal))
-      expect(view.getByRole('button', { name: '停止语音助手' })).toBeTruthy()
+      expect(live).toHaveBeenCalled()
+      expect(browser).not.toHaveBeenCalled()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
+      expect(view.getByRole('button', { name: '开始语音助手' })
+        .getAttribute('data-codex-voice-failure')).toBe('codex-login-required')
     } finally {
+      browser.mockRestore()
+      live.mockRestore()
       cleanup()
-      if (descriptor === undefined) delete (window as Window & { SpeechRecognition?: unknown }).SpeechRecognition
-      else Object.defineProperty(window, 'SpeechRecognition', descriptor)
     }
   })
+
 })
