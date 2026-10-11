@@ -416,7 +416,7 @@ export function codexLiveRepairFromStatus(status: unknown): CodexLiveRepairState
 export async function waitForCodexLiveRepair(
   signal: AbortSignal,
   options: { readonly timeoutMs?: number; readonly pollMs?: number } = {},
-): Promise<'ready' | 'unavailable' | 'timeout' | 'cancelled'> {
+): Promise<'ready' | 'waiting-upstream' | 'unavailable' | 'timeout' | 'cancelled'> {
   const timeoutMs = options.timeoutMs ?? 3 * 60_000
   const pollMs = options.pollMs ?? 5_000
   const expires = Date.now() + timeoutMs
@@ -429,6 +429,9 @@ export async function waitForCodexLiveRepair(
       if (result.ok) {
         const phase = codexLiveRepairFromStatus(result.value)
         if (phase === 'ready') return 'ready'
+        // Nothing is being installed when the newest official CLI still lacks
+        // Quicksilver support. Do not trap the microphone in a three-minute wait.
+        if (phase === 'waiting-upstream') return 'waiting-upstream'
         if (phase === 'blocked' || phase === 'disabled') return 'unavailable'
         if (phase === undefined && (!result.value.enabled || result.value.reason === 'codex-login-required')) {
           return 'unavailable'
@@ -489,7 +492,10 @@ export async function tryStartCodexRealtimeVoice(
     if (!capability.ok) return { kind: 'failed', reason: capability.error.code }
     if (!capability.value.enabled || !capability.value.available || !capability.value.authenticated) {
       const phase = codexLiveRepairFromStatus(capability.value)
-      if (phase === 'checking' || phase === 'updating' || phase === 'waiting-upstream') {
+      if (phase === 'waiting-upstream') {
+        return { kind: 'failed', reason: 'Codex Live: la versión oficial instalada aún no es compatible con Quicksilver v2; no hay una actualización disponible.' }
+      }
+      if (phase === 'checking' || phase === 'updating') {
         return { kind: 'failed', reason: 'codex-live-repair-pending' }
       }
       return {
