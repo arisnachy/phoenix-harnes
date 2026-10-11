@@ -610,7 +610,7 @@ function CatalogCard({ definition, live, account, mcpRuntime, managed, openClaw,
     && !connectedByAccount
     && (openClaw?.connected !== true || managed !== undefined || mcpRuntime !== undefined)
     && (!openClawRuntimeMissing || managed !== undefined || mcpRuntime !== undefined)
-    && (authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required'
+    && (definition.id === 'codex' || authorizationAccount.stored === undefined || mcpRuntime?.status === 'auth-required'
       || (authorizationAccount.methods.some(method => method.id === 'credentials')
         && mcpRuntime !== undefined && mcpRuntime.status !== 'ready'))
   const missingOAuthFlow = managed !== undefined && mcpRuntime?.status === 'auth-required'
