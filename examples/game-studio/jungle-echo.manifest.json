@@ -33,7 +33,23 @@
       "shoot": 3,
       "hurt": 2,
       "death": 6
-    }
+    },
+    "abilities": [
+      {
+        "id": "arcane-pulse",
+        "input": "L",
+        "kind": "magic",
+        "damage": 4,
+        "cooldownSeconds": 4.5
+      },
+      {
+        "id": "whip",
+        "input": "H",
+        "kind": "melee",
+        "damage": 2,
+        "cooldownSeconds": 0.7
+      }
+    ]
   },
   "enemies": [
     {
@@ -61,6 +77,23 @@
       "phases": [
         "patrol",
         "barrage"
+      ],
+      "attacks": [
+        {
+          "id": "bolt",
+          "telegraphSeconds": 0.82,
+          "phase": "patrol"
+        },
+        {
+          "id": "fan",
+          "telegraphSeconds": 0.58,
+          "phase": "barrage"
+        },
+        {
+          "id": "ground-wave",
+          "telegraphSeconds": 0.58,
+          "phase": "barrage"
+        }
       ]
     }
   ],
@@ -109,7 +142,9 @@
   "controls": {
     "move": "A/D or ArrowLeft/ArrowRight",
     "jump": "Space",
-    "shoot": "J"
+    "shoot": "J",
+    "melee": "H",
+    "power": "L"
   },
   "audio": {
     "cues": [
@@ -117,9 +152,12 @@
       "shoot",
       "hit",
       "explosion",
-      "boss"
+      "boss",
+      "power",
+      "whip"
     ],
-    "music": "original WebAudio procedural loop, user gesture unlock"
+    "music": "original WebAudio procedural loop, user gesture unlock",
+    "mode": "prototype-procedural-with-recorded-sample-hooks"
   },
   "sources": [
     {
