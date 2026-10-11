@@ -45,6 +45,11 @@ const MAX_NETWORK_BACKOFF_MS = 15 * 60 * 1000
 // while github.com is unreachable. Normal staging/build commands are unaffected.
 const WATCH_FETCH_TIMEOUT_MS = 9_000
 const NETWORK_WARNING_INTERVAL_MS = 15 * 60 * 1000
+// A locked Windows orphan can survive indefinitely. Do not re-run the same
+// expensive cleanup and print the same capacity warning on every network poll.
+const STORAGE_RETRY_MS = 5 * 60 * 1000
+const STORAGE_WARNING_INTERVAL_MS = 15 * 60 * 1000
+let lastStorageWarningAt = Number.NEGATIVE_INFINITY
 const STATE_FILE = 'phoenix-update-state.json'
 const PREPARED_FILE = 'phoenix-update-prepared.json'
 const ACTIVE_RUNTIME_FILE = 'phoenix-active-runtime.json'
@@ -500,7 +505,7 @@ function removeUpdaterRuntime(root, path, registeredWorktrees) {
   return false
 }
 
-function cleanupUpdaterRuntimeStorage(root) {
+function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {}) {
   const keep = new Set()
   const active = readActiveRuntime(root)
   if (active?.path !== undefined) keep.add(runtimePathKey(active.path))
@@ -516,9 +521,11 @@ function cleanupUpdaterRuntimeStorage(root) {
 
   let retained = 0
   let removed = 0
+  const rollbackCandidates = []
   for (const candidate of inactive) {
     if (retained < MAX_INACTIVE_RUNTIME_BACKUPS) {
       retained += 1
+      rollbackCandidates.push(candidate)
       continue
     }
     if (!removeUpdaterRuntime(root, candidate, registered)) continue
@@ -526,6 +533,17 @@ function cleanupUpdaterRuntimeStorage(root) {
     console.error(`[PHOENIX UPDATE] updater janitor removed obsolete isolated runtime: ${candidate}`)
   }
 
+  // If a stale orphan is EBUSY, a safely removable backup can be released
+  // instead. Never exceed the hard cap and never remove protected runtimes.
+  // Do not sacrifice rollback copies during a normal idle janitor pass.
+  if (ensureCapacity) {
+    for (const candidate of rollbackCandidates.reverse()) {
+      if (updaterRuntimeDirectories(root).length < MAX_RUNTIME_DIRECTORIES) break
+      if (!removeUpdaterRuntime(root, candidate, registered)) continue
+      removed += 1
+      console.error(`[PHOENIX UPDATE] updater janitor reclaimed inactive rollback runtime: ${candidate}`)
+    }
+  }
   git(root, ['worktree', 'prune', '--expire', 'now'], { allowFailure: true })
   return { removed, remaining: updaterRuntimeDirectories(root).length }
 }
@@ -537,13 +555,17 @@ function updaterRuntimeStorageHasCapacity(root, target) {
   )
   if (existsSync(targetRuntime)) return true
 
-  const { remaining } = cleanupUpdaterRuntimeStorage(root)
+  const { remaining } = cleanupUpdaterRuntimeStorage(root, { ensureCapacity: true })
   if (remaining < MAX_RUNTIME_DIRECTORIES) return true
 
-  console.error(
-    `[PHOENIX UPDATE] runtime storage safety limit reached (${String(remaining)}/${String(MAX_RUNTIME_DIRECTORIES)}); `
-    + 'the current Host will stay online and storage cleanup will be retried before another runtime is created.',
-  )
+  const now = Date.now()
+  if (now - lastStorageWarningAt >= STORAGE_WARNING_INTERVAL_MS) {
+    console.error(
+      `[PHOENIX UPDATE] runtime storage safety limit reached (${String(remaining)}/${String(MAX_RUNTIME_DIRECTORIES)}); `
+      + 'the current Host will stay online and storage cleanup will be retried before another runtime is created.',
+    )
+    lastStorageWarningAt = now
+  }
   return false
 }
 
@@ -1114,6 +1136,8 @@ async function watch(root, parentPid) {
   let preparedTarget
   let consecutiveNetworkFailures = 0
   let lastNetworkWarningAt = Number.NEGATIVE_INFINITY
+  let blockedStorageTarget
+  let nextStorageRetryAt = 0
   cleanupUpdaterRuntimeStorage(root)
   recoverStaleStagingIndexLock(root)
   clearRefreshRequest(root)
@@ -1195,18 +1219,27 @@ async function watch(root, parentPid) {
         case 'isolate':
         case 'apply':
         case 'replace': {
-          if (process.env.PHOENIX_UPDATE_SUPERVISED === '1'
-            && !updaterRuntimeStorageHasCapacity(root, inspection.target)) {
-            pending = undefined
-            preparedTarget = undefined
-            clearPrepared(root)
-            writeState(root, {
-              status: 'paused',
-              phase: 'storage',
-              ...updateFacts(inspection),
-              detail: 'Runtime storage is at its safety limit. PHOENIX kept the current Host online and will retry cleanup automatically.',
-            })
-            break
+          if (process.env.PHOENIX_UPDATE_SUPERVISED === '1') {
+            // Avoid touching a known busy runtime on every channel poll.
+            // Changes to the candidate SHA bypass this wait; an unchanged
+            // target is retried after a bounded five-minute pause.
+            if (blockedStorageTarget === inspection.target && Date.now() < nextStorageRetryAt) break
+            if (!updaterRuntimeStorageHasCapacity(root, inspection.target)) {
+              pending = undefined
+              preparedTarget = undefined
+              blockedStorageTarget = inspection.target
+              nextStorageRetryAt = Date.now() + STORAGE_RETRY_MS
+              clearPrepared(root)
+              writeState(root, {
+                status: 'paused',
+                phase: 'storage',
+                ...updateFacts(inspection),
+                detail: 'Runtime storage is at its safety limit. PHOENIX kept the current Host online and will retry cleanup automatically.',
+              })
+              break
+            }
+            blockedStorageTarget = undefined
+            nextStorageRetryAt = 0
           }
           pending = inspection
           if (preparedTarget !== inspection.target) {
