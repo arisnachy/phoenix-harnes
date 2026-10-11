@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
@@ -12,7 +12,7 @@ import VoiceRuntime, {
 } from '../src/index.ts'
 import {
   CodexRealtimeBridge, codexRealtimeEnvironment, codexRealtimeLaunchCommand, codexRealtimeNeedsLogin,
-  findManagedCodexRealtimeBin, isCodexQuicksilverV2Required, realtimeVoiceForGender,
+  findManagedCodexRealtimeBin, isCodexQuicksilverV2Required, queueCodexLiveRepair, realtimeVoiceForGender,
 } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
@@ -445,6 +445,63 @@ describe('Codex managed runtime voice recovery', () => {
   })
 })
 
+describe('Codex Live on-demand updater', () => {
+  it('queues an immediate repair once and throttles identical failures', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-live-auto-update-'))
+    try {
+      expect(queueCodexLiveRepair(home, 'auto')).toBe('queued')
+      expect(queueCodexLiveRepair(home, 'auto')).toBe('recent')
+      expect(queueCodexLiveRepair(home, 'off')).toBe('disabled')
+      const marker = JSON.parse(readFileSync(join(home, 'codex-cli', 'live-repair-request.json'), 'utf8'))
+      expect(marker.schema).toBe(1)
+      expect(marker.reason).toBe('quicksilver-v2')
+    } finally { rmSync(home, { recursive: true, force: true }) }
+  })
+
+  it('releases the idle app-server after the managed CLI binary changes', async () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-live-managed-swap-'))
+    const marker = join(home, 'codex-cli', 'active.json')
+    const firstBin = join(home, 'codex-cli', 'versions', '0.100.0', 'codex.js')
+    const newerBin = join(home, 'codex-cli', 'versions', '0.101.0', 'codex.js')
+    mkdirSync(join(firstBin, '..'), { recursive: true })
+    mkdirSync(join(newerBin, '..'), { recursive: true })
+    writeFileSync(firstBin, '')
+    writeFileSync(newerBin, '')
+    const select = (version: string) => writeFileSync(marker, JSON.stringify({
+      schema: 1, version, bin: 'versions/' + version + '/codex.js',
+    }))
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      child?: { killed: boolean }
+      launchedManagedCodexBin?: string
+      ensureStarted(): Promise<void>
+      startProcess(): Promise<void>
+      close(): void
+    }
+    try {
+      vi.stubEnv('DSH_HOME', home)
+      select('0.100.0')
+      internal.child = { killed: true }
+      internal.launchedManagedCodexBin = firstBin
+      const close = vi.spyOn(internal, 'close').mockImplementation(() => {
+        internal.child = undefined
+        internal.launchedManagedCodexBin = undefined
+      })
+      const start = vi.spyOn(internal, 'startProcess').mockResolvedValue(undefined)
+      await internal.ensureStarted()
+      expect(close).not.toHaveBeenCalled()
+      select('0.101.0')
+      await internal.ensureStarted()
+      expect(close).toHaveBeenCalledTimes(1)
+      expect(start).toHaveBeenCalledTimes(1)
+    } finally {
+      internal.child = undefined
+      vi.unstubAllEnvs()
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+})
+
 describe('Codex realtime voice protocol compatibility', () => {
   it('uses supported gender-specific voices on V3 WebRTC', () => {
     expect(realtimeVoiceForGender('feminine', 'v3')).toBe('marin')
@@ -497,7 +554,7 @@ describe('Codex realtime voice protocol compatibility', () => {
     const requests = vi.spyOn(internal, 'request').mockResolvedValue({})
     try {
       await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
-        .rejects.toThrow('Actualiza Codex CLI')
+        .rejects.toThrow('Quicksilver v2')
       expect(started).toHaveBeenCalledTimes(1)
       expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3'])
       expect(requests).toHaveBeenCalledWith('thread/realtime/stop', { threadId: 'stale-cli-thread' })
