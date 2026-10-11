@@ -36,7 +36,7 @@ node apps/cli/config/agent-presets/code/skills/game-development/scripts/godot-ai
 node apps/cli/config/agent-presets/code/skills/game-development/scripts/godot-ai-addon.mjs install --project RUTA_PROYECTO --allow-install
 ```
 
-El addon instalado debe activarse en **Godot: Project Settings > Plugins > Godot AI**. En el dock selecciona **DeepSeek Harness > Configure** (y confirma que Godot realmente está abierto en el proyecto). Esa opción registra `mcp-godot-ai` como `insert` de `$DSH_HOME/cordis.patch.yml`, con puente `godot-ai attach` y autenticación local que rota. El complemento oficial usa el plugin original `@deepseek-ai/dsh-mcp-client`, mientras que Phoenix publica `@phoenix-ai/dsh-mcp-client`. No copies configuraciones de HTTP 8000 sin capability ni fijas manualmente tokens/puertos.
+El addon instalado debe activarse en **Godot: Project Settings > Plugins > Godot AI**. En el dock selecciona **DeepSeek Harness > Configure** (y confirma que Godot realmente está abierto en el proyecto). Esa opción registra `mcp-godot-ai` como `insert` de `$DSH_HOME/cordis.patch.yml`, con puente `godot-ai attach` y autenticación local que rota. El complemento oficial usa el plugin original `paquete del cliente DeepSeek original`, mientras que Phoenix publica `@phoenix-ai/dsh-mcp-client`. No copies configuraciones de HTTP 8000 sin capability ni fijas manualmente tokens/puertos.
 
 ```sh
 node apps/cli/config/agent-presets/code/skills/game-development/scripts/godot-ai-bridge.mjs doctor --project RUTA_PROYECTO
