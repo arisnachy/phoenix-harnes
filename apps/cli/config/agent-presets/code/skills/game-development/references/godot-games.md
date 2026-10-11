@@ -2,6 +2,24 @@
 
 Godot y Blender permiten desarrollo local sin una API de pago. Verifica las versiones con el toolkit; usa `PHOENIX_GODOT_BIN`/`PHOENIX_BLENDER_BIN` si el editor no está en PATH. Un motor instalado no incluye automáticamente sus plantillas de exportación. Consulta documentación y plantillas de la versión exacta: [Godot](https://docs.godotengine.org/en/stable/) y [Blender](https://docs.blender.org/manual/en/latest/).
 
+## Elección de motor y aprovisionamiento bajo demanda
+
+Kira debe seleccionar el motor **antes** de crear presets. Para una producción compleja 2D/2.5D nativa, Godot es el motor recomendado; Tiled es el editor de zonas/tiles y FFmpeg prepara efectos y pistas. Para 3D añade Blender. Para juegos dentro del chat usa HTML5/Canvas y atlases exportados: el export Web de Godot **no** es un documento autocontenido compatible con `phoenix_game`.
+
+```sh
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs route --genre "beat-em-up" --delivery desktop --quality production
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs doctor --target godot
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs plan --target godot --platform win32
+# Solo cuando la misión haya autorizado aprovisionamiento de programas:
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs ensure --target godot --allow-install
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs ensure --target tiled --allow-install
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs ensure --target ffmpeg --allow-install
+```
+
+El instalador usa IDs `winget --exact --source winget` en Windows, `brew` en macOS, y Flatpak solamente para motores con ruta conocida en Linux. Instala **solo si la herramienta falta**, nunca al inicio de Phoenix. Sin `--allow-install`, `ensure` presenta el plan sin efectuar cambios en el equipo. Las credenciales, permisos y condiciones de cada plataforma se respetan. No te saltes UAC ni instaladores que requieran la intervención del usuario. Si el entorno no detecta la herramienta tras instalarla, ejecuta `doctor` de nuevo después de actualizar PATH, abrir otro terminal o configurar `PHOENIX_*_BIN`. No declares éxito hasta obtener versión real.
+
+En Godot 4, comprueba que el binario corresponde a la versión del proyecto y que las plantillas de exportación están instaladas antes de exportar: la instalación del editor por sí sola no lo garantiza. Un export Web contiene archivos HTML/JS/WASM/PCK y necesita un servidor y navegador reales; no copies únicamente el HTML al chat. Crea una compilación nativa o una URL web alojada y comprueba la ejecución; si el usuario exige jugar dentro del chat, proporciona además una versión autocontenida HTML5 que pase las puertas de presets y gameplay.
+
 ## Preparar y comprobar
 
 ```sh
