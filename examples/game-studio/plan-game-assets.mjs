@@ -22,15 +22,19 @@ export function planGameAssets(manifest) {
   }
   const genre = String(manifest.gameType || manifest.genre).toLowerCase()
   const isShooter = /run.and.gun|shooter|shoot.em.up/u.test(genre)
-  const hasActors = isShooter || /platform|rpg|role.play|top.down.action/u.test(genre)
+  const isBrawler = /beat.em.up|beat.?em.?up|brawler|double.dragon|street.fight|pelea.{0,9}callej|lucha.{0,9}callej/u.test(genre)
+  const hasActors = isShooter || isBrawler || /platform|rpg|role.play|top.down.action/u.test(genre)
   const todo = []
   const missing = []
   const add = (...parts) => { todo.push(item(...parts)) }
   if (hasActors) {
-    add('hero', manifest.player?.id || 'hero', ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death'], 'art/motion')
+    add('hero', manifest.player?.id || 'hero', isBrawler
+      ? ['idle', 'run', 'jump', 'punch', 'kick', 'grab', 'hurt', 'death']
+      : ['idle', 'run', 'jump', 'fall', 'shoot', 'hurt', 'death'], 'art/motion')
     const enemies = entries(manifest.enemies)
     for (const enemy of enemies) add('enemies', enemy.id || 'unnamed-enemy', ['move', 'attack', 'hurt', 'death'], 'art/motion')
     if (isShooter && enemies.length === 0) missing.push('define enemy types and behaviors')
+    if (isBrawler && enemies.length < 3) missing.push('define at least three distinct melee enemy archetypes with behavior and atlases')
     const bosses = entries(manifest.bosses)
     for (const boss of bosses) {
       add('bosses', boss.id || 'unnamed-boss',
@@ -39,7 +43,7 @@ export function planGameAssets(manifest) {
       for (const attack of entries(boss.attacks)) add('boss-attacks',
         (boss.id || 'boss') + '-' + (attack.id || 'unnamed-attack'),
         ['telegraph', 'emission', 'collision', 'recovery', 'impact-sfx'], 'gameplay/audio')
-      if (isShooter && entries(boss.attacks).length < 2) missing.push('boss '
+      if ((isShooter || isBrawler) && entries(boss.attacks).length < 2) missing.push('boss '
         + (boss.id || 'unnamed') + ' needs at least two real attacks with tell and recovery')
     }
     for (const ability of entries(manifest.player?.abilities)) add('abilities',
@@ -47,12 +51,24 @@ export function planGameAssets(manifest) {
     if (isShooter && entries(manifest.player?.abilities).length === 0) {
       missing.push('design player abilities with input, damage, cooldown, VFX and sound')
     }
-    if (isShooter && bosses.length === 0) missing.push('define boss and distinct phases')
+    if ((isShooter || isBrawler) && bosses.length === 0) missing.push('define boss and distinct phases')
+    if (isBrawler) {
+      for (const combo of entries(manifest.combat?.combos)) add('combat-combos', combo.id || 'unnamed-combo',
+        ['input-chain', 'startup', 'active-hitbox', 'hitstop', 'recovery'], 'combat/qa')
+      for (const grab of entries(manifest.combat?.grapples)) add('grapples', grab.id || 'unnamed-grapple',
+        ['grab', 'hold', 'throw', 'reaction', 'audio-trigger'], 'combat/qa')
+      if (entries(manifest.combat?.combos).length < 2 || entries(manifest.combat?.grapples).length < 1)
+        missing.push('design two combos and real grab/throw moves with hitboxes and timing')
+      if (manifest.combat?.depthAxis !== true || manifest.combat?.knockback !== true)
+        missing.push('implement walkable belt depth, knockback and y-sensitive melee collision')
+    }
   }
   const level = manifest.level && typeof manifest.level === 'object' ? manifest.level : {}
   const layers = entries(level.layers)
   for (const layer of layers) add('backgrounds', layer.id || 'unnamed-layer', ['parallax', 'lighting'], 'world-design')
-  if (isShooter && layers.length < 3) missing.push('design at least 3 independently illustrated parallax layers')
+  if ((isShooter || isBrawler) && layers.length < 3) missing.push('design at least 3 independently illustrated parallax layers')
+  if (isBrawler && (!Array.isArray(level.zones) || level.zones.length < 2 || !level.belt))
+    missing.push('design two distinct street-stage zones and a walkable depth belt')
   if (isShooter) {
     for (const [family, id, animations] of [
       ['weapons', 'primary-weapon', ['idle', 'shoot', 'reload']],
@@ -63,10 +79,17 @@ export function planGameAssets(manifest) {
       ['effects', 'explosion', ['start', 'end']],
     ]) add(family, id, animations, 'art/motion')
   }
+  if (isBrawler) {
+    for (const family of ['weapons', 'props', 'effects']) {
+      const defaults = family === 'weapons' ? ['bat', 'whip']
+        : family === 'props' ? ['breakable-crate', 'pickup'] : ['impact', 'dust', 'knockdown']
+      for (const id of defaults) add(family, id, ['idle', 'interact', 'impact'], 'art/motion')
+    }
+  }
   const cues = Array.isArray(manifest.audio?.cues) ? manifest.audio.cues : []
   for (const cue of cues) add('audio', cue, ['trigger', 'mute', 'mix'], 'audio/qa', 'audio-or-WebAudio')
   if (!cues.length) missing.push('design actual sound effects and runtime cue triggers')
-  if (isShooter) add('audio', 'music', ['intro', 'loop', 'pause', 'resume'], 'audio/qa', 'audio-or-WebAudio')
+  if (isShooter || isBrawler) add('audio', 'music', ['intro', 'loop', 'pause', 'resume'], 'audio/qa', 'audio-or-WebAudio')
   if (todo.length === 0) missing.push('define gameplay and scene assets for the requested genre')
   return {
     title: manifest.title || 'Untitled game',
