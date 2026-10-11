@@ -195,9 +195,10 @@ export function InputBar({
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
-  // The conversation microphone uses authenticated Codex CLI Live only.
-  // Do not switch to browser-generated speech without an explicit user choice.
-  const nativeCodexVoiceOnly = true
+  // Native Codex remains the default; only an explicit user click unlocks
+  // browser STT + Phoenix natural/Kokoro TTS for this mounted composer.
+  const [useAlternativeVoice, setUseAlternativeVoice] = useState(false)
+  const nativeCodexVoiceOnly = !useAlternativeVoice
   // Voice is an input/output layer over the ordinary PHOENIX execution path.
   // For an OpenAI Codex route, native Realtime owns microphone/audio and its
   // finalized transcript is admitted through this same composer path as typed
@@ -334,6 +335,21 @@ export function InputBar({
     })
   }, [])
 
+  const chooseAlternativeVoice = useCallback((): void => {
+    if (locked || machineBusy || voiceStartingRef.current || voiceRepairAbortRef.current !== null) return
+    // The alternative must be user-initiated. No silent browser-mic takeover
+    // on account, upstream, proxy, or Quicksilver failures.
+    const recognition = ensureHarnessVoiceRecognition()
+    if (recognition === undefined) {
+      setCodexVoiceFailure('La voz alternativa necesita reconocimiento de voz del navegador.')
+      return
+    }
+    setUseAlternativeVoice(true)
+    setCodexVoiceFailure(null)
+    setVoiceAssistantActive(true)
+    startVoiceRecognition()
+  }, [ensureHarnessVoiceRecognition, locked, machineBusy, startVoiceRecognition])
+
   const toggleVoice = useCallback(async (): Promise<void> => {
     if (voiceRepairAbortRef.current !== null) {
       voiceRepairAbortRef.current.abort()
@@ -348,6 +364,7 @@ export function InputBar({
       setVoiceAssistantActive(false)
       voiceRef.current?.stop()
       voiceRef.current = null
+      setUseAlternativeVoice(false)
       setCodexVoiceFailure(null)
       return
     }
@@ -1118,6 +1135,21 @@ export function InputBar({
                   ? <>Codex desconectado · <button type="button" className={css.voiceReconnectAction} onClick={openCodexReconnection}>Reconectar</button></>
                   : <>Codex Live: {codexVoiceFailure}</>}
               </span>
+            )}
+            {codexVoiceFailure !== null && !voiceRepairing
+              && !codexRealtimeRequiresLogin(codexVoiceFailure)
+              && voiceState !== 'unsupported' && !voiceEnabled && (
+              <button
+                type="button"
+                className={css.voiceReconnectAction}
+                data-phoenix-voice-alternative
+                aria-label="Usar voz alternativa de Phoenix"
+                title="Usar reconocimiento del navegador y síntesis neural de Phoenix (Kokoro si está disponible). No es Codex Live."
+                disabled={locked || machineBusy}
+                onClick={chooseAlternativeVoice}
+              >
+                Usar voz alternativa
+              </button>
             )}
             {(voiceState !== 'unsupported' || hasCodexRealtimeVoiceSupport()) && (
               <Tooltip
