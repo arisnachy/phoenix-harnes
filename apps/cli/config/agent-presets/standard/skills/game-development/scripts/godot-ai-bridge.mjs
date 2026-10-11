@@ -11,6 +11,7 @@ import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from 'n
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { windowsGodotCandidates } from './game-tools.mjs'
 
 const VENDOR = '@deepseek-ai/' + 'dsh-mcp-client'
 const NATIVE = '@phoenix-ai/dsh-mcp-client'
@@ -42,8 +43,7 @@ function probe(command, args) {
 function godotReadiness() {
   const explicit = process.env.PHOENIX_GODOT_BIN
   const candidates = explicit ? [explicit] : ['godot', 'godot4',
-    ...(process.platform === 'win32' && process.env.LOCALAPPDATA
-      ? [join(process.env.LOCALAPPDATA, 'Microsoft', 'WinGet', 'Links', 'godot.exe')] : [])]
+    ...(process.platform === 'win32' ? windowsGodotCandidates() : [])]
   for (const binary of candidates) {
     const result = probe(binary, ['--version'])
     const match = result.output.match(/^(\d+)\.(\d+)/)
