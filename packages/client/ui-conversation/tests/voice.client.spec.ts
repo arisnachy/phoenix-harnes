@@ -6,7 +6,7 @@ import {
   configureCodexRealtimeUserTranscriptHandler,
   configureVoiceAssistantRemote,
   configureVoiceModelRouteResolver,
-  codexRealtimeStatusFailureReason,
+  codexRealtimeStatusFailureReason, codexRealtimeRequiresLogin, openCodexReconnection,
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
@@ -76,6 +76,22 @@ describe('browser voice adapter', () => {
       detail: '  ',
     })).toBe('codex-login-required')
     expect(codexRealtimeStatusFailureReason({})).toBe('codex-realtime-unavailable')
+  })
+
+  it('opens the existing Codex connector window for expired credentials only', () => {
+    const seen: unknown[] = []
+    const onFeature = (event: Event) => { seen.push((event as CustomEvent).detail) }
+    window.addEventListener('phoenix:open-feature', onFeature)
+    try {
+      expect(codexRealtimeRequiresLogin('codex-login-required')).toBe(true)
+      expect(codexRealtimeRequiresLogin('refresh token has expired')).toBe(true)
+      expect(codexRealtimeRequiresLogin('experimental-unavailable')).toBe(false)
+      expect(codexRealtimeRequiresLogin('ETIMEDOUT')).toBe(false)
+      openCodexReconnection()
+      expect(seen).toEqual([{ destination: 'connectors', label: 'Reconectar Codex' }])
+    } finally {
+      window.removeEventListener('phoenix:open-feature', onFeature)
+    }
   })
 
   it('attempts Codex voice for a Phoenix Auto/non-Codex task route instead of skipping it', async () => {
