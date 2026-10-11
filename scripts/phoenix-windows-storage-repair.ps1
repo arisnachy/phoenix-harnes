@@ -100,6 +100,26 @@ if ([int]::TryParse($env:PHOENIX_UPDATE_RUNTIME_LIMIT, [ref]$limitOverride)) {
     $configuredLimit = [Math]::Max(2, [Math]::Min(6, $limitOverride))
 }
 if ($after.Count -ge $configuredLimit) {
+    # Only report process IDs/names, never their full command lines (which may
+    # contain credentials). This is a clue, not proof of a Windows file handle:
+    # Explorer, antivirus, a shell cwd or another tool can also hold a lock.
+    $referencing = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $command = [string]$_.CommandLine
+        $matchesRuntime = $false
+        foreach ($runtime in $after) {
+            if ($command.IndexOf($runtime.FullName, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                $matchesRuntime = $true
+                break
+            }
+        }
+        $matchesRuntime
+    })
+    if ($referencing.Count -gt 0) {
+        Write-Warning '[PHOENIX STORAGE] Processes referencing managed runtimes (not terminated automatically):'
+        $referencing | Select-Object ProcessId, Name | Format-Table -AutoSize
+    } else {
+        Write-Warning '[PHOENIX STORAGE] No owner identified from process command lines. Open Resource Monitor (resmon.exe), CPU, Associated Handles, and search the runtime SHA.'
+    }
     Write-Warning ('Capacity is STILL blocked (' + $after.Count + '/' + $configuredLimit + '). Restart Windows, then run -Apply BEFORE starting Phoenix; never force-delete an active runtime.')
     throw 'Phoenix cleanup could not free runtime capacity; no unsafe deletion was attempted.'
 }
