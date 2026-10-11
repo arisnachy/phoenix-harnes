@@ -110,7 +110,7 @@ describe('Phoenix Godot AI v4 integration', () => {
       expect(readFileSync(join(codeRoot, 'scripts', name), 'utf8'))
         .toBe(readFileSync(join(standardRoot, 'scripts', name), 'utf8'))
     }
-    const studio = readFileSync(resolve(skill, '../../../../../../../.agents/skills/phoenix-game-studio/SKILL.md'), 'utf8')
+    const studio = readFileSync(resolve(skill, '../../../../../../../../.agents/skills/phoenix-game-studio/SKILL.md'), 'utf8')
     expect(studio).toContain('editor_state')
     expect(studio).toContain('scene_get_hierarchy')
     expect(studio).toContain('godot-ai-bridge.mjs sync')
