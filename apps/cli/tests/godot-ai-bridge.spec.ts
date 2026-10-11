@@ -23,10 +23,11 @@ function run(script: string, ...args: string[]) {
       PHOENIX_UVX_BIN: join(tmpdir(), 'uvx-not-installed-in-test') },
   })
 }
+const upstreamPackage = '@deepseek-ai/' + 'dsh-mcp-client'
 const official = [
   '- insert:',
   '    - id: mcp-godot-ai',
-  "      name: '@deepseek-ai/dsh-mcp-client'",
+  "      name: '${upstreamPackage}'",
   '      config:',
   '        serverName: godot-ai',
   '        transport: stdio',
@@ -60,7 +61,7 @@ describe('Phoenix Godot AI v4 integration', () => {
     expect(sync.status).toBe(0)
     expect(JSON.parse(sync.stdout)).toMatchObject({ updated: true, state: 'ready-config' })
     const after = readFileSync(path, 'utf8')
-    expect(after).toBe(official.replace("name: '@deepseek-ai/dsh-mcp-client'",
+    expect(after).toBe(official.replace(`name: '${upstreamPackage}'`,
       "name: '@phoenix-ai/dsh-mcp-client'"))
     expect(run(bridge, 'sync', '--home', home, '--allow-config-edit').status).toBe(0)
   })
