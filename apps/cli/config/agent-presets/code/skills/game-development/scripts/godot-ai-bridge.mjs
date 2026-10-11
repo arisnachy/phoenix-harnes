@@ -121,13 +121,14 @@ if (operation === 'plan') {
 } else if (state.state === 'ready-config') {
   report({ action: 'sync', updated: false, state: 'ready-config' })
 } else {
+  const lineEnding = text.includes('\r\n') ? '\r\n' : '\n'
   const lines = text.split(/\r?\n/u)
   const { start, end } = state.block
-  const original = lines.slice(start, end).join('\n')
+  const original = lines.slice(start, end).join(lineEnding)
   const changed = original.replace(/^(\s+name:\s*['"]?)@deepseek-ai\/dsh-mcp-client(['"]?\s*)$/mu,
     '$1@phoenix-ai/dsh-mcp-client$2')
   if (changed === original) throw new Error('Godot AI client package alias could not be updated.')
-  const updated = lines.slice(0, start).concat(changed.split('\n'), lines.slice(end)).join('\n')
+  const updated = lines.slice(0, start).concat(changed.split(/\r?\n/u), lines.slice(end)).join(lineEnding)
   const before = createHash('sha256').update(text).digest('hex')
   if (createHash('sha256').update(readFileSync(path, 'utf8')).digest('hex') !== before) {
     throw new Error('DSH patch changed concurrently; retry rather than overwrite.')
