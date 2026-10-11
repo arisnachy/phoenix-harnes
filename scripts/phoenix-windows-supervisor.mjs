@@ -1633,8 +1633,11 @@ while (true) {
     host.once('exit', (code, signal) => resolveExit({ code, signal }))
   })
   let healthyCheckpointWritten = false
+  let intentionalHandoffRequested = false
   const stableTimer = setTimeout(() => {
-    if (host.exitCode !== null || shutdownRequested) return
+    // Do not mark a Host healthy while its supervisor-initiated shutdown is
+    // pending (especially when Windows holds the port after termination).
+    if (host.exitCode !== null || shutdownRequested || intentionalHandoffRequested) return
     try {
       persistLastKnownGoodConfiguration(launchConfiguration)
       healthyCheckpointWritten = true
@@ -1653,6 +1656,7 @@ while (true) {
 
   if (hostEvent.kind === 'safe-restart' || hostEvent.kind === 'safe-update-handoff') {
     plannedHostRestart = true
+    intentionalHandoffRequested = true
     await stopWatcherSupervisor()
     if (hostEvent.kind === 'safe-update-handoff') {
       console.error('[PHOENIX UPDATE] replacement runtime is fully ready; handing off from the current Host.')
