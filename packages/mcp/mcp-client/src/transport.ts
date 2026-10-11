@@ -27,6 +27,11 @@ function buildChildEnv(extra: Record<string, string>): Record<string, string> {
   return { ...scrubbedParentEnv(), ...extra }
 }
 
+/** Opt-in Python hook loaded only by Phoenix's curated Fetch MCP on Windows. */
+const FETCH_MCP_NPM_SITE_FILE = fileURLToPath(
+  new URL('../../../../scripts/phoenix-fetch-mcp-sitecustomize/sitecustomize.py', import.meta.url),
+)
+
 
 /**
  * The curated Python Fetch MCP uses readabilipy, which launches Node and npm
@@ -67,10 +72,11 @@ export function hydrateFetchMcpNodeEnvironment(
     return exists(win32.join(directory, 'npm.cmd')) || exists(win32.join(directory, 'npm.exe'))
   }
 
-  // Preserve a working user/system PATH before considering a curated fallback.
+  // Keep the user's verified Node installation; detect npm.cmd as well as
+  // npm.exe because Windows Python subprocesses cannot reliably resolve the
+  // bare "npm" name to npm.cmd even when its directory is already on PATH.
   const present = current.split(';').map(entry => entry.replace(/^"(.*)"$/u, '$1').trim())
-  if (present.some(validDirectory)) return result
-
+  const presentDirectory = present.find(validDirectory)
   const node = options.nodeExecutable ?? process.execPath
   const localAppData = Object.entries(result).find(([name]) => name.toUpperCase() === 'LOCALAPPDATA')?.[1]
   const programFiles = Object.entries(result).find(([name]) => name.toUpperCase() === 'PROGRAMFILES')?.[1]
@@ -83,8 +89,26 @@ export function hydrateFetchMcpNodeEnvironment(
     x86ProgramFiles === undefined ? undefined : win32.join(x86ProgramFiles, 'nodejs'),
     localAppData === undefined ? undefined : win32.join(localAppData, 'Programs', 'nodejs'),
   ]
-  const directory = candidates.find(value => value !== undefined && validDirectory(value))
-  if (directory !== undefined) result[key] = current === '' ? directory : `${directory};${current}`
+  const directory = presentDirectory ?? candidates.find(value => value !== undefined && validDirectory(value))
+  if (directory === undefined) return result // No installation to pretend is working.
+  if (presentDirectory === undefined) result[key] = current === '' ? directory : `${directory};${current}`
+
+  // ReadabiliPy calls subprocess(["npm", "version"]) and ["npm", "install"]
+  // inside uvx's Python child. Its bare executable lookup is unreliable for
+  // Windows npm.cmd, irrespective of a valid PATH. A Fetch-only sitecustomize
+  // fixes that invocation and keeps first-use npm output off JSON-RPC stdout.
+  if (exists(FETCH_MCP_NPM_SITE_FILE)) {
+    const pythonKeys = Object.keys(result).filter(name => name.toUpperCase() === 'PYTHONPATH')
+    const pythonKey = pythonKeys.at(-1) ?? 'PYTHONPATH'
+    const pythonPath = result[pythonKey] ?? ''
+    for (const alias of pythonKeys) if (alias !== pythonKey) delete result[alias]
+    const siteDirectory = dirname(FETCH_MCP_NPM_SITE_FILE)
+    const segments = pythonPath.split(';').map(value => value.replace(/^"(.*)"$/u, '$1').trim())
+    result[pythonKey] = segments.some(value => value.toLowerCase() === siteDirectory.toLowerCase())
+      ? pythonPath
+      : pythonPath === '' ? siteDirectory : `${siteDirectory};${pythonPath}`
+    result.PHOENIX_FETCH_MCP_NPM_SHIM = '1'
+  }
   return result
 }
 
