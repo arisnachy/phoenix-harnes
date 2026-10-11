@@ -682,20 +682,45 @@ describe('Contextual focus chrome', () => {
     },
   )
 
-  it('auto-compacts an existing chat and expands only while hovered or focused', () => {
+  it('starts with a right-side compact header; hover does not cause a width jump, typing expands it', () => {
     const b = mount(conversationSnapshot())
-    const root = b.view.container.querySelector('[data-header-compact]')
-    const header = b.view.container.querySelector('[aria-label="Barra superior de Phoenix"]')
+    const root = b.view.container.querySelector('[data-phase="active"]')
+    const header = b.view.container.querySelector('[aria-label="Barra superior de la conversación"]')
     if (root === null || header === null) throw new Error('header is required')
     expect(root.getAttribute('data-header-compact')).toBe('true')
     fireEvent.mouseEnter(header)
-    expect(root.hasAttribute('data-header-compact')).toBe(false)
-    fireEvent.mouseLeave(header)
     expect(root.getAttribute('data-header-compact')).toBe('true')
+    fireEvent.mouseLeave(header)
     const search = b.view.getByRole('button', { name: 'Buscar sesiones' })
     fireEvent.focus(search)
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    const textarea = b.view.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Quiero crear un juego' } })
     expect(root.hasAttribute('data-header-compact')).toBe(false)
-    fireEvent.blur(search, { relatedTarget: null })
+    fireEvent.change(textarea, { target: { value: '' } })
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+  })
+
+  it('opens the home screen compact, expands on draft, and collapses for a game/visual presentation', async () => {
+    const b = mount(
+      conversationSnapshot({ composerPhase: 'blank', blank: true }),
+      undefined, undefined, { summaryBlank: true },
+    )
+    const root = b.view.container.querySelector('[data-phase="hero"]')
+    const scroll = b.view.container.querySelector('[data-conversation-scroll]')
+    if (root === null || scroll === null) throw new Error('hero shell is required')
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    expect(b.view.getByRole('button', { name: 'Expandir barra superior' })).toBeTruthy()
+    const textarea = b.view.getByRole('textbox')
+    fireEvent.change(textarea, { target: { value: 'Juego con animaciones y sonido' } })
+    expect(root.hasAttribute('data-header-compact')).toBe(false)
+    const game = document.createElement('div')
+    game.setAttribute('data-universal-artifact', 'game')
+    act(() => { scroll.append(game) })
+    await waitFor(() => { expect(root.getAttribute('data-header-compact')).toBe('true') })
+    act(() => { game.remove() })
+    await waitFor(() => { expect(root.hasAttribute('data-header-compact')).toBe(false) })
+    fireEvent.change(textarea, { target: { value: '' } })
     expect(root.getAttribute('data-header-compact')).toBe('true')
   })
 
