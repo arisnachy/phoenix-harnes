@@ -12,7 +12,7 @@ import VoiceRuntime, {
 } from '../src/index.ts'
 import {
   CodexRealtimeBridge, codexRealtimeEnvironment, codexRealtimeLaunchCommand, codexRealtimeNeedsLogin,
-  findManagedCodexRealtimeBin, realtimeVoiceForGender,
+  findManagedCodexRealtimeBin, isCodexQuicksilverV2Required, realtimeVoiceForGender,
 } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
@@ -453,6 +453,85 @@ describe('Codex realtime voice protocol compatibility', () => {
     expect(realtimeVoiceForGender('feminine', 'v1')).toBe('juniper')
     expect(realtimeVoiceForGender('masculine', 'v1')).toBe('cove')
     expect(realtimeVoiceForGender('neutral', 'v1')).toBe('breeze')
+  })
+
+  it('recognizes the exact AVAS alpha header rejection without classifying authentication or network failures', () => {
+    const backend = JSON.stringify({
+      error: {
+        message: 'AVAS requires OpenAI-Alpha: quicksilver=v2.',
+        type: 'invalid_request_error',
+        code: 'invalid_quicksilver_alpha_header',
+        param: '',
+      },
+    })
+    expect(isCodexQuicksilverV2Required(backend)).toBe(true)
+    expect(isCodexQuicksilverV2Required(new Error('AVAS requires OpenAI-Alpha: quicksilver=v2.'))).toBe(true)
+    expect(isCodexQuicksilverV2Required(new Error('invalid_quicksilver_alpha_header'))).toBe(true)
+    expect(isCodexQuicksilverV2Required(new Error('401 unauthorized, refresh token expired'))).toBe(false)
+    expect(isCodexQuicksilverV2Required(new Error('connect ETIMEDOUT'))).toBe(false)
+  })
+
+  it('recovers the exact Quicksilver header error with a clean V3 thread and remembers the result', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      ensureStarted(): Promise<void>
+      stop(key: string): Promise<boolean>
+      startVoiceThread(model?: string): Promise<string>
+      negotiateRealtime(threadId: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
+      request(method: string, params?: unknown): Promise<unknown>
+    }
+    vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
+    vi.spyOn(internal, 'stop').mockResolvedValue(false)
+    const thread = vi.spyOn(internal, 'startVoiceThread')
+      .mockResolvedValueOnce('legacy-rejected')
+      .mockResolvedValueOnce('v3-recovered')
+      .mockResolvedValueOnce('v3-next-session')
+    const negotiate = vi.spyOn(internal, 'negotiateRealtime')
+      .mockRejectedValueOnce(new Error(JSON.stringify({
+        error: { message: 'AVAS requires OpenAI-Alpha: quicksilver=v2.',
+          type: 'invalid_request_error', code: 'invalid_quicksilver_alpha_header' },
+      })))
+      .mockResolvedValue('v=0')
+    const request = vi.spyOn(internal, 'request').mockResolvedValue({})
+    try {
+      await expect(bridge.start({ key: 'kira-first', offerSdp: 'v=0' }))
+        .resolves.toMatchObject({ threadId: 'v3-recovered' })
+      expect(request).toHaveBeenCalledWith('thread/realtime/stop', { threadId: 'legacy-rejected' })
+      await expect(bridge.start({ key: 'kira-second', offerSdp: 'v=0' }))
+        .resolves.toMatchObject({ threadId: 'v3-next-session' })
+      expect(negotiate.mock.calls.map(call => [call[0], call[2]])).toEqual([
+        ['legacy-rejected', 'v1'], ['v3-recovered', 'v3'], ['v3-next-session', 'v3'],
+      ])
+      expect(thread).toHaveBeenCalledTimes(3)
+    } finally {
+      bridge.close()
+    }
+  })
+
+  it('does not retry a V3 thread or reinterpret an auth failure as AVAS compatibility', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      ensureStarted(): Promise<void>
+      stop(key: string): Promise<boolean>
+      startVoiceThread(): Promise<string>
+      negotiateRealtime(threadId: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
+      request(method: string, params?: unknown): Promise<unknown>
+    }
+    vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
+    vi.spyOn(internal, 'stop').mockResolvedValue(false)
+    const thread = vi.spyOn(internal, 'startVoiceThread').mockResolvedValue('unavailable')
+    const negotiate = vi.spyOn(internal, 'negotiateRealtime')
+      .mockRejectedValue(new Error('401 Unauthorized, Codex login expired'))
+    vi.spyOn(internal, 'request').mockResolvedValue({})
+    try {
+      await expect(bridge.start({ key: 'kira-expired', offerSdp: 'v=0' }))
+        .rejects.toThrow('401 Unauthorized')
+      expect(thread).toHaveBeenCalledTimes(1)
+      expect(negotiate).toHaveBeenCalledTimes(1)
+      expect(negotiate.mock.calls[0]?.[2]).toBe('v1')
+    } finally {
+      bridge.close()
+    }
   })
 
   it('recovers with V3 when the original Juniper V1 protocol is unsupported', async () => {
