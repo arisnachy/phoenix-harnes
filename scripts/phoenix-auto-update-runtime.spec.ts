@@ -12,7 +12,7 @@ const stableWorkflow = readFileSync(resolve('.github/workflows/phoenix-stable-up
 
 describe('PHOENIX supervised updater runtime isolation', () => {
   it('does not launch a duplicate web host into a busy 3080 port or kill the current listener', () => {
-    expect(supervisor).toContain("import { createConnection } from 'node:net'")
+    expect(supervisor).toContain("import { createConnection, createServer } from 'node:net'")
     expect(supervisor).toContain('function existingHostOnPort(port)')
     expect(supervisor).toContain('if (port !== undefined && await existingHostOnPort(port))')
     expect(supervisor).toContain('finalCode = 0')
@@ -134,7 +134,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain('DEFAULT_STORAGE_SWEEP_MS = 5 * 60 * 1000')
     expect(supervisor).toContain('PHOENIX_UPDATE_STORAGE_SWEEP_MS')
     expect(supervisor).toContain('nextStorageSweepAt = Date.now() + STORAGE_SWEEP_MS')
-    expect(updater).toContain('function cleanupUpdaterRuntimeStorage(root)')
+    expect(updater).toContain('function cleanupUpdaterRuntimeStorage(root, { ensureCapacity = false } = {})')
     expect(updater).toContain('updater janitor removed obsolete isolated runtime')
     expect(updater).toContain('function updaterRuntimeStorageHasCapacity(root, target)')
     expect(updater).toContain("process.env.PHOENIX_RUNTIME_ROOT?.trim()")
