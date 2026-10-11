@@ -320,6 +320,9 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(end).toBeGreaterThan(begin)
     const loop = supervisor.slice(begin, end)
     expect(loop).toContain("readUpdateState()?.status !== 'preparing'")
+    expect(loop).toContain("!watcherSupervisor?.isActive()")
+    expect(supervisor).toContain("isActive() {")
+    expect(supervisor).toContain("!stopping && watcher !== undefined && watcher.exitCode === null")
     expect(loop).toContain('cleanupObsoleteRuntimes()')
     // Capacity checks and explicit offline repairs must still report EBUSY.
     expect(supervisor).toContain('cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: true })')
