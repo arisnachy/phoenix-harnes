@@ -21,6 +21,7 @@ import type { ModelDirectoryState } from './directory.ts'
 import { ModelDirectoryResolver } from './service.ts'
 import type { ModelSelectInjected } from './slots.ts'
 import { ModelSelect } from './ModelSelect.tsx'
+import { isPhoenixAutoRouting } from './presentation.ts'
 import { CodexQuotaRemaining } from './CodexQuotaRemaining.tsx'
 import type { CodexQuotaRemainingInjected } from './CodexQuotaRemaining.tsx'
 import { en, es, zh, type ModelKey } from './locales.ts'
@@ -49,8 +50,10 @@ function optionsOf(directory: SessionModels, t: TranslateNS<'model'>): SelectOpt
     for (const model of group.models) {
       rows.push({
         id: rowId(group.id, model.id),
-        label: model.name,
-        detail: model.description !== undefined ? `${group.name} · ${model.description}` : group.name,
+        label: isPhoenixAutoRouting(model.id, model.name) ? t('trigger.auto') : model.name,
+        detail: isPhoenixAutoRouting(model.id, model.name)
+          ? t('trigger.autoDetail')
+          : model.description !== undefined ? `${group.name} · ${model.description}` : group.name,
         ...(directory.current.provider === group.id && directory.current.model === model.id
           ? { active: true } : {}),
       })
