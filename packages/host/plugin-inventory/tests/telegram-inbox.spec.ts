@@ -140,7 +140,10 @@ describe('Telegram owner-paired Host inbox', () => {
     f.values.set('PHOENIX_TELEGRAM_OWNER_CHAT_ID', '12345')
     let finish!: () => void
     const pending = new Promise<void>(resolve => { finish = resolve })
-    f.agent.whenIdle = vi.fn(async () => pending)
+    f.agent.whenIdle = vi.fn(async () => {
+      await pending
+      return undefined
+    })
     const processing = f.internal.process(makeMessage(12345, 'Kira, revisa las herramientas'), TOKEN, f.creds)
     await vi.waitFor(() => expect(f.typing).toHaveBeenCalledTimes(1))
     await vi.waitFor(() => expect(f.sessions.prompt).toHaveBeenCalledTimes(1))

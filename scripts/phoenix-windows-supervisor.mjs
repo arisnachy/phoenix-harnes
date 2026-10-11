@@ -14,6 +14,7 @@ import {
   existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, unlinkSync, writeFileSync,
 } from 'node:fs'
 import { homedir } from 'node:os'
+import { createConnection } from 'node:net'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
@@ -1221,6 +1222,31 @@ async function stopWatcher(watcher) {
   }
 }
 
+// Avoid a second independent supervisor fighting an already-running Phoenix
+// Host for the default loopback port. Never terminate the process owning it.
+// Custom bind options are left to the underlying Host configuration.
+function defaultPhoenixPort() {
+  if (hostArgs.some(arg => /^--(?:port|host|hostname|address)(?:=|$)/u.test(arg))) return undefined
+  if (process.env.PORT || process.env.PHOENIX_PORT || process.env.PHOENIX_HOST) return undefined
+  return 3080
+}
+
+function existingHostOnPort(port) {
+  return new Promise(resolve => {
+    const socket = createConnection({ host: '127.0.0.1', port })
+    let settled = false
+    const finish = occupied => {
+      if (settled) return
+      settled = true
+      socket.destroy()
+      resolve(occupied)
+    }
+    socket.once('connect', () => finish(true))
+    socket.once('error', () => finish(false))
+    socket.setTimeout(600, () => finish(false))
+  })
+}
+
 function startHost() {
   return spawn(process.execPath, runtimeNodeArgs(runtimeRoot, [
     'web', '--',
@@ -1509,7 +1535,7 @@ if (startupFallbackMissing) {
   }
 }
 
-let watcherSupervisor = superviseWatcher()
+let watcherSupervisor
 
 async function stopWatcherSupervisor() {
   const supervisor = watcherSupervisor
@@ -1519,9 +1545,15 @@ async function stopWatcherSupervisor() {
 
 let finalCode = 0
 while (true) {
-  if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()
   const launchConfiguration = captureBootCriticalConfiguration()
   let lastObservedFingerprint = configurationFingerprint(launchConfiguration)
+  const port = defaultPhoenixPort()
+  if (port !== undefined && await existingHostOnPort(port)) {
+    console.error(`[PHOENIX] 127.0.0.1:${String(port)} ya está ocupado. No se iniciará un segundo Host ni se cerrará el proceso activo; usa la ventana o la instancia de Phoenix existente.`)
+    finalCode = 0
+    break
+  }
+  if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()
   const startedAt = Date.now()
   const host = startHost()
   activeHost = host

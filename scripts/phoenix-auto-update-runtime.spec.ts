@@ -11,6 +11,14 @@ const build = readFileSync(resolve('scripts/build.ts'), 'utf8')
 const stableWorkflow = readFileSync(resolve('.github/workflows/phoenix-stable-update-channel.yml'), 'utf8')
 
 describe('PHOENIX supervised updater runtime isolation', () => {
+  it('does not launch a duplicate web host into a busy 3080 port or kill the current listener', () => {
+    expect(supervisor).toContain("import { createConnection } from 'node:net'")
+    expect(supervisor).toContain('function existingHostOnPort(port)')
+    expect(supervisor).toContain('if (port !== undefined && await existingHostOnPort(port))')
+    expect(supervisor).toContain('finalCode = 0')
+    expect(supervisor).not.toContain("taskkill /IM node.exe")
+  })
+
   it('limits offline watcher fetch latency while preserving manual refresh and live Host', () => {
     expect(updater).toContain('const WATCH_FETCH_TIMEOUT_MS = 9_000')
     expect(updater).toContain('timeout: options.timeoutMs')
