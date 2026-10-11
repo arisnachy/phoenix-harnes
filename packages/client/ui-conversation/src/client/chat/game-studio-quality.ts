@@ -174,8 +174,8 @@ export function auditGameManifest(value: unknown): GameStudioAudit {
   else {
     const cues = profile === 'beat-em-up' ? ['punch', 'kick', 'hit', 'grab', 'boss', 'pickup']
       : profile === 'run-and-gun' ? ['jump', 'shoot', 'hit', 'explosion', 'boss']
-      : profile === 'racing' ? ['engine', 'collision']
-        : profile === 'rhythm' ? ['beat'] : []
+        : profile === 'racing' ? ['engine', 'collision']
+          : profile === 'rhythm' ? ['beat'] : []
     missing(stringSet(value.audio.cues), cues, 'audio-cue', issues)
     if (!Array.isArray(value.audio.cues) || value.audio.cues.length === 0) warnings.push('audio-cues-not-declared')
     if (!nonempty(value.audio.music)) warnings.push('missing-music-plan')
