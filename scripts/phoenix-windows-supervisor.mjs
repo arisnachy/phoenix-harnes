@@ -1442,6 +1442,19 @@ function superviseWatcher() {
   }
 }
 
+// Only a verified fast-forward on the clean durable release checkout may
+// fall back to a brief in-place activation when stale Windows file handles
+// prevent a replacement runtime from being materialized.
+function safeInPlacePreparedFallback(target) {
+  if (runtimeRoot !== root || readActiveRuntimeRecord() !== undefined) return false
+  const branch = gitValue(root, ['branch', '--show-current'])
+  const current = gitValue(root, ['rev-parse', 'HEAD'])
+  if (!isManagedReleaseBranch(branch, STABLE_SOURCE_BRANCH)
+    || !current || current === target || !gitClean(root)) return false
+  if (!gitSucceeds(root, ['merge-base', '--is-ancestor', current, target])) return false
+  return preparedStageForTarget(target) !== undefined
+}
+
 function preparedActivator() {
   const target = restartRequestTarget()
   const stage = persistentStage()
@@ -1525,6 +1538,17 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
       }
 
       try {
+        // A Windows-locked orphan can exhaust every isolated runtime slot.
+        // The staged release has already passed its build and smoke checks:
+        // use the existing rollback-aware live activator only when safe.
+        if (runtimeDirectoriesForCleanup().length >= MAX_RUNTIME_DIRECTORIES
+          && safeInPlacePreparedFallback(updateTarget)) {
+          console.error(
+            '[PHOENIX UPDATE] runtime storage full; using verified in-place fast-forward '
+            + 'after a controlled Host stop, without creating another runtime.',
+          )
+          return { kind: 'safe-inplace-update-handoff', target: updateTarget, lastObservedFingerprint }
+        }
         console.error(
           `[PHOENIX UPDATE] prepared ${updateTarget.slice(0, 12)} is ready; warming replacement runtime while current Host remains online...`,
         )
@@ -1711,12 +1735,15 @@ while (true) {
   let hostExit
   let crashPreparedUpdate
 
-  if (hostEvent.kind === 'safe-restart' || hostEvent.kind === 'safe-update-handoff') {
+  if (hostEvent.kind === 'safe-restart' || hostEvent.kind === 'safe-update-handoff'
+    || hostEvent.kind === 'safe-inplace-update-handoff') {
     plannedHostRestart = true
     intentionalHandoffRequested = true
     await stopWatcherSupervisor()
     if (hostEvent.kind === 'safe-update-handoff') {
       console.error('[PHOENIX UPDATE] replacement runtime is fully ready; handing off from the current Host.')
+    } else if (hostEvent.kind === 'safe-inplace-update-handoff') {
+      console.error('[PHOENIX UPDATE] preparing a verified in-place release after the current Host exits.')
     } else {
       console.error('[PHOENIX RECOVERY] configuration preflight passed; restarting under the external supervisor.')
     }

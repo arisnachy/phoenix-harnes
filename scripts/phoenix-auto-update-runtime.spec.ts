@@ -263,6 +263,22 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain("if (active?.path) keep.add(runtimePathKey(active.path))")
   })
 
+  it('keeps clean release checkouts updatable when Windows locks a stale isolated runtime', () => {
+    expect(updater).toContain("const inPlaceFallbackEligible = action === 'apply'")
+    expect(updater).toContain("inspection.status === 'upgrade'")
+    expect(updater).toContain('inspection.current === inspection.sourceCurrent')
+    expect(updater).toContain('inspection.activeRuntime === undefined')
+    expect(updater).toContain('readActiveRuntime(root) === undefined')
+    expect(updater).toContain('cleanWorktree(root)')
+    expect(updater).toContain('if (inPlaceFallbackEligible) {')
+    expect(supervisor).toContain('function safeInPlacePreparedFallback(target)')
+    expect(supervisor).toContain('runtimeRoot !== root || readActiveRuntimeRecord() !== undefined')
+    expect(supervisor).toContain("gitSucceeds(root, ['merge-base', '--is-ancestor', current, target])")
+    expect(supervisor).toContain('safe-inplace-update-handoff')
+    expect(supervisor).toContain("if (hostEvent.kind === 'safe-inplace-update-handoff')")
+    expect(supervisor).toContain("const activationCode = activatePrepared()")
+  })
+
   it('backs off blocked Windows storage and avoids repeating EBUSY or capacity warnings in every poll', () => {
     expect(updater).toContain('const STORAGE_RETRY_MS = 5 * 60 * 1000')
     expect(updater).toContain('scripts/phoenix-windows-storage-repair.ps1 -Apply')

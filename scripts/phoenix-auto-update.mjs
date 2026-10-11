@@ -1221,6 +1221,23 @@ async function watch(root, parentPid) {
         case 'apply':
         case 'replace': {
           if (process.env.PHOENIX_UPDATE_SUPERVISED === '1') {
+            // A clean, fast-forwardable release checkout can use the verified
+            // staged activator in place if Windows has locked all spare runtime
+            // slots. Do not strand it at 3/3 merely because a zero-downtime
+            // isolated handoff is unavailable. Other checkout/dirty paths must
+            // still pass the isolated-runtime capacity guard.
+            const inPlaceFallbackEligible = action === 'apply'
+              && inspection.status === 'upgrade'
+              && inspection.current === inspection.sourceCurrent
+              && inspection.activeRuntime === undefined
+              && readActiveRuntime(root) === undefined
+              && (!process.env.PHOENIX_RUNTIME_ROOT
+                || runtimePathKey(process.env.PHOENIX_RUNTIME_ROOT) === runtimePathKey(root))
+              && cleanWorktree(root)
+            if (inPlaceFallbackEligible) {
+              blockedStorageTarget = undefined
+              nextStorageRetryAt = 0
+            } else {
             // Avoid touching a known busy runtime on every channel poll.
             // Changes to the candidate SHA bypass this wait; an unchanged
             // target is retried after a bounded five-minute pause.
@@ -1241,6 +1258,7 @@ async function watch(root, parentPid) {
             }
             blockedStorageTarget = undefined
             nextStorageRetryAt = 0
+            }
           }
           pending = inspection
           if (preparedTarget !== inspection.target) {

@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { runInNewContext } from 'node:vm'
 import { describe, expect, it } from 'vitest'
 
 const source = readFileSync(resolve('scripts/phoenix-windows-supervisor.mjs'), 'utf8')
@@ -411,6 +412,56 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(autoUpdateSource).toContain("['reset', '--hard', target]")
     expect(autoUpdateSource).toContain('ensureStagingMaterialized(stage, target)')
     expect(autoUpdateSource).toContain('staging worktree remains incomplete after repair')
+  })
+
+  it('only permits in-place fallback for an eligible, clean, fast-forward release', () => {
+    const begin = source.indexOf('function safeInPlacePreparedFallback(target)')
+    const end = source.indexOf('\nfunction preparedActivator()', begin)
+    expect(begin).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(begin)
+    const routine = source.slice(begin, end)
+    expect(routine).toContain('runtimeRoot !== root')
+    expect(routine).toContain('readActiveRuntimeRecord() !== undefined')
+    expect(routine).toContain('gitClean(root)')
+    expect(routine).toContain('isManagedReleaseBranch(branch, STABLE_SOURCE_BRANCH)')
+    expect(routine).toContain("gitSucceeds(root, ['merge-base', '--is-ancestor', current, target])")
+    expect(routine).toContain('preparedStageForTarget(target) !== undefined')
+    expect(source).toContain('runtimeDirectoriesForCleanup().length >= MAX_RUNTIME_DIRECTORIES')
+    expect(source).toContain("kind: 'safe-inplace-update-handoff'")
+    expect(source).toContain("hostEvent.kind === 'safe-inplace-update-handoff'")
+  })
+
+  it('exercises the clean-release fallback eligibility without touching real worktrees', () => {
+    const begin = source.indexOf('function safeInPlacePreparedFallback(target)')
+    const end = source.indexOf('\nfunction preparedActivator()', begin)
+    const predicate = source.slice(begin, end)
+    const env = {
+      runtimeRoot: 'checkout',
+      root: 'checkout',
+      STABLE_SOURCE_BRANCH: 'stable',
+      readActiveRuntimeRecord: () => undefined as unknown,
+      gitValue: (_cwd: string, args: string[]) => args[0] === 'branch' ? 'stable' : 'old-head',
+      gitClean: () => true,
+      gitSucceeds: () => true,
+      isManagedReleaseBranch: (branch: string) => branch === 'stable' || branch === 'main',
+      preparedStageForTarget: (): string | undefined => 'verified-stage',
+    }
+    const makePredicate = () => runInNewContext(predicate + '\nsafeInPlacePreparedFallback', env) as (target: string) => boolean
+    expect(makePredicate()('new-head')).toBe(true)
+    env.runtimeRoot = 'isolated-runtime'
+    expect(makePredicate()('new-head')).toBe(false)
+    env.runtimeRoot = 'checkout'
+    env.readActiveRuntimeRecord = () => ({ path: 'active' })
+    expect(makePredicate()('new-head')).toBe(false)
+    env.readActiveRuntimeRecord = () => undefined
+    env.gitClean = () => false
+    expect(makePredicate()('new-head')).toBe(false)
+    env.gitClean = () => true
+    env.gitSucceeds = () => false
+    expect(makePredicate()('new-head')).toBe(false)
+    env.gitSucceeds = () => true
+    env.preparedStageForTarget = () => undefined
+    expect(makePredicate()('new-head')).toBe(false)
   })
 
   it('keeps cleanup-only mode available without spawning duplicate cleanup passes from each Host', () => {
