@@ -5,6 +5,7 @@ import type { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import {
   classifyCodexImageFailure,
+  codexImageInvocation,
   codexDoctorSupportsImageGeneration,
   imageGenerationToolDescription,
   imageGenerationBackendOrder,
@@ -26,6 +27,26 @@ type CapturedImageTool = {
 }
 
 describe('Codex image generation bridge', () => {
+  it('launches npm/pnpm Windows Codex shims with cmd /d /s /c and retains stdin prompt separation', () => {
+    const tail = ['exec','--ignore-user-config','--ephemeral','--skip-git-repo-check',
+      '--enable','image_generation','-s','read-only','-']
+    const cmd = codexImageInvocation('C:\\Program Files\\nodejs\\codex.cmd', tail, 'win32')
+    expect(cmd.slice(1, 4)).toEqual(['/d', '/s', '/c'])
+    expect(cmd[4]).toBe('""C:\\Program Files\\nodejs\\codex.cmd" ' + tail.join(' ') + '"')
+    expect(cmd[4]).not.toContain('test image')
+    expect(codexImageInvocation('C:\\codex\\codex.exe', tail, 'win32')).toEqual([
+      'C:\\codex\\codex.exe', ...tail,
+    ])
+    expect(codexImageInvocation('/usr/local/bin/codex', tail, 'linux')).toEqual([
+      '/usr/local/bin/codex', ...tail,
+    ])
+    expect(codexImageInvocation('C:\\codex\\codex.BAT', tail, 'win32').slice(1, 4))
+      .toEqual(['/d', '/s', '/c'])
+    expect(() => codexImageInvocation('C:\\bad%NAME%\\codex.cmd', tail, 'win32'))
+      .toThrow(/unsafe Windows Codex launcher/)
+    expect(() => codexImageInvocation('C:\\codex.cmd', [...tail, '&whoami'], 'win32'))
+      .toThrow(/unsafe Windows Codex launcher/)
+  })
   it('recognizes the current Codex doctor JSON shape with ChatGPT auth and image generation enabled', () => {
     expect(codexDoctorSupportsImageGeneration(JSON.stringify({
       checks: {
