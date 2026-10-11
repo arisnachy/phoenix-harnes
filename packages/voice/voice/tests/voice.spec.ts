@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
 import VoiceRuntime, {
   displayOutputToVoiceText,
@@ -7,7 +10,9 @@ import VoiceRuntime, {
   type VoiceImportantEvent,
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
-import { CodexRealtimeBridge, realtimeVoiceForGender } from '../src/codex-realtime.ts'
+import {
+  CodexRealtimeBridge, findManagedCodexRealtimeBin, realtimeVoiceForGender,
+} from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
   ctx: Context
@@ -405,6 +410,37 @@ describe('Codex realtime app-server notifications', () => {
     await expect(wait.promise).resolves.toEqual({ threadId: 'thread-target', sdp: 'v=0' })
     wait.cancel()
     bridge.close()
+  })
+})
+
+describe('Codex managed runtime voice recovery', () => {
+  it('finds the same managed runtime installed for Phoenix Codex model discovery', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-voice-managed-'))
+    try {
+      const runtime = join(home, 'codex-cli')
+      mkdirSync(runtime, { recursive: true })
+      writeFileSync(join(runtime, 'codex.js'), '// managed Codex entrypoint')
+      writeFileSync(join(runtime, 'active.json'), JSON.stringify({
+        schema: 1, version: '1.2.3', bin: 'codex.js',
+      }))
+      expect(findManagedCodexRealtimeBin(home)).toBe(join(runtime, 'codex.js'))
+      // A poisoned marker must not escape the trusted managed directory.
+      writeFileSync(join(runtime, 'active.json'), JSON.stringify({
+        schema: 1, version: '1.2.3', bin: '../../external.js',
+      }))
+      expect(findManagedCodexRealtimeBin(home)).toBeUndefined()
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('uses PATH only when the managed marker is missing', () => {
+    const home = mkdtempSync(join(tmpdir(), 'phoenix-voice-unmanaged-'))
+    try {
+      expect(findManagedCodexRealtimeBin(home)).toBeUndefined()
+    } finally {
+      rmSync(home, { recursive: true, force: true })
+    }
   })
 })
 
