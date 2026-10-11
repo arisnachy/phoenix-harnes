@@ -795,6 +795,12 @@ describe('Codex Live launch regression', () => {
     expect(launch.args[3]).toContain('features.plugins=false')
     expect(launch.args[3]).toContain('app-server --stdio')
     expect(launch.args[3]).not.toContain('--listen stdio://')
+    // cmd.exe strips TOML quotation marks, so never embed a quoted Windows
+    // file path inside its command string. The env supplies the SQLite home.
+    const withSqliteHome = codexRealtimeLaunchCommand(
+      undefined, 'win32', 'C:\\Windows\\System32\\cmd.exe', 'C:\\Users\\Phoenix Voice',
+    )
+    expect(withSqliteHome.args[3]).not.toContain('sqlite_home=')
   })
 
   it('keeps the same authenticated home and SQLite root as working Codex account probes', () => {
