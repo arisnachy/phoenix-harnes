@@ -216,9 +216,9 @@ export class CodexRealtimeBridge {
     } catch (error) {
       const message = errorText(error)
       const detail = message
-        .replace(/Bearer\\s+[^\\s]+/giu, 'Bearer [redacted]')
-        .replace(/\\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\\b/gu, '[redacted]')
-        .replace(/(?:access_token|refresh_token|password)\\s*[:=]\\s*[^\\s,;]+/giu, '[redacted]')
+        .replace(/Bearer\s+[^\s]+/giu, 'Bearer [redacted]')
+        .replace(/\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\b/gu, '[redacted]')
+        .replace(/(?:access_token|refresh_token|password)\s*[:=]\s*[^\s,;]+/giu, '[redacted]')
         .slice(0, 360)
       if (/not found|enoent|could not start|spawn/i.test(message)) {
         return { available: false, authenticated: false, reason: 'codex-unavailable', detail }
