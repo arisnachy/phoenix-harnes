@@ -1873,6 +1873,42 @@ describe('command launcher chrome and control seats', () => {
     }
   })
 
+  it('offers Kokoro/natural voice only after explicit opt-in on Quicksilver rejection', async () => {
+    const available = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(true)
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'invalid_quicksilver_alpha_header' })
+    const start = vi.fn()
+    const recognition = vi.spyOn(voiceAdapter, 'createVoiceRecognition')
+      .mockReturnValue({
+        lang: 'es-DO', continuous: true, interimResults: false, maxAlternatives: 1,
+        onstart: null, onend: null, onerror: null, onresult: null,
+        start, stop: vi.fn(), abort: vi.fn(),
+      })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      expect(recognition).not.toHaveBeenCalled()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
+      const alternate = view.getByRole('button', { name: 'Usar voz alternativa de Phoenix' })
+      fireEvent.click(alternate)
+      await act(async () => { await Promise.resolve() })
+      expect(recognition).toHaveBeenCalledTimes(1)
+      expect(start).toHaveBeenCalledTimes(1)
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(true)
+      expect(live).toHaveBeenCalledTimes(1)
+      expect(view.container.querySelector('[data-codex-voice-fallback]')).toBeNull()
+    } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
+      recognition.mockRestore()
+      live.mockRestore()
+      support.mockRestore()
+      available.mockRestore()
+      cleanup()
+    }
+  })
+
   it('never opens browser speech recognition when Codex CLI Live fails', async () => {
     const browser = vi.spyOn(voiceAdapter, 'createVoiceRecognition')
       .mockImplementation(() => { throw new Error('browser microphone must stay off') })
