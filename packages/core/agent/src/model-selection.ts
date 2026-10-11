@@ -654,6 +654,8 @@ export function isExplicitKiraTeamRequest(text: string): boolean {
   if (!people.test(value)) return false
   // oxlint-disable-next-line @stylistic/max-len -- Suppress explicitly negated Team delegation.
   if (/\b(?:no|sin|evita|deja de)\s+(?:quiero que\s+|necesito que\s+)?(?:llam\w*|convoc\w*|deleg\w*|us\w*|utiliz\w*|trabaj\w*)/u.test(value)) return false
+  // "No lo hagas con tu equipo" is not permission to use Team tools.
+  if (/^no\b.{0,75}\b(?:con|junto a|con ayuda de)\b/u.test(value)) return false
   // "Hazlo con tu equipo" is an explicit collaboration request even though
   // "hazlo" does not name a particular teammate or call a spawn verb.
   if (/\b(?:con|junto a|con ayuda de)\s+(?:(?:tu|el|los|sus|tus)\s+)?(?:equipo|agentes|companeros|especialistas|team|teammates)\b/u.test(value)) return true
