@@ -20,6 +20,36 @@ El instalador usa IDs `winget --exact --source winget` en Windows, `brew` en mac
 
 En Godot 4, comprueba que el binario corresponde a la versión del proyecto y que las plantillas de exportación están instaladas antes de exportar: la instalación del editor por sí sola no lo garantiza. Un export Web contiene archivos HTML/JS/WASM/PCK y necesita un servidor y navegador reales; no copies únicamente el HTML al chat. Crea una compilación nativa o una URL web alojada y comprueba la ejecución; si el usuario exige jugar dentro del chat, proporciona además una versión autocontenida HTML5 que pase las puertas de presets y gameplay.
 
+## Godot AI MCP: editor real, no sustituto de los assets
+
+El usuario puede pedir que Kira utilice [Godot AI](https://github.com/hi-godot/godot-ai), un complemento comunitario MIT. El recurso [Asset Library #5050](https://godotengine.org/asset-library/asset/5050) es **v3.2.1 para Godot 4.5+**; el protocolo v4 no es intercambiable con v3. El instalador fijado de Phoenix apunta a **v4.3.0 para Godot 4.7+**, verificado por SHA-256, y no debe pisar un addon anterior ni su migración firmada.
+
+### Preparación automatizable solo al crear un juego Godot
+
+```sh
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs doctor --target godot
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs doctor --target uv
+# Si faltan y está autorizada la instalación:
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs ensure --target godot --allow-install
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/game-tools.mjs ensure --target uv --allow-install
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/godot-ai-addon.mjs plan --project RUTA_PROYECTO
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/godot-ai-addon.mjs install --project RUTA_PROYECTO --allow-install
+```
+
+El addon instalado debe activarse en **Godot: Project Settings > Plugins > Godot AI**. En el dock selecciona **DeepSeek Harness > Configure** (y confirma que Godot realmente está abierto en el proyecto). Esa opción registra `mcp-godot-ai` como `insert` de `$DSH_HOME/cordis.patch.yml`, con puente `godot-ai attach` y autenticación local que rota. El complemento oficial usa el plugin original `@deepseek-ai/dsh-mcp-client`, mientras que Phoenix publica `@phoenix-ai/dsh-mcp-client`. No copies configuraciones de HTTP 8000 sin capability ni fijas manualmente tokens/puertos.
+
+```sh
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/godot-ai-bridge.mjs doctor --project RUTA_PROYECTO
+# Tras revisar la configuración generada por el editor, autoriza solo el alias de integración:
+node apps/cli/config/agent-presets/code/skills/game-development/scripts/godot-ai-bridge.mjs sync --allow-config-edit
+```
+
+Reinicia la sesión de Phoenix para cargar el registro. Kira debe llamar herramientas reales del namespace `godot-ai`: `editor_state`, `scene_get_hierarchy`, `session_activate` si hay varios proyectos, `node_create`, `animation_create`, `animation_manage`, `script_create`, `project_run`, `test_run`, `editor_screenshot`, `logs_read` y `game_manage`. No confundir “registro configurado” con “servidor conectado”: la verificación real exige respuesta del editor.
+
+**Producción audiovisual:** diseñar primero presets coherentes; importar atlases por actor y escenarios por capa/TileMap, conectar estados e hitboxes/IA/FX/sonidos y ejecutar pruebas con capturas. El editor MCP puede ensamblar y ejecutar escenas pero no sustituye diseño de alta calidad ni audio original. Si un sprite o jefe no aparece en capturas del juego, no entregar como producción.
+
+No ejecutar `godot-ai-addon.mjs install` para actualizaciones: usa **Update** en el dock y el proceso de migración v3→v4 firmado. Si Godot 4.7+ o `uvx` no están disponibles tras instalación, reportar el error real y no llamar a Godot AI listo. `GODOT_AI_DISABLE_TELEMETRY=true` desactiva la telemetría voluntaria.
+
 ## Preparar y comprobar
 
 ```sh
