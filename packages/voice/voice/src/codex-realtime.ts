@@ -131,7 +131,7 @@ export function codexLiveCurrentCliVersion(home: string, now = Date.now()): stri
     const current = state.currentVersion
     const latest = state.latestVersion
     if (typeof current !== 'string' || typeof latest !== 'string'
-      || !/^\\d+\\.\\d+\\.\\d+$/u.test(current) || latest !== current) return undefined
+      || !/^\d+\.\d+\.\d+$/u.test(current) || latest !== current) return undefined
     return current
   } catch {
     return undefined
