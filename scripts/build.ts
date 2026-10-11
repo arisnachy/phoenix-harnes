@@ -146,6 +146,40 @@ export function vendoredIncludeTypeRepairNeeded(
   return !exists(types)
 }
 
+/**
+ * Missing pnpm workspace links produce the same unresolved-include symptom as
+ * missing declarations. Both consumers must link to vendor/include in the
+ * isolated runtime; a successful package install elsewhere proves nothing.
+ */
+export function missingVendoredIncludeWorkspaceLinks(
+  root: string,
+  exists: (file: string) => boolean = existsSync,
+): string[] {
+  return [
+    'apps/cli/node_modules/@phoenix-ai/cordis-plugin-include',
+    'packages/boot/app-boot/node_modules/@phoenix-ai/cordis-plugin-include',
+  ].filter(path => !exists(resolve(root, path)))
+}
+
+/** Refresh scoped pnpm workspace links only when a cold runtime lost them. */
+function ensureVendoredIncludeWorkspaceLinks(root: string, environment: NodeJS.ProcessEnv): void {
+  const missing = missingVendoredIncludeWorkspaceLinks(root)
+  if (missing.length === 0) return
+  console.log('build: Cordis include workspace links are missing; refreshing frozen dependencies...')
+  const invocation = buildPnpmInvocation(['install', '--frozen-lockfile'], environment)
+  const installed = spawnSync(invocation.command, invocation.args, {
+    cwd: root,
+    env: environment,
+    stdio: 'inherit',
+    windowsHide: true,
+  })
+  if (installed.error !== undefined) throw installed.error
+  const remaining = missingVendoredIncludeWorkspaceLinks(root)
+  if (installed.status !== 0 || remaining.length > 0) {
+    throw new Error('build: Cordis include workspace links are incomplete: ' + remaining.join(', '))
+  }
+}
+
 /** Repair only a missing generated include declaration on cold runtime builds. */
 function ensureVendoredIncludeTypes(root: string, environment: NodeJS.ProcessEnv): void {
   if (!vendoredIncludeTypeRepairNeeded(root)) return
@@ -215,6 +249,7 @@ function main(): void {
 
   rmSync(resolve(root, CLIENT_BUILD_RECORD_PATH), { force: true })
   if (scope === 'full') {
+    ensureVendoredIncludeWorkspaceLinks(root, buildEnvironment)
     ensureVendoredIncludeTypes(root, buildEnvironment)
     runScript('build:lib', buildEnvironment)
     verifyProfileRuntimeArtifacts(root)
