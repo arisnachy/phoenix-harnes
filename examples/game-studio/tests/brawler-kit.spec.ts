@@ -15,6 +15,7 @@ const kit = runInNewContext(code + '\nPhoenixBrawlerKit;', {}) as {
   enemyAI: (a: Actor, target: Actor, dt: number, belt: object, w: number, emit?: (e: any) => void) => void
   bossAI: (a: Actor, target: Actor, dt: number, belt: object, w: number, emit?: (e: any) => void) => void
   cameraX: (target: Actor, camera: number, w: number, world: number, dt: number) => number
+  drawStage: (ctx: object, level: object, imageFor: (id: string, family: string) => any, camera: number, w: number, h: number) => boolean
   drawActorsByDepth: (ctx: object, fighters: Actor[], atlas: (id: string) => any, camera: number, clock: number, kit: object) => void
   audioBus: (doc: object) => { unlock: () => void; cue: (name: string) => boolean; music: () => boolean; mute: (v: boolean) => void; stop: () => void }
 }
@@ -64,6 +65,21 @@ describe('Phoenix street beat-em-up runtime (no placeholder art)', () => {
     expect(boss.phase).toBe('enraged')
     expect(events.some(e => e.type === 'boss-phase')).toBe(true)
     expect(['sweep', 'charge']).toContain(boss.action.name)
+  })
+
+  it('draws separate authored backgrounds and stage zones, but fails when an asset is missing', () => {
+    const image = { complete: true, naturalWidth: 100, naturalHeight: 100 }
+    const images = new Map(['sky', 'buildings', 'street', 'alley', 'warehouse'].map(id => [id, image]))
+    const level = { layers: [{ id: 'sky', scrollFactor: .1 },
+      { id: 'buildings', scrollFactor: .4 }, { id: 'street', scrollFactor: .9 }],
+      zones: [{ id: 'alley', startX: 0, endX: 1000 },
+        { id: 'warehouse', startX: 1000, endX: 2400 }] }
+    const drawImage = vi.fn()
+    const draw = () => kit.drawStage({ drawImage }, level, id => images.get(id), 950, 640, 400)
+    expect(draw()).toBe(true)
+    expect(drawImage.mock.calls.length).toBeGreaterThan(5)
+    images.delete('warehouse')
+    expect(draw()).toBe(false)
   })
 
   it('draws approved atlases by actor depth instead of substituting generic figures', () => {
