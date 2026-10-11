@@ -25,6 +25,18 @@ describe('PHOENIX human presence protocol', () => {
     expect(dispose).toHaveBeenCalledOnce()
   })
 
+  it('guides Kira to use meaningful native chat visuals without inventing evidence or restarting work', () => {
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Rich, contextual presentation inside the chat')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('existing Markdown renderer')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('do not require the user to request visual formatting')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('the result, concrete evidence or verification')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('a chart only when numeric data and its provenance')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Never invent success badges, dates, completion percentages')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Never expose declarative JSON')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('obey the universal stop rule')
+    expect(HUMAN_PRESENCE_PROTOCOL).toContain('Follow explicit user requests for plain text')
+  })
+
   it('pins continuity, initiative, natural tone, rigor, low-noise behavior, and user agency', () => {
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('one continuous, attentive collaborator')
     expect(HUMAN_PRESENCE_PROTOCOL).toContain('silent behavior')
