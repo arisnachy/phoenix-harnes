@@ -369,6 +369,10 @@ describe('browser voice adapter', () => {
       expect(spoken.type).toBe('response.create')
       expect(spoken.response.instructions).toContain('La tarea terminó correctamente.')
       expect(audio?.muted).toBe(true)
+      // V3 may surface first audio frames before the response.created event.
+      // A harness-approved utterance must never stay accidentally muted.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.output_audio.delta' }) })
+      expect(audio?.muted).toBe(false)
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
       expect(audio?.muted).toBe(false)
 
