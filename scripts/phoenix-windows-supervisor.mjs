@@ -1434,6 +1434,11 @@ function superviseWatcher() {
   start()
 
   return {
+    // A stale 'preparing' marker must not suppress cleanup forever after
+    // the updater exits or its supervisor is shutting down.
+    isActive() {
+      return !stopping && watcher !== undefined && watcher.exitCode === null
+    },
     async stop() {
       stopping = true
       if (restartTimer !== undefined) {
@@ -1514,7 +1519,9 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
       // Full preflights spawn pnpm/tsc/tsdown processes that can hold Windows
       // runtime files open temporarily. Do not compete with a known active
       // compilation. A later idle sweep or capacity check reclaims them.
-      if (readUpdateState()?.status !== 'preparing') cleanupObsoleteRuntimes()
+      if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
+        cleanupObsoleteRuntimes()
+      }
       nextStorageSweepAt = Date.now() + STORAGE_SWEEP_MS
     }
 
