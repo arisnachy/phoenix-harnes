@@ -1,4 +1,4 @@
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,6 +13,16 @@ afterEach(() => {
 })
 
 describe('Google authorization REAL composition', () => {
+  it('pins Google OAuth credentials outside disposable Phoenix update runtimes', () => {
+    const bundle = readFileSync(
+      fileURLToPath(new URL('../cordis.patch.yml', import.meta.url)),
+      'utf8',
+    )
+    expect(bundle).toContain("path: !!js dshHomePath('.credentials.yaml')")
+    expect(bundle).toContain("name: '@phoenix-ai/dsh-authorization/google'")
+    expect(bundle).toContain("name: '@phoenix-ai/dsh-tool-google-workspace'")
+  })
+
   it('boots the shipping providers through Loader and exposes only the user-facing authorization entry', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-google-real-'))
     vi.stubEnv('PHOENIX_GOOGLE_REAL_CREDENTIALS_PATH', join(dir, '.credentials.yaml'))
