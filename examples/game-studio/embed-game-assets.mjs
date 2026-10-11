@@ -43,10 +43,10 @@ export async function embedGameAssets(html, manifest, baseDirectory) {
   for (const clip of audio) {
     const id = clip?.id, path = clip?.path
     if (typeof id !== 'string' || !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/u.test(id)
-      || typeof path !== 'string' || !path.trim() || /^https?:\\/\\//iu.test(path) || path.includes('\\0')) {
+      || typeof path !== 'string' || !path.trim() || /^https?:\/\//iu.test(path) || path.includes('\0')) {
       throw new Error('Audio entries require safe id and local WAV/OGG/MP3 path')
     }
-    if (seen.has(id) || new RegExp('<audio\\\\b[^>]*\\\\bid\\\\s*=\\\\s*["\\\\x27]' + id + '["\\\\x27]', 'iu').test(html)) {
+    if (seen.has(id) || new RegExp('<audio\\b[^>]*\\bid\\s*=\\s*["\\x27]' + id + '["\\x27]', 'iu').test(html)) {
       throw new Error('Duplicate audio asset id: ' + id)
     }
     seen.add(id)
@@ -59,7 +59,7 @@ export async function embedGameAssets(html, manifest, baseDirectory) {
     const mime = wav ? 'audio/wav' : ogg ? 'audio/ogg' : mp3 ? 'audio/mpeg' : undefined
     if (mime === undefined) throw new Error('Unsupported or invalid WAV/OGG/MP3 data: ' + path)
     tags += '<audio hidden preload="auto" id="' + id
-      + '" src="data:' + mime + ';base64,' + bytes.toString('base64') + '"></audio>\\n'
+      + '" src="data:' + mime + ';base64,' + bytes.toString('base64') + '"></audio>\n'
   }
   // Put images and audio before executable scripts so document.getElementById can bind them.
   return html.replace(/<body\b[^>]*>/iu, opening => opening + '\n' + tags)
