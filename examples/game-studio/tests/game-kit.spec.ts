@@ -1,13 +1,18 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { runInNewContext } from 'node:vm'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
 const kitPath = resolve(process.cwd(), 'examples/game-studio/game-kit.js')
 const kitSource = readFileSync(kitPath, 'utf8')
 type Point = { x: number; y: number }
 interface GameKit {
   direction8: (face: number, up: boolean, down: boolean) => Point
+  drawSpriteState: (ctx: object, image: object, atlas: object, state: string, seconds: number,
+    x: number, y: number, width: number, height: number, face?: number) => boolean
+  advanceBoss: (boss: Record<string, number | string | boolean>, player: { x: number; y: number; w: number; h: number },
+    dt: number, fire: (projectile: { kind: string; vx: number; vy: number }) => void) => void
+  activateAbility: (actor: { nextPowerAt?: number; powerAnimationUntil?: number }, seconds: number, cooldown?: number) => boolean
   twoBone: (root: Point, target: Point, upper: number, lower: number, bend?: number) => {
     joint: Point; end: Point; reached: boolean
   }
@@ -22,6 +27,47 @@ interface GameKit {
 const kit = runInNewContext(kitSource + '\nPhoenixGameKit;', {}) as GameKit
 
 describe('original dependency-free Phoenix Game Studio motion kit', () => {
+  it('renders the requested real atlas frame, with facing and strict missing-animation rejection', () => {
+    const drawImage = vi.fn()
+    const ctx = { save: vi.fn(), translate: vi.fn(), scale: vi.fn(), drawImage, restore: vi.fn() }
+    const image = { complete: true, naturalWidth: 32, naturalHeight: 32 }
+    const atlas = { frameWidth: 16, frameHeight: 16, fps: 10,
+      animations: { idle: [0, 1], attack: [2, 3] } }
+    expect(kit.drawSpriteState(ctx, image, atlas, 'attack', .12, 10, 20, 32, 32, -1)).toBe(true)
+    expect(drawImage).toHaveBeenCalledWith(image, 16, 16, 16, 16, 0, 0, 32, 32)
+    expect(ctx.scale).toHaveBeenCalledWith(-1, 1)
+    expect(kit.drawSpriteState(ctx, image, atlas, 'death', .12, 0, 0, 32, 32)).toBe(false)
+    expect(kit.drawSpriteState(ctx, { ...image, complete: false }, atlas, 'idle', 0, 0, 0, 32, 32)).toBe(false)
+  })
+
+  it('actually launches warned boss attacks, changes phase and alternates avoidable powers', () => {
+    const boss: Record<string, number | string | boolean> = {
+      x: 3410, y: 318, w: 110, h: 122, hp: 30, maxHp: 30, alive: true,
+      action: 'idle', recovery: 0, windup: 0, attackIndex: 0, animTime: 0,
+    }
+    const hero = { x: 3260, y: 340, w: 30, h: 54 }
+    const attacks: Array<{ kind: string; vx: number; vy: number }> = []
+    kit.advanceBoss(boss, hero, .05, attack => attacks.push(attack))
+    expect(boss.action).toBe('windup')
+    expect(attacks).toHaveLength(0)
+    for (let i = 0; i < 75; i++) kit.advanceBoss(boss, hero, .05, attack => attacks.push(attack))
+    expect(attacks.some(attack => attack.kind === 'bolt')).toBe(true)
+    boss.hp = 12
+    for (let i = 0; i < 150; i++) kit.advanceBoss(boss, hero, .05, attack => attacks.push(attack))
+    expect(boss.phase).toBe('barrage')
+    expect(attacks.some(attack => attack.kind === 'fan')).toBe(true)
+    expect(attacks.some(attack => attack.kind === 'ground-wave')).toBe(true)
+    expect(attacks.every(attack => Number.isFinite(attack.vx) && Number.isFinite(attack.vy))).toBe(true)
+  })
+
+  it('does not allow infinite magic spam and exposes the timed power animation', () => {
+    const actor: { nextPowerAt?: number; powerAnimationUntil?: number } = {}
+    expect(kit.activateAbility(actor, 0)).toBe(true)
+    expect(actor.powerAnimationUntil).toBeCloseTo(.42)
+    expect(kit.activateAbility(actor, 1)).toBe(false)
+    expect(kit.activateAbility(actor, 4.5)).toBe(true)
+  })
+
   it('maintains 2-bone reach and bend direction without NaNs for extreme or zero targets', () => {
     const near = kit.twoBone({ x: 0, y: 0 }, { x: 0, y: 0 }, 20, 18)
     const far = kit.twoBone({ x: 0, y: 0 }, { x: 400, y: 0 }, 20, 18)
