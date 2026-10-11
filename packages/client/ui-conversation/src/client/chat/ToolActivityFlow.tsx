@@ -51,7 +51,7 @@ type ActivityItem =
 
 type FlowItem =
   | { readonly kind: 'browser'; readonly key: string; readonly userKey: string }
-  | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly items: readonly FlowItem[] }
+  | { readonly kind: 'browser-workspace'; readonly key: string; readonly userKey: string; readonly live: boolean; readonly items: readonly FlowItem[] }
   | { readonly kind: 'node'; readonly key: string }
   | { readonly kind: 'optimistic'; readonly key: string; readonly text: string }
   | {
@@ -294,7 +294,7 @@ export function groupActiveBrowserFlow(
   if (nextTurn) return flow
   return [
     ...flow.slice(0, index),
-    { kind: 'browser-workspace', key: 'browser-workspace:' + userKey, userKey, items: flow.slice(index + 1) },
+    { kind: 'browser-workspace', key: 'browser-workspace:' + userKey, userKey, live: true, items: flow.slice(index + 1) },
   ]
 }
 
@@ -471,10 +471,10 @@ function TurnStatus({ startTime, progress, expiresAfterMs, t, centered = false }
 
 /** Same real transcript seats as the ordinary chat, inside the temporary sidecar. */
 function BrowserWorkspace({
-  userKey, items, selected, onActivate, seatProps, turnStatus,
+  items, live, selected, onActivate, seatProps, turnStatus,
 }: {
-  readonly userKey: string
   readonly items: readonly FlowItem[]
+  readonly live: boolean
   readonly selected: boolean
   readonly onActivate: () => void
   readonly seatProps: SeatProps
@@ -482,11 +482,12 @@ function BrowserWorkspace({
 }) {
   const [page, setPage] = useState<{ title: string; url: string } | null>(null)
   return (
-    <div className={css.browserWorkspace} data-browser-workspace="" data-chat-flow-kind="browser-workspace">
+    <div className={css.browserWorkspace} data-browser-workspace={live ? '' : undefined}
+      data-activity-open={live ? 'true' : undefined} data-chat-flow-kind="browser-workspace">
       <div className={css.browserPane}>
         <MiniBrowser requested active={selected} onActivate={onActivate} autoScroll={false} onPageChange={setPage} />
       </div>
-      <aside className={css.activityPane} aria-label="Actividad del agente en este navegador">
+      {live && <aside className={css.activityPane} aria-label="Actividad del agente en este navegador">
         <header className={css.activityHeader}>
           <strong>Actividad del agente</strong>
           <span className={css.livePill}><span aria-hidden="true" /> En vivo</span>
@@ -523,7 +524,7 @@ function BrowserWorkspace({
               expiresAfterMs={turnStatus.expiresAfterMs} t={seatProps.t} />
           )}
         </div>
-      </aside>
+      </aside>}
     </div>
   )
 }
@@ -550,12 +551,18 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
   }, [newestBrowserKey, lastBrowserKey])
   const activeBrowserKey = selectedBrowserKey ?? newestBrowserKey
   const browserTurnRunning = turnStatus?.progress != null
-  const flow = useMemo(() =>
-    browserTurnRunning && newestBrowserKey !== undefined
+  const flow = useMemo(() => {
+    const grouped = browserTurnRunning && newestBrowserKey !== undefined
       ? groupActiveBrowserFlow(ordinaryFlow, newestBrowserKey, nodes)
-      : ordinaryFlow,
-    [ordinaryFlow, newestBrowserKey, nodes, browserTurnRunning])
-  const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace')
+      : ordinaryFlow
+    // Keep every browser mounted under the SAME React key as the sidecar opens
+    // and closes. Changing layouts must never recreate the CDP tab/session.
+    return grouped.map(item => item.kind === 'browser'
+      ? { kind: 'browser-workspace' as const, key: 'browser-workspace:' + item.userKey,
+        userKey: item.userKey, live: false, items: [] }
+      : item)
+  }, [ordinaryFlow, newestBrowserKey, nodes, browserTurnRunning])
+  const hasBrowserWorkspace = flow.some(item => item.kind === 'browser-workspace' && item.live)
   // The screenshot-like centered preparation state is confined to a blank
   // conversation's first pending answer, never to a continuing transcript.
   const centeredPreparing = turnStatus?.progress?.phase === 'preparing'
@@ -585,7 +592,7 @@ export function ToolActivityFlow({ nodes, optimisticSubmit, turnStatus, ...seatP
           )}
           {item.kind === 'browser-workspace'
             ? <BrowserWorkspace
-              userKey={item.userKey}
+              live={item.live}
               items={item.items}
               selected={item.userKey === activeBrowserKey}
               onActivate={() => { setSelectedBrowserKey(item.userKey) }}
