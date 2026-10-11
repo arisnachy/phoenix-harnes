@@ -63,6 +63,36 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(updater).toContain('if (repollImmediately) continue')
   })
 
+  it('retires stale prepared state when an independently activated runtime already owns the target SHA', () => {
+    const begin = updater.indexOf('function reconcileAlreadyActiveTarget(root, inspection)')
+    const end = updater.indexOf('\nfunction writePreparedState(', begin)
+    expect(begin).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(begin)
+    const source = updater.slice(begin, end)
+    const writes: Record<string, unknown>[] = []
+    const cleared: string[] = []
+    const active = { target: 'a'.repeat(40), path: 'active-runtime' }
+    const { reconcileAlreadyActiveTarget } = runInNewContext(
+      source + '\n({ reconcileAlreadyActiveTarget })',
+      {
+        validatedActiveRuntime: () => active,
+        clearPrepared: () => { cleared.push('prepared') },
+        readRestartRequest: () => ({ target: active.target }),
+        clearRestartRequest: () => { cleared.push('restart') },
+        writeState: (_root: string, state: Record<string, unknown>) => { writes.push(state) },
+        console: { error: () => {} },
+      },
+    ) as { reconcileAlreadyActiveTarget: (root: string, inspection: {target: string; sourceCurrent: string}) => boolean }
+    expect(reconcileAlreadyActiveTarget('checkout', { target: 'b'.repeat(40), sourceCurrent: 'c'.repeat(40) })).toBe(false)
+    expect(writes).toHaveLength(0)
+    expect(reconcileAlreadyActiveTarget('checkout', { target: active.target, sourceCurrent: 'c'.repeat(40) })).toBe(true)
+    expect(cleared).toEqual(['prepared', 'restart'])
+    expect(writes).toMatchObject([{ status: 'current', phase: 'idle', current: active.target, runtimePath: 'active-runtime' }])
+    expect(updater).toContain('if (reconcileAlreadyActiveTarget(root, inspection)) return')
+    expect(updater).toContain('if (reconcileAlreadyActiveTarget(root, inspection)) {')
+    expect(updater).toContain('repollImmediately = true')
+  })
+
   it('uses a verified active isolated runtime as the effective update baseline', () => {
     expect(updater).toContain('function validatedActiveRuntime(root)')
     expect(updater).toContain('function effectiveCurrentCommit(root)')
@@ -282,6 +312,12 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain("const activationCode = activatePrepared()")
   })
 
+  it('shows orphaned-runtime EBUSY only when storage capacity is truly blocked', () => {
+    expect(supervisor).toContain('const storageAtHardCap = runtimeDirectoriesForCleanup().length >= MAX_RUNTIME_DIRECTORIES')
+    expect(supervisor).toContain('cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: storageAtHardCap })')
+    expect(supervisor).toContain('const busyManagedRuntimeRetryAt = new Map()')
+  })
+
   it('defers routine Windows EBUSY cleanup quietly but exposes capacity-critical locks', () => {
     const begin = supervisor.indexOf('const busyManagedRuntimeRetryAt = new Map()')
     const end = supervisor.indexOf('\nfunction removeManagedWorktree(', begin)
@@ -328,7 +364,7 @@ describe('PHOENIX supervised updater runtime isolation', () => {
     expect(supervisor).toContain("!stopping && watcher !== undefined && watcher.exitCode === null")
     expect(loop).toContain('cleanupObsoleteRuntimes()')
     // Capacity checks and explicit offline repairs must still report EBUSY.
-    expect(supervisor).toContain('cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: true })')
+    expect(supervisor).toContain('cleanupObsoleteRuntimes([runtimeRoot], { reportBusy: storageAtHardCap })')
     expect(supervisor).toContain('cleanupObsoleteRuntimes([], { reportBusy: true })')
   })
 

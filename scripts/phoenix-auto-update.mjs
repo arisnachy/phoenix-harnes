@@ -756,7 +756,31 @@ function preparedCandidateValid(root, target) {
   return stagedCandidateValid(root, target) && cleanWorktree(root)
 }
 
+/**
+ * A different supervisor may finish activating this exact SHA while our
+ * preflight is still building or while a cached candidate is being reused.
+ * Once the verified runtime is already active, "restart to activate" is stale
+ * and must never re-arm the bridge or overwrite the current idle status.
+ */
+function reconcileAlreadyActiveTarget(root, inspection) {
+  const activeRuntime = validatedActiveRuntime(root)
+  if (activeRuntime?.target !== inspection.target) return false
+  clearPrepared(root)
+  if (readRestartRequest(root)?.target === inspection.target) clearRestartRequest(root)
+  writeState(root, {
+    status: 'current',
+    phase: 'idle',
+    current: inspection.target,
+    sourceCurrent: inspection.sourceCurrent,
+    runtimePath: activeRuntime.path,
+    detail: `Stable ${inspection.target.slice(0, 12)} is already active in the verified isolated runtime; no restart is required.`,
+  })
+  console.error(`[PHOENIX UPDATE] stable ${inspection.target.slice(0, 12)} is already active and verified; discarded stale prepared/restart state.`)
+  return true
+}
+
 function writePreparedState(root, inspection, plan) {
+  if (reconcileAlreadyActiveTarget(root, inspection)) return
   if (cleanWorktree(root)) {
     writeState(root, { status: 'ready', phase: 'ready', ...updateFacts(inspection) })
     return
@@ -836,6 +860,9 @@ function stageCandidate(root, inspection) {
   const target = inspection.target
   const facts = updateFacts(inspection)
   const plan = updatePlan(root, inspection)
+  if (reconcileAlreadyActiveTarget(root, inspection)) {
+    return { prepared: false, plan, latestTarget: target }
+  }
   if (stagedCandidateValid(root, target)) {
     const freshness = promotedTargetStillCurrent(root, target)
     if (!freshness.current) return { prepared: false, plan, latestTarget: freshness.latest }
@@ -859,6 +886,10 @@ function stageCandidate(root, inspection) {
     // promoted stable target now that preflight has completed.
     const freshness = promotedTargetStillCurrent(root, target)
     if (!freshness.current) return { prepared: false, plan, latestTarget: freshness.latest }
+    // The Host can switch to this target while the expensive build runs.
+    if (reconcileAlreadyActiveTarget(root, inspection)) {
+      return { prepared: false, plan, latestTarget: target }
+    }
 
     writePrepared(root, inspection, plan)
     writePreparedState(root, inspection, plan)
@@ -1275,7 +1306,13 @@ async function watch(root, parentPid) {
               repollImmediately = true
             }
           } else {
-            writePreparedState(root, inspection, updatePlan(root, inspection))
+            if (reconcileAlreadyActiveTarget(root, inspection)) {
+              pending = undefined
+              preparedTarget = undefined
+              repollImmediately = true
+            } else {
+              writePreparedState(root, inspection, updatePlan(root, inspection))
+            }
           }
           break
         }
