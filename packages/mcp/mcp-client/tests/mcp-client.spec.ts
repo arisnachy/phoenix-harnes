@@ -1331,6 +1331,35 @@ describe('Fetch MCP Windows Node/npm environment hydration', () => {
     expect(Object.keys(result)).toEqual(['PATH'])
   })
 
+  it('activates a Fetch-only npm.cmd shim even when Node is already on PATH', () => {
+    const result = hydrateFetchMcpNodeEnvironment(fetchServer, {
+      Path: 'C:\\Program Files\\nodejs;C:\\Windows\\System32',
+      PYTHONPATH: 'C:\\PythonExtras',
+    }, {
+      platform: 'win32',
+      nodeExecutable: nodeExe,
+      fileExists: (name) => fileExists(name) || name.endsWith('sitecustomize.py'),
+    })
+    expect(result.Path).toBe('C:\\Program Files\\nodejs;C:\\Windows\\System32')
+    expect(result.PHOENIX_FETCH_MCP_NPM_SHIM).toBe('1')
+    expect(result.PYTHONPATH).toContain('phoenix-fetch-mcp-sitecustomize')
+    expect(result.PYTHONPATH).toContain('C:\\PythonExtras')
+    expect(Object.keys(result).filter(name => name.toUpperCase() === 'PYTHONPATH')).toHaveLength(1)
+  })
+
+  it('does not enable the Python hook without a verified Node/npm or the bundled hook', () => {
+    const original = { Path: 'C:\\Windows\\System32' }
+    const missingNpm = hydrateFetchMcpNodeEnvironment(fetchServer, original, {
+      platform: 'win32', nodeExecutable: nodeExe,
+      fileExists: name => name.endsWith('sitecustomize.py') || name.toLowerCase() === nodeExe.toLowerCase(),
+    })
+    expect(missingNpm).toEqual(original)
+    const missingHook = hydrateFetchMcpNodeEnvironment(fetchServer, original, {
+      platform: 'win32', nodeExecutable: nodeExe, fileExists,
+    })
+    expect(missingHook.PHOENIX_FETCH_MCP_NPM_SHIM).toBeUndefined()
+  })
+
   it('normalizes duplicate Windows Path/PATH aliases while keeping the explicit override', () => {
     const result = hydrateFetchMcpNodeEnvironment(fetchServer, {
       Path: 'C:\\old', PATH: 'C:\\Windows\\System32',
