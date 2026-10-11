@@ -25,9 +25,25 @@ const HEADERS = { 'x-phoenix-mini-browser': '1' }
 const BLANK: Snapshot = { available: false, tabs: [] }
 
 async function decode<T>(response: Response): Promise<T> {
-  const data = await response.json() as T & { error?: string }
-  if (!response.ok) throw new Error(data.error || 'El navegador no respondió.')
-  return data
+  // Host restarts, interrupted connections and 204 responses may carry no JSON.
+  // Never let Response.json() expose a raw SyntaxError to the MiniBrowser UI.
+  const body = await response.text()
+  const fallback = response.ok
+    ? 'El navegador devolvió una respuesta vacía. Phoenix reintentará la conexión.'
+    : 'El servidor del navegador no está disponible (HTTP ' + response.status + '). Phoenix reintentará la conexión.'
+  if (!body.trim()) throw new Error(fallback)
+  let data: unknown
+  try {
+    data = JSON.parse(body) as unknown
+  } catch {
+    throw new Error('Respuesta incompleta del navegador (HTTP ' + response.status + '). Phoenix reintentará la conexión.')
+  }
+  if (!response.ok) {
+    const message = data !== null && typeof data === 'object' && 'error' in data
+      && typeof data.error === 'string' ? data.error : fallback
+    throw new Error(message)
+  }
+  return data as T
 }
 function validSnapshot(value: unknown): value is Snapshot {
   if (value === null || typeof value !== 'object') return false
