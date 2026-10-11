@@ -122,6 +122,15 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
 
+  it('retries orphan cleanup after Windows releases exited Host and updater handles', () => {
+    const finish = supervisor.lastIndexOf('await stopWatcherSupervisor()')
+    const close = supervisor.indexOf('supervisorInstanceLock?.close()', finish)
+    expect(finish).toBeGreaterThan(-1)
+    expect(close).toBeGreaterThan(finish)
+    expect(supervisor.slice(finish, close)).toContain('cleanupObsoleteRuntimes()')
+    expect(supervisor.slice(finish, close)).toContain('final storage cleanup deferred')
+  })
+
   it('does not let other checkouts exhaust this Windows runtime quota', () => {
     const begin = supervisor.indexOf('function runtimeDirectoriesForCleanup()')
     const end = supervisor.indexOf('\nfunction stageDirectoriesForCleanup()', begin)
