@@ -33,7 +33,7 @@ import { isSafariBrowser, repairSafariTextareaLayout } from './safari.ts'
 import {
   configureCodexRealtimeUserTranscriptHandler,
   createVoiceRecognition, getVoiceAssistantSnapshot, hasCodexRealtimeVoiceSupport, hasVoiceRecognition,
-  interruptVoiceAssistantSpeech,
+  interruptVoiceAssistantSpeech, isCodexLiveRepairPending, waitForCodexLiveRepair, stopCodexRealtimeVoice,
   isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, openCodexReconnection, codexRealtimeRequiresLogin,
   setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant, tryStartCodexRealtimeVoice,
   type VoiceInputState, type VoiceRecognitionLike,
@@ -216,6 +216,8 @@ export function InputBar({
   )
   const voiceEnabled = voiceAssistant.active
   const [codexVoiceFailure, setCodexVoiceFailure] = useState<string | null>(null)
+  const [voiceRepairing, setVoiceRepairing] = useState(false)
+  const voiceRepairAbortRef = useRef<AbortController | null>(null)
   const voiceRef = useRef<VoiceRecognitionLike | null>(null)
   const voiceSubmitPendingRef = useRef(false)
   const voiceStartingRef = useRef(false)
@@ -271,6 +273,8 @@ export function InputBar({
   }, [appendVoiceText])
   useEffect(() => () => {
     voiceStartingRef.current = false
+    voiceRepairAbortRef.current?.abort()
+    voiceRepairAbortRef.current = null
     // Approval/Hardness composer takeovers temporarily unmount InputBar. Keep
     // the native Codex WebRTC call alive across that UI swap so the same voice
     // can announce the request and resume the harness answer. Legacy browser
@@ -280,7 +284,63 @@ export function InputBar({
     voiceRef.current = null
     if (!keepNativeCodex) setVoiceAssistantActive(false)
   }, [])
+  /** Complete the microphone action without requiring a second user click. */
+  const resumeAfterRepair = useCallback((key: string): void => {
+    voiceRepairAbortRef.current?.abort()
+    const controller = new AbortController()
+    voiceRepairAbortRef.current = controller
+    setVoiceRepairing(true)
+    setCodexVoiceFailure('Phoenix está recuperando Codex Live automáticamente…')
+    void waitForCodexLiveRepair(controller.signal).then(async outcome => {
+      if (controller.signal.aborted || voiceRepairAbortRef.current !== controller) return
+      if (outcome === 'ready') {
+        voiceStartingRef.current = true
+        try {
+          const restored = await tryStartCodexRealtimeVoice(key)
+          if (controller.signal.aborted || voiceRepairAbortRef.current !== controller) {
+            if (restored.kind === 'started') await stopCodexRealtimeVoice()
+            return
+          }
+          if (restored.kind === 'started') { setCodexVoiceFailure(null); return }
+          if (restored.kind === 'failed' && codexRealtimeRequiresLogin(restored.reason)) {
+            setCodexVoiceFailure('codex-login-required')
+            openCodexReconnection()
+          } else {
+            // A new CLI cannot manufacture server-side Quicksilver support.
+            // Stop here instead of relaunching npm or WebRTC indefinitely.
+            setCodexVoiceFailure(isCodexLiveRepairPending(restored.kind === 'failed' ? restored.reason : '')
+              ? 'La versión oficial instalada todavía no admite este protocolo. Phoenix seguirá comprobando actualizaciones.'
+              : restored.kind === 'failed' ? restored.reason : 'codex-live-unavailable')
+          }
+        } finally {
+          voiceStartingRef.current = false
+        }
+      } else {
+        setCodexVoiceFailure(outcome === 'timeout'
+          ? 'Phoenix seguirá buscando una versión oficial compatible; la recuperación continuará en segundo plano.'
+          : 'La recuperación automática de Codex Live no está disponible por ahora.')
+      }
+    }).catch(() => {
+      if (!controller.signal.aborted && voiceRepairAbortRef.current === controller) {
+        setCodexVoiceFailure('No se pudo comprobar la actualización de Codex Live.')
+      }
+    }).finally(() => {
+      if (voiceRepairAbortRef.current === controller) {
+        voiceRepairAbortRef.current = null
+        setVoiceRepairing(false)
+      }
+    })
+  }, [])
+
   const toggleVoice = useCallback(async (): Promise<void> => {
+    if (voiceRepairAbortRef.current !== null) {
+      voiceRepairAbortRef.current.abort()
+      voiceRepairAbortRef.current = null
+      setVoiceRepairing(false)
+      setCodexVoiceFailure(null)
+      void stopCodexRealtimeVoice()
+      return
+    }
     if (locked || machineBusy || voiceStartingRef.current) return
     if (voiceEnabled) {
       setVoiceAssistantActive(false)
@@ -302,6 +362,10 @@ export function InputBar({
       const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
       if (realtime.kind === 'started') return
       if (realtime.kind === 'failed') {
+        if (isCodexLiveRepairPending(realtime.reason)) {
+          resumeAfterRepair(String(sessionId))
+          return
+        }
         setCodexVoiceFailure(codexRealtimeRequiresLogin(realtime.reason)
           ? 'codex-login-required' : realtime.reason)
         // A missing or expired login should display the actual Connectors
@@ -321,7 +385,7 @@ export function InputBar({
     } finally {
       voiceStartingRef.current = false
     }
-  }, [ensureHarnessVoiceRecognition, locked, machineBusy, sessionId, startVoiceRecognition, voiceEnabled])
+  }, [ensureHarnessVoiceRecognition, locked, machineBusy, resumeAfterRepair, sessionId, startVoiceRecognition, voiceEnabled])
 
   // Browser recognition is fallback input only. Never compete with an active
   // Codex Live microphone; when Live ends, the published assistant state causes
@@ -1038,20 +1102,26 @@ export function InputBar({
             {codexVoiceFailure !== null && (
               <span
                 role="status"
-                className={clsx(css.voiceFallback, codexRealtimeRequiresLogin(codexVoiceFailure) && css.voiceReconnect)}
+                className={clsx(css.voiceFallback, (voiceRepairing || codexRealtimeRequiresLogin(codexVoiceFailure)) && css.voiceReconnect)}
                 data-codex-voice-fallback
-                title={codexRealtimeRequiresLogin(codexVoiceFailure)
+                title={voiceRepairing
+                  ? 'Phoenix está recuperando Codex CLI y reanudará esta llamada automáticamente cuando haya una versión compatible.'
+                  : codexRealtimeRequiresLogin(codexVoiceFailure)
                   ? 'Codex perdió la autenticación. Vuelve a conectar tu cuenta de ChatGPT.'
                   : `Codex Live no disponible: ${codexVoiceFailure}. No se ha activado la voz del navegador.`}
               >
-                {codexRealtimeRequiresLogin(codexVoiceFailure)
+                {voiceRepairing
+                  ? <>Recuperando Codex Live… · <button type="button" className={css.voiceReconnectAction} onClick={() => { void toggleVoice() }}>Cancelar</button></>
+                  : codexRealtimeRequiresLogin(codexVoiceFailure)
                   ? <>Codex desconectado · <button type="button" className={css.voiceReconnectAction} onClick={openCodexReconnection}>Reconectar</button></>
                   : <>Codex Live: {codexVoiceFailure}</>}
               </span>
             )}
             {(voiceState !== 'unsupported' || hasCodexRealtimeVoiceSupport()) && (
               <Tooltip
-                label={codexVoiceFailure !== null
+                label={voiceRepairing
+                  ? 'Cancelar la recuperación automática de Codex Live'
+                  : codexVoiceFailure !== null
                   ? `Codex Live no disponible: ${codexVoiceFailure} · sin voz del navegador`
                   : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
@@ -1060,11 +1130,11 @@ export function InputBar({
                 <button
                   type="button"
                   className={clsx(css.voice, voiceEnabled && css.voiceActive)}
-                  aria-label={voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
+                  aria-label={voiceRepairing ? 'Cancelar recuperación de Codex Live' : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                   aria-pressed={voiceEnabled}
                   data-voice-state={voiceState}
                   data-codex-voice-failure={codexVoiceFailure ?? undefined}
-                  disabled={locked || machineBusy}
+                  disabled={(locked || machineBusy) && !voiceRepairing}
                   onMouseDown={keepFocus}
                   onClick={() => { void toggleVoice() }}
                 >

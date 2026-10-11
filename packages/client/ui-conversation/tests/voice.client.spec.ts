@@ -6,7 +6,8 @@ import {
   configureCodexRealtimeUserTranscriptHandler,
   configureVoiceAssistantRemote,
   configureVoiceModelRouteResolver,
-  codexRealtimeStatusFailureReason, codexRealtimeRequiresLogin, openCodexReconnection,
+  codexRealtimeStatusFailureReason, codexRealtimeRequiresLogin, codexLiveRepairFromStatus,
+  isCodexLiveRepairPending, openCodexReconnection,
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
@@ -76,6 +77,17 @@ describe('browser voice adapter', () => {
       detail: '  ',
     })).toBe('codex-login-required')
     expect(codexRealtimeStatusFailureReason({})).toBe('codex-realtime-unavailable')
+  })
+
+  it('decodes updater progress from newer and older Host Remote contracts', () => {
+    expect(isCodexLiveRepairPending('codex-live-repair-pending')).toBe(true)
+    expect(isCodexLiveRepairPending('refresh token expired')).toBe(false)
+    expect(codexLiveRepairFromStatus({ repair: 'ready' })).toBe('ready')
+    expect(codexLiveRepairFromStatus({ repair: 'waiting-upstream' })).toBe('waiting-upstream')
+    expect(codexLiveRepairFromStatus({ repair: 'blocked' })).toBe('blocked')
+    expect(codexLiveRepairFromStatus({ reason: 'experimental-unavailable' })).toBeUndefined()
+    expect(codexLiveRepairFromStatus({ repair: 'unknown-version' })).toBeUndefined()
+    expect(codexLiveRepairFromStatus(null)).toBeUndefined()
   })
 
   it('opens the existing Codex connector window for expired credentials only', () => {

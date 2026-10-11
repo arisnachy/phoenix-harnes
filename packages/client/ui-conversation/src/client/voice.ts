@@ -392,6 +392,62 @@ export function openCodexReconnection(): void {
   }))
 }
 
+/** A successful update is the only condition that may restart the user's Live call. */
+export type CodexLiveRepairState = 'checking' | 'updating' | 'waiting-upstream' | 'ready' | 'blocked' | 'disabled'
+
+export function isCodexLiveRepairPending(reason: string): boolean {
+  return reason === 'codex-live-repair-pending'
+}
+
+/** Consume optional Host updater progress without relying on newly generated Remote types. */
+export function codexLiveRepairFromStatus(status: unknown): CodexLiveRepairState | undefined {
+  if (status === null || typeof status !== 'object' || !('repair' in status)) return undefined
+  const repair = status.repair
+  return repair === 'checking' || repair === 'updating' || repair === 'waiting-upstream'
+    || repair === 'ready' || repair === 'blocked' || repair === 'disabled'
+    ? repair : undefined
+}
+
+/**
+ * Poll only the existing single-owner updater after an explicit microphone click.
+ * Do not start fresh WebRTC negotiations while a binary is downloading and
+ * never wait forever for a provider version that has not been released.
+ */
+export async function waitForCodexLiveRepair(
+  signal: AbortSignal,
+  options: { readonly timeoutMs?: number; readonly pollMs?: number } = {},
+): Promise<'ready' | 'unavailable' | 'timeout' | 'cancelled'> {
+  const timeoutMs = options.timeoutMs ?? 3 * 60_000
+  const pollMs = options.pollMs ?? 5_000
+  const expires = Date.now() + timeoutMs
+  while (!signal.aborted && Date.now() < expires) {
+    const remote = voiceAssistantRemote
+    if (remote?.conversationRealtimeStatus === undefined) return 'unavailable'
+    try {
+      const result = await remote.conversationRealtimeStatus()
+      if (signal.aborted) break
+      if (result.ok) {
+        const phase = codexLiveRepairFromStatus(result.value)
+        if (phase === 'ready') return 'ready'
+        if (phase === 'blocked' || phase === 'disabled') return 'unavailable'
+        if (phase === undefined && (!result.value.enabled || result.value.reason === 'codex-login-required')) {
+          return 'unavailable'
+        }
+      }
+    } catch {
+      // A Host handoff can briefly disconnect the remote. Retry after delay.
+    }
+    await new Promise<void>(resolve => {
+      if (signal.aborted) { resolve(); return }
+      const timer = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve() },
+        Math.min(pollMs, Math.max(0, expires - Date.now())))
+      function cancel(): void { clearTimeout(timer); resolve() }
+      signal.addEventListener('abort', cancel, { once: true })
+    })
+  }
+  return signal.aborted ? 'cancelled' : 'timeout'
+}
+
 /** Result of one attempt to enter native Codex voice independently of the task model. */
 export type CodexRealtimeVoiceStartResult =
   | { readonly kind: 'started' }
@@ -432,6 +488,10 @@ export async function tryStartCodexRealtimeVoice(
     const capability = await remote.conversationRealtimeStatus()
     if (!capability.ok) return { kind: 'failed', reason: capability.error.code }
     if (!capability.value.enabled || !capability.value.available || !capability.value.authenticated) {
+      const phase = codexLiveRepairFromStatus(capability.value)
+      if (phase === 'checking' || phase === 'updating' || phase === 'waiting-upstream') {
+        return { kind: 'failed', reason: 'codex-live-repair-pending' }
+      }
       return {
         kind: 'failed',
         // Incremental client builds may still hold the previous generated

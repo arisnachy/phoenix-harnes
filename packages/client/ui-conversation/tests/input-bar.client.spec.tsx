@@ -1796,6 +1796,61 @@ describe('command launcher chrome and control seats', () => {
     }
   })
 
+  it('resumes native Codex Live once after a verified automatic CLI repair', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const wait = vi.spyOn(voiceAdapter, 'waitForCodexLiveRepair').mockResolvedValue('ready')
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValueOnce({ kind: 'failed', reason: 'codex-live-repair-pending' })
+      .mockResolvedValueOnce({ kind: 'started' })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(wait).toHaveBeenCalledOnce()
+      expect(live).toHaveBeenCalledTimes(2)
+      expect(view.container.querySelector('[data-codex-voice-fallback]')).toBeNull()
+    } finally {
+      live.mockRestore()
+      wait.mockRestore()
+      support.mockRestore()
+      cleanup()
+    }
+  })
+
+  it('lets the user cancel recovery without starting browser speech or a second Codex call', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'codex-live-repair-pending' })
+    let watchSignal: AbortSignal | undefined
+    const wait = vi.spyOn(voiceAdapter, 'waitForCodexLiveRepair')
+      .mockImplementation(signal => {
+        watchSignal = signal
+        return new Promise(resolve => {
+          signal.addEventListener('abort', () => { resolve('cancelled') }, { once: true })
+        })
+      })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      expect(view.getByRole('button', { name: 'Cancelar recuperación de Codex Live' })).toBeTruthy()
+      fireEvent.click(view.getByRole('button', { name: 'Cancelar recuperación de Codex Live' }))
+      await act(async () => { await Promise.resolve() })
+      expect(watchSignal?.aborted).toBe(true)
+      expect(live).toHaveBeenCalledTimes(1)
+      expect(view.container.querySelector('[data-codex-voice-fallback]')).toBeNull()
+    } finally {
+      wait.mockRestore()
+      live.mockRestore()
+      support.mockRestore()
+      cleanup()
+    }
+  })
+
   it('reveals the Codex Live startup failure instead of silently choosing another voice', async () => {
     const recognition = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(false)
     const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)

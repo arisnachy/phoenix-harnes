@@ -8,6 +8,8 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { Context } from '@phoenix-ai/cordis'
 import { Remote, TypertRemoteService } from '@phoenix-ai/dsh-typert-protocol'
 import z from '@phoenix-ai/schemastery'
@@ -26,7 +28,7 @@ import type {
   VoiceConversationStatus,
 } from './types.ts'
 import {
-  CodexRealtimeBridge, codexRealtimeNeedsLogin,
+  CodexRealtimeBridge, codexLiveRepairPhase, codexRealtimeNeedsLogin,
   type CodexRealtimeInitialItem,
   type CodexRealtimeTranscript,
 } from './codex-realtime.ts'
@@ -427,8 +429,23 @@ export class VoiceRuntime extends TypertRemoteService {
         reason: 'disabled',
       }
     }
+    const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+    const repair = codexLiveRepairPhase(dshHome)
+    if (repair !== 'idle' && repair !== 'ready') {
+      return {
+        enabled: true, available: false, authenticated: false, provider: 'openai-codex',
+        reason: 'experimental-unavailable',
+        detail: repair === 'waiting-upstream'
+          ? 'Codex Live espera una versión oficial compatible. Phoenix seguirá comprobando las actualizaciones.'
+          : repair === 'blocked' || repair === 'disabled'
+            ? 'La reparación automática de Codex Live no pudo continuar.'
+            : 'Phoenix está actualizando Codex CLI para recuperar Live.',
+        repair,
+      }
+    }
     const probe = await this.codexRealtimeBridge().probe()
     return {
+      ...(repair === 'ready' ? { repair } : {}),
       enabled: true,
       available: probe.available,
       authenticated: probe.authenticated,
@@ -955,7 +972,7 @@ function codexRealtimeFailureDetail(value: unknown): string {
   // A backend AVAS header rejection is protocol incompatibility, never a
   // reason to dump a raw provider JSON payload in Phoenix's voice overlay.
   if (/invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\s*quicksilver=v2/iu.test(message)) {
-    return 'Codex Live requiere Quicksilver v2. Actualiza Codex CLI y reinicia Phoenix para usar WebRTC v3.'
+    return 'Codex Live está comprobando y actualizando automáticamente su compatibilidad con Quicksilver v2.'
   }
   const redacted = message
     .replace(/\b(?:sk|sess|token)-[A-Za-z0-9._-]{8,}\b/gu, '[redacted]')

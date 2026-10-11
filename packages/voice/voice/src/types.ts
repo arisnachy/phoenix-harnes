@@ -43,6 +43,8 @@ export interface VoiceConversationRealtimeStatus {
   readonly reason?: 'disabled' | 'codex-unavailable' | 'codex-login-required' | 'experimental-unavailable'
   /** Sanitized diagnostic from Codex CLI on failed native startup. */
   readonly detail?: string
+  /** Existing single-owner updater's progress; optional for rolling clients. */
+  readonly repair?: 'checking' | 'updating' | 'waiting-upstream' | 'ready' | 'blocked' | 'disabled'
 }
 
 /** Browser WebRTC offer for one PHOENIX session using its current Codex route. */

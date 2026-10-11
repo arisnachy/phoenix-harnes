@@ -150,6 +150,42 @@ export function queueCodexLiveRepair(
   }
 }
 
+/** Read the existing updater's progress without starting npm or exposing credentials. */
+export type CodexLiveRepairPhase = 'idle' | 'checking' | 'updating' | 'waiting-upstream' | 'ready' | 'blocked' | 'disabled'
+
+export function codexLiveRepairPhase(home: string, now = Date.now()): CodexLiveRepairPhase {
+  const root = join(resolve(home), 'codex-cli')
+  const requestPath = join(root, 'live-repair-request.json')
+  try {
+    if (!existsSync(requestPath)) return 'idle'
+    const request = JSON.parse(readFileSync(requestPath, 'utf8')) as Record<string, unknown>
+    const requested = typeof request.requestedAt === 'string' ? Date.parse(request.requestedAt) : NaN
+    if (request.schema !== 1 || request.reason !== 'quicksilver-v2'
+      || !Number.isFinite(requested) || requested > now + 60_000
+      || now - requested > LIVE_REPAIR_COOLDOWN_MS) return 'idle'
+
+    const statePath = join(root, 'update-state.json')
+    if (!existsSync(statePath)) return 'checking'
+    const state = JSON.parse(readFileSync(statePath, 'utf8')) as Record<string, unknown>
+    const checked = typeof state.checkedAt === 'string' ? Date.parse(state.checkedAt) : NaN
+    if (!Number.isFinite(checked) || checked < requested) return 'checking'
+    if (state.mode === 'off' || state.mode === 'notify') return 'disabled'
+    if (state.status === 'blocked') return 'blocked'
+    if (state.status === 'waiting-upstream' || state.status === 'current') return 'waiting-upstream'
+    if (state.status === 'applied') {
+      const activePath = join(root, 'active.json')
+      if (!existsSync(activePath)) return 'checking'
+      const active = JSON.parse(readFileSync(activePath, 'utf8')) as Record<string, unknown>
+      const activated = typeof active.activatedAt === 'string' ? Date.parse(active.activatedAt) : NaN
+      return Number.isFinite(activated) && activated >= requested ? 'ready' : 'checking'
+    }
+    return state.status === 'available' ? 'updating' : 'checking'
+  } catch {
+    // A concurrent atomic replacement may briefly prevent reading its file.
+    return 'checking'
+  }
+}
+
 /**
  * Locate the exact managed Codex CLI that PHOENIX model discovery already
  * installs. Voice previously executed ambient 'codex' only, which can be
@@ -322,7 +358,10 @@ export class CodexRealtimeBridge {
           const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
           const repair = queueCodexLiveRepair(home)
           if (repair === 'queued' || repair === 'recent') {
-            throw new Error('Codex Live requiere Quicksilver v2. Phoenix ha solicitado una comprobación y actualización automática de Codex CLI. Vuelve a probar la voz en unos minutos.')
+            // The client will watch updater progress and resume its original
+            // user-requested voice call once a verified newer CLI activates.
+            // Do not repeatedly acquire the mic or start multiple npm installs.
+            throw new Error('codex-live-repair-pending')
           }
           throw new Error(repair === 'disabled'
             ? 'Codex Live requiere Quicksilver v2. La actualización automática de Codex está desactivada.'
