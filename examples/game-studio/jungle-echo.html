@@ -19,13 +19,13 @@ canvas{display:block;width:100%;height:auto;border-radius:11px;border:1px solid 
 </head>
 <body>
 <header><div><h1>JUNGLE ECHO</h1><small>Arcade original · prototipo jugable · Phoenix Game Studio</small></div>
-<div><button id="restart" type="button">Reiniciar</button> <button id="mute" type="button" aria-pressed="false">Sonido: encender</button></div></header>
-<canvas id="game" width="960" height="500" tabindex="0" aria-label="Juego de plataformas, movimiento A D o flechas, salto Espacio, disparo J, apuntar I hacia arriba u O hacia abajo"></canvas>
+<div><button id="restart" type="button">Reiniciar</button> <button id="mute" type="button" aria-pressed="false">Sonido: apagar</button></div></header>
+<canvas id="game" width="960" height="500" tabindex="0" aria-label="Juego de plataformas: mover A D, saltar Espacio, disparar J, magia L, látigo H, apuntar I y O, sonido M"></canvas>
 <div id="controls" aria-label="Controles táctiles">
 <button data-key="ArrowLeft" type="button">◀</button><button data-key="ArrowRight" type="button">▶</button>
-<button data-key="Space" type="button">Saltar</button><button data-key="KeyJ" type="button">Disparar</button><button data-key="KeyI" type="button">Apuntar ↑</button><button data-key="KeyO" type="button">Apuntar ↓</button>
+<button data-key="Space" type="button">Saltar</button><button data-key="KeyJ" type="button">Disparar</button><button data-key="KeyL" type="button">Magia</button><button data-key="KeyH" type="button">Látigo</button><button data-key="KeyI" type="button">Apuntar ↑</button><button data-key="KeyO" type="button">Apuntar ↓</button>
 </div>
-<div id="status" role="status">Haz clic en el juego. A/D o flechas: mover · Espacio: saltar · J: disparar · I/O: apuntar arriba/abajo · M: sonido</div>
+<div id="status" role="status">Haz clic en el juego. A/D o flechas: mover · Espacio: saltar · J: disparar · L: magia · H: látigo · I/O: apuntar · M: sonido (actívalo con tecla o clic)</div>
 <script id="phoenix-game-manifest" type="application/json">
 {
   "schemaVersion":1,"title":"Jungle Echo","genre":"original run-and-gun",
@@ -147,17 +147,97 @@ const PhoenixGameKit = (() => {
     return 'cover';
   }
 
-  return { clamp, direction8, twoBone, animationFrame, parallaxX, humanPose, drawHumanoid, enemyDecision, distance };
-})();
+
+  // Bind a real embedded sprite atlas to the requested state. Missing artwork is
+  // NOT replaced by a pretend animation; callers must flag a prototype instead.
+  function drawSpriteState(ctx, image, atlas, state, seconds, x, y, width, height, face = 1) {
+    const fw = atlas?.frameWidth, fh = atlas?.frameHeight;
+    const sequence = atlas?.animations?.[state];
+    if (!image?.complete || !(image.naturalWidth > 0 && image.naturalHeight > 0)
+      || !(fw > 0 && fh > 0) || !Array.isArray(sequence) || !sequence.length) return false;
+    const cols = Math.floor(image.naturalWidth / fw);
+    const rows = Math.floor(image.naturalHeight / fh);
+    if (cols < 1 || rows < 1 || image.naturalWidth % fw || image.naturalHeight % fh) return false;
+    const index = sequence[animationFrame(seconds, atlas.fps || 10, sequence.length)];
+    if (!Number.isInteger(index) || index < 0 || index >= cols * rows) return false;
+    ctx.save();
+    ctx.translate(x + (face < 0 ? width : 0), y);
+    if (face < 0) ctx.scale(-1, 1);
+    ctx.drawImage(image, index % cols * fw, Math.floor(index / cols) * fh, fw, fh, 0, 0, width, height);
+    ctx.restore();
+    return true;
+  }
+
+  // Attack animation is a state machine: anticipation -> projectile(s) -> recovery.
+  // Each bullet is emitted only AFTER a visible, avoidable warning.
+  function advanceBoss(boss, player, dt, fire) {
+    if (!boss.alive || !Number.isFinite(dt) || dt <= 0) return;
+    const step = Math.min(dt, 0.05);
+    boss.animTime = (boss.animTime || 0) + step;
+    boss.phase = boss.hp <= (boss.maxHp || 30) * 0.5 ? 'barrage' : 'patrol';
+    const delta = player.x - boss.x;
+    boss.face = delta >= 0 ? 1 : -1;
+    if (Math.abs(delta) > 800) { boss.action = 'idle'; boss.windup = 0; return; }
+    if (boss.action === 'windup') {
+      boss.windup -= step;
+      if (boss.windup > 0) return;
+      const origin = { x: boss.x + boss.w / 2 + boss.face * 42, y: boss.y + 42 };
+      const dx = player.x + (player.w || 30) / 2 - origin.x;
+      const dy = player.y + (player.h || 54) / 2 - origin.y;
+      const angle = Math.atan2(dy, dx);
+      const advanced = boss.phase === 'barrage';
+      const attack = advanced && boss.attackIndex % 2 === 0 ? 'ground-wave'
+        : advanced ? 'fan' : 'bolt';
+      const offsets = attack === 'fan' ? [-0.36, 0, 0.36] : [0];
+      for (const offset of offsets) {
+        const theta = attack === 'ground-wave' ? (boss.face > 0 ? 0 : Math.PI) : angle + offset;
+        const speed = attack === 'ground-wave' ? 325 : advanced ? 315 : 255;
+        fire({ x: origin.x, y: attack === 'ground-wave' ? 425 : origin.y,
+          vx: Math.cos(theta) * speed, vy: Math.sin(theta) * speed,
+          r: attack === 'ground-wave' ? 13 : 8, ttl: 2, kind: attack });
+      }
+      boss.lastAttack = attack;
+      boss.action = 'recover';
+      boss.recovery = advanced ? 0.65 : 1.05;
+      return;
+    }
+    if (boss.recovery > 0) {
+      boss.recovery = Math.max(0, boss.recovery - step);
+      boss.action = 'recover';
+      return;
+    }
+    // An actual animated body translation, unlike moving a static boss bitmap.
+    const velocity = boss.phase === 'barrage' ? 30 : 14;
+    boss.x = clamp(boss.x + Math.sin(boss.animTime * 1.4) * velocity * step, 3300, 3500);
+    boss.attackIndex = (boss.attackIndex || 0) + 1;
+    boss.windup = boss.phase === 'barrage' ? 0.58 : 0.82;
+    boss.action = 'windup';
+  }
+
+  function activateAbility(actor, seconds, cooldown = 4.5) {
+    if (!Number.isFinite(seconds) || seconds < (actor.nextPowerAt || 0)) return false;
+    actor.nextPowerAt = seconds + cooldown;
+    actor.powerAnimationUntil = seconds + 0.42;
+    return true;
+  }
+
+  return { clamp, direction8, twoBone, animationFrame, parallaxX, humanPose, drawHumanoid, enemyDecision, distance,
+    drawSpriteState, advanceBoss, activateAbility };
+})();;
 
 const canvas=document.getElementById('game'),g=canvas.getContext('2d'),status=document.getElementById('status');
 const W=960,H=500,FLOOR=440,WORLD=3800,keys=new Set(),sparks=[],bullets=[],enemyBullets=[];
 const platforms=[{x:0,y:FLOOR,w:WORLD},{x:465,y:370,w:180},{x:1160,y:352,w:190},{x:2080,y:365,w:240}];
 const enemies=[];
-let p,boss,camera=0,t=0,score=0,ended=false,audio=null,audioOn=false,beat=0,invuln=0;
+let p,boss,camera=0,t=0,score=0,ended=false,audio=null,audioOn=true,beat=0,invuln=0;
+const audioSamples=new Map();
+function registerSoundSample(cue, decodedAudioBuffer){if(typeof cue==='string'&&decodedAudioBuffer)audioSamples.set(cue,decodedAudioBuffer)}
+function playSoundSample(cue){if(!audioOn||!audio||!audioSamples.has(cue))return false;const src=audio.createBufferSource();src.buffer=audioSamples.get(cue);src.connect(audio.destination);src.start();return true}
+// Licensed voice recordings and detailed Foley may be registered as decoded buffers; oscillator fallback remains prototype audio.
+window.PhoenixRegisterGameSound=registerSoundSample;
 function reset(){
- p={x:72,y:350,vx:0,vy:0,w:30,h:54,hp:8,grounded:false,face:1,shot:0,frame:0,walk:0,state:'idle'};
- boss={x:3410,y:FLOOR-122,w:110,h:122,hp:30,phase:'patrol',shot:1,alive:true,flash:0};
+ p={x:72,y:350,vx:0,vy:0,w:30,h:54,hp:8,grounded:false,face:1,shot:0,frame:0,walk:0,state:'idle',nextPowerAt:0,whipReadyAt:0,powerAnimationUntil:0,whipAnimationUntil:0};
+ boss={x:3410,y:FLOOR-122,w:110,h:122,hp:30,maxHp:30,phase:'patrol',alive:true,flash:0,face:-1,action:'idle',windup:0,recovery:1,attackIndex:0,animTime:0};
  enemies.length=0;bullets.length=0;enemyBullets.length=0;sparks.length=0;
  [330,620,940,1300,1630,1850,2260,2520,2860,3190].forEach((x,i)=>enemies.push({x,y:FLOOR-42,w:30,h:42,hp:i%3===0?3:2,
   type:i%3===0?'turret':'scout',face:-1,shot:i%2,walk:i,alive:true,flash:0,aiState:'patrol',telegraph:0}));
@@ -166,6 +246,14 @@ function reset(){
 function unlockAudio(){
  if(audio===null){const C=window.AudioContext||window.webkitAudioContext;if(C)audio=new C();}
  if(audio!==null&&audio.state==='suspended')audio.resume().catch(()=>{});
+}
+function noise(duration,volume,cutoff=2300){
+ if(!audioOn||!audio)return;
+ const length=Math.max(1,Math.floor(duration*audio.sampleRate)),data=audio.createBuffer(1,length,audio.sampleRate);
+ const samples=data.getChannelData(0);for(let i=0;i<length;i++)samples[i]=(Math.random()*2-1)*Math.pow(1-i/length,1.5);
+ const source=audio.createBufferSource(),filter=audio.createBiquadFilter(),gain=audio.createGain();
+ source.buffer=data;filter.type='lowpass';filter.frequency.value=cutoff;
+ gain.gain.value=volume;source.connect(filter);filter.connect(gain);gain.connect(audio.destination);source.start();
 }
 function tone(freq,duration,wave,volume,endFreq){
  if(!audioOn||audio===null)return;
@@ -176,17 +264,21 @@ function tone(freq,duration,wave,volume,endFreq){
  o.connect(gain);gain.connect(audio.destination);o.start(now);o.stop(now+duration+.01);
 }
 const sound={
- jump:()=>tone(240,.18,'triangle',.09,440),
- shoot:()=>tone(640,.07,'square',.075,180),
- hit:()=>tone(150,.14,'sawtooth',.11,65),
- explosion:()=>{tone(90,.33,'sawtooth',.15,27);tone(40,.27,'triangle',.11,28)},
- boss:()=>{tone(220,.3,'square',.11,110);tone(120,.38,'sawtooth',.07,60)}
+ jump:()=>{if(!playSoundSample('jump'))tone(240,.18,'triangle',.09,440)},
+ shoot:()=>{if(!playSoundSample('shoot')){noise(.082,.12,3600);tone(260,.095,'sawtooth',.06,75)}},
+ whip:()=>{if(!playSoundSample('whip')){noise(.17,.12,6000);tone(730,.16,'triangle',.08,125)}},
+ power:()=>{if(!playSoundSample('power')){tone(240,.38,'sine',.14,920);tone(460,.24,'triangle',.065,1150)}},
+ hit:()=>{if(!playSoundSample('hit')){noise(.11,.12,1800);tone(150,.14,'sawtooth',.08,65)}},
+ explosion:()=>{if(!playSoundSample('explosion')){noise(.35,.16,900);tone(90,.33,'sawtooth',.12,27)}},
+ boss:()=>{if(!playSoundSample('boss')){noise(.23,.09,1300);tone(130,.38,'sawtooth',.07,60)}}
 };
 function music(dt){
  if(!audioOn||ended)return;
  beat-=dt;
  if(beat<=0){beat+=.22;const notes=[110,0,146.83,0,164.81,0,146.83,98,0,146.83,164.81,0,196,0,164.81,0];
-  const note=notes[Math.floor(t/.22)%notes.length];if(note)tone(note,.16,'triangle',.025,note*.998);
+  const note=notes[Math.floor(t/.22)%notes.length];if(note){tone(note,.18,'triangle',.037,note*.998);tone(note*2,.12,'sine',.011,note*2)}
+  if(Math.floor(t/.22)%4===0){tone(boss.phase==='barrage'?55:68,.14,'sine',.095,30);noise(.06,.035,600)}
+  if(Math.floor(t/.22)%4===2)noise(.095,.029,3100);
  }
 }
 function particles(x,y,c,n=10,power=1){
@@ -195,12 +287,13 @@ function particles(x,y,c,n=10,power=1){
   sparks.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:.25+Math.random()*.42,color:c,r:1+Math.random()*3});
  }
 }
-function addBullet(x,y,dir,owner='player'){
+function addBullet(x,y,dir,owner='player',kind='bullet'){
  const arr=owner==='player'?bullets:enemyBullets;
  if(arr.length>35)return;
  const axis=typeof dir==='number'?{x:dir,y:0}:dir;
- arr.push({x,y,vx:axis.x*(owner==='player'?730:270),vy:axis.y*(owner==='player'?730:270),r:owner==='player'?5:7,ttl:1.7});
- if(owner==='player'){sound.shoot();particles(x,y,'#ffde72',4,.28)}
+ arr.push({x,y,vx:axis.x*(kind==='magic'?520:owner==='player'?730:270),vy:axis.y*(kind==='magic'?520:owner==='player'?730:270),
+  r:kind==='magic'?15:owner==='player'?5:7,ttl:kind==='magic'?2.2:1.7,kind,damage:kind==='magic'?4:1});
+ if(owner==='player'){if(kind==='magic')sound.power();else sound.shoot();particles(x,y,kind==='magic'?'#83eafa':'#ffde72',kind==='magic'?16:4,.35)}
 }
 function overlap(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
 function damagePlayer(){
@@ -228,13 +321,25 @@ function update(dt){
  p.vx=axis*245;if(axis)p.face=axis;
  if((keys.has('Space')||keys.has('ArrowUp')||keys.has('KeyW'))&&p.grounded){p.vy=-660;p.grounded=false;sound.jump();particles(p.x+15,p.y+p.h,'#cab48a',8,.38)}
  moveBody(p,dt,true);
+ if(keys.has('KeyL')&&PhoenixGameKit.activateAbility(p,t,4.5)){
+  const direction=PhoenixGameKit.direction8(p.face,keys.has('KeyI'),keys.has('KeyO'));
+  addBullet(p.x+15+p.face*40,p.y+20,direction,'player','magic');
+ }
+ if(keys.has('KeyH')&&t>=p.whipReadyAt){
+  p.whipReadyAt=t+.7;p.whipAnimationUntil=t+.3;sound.whip();
+  particles(p.x+15+p.face*60,p.y+22,'#ebf7df',16,.36);
+  for(const e of enemies)if(e.alive&&Math.abs(e.x-p.x)<105&&Math.abs(e.y-p.y)<92){
+   e.hp-=2;e.flash=.2;if(e.hp<=0){e.alive=false;score+=100;sound.explosion()}
+  }
+  if(boss.alive&&Math.abs(boss.x-p.x)<125){boss.hp=Math.max(0,boss.hp-2);boss.flash=.2}
+ }
  if((keys.has('KeyJ')||keys.has('KeyK'))&&p.shot<=0){
   const aim=PhoenixGameKit.direction8(p.face,keys.has('KeyI'),keys.has('KeyO'));
   const ang=Math.atan2(aim.y,Math.abs(aim.x));
   const recoil=p.shot/.14*3,forward=51*Math.cos(ang)-recoil;
   addBullet(p.x+15+p.face*forward,p.y+27+51*Math.sin(ang),aim);p.shot=.14
  }
- p.state=invuln>.68?'hurt':!p.grounded?(p.vy<0?'jump':'fall'):p.shot>.08?'shoot':Math.abs(p.vx)>4?'run':'idle';
+ p.state=t<p.whipAnimationUntil?'whip':t<p.powerAnimationUntil?'power':invuln>.68?'hurt':!p.grounded?(p.vy<0?'jump':'fall'):p.shot>.08?'shoot':Math.abs(p.vx)>4?'run':'idle';
  for(const e of enemies){
   if(!e.alive)continue;
   const dist=p.x-e.x;e.face=dist>=0?1:-1;e.walk+=dt*5;e.flash=Math.max(0,e.flash-dt);
@@ -250,34 +355,31 @@ function update(dt){
   moveBody(e,dt,false);
   if(overlap(p,e))damagePlayer();
  }
- boss.phase=boss.hp<=15?'barrage':'patrol';
  if(boss.alive){
-  boss.flash=Math.max(0,boss.flash-dt);boss.shot-=dt;
-  if(Math.abs(p.x-boss.x)<730&&boss.shot<=0){
-   const dir=p.x>=boss.x?1:-1;sound.boss();
-   addBullet(boss.x+55+dir*45,boss.y+40,dir,'enemy');
-   if(boss.phase==='barrage')addBullet(boss.x+55+dir*45,boss.y+80,dir,'enemy');
-   boss.shot=boss.phase==='barrage'?.72:1.35;
-  }
-  if(Math.abs(p.x-boss.x)<700&&boss.phase==='barrage'){boss.x+=Math.sin(t*1.4)*.35}
+  boss.flash=Math.max(0,boss.flash-dt);
+  const beforeAction=boss.action;
+  PhoenixGameKit.advanceBoss(boss,p,dt,attack=>{
+   if(enemyBullets.length<70)enemyBullets.push(attack);
+  });
+  if(beforeAction==='windup'&&boss.action==='recover'){sound.boss();particles(boss.x+55,boss.y+40,'#f5ad69',15,.65)}
  }
  for(const b of bullets){
   b.x+=b.vx*dt;b.y+=b.vy*dt;b.ttl-=dt;
   for(const e of enemies){
    if(e.alive&&b.ttl>0&&b.x>e.x&&b.x<e.x+e.w&&b.y>e.y&&b.y<e.y+e.h){
-    e.hp--;e.flash=.12;b.ttl=0;particles(b.x,b.y,'#fce195',7,.45);sound.hit();
+    e.hp-=b.damage||1;e.flash=.12;b.ttl=0;particles(b.x,b.y,'#fce195',7,.45);sound.hit();
     if(e.hp<=0){e.alive=false;score+=100;particles(e.x+15,e.y+20,'#ff9345',18,.9);sound.explosion()}
    }
   }
   if(boss.alive&&b.ttl>0&&b.x>boss.x&&b.x<boss.x+boss.w&&b.y>boss.y&&b.y<boss.y+boss.h){
-   boss.hp--;boss.flash=.13;b.ttl=0;particles(b.x,b.y,'#fae7a1',7,.55);sound.hit();
-   if(boss.hp===15){particles(boss.x+55,boss.y+50,'#fba03b',32,1.1);sound.boss()}
+   boss.hp-=b.damage||1;boss.flash=.13;b.ttl=0;particles(b.x,b.y,'#fae7a1',7,.55);sound.hit();
+   if(boss.hp<=15&&!boss.enraged){boss.enraged=true;particles(boss.x+55,boss.y+50,'#fba03b',32,1.1);sound.boss()}
    if(boss.hp<=0){boss.alive=false;ended=true;score+=2000;particles(boss.x+55,boss.y+60,'#ffb54c',80,1.7);
      sound.explosion();status.textContent='¡VICTORIA! Jungla liberada. Puntaje: '+score+'. Pulsa Reiniciar.'}
   }
  }
  for(const b of enemyBullets){b.x+=b.vx*dt;b.y+=b.vy*dt;b.ttl-=dt;
-  if(b.ttl>0&&b.x>p.x&&b.x<p.x+p.w&&b.y>p.y&&b.y<p.y+p.h){b.ttl=0;damagePlayer()}
+  if(b.ttl>0&&b.x+b.r>p.x&&b.x-b.r<p.x+p.w&&b.y+b.r>p.y&&b.y-b.r<p.y+p.h){b.ttl=0;damagePlayer()}
  }
  for(let i=sparks.length-1;i>=0;i--){
   const s=sparks[i];s.x+=s.vx*dt;s.y+=s.vy*dt;s.vy+=420*dt;s.life-=dt;
@@ -321,10 +423,12 @@ function world(){
  if(boss.alive)drawBoss();
  if(invuln===0||Math.floor(t*16)%2===0)drawHero();
  for(const b of bullets){
-  g.fillStyle='#fff2a5';g.shadowColor='#ffba46';g.shadowBlur=12;g.fillRect(b.x-10,b.y-3,18,6);g.shadowBlur=0;
+  g.fillStyle=b.kind==='magic'?'#a6f9ff':'#fff2a5';g.shadowColor=b.kind==='magic'?'#47d9ff':'#ffba46';g.shadowBlur=b.kind==='magic'?25:12;
+  if(b.kind==='magic'){g.beginPath();g.arc(b.x,b.y,13+Math.sin(t*22)*2,0,Math.PI*2);g.fill()}else g.fillRect(b.x-10,b.y-3,18,6);g.shadowBlur=0;
  }
  for(const b of enemyBullets){
-  g.fillStyle='#fd7269';g.shadowColor='#fe4844';g.shadowBlur=14;g.beginPath();g.arc(b.x,b.y,b.r,0,Math.PI*2);g.fill();g.shadowBlur=0;
+  g.fillStyle=b.kind==='ground-wave'?'#ffbd5f':'#fd7269';g.shadowColor='#fe4844';g.shadowBlur=14;
+  g.beginPath();g.arc(b.x,b.y,b.r*(1+.1*Math.sin(t*17)),0,Math.PI*2);g.fill();g.shadowBlur=0;
  }
  for(const s of sparks){g.globalAlpha=Math.min(1,s.life*2.8);rect(s.x,s.y,s.r,s.r,s.color)}g.globalAlpha=1;
  g.restore();
@@ -337,7 +441,10 @@ function drawHero(){
   face:p.face,walk:p.walk,running:p.state==='run',airborne:!p.grounded,
   falling:p.vy>0,aim:Math.atan2(aim.y,Math.abs(aim.x)),
   recoil:p.shot/.14*3,flash:p.shot>.09
- });g.restore();
+ });
+ if(t<p.whipAnimationUntil){g.strokeStyle='#fff2b3';g.lineWidth=5;g.beginPath();g.arc(p.x+15,p.y+20,75,p.face>0?-.95:Math.PI-.95,p.face>0?.95:Math.PI+.95,p.face<0);g.stroke()}
+ if(t<p.powerAnimationUntil){g.strokeStyle='#7ae8ff';g.lineWidth=3;g.beginPath();g.arc(p.x+15,p.y+20,36+8*Math.sin(t*35),0,Math.PI*2);g.stroke()}
+ g.restore();
 }
 function drawEnemy(e){
  g.save();g.translate(e.x+15,e.y+18);g.scale(.83,.75);
@@ -352,12 +459,16 @@ function drawBoss(){
  const x=boss.x,y=boss.y;
  g.save();g.translate(x,y);
  g.fillStyle='#151d28';g.fillRect(8,33,96,84);
- for(let k=0;k<3;k++){rect(7+k*37,112,25,11,'#354550');rect(8+k*37,118+Math.sin(t*3+k)*3,19,8,'#161f28')}
+ for(let k=0;k<3;k++){const stride=Math.sin(boss.animTime*7+k*2)*9;
+  rect(7+k*37+stride,112,25,11,'#354550');rect(8+k*37+stride,118+Math.sin(boss.animTime*7+k)*5,19,8,'#161f28')}
  rect(8,20,96,79,boss.flash?'#fff0b1':'#56676d');rect(19,7,75,17,'#789494');
  rect(14,42,16,43,'#23313a');rect(83,42,14,43,'#23313a');
  rect(33,36,44,29,boss.phase==='barrage'?'#db6c45':'#b9c773');
  rect(44,45,23,12,'#172a30');
- rect(-12,40,42,17,'#818a85');rect(82,41,45,17,'#818a85');
+ const thrust=boss.action==='windup'?12+Math.sin(boss.animTime*20)*5:Math.sin(boss.animTime*5)*5;
+ rect(-12-thrust,40,42,17,'#818a85');rect(82+thrust,41,45,17,'#818a85');
+ if(boss.action==='windup'){g.strokeStyle='#ffd06a';g.lineWidth=4;g.beginPath();g.arc(55,56,56+Math.sin(boss.animTime*32)*4,0,Math.PI*2);g.stroke();
+   g.fillStyle='#ffc26a';g.fillRect(boss.face>0?108:-30,38,28,20)}
  rect(-19,43,19,11,'#2c3c44');rect(123,44,18,11,'#2c3c44');
  if(boss.phase==='barrage'){g.strokeStyle='#f0a15a';g.lineWidth=3;g.strokeRect(5,17,101,84)}
  g.restore();
@@ -366,6 +477,8 @@ function hud(){
  g.fillStyle='#0b1e29d9';g.fillRect(14,13,344,59);g.fillRect(W-229,13,213,59);
  g.font='bold 17px system-ui';g.fillStyle='#efdea2';g.fillText('JUNGLE ECHO',25,35);
  g.font='13px system-ui';g.fillStyle='#e8efda';g.fillText('VIDAS '+p.hp+'     PUNTOS '+score,25,57);
+ g.font='12px system-ui';g.fillStyle='#a3f4ff';g.fillText('MAGIA '+(Math.max(0,p.nextPowerAt-t)).toFixed(1)+'s',370,27);
+ if(boss.action==='windup')g.fillText('⚠ JEFE PREPARA '+boss.phase.toUpperCase(),370,45);
  g.fillText('Iron Stag '+(boss.alive?boss.phase:'derrotado'),W-217,34);
  rect(W-215,46,180,11,'#34454a');rect(W-215,46,Math.max(0,boss.hp)/30*180,11,'#d98750');
  if(ended){
@@ -383,7 +496,7 @@ function frame(ms){
 }
 document.addEventListener('keydown',event=>{
  const key=event.code;
- if(['ArrowLeft','ArrowRight','ArrowUp','Space','KeyA','KeyD','KeyW','KeyJ','KeyK','KeyI','KeyO','KeyM'].includes(key))event.preventDefault();
+ if(['ArrowLeft','ArrowRight','ArrowUp','Space','KeyA','KeyD','KeyW','KeyJ','KeyK','KeyI','KeyO','KeyL','KeyH','KeyM'].includes(key))event.preventDefault();
  if(key==='KeyM'){toggleAudio();return}
  keys.add(key);if(!event.repeat){unlockAudio()}
 });
