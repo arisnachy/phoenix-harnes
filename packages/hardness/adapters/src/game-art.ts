@@ -12,7 +12,7 @@ function failed(message: string): never {
 }
 function imageById(html: string, id: string): { width: number; height: number; colorType: number } {
   const tags = [...html.matchAll(/<img\b[^>]*>/giu)]
-  const entry = tags.find(match => {
+  const entry = tags.find((match) => {
     const tag = match[0]
     const idMatch = /\bid\s*=\s*(["'])([^"']+)\1/iu.exec(tag)
     return idMatch?.[2] === id
@@ -44,7 +44,8 @@ function imageById(html: string, id: string): { width: number; height: number; c
  * @returns Classified art readiness; does not certify visual fidelity.
  */
 export function validateGameArt(html: string, manifest: RecordValue): 'production-structure' | 'prototype' | 'not-required' {
-  const genre = String(manifest.gameType ?? manifest.genre ?? '').toLowerCase()
+  const genreValue = manifest.gameType ?? manifest.genre
+  const genre = typeof genreValue === 'string' ? genreValue.toLowerCase() : ''
   const isBrawler = /beat.em.up|beat.?em.?up|brawler|double.dragon|street.fight|pelea.{0,9}callej|lucha.{0,9}callej/u.test(genre)
   const isShooter = /run.and.gun|shooter|shoot.em.up/u.test(genre)
   const isCharacterGame = isBrawler || /run.and.gun|shooter|platformer|top.down.action|\brpg\b|role.play/u.test(genre)
@@ -90,7 +91,8 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
   const runtime = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)]
     .filter(match => !/\btype\s*=\s*["']application\/json["']/iu.test(match[1] ?? ''))
     .map(match => match[2] ?? '').join('\n')
-  const imageBindings = [...runtime.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*document\.getElementById\(\s*(["'])([^"']+)\2\s*\)/gu)]
+  const imageBindingPattern = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*document\.getElementById\(\s*(["'])([^"']+)\2\s*\)/gu
+  const imageBindings = [...runtime.matchAll(imageBindingPattern)]
   const drawnVariables = new Set([...runtime.matchAll(/\.drawImage\s*\(\s*([A-Za-z_$][\w$]*)\s*,/gu)].map(match => match[1]))
   // Support manifest-driven renderers without mistaking embedded concept PNGs
   // for drawn gameplay assets. Every declared family needs a runtime call.
