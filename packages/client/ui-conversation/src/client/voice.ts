@@ -196,7 +196,7 @@ function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
 function allowAuthorizedCodexAudio(session: CodexRealtimeVoiceSession): void {
   session.audio.muted = false
   session.audio.volume = 1
-  if (session.audio.srcObject !== null) playCodexRealtimeAudio(session.audio)
+  if (session.audio.srcObject) playCodexRealtimeAudio(session.audio)
 }
 
 function queueCodexRealtimeUtterance(utterance: PendingCodexRealtimeUtterance): void {
