@@ -112,6 +112,15 @@ describe('Phoenix Game Studio publisher', () => {
     await expect(tool.execute({ title: 'Missing audio', html: withoutAudio }, execution())).rejects.toThrow('audio')
   })
 
+  it('distinguishes a brawler prototype from false finished production', () => {
+    const game = runnable.replace('"genre":"puzzle","gameType":"puzzle"', '"genre":"beat-em-up","gameType":"beat-em-up"')
+      .replace('"controls":{"interact":"Enter"}', '"controls":{"move":"WASD"}')
+      .replace('"audio":{"cues":["click"]}', '"audio":{"cues":["hit"]},"art":{"mode":"prototype"}')
+    expect(validateGameHtml(game).artPreflight).toBe('prototype')
+    const dishonest = game.replace('"art":{"mode":"prototype"}', '"art":{"mode":"production"}')
+    expect(() => validateGameHtml(dishonest)).toThrow('control necesario')
+  })
+
   it('requires embedded action samples, soundtrack and a playback route when claiming production sound', () => {
     const declared = runnable.replace('"audio":{"cues":["click"]}',
       '"audio":{"mode":"sampled-production","cues":["click"]}')
