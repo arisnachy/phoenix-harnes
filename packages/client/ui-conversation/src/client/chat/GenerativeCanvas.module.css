@@ -82,3 +82,6 @@
 .canvas :global(table) { font-variant-numeric:tabular-nums; }
 @media(max-width:640px) { .canvas { max-width:100%; } .grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .row > * { flex:1 1 100%; } }
 @media(max-width:360px) { .grid { grid-template-columns:1fr; } }
+
+.iconLabel {display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:550;max-width:100%;}
+.iconLabel svg {flex-shrink:0;}
