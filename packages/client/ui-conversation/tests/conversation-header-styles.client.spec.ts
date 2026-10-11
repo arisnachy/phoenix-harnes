@@ -64,11 +64,26 @@ describe('ConversationRoot premium header', () => {
     expect(declarations(compact + ' .headerGlobal')?.get('min-height')).toBe('36px')
     expect(css).toContain('grid-template-rows: auto;')
     expect(css).toContain('@media (prefers-reduced-motion: reduce)')
-    expect(conversationRoot).toContain('onMouseEnter')
-    expect(conversationRoot).toContain('onFocusCapture')
     expect(conversationRoot).toContain('aria-pressed={headerPinnedOpen}')
-    expect(conversationRoot).toContain('visualActive || (headerAutoCompact && !headerHovered && !headerFocused)')
+    expect(conversationRoot).toContain("const hasDraft = (inputState?.draft ?? '').trim().length > 0")
+    expect(conversationRoot).toContain('visualActive || (!hasDraft && headerAutoCompact)')
+    expect(conversationRoot).not.toContain('headerHovered')
+    expect(conversationRoot).not.toContain('headerFocused')
     expect(conversationRoot).toContain('[data-universal-artifact], [data-phoenix-scene3d], [data-phoenix-visual-kind]')
+  })
+
+  it('actually moves the collapsed bar to a small right-aligned tools pill on home and chat', () => {
+    const compact = ".root[data-header-compact='true']:is([data-phase='hero'], [data-phase='active'], [data-phase='settling']) .unifiedHeader"
+    // The compact CSS is applied to BOTH hero and active: no empty full-width header.
+    expect(css).toContain(compact)
+    expect(css).toContain('align-self: flex-end;')
+    expect(css).toContain('width: max-content;')
+    expect(css).toContain('max-width: calc(100% - 24px);')
+    expect(css).toContain(".root[data-header-compact='true'] .unifiedHeader .sessionChrome")
+    expect(css).toContain('display: none;')
+    expect(conversationRoot).toContain("const headerCompact = !headerPinnedOpen")
+    expect(conversationRoot).toContain('headerAutoCompact = hero')
+    expect(conversationRoot).toContain('const firstSendPending =')
   })
 
   it('uses compact shell geometry', () => {
