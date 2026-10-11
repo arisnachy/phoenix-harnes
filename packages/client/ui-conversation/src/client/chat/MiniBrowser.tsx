@@ -89,10 +89,12 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser({ requested = false, active = true, onActivate }: {
+export function MiniBrowser({ requested = false, active = true, onActivate, autoScroll = true, onPageChange }: {
   requested?: boolean
   active?: boolean
   onActivate?: () => void
+  autoScroll?: boolean
+  onPageChange?: (page: { title: string; url: string } | null) => void
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
   const [enabled, setEnabled] = useState(false)
@@ -124,12 +126,17 @@ export function MiniBrowser({ requested = false, active = true, onActivate }: {
   // its height without changing chat message IDs; bring the result into view
   // once instead of leaving it invisibly below the last Kira bubble.
   useEffect(() => {
-    if (!requested || !show || expanded || !active) return
+    if (!autoScroll || !requested || !show || expanded || !active) return
     const element = inlineRef.current
     if (element && typeof element.scrollIntoView === 'function') {
       element.scrollIntoView({ block: 'nearest', behavior: 'auto' })
     }
-  }, [requested, show, expanded, active, snapshot.tabId, snapshot.url])
+  }, [autoScroll, requested, show, expanded, active, snapshot.tabId, snapshot.url])
+
+  useEffect(() => {
+    onPageChange?.(snapshot.available && snapshot.url
+      ? { title: snapshot.title ?? '', url: snapshot.url } : null)
+  }, [snapshot.available, snapshot.url, snapshot.title, onPageChange])
 
   const run = useCallback(async (request: Command): Promise<void> => {
     try {
