@@ -1,8 +1,8 @@
-/** Free game-engine readiness and explicit package-manager installation; no startup work. */
+/** On-demand game toolchains: route -> doctor -> ensure; never install at startup. */
 import { spawnSync } from 'node:child_process'
 import { join } from 'node:path'
 
-const targets = new Set(['web', 'godot', 'blender', 'gameboy', 'nes', 'snes', 'genesis', 'sms', 'ps1'])
+const targets = new Set(['web', 'godot', 'blender', 'tiled', 'ffmpeg', 'gameboy', 'nes', 'snes', 'genesis', 'sms', 'ps1'])
 function execute(command, args, timeout = 8000) {
   return spawnSync(command, args, { encoding: 'utf8', shell: false, timeout, maxBuffer: 256 * 1024 })
 }
@@ -35,6 +35,18 @@ function readiness(target) {
     ...(process.platform === 'darwin' ? [['/Applications/Blender.app/Contents/MacOS/Blender', ['--version']]] : []),
     ['flatpak', ['run', 'org.blender.Blender', '--version']],
   ], /^Blender (?:[3-9]|[1-9]\d)\./mu)
+  if (target === 'tiled') {
+    return probe(process.env.PHOENIX_TILED_BIN ? [[process.env.PHOENIX_TILED_BIN, ['--version']]] : [
+      ['tiled', ['--version']],
+      ...(process.platform === 'darwin'
+        ? [['/Applications/Tiled.app/Contents/MacOS/Tiled', ['--version']]] : []),
+      ...(process.platform === 'win32' && process.env.ProgramFiles
+        ? [[join(process.env.ProgramFiles, 'Tiled', 'tiled.exe'), ['--version']]] : []),
+    ], /^(?:Tiled\s+)?\d+\.\d+(?:\.\d+)?(?:\.|\s|$)/mu)
+  }
+  if (target === 'ffmpeg') return probe(process.env.PHOENIX_FFMPEG_BIN
+    ? [[process.env.PHOENIX_FFMPEG_BIN, ['-version']]]
+    : [['ffmpeg', ['-version']]], /^ffmpeg version\s+\S+/mu)
   if (target === 'gameboy') return probe([[process.env.GBDK_HOME ? join(process.env.GBDK_HOME, 'bin', `lcc${suffix}`) : 'lcc', ['-v']]], /GBDK|gbz80|sm83|SDCC/iu)
   if (target === 'nes') return probe([['cc65', ['--version']]], /cc65/iu)
   if (target === 'ps1') {
@@ -49,21 +61,84 @@ function readiness(target) {
   }
   return probe([['sdcc', ['--version']]], /SDCC/iu)
 }
+/**
+ * Routing is a deterministic, read-only decision based on the *delivery target*.
+ * Godot's multi-file HTML5 WebAssembly export is NOT a valid single-file
+ * phoenix_game payload. A Godot project can still be delivered separately.
+ */
+function route(genre, delivery, quality) {
+  if (!['chat', 'desktop', 'web'].includes(delivery)) throw new Error('Delivery must be chat, desktop or web.')
+  if (!['prototype', 'production'].includes(quality)) throw new Error('Quality must be prototype or production.')
+  if (!genre.trim()) throw new Error('Genre cannot be empty.')
+  const normalized = genre.toLowerCase()
+  const brawler = /beat.em.up|beat.?em.?up|double.dragon|brawler|street.fight/u.test(normalized)
+  const is3d = /3d|open.world|mundo.abierto|low.poly|racing.3d/u.test(normalized)
+  const simple = /snake|pong|tetris|2048|logic.puzzle|juego.de.tablero/u.test(normalized)
+  const complexity = brawler || is3d || (!simple && quality === 'production')
+  const engine = delivery === 'chat' || !complexity ? 'html5' : 'godot'
+  const tools = engine === 'godot'
+    ? ['godot', ...(is3d ? ['blender'] : ['tiled']), 'ffmpeg']
+    : (simple ? [] : ['tiled', 'ffmpeg'])
+  return {
+    genre, delivery, quality, engine, tools,
+    action: tools.length ? 'Run doctor for each tool; ensure missing tools only during an authorized game build.' : 'No external editor is required.',
+    renderer: delivery === 'chat' ? 'phoenix_game-single-file-html' : 'native-project-or-hosted-export',
+    godotWebNote: delivery === 'web' && engine === 'godot'
+      ? 'Godot HTML5 export requires matching templates, JS/WASM/PCK files and real HTTP hosting; never present its index.html alone as an in-chat game.'
+      : undefined,
+    gate: 'Presets require imported atlas/scene IDs, visible runtime animation, original audio and real playtest evidence.',
+  }
+}
+
 function installation(target, platform) {
-  if (target !== 'godot' && target !== 'blender') throw new Error('Automatic installation supports only the free Godot and Blender engines; use the native SDK reference for other targets.')
-  if (platform === 'win32') return { command: 'winget', args: ['install', '--exact', '--id', target === 'godot' ? 'GodotEngine.GodotEngine' : 'BlenderFoundation.Blender', '--source', 'winget', '--silent', '--accept-package-agreements', '--accept-source-agreements'] }
-  if (platform === 'darwin') return { command: 'brew', args: ['install', '--cask', target] }
-  if (platform === 'linux') return { command: 'flatpak', args: ['install', '--user', '--noninteractive', 'flathub', target === 'godot' ? 'org.godotengine.Godot' : 'org.blender.Blender'] }
-  throw new Error('No verified package-manager route for this operating system.')
+  const packages = {
+    godot: { win32: 'GodotEngine.GodotEngine', darwin: 'godot', linux: 'org.godotengine.Godot' },
+    blender: { win32: 'BlenderFoundation.Blender', darwin: 'blender', linux: 'org.blender.Blender' },
+    tiled: { win32: 'Tiled.Tiled', darwin: 'tiled' },
+    ffmpeg: { win32: 'Gyan.FFmpeg', darwin: 'ffmpeg' },
+  }
+  if (!(target in packages)) throw new Error('No approved automatic installation route for this target.')
+  const id = packages[target][platform]
+  if (!id) throw new Error('No verified package manager route for ' + target + ' on ' + platform + '.')
+  if (platform === 'win32') return {
+    command: 'winget',
+    args: ['install', '--exact', '--id', id, '--source', 'winget', '--silent',
+      '--accept-package-agreements', '--accept-source-agreements'],
+  }
+  if (platform === 'darwin') return {
+    command: 'brew', args: ['install', ...(target === 'ffmpeg' ? [] : ['--cask']), id],
+  }
+  if (platform === 'linux') return {
+    command: 'flatpak', args: ['install', '--user', '--noninteractive', 'flathub', id],
+  }
+  throw new Error('No verified package manager route for this operating system.')
 }
 function main() {
   const [operation, ...options] = process.argv.slice(2)
   const values = {}
+  if (options.includes('--allow-install')) {
+    if (options.filter(value => value === '--allow-install').length !== 1) throw new Error('Duplicate --allow-install.')
+    values['--allow-install'] = true
+    options.splice(options.indexOf('--allow-install'), 1)
+  }
   for (let i = 0; i < options.length; i += 2) {
     const key = options[i]
-    if (!['--target', '--platform'].includes(key) || !options[i + 1] || values[key] !== undefined) throw new Error('Use doctor|plan|install --target TARGET; --platform is allowed only for plan.')
+    if (!['--target', '--platform', '--genre', '--delivery', '--quality'].includes(key)
+      || !options[i + 1] || values[key] !== undefined) {
+      throw new Error('Use route --genre NAME --delivery chat|desktop|web --quality production|prototype or doctor|plan|ensure --target TARGET.')
+    }
     values[key] = options[i + 1]
   }
+  if (operation === 'route') {
+    if (values['--allow-install'] || values['--target'] || values['--platform']) throw new Error('Route only supports genre, delivery and quality.')
+    console.log(JSON.stringify(route(values['--genre'] ?? '',
+      values['--delivery'] ?? 'chat', values['--quality'] ?? 'production')))
+    return
+  }
+  if (values['--genre'] || values['--delivery'] || values['--quality']) {
+    throw new Error('Routing options are only allowed for route.')
+  }
+  if (values['--allow-install'] && operation !== 'ensure') throw new Error('--allow-install is permitted only for ensure.')
   const target = values['--target']
   if (!targets.has(target)) throw new Error('Unknown game target.')
   if (operation !== 'plan' && values['--platform']) throw new Error('Actual probes/installations always use the current operating system.')
@@ -73,16 +148,35 @@ function main() {
     process.exitCode = result.ready ? 0 : 1
     return
   }
-  if (operation !== 'plan' && operation !== 'install') throw new Error('Unknown game-tool operation.')
+  if (operation !== 'plan' && operation !== 'install' && operation !== 'ensure') throw new Error('Unknown game-tool operation.')
   const platform = values['--platform'] ?? process.platform
-  const plan = installation(target, platform)
-  if (operation === 'plan') { console.log(JSON.stringify({ target, platform, ...plan })); return }
+  if (operation === 'plan') {
+    const plan = installation(target, platform)
+    console.log(JSON.stringify({ target, platform, ...plan }))
+    return
+  }
   const before = readiness(target)
-  if (before.ready) { console.log(JSON.stringify({ target, ...before, installed: false })); return }
+  if (before.ready) {
+    console.log(JSON.stringify({ target, ...before, installed: false, action: 'reused-existing' }))
+    return
+  }
+  // Missing packages need an explicit installation grant from the game mission.
+  // Allowlisted package IDs + no shell + current OS protect against model-supplied commands.
+  const plan = installation(target, platform)
+  if (operation === 'ensure' && !values['--allow-install']) {
+    console.log(JSON.stringify({ target, ready: false, installed: false,
+      action: 'authorization-required', installationPlan: plan }))
+    process.exitCode = 1
+    return
+  }
   const result = execute(plan.command, plan.args, 600_000)
-  if (result.status !== 0) throw new Error(`Package-manager installation failed (${result.error?.code ?? result.status}); inspect the official manager and its prerequisites. No ready state is claimed.`)
+  if (result.status !== 0) {
+    throw new Error(`Package-manager installation failed (${result.error?.code ?? result.status}); check the verified manager/installation logs. No ready state is claimed.`)
+  }
   const after = readiness(target)
-  console.log(JSON.stringify({ target, ...after, installed: true }))
+  console.log(JSON.stringify({ target, ...after, installed: true,
+    action: after.ready ? 'installed-and-verified' : 'installed-but-not-detected',
+    reason: after.ready ? undefined : 'Reopen the terminal or configure the PHOENIX_*_BIN executable path, then run doctor again.' }))
   process.exitCode = after.ready ? 0 : 1
 }
 try { main() } catch (error) {

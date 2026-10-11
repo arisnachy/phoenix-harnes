@@ -65,6 +65,61 @@ describe('shipped game toolkit', () => {
     })
     expect(record(result.stdout).args).toEqual(expect.arrayContaining(['--exact', '--id', 'GodotEngine.GodotEngine', '--source', 'winget']))
   })
+  it('routes production fighting games by destination, not by the fact an editor exists', () => {
+    const desktop = run(['route', '--genre', 'Double Dragon beat-em-up', '--delivery', 'desktop'])
+    expect(desktop.status).toBe(0)
+    expect(record(desktop.stdout)).toMatchObject({
+      engine: 'godot', tools: ['godot', 'tiled', 'ffmpeg'],
+      renderer: 'native-project-or-hosted-export',
+    })
+    const chat = run(['route', '--genre', 'beat-em-up', '--delivery', 'chat'])
+    expect(chat.status).toBe(0)
+    expect(record(chat.stdout)).toMatchObject({
+      engine: 'html5', renderer: 'phoenix_game-single-file-html',
+    })
+    const simple = run(['route', '--genre', 'Snake', '--delivery', 'desktop'])
+    expect(record(simple.stdout)).toMatchObject({ engine: 'html5', tools: [] })
+    const web = run(['route', '--genre', '3D adventure', '--delivery', 'web'])
+    expect(record(web.stdout).godotWebNote).toMatch(/WASM|WebAssembly|HTML5/u)
+  })
+
+  it('plans approved Windows art and audio helper installation without executing it', () => {
+    for (const [tool, id] of [['tiled', 'Tiled.Tiled'], ['ffmpeg', 'Gyan.FFmpeg']] as const) {
+      const result = run(['plan', '--target', tool, '--platform', 'win32'])
+      expect(result.status).toBe(0)
+      expect(record(result.stdout).args).toEqual(expect.arrayContaining(['--id', id, '--source', 'winget']))
+    }
+  })
+
+  it.skipIf(process.platform === 'win32')('ensure reuses an already-installed engine without package installation', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'phoenix-godot-ensure-'))
+    try {
+      const command = join(directory, 'godot')
+      writeFileSync(command, '#!/bin/sh\\nprintf "4.4.stable.official.123\\\\n"\\n')
+      chmodSync(command, 0o755)
+      const result = run(['ensure', '--target', 'godot'], { PHOENIX_GODOT_BIN: command })
+      expect(result.status).toBe(0)
+      expect(record(result.stdout)).toMatchObject({ ready: true, installed: false, action: 'reused-existing' })
+    } finally { rmSync(directory, { recursive: true, force: true }) }
+  })
+
+  it('never installs a missing engine without an explicit install grant', () => {
+    const result = run(['ensure', '--target', 'godot'],
+      { PHOENIX_GODOT_BIN: `${root}missing-godot` })
+    expect(result.status).toBe(1)
+    expect(record(result.stdout)).toMatchObject({
+      ready: false, installed: false, action: 'authorization-required',
+    })
+    expect(record(result.stdout).installationPlan).toBeDefined()
+    expect(run(['doctor', '--target', 'godot', '--allow-install']).status).toBe(2)
+  })
+
+  it('blocks unsupported on-demand installation and malformed routes', () => {
+    expect(run(['plan', '--target', 'ffmpeg', '--platform', 'linux']).status).toBe(2)
+    expect(run(['route', '--genre', 'brawler', '--delivery', 'unknown']).status).toBe(2)
+    expect(run(['route', '--genre', '', '--delivery', 'desktop']).status).toBe(2)
+  })
+
   it('does not accept arbitrary installation targets or platform overrides for actual installation', () => {
     expect(run(['install', '--target', 'arbitrary-community-repo']).status).toBe(2)
     expect(run(['install', '--target', 'godot', '--platform', 'win32']).status).toBe(2)
