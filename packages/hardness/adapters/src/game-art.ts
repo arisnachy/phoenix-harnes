@@ -85,11 +85,29 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
     .map(match => match[2] ?? '').join('\n')
   const imageBindings = [...runtime.matchAll(/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*document\.getElementById\(\s*(["'])([^"']+)\2\s*\)/gu)]
   const drawnVariables = new Set([...runtime.matchAll(/\.drawImage\s*\(\s*([A-Za-z_$][\w$]*)\s*,/gu)].map(match => match[1]))
-  const usedByDraw = (id: string): boolean => imageBindings.some(match =>
+  // Support manifest-driven renderers without mistaking embedded concept PNGs
+  // for drawn gameplay assets. Every declared family needs a runtime call.
+  const normalizedRuntime = runtime.replace(/\s+/gu, '')
+  const dynamicAtlas = /document\.getElementById\(\s*spec\.imageId\s*\)/u.test(runtime)
+    && /PhoenixGameKit\.drawSpriteState\s*\(/u.test(runtime)
+    && /\.drawImage\s*\(\s*image\s*,/u.test(runtime)
+  const dynamicWorld = /document\.getElementById\(\s*spec\.imageId\s*\)/u.test(runtime)
+    && /\.drawImage\s*\(\s*image\s*,/u.test(runtime)
+  const dynamicBackdrop = /gameArt\.backgrounds/u.test(runtime)
+    && /document\.getElementById\(\s*layer\.imageId\s*\)/u.test(runtime)
+    && /\.drawImage\s*\(\s*image\s*,/u.test(runtime)
+  const callsFamily = (renderer: string, family: string): boolean =>
+    normalizedRuntime.includes(renderer + "('" + family + "'")
+      || normalizedRuntime.includes(renderer + '("' + family + '"')
+  const usedByDraw = (id: string, family: string): boolean => imageBindings.some(match =>
     match[3] === id && drawnVariables.has(match[1] ?? ''))
-  if (!usedByDraw(hero.imageId)) failed('el sprite del protagonista no se carga y dibuja con drawImage en el juego.')
+    || (family === 'backgrounds' && dynamicBackdrop)
+    || (['hero', 'enemies', 'bosses'].includes(family) && dynamicAtlas && callsFamily('drawArt', family))
+    || (['weapons', 'projectiles', 'powers', 'props', 'effects'].includes(family)
+      && dynamicWorld && callsFamily('drawWorldAsset', family))
+  if (!usedByDraw(hero.imageId, 'hero')) failed('el sprite del protagonista no se carga y dibuja con drawImage en el juego.')
   for (const item of art.backgrounds) {
-    if (record(item) && nonempty(item.imageId) && !usedByDraw(item.imageId)) {
+    if (record(item) && nonempty(item.imageId) && !usedByDraw(item.imageId, 'backgrounds')) {
       failed('JavaScript no carga ni dibuja con drawImage el escenario ilustrado "' + item.imageId + '".')
     }
   }
@@ -109,7 +127,7 @@ export function validateGameArt(html: string, manifest: RecordValue): 'productio
         if (ids.has(entry.id) || images.has(entry.imageId)) failed('art.' + name + ' reutiliza un id/atlas en papeles diferentes.')
         ids.add(entry.id); images.add(entry.imageId)
         const atlas = imageById(html, entry.imageId)
-        if (!usedByDraw(entry.imageId)) failed('art.' + name + ' no se dibuja con drawImage: ' + entry.id)
+        if (!usedByDraw(entry.imageId, name)) failed('art.' + name + ' no se dibuja con drawImage: ' + entry.id)
         if (states.length === 0) continue
         if (!Number.isInteger(entry.frameWidth) || !Number.isInteger(entry.frameHeight)
           || (entry.frameWidth as number) < 8 || (entry.frameHeight as number) < 8
