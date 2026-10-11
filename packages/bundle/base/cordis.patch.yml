@@ -93,10 +93,13 @@
 
     # Credential sources: inherited environment over the managed
     # `$DSH_HOME/.credentials.yaml`, with project and user `.env` fallbacks.
-    # Adapters resolve references per request; the Models page writes only the
-    # managed document, which is never materialized into the process environment.
+    # Pin to the user home, never to the staged/runtime checkout: one saved
+    # Google OAuth grant must survive side-by-side update Hosts and restarts.
+    # The file is owner-only (0600); never print, copy or store it in a runtime.
     - id: credentials
       name: '@phoenix-ai/dsh-credentials-local'
+      config:
+        path: !!js dshHomePath('.credentials.yaml')
 
     # Human-only secret entry point. Its command omits raw input from the
     # session log and the provider resolves values only inside consumers.
@@ -113,8 +116,9 @@
     # Google Workspace authorization uses a Desktop OAuth client id. A deployment
     # may supply it through PHOENIX_GOOGLE_OAUTH_CLIENT_ID; otherwise the first
     # Connect action asks for the public Desktop client id once and stores that
-    # application identity in Phoenix credentials. Access/refresh tokens remain
-    # Host-process-only and never enter model context or the credential file.
+    # application identity in Phoenix credentials. Access and refresh tokens are
+    # stored in the same owner-only persistent credential document, never in
+    # model context, session logs or disposable runtime/staging directories.
     # Google installed apps do not support incremental authorization, so the
     # enabled provider requests exactly the shipped Workspace capability set.
     - id: authorization-google
