@@ -143,6 +143,32 @@ export function findManagedCodexRealtimeBin(dshHome: string): string | undefined
   }
 }
 
+/** Reuse model discovery's reliable Windows Codex launch convention.
+ * @param managed - Validated managed Node CLI, when present.
+ * @param platform - Runtime platform, injectable for tests.
+ * @param comSpec - Windows command interpreter.
+ * @returns Command and argument vector for the Codex app-server.
+ */
+export function codexRealtimeLaunchCommand(
+  managed: string | undefined,
+  platform: NodeJS.Platform = process.platform,
+  comSpec: string | undefined = process.env.ComSpec,
+): { readonly command: string; readonly args: readonly string[] } {
+  const codexArgs = [
+    '--config', "forced_login_method='chatgpt'",
+    '--config', 'features.realtime_conversation=true',
+    '--config', 'features.plugins=false',
+    '--config', 'skills.bundled.enabled=false',
+    'app-server', '--listen', 'stdio://',
+  ]
+  if (managed !== undefined) return { command: process.execPath, args: [managed, ...codexArgs] }
+  if (platform === 'win32') {
+    // cmd.exe /c receives ONE command string with arguments, as in Codex discovery.
+    return { command: comSpec || 'cmd.exe', args: ['/d', '/s', '/c', `codex ${codexArgs.join(' ')}`] }
+  }
+  return { command: 'codex', args: codexArgs }
+}
+
 /** Keep voice's SQLite state separate from model discovery, while sharing Codex login. */
 function codexRealtimeEnvironment(): NodeJS.ProcessEnv {
   const env = { ...process.env }
@@ -422,23 +448,8 @@ export class CodexRealtimeBridge {
   }
 
   private async startProcess(): Promise<void> {
-    const codexArgs = [
-      '--config', "forced_login_method='chatgpt'",
-      '--config', 'features.realtime_conversation=true',
-      '--config', 'features.plugins=false',
-      '--config', 'skills.bundled.enabled=false',
-      'app-server', '--listen', 'stdio://',
-    ]
     const dshHome = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
-    const managed = findManagedCodexRealtimeBin(dshHome)
-    const command = managed !== undefined
-      ? process.execPath
-      : process.platform === 'win32' ? process.env.ComSpec || 'cmd.exe' : 'codex'
-    const args = managed !== undefined
-      ? [managed, ...codexArgs]
-      : process.platform === 'win32'
-        ? ['/d', '/s', '/c', 'codex', ...codexArgs]
-        : codexArgs
+    const { command, args } = codexRealtimeLaunchCommand(findManagedCodexRealtimeBin(dshHome))
     const env = codexRealtimeEnvironment()
 
     let child: ChildProcessWithoutNullStreams
@@ -491,7 +502,7 @@ export class CodexRealtimeBridge {
       })
       this.notify('initialized')
 
-      const account = await this.request('account/read', { refreshToken: false })
+      const account = await this.request('account/read', { refreshToken: true })
       if (!isRecord(account) || !isRecord(account.account) || account.account.type !== 'chatgpt') {
         throw new Error('Codex ChatGPT login required for subscription-backed realtime voice')
       }

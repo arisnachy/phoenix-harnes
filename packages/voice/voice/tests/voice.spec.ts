@@ -11,7 +11,7 @@ import VoiceRuntime, {
   type VoiceTextToSpeechProvider,
 } from '../src/index.ts'
 import {
-  CodexRealtimeBridge, findManagedCodexRealtimeBin, realtimeVoiceForGender,
+  CodexRealtimeBridge, codexRealtimeLaunchCommand, findManagedCodexRealtimeBin, realtimeVoiceForGender,
 } from '../src/codex-realtime.ts'
 
 async function mountVoice(config: ConstructorParameters<typeof VoiceRuntime>[1] = {}): Promise<{
@@ -683,5 +683,22 @@ describe('session-event voice mapping', () => {
     })
     expect(supervisor?.displayOutput).not.toContain(goalId)
     expect(supervisor?.displayOutput.toLowerCase()).not.toContain('needs attention')
+  })
+})
+
+describe('Codex Live launch regression', () => {
+  it('passes the full CLI invocation as one Windows cmd.exe /c string', () => {
+    const launch = codexRealtimeLaunchCommand(undefined, 'win32', 'C:\\Windows\\System32\\cmd.exe')
+    expect(launch.command).toBe('C:\\Windows\\System32\\cmd.exe')
+    expect(launch.args.slice(0, 3)).toEqual(['/d', '/s', '/c'])
+    expect(launch.args).toHaveLength(4)
+    expect(launch.args[3]).toContain('codex --config')
+    expect(launch.args[3]).toContain('app-server --listen stdio://')
+  })
+
+  it('preserves direct managed and non-Windows launching', () => {
+    expect(codexRealtimeLaunchCommand('C:\\managed\\codex.js', 'win32').args[0])
+      .toBe('C:\\managed\\codex.js')
+    expect(codexRealtimeLaunchCommand(undefined, 'linux').command).toBe('codex')
   })
 })
