@@ -3,12 +3,13 @@ import React from 'react';
 // Phoenix validates declarative props before this upstream visual component renders.
 // Zod-only metadata was omitted so this React 18 adaptation needs no new npm dependency.
 
-export type DataTableProps = { title?: string; headers: string[]; rows: Array<Record<string, unknown>> };
+export type DataTableProps = { title?: string; headers: string[]; rows: Array<Record<string, unknown>>; cellRenderer?: (value: unknown) => React.ReactNode };
 
 export const DataTable: React.FC<DataTableProps> = ({
   title,
   headers,
   rows,
+  cellRenderer,
 }) => {
   return (
     <div style={{
@@ -51,7 +52,7 @@ export const DataTable: React.FC<DataTableProps> = ({
                 const cellValue = row[h] !== undefined ? row[h] : row[h.toLowerCase()];
                 return (
                   <td key={colIndex} style={{ padding: '0.75rem 1.25rem', color: 'var(--dsw-alias-label-primary,inherit)' }}>
-                    {typeof cellValue === 'boolean' ? (cellValue ? 'Yes' : 'No') : String(cellValue ?? '')}
+                    {cellRenderer ? cellRenderer(cellValue) : (typeof cellValue === 'boolean' ? (cellValue ? 'Yes' : 'No') : String(cellValue ?? ''))}
                   </td>
                 );
               })}
