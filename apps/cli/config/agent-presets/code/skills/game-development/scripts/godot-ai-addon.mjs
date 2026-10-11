@@ -107,14 +107,30 @@ with zipfile.ZipFile(archive) as z:
 if not (pathlib.Path(root) / "plugin.cfg").is_file():
     raise RuntimeError("Missing plugin.cfg after extraction")
 `;
-    const python = process.env.PHOENIX_PYTHON_BIN ?? (process.platform === 'win32' ? 'py' : 'python3')
-    const prefixArgs = python === 'py' ? ['-3'] : []
-    const result = spawnSync(python, [...prefixArgs, '-c', py, archive, stage], {
-      encoding: 'utf8', shell: false, timeout: 30_000, maxBuffer: 4096,
-    })
-    if (result.status !== 0) {
-      throw new Error('Safe addon extraction failed; configure Python 3. ' + String(result.stderr || result.error || '').slice(0, 250))
+    // Try a configured Python first; otherwise try Windows launcher,
+    // common Python executables, then uv's managed Python (after permission).
+    const explicit = process.env.PHOENIX_PYTHON_BIN
+    const interpreters = explicit ? [[explicit, []]] : [
+      ...(process.platform === 'win32' ? [['py', ['-3']]] : []),
+      ['python3', []], ['python', []],
+      [process.env.PHOENIX_UV_BIN ?? 'uv', ['run', '--no-project', '--python', '3.13', 'python']],
+    ]
+    let error = 'Python 3 was not available.'
+    let extracted = false
+    for (const [binary, prefixArgs] of interpreters) {
+      const result = spawnSync(binary, [...prefixArgs, '-c', py, archive, stage], {
+        encoding: 'utf8', shell: false, timeout: 60_000, maxBuffer: 4096,
+      })
+      if (result.status === 0) {
+        extracted = true
+        break
+      }
+      error = String(result.stderr || result.error || 'Interpreter unavailable').slice(0, 250)
+      // Extraction failed after starting Python: abort rather than trying a
+      // different interpreter against partially extracted staging files.
+      if (result.status !== null) break
     }
+    if (!extracted) throw new Error('Safe addon extraction failed: ' + error)
     if (!existsSync(join(stage, 'plugin.cfg'))) throw new Error('Downloaded package lacks the Godot AI plugin entry.')
     mkdirSync(dirname(addon), { recursive: true })
     if (existsSync(addon) || existsSync(pending)) throw new Error('Addon appeared during download; not overwriting it.')
