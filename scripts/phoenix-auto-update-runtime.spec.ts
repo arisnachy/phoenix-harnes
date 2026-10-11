@@ -122,6 +122,29 @@ describe('PHOENIX supervised updater runtime isolation', () => {
   })
 
 
+  it('does not let other checkouts exhaust this Windows runtime quota', () => {
+    const begin = supervisor.indexOf('function runtimeDirectoriesForCleanup()')
+    const end = supervisor.indexOf('\nfunction stageDirectoriesForCleanup()', begin)
+    expect(begin).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(begin)
+    const source = supervisor.slice(begin, end) + '\n({ runtimeDirectoriesForCleanup })'
+    const currentId = 'c844c9f3ab'
+    const otherId = 'abcde12345'
+    const names = [
+      `phoenix-runtime-${currentId}-0123456789ab`,
+      `phoenix-runtime-${otherId}-aaaaaaaaaaaa`,
+      `phoenix-runtime-${otherId}-bbbbbbbbbbbb`,
+      'phoenix-runtime-unmanaged',
+    ]
+    const { runtimeDirectoriesForCleanup } = runInNewContext(source, {
+      runtimeBaseDirectory: () => 'p',
+      stageIdentity: () => currentId,
+      readdirSync: () => names.map(name => ({ name, isDirectory: () => true })),
+      join,
+    }) as { runtimeDirectoriesForCleanup: () => string[] }
+    expect(runtimeDirectoriesForCleanup()).toEqual([join('p', names[0]!)])
+  })
+
   it('caps runtime copies while keeping age-based staging cleanup', () => {
     expect(supervisor).toContain('DEFAULT_UPDATE_STORAGE_RETENTION_MS = 6 * 60 * 60 * 1000')
     expect(supervisor).toContain('PHOENIX_UPDATE_STORAGE_RETENTION_MS')
