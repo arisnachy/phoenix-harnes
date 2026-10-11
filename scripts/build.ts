@@ -129,7 +129,7 @@ function buildScope(value: string | undefined): BuildScope {
  * without the declaration output of a vendored package. TypeScript may then
  * report Cannot find module '@phoenix-ai/cordis-plugin-include' from an
  * otherwise valid app-boot/CLI source. Repair only the missing dependency
- * declaration, not every package or the running Host.
+ * JS entry and declaration, not every package or the running Host.
  *
  * Exported as a pure decision so regression tests can simulate missing
  * generated artifacts on any platform.
@@ -139,11 +139,14 @@ export function vendoredIncludeTypeRepairNeeded(
   exists: (file: string) => boolean = existsSync,
 ): boolean {
   const source = resolve(root, 'vendor', 'include', 'src', 'index.ts')
-  const types = resolve(root, 'vendor', 'include', 'lib', 'types', 'index.d.ts')
+  const outputDir = resolve(root, 'vendor', 'include', 'lib', 'types')
   if (!exists(source)) {
     throw new Error('build: vendored Cordis include source is missing; restore the tracked vendor/include files before building')
   }
-  return !exists(types)
+  // TS composite incremental state may outlive ignored JS outputs. tsdown
+  // consumes index.js, not index.d.ts; both must be present before bundling.
+  return !exists(resolve(outputDir, 'index.d.ts'))
+    || !exists(resolve(outputDir, 'index.js'))
 }
 
 /**
@@ -224,10 +227,10 @@ function ensureVendoredCordisBundle(root: string, environment: NodeJS.ProcessEnv
   }
 }
 
-/** Repair only a missing generated include declaration on cold runtime builds. */
+/** Repair missing Include emitted JavaScript/declarations on cold runtime builds. */
 function ensureVendoredIncludeTypes(root: string, environment: NodeJS.ProcessEnv): void {
   if (!vendoredIncludeTypeRepairNeeded(root)) return
-  console.log('build: Cordis include type declarations are missing; rebuilding its TypeScript project references...')
+  console.log('build: Cordis include JS/types entries are missing; rebuilding its TypeScript project references...')
   const invocation = buildPnpmInvocation(['exec', 'tsc', '-b', 'vendor/include', '--force'], environment)
   const repaired = spawnSync(invocation.command, invocation.args, {
     cwd: root,
@@ -237,7 +240,7 @@ function ensureVendoredIncludeTypes(root: string, environment: NodeJS.ProcessEnv
   })
   if (repaired.error !== undefined) throw repaired.error
   if (repaired.status !== 0 || vendoredIncludeTypeRepairNeeded(root)) {
-    throw new Error('build: failed to regenerate vendor/include/lib/types/index.d.ts; refusing to activate incomplete runtime')
+    throw new Error('build: failed to regenerate vendor/include/lib/types/index.{js,d.ts}; refusing to activate incomplete runtime')
   }
 }
 

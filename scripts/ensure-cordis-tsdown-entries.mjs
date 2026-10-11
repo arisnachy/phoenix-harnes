@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Repair generated Cordis entry points after the Host TypeScript project build.
+ * Repair generated Cordis and Include entry points after the Host TypeScript project build.
  *
  * Windows managed worktrees sometimes preserve .tsbuildinfo while ignored
  * lib/types outputs disappear. TypeScript's incremental -b then succeeds with
@@ -18,11 +18,11 @@ import { fileURLToPath } from 'node:url'
 export const CORDIS_TSDOWN_ENTRY_NAMES = ['index', 'invariant', 'startup']
 
 /** Returns missing generated JS/declaration entries for Cordis source modules. */
-export function missingCordisTsdownEntries(root, exists = existsSync) {
-  const directory = resolve(root, 'vendor', 'cordis')
+function missingVendoredTsdownEntries(root, vendor, exists = existsSync) {
+  const directory = resolve(root, 'vendor', vendor)
   const sourceIndex = resolve(directory, 'src', 'index.ts')
   if (!exists(sourceIndex)) {
-    throw new Error('build: tracked vendor/cordis/src/index.ts is missing; refusing generated-file recovery')
+    throw new Error('build: tracked vendor/' + vendor + '/src/index.ts is missing; refusing generated-file recovery')
   }
   const missing = []
   for (const entry of CORDIS_TSDOWN_ENTRY_NAMES) {
@@ -35,27 +35,37 @@ export function missingCordisTsdownEntries(root, exists = existsSync) {
   return missing
 }
 
+/** Report every source-backed tsdown entry missing from vendored Cordis. */
+export function missingCordisTsdownEntries(root, exists = existsSync) {
+  return missingVendoredTsdownEntries(root, 'cordis', exists)
+}
+
+/** Include has its own lib/types/index.js input: a declaration alone is NOT enough. */
+export function missingIncludeTsdownEntries(root, exists = existsSync) {
+  return missingVendoredTsdownEntries(root, 'include', exists)
+}
+
 /**
  * Re-emit only Cordis and its TypeScript project references if generated entry
  * points vanished despite a successful incremental -b. Do not clear pnpm,
  * touch CODEX_HOME, or delete active runtimes.
  */
-export function ensureCordisTsdownEntries(root, {
+function ensureVendorTsdownEntries(root, vendor, {
   exists = existsSync,
   spawn = spawnSync,
   node = process.execPath,
   environment = process.env,
   log = message => console.error(message),
 } = {}) {
-  const missing = missingCordisTsdownEntries(root, exists)
+  const missing = missingVendoredTsdownEntries(root, vendor, exists)
   if (missing.length === 0) return { repaired: false, missing: [] }
 
   const tsc = resolve(root, 'node_modules', 'typescript', 'bin', 'tsc')
   if (!exists(tsc)) {
-    throw new Error('build: cannot restore Cordis entries: workspace TypeScript executable is missing at ' + tsc)
+    throw new Error('build: cannot restore ' + vendor + ' entries: workspace TypeScript executable is missing at ' + tsc)
   }
-  log('[PHOENIX BUILD] restoring Cordis generated TypeScript entries (' + missing.join(', ') + ') before tsdown...')
-  const result = spawn(node, [tsc, '-b', 'vendor/cordis', '--force'], {
+  log('[PHOENIX BUILD] restoring ' + vendor + ' generated TypeScript entries (' + missing.join(', ') + ') before tsdown...')
+  const result = spawn(node, [tsc, '-b', 'vendor/' + vendor, '--force'], {
     cwd: root,
     env: environment,
     stdio: 'inherit',
@@ -63,18 +73,29 @@ export function ensureCordisTsdownEntries(root, {
   })
   if (result.error) throw result.error
   if (result.status !== 0) {
-    throw new Error('build: Cordis TypeScript entry repair exited with ' + String(result.status ?? result.signal))
+    throw new Error('build: ' + vendor + ' TypeScript entry repair exited with ' + String(result.status ?? result.signal))
   }
-  const remaining = missingCordisTsdownEntries(root, exists)
+  const remaining = missingVendoredTsdownEntries(root, vendor, exists)
   if (remaining.length > 0) {
-    throw new Error('build: Cordis entry repair did not emit: ' + remaining.join(', ')
-      + '; inspect vendor/cordis/tsconfig.json and generated lib/types before tsdown')
+    throw new Error('build: ' + vendor + ' entry repair did not emit: ' + remaining.join(', ')
+      + '; inspect vendor/' + vendor + '/tsconfig.json and generated lib/types before tsdown')
   }
-  log('[PHOENIX BUILD] Cordis TypeScript entry repair completed; resuming Host bundling.')
+  log('[PHOENIX BUILD] ' + vendor + ' TypeScript entry repair completed; resuming Host bundling.')
   return { repaired: true, missing }
+}
+
+/** Keep the existing Cordis repair API for isolated Host builds and tests. */
+export function ensureCordisTsdownEntries(root, options = {}) {
+  return ensureVendorTsdownEntries(root, 'cordis', options)
+}
+
+/** Repair the Include plugin JS entry as well as its declaration before tsdown. */
+export function ensureIncludeTsdownEntries(root, options = {}) {
+  return ensureVendorTsdownEntries(root, 'include', options)
 }
 
 if (import.meta.main) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
   ensureCordisTsdownEntries(root)
+  ensureIncludeTsdownEntries(root)
 }
