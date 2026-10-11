@@ -1796,6 +1796,28 @@ describe('command launcher chrome and control seats', () => {
     }
   })
 
+  it('reveals the Codex Live startup failure instead of silently choosing another voice', async () => {
+    const recognition = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(false)
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'codex-login-required' })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      const notice = view.container.querySelector('[data-codex-voice-fallback]')
+      expect(notice?.textContent).toContain('Codex Live: codex-login-required')
+      expect(view.getByRole('button', { name: '开始语音助手' })
+        .getAttribute('data-codex-voice-failure')).toBe('codex-login-required')
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
+    } finally {
+      live.mockRestore()
+      support.mockRestore()
+      recognition.mockRestore()
+      cleanup()
+    }
+  })
+
   it('submits each final browser speech fragment automatically in assistant mode', async () => {
     class FakeRecognition implements VoiceRecognitionLike {
       static instance: FakeRecognition | undefined

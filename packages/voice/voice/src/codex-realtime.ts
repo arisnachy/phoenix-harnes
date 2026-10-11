@@ -502,7 +502,11 @@ export class CodexRealtimeBridge {
       })
       this.notify('initialized')
 
-      const account = await this.request('account/read', { refreshToken: true })
+      // The stored ChatGPT session may already be valid. Forcing an OAuth refresh
+      // on every voice start can reject an otherwise usable login when the
+      // refresh endpoint is temporarily unavailable. Codex refreshes credentials
+      // on demand for authenticated backend requests.
+      const account = await this.request('account/read', { refreshToken: false })
       if (!isRecord(account) || !isRecord(account.account) || account.account.type !== 'chatgpt') {
         throw new Error('Codex ChatGPT login required for subscription-backed realtime voice')
       }

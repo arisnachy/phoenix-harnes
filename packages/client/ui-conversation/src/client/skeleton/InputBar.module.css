@@ -377,6 +377,20 @@
   cursor: default;
 }
 
+/* Always expose native Codex Live failures, even when Kokoro takes over.
+   Compact inline diagnostic; full reason remains accessible via title. */
+.voiceFallback {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 156px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--dsw-alias-state-error-primary);
+}
+
 /* Native voice input: quiet secondary chrome until the browser is listening. */
 .voice {
   display: grid;

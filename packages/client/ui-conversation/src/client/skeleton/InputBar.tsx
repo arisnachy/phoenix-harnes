@@ -1015,6 +1015,16 @@ export function InputBar({
             {rightItems}
             {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
+            {codexVoiceFailure !== null && (
+              <span
+                role="status"
+                className={css.voiceFallback}
+                data-codex-voice-fallback
+                title={`Codex Live no disponible: ${codexVoiceFailure}. La voz alternativa está activa si el navegador la admite.`}
+              >
+                Codex Live: {codexVoiceFailure}
+              </span>
+            )}
             {(voiceState !== 'unsupported' || hasCodexRealtimeVoiceSupport()) && (
               <Tooltip
                 label={codexVoiceFailure !== null
