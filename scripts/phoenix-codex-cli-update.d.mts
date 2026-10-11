@@ -9,3 +9,7 @@ export declare function readActiveCodexRuntime(home: string): {
   bin: string
 } | undefined
 export declare function pruneManagedCodexVersions(home: string, activeVersion: string): { removed: number }
+export declare function readCodexLiveRepairRequest(home: string): {
+  requestedAt: string
+  reason: 'quicksilver-v2'
+} | undefined
