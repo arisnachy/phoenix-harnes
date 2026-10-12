@@ -484,4 +484,4 @@
     - id: agent-presets
       name: '@phoenix-ai/dsh-agent-presets'
       config:
-        default: standard
+        default: kira-max
