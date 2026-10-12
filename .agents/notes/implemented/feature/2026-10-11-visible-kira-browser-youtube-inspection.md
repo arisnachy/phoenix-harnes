@@ -18,6 +18,14 @@ The Chrome connector adds a scoped `youtube_video_inspect` tool. Its URL parser 
 
 Focused browser-flow tests cover indirect MCP navigation, unrelated tool exclusion, and video-review requests. MiniBrowser component tests pin non-autoplay preview, explicit playback, and the control to return to Chromium. Browser connector tests pin muted headless Chromium. Video utility tests cover URL/host enforcement, malicious caption endpoint rejection, language priority, JSON3/XML timestamps and missing caption text. CI and an actual Windows Chrome/YouTube session must confirm bundled behavior before a live multimedia guarantee.
 
+## Alternatives considered
+
+Requiring the user to paste transcripts was rejected because accessible public subtitles should be checked automatically first. Showing any new Chrome desktop window was rejected because it breaks the in-chat navigation contract. Using a silent static image as proof of a decoded video was rejected because screenshots can capture buffering or blank surfaces.
+
+## Consequences
+
+Kira can analyze real, accessible YouTube timed-text and inspect selected visible frames, and browser navigation performed during other tasks becomes observable in the MiniBrowser. The headless CDP tab stays isolated and muted, while playback with audio is explicitly human-initiated in the in-chat player. YouTube access, playback and subtitle availability still depend on the video's public visibility, server behavior and permissions.
+
 ## Limits and recovery
 
 YouTube can refuse caption retrieval, hide player state, or prevent reliable video-frame seeking. The tool reports missing transcript and missing frames explicitly rather than presenting title/description as full video analysis. Images confirm a Chromium JPEG capture, not that every pixel is a decoded video frame; the model must inspect returned images. Other websites stay CDP screenshot-based, and browser-action permissions remain enforced. Future local audio transcription may be added as an independent, opt-in capability.

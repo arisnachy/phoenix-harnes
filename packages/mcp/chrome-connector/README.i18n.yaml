@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/mcp/chrome-connector/README.md
-README.md: 9d2b249afb74249243cd06b474a88775e6f4414c
-README.zh.md: 6150a5dc7ede6b0552a5a50c6aeaa62721961f26
+README.md: 7bac8bd42b5227e5026ab9c7aeaa97a2dd292c87
+README.zh.md: 6e61a04d4ac578d3bcc0e2a2c1c931c0d87e160d

@@ -1,3 +1,6 @@
-# Bilingual-pair consistency record (docs/i18n/README.md): git blob hashes of both translations.
-2026-10-11-visible-kira-browser-youtube-inspection.md: d875f5f567fed06fc51d53f9148671342fb1b36d
-2026-10-11-visible-kira-browser-youtube-inspection.zh.md: 5958f0715f979a46574429db07de06e353aec32e
+# Bilingual-pair consistency record (docs/i18n/README.md): the git blob hash of each
+# side as of the last confirmed-consistent state. Both languages carry equal authority;
+# after editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-11-visible-kira-browser-youtube-inspection.md
+2026-10-11-visible-kira-browser-youtube-inspection.md: 1535862324800c0c3c351ff18e108d00398610a5
+2026-10-11-visible-kira-browser-youtube-inspection.zh.md: bbc4a2387e5d0dee977f358a50cb29c520ed5872
