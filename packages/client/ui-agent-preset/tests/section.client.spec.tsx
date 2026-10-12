@@ -13,7 +13,7 @@ import { createSnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import { AgentPresetSection } from '../src/client/AgentPresetSection.tsx'
 import type { AgentPresetSectionProps } from '../src/client/AgentPresetSection.tsx'
 import type { AgentPresetSectionState, CopyDraft } from '../src/client/section-store.ts'
-import { en } from '../src/client/locales.ts'
+import { en, es } from '../src/client/locales.ts'
 
 afterEach(cleanup)
 
@@ -40,7 +40,7 @@ const READY: AgentPresetSectionState = {
  */
 function renderSection(
   state: Partial<AgentPresetSectionState> = {},
-  options: { creator?: boolean } = {},
+  options: { creator?: boolean; locale?: 'en' | 'es' } = {},
 ) {
   const store = createSnapshotStore<AgentPresetSectionState>({ ...READY, ...state })
   const actions = {
@@ -63,7 +63,7 @@ function renderSection(
   const props = {
     ...actions,
     useAgentPresetSection: bindSnapshotSelector(store),
-    t: (key: keyof typeof en) => en[key],
+    t: (key: keyof typeof en) => (options.locale === 'es' ? es : en)[key],
   } as unknown as AgentPresetSectionProps
   render(<AgentPresetSection {...props} />)
   return actions
@@ -398,6 +398,16 @@ describe('the read-only viewer', () => {
     expect(within(dialog).getByText(content).textContent).toBe(content)
     fireEvent.click(within(dialog).getByRole('tab', { name: en.viewerOverview }))
     expect(within(dialog).queryByText(content)).toBeNull()
+  })
+
+  it('uses the active Spanish UI language inside a preset detail dialog', () => {
+    const content = '# ── shell ──────────\n- id: tool-bash\n  name: plugin-bash\n'
+    renderSection({ view: { id: 'standard', title: 'Standard', content } }, { locale: 'es' })
+    const dialog = screen.getByRole('dialog')
+    expect(dialog.getAttribute('aria-label')).toBe(`${es.view} · ${es.presetStandardName}`)
+    expect(within(dialog).getByText(es.viewerShell)).toBeTruthy()
+    expect(within(dialog).getByText(es.viewerShellDetail)).toBeTruthy()
+    expect(within(dialog).getByRole('tab', { name: es.viewerSource })).toBeTruthy()
   })
 
   it('keeps the loaded title when the viewed row leaves the roster', () => {
