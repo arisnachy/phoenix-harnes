@@ -1876,6 +1876,27 @@ describe('command launcher chrome and control seats', () => {
     }
   })
 
+  it('keeps the upstream Quicksilver error available without displaying an oversized tooltip', async () => {
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'invalid_quicksilver_alpha_header: AVAS requires OpenAI-Alpha quicksilver=v2' })
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      const notice = view.container.querySelector('[data-codex-voice-fallback]')
+      expect(notice?.textContent).toContain('Codex Live sin conexión')
+      expect(notice?.getAttribute('title')).not.toContain('invalid_quicksilver')
+      const microphone = view.getByRole('button', { name: '开始语音助手' })
+      expect(microphone.getAttribute('data-codex-voice-failure'))
+        .toContain('invalid_quicksilver_alpha_header')
+      expect(view.getByText('Detalles').closest('details')?.textContent)
+        .toContain('invalid_quicksilver_alpha_header')
+    } finally {
+      live.mockRestore()
+      cleanup()
+    }
+  })
+
   it('offers Kokoro/natural voice only after explicit opt-in on Quicksilver rejection', async () => {
     const available = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(true)
     const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
