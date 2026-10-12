@@ -221,6 +221,23 @@ describe('web e2e: agent-preset selection', () => {
     await page.keyboard.press('Escape')
   })
 
+  it('selecting Kira Max preserves the workspace and an enabled input, then allows switching back', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-kira-max-composer'))
+    await page.getByRole('button', { name: 'Standard mode' }).click()
+    await page.getByRole('menuitem', { name: /Kira Max/ }).click()
+    await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: 20_000 }).toBe('kira-max')
+    const input = page.locator('textarea:enabled').last()
+    await input.waitFor({ timeout: 15_000 })
+    await input.fill('Kira Max input ready')
+    expect(await input.inputValue()).toBe('Kira Max input ready')
+    await input.fill('')
+    await page.getByRole('button', { name: 'Kira Max' }).click()
+    await page.getByRole('menuitem', { name: /^Standard mode/ }).click()
+    await expect.poll(() => livePreset(scaffold.baseUrl), { timeout: 20_000 }).toBe('standard')
+    await input.waitFor({ state: 'visible', timeout: 15_000 })
+    expect(await input.isEnabled()).toBe(true)
+  }, 60_000)
+
   it('applies the staged pick to the blank session, and the host honors it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-agent-preset-stage'))
     await page.getByRole('button', { name: 'Standard mode' }).click()
