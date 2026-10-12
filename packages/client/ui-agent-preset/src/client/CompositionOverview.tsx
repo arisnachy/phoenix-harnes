@@ -30,6 +30,23 @@ const GROUPS: Readonly<Record<string, AgentPresetSettingsKey>> = {
   'self-modification': 'viewerAuthoring',
 }
 
+const GROUP_DETAILS: Readonly<Partial<Record<AgentPresetSettingsKey, AgentPresetSettingsKey>>> = {
+  viewerIdentity: 'viewerIdentityDetail',
+  viewerShell: 'viewerShellDetail',
+  viewerFilesystem: 'viewerFilesystemDetail',
+  viewerJobs: 'viewerJobsDetail',
+  viewerSkills: 'viewerSkillsDetail',
+  viewerGoals: 'viewerGoalsDetail',
+  viewerPlanning: 'viewerPlanningDetail',
+  viewerCompaction: 'viewerCompactionDetail',
+  viewerTeam: 'viewerTeamDetail',
+  viewerImages: 'viewerImagesDetail',
+  viewerTools: 'viewerToolsDetail',
+  viewerPresentation: 'viewerPresentationDetail',
+  viewerAuthoring: 'viewerAuthoringDetail',
+  viewerOther: 'viewerOtherDetail',
+}
+
 /** Parse plugin-row headers only; never evaluate YAML or its !!js expressions. */
 export function compositionGroups(content: string): Group[] {
   const groups: Group[] = []
@@ -74,6 +91,7 @@ export function CompositionOverview({ content, t }: { content: string; t: Transl
       {groups.map((group, index) => (
         <section className={css.overviewSection} key={String(index) + group.key}>
           <h4>{t(group.key)} <span>({group.items.length})</span></h4>
+          <p className={css.overviewIntro}>{t(GROUP_DETAILS[group.key] ?? 'viewerOtherDetail')}</p>
           <ul className={css.overviewList}>
             {group.items.map(item => (
               <li key={item.id}>
