@@ -25,10 +25,14 @@ function safeOAuthConsentUrl(value: string): string | undefined {
 
 
 /** Translate a failed Host-start transport into an actionable, local-safe message. */
-function authorizationBeginFailure(error: unknown): string {
+function authorizationBeginFailure(error: unknown, key: string): string {
   if (error instanceof Error && (error.name === 'TimeoutError'
     || /(?:timed? out|timeout|operation was aborted due to timeout)/i.test(error.message))) {
-    return 'El Host de PHOENIX no respondió a authorization.begin en 12 segundos. Comprueba que la actualización está activa y revisa el registro del Host; todavía no se ha llegado a Notion.'
+    const connector = key === 'mcp-client/slack' ? 'Slack'
+      : key === 'mcp-client/meta-devtools' ? 'Meta Social Technologies'
+        : key === 'mcp-client/meta-whatsapp-business' ? 'WhatsApp Business'
+          : key.split('/').at(-1) ?? 'solicitado'
+    return `El Host de PHOENIX no respondió a authorization.begin en 12 segundos para ${connector}. La solicitud se detuvo antes de confirmar el inicio de OAuth; revisa el registro y la disponibilidad del Host. No se ha autorizado el conector.`
   }
   if (error instanceof Error && /(?:failed to fetch|networkerror|econnrefused|connection refused)/i.test(error.message)) {
     return 'PHOENIX perdió la conexión con el Host al iniciar OAuth. Comprueba que el servidor local 127.0.0.1:3080 sigue funcionando.'
@@ -331,7 +335,7 @@ export function useAuthorizationAttempt(
       window.clearTimeout(pendingBeginTimerRef.current)
       pendingBeginTimerRef.current = undefined
       setPreparingKey(undefined)
-      const reason = authorizationBeginFailure(error)
+      const reason = authorizationBeginFailure(error, key)
       if (!navigatedRef.current) failReservedPopup(reason)
       setFailure(reason)
     })

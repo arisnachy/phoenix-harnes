@@ -13,6 +13,10 @@ function request<P>(payload: P) {
   return { rpcId: RpcId('authorization-test'), payload }
 }
 
+function hostTick(): Promise<void> {
+  return new Promise(resolve => { setImmediate(resolve) })
+}
+
 function ok<T>(response: { result: { ok: boolean; value?: T } }): T {
   expect(response.result.ok).toBe(true)
   if (!response.result.ok) throw new Error('expected success')
@@ -66,6 +70,43 @@ function fakeAuthorization() {
 }
 
 describe('authorization API domain', () => {
+  it('acknowledges the initial RPC before running potentially slow provider startup', async () => {
+    const ctx = new Context()
+    const { service, key } = fakeAuthorization()
+    let started = false
+    ctx.provide('authorization', {
+      ...service,
+      begin: (authorization: AuthorizationRequest) => {
+        started = true
+        return service.begin(authorization)
+      },
+    } as unknown as AuthorizationService)
+    const api = createApiProxy(ctx, DEFAULTS)
+    const begun = ok(await api.authorization.begin(request({ key: String(key), method: 'oauth' })))
+    expect(begun.status).toBe('pending')
+    expect(started).toBe(false)
+    await hostTick()
+    expect(started).toBe(true)
+    const state = ok(await api.authorization.status(request({ attemptId: begun.attemptId })))
+    expect(state.notices[0]?.notice.url).toBe('https://example.test/oauth')
+    ok(await api.authorization.cancel(request({ attemptId: begun.attemptId })))
+  })
+
+  it('cancels an attempt before provider startup without leaving the key busy', async () => {
+    const ctx = new Context()
+    const { service, key } = fakeAuthorization()
+    ctx.provide('authorization', service)
+    const api = createApiProxy(ctx, DEFAULTS)
+    const first = ok(await api.authorization.begin(request({ key: String(key) })))
+    ok(await api.authorization.cancel(request({ attemptId: first.attemptId })))
+    await hostTick()
+    const state = ok(await api.authorization.status(request({ attemptId: first.attemptId })))
+    expect(state.status).toBe('cancelled')
+    const next = ok(await api.authorization.begin(request({ key: String(key) })))
+    await hostTick()
+    ok(await api.authorization.cancel(request({ attemptId: next.attemptId })))
+  })
+
   it.each([
     ['MCP_OAUTH_DISCOVERY_TIMEOUT', 'no entregó una URL de autorización'],
     ['MCP_OAUTH_NO_CONSENT_URL', 'sin una URL de autorización'],
@@ -83,6 +124,7 @@ describe('authorization API domain', () => {
     } as unknown as AuthorizationService)
     const api = createApiProxy(ctx, DEFAULTS)
     const begun = ok(await api.authorization.begin(request({ key: String(key), method: 'oauth' })))
+    await hostTick()
     await Promise.resolve()
     const state = ok(await api.authorization.status(request({ attemptId: begun.attemptId })))
     expect(state.status).toBe('failed')
@@ -103,7 +145,7 @@ describe('authorization API domain', () => {
     expect(entries.entries[0]?.key).toBe(key)
 
     const begun = ok(await api.authorization.begin(request({ key: String(key), method: 'oauth' })))
-    await Promise.resolve()
+    await hostTick()
     let state = ok(await api.authorization.status(request({ attemptId: begun.attemptId })))
     expect(state.status).toBe('pending')
     expect(state.notices[0]?.notice.url).toBe('https://example.test/oauth')
@@ -133,7 +175,7 @@ describe('authorization API domain', () => {
       carrier.signal,
     ))
     carrier.abort(new Error('request completed'))
-    await Promise.resolve()
+    await hostTick()
     await Promise.resolve()
 
     const state = ok(await api.authorization.status(request({ attemptId: begun.attemptId })))
@@ -225,6 +267,7 @@ describe('authorization API domain', () => {
     const listing = api.authorization.list(request({}))
     const begun = ok(await api.authorization.begin(request({ key: String(key), method: 'oauth' })))
     expect(begun.status).toBe('pending')
+    await hostTick()
     const state = ok(await api.authorization.status(request({ attemptId: begun.attemptId })))
     expect(state.notices[0]?.notice.url).toBe('https://example.test/oauth')
     const catalog = ok(await listing)
