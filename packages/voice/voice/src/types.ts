@@ -65,6 +65,19 @@ export interface VoiceConversationRealtimeStartReceipt {
   readonly detail?: string
 }
 
+/** Read aloud a Phoenix-authorized final answer over the active Codex V3 session. */
+export interface VoiceConversationRealtimeSpeakRequest {
+  /** Browser-owned call key; never the raw Codex thread id. */
+  readonly key: string
+  /** Final plain-language answer chosen by Phoenix, not Codex-generated tool claims. */
+  readonly text: string
+}
+
+export interface VoiceConversationRealtimeSpeakReceipt {
+  readonly accepted: boolean
+  readonly reason?: 'disabled' | 'invalid' | 'no-session' | 'codex-unavailable'
+}
+
 /** Stop one native Codex realtime session addressed by its PHOENIX session key. */
 export interface VoiceConversationRealtimeStopRequest {
   readonly key: string
