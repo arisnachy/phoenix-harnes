@@ -124,7 +124,7 @@ function userMessageText(node: UserMessageNode): string {
  */
 export function ChatView({
   useSession, useSessions, useInput, useStore, renderSlot, sessionId, openFile, loadOlder, loadImage, inspectCall, chatScroll, forkAt,
-  fileMentions, workspaceFileMentions, openCanvas, runArtifact, t,
+  fileMentions, workspaceFileMentions, openCanvas, runArtifact, inputActions, t,
 }: ChatViewSlotProps) {
   const order = useSession(s => s.chat.order)
   const nodeStore = useSession(s => s.chat.nodes)
@@ -132,6 +132,17 @@ export function ChatView({
   const inbox = useSession(s => s.queue)
   const pendingSubmit = useInput(s => s.pendingSubmit)
   const inputPhase = useInput(s => s.phase)
+  const inputDraft = useInput(s => s.draft)
+  // A completed, explicitly authorized media capture may ask Kira to inspect
+  // its evidence without requiring the human to type a second message.
+  // Never overwrite their draft or inject into an active submission.
+  const requestCapturedMediaReview = useCallback((captureId: string): boolean => {
+    if (inputPhase !== 'plain' || inputDraft.trim() !== '' || pendingSubmit !== undefined) return false
+    inputActions.setDraft('Kira, analiza ahora la grabación de pestaña que acabo de autorizar ('
+      + captureId + ') usando browser_sense con source=authorized-capture. Describe solo fotogramas y audio realmente procesados; si no hay evidencia, indica el fallo exacto.')
+    inputActions.submit()
+    return true
+  }, [inputActions, inputDraft, inputPhase, pendingSubmit])
   // Workspace root off the session list row: path summaries display relative to it.
   const cwd = useSessions(s => s.byId[sessionId]?.cwd)
   const running = useSession(s => s.running)
@@ -544,6 +555,7 @@ export function ChatView({
             optimisticSubmit={optimisticSubmit}
             turnStatus={visibleTurnStatus}
             browserTurnOpen={running || admissionInFlight}
+            onCaptureReady={requestCapturedMediaReview}
             useSession={useSession}
             selectedCallId={selectedCallId}
             cwd={cwd}
