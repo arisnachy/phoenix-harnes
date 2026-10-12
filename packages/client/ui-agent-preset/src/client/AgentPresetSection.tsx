@@ -180,6 +180,7 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
   const { useAgentPresetSection, t, load } = props
   const state = useAgentPresetSection(snapshot => snapshot)
   const [sourceViewId, setSourceViewId] = useState<string | null>(null)
+  const closeComposition = () => { setSourceViewId(null); props.closeView() }
   const viewedId = state.view?.id
   const viewedRow = viewedId === undefined ? undefined : state.rows.find(row => row.id === viewedId)
   const viewedTitle = state.view === null
@@ -375,13 +376,13 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
       />
       <Modal
         open={state.view !== null}
-        onClose={() => { props.closeView() }}
+        onClose={closeComposition}
         title={state.view === null ? '' : `${t('view')} · ${viewedTitle}`}
         closeLabel={t('close')}
         description={t('composition')}
         className={css.dialog as string}
         footer={(
-          <Button variant="outline" autoFocus onClick={() => { props.closeView() }}>
+          <Button variant="outline" autoFocus onClick={closeComposition}>
             {t('close')}
           </Button>
         )}
