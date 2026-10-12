@@ -89,12 +89,13 @@ function youtubeId(raw: string | undefined): string | undefined {
   } catch { return undefined }
 }
 /** Human navigation stays in the user-controlled MiniBrowser, never in the model's context. */
-export function MiniBrowser({ requested = false, active = true, onActivate, autoScroll = true, onPageChange }: {
+export function MiniBrowser({ requested = false, active = true, onActivate, autoScroll = true, onPageChange, onCaptureReady }: {
   requested?: boolean
   active?: boolean
   onActivate?: () => void
   autoScroll?: boolean
   onPageChange?: (page: { title: string; url: string } | null) => void
+  onCaptureReady?: (captureId: string) => boolean
 }) {
   const [snapshot, setSnapshot] = useState<Snapshot>(BLANK)
   const [enabled, setEnabled] = useState(false)
@@ -351,9 +352,15 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
               body: blob, cache: 'no-store',
             })
             const result = await decode<{ captureId: string }>(response)
+            if (typeof result.captureId !== 'string' || !/^[a-f0-9-]{36}$/i.test(result.captureId)) {
+              throw new Error('El Host no devolvió un identificador válido para la grabación.')
+            }
+            const dispatched = onCaptureReady?.(result.captureId) === true
             setMediaCaptureState('ready')
             setMediaCaptureMessage('Grabación recibida (' + result.captureId.slice(0, 8)
-              + '). Escribe a Kira: «Analiza la grabación compartida con video_media_inspect». Solo el análisis confirma audio e imágenes.')
+              + (dispatched
+                ? '). Solicité a Kira que analice su audio y fotogramas verificables en este chat.'
+                : '). Pide a Kira analizarla con browser_sense source=authorized-capture; no se modificó tu mensaje en preparación.'))
           } catch (error) {
             setMediaCaptureState('idle')
             setMediaCaptureMessage('No se pudo guardar la grabación: ' + String(error))
