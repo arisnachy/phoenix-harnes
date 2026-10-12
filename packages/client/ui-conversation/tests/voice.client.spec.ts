@@ -374,6 +374,7 @@ describe('browser voice adapter', () => {
       expect(realtimeSpeak).toHaveBeenCalledWith({
         key: 'session-harness', text: 'La tarea terminó correctamente.',
       })
+      expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('accepted')
       expect(channel?.send).toHaveBeenCalledTimes(1)
       expect(audio?.muted).toBe(false)
       // V3 may surface first audio frames before the response.created event.
@@ -390,7 +391,11 @@ describe('browser voice adapter', () => {
         'Revisa la acción antes de continuar; referencia 123456789 needs attention.',
       )).toBe(true)
       expect(realtimeSpeak).toHaveBeenCalledTimes(1)
-      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      // User turn markers must not complete the assistant's speech.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'user' } }) })
+      expect(realtimeSpeak).toHaveBeenCalledTimes(1)
+      // V3 completes spoken output using assistant turn.done.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'assistant' } }) })
       // Generation is finished, but the WebRTC speaker may still be draining
       // previously buffered audio. Keep Kira audible until an explicit cancel.
       expect(audio?.muted).toBe(false)
