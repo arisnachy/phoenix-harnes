@@ -597,21 +597,21 @@ describe('Codex realtime voice protocol compatibility', () => {
     const never = new Promise<unknown>(() => {})
     vi.spyOn(internal, 'waitForNotification').mockImplementation(method => ({
       promise: method === 'thread/realtime/sdp'
-        ? Promise.resolve({ threadId: 'thread-client-owned', sdp: 'v=answer\\r\\n' })
+        ? Promise.resolve({ threadId: 'thread-client-owned', sdp: 'v=answer\r\n' })
         : never,
       cancel,
     }))
     try {
       await expect(internal.negotiateRealtime(
-        'thread-client-owned', { offerSdp: 'v=offer\\r\\n', assistantGender: 'feminine' }, 'v3',
-      )).resolves.toBe('v=answer\\r\\n')
+        'thread-client-owned', { offerSdp: 'v=offer\r\n', assistantGender: 'feminine' }, 'v3',
+      )).resolves.toBe('v=answer\r\n')
       expect(request).toHaveBeenCalledTimes(1)
       expect(request).toHaveBeenCalledWith('thread/realtime/start', expect.objectContaining({
         threadId: 'thread-client-owned',
         clientManagedHandoffs: true,
         outputModality: 'audio',
         version: 'v3',
-        transport: { type: 'webrtc', sdp: 'v=offer\\r\\n' },
+        transport: { type: 'webrtc', sdp: 'v=offer\r\n' },
       }))
       expect(cancel).toHaveBeenCalledTimes(3)
     } finally { bridge.close() }
