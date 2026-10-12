@@ -55,7 +55,12 @@ export const Config: z<Config> = z.object({
 /** Language override in the user's selected Web locale for the effective YAML persona. */
 export const PHOENIX_LOCALE_VARIABLE = 'phoenix_locale_instruction'
 
-/** A tool or judge's language never overrides a deliberately chosen UI language. */
+/**
+ * Resolve a language directive from the persisted Phoenix interface preference.
+ * A tool or judge's output never changes a deliberately chosen UI language.
+ * @param preference - Explicit stored locale identifier, when present.
+ * @returns A directive in the selected language, or a user-message fallback.
+ */
 export function localeInstruction(preference: unknown): string {
   switch (preference) {
     case 'es':
