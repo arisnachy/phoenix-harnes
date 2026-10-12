@@ -19,6 +19,7 @@ import type { SnapshotStore } from '@phoenix-ai/dsh-client-runtime/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@phoenix-ai/dsh-client-ui-slots'
 import { draftBlocker, type AgentPresetSectionState } from './section-store.ts'
 import { presetDisplayText, type AgentPresetSettingsKey } from './locales.ts'
+import { CompositionOverview } from './CompositionOverview.tsx'
 import css from './AgentPresetSection.module.css'
 
 /** Registration-side business face for the management section. */
@@ -178,6 +179,7 @@ function CardDescription({ text }: { text: string }): ReactNode {
 export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
   const { useAgentPresetSection, t, load } = props
   const state = useAgentPresetSection(snapshot => snapshot)
+  const [sourceViewId, setSourceViewId] = useState<string | null>(null)
   const viewedId = state.view?.id
   const viewedRow = viewedId === undefined ? undefined : state.rows.find(row => row.id === viewedId)
   const viewedTitle = state.view === null
@@ -386,7 +388,26 @@ export function AgentPresetSection(props: AgentPresetSectionProps): ReactNode {
       >
         {state.view === null
           ? null
-          : <pre className={css.viewerCode}>{state.view.content}</pre>}
+          : (
+            <div className={css.viewerPanel}>
+              <div className={css.viewerTabs} role="tablist">
+                <button type="button" role="tab" aria-selected={sourceViewId !== state.view.id}
+                  onClick={() => setSourceViewId(null)}>{t('viewerOverview')}</button>
+                <button type="button" role="tab" aria-selected={sourceViewId === state.view.id}
+                  onClick={() => setSourceViewId(state.view?.id ?? null)}>{t('viewerSource')}</button>
+              </div>
+              {sourceViewId === state.view.id
+                ? (
+                  <div role="tabpanel" className={css.viewerContent}>
+                    <p className={css.overviewIntro}>{t('viewerSourceIntro')}</p>
+                    <pre className={css.viewerCode}>{state.view.content}</pre>
+                  </div>
+                )
+                : <div role="tabpanel" className={css.viewerContent}>
+                    <CompositionOverview content={state.view.content} t={t} />
+                  </div>}
+            </div>
+          )}
       </Modal>
       <Modal
         open={state.pendingDelete !== null}
