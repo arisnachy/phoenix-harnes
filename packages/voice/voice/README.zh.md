@@ -25,6 +25,8 @@ PHOENIX 的 provider 中立异步语音服务。只有经确认的任务完成�
 
 实现 `VoiceTextToSpeechProvider` 或 `VoiceSpeechToTextProvider` 后即可注册 provider。对话首选原生 OpenAI/Codex Realtime，其次是本地 Kokoro，最后是平台语音。新客户端从实际文本和界面语言决定 BCP 47 标签并逐段传递；旧客户端的 Host 默认语言为 `es-DO`。助手资料中的女性或男性呈现方式逐段传递给语音提供方，保证其身份一致。
 
+原生 Codex Realtime WebRTC 在两个协议版本中都使用 `juniper` 表示女性、`cove` 表示男性、`breeze` 表示中性；这些标识符受到托管 Codex app-server 支持。
+
 ## Model Experience
 
 ### 语音旁路

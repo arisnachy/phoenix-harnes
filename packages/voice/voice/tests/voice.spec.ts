@@ -172,7 +172,7 @@ describe('VoiceRuntime event gate and asynchronous queue', () => {
       id: 'kokoro',
       priority: 100,
       available: () => true,
-      speak: async request => { languages.push(request.language) },
+      speak: async (request) => { languages.push(request.language) },
     })
     await expect(voice.conversationSpeak({
       key: 'assistant:spanish-default',
@@ -562,11 +562,33 @@ describe('Codex Live Quicksilver local diagnostics', () => {
 })
 
 describe('Codex realtime voice protocol compatibility', () => {
-  it('uses supported gender-specific voices on V3 WebRTC', () => {
-    expect(realtimeVoiceForGender('feminine', 'v3')).toBe('marin')
-    expect(realtimeVoiceForGender('masculine', 'v3')).toBe('cedar')
-    expect(realtimeVoiceForGender('neutral', 'v3')).toBe('alloy')
+  it('uses the shared supported gender-specific voices on V1 and V3 WebRTC', () => {
+    expect(realtimeVoiceForGender('feminine', 'v3')).toBe('juniper')
+    expect(realtimeVoiceForGender('masculine', 'v3')).toBe('cove')
+    expect(realtimeVoiceForGender('neutral', 'v3')).toBe('breeze')
     expect(realtimeVoiceForGender('feminine', 'v1')).toBe('juniper')
+  })
+
+  it('does not downgrade V3 when the selected voice is unsupported', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      ensureStarted(): Promise<void>
+      stop(key: string): Promise<boolean>
+      startVoiceThread(model?: string): Promise<string>
+      negotiateRealtime(id: string, options: unknown, version: 'v1' | 'v3'): Promise<string>
+      request(method: string, params?: unknown): Promise<unknown>
+    }
+    vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
+    vi.spyOn(internal, 'stop').mockResolvedValue(false)
+    const started = vi.spyOn(internal, 'startVoiceThread').mockResolvedValue('voice-thread')
+    const upstream = 'realtime voice "marin" is not supported for v3; supported voices: juniper, maple, spruce, ember, vale, breeze, arbor, sol, cove'
+    const negotiated = vi.spyOn(internal, 'negotiateRealtime').mockRejectedValue(new Error(upstream))
+    vi.spyOn(internal, 'request').mockResolvedValue({})
+    try {
+      await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' })).rejects.toThrow(upstream)
+      expect(started).toHaveBeenCalledTimes(1)
+      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3'])
+    } finally { bridge.close() }
   })
 
   it('detects Quicksilver v2 protocol rejection without mistaking it for expired login', () => {
@@ -620,7 +642,8 @@ describe('Codex realtime voice protocol compatibility', () => {
   it('negotiates V3 first on the initial microphone activation', async () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
-      ensureStarted(): Promise<void>; stop(key: string): Promise<boolean>
+      ensureStarted(): Promise<void>
+      stop(key: string): Promise<boolean>
       startVoiceThread(model?: string): Promise<string>
       negotiateRealtime(id: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
     }
@@ -639,7 +662,8 @@ describe('Codex realtime voice protocol compatibility', () => {
   it('stops after one upstream Quicksilver rejection and cools down duplicate starts', async () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
-      ensureStarted(): Promise<void>; stop(key: string): Promise<boolean>
+      ensureStarted(): Promise<void>
+      stop(key: string): Promise<boolean>
       startVoiceThread(model?: string): Promise<string>
       negotiateRealtime(id: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
       request(method: string, params?: unknown): Promise<unknown>
@@ -731,7 +755,8 @@ describe('Codex realtime voice protocol compatibility', () => {
   it('falls back once to V1 only when V3 itself is explicitly unsupported', async () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
-      ensureStarted(): Promise<void>; stop(key: string): Promise<boolean>
+      ensureStarted(): Promise<void>
+      stop(key: string): Promise<boolean>
       startVoiceThread(model?: string): Promise<string>
       negotiateRealtime(id: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
       request(method: string, params?: unknown): Promise<unknown>
@@ -757,7 +782,8 @@ describe('Codex realtime voice protocol compatibility', () => {
       'not authenticated', 'notification timed out: thread/realtime/sdp']) {
       const bridge = new CodexRealtimeBridge()
       const internal = bridge as unknown as {
-        ensureStarted(): Promise<void>; stop(key: string): Promise<boolean>
+        ensureStarted(): Promise<void>
+        stop(key: string): Promise<boolean>
         startVoiceThread(model?: string): Promise<string>
         negotiateRealtime(id: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
         request(method: string, params?: unknown): Promise<unknown>
@@ -1143,28 +1169,28 @@ describe('Codex Live launch regression', () => {
       "let input = ''",
       "process.stdin.setEncoding('utf8')",
       "process.stdin.on('data', chunk => {",
-      "  input += chunk",
+      '  input += chunk',
       "  while (input.includes('\\n')) {",
       "    const end = input.indexOf('\\n')",
-      "    const line = input.slice(0, end); input = input.slice(end + 1)",
-      "    if (!line.trim()) continue",
-      "    const request = JSON.parse(line)",
-      "    if (request.id === undefined) continue",
-      "    const args = process.argv.slice(2)",
+      '    const line = input.slice(0, end); input = input.slice(end + 1)',
+      '    if (!line.trim()) continue',
+      '    const request = JSON.parse(line)',
+      '    if (request.id === undefined) continue',
+      '    const args = process.argv.slice(2)',
       "    if (request.method === 'initialize') {",
-      "      const valid = process.env.CODEX_SQLITE_HOME === process.env.CODEX_HOME",
+      '      const valid = process.env.CODEX_SQLITE_HOME === process.env.CODEX_HOME',
       "        && args.includes('sqlite_home=' + JSON.stringify(process.env.CODEX_HOME))",
       "        && args.includes('forced_login_method=\"chatgpt\"')",
       "        && args.filter(arg => arg.startsWith('forced_login_method=')).length === 1",
       "        && args.slice(-2).join(',') === 'app-server,--stdio'",
-      "        && process.env.OPENAI_API_KEY === undefined",
-      "        && request.params.capabilities.requestAttestation === false",
+      '        && process.env.OPENAI_API_KEY === undefined',
+      '        && request.params.capabilities.requestAttestation === false',
       "      process.stdout.write(JSON.stringify({id: request.id, ...(valid ? {result: {}} : {error: {message: 'invalid startup'}})}) + '\\n')",
       "    } else if (request.method === 'account/read') {",
       "      process.stdout.write(JSON.stringify({id: request.id, result: {account: {type: 'chatgpt'}}}) + '\\n')",
-      "    }",
-      "  }",
-      "})",
+      '    }',
+      '  }',
+      '})',
     ].join('\n'))
     writeFileSync(join(managed, 'active.json'), JSON.stringify({
       schema: 1, version: '1.2.3', bin: 'codex-mock.cjs',

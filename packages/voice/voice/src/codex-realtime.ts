@@ -41,7 +41,7 @@ export interface CodexRealtimeInitialItem {
   readonly text: string
 }
 
-/** Voices accepted by current Codex Realtime V3 and the legacy V1 path. */
+/** Voice identifiers understood by Codex Realtime implementations. */
 export type CodexRealtimeVoice =
   | 'marin' | 'cedar' | 'alloy'
   | 'juniper' | 'maple' | 'spruce' | 'ember' | 'vale'
@@ -49,21 +49,16 @@ export type CodexRealtimeVoice =
 
 /** Pick Kira's voice for the negotiated protocol, not the text model.
  * @param gender - Persisted assistant presentation.
- * @param version - Codex Realtime protocol selected by negotiation.
- * @returns A supported voice identifier for this protocol generation.
+ * @param _version - Codex Realtime protocol selected by negotiation.
+ * @returns A supported Codex Realtime voice identifier.
  */
 export function realtimeVoiceForGender(
   gender: 'masculine' | 'feminine' | 'neutral' = 'feminine',
-  version: 'v3' | 'v1' = 'v3',
+  _version: 'v3' | 'v1' = 'v3',
 ): CodexRealtimeVoice {
-  if (version === 'v1') {
-    if (gender === 'masculine') return 'cove'
-    if (gender === 'neutral') return 'breeze'
-    return 'juniper'
-  }
-  if (gender === 'masculine') return 'cedar'
-  if (gender === 'neutral') return 'alloy'
-  return 'marin'
+  if (gender === 'masculine') return 'cove'
+  if (gender === 'neutral') return 'breeze'
+  return 'juniper'
 }
 
 /** One finalized realtime transcript segment. */
@@ -323,7 +318,9 @@ export function codexRealtimeConfigOverrides(source: string): string[] {
     if (/^\[[^\]]+\]/u.test(trimmed)) { inRoot = false; continue }
     if (!inRoot || trimmed.startsWith('#')) continue
     const match = /^([a-z_]+)\s*=\s*(\S.*)$/u.exec(trimmed)
-    if (match !== null && keys.has(match[1]!) && !active.includes(match[1]!)) active.push(match[1]!)
+    if (match === null) continue
+    const key = match[1]
+    if (key !== undefined && keys.has(key) && !active.includes(key)) active.push(key)
   }
   return active
 }
@@ -342,6 +339,7 @@ function customRealtimeEndpointWarning(): string {
 /** Recognize only real Codex login failures; network hiccups must not log users out. */
 export function codexRealtimeNeedsLogin(error: unknown): boolean {
   const message = errorText(error)
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the login failure matcher auditable as one literal.
   return /(?:refresh[\s_-]*token[^\r\n]{0,120}expired|access token could not be refreshed|chatgpt login required|not authenticated|login required|please log out and sign in again)/iu.test(message)
 }
 
@@ -999,8 +997,10 @@ export function isCodexQuicksilverV2Required(value: unknown): boolean {
 function isRealtimeV3UnsupportedError(value: unknown): boolean {
   if (isCodexQuicksilverV2Required(value)) return false
   const message = errorText(value)
+  if (/\brealtime voice\b/iu.test(message)) return false
   // Explicit unsupported protocol only: never treat generic 400, timeouts,
   // forbidden access or missing WebRTC permissions as version compatibility.
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the protocol matcher auditable as one literal.
   return /(?:v3|frameless|realtime version).{0,90}(?:unsupported|not supported|unknown|unrecognized)|(?:unsupported|not supported|unknown|unrecognized).{0,90}(?:v3|frameless|realtime version)/iu.test(message)
 }
 
