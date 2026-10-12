@@ -6,6 +6,7 @@ import { MiniBrowser } from '../src/client/chat/MiniBrowser.tsx'
 const originalCreateObjectUrl = Object.getOwnPropertyDescriptor(URL, 'createObjectURL')
 const originalRevokeObjectUrl = Object.getOwnPropertyDescriptor(URL, 'revokeObjectURL')
 const originalScrollIntoView = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView')
+const originalMediaDevices = Object.getOwnPropertyDescriptor(window.navigator, 'mediaDevices')
 afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
@@ -15,6 +16,8 @@ afterEach(() => {
   else Reflect.deleteProperty(URL, 'revokeObjectURL')
   if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', originalScrollIntoView)
   else Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
+  if (originalMediaDevices) Object.defineProperty(window.navigator, 'mediaDevices', originalMediaDevices)
+  else Reflect.deleteProperty(window.navigator, 'mediaDevices')
 })
 
 const state = {
@@ -178,6 +181,28 @@ describe('MiniBrowser in Phoenix conversation', () => {
     fireEvent.click(screen.getByRole('button', { name: /Ver navegador de Kira/ }))
     expect(screen.queryByTitle('Reproductor YouTube')).toBeNull()
   })
+  it('keeps authorized tab capture visible when YouTube has no recognized playable watch URL', async () => {
+    installBrowserMock({ ...state, url: 'https://www.youtube.com/', title: 'YouTube (error del reproductor)' })
+    render(<MiniBrowser requested />)
+    expect(await screen.findByRole('button', { name: 'Compartir pestaña para Kira' })).toBeTruthy()
+    expect(screen.queryByTitle('Reproductor YouTube')).toBeNull()
+  })
+
+  it('does not start tab recording automatically and requires an explicit user gesture', async () => {
+    installBrowserMock({ ...state, available: false, url: 'about:blank', tabs: [] })
+    const chooser = vi.fn(async () => { throw new Error('Permission denied by user') })
+    vi.stubGlobal('MediaRecorder', class MockMediaRecorder {})
+    Object.defineProperty(window.navigator, 'mediaDevices', {
+      configurable: true, value: { getDisplayMedia: chooser },
+    })
+    render(<MiniBrowser requested />)
+    const button = screen.getByRole('button', { name: 'Compartir pestaña para Kira' })
+    expect(chooser).not.toHaveBeenCalled()
+    fireEvent.click(button)
+    await waitFor(() => expect(chooser).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Permission denied by user'))
+  })
+
   it('does not embed external websites in an iframe', async () => {
     installBrowserMock()
     const view = render(<MiniBrowser />)
