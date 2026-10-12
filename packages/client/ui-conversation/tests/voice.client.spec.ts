@@ -254,6 +254,10 @@ describe('browser voice adapter', () => {
         answerSdp: 'v=0\r\n',
       },
     }))
+    const realtimeSpeak = vi.fn(async (_request: { readonly key: string; readonly text: string }) => ({
+      ok: true as const,
+      value: { accepted: true },
+    }))
     const disposeRemote = configureVoiceAssistantRemote({
       conversationStatus: async () => ({
         ok: true,
@@ -277,6 +281,7 @@ describe('browser voice adapter', () => {
         },
       }),
       conversationRealtimeStart: realtimeStart,
+      conversationRealtimeSpeak: realtimeSpeak,
       conversationRealtimeStop: async () => ({
         ok: true,
         value: { stopped: true },
@@ -362,13 +367,16 @@ describe('browser voice adapter', () => {
         peer.connectionState = 'connected'
         peer.onconnectionstatechange?.()
       }
-      const spoken = JSON.parse(String(channel?.send.mock.calls[1]?.[0])) as {
-        type: string
-        response: { instructions: string }
-      }
-      expect(spoken.type).toBe('response.create')
-      expect(spoken.response.instructions).toContain('La tarea terminó correctamente.')
-      expect(audio?.muted).toBe(true)
+      await Promise.resolve()
+      // V3 uses the authenticated Codex app-server appendSpeech RPC: a
+      // response.create with ad hoc instructions on the raw datachannel is
+      // not the official pathway for client-selected speech.
+      expect(realtimeSpeak).toHaveBeenCalledWith({
+        key: 'session-harness', text: 'La tarea terminó correctamente.',
+      })
+      expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('accepted')
+      expect(channel?.send).toHaveBeenCalledTimes(1)
+      expect(audio?.muted).toBe(false)
       // V3 may surface first audio frames before the response.created event.
       // A harness-approved utterance must never stay accidentally muted.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.output_audio.delta' }) })
@@ -377,32 +385,34 @@ describe('browser voice adapter', () => {
       expect(audio?.muted).toBe(false)
 
       // A second spoken event queues until the real completion of the
-      // first response; Realtime rejects overlapping response.create calls.
+      // first response; keep the same Codex V3 speech channel serialized.
       expect(speakVoiceAssistantAttention(
         'Aprobación 550e8400-e29b-41d4-a716-446655440000',
         'Revisa la acción antes de continuar; referencia 123456789 needs attention.',
       )).toBe(true)
-      expect(channel?.send).toHaveBeenCalledTimes(2)
-      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      expect(realtimeSpeak).toHaveBeenCalledTimes(1)
+      // User turn markers must not complete the assistant's speech.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'user' } }) })
+      expect(realtimeSpeak).toHaveBeenCalledTimes(1)
+      // V3 completes spoken output using assistant turn.done.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'assistant' } }) })
       // Generation is finished, but the WebRTC speaker may still be draining
       // previously buffered audio. Keep Kira audible until an explicit cancel.
       expect(audio?.muted).toBe(false)
-      const attention = JSON.parse(String(channel?.send.mock.calls[2]?.[0])) as {
-        type: string
-        response: { instructions: string }
-      }
-      expect(attention.type).toBe('response.create')
-      expect(attention.response.instructions).not.toContain('550e8400-e29b-41d4-a716-446655440000')
-      expect(attention.response.instructions).not.toContain('123456789 needs attention')
-      expect(attention.response.instructions).toContain('same voice and persona')
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(2)
+      const attention = realtimeSpeak.mock.calls[1]?.[0]
+      expect(attention?.text).not.toContain('550e8400-e29b-41d4-a716-446655440000')
+      expect(attention?.text).not.toContain('123456789 needs attention')
+      expect(attention?.text).toContain('Revisa la acción')
 
       expect(interruptVoiceAssistantSpeech()).toBe(true)
-      expect(JSON.parse(String(channel?.send.mock.calls[3]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(JSON.parse(String(channel?.send.mock.calls[1]?.[0]))).toEqual({ type: 'response.cancel' })
 
       // The Realtime model must not autonomously claim a tool is running:
       // no harness-final request is active, so abort unsolicited responses.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
-      expect(JSON.parse(String(channel?.send.mock.calls[4]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(JSON.parse(String(channel?.send.mock.calls[2]?.[0]))).toEqual({ type: 'response.cancel' })
       expect(audio?.muted).toBe(true)
 
       // Telegram/browser disconnection must never leave voice stuck: grant a

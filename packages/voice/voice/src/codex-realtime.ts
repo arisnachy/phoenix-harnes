@@ -564,6 +564,21 @@ export class CodexRealtimeBridge {
     return this.sessions.size > 0
   }
 
+  /**
+   * Send speakable text through the official authenticated app-server V3
+   * protocol. Unlike a browser response.create instruction, appendSpeech
+   * feeds the selected final answer into Codex's speakable sideband channel.
+   * No API keys or guessed Quicksilver HTTP headers are involved.
+   */
+  async speak(key: string, text: string): Promise<boolean> {
+    const threadId = this.sessions.get(key)
+    if (threadId === undefined || this.child === undefined) return false
+    const spoken = text.trim()
+    if (spoken === '' || spoken.length > 6000) return false
+    await this.request('thread/realtime/appendSpeech', { threadId, text: spoken })
+    return this.sessions.get(key) === threadId
+  }
+
   /** Stop one active realtime conversation without affecting text Codex use.
    * @param key Browser-owned call identity.
    * @returns Whether an existing call was removed; transport failures may reject after local removal.
@@ -913,7 +928,7 @@ function realtimeIdentityInstructions(
     'Speak naturally, warmly, and concisely in the user\'s language. This is a continuation of the compact Phoenix conversation history; do not repeat that history.',
     'PHOENIX\'s normal harness is the only planner and executor. This realtime thread is voice transport: transcribe the human faithfully and do not claim tool use, file changes, plans, or completed actions on its own.',
     'Never generate your own spoken answers or progress acknowledgements in response to user audio. Input audio is transcription only.',
-    'Only an explicit response.create from the PHOENIX client authorizes speech. Read the already-completed harness answer faithfully, without adding claims, waiting updates, tool status or speculation.',
+    'Only an explicit thread/realtime/appendSpeech message from PHOENIX authorizes speech. Read the already-completed harness answer faithfully, without adding claims, waiting updates, tool status or speculation.',
   ].join(' ')
 }
 

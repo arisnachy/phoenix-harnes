@@ -20,6 +20,8 @@ import type {
   VoiceConversationCancelRequest,
   VoiceConversationRealtimeStartReceipt,
   VoiceConversationRealtimeStartRequest,
+  VoiceConversationRealtimeSpeakRequest,
+  VoiceConversationRealtimeSpeakReceipt,
   VoiceConversationRealtimeStatus,
   VoiceConversationRealtimeStopReceipt,
   VoiceConversationRealtimeStopRequest,
@@ -532,6 +534,35 @@ export class VoiceRuntime extends TypertRemoteService {
         reason: 'negotiation-failed',
         detail: codexRealtimeFailureDetail(error),
       }
+    }
+  }
+
+  /**
+   * Hand a fully completed Phoenix answer to Codex native V3 speech. This
+   * only accepts an already-active browser-owned call; it does not create
+   * a new thread, spawn a model, or switch to another voice provider.
+   */
+  @Remote('conversationRealtimeSpeak')
+  async conversationRealtimeSpeak(
+    request: VoiceConversationRealtimeSpeakRequest,
+  ): Promise<VoiceConversationRealtimeSpeakReceipt> {
+    if (!this.config.enabled || !this.config.codexRealtime) {
+      return { accepted: false, reason: 'disabled' }
+    }
+    const key = request.key.trim()
+    const text = displayOutputToVoiceText(request.text, 4800)
+    if (key === '' || key.length > 256 || text === '' || request.text.length > 8000) {
+      return { accepted: false, reason: 'invalid' }
+    }
+    if (this.codexRealtime === undefined || !this.codexRealtime.hasActiveSession()) {
+      return { accepted: false, reason: 'no-session' }
+    }
+    try {
+      const accepted = await this.codexRealtime.speak(key, text)
+      return accepted ? { accepted: true } : { accepted: false, reason: 'no-session' }
+    } catch (error) {
+      this.ctx.logger('voice').warn('Codex native appendSpeech failed: ' + String(error).slice(0, 180))
+      return { accepted: false, reason: 'codex-unavailable' }
     }
   }
 
