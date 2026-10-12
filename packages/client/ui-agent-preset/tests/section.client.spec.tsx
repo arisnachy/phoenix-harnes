@@ -384,13 +384,20 @@ describe('the copy dialog', () => {
 })
 
 describe('the read-only viewer', () => {
-  it('shows the composition text under the preset\'s name', () => {
-    renderSection({ view: { id: 'standard', title: '标准模式', content: '- id: tool-bash\n' } })
+  it('shows localized component explanations, then the exact source only on request', () => {
+    const content = '# ── shell ───────────\n- id: tool-bash\n  name: \'@phoenix-ai/dsh-tool-bash\'\n'
+    renderSection({ view: { id: 'standard', title: '标准模式', content } })
 
     const dialog = screen.getByRole('dialog')
     expect(dialog.getAttribute('aria-label')).toBe(`${en.view} · ${en.presetStandardName}`)
     expect(within(dialog).getByText(en.composition)).toBeTruthy()
-    expect(within(dialog).getByText(/tool-bash/).textContent).toBe('- id: tool-bash\n')
+    expect(within(dialog).getByText(en.viewerShell)).toBeTruthy()
+    expect(within(dialog).getByText('tool-bash')).toBeTruthy()
+    expect(within(dialog).queryByText(content)).toBeNull()
+    fireEvent.click(within(dialog).getByRole('tab', { name: en.viewerSource }))
+    expect(within(dialog).getByText(content).textContent).toBe(content)
+    fireEvent.click(within(dialog).getByRole('tab', { name: en.viewerOverview }))
+    expect(within(dialog).queryByText(content)).toBeNull()
   })
 
   it('keeps the loaded title when the viewed row leaves the roster', () => {
