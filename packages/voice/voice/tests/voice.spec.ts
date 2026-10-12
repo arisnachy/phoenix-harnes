@@ -1098,10 +1098,10 @@ describe('Codex Live launch regression', () => {
       await expect(bridge.speak('not-owner', 'Hola')).resolves.toBe(false)
       expect(request).not.toHaveBeenCalled()
       await expect(bridge.speak('session-a', '  Ya terminé.  ')).resolves.toBe(true)
-      expect(request).toHaveBeenCalledExactlyOnceWith(
-        'thread/realtime/appendSpeech',
-        { threadId: 'thread-123', text: 'Ya terminé.' },
-      )
+      expect(request).toHaveBeenCalledTimes(1)
+      expect(request).toHaveBeenCalledWith('thread/realtime/appendSpeech', {
+        threadId: 'thread-123', text: 'Ya terminé.',
+      })
     } finally {
       internals.child = undefined
       bridge.close()
@@ -1121,7 +1121,8 @@ describe('Codex Live launch regression', () => {
     try {
       await expect(voice.conversationRealtimeSpeak({ key: 'session-a', text: 'Kira ha terminado.' }))
         .resolves.toEqual({ accepted: true })
-      expect(speak).toHaveBeenCalledExactlyOnceWith('session-a', 'Kira ha terminado.')
+      expect(speak).toHaveBeenCalledTimes(1)
+      expect(speak).toHaveBeenCalledWith('session-a', 'Kira ha terminado.')
       await expect(voice.conversationRealtimeSpeak({ key: 'session-a', text: '' })).resolves.toEqual({
         accepted: false, reason: 'invalid',
       })
