@@ -1,4 +1,5 @@
 import { Context } from '@phoenix-ai/cordis'
+import z from '@phoenix-ai/schemastery'
 import SystemPrompt, { renderPrompt } from '@phoenix-ai/dsh-system-prompt'
 import { SettingsProvider, settingsNamespace, type SettingsNamespace } from '@phoenix-ai/dsh-settings'
 import { createScope, type ScopeKey } from '@phoenix-ai/dsh-scope'
@@ -103,8 +104,8 @@ describe('the persona row', () => {
     await scope.ctx.plugin(Persona, { text: 'Identidad. {{phoenix_locale_instruction}}', complete: true })
 
     const ns = settingsNamespace('locale')
-    ctx.settings.register(ns, (await import('@phoenix-ai/schemastery')).default.object({
-      preference: (await import('@phoenix-ai/schemastery')).default.union(['es','en','zh'] as const).required(false),
+    ctx.settings.register(ns, z.object({
+      preference: z.union(['es','en','zh'] as const).required(false),
     }))
     await ctx.settings.update(ns, { preference: 'es' })
     expect(renderPrompt(await ctx.systemPrompt.assemble({ scope: key }))).toContain('IDIOMA ELEGIDO EN PHOENIX: ESPAÑOL')
