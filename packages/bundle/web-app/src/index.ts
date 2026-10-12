@@ -153,6 +153,8 @@ function webSurfacePrompt(webUrl: string): string {
     + 'When the user asks to watch or analyze a YouTube tutorial or video, use Chrome MCP youtube_video_inspect with the supplied watch URL or existing tabId, including multiple actual screenshots. '
     + 'When captions are empty, inspect the real local audioSample; if successful, use youtube_video_listen on the same tabId for additional portions needed to understand speech, with exact timecodes. '
     + 'The local faster-whisper model is auto-provisioned via uv on first use; audio is short-lived and not sent to external speech APIs. '
+    + 'If sound capture is blocked or local transcription fails, do NOT retry the muted headless player repeatedly. Tell the user to choose «Compartir pestaña para Kira» in the MiniBrowser and select the actually playing Chrome tab with «Compartir audio» enabled; then call Chrome MCP video_media_inspect with no path to inspect its latest authorized recording. '
+    + 'For a user-owned local MP4/WebM/MOV, call video_media_inspect with its path only when PHOENIX_VIDEO_ALLOWED_DIRS explicitly authorizes that directory. FFmpeg is resolved locally or via uv/imageio-ffmpeg; never use YouTube scraping, DRM workarounds, unauthorized downloading or paid speech APIs. '
     + 'If sound capture is blocked or local transcription fails, report the exact limitation, never assume the video was heard. '
     + 'Inspect actual timecoded evidence and screenshots before judging Godot workflows or code. '
     + 'If captions are unavailable or video frames cannot be captured, report exactly what evidence is missing and never pretend to have watched or listened to the whole video. '

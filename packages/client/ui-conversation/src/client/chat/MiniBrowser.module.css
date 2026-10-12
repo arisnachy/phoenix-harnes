@@ -117,3 +117,7 @@
   .titlebar { padding-inline: 9px; }
   .toolbar { padding-inline: 8px; }
 }
+
+/* Explicit Chrome getDisplayMedia capture: never automatic or invisible. */
+.captureStatus { margin: 0; border-top: 1px solid var(--dsw-alias-border-l2); padding: 8px 12px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.mediaBar button:disabled { opacity: 0.55; cursor: not-allowed; }

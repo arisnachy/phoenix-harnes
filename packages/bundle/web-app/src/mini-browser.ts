@@ -8,7 +8,8 @@
  * loopback peer; arbitrary page scripts and private profile access are absent.
  */
 import { spawn, type ChildProcess } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
@@ -32,6 +33,8 @@ type Action = {
 const SHARED = join(tmpdir(), 'phoenix-browser-cdp.json')
 const VIEWPORT = { width: 1280, height: 720 }
 const MAX_BODY = 8192
+const MAX_CAPTURE_BYTES = 24 * 1024 * 1024
+const CAPTURE_ROOT = join(tmpdir(), 'phoenix-video-captures')
 const LIMIT_MS = 8000
 let owned: ChildProcess | undefined
 let ownedProfile: string | undefined
@@ -439,8 +442,52 @@ async function readAction(req: IncomingMessage): Promise<Action> {
     || typeof (body as { type?: unknown }).type !== 'string') throw new Error('Acción mal formada.')
   return body as Action
 }
+
+/** Accept only bounded WebM bytes, never arbitrary uploads or web URLs. */
+export function isVerifiedWebmCapture(buffer: Buffer): boolean {
+  return buffer.length >= 128 && buffer.length <= MAX_CAPTURE_BYTES
+    && buffer[0] === 0x1a && buffer[1] === 0x45
+    && buffer[2] === 0xdf && buffer[3] === 0xa3
+}
+async function receiveAuthorizedCapture(req: IncomingMessage): Promise<{captureId: string; bytes: number}> {
+  if (req.headers['content-type']?.startsWith('video/webm') !== true) throw new Error('VIDEO_CAPTURE_TYPE_INVALID')
+  const length = Number(req.headers['content-length'])
+  if (req.headers['content-length'] !== undefined
+    && (!Number.isInteger(length) || length < 128 || length > MAX_CAPTURE_BYTES)) {
+    throw new Error('VIDEO_CAPTURE_SIZE_INVALID')
+  }
+  const parts: Buffer[] = []
+  let total = 0
+  for await (const incoming of req) {
+    const bytes = Buffer.isBuffer(incoming) ? incoming : Buffer.from(incoming)
+    total += bytes.length
+    if (total > MAX_CAPTURE_BYTES) throw new Error('VIDEO_CAPTURE_TOO_LARGE')
+    parts.push(bytes)
+  }
+  const body = Buffer.concat(parts)
+  if (!isVerifiedWebmCapture(body)) throw new Error('VIDEO_CAPTURE_WEBM_INVALID')
+  mkdirSync(CAPTURE_ROOT, {recursive:true,mode:0o700})
+  // Old recordings expire and are removed opportunistically.
+  for (const name of readdirSync(CAPTURE_ROOT)) {
+    if (!/^capture-[a-f0-9-]{36}\.webm$/i.test(name)) continue
+    const path = join(CAPTURE_ROOT,name)
+    try {
+      if (Date.now() - statSync(path).mtimeMs > 60 * 60_000) rmSync(path,{force:true})
+    } catch { /* A disappearing expired recording is harmless. */ }
+  }
+  const captureId = randomUUID()
+  writeFileSync(join(CAPTURE_ROOT,'capture-'+captureId+'.webm'),body,{flag:'wx',mode:0o600})
+  const marker = JSON.stringify({id:captureId,createdAt:Date.now(),bytes:body.length})
+  const staging = join(CAPTURE_ROOT,'latest-'+captureId+'.tmp')
+  try {
+    writeFileSync(staging,marker,{flag:'wx',mode:0o600})
+    renameSync(staging,join(CAPTURE_ROOT,'latest.json'))
+  } finally { rmSync(staging,{force:true}) }
+  return {captureId,bytes:body.length}
+}
+
 /**
- * Register the three bounded MiniBrowser routes in the existing Phoenix Web host.
+ * Register the four bounded MiniBrowser routes in the existing Phoenix Web host.
  * @param ctx - Active Cordis context with a bound Web server.
  */
 export function registerMiniBrowserRoutes(ctx: Context): void {
@@ -462,6 +509,12 @@ export function registerMiniBrowserRoutes(ctx: Context): void {
         res.writeHead(200, { 'content-type': 'image/jpeg', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' })
         res.end(jpeg)
       } catch (error) { reply(res, 503, { error: String(error) }) }
+    } }),
+    ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/capture', handler: async (req, res) => {
+      if (!sharedGuard(req, res)) return
+      if (req.method !== 'POST') { reply(res, 405, {error:'Método no permitido.'}); return }
+      try { reply(res, 201, await receiveAuthorizedCapture(req)) }
+      catch (error) { reply(res, 400, {error:String(error)}) }
     } }),
     ctx.webServer.register({ kind: 'exact', path: '/phoenix-mini-browser/action', handler: async (req, res) => {
       if (!sharedGuard(req, res)) return

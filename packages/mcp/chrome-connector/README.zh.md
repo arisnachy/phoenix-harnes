@@ -30,6 +30,13 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 
 没有字幕时，Phoenix 在 PATH 中调用 `uv`，按需建立包含 `faster-whisper` 的隔离 Python 环境，首次使用时缓存 Whisper `base` 模型，后续复用。首次下载需要网络。可以用 `PHOENIX_VIDEO_WHISPER_MODEL=tiny|base|small` 调整模型，或通过 `PHOENIX_VIDEO_PYTHON` 指定已经配置好的 Python。用于浏览器导航和音频捕获的授权仍是 `PHOENIX_BROWSER_ALLOW_ACTIONS=true`。验收需要真实可读的截图、带时间戳的真实转录片段，或明确的错误代码，不应猜测私有或 DRM 视频内容。
 
+
+### Video Engine 2.0：主动共享标签页与本地文件
+
+当无头 Chromium 无法播放 YouTube、读取字幕或得到画面时，Kira 不应反复重试。用户在 MiniBrowser 点 **«Compartir pestaña para Kira»**，在 Chrome 自带的选择器中选中真正播放视频的标签，并启用 **Compartir audio**。授权后，浏览器通过 `getDisplayMedia` 和 MediaRecorder 最多录制 30 秒、24 MB 的 WebM。录制仅保存在用户本机私有临时目录，一小时后失效，旧文件在后续录制时清理。声音不会被发送至付费转录 API。随后 Kira 不传 `path` 调用 `video_media_inspect`，由 FFmpeg 抽取真实画面和音轨，Whisper 最多识别 90 秒内容。未分析片段不能推测。
+
+`video_media_inspect` 还可以分析用户本人合法持有的 MP4/WebM/MOV/MKV 文件，但必须先用 `PHOENIX_VIDEO_ALLOWED_DIRS` 明确授权包含该文件的目录（Windows 使用分号分隔多个目录），不会从非授权目录读取媒体或下载 YouTube 视频。FFmpeg 使用 `PHOENIX_VIDEO_FFMPEG`、PATH 中的现有程序或通过 `uv` / `imageio-ffmpeg` 缓存安装。Whisper/FFmpeg 首次安装可能需要联网。分享音轨必须经 Chrome 原生权限窗口确认；受到 DRM 保护的内容仍可能无法捕获。
+
 ## 模型体验
 
 ### 浏览器会话检查

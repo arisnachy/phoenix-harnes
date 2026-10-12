@@ -104,12 +104,8 @@ export function parseCapturedVideoAudio(value: unknown): CapturedVideoAudio {
  * @param capture - Validated audio WebM from Chrome, not exposed to the LLM.
  * @returns Timecoded transcript segments based on decoded speech.
  */
-export async function transcribeCapturedVideoAudio(capture: CapturedVideoAudio): Promise<AudioTranscript> {
-  if (!capture.ok || !capture.base64) throw new Error('AUDIO_CAPTURE_NOT_AVAILABLE')
-  const directory = await mkdtemp(join(tmpdir(), 'phoenix-video-audio-'))
-  const path = join(directory,'clip.webm')
-  try {
-    await writeFile(path,Buffer.from(capture.base64,'base64'),{mode:0o600})
+/** Shared file-based local Whisper transcription; the caller owns the file. */
+export async function transcribeLocalMediaFile(path: string): Promise<AudioTranscript> {
     const configuredModel=process.env.PHOENIX_VIDEO_WHISPER_MODEL
     const model=['tiny','base','small'].includes(configuredModel ?? '') ? configuredModel! : 'base'
     const configuredPython=process.env.PHOENIX_VIDEO_PYTHON?.trim()
@@ -147,6 +143,15 @@ export async function transcribeCapturedVideoAudio(capture: CapturedVideoAudio):
         &&typeof item.text==='string'&&item.text.length<=2000
     })
     return {...(typeof result.language==='string' ? {language:result.language.slice(0,12)} : {}),cues}
+}
+
+export async function transcribeCapturedVideoAudio(capture: CapturedVideoAudio): Promise<AudioTranscript> {
+  if (!capture.ok || !capture.base64) throw new Error('AUDIO_CAPTURE_NOT_AVAILABLE')
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-video-audio-'))
+  const path = join(directory,'clip.webm')
+  try {
+    await writeFile(path,Buffer.from(capture.base64,'base64'),{mode:0o600})
+    return await transcribeLocalMediaFile(path)
   } finally {
     await rm(directory,{recursive:true,force:true})
   }

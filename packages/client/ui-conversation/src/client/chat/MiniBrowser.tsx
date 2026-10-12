@@ -109,6 +109,9 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
   const [error, setError] = useState<string>()
   const [connectionError, setConnectionError] = useState<string>()
   const [captureError, setCaptureError] = useState<string>()
+  const [mediaCaptureState, setMediaCaptureState] = useState<'idle' | 'recording' | 'uploading' | 'ready'>('idle')
+  const [mediaCaptureMessage, setMediaCaptureMessage] = useState<string>()
+  const stopMediaCapture = useRef<(() => void) | undefined>(undefined)
   const focusRef = useRef<HTMLImageElement>(null)
   const inlineRef = useRef<HTMLDivElement>(null)
   const currentTab = useRef<string | undefined>(undefined)
@@ -294,6 +297,88 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
     void run({ type: 'key', key: event.key, modifiers })
   }
 
+  /** Capture only after the user opens Chrome's native sharing prompt.
+   * This is independent of Kira's muted headless YouTube player.
+   */
+  const startMediaCapture = async () => {
+    if (stopMediaCapture.current) return
+    let stream: MediaStream | undefined
+    try {
+      if (!navigator.mediaDevices?.getDisplayMedia || typeof MediaRecorder === 'undefined') {
+        throw new Error('Chrome no permite compartir pestaña desde esta sesión.')
+      }
+      // The browser MUST show its native tab chooser; no hidden auto-capture.
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: 10 }, audio: true,
+      })
+      if (stream.getAudioTracks().length === 0) {
+        throw new Error('Activa «Compartir audio de la pestaña» en el selector de Chrome.')
+      }
+      const format = ['video/webm;codecs=vp8,opus', 'video/webm']
+        .find(type => MediaRecorder.isTypeSupported(type))
+      if (!format) throw new Error('Este Chrome no puede grabar video WebM.')
+      const recorder = new MediaRecorder(stream, { mimeType: format, videoBitsPerSecond: 1_200_000 })
+      const recorded: Blob[] = []
+      let done = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const cleanup = () => {
+        if (timer !== undefined) clearTimeout(timer)
+        stream?.getTracks().forEach(track => track.stop())
+        stopMediaCapture.current = undefined
+      }
+      recorder.ondataavailable = event => { if (event.data.size > 0) recorded.push(event.data) }
+      recorder.onerror = () => {
+        done = true
+        cleanup()
+        setMediaCaptureState('idle')
+        setMediaCaptureMessage('Falló la grabación. Puedes intentarlo de nuevo.')
+      }
+      recorder.onstop = () => {
+        if (done) return
+        done = true
+        cleanup()
+        const blob = new Blob(recorded, { type: 'video/webm' })
+        if (blob.size < 128 || blob.size > 24 * 1024 * 1024) {
+          setMediaCaptureState('idle')
+          setMediaCaptureMessage('La grabación está vacía o excede 24 MB.')
+          return
+        }
+        setMediaCaptureState('uploading')
+        void (async () => {
+          try {
+            const response = await fetch(API + '/capture', {
+              method: 'POST', headers: { ...HEADERS, 'content-type': 'video/webm' },
+              body: blob, cache: 'no-store',
+            })
+            const result = await decode<{ captureId: string }>(response)
+            setMediaCaptureState('ready')
+            setMediaCaptureMessage('Grabación recibida (' + result.captureId.slice(0, 8)
+              + '). Pide a Kira usar video_media_inspect; solo esa herramienta confirma audio e imágenes.')
+          } catch (error) {
+            setMediaCaptureState('idle')
+            setMediaCaptureMessage('No se pudo guardar la grabación: ' + String(error))
+          }
+        })()
+      }
+      for (const track of stream.getTracks()) {
+        track.addEventListener('ended', () => {
+          if (recorder.state !== 'inactive') recorder.stop()
+        }, {once:true})
+      }
+      recorder.start(1000)
+      stopMediaCapture.current = () => {
+        if (recorder.state !== 'inactive') recorder.stop()
+      }
+      timer = setTimeout(() => { stopMediaCapture.current?.() }, 30_000)
+      setMediaCaptureState('recording')
+      setMediaCaptureMessage('Grabando hasta 30 segundos. Reproduce el video en la pestaña seleccionada.')
+    } catch (error) {
+      stream?.getTracks().forEach(track => track.stop())
+      setMediaCaptureState('idle')
+      setMediaCaptureMessage(error instanceof Error ? error.message : String(error))
+    }
+  }
+
   // No browser chrome in ordinary greetings or unrelated conversations.
   // A deliberate request or an existing real Chromium tab is required.
   if (!show) return null
@@ -366,8 +451,15 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
           <button type="button" onClick={() => { setVideoSurface(true); setPlayingVideo(false) }}>
             ▣ Ver video
           </button>
-          <span>Vista previa oficial sin reproducción automática; el audio solo se activa al pulsar reproducir.</span>
+          <button type="button"
+            disabled={mediaCaptureState === 'uploading'}
+            onClick={() => mediaCaptureState === 'recording'
+              ? stopMediaCapture.current?.() : void startMediaCapture()}>
+            {mediaCaptureState === 'recording' ? '■ Detener captura' : '◉ Compartir pestaña para Kira'}
+          </button>
+          <span>Selecciona en Chrome la pestaña que reproduce el video y activa «Compartir audio». Captura máxima: 30 segundos.</span>
         </div>}
+        {mediaCaptureMessage && <p className={css.captureStatus} role="status">{mediaCaptureMessage}</p>}
         <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
           <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={(event) => { setTyped(event.currentTarget.value) }} />
           <button type="submit" disabled={!snapshot.available || !typed}>Escribir</button>
