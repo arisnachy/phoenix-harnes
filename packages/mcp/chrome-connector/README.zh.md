@@ -21,6 +21,10 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 
 连接器不会读取配置文件、cookies 或密码。必须由用户明确启用 CDP；普通浏览器标签不能被另一个进程自动接管。
 
+### YouTube 视频分析与 MiniBrowser 可见性
+
+`youtube_video_inspect` 可接收 `url` 或既有 `tabId`，以及 `maxChars` 与 `frames`（0 至 3）。它只读取可访问的 YouTube 公开视频字幕（JSON3/XML）、时间码和最多三张真实 Chromium 截图，不推测无法获取的语音。对新的 URL 进行导航需要 `PHOENIX_BROWSER_ALLOW_ACTIONS=true`。无头 Chromium 保持静音；YouTube 官方播放器会在聊天中显示预览，只有用户按下播放按钮才会发出声音。若 YouTube 不允许读取字幕或视频画面，Kira 必须明确说明限制，不得假装已经看完或听完视频。
+
 ## 模型体验
 
 ### 浏览器会话检查

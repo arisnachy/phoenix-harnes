@@ -31,6 +31,13 @@ Para `https://www.selenium.dev/selenium/web/web-form.html`, un flujo normal es i
 
 El conector no lee archivos del perfil, cookies ni contraseñas. CDP debe ser habilitado explícitamente por el usuario; una pestaña normal no puede ser adoptada mágicamente desde otro proceso.
 
+
+### Análisis real de videos de YouTube (Kira / Godot)
+
+`youtube_video_inspect` acepta `url` o una `tabId` existente, junto con `maxChars` y `frames` (0–3). Lee los subtítulos públicos JSON3/XML con marcas de tiempo cuando están disponibles, devuelve su idioma y el número de segmentos, y captura fotogramas reales del reproductor Chromium solo cuando el navegador tiene autorización para controlar la reproducción. Para URL nueva aplica `PHOENIX_BROWSER_ALLOW_ACTIONS=true`; sin permiso, se puede inspeccionar la pestaña previamente abierta, pero no cambiar el instante del video. No transmite ni adivina audio, no accede a contenido privado, DRM o videos sin pistas accesibles, y no habilita una API de pago. Una captura JPEG válida no garantiza que YouTube haya renderizado un fotograma visible: Kira debe examinar cada imagen antes de describirla.
+
+Cuando el conector navega por petición de Kira, las tarjetas del MiniBrowser aparecen también en investigaciones y análisis indirectos (no solo con la orden «abre»). El Chromium headless funciona silenciado para impedir audio invisible; los videos de YouTube muestran una vista previa en el chat y el sonido se activa exclusivamente desde el reproductor visible mediante el botón «Reproducir con audio».
+
 ## Model Experience
 
 ### Browser session inspection

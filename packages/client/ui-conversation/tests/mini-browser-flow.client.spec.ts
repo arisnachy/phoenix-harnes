@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addBrowserCards, groupActiveBrowserFlow, isBrowserPrompt } from '../src/client/chat/ToolActivityFlow.tsx'
+import { addBrowserCards, groupActiveBrowserFlow, isBrowserPrompt, isEmbeddedNavigationTool } from '../src/client/chat/ToolActivityFlow.tsx'
 
 type BrowserFlowNode = { key: string; kind: string; data: unknown }
 const user = (key: string, text: string): BrowserFlowNode => ({
@@ -21,6 +21,21 @@ describe('MiniBrowser chronological conversation cards', () => {
     expect(isBrowserPrompt('Abre la carpeta del proyecto')).toBe(false)
     expect(isBrowserPrompt('No abras el navegador')).toBe(false)
     expect(isBrowserPrompt('Hola, ¿cómo va todo?')).toBe(false)
+    expect(isBrowserPrompt('Analiza este tutorial de Godot en YouTube')).toBe(true)
+  })
+
+  it('exposes actual Chromium navigation even when the user requested research rather than opening a browser', () => {
+    expect(isEmbeddedNavigationTool('mcp__browser__navigate')).toBe(true)
+    expect(isEmbeddedNavigationTool('mcp__chrome__youtube_video_inspect')).toBe(true)
+    expect(isEmbeddedNavigationTool('mcp__browser__youtube_search')).toBe(true)
+    expect(isEmbeddedNavigationTool('web_search')).toBe(false)
+    expect(isEmbeddedNavigationTool('mcp__browser__read_page')).toBe(false)
+    const nodes = [
+      user('user-1', 'Investiga las técnicas usadas por este autor'),
+      { key: 'tool-1', kind: 'tool-call', data: { root: { call: { name: 'mcp__browser__navigate' } } } },
+    ]
+    const output = addBrowserCards(flowNodes('user-1', 'tool-1'), nodes)
+    expect(output.map(item => item.key)).toEqual(['user-1', 'browser:user-1', 'tool-1'])
   })
 
   it('keeps the older browser immediately after its request and its answer below', () => {

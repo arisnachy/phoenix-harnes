@@ -104,6 +104,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
   const [address, setAddress] = useState('')
   const [typed, setTyped] = useState('')
   const [playingVideo, setPlayingVideo] = useState(false)
+  const [videoSurface, setVideoSurface] = useState(true)
   const [frame, setFrame] = useState<string>()
   const [error, setError] = useState<string>()
   const [connectionError, setConnectionError] = useState<string>()
@@ -251,7 +252,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
       setDismissed(false)
       setCollapsed(false)
     }
-    if (snapshot.url !== lastObservedUrl.current) setPlayingVideo(false)
+    if (snapshot.url !== lastObservedUrl.current) { setPlayingVideo(false); setVideoSurface(true) }
     lastObservedUrl.current = snapshot.url
   }, [snapshot.url])
 
@@ -333,10 +334,10 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
         </form>
         {snapshot.available ? (
           <div className={css.viewport}>
-            {playingVideo && videoId ? (
+            {videoSurface && videoId ? (
               <iframe className={css.player}
                 title="Reproductor YouTube"
-                src={'https://www.youtube-nocookie.com/embed/' + videoId + '?autoplay=1'}
+                src={'https://www.youtube-nocookie.com/embed/' + videoId + '?autoplay=' + (playingVideo ? '1' : '0') + '&playsinline=1'}
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                 sandbox="allow-scripts allow-same-origin allow-presentation"
                 allowFullScreen
@@ -356,10 +357,16 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
           </div>
         )}
         {videoId && <div className={css.mediaBar}>
-          <button type="button" onClick={() => { setPlayingVideo(current => !current) }}>
-            {playingVideo ? '↩ Volver al navegador' : '▶ Reproducir con audio'}
+          <button type="button" onClick={() => { setVideoSurface(true); setPlayingVideo(true) }}>
+            ▶ Reproducir con audio
           </button>
-          <span>Reproductor oficial; la pestaña de Kira permanece abierta.</span>
+          <button type="button" onClick={() => { setVideoSurface(false); setPlayingVideo(false) }}>
+            ◧ Ver navegador de Kira
+          </button>
+          <button type="button" onClick={() => { setVideoSurface(true); setPlayingVideo(false) }}>
+            ▣ Ver video
+          </button>
+          <span>Vista previa oficial sin reproducción automática; el audio solo se activa al pulsar reproducir.</span>
         </div>}
         <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
           <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={(event) => { setTyped(event.currentTarget.value) }} />

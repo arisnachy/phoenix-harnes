@@ -14,6 +14,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { browserBatchExpression, browserInteractionExpression, type BrowserInteraction, type BrowserInteractionResult } from './browser-interactions.ts'
+import { chooseYoutubeCaptions, youtubeCaptionUrl, youtubeTranscript, youtubeWatchUrl, type YoutubeCaptionTrack } from './youtube-video.ts'
 
 const DEFAULT_PORTS = [9222, 9223, 9224]
 /** User-temp discovery lets the in-chat view reuse this exact Chromium tab. */
@@ -88,7 +89,7 @@ export function buildDedicatedBrowserArgs(profileDir: string, headless = false):
     '--no-default-browser-check',
     '--disable-sync',
     '--window-size=1280,820', '--force-device-scale-factor=1',
-    ...(headless ? ['--headless=new'] : []),
+    ...(headless ? ['--headless=new', '--mute-audio'] : []),
     'about:blank',
   ]
 }
@@ -511,6 +512,167 @@ server.registerTool('wait_for', {
     await new Promise(resolve => setTimeout(resolve, 250))
   } while (Date.now() < deadline)
   return formatBrowserResult({ ok: false, reason: 'TIMEOUT_WAITING_FOR_TEXT', url: last?.url, title: last?.title, foundText: false })
+})
+
+
+type YoutubeInspectionMetadata = {
+  readonly url: string
+  readonly title: string
+  readonly author: string
+  readonly description: string
+  readonly durationSeconds: number
+  readonly tracks: YoutubeCaptionTrack[]
+  readonly hasVideoElement: boolean
+}
+
+/** Inspect the public player's exposed metadata, not cookies or user storage. */
+async function inspectYoutubeMetadata(tab: Tab): Promise<YoutubeInspectionMetadata> {
+  const expression = '(() => { '
+    + 'const data = window.ytInitialPlayerResponse || document.querySelector("#movie_player")?.getPlayerResponse?.(); '
+    + 'const details = data?.videoDetails; '
+    + 'const captions = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks; '
+    + 'return JSON.stringify({ url: location.href, title: String(details?.title || document.title || ""), '
+    + 'author: String(details?.author || ""), description: String(details?.shortDescription || "").slice(0, 1600), '
+    + 'durationSeconds: Number(details?.lengthSeconds) || 0, hasVideoElement: !!document.querySelector("video"), '
+    + 'tracks: (Array.isArray(captions) ? captions : []).map(t => ({ baseUrl: String(t.baseUrl || ""), '
+    + 'languageCode: String(t.languageCode || ""), kind: String(t.kind || ""), '
+    + 'name: String(t.name?.simpleText || "") })) }); })()'
+  const result = await evaluate(tab, expression)
+  return JSON.parse(String(result)) as YoutubeInspectionMetadata
+}
+
+/** Only read public YouTube timed-text from the video tab's own origin. */
+async function youtubeCaptionDocument(tab: Tab, rawUrl: string): Promise<string> {
+  const address = new URL(youtubeCaptionUrl(rawUrl))
+  address.searchParams.set('fmt', 'json3')
+  const js = '(async () => { const response = await fetch(' + JSON.stringify(address.href)
+    + ', { credentials: "same-origin" }); if (!response.ok) return ""; '
+    + 'const text = await response.text(); return text.length <= 2000000 ? text : ""; })()'
+  const response = await evaluate(tab, js)
+  if (typeof response === 'string' && response.length > 0) return response
+  // Some tracks are XML-only. The original signed endpoint is the fallback.
+  const xml = '(async () => { const response = await fetch(' + JSON.stringify(youtubeCaptionUrl(rawUrl))
+    + ', { credentials: "same-origin" }); if (!response.ok) return ""; '
+    + 'const text = await response.text(); return text.length <= 2000000 ? text : ""; })()'
+  const fallback = await evaluate(tab, xml)
+  return typeof fallback === 'string' ? fallback : ''
+}
+
+/** Capture true decoded Chromium video frames, never fabricated image assets. */
+async function youtubeSampleFrame(tab: Tab, requestedSeconds: number): Promise<
+  { readonly atSeconds: number; readonly jpeg: string } | undefined
+> {
+  const expression = '(async () => { const video = document.querySelector("video"); '
+    + 'if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return JSON.stringify({ok:false}); '
+    + 'video.pause(); const seconds = ' + String(requestedSeconds) + '; video.currentTime = seconds; '
+    + 'await Promise.race([new Promise(resolve => video.addEventListener("seeked", resolve, {once:true})), '
+    + 'new Promise(resolve => setTimeout(resolve, 1600))]); '
+    + 'return JSON.stringify({ok: video.readyState >= 2 && Math.abs(video.currentTime - seconds) < 3, '
+    + 'atSeconds: video.currentTime}); })()'
+  const result = JSON.parse(String(await evaluate(tab, expression))) as { ok?: boolean; atSeconds?: number }
+  if (!result.ok || typeof result.atSeconds !== 'number') return
+  const shot = await cdp<{ data: string }>(tab, 'Page.captureScreenshot', {
+    format: 'jpeg', quality: 65, fromSurface: true, captureBeyondViewport: false,
+  })
+  const bytes = typeof shot.data === 'string' ? Buffer.from(shot.data, 'base64') : Buffer.alloc(0)
+  if (bytes.length < 64 || bytes.length > 5_000_000 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return
+  return { atSeconds: result.atSeconds, jpeg: shot.data }
+}
+
+server.registerTool('youtube_video_inspect', {
+  description: 'Inspecciona un VIDEO REAL de YouTube para aprender técnicas (Godot, programación, tutoriales). Lee subtítulos con marcas de tiempo si existen y ofrece hasta tres fotogramas reales del reproductor para análisis visual. Usa esta herramienta antes de decir que solo tienes título/descripción. No adivina audio, no evita bloqueos, no descarga videos ni exige API de pago. Con URL abre una pestaña del MiniBrowser y necesita permiso de navegación; sin URL analiza la pestaña actual. Devuelve evidencia y restricciones de accesibilidad.',
+  inputSchema: {
+    url: z.url().optional(),
+    tabId: z.string().optional(),
+    maxChars: z.number().int().min(1000).max(80000).default(45000),
+    frames: z.number().int().min(0).max(3).default(3),
+  },
+}, async ({ url, tabId, maxChars, frames }) => {
+  let tab: Tab
+  let expectedVideoUrl: string
+  if (url !== undefined) {
+    expectedVideoUrl = youtubeWatchUrl(url)
+    ensureBrowserActionPermission()
+    tab = await newBrowserTab(expectedVideoUrl)
+  } else {
+    tab = await selectedTab(tabId)
+    expectedVideoUrl = youtubeWatchUrl(tab.url)
+  }
+
+  let metadata: YoutubeInspectionMetadata | undefined
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      const inspected = await inspectYoutubeMetadata(tab)
+      if (youtubeWatchUrl(inspected.url) !== expectedVideoUrl) {
+        throw new Error('YouTube redirigió fuera del video solicitado.')
+      }
+      metadata = inspected
+      if (inspected.hasVideoElement || inspected.tracks.length > 0) break
+    } catch (error) {
+      if (attempt === 7) return {
+        isError: true,
+        content: [{ type: 'text', text: 'No se pudo leer el video público de YouTube: ' + String(error) }],
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 450))
+  }
+  if (metadata === undefined) return {
+    isError: true, content: [{ type: 'text', text: 'YouTube no expuso metadatos verificables para este video.' }],
+  }
+
+  const track = chooseYoutubeCaptions(metadata.tracks)
+  let transcript = { text: '', cues: 0, truncated: false }
+  let captionError: string | undefined
+  if (track !== undefined) {
+    try {
+      transcript = youtubeTranscript(await youtubeCaptionDocument(tab, track.baseUrl), maxChars)
+      if (transcript.cues === 0) captionError = 'YouTube no entregó texto para la pista seleccionada.'
+    } catch (error) {
+      captionError = 'No se pudo leer la pista de subtítulos: ' + String(error)
+    }
+  } else captionError = 'El reproductor no ofrece pistas de subtítulos accesibles.'
+
+  const content: Array<
+    | { type: 'text'; text: string }
+    | { type: 'image'; data: string; mimeType: 'image/jpeg' }
+  > = [{
+    type: 'text',
+    text: JSON.stringify({
+      source: 'YouTube public player + actual timed-text; not inferred speech',
+      url: expectedVideoUrl,
+      title: metadata.title,
+      author: metadata.author,
+      durationSeconds: metadata.durationSeconds,
+      description: metadata.description,
+      availableCaptionTracks: metadata.tracks.map(item => ({ language: item.languageCode, type: item.kind || 'manual' })),
+      chosenCaptionLanguage: track?.languageCode,
+      transcript: transcript.text,
+      transcriptCueCount: transcript.cues,
+      transcriptTruncated: transcript.truncated,
+      captionLimitation: captionError,
+      videoFrameMethod: 'real Chromium video seek + screenshot; audio is not transcribed',
+      browserTabId: tab.id,
+    }),
+  }]
+  if (frames > 0 && actionsAllowed() && metadata.hasVideoElement && metadata.durationSeconds > 0) {
+    for (let index = 0; index < frames; index++) {
+      const seconds = Math.max(1, Math.floor(metadata.durationSeconds * (index + 1) / (frames + 1)))
+      try {
+        const sample = await youtubeSampleFrame(tab, seconds)
+        if (sample) {
+          content.push({ type: 'text', text: 'Fotograma real del video en segundo ' + String(sample.atSeconds) })
+          content.push({ type: 'image', data: sample.jpeg, mimeType: 'image/jpeg' })
+        }
+      } catch { /* A seek or screenshot may be blocked even when captions work. */ }
+    }
+  }
+  const realFrames = content.filter(part => part.type === 'image').length
+  content.push({ type: 'text', text: 'Fotogramas capturados: ' + String(realFrames) + '/'
+    + String(frames) + '. ' + (frames > 0 && !actionsAllowed()
+      ? 'La inspección visual requiere permiso para controlar el navegador.'
+      : realFrames === 0 && frames > 0 ? 'El reproductor no permitió extraer fotogramas verificables.' : '')
+    + ' Nunca afirmar haber escuchado el audio ni visto fotogramas no capturados.' })
+  return { content, ...(transcript.cues === 0 && realFrames === 0 ? { isError: true as const } : {}) }
 })
 
 server.registerTool('screenshot', {

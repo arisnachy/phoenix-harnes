@@ -119,7 +119,7 @@ async function startChromium(): Promise<string> {
     ownedProfile = profile
     const child = spawn(executable, [
       '--remote-debugging-port=0', '--remote-debugging-address=127.0.0.1',
-      '--user-data-dir=' + profile, '--headless=new', '--window-size=1280,820',
+      '--user-data-dir=' + profile, '--headless=new', '--mute-audio', '--window-size=1280,820',
       '--force-device-scale-factor=1', '--no-first-run', '--no-default-browser-check',
       '--disable-sync', 'about:blank',
     ], { stdio: 'ignore', windowsHide: true })
