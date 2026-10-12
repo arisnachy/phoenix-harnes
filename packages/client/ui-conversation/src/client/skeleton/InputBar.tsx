@@ -36,6 +36,7 @@ import {
   interruptVoiceAssistantSpeech, isCodexLiveRepairPending, waitForCodexLiveRepair, stopCodexRealtimeVoice,
   isCodexRealtimeVoiceActive, isLikelyVoiceAssistantEcho, openCodexReconnection, codexRealtimeRequiresLogin,
   setVoiceAssistantActive, setVoiceAssistantListening, subscribeVoiceAssistant, tryStartCodexRealtimeVoice,
+  hasApprovedVoiceFallback, setApprovedVoiceFallback,
   type VoiceInputState, type VoiceRecognitionLike,
 } from '../voice.ts'
 import css from './InputBar.module.css'
@@ -195,8 +196,8 @@ export function InputBar({
   const canSteerQueue = !locked && !machineBusy && !commandMenuOpen && empty && running && subagent === null
     && input.queue.some(row => row.placement === 'queued')
 
-  // Native Codex remains the default; only an explicit user click unlocks
-  // browser STT + Phoenix natural/Kokoro TTS for this mounted composer.
+  // Native Codex remains the default. Browser STT is only used after explicit
+  // opt-in, which may be remembered locally for future upstream failures.
   const [useAlternativeVoice, setUseAlternativeVoice] = useState(false)
   const nativeCodexVoiceOnly = !useAlternativeVoice
   // Voice is an input/output layer over the ordinary PHOENIX execution path.
@@ -344,6 +345,7 @@ export function InputBar({
       setCodexVoiceFailure('La voz alternativa necesita reconocimiento de voz del navegador.')
       return
     }
+    setApprovedVoiceFallback(true)
     setUseAlternativeVoice(true)
     setCodexVoiceFailure(null)
     setVoiceAssistantActive(true)
@@ -393,12 +395,13 @@ export function InputBar({
         if (codexRealtimeRequiresLogin(realtime.reason)) openCodexReconnection()
       }
 
-      // Report a failed Codex startup without automatically substituting
-      // browser recognition and browser/system speech synthesis.
-      if (nativeCodexVoiceOnly) return
-      // Legacy alternative path is kept for explicit future opt-in only.
+      // The user can explicitly approve browser recognition using the nearby
+      // alternative button. Reuse that browser-local approval on subsequent
+      // service outages; never silently opt in a fresh user or use paid APIs.
+      if (nativeCodexVoiceOnly && !hasApprovedVoiceFallback()) return
       const recognition = ensureHarnessVoiceRecognition()
       if (recognition === undefined) return
+      setUseAlternativeVoice(true)
       setVoiceAssistantActive(true)
       startVoiceRecognition()
     } finally {
@@ -1118,7 +1121,7 @@ export function InputBar({
             {rightItems}
             {renderSlot('conversation.input.model', { locked: modelSeatLocked })}
             <ContextMeter useProjection={useProjection} t={t} />
-            {codexVoiceFailure !== null && (
+            {codexVoiceFailure !== null && !voiceEnabled && (
               <span
                 role="status"
                 className={clsx(css.voiceFallback, (voiceRepairing || codexRealtimeRequiresLogin(codexVoiceFailure)) && css.voiceReconnect)}
@@ -1127,13 +1130,28 @@ export function InputBar({
                   ? 'Phoenix está recuperando Codex CLI y reanudará esta llamada automáticamente cuando haya una versión compatible.'
                   : codexRealtimeRequiresLogin(codexVoiceFailure)
                   ? 'Codex perdió la autenticación. Vuelve a conectar tu cuenta de ChatGPT.'
-                  : `Codex Live no disponible: ${codexVoiceFailure}. No se ha activado la voz del navegador.`}
+                  : `Codex Live no disponible: ${codexVoiceFailure.slice(0, 220)}. El respaldo del navegador requiere tu autorización.`}
               >
                 {voiceRepairing
                   ? <>Recuperando Codex Live… · <button type="button" className={css.voiceReconnectAction} onClick={() => { void toggleVoice() }}>Cancelar</button></>
                   : codexRealtimeRequiresLogin(codexVoiceFailure)
                   ? <>Codex desconectado · <button type="button" className={css.voiceReconnectAction} onClick={openCodexReconnection}>Reconectar</button></>
-                  : <>Codex Live: {codexVoiceFailure}</>}
+                  : <>Codex Live sin conexión</>}
+              </span>
+            )}
+            {voiceEnabled && useAlternativeVoice && (
+              <span className={css.voiceAlternativeActive} role="status"
+                title="Respaldo autorizado: reconocimiento del navegador y voz de Phoenix (Kokoro si está disponible). No es Codex Live.">
+                Voz alternativa activa
+                <button type="button" className={css.voiceReconnectAction}
+                  onClick={() => {
+                    setApprovedVoiceFallback(false)
+                    voiceRef.current?.abort()
+                    voiceRef.current = null
+                    setVoiceAssistantActive(false)
+                    setUseAlternativeVoice(false)
+                    setCodexVoiceFailure(null)
+                  }}>Revocar permiso</button>
               </span>
             )}
             {codexVoiceFailure !== null && !voiceRepairing
