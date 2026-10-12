@@ -443,7 +443,10 @@ async function readAction(req: IncomingMessage): Promise<Action> {
   return body as Action
 }
 
-/** Accept only bounded WebM bytes, never arbitrary uploads or web URLs. */
+/** Accept only bounded WebM bytes, never arbitrary uploads or web URLs.
+ * @param buffer - Binary POST content from the user's authorized tab recording.
+ * @returns True only for a bounded WebM EBML header.
+ */
 export function isVerifiedWebmCapture(buffer: Buffer): boolean {
   return buffer.length >= 128 && buffer.length <= MAX_CAPTURE_BYTES
     && buffer[0] === 0x1a && buffer[1] === 0x45

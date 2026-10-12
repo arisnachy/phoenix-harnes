@@ -4,6 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
+/** Bounded WebM sample captured by the Chromium playback surface. */
 export interface CapturedVideoAudio {
   ok: boolean
   reason?: string
@@ -11,6 +12,7 @@ export interface CapturedVideoAudio {
   startSeconds?: number
   durationSeconds?: number
 }
+/** Timecoded transcript recognized locally; never an inferred YouTube caption. */
 export interface AudioTranscript {
   language?: string
   cues: Array<{ start: number; end: number; text: string }>
@@ -104,7 +106,10 @@ export function parseCapturedVideoAudio(value: unknown): CapturedVideoAudio {
  * @param capture - Validated audio WebM from Chrome, not exposed to the LLM.
  * @returns Timecoded transcript segments based on decoded speech.
  */
-/** Shared file-based local Whisper transcription; the caller owns the file. */
+/** Shared file-based local Whisper transcription; the caller owns the file.
+ * @param path - Caller-owned local WebM/WAV/media file to transcribe.
+ * @returns Recognized timecoded speech segments and detected language.
+ */
 export async function transcribeLocalMediaFile(path: string): Promise<AudioTranscript> {
     const configuredModel=process.env.PHOENIX_VIDEO_WHISPER_MODEL
     const model=['tiny','base','small'].includes(configuredModel ?? '') ? configuredModel! : 'base'
@@ -145,6 +150,10 @@ export async function transcribeLocalMediaFile(path: string): Promise<AudioTrans
     return {...(typeof result.language==='string' ? {language:result.language.slice(0,12)} : {}),cues}
 }
 
+/** Delete the private audio sample after transcribing it locally.
+ * @param capture - Verified browser audio sample.
+ * @returns Recognized timecoded speech segments.
+ */
 export async function transcribeCapturedVideoAudio(capture: CapturedVideoAudio): Promise<AudioTranscript> {
   if (!capture.ok || !capture.base64) throw new Error('AUDIO_CAPTURE_NOT_AVAILABLE')
   const directory = await mkdtemp(join(tmpdir(), 'phoenix-video-audio-'))

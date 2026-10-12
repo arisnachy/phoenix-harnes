@@ -21,6 +21,16 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 
 连接器不会读取配置文件、cookies 或密码。必须由用户明确启用 CDP；普通浏览器标签不能被另一个进程自动接管。
 
+### 表单与 Web 应用（无需 Computer 桌面）
+
+- `inspect_page`：一次检查表单控件、标签、类型、下拉选项以及只读与禁用状态，不公开密码。
+- `fill_form`：一项请求内最多填写 30 个字段；可填写文字、勾选、下拉和 ISO 日期，不修改受保护字段。
+- `interact`：通过标签、名称、占位文字或 CSS 选择器针对单个控件执行点击或填写操作。
+- `submit_form`：仅在用户明确请求后提交表单；尝试提交不等于已确认成功。
+- `wait_for`：验证实际成功文本和跳转 URL，不重复提交表单。
+
+对 Selenium 官方 Web 表单，先检查字段，再一次填充，获得授权后提交，最后核查反馈。出现验证码、外部登录、跨域 iframe 或原生对话框时，应请求用户介入，不绕过权限。
+
 ### YouTube 视频分析与 MiniBrowser 可见性
 
 `youtube_video_inspect` 可处理公开视频 URL 或已有的 `tabId`、JSON3/XML 字幕、最多 12 张真实 Chromium 截图（默认 6 张），以及 0–9 秒的可选音频样本（默认 8 秒）。字幕为空时，它尝试捕获真正的 Chromium 视频音轨并在本机识别语音。`youtube_video_listen` 用 `startSeconds` 与 `durationSeconds` 继续收听每段 3–9 秒的内容，返回有时间戳的文本与下一段起点。Kira 不得声称听过尚未处理的长视频部分。音频仅在临时目录保存、随后删除，不会发送给外部付费转录 API。受保护视频、浏览器禁止自动播放或缺少可捕获音轨时仍可能无法使用。无头 Chromium 保持系统声音静音，聊天中的可见播放器仅由用户点击启动。

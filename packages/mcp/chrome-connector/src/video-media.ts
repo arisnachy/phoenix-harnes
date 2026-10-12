@@ -9,7 +9,9 @@ const CAPTURE_ROOT = join(tmpdir(), 'phoenix-video-captures')
 const MAX_BYTES = 64 * 1024 * 1024
 const MAX_AGE_MS = 60 * 60_000
 const MEDIA_SUFFIXES = new Set(['.webm', '.mp4', '.mov', '.m4v', '.mkv'])
+/** Decoded JPEG accompanied by its verified media timestamp. */
 export type FrameEvidence = { atSeconds: number; jpeg: string }
+/** Model-facing bounded evidence from an approved audio/video source. */
 export type VideoMediaEvidence = {
   source: 'authorized-browser-capture' | 'approved-local-file'
   durationSeconds: number
@@ -17,7 +19,11 @@ export type VideoMediaEvidence = {
   audio: { status: 'ok' | 'unavailable'; language?: string; transcript?: string; reason?: string; cueCount?: number }
 }
 
-/** Even distribution across a decoded clip, including very short recordings. */
+/** Even distribution across a decoded clip, including very short recordings.
+ * @param duration - Measured clip duration in seconds.
+ * @param count - Requested number of sampled frames (up to eight).
+ * @returns Bounded, deterministic timestamps in the source clip.
+ */
 export function videoFrameTimes(duration: number, count: number): number[] {
   if (!Number.isFinite(duration) || duration <= 0 || !Number.isInteger(count) || count < 1 || count > 8) return []
   const length = Math.min(duration, 7200)
@@ -26,7 +32,10 @@ export function videoFrameTimes(duration: number, count: number): number[] {
     (_, index) => Number(Math.max(0, (index + 0.5) * length / total).toFixed(2)))
 }
 
-/** Reject unapproved local paths and expired or forged capture descriptors. */
+/** Reject unapproved local paths and expired or forged capture descriptors.
+ * @param path - Explicit, allowlisted local video; omitted means latest authorized recording.
+ * @returns Verified media path and source classification.
+ */
 export async function videoMediaInput(path?: string): Promise<{ path: string; source: VideoMediaEvidence['source'] }> {
   if (path !== undefined) {
     if (!isAbsolute(path) || !MEDIA_SUFFIXES.has(extname(path).toLowerCase())) throw new Error('VIDEO_FILE_NOT_APPROVED')
@@ -92,7 +101,9 @@ async function execute(command: string, args: string[], timeout = 30_000, maxOut
   })
 }
 let cachedDecoder: Promise<string> | undefined
-/** Cached, bounded decoder discovery: FFmpeg PATH/config or uv imageio-ffmpeg. */
+/** Cached, bounded decoder discovery: FFmpeg PATH/config or uv imageio-ffmpeg.
+ * @returns Verified local FFmpeg executable path.
+ */
 export async function resolveVideoDecoder(): Promise<string> {
   cachedDecoder ??= (async () => {
     const configured = process.env.PHOENIX_VIDEO_FFMPEG?.trim() || 'ffmpeg'
@@ -111,7 +122,10 @@ export async function resolveVideoDecoder(): Promise<string> {
   return await cachedDecoder
 }
 
-/** Analyze only a verified, explicitly authorized capture or approved local file. */
+/** Analyze only a verified, explicitly authorized capture or approved local file.
+ * @param input - Approved source, frame limit and audio seconds to inspect.
+ * @returns Real JPEG frames and a bounded local speech transcription.
+ */
 export async function inspectVideoMedia(input: {path?: string; frames: number; audioSeconds: number}): Promise<VideoMediaEvidence> {
   const selected = await videoMediaInput(input.path)
   const decoder = await resolveVideoDecoder()
