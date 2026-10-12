@@ -356,7 +356,6 @@ export class CodexRealtimeBridge {
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
   private launchedManagedCodexBin: string | undefined
-  private quicksilverRestartAttemptedFor: string | undefined
   /** Brief cooldown for identical upstream protocol failures; a CLI change clears it. */
   private lastQuicksilverRejection: { readonly runtime: string; readonly at: number; readonly detail: string } | undefined
 
