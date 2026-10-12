@@ -306,6 +306,27 @@ describe('web e2e: agent-preset selection', () => {
     expect(snapshot).not.toContain('button "Minimal mode"')
   })
 
+  it('boots a fresh Kira Max default and activates the composer after choosing a workspace', async () => {
+    const kiraScaffold = await launchWebScaffold({
+      agentPresets: { roots: [{ path: SHIPPED_PRESETS, trust: 'system' }], default: 'kira-max' },
+    })
+    const kiraBrowser = await chromium.launch()
+    const kiraPage = await newEnglishPage(kiraBrowser)
+    try {
+      await kiraPage.goto(kiraScaffold.baseUrl, { waitUntil: 'load' })
+      await kiraPage.waitForSelector('[class*="frame"]', { timeout: 30_000 })
+      await connectFreshWorkspace(kiraPage, kiraScaffold.workspaceCwd)
+      await expect.poll(() => livePreset(kiraScaffold.baseUrl), { timeout: 25_000 }).toBe('kira-max')
+      const active = kiraPage.locator('textarea:enabled').last()
+      await active.waitFor({ timeout: 25_000 })
+      await active.fill('Nuevo mensaje con Kira')
+      expect(await active.inputValue()).toBe('Nuevo mensaje con Kira')
+    } finally {
+      await kiraBrowser.close()
+      await kiraScaffold.close()
+    }
+  }, 120_000)
+
   it('drove every surface without a page error or a stream warning', () => {
     expect(tripwire.pageErrors).toEqual([])
     expect(tripwire.warnings).toEqual([])
