@@ -679,6 +679,11 @@ describe('Codex realtime voice protocol compatibility', () => {
       expect(started).toHaveBeenCalledTimes(2)
       expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3'])
       expect(existsSync(join(home, 'codex-cli', 'live-repair-request.json'))).toBe(false)
+      await expect(bridge.probe()).resolves.toMatchObject({
+        available: false, authenticated: true, reason: 'experimental-unavailable',
+        detail: expect.stringContaining('invalid_quicksilver_alpha_header'),
+      })
+      expect(started).toHaveBeenCalledTimes(2)
     } finally {
       bridge.close()
       vi.unstubAllEnvs()
