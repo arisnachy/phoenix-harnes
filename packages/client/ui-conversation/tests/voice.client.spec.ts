@@ -11,6 +11,8 @@ import {
   createVoiceRecognition,
   getVoiceAssistantSnapshot,
   hasVoiceRecognition,
+  hasApprovedVoiceFallback,
+  setApprovedVoiceFallback,
   interruptVoiceAssistantSpeech,
   isCodexRealtimeVoiceActive,
   isLikelyVoiceAssistantEcho,
@@ -55,6 +57,27 @@ describe('browser voice adapter', () => {
   })
 
   afterEach(() => { setVoiceAssistantActive(false) })
+
+  it('requires prior explicit opt-in before reusing a browser-vendor voice backup', () => {
+    const source = new Map<string, string>()
+    const storage = {
+      getItem: (name: string) => source.get(name) ?? null,
+      setItem: (name: string, value: string) => { source.set(name, value) },
+      removeItem: (name: string) => { source.delete(name) },
+    }
+    expect(hasApprovedVoiceFallback(storage)).toBe(false)
+    setApprovedVoiceFallback(true, storage)
+    expect(hasApprovedVoiceFallback(storage)).toBe(true)
+    setApprovedVoiceFallback(false, storage)
+    expect(hasApprovedVoiceFallback(storage)).toBe(false)
+    expect(hasApprovedVoiceFallback({
+      getItem: () => { throw new Error('Storage blocked') },
+    })).toBe(false)
+    expect(() => setApprovedVoiceFallback(true, {
+      setItem: () => { throw new Error('Storage blocked') },
+      removeItem: () => {},
+    })).not.toThrow()
+  })
 
   it('reports unsupported browsers without constructing a recognizer', () => {
     expect(hasVoiceRecognition({})).toBe(false)
