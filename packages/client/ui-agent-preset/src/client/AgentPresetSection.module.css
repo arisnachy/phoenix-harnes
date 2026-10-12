@@ -565,3 +565,27 @@
     min-height: 0;
   }
 }
+
+/* Translated human overview and untouched technical source share one dialog. */
+.viewerPanel { display: grid; min-width: 0; gap: 12px; }
+.viewerTabs { display:flex; gap:8px; flex-wrap:wrap; border-bottom:1px solid var(--dsw-alias-border-subtle, #ddd); }
+.viewerTabs button {
+  border:0; border-bottom:2px solid transparent; background:transparent; color:inherit;
+  padding:9px 12px; font:inherit; cursor:pointer;
+}
+.viewerTabs button[aria-selected="true"] {
+  border-bottom-color: var(--dsw-alias-brand-primary, currentColor);
+  font-weight:650;
+}
+.viewerTabs button:focus-visible { outline:2px solid currentColor; outline-offset:2px; }
+.viewerContent { min-width: 0; max-height: min(62vh,700px); overflow:auto; }
+.overview { display:grid; gap:16px; min-width:0; }
+.overviewIntro { margin:0 0 8px; color:var(--dsw-alias-label-secondary, #666); line-height:1.55; font-size:13px; }
+.overviewSection { border-bottom:1px solid var(--dsw-alias-border-subtle, #ddd); padding:0 0 12px; min-width:0; }
+.overviewSection h4 { margin:0 0 9px; font-size:14px; font-weight:650; }
+.overviewSection h4 span { color:var(--dsw-alias-label-secondary, #666); font-weight:400; }
+.overviewList { padding:0; margin:0; list-style:none; display:grid; gap:8px; }
+.overviewList li { display:flex; justify-content:space-between; align-items:baseline; gap:12px; min-width:0; }
+.overviewList li span { font-weight:550; font-size:13px; overflow-wrap:anywhere; }
+.overviewList li code { font-size:11px; text-align:right; color:var(--dsw-alias-label-secondary, #666); overflow-wrap:anywhere; }
+@media(max-width:640px) { .overviewList li { flex-direction:column; gap:3px; } .overviewList li code { text-align:left; } }
