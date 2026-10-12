@@ -389,7 +389,7 @@ export function InputBar({
       const realtime = await tryStartCodexRealtimeVoice(String(sessionId))
       if (realtime.kind === 'started') return
       if (realtime.kind === 'failed') {
-        if (isCodexLiveRepairPending(realtime.reason)) {
+        if (isCodexLiveRepairPending(realtime.reason) && !hasApprovedVoiceFallback()) {
           resumeAfterRepair(String(sessionId))
           return
         }
@@ -1160,7 +1160,7 @@ export function InputBar({
                   }}>Revocar permiso</button>
               </span>
             )}
-            {codexVoiceFailure !== null && !voiceRepairing
+            {codexVoiceFailure !== null
               && !codexRealtimeRequiresLogin(codexVoiceFailure)
               && voiceState !== 'unsupported' && !voiceEnabled && (
               <button
