@@ -12,6 +12,54 @@ const desktop = readFileSync(resolve('apps/desktop-windows/Program.cs'), 'utf8')
 const build = readFileSync(resolve('scripts/build.ts'), 'utf8')
 const stableWorkflow = readFileSync(resolve('.github/workflows/phoenix-stable-update-channel.yml'), 'utf8')
 
+describe('failed isolated runtime storage reclamation', () => {
+  it('reclaims only a failed unactivated candidate after a build error', () => {
+    const start = supervisor.indexOf('function cleanupFailedPreparedRuntime(target) {')
+    const end = supervisor.indexOf('\nfunction assertRuntimeStorageCapacity(nextRuntime) {', start)
+    expect(start).toBeGreaterThan(-1)
+    expect(end).toBeGreaterThan(start)
+    const remove = vi.fn(() => true)
+    const registered = new Set(['failed-runtime'])
+    let candidate = 'failed-runtime'
+    let active = { path: 'live-marker' }
+    let protectedByCheckout = false
+    const { cleanupFailedPreparedRuntime } = runInNewContext(
+      supervisor.slice(start, end) + '\n({ cleanupFailedPreparedRuntime })',
+      {
+        persistentRuntime: () => candidate,
+        runtimePathKey: (path: string) => path.toLowerCase(),
+        runtimeRoot: 'running-host',
+        root: 'checkout',
+        readActiveRuntimeRecord: () => active,
+        existsSync: () => true,
+        runtimeProtectedByOwningCheckout: () => protectedByCheckout,
+        registeredWorktreePaths: () => registered,
+        removeManagedWorktree: remove,
+        console: { error: () => {} },
+      },
+    ) as { cleanupFailedPreparedRuntime: (target: string) => void }
+    cleanupFailedPreparedRuntime('sha')
+    expect(remove).toHaveBeenCalledTimes(1)
+    expect(remove).toHaveBeenCalledWith('failed-runtime', registered, true)
+
+    for (const protectedPath of ['running-host', 'checkout', 'live-marker']) {
+      candidate = protectedPath
+      cleanupFailedPreparedRuntime('sha')
+    }
+    expect(remove).toHaveBeenCalledTimes(1)
+
+    candidate = 'owned-by-other-checkout'
+    protectedByCheckout = true
+    cleanupFailedPreparedRuntime('sha')
+    expect(remove).toHaveBeenCalledTimes(1)
+    protectedByCheckout = false
+    active = { path: 'another-live-host' }
+    cleanupFailedPreparedRuntime('sha')
+    expect(remove).toHaveBeenCalledTimes(2)
+    expect(remove).toHaveBeenLastCalledWith('owned-by-other-checkout', registered, true)
+  })
+})
+
 describe('PHOENIX supervised updater runtime isolation', () => {
   it('does not launch a duplicate web host into a busy 3080 port or kill the current listener', () => {
     expect(supervisor).toContain("import { createServer } from 'node:net'")

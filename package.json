@@ -22,7 +22,7 @@
     "build:lib": "npm run build:lib:host && npm run build:lib:client",
     "build:lib:host": "tsc -b tsconfig.host.json && node scripts/ensure-cordis-tsdown-entries.mjs && npm run build:typert && tsdown --env.DSH_BUILD_FACE host",
     "build:typert": "tsx scripts/generate-typert.ts",
-    "build:lib:client": "tsc -b tsconfig.client.json && tsdown --env.DSH_BUILD_FACE client",
+    "build:lib:client": "node scripts/ensure-cordis-tsdown-entries.mjs && tsc -b tsconfig.client.json && tsdown --env.DSH_BUILD_FACE client",
     "build:web": "pnpm --filter @phoenix-ai/dsh-web-frontend run build",
     "clean": "tsx scripts/clean.ts",
     "change-scope": "tsx scripts/change-scope.ts",
