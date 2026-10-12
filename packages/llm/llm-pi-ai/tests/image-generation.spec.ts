@@ -1,12 +1,13 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import { describe, expect, it } from 'vitest'
 import {
   classifyCodexImageFailure,
   codexImageInvocation,
+  resolveNativeCodexImageLauncher,
   codexDoctorSupportsImageGeneration,
   imageGenerationToolDescription,
   imageGenerationBackendOrder,
@@ -63,6 +64,32 @@ describe('Codex image generation bridge', () => {
       expect(processResult.stdout).toContain('result:raster-test')
     } finally {
       await rm(root, { force: true, recursive: true })
+    }
+  })
+  it('selects npm or pnpm native Windows Codex instead of invoking a .cmd shim', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'phoenix-codex-native-'))
+    try {
+      const shim = join(root, 'codex.cmd')
+      const native = join(root, 'node_modules', '@openai', 'codex',
+        'node_modules', '@openai', 'codex-win32-x64', 'vendor',
+        'x86_64-pc-windows-msvc', 'bin', 'codex.exe')
+      await mkdir(dirname(native), { recursive: true })
+      await writeFile(native, 'mock executable')
+      expect(await resolveNativeCodexImageLauncher(shim, 'win32', 'x64')).toBe(native)
+      const command = codexImageInvocation(native, ['exec', '-'], 'win32')
+      expect(command).toEqual([native, 'exec', '-'])
+      expect(await resolveNativeCodexImageLauncher(shim, 'linux', 'x64')).toBe(shim)
+      const pnpmShim = join(root, 'pnpm', 'codex.cmd')
+      const pnpmNative = join(root, 'pnpm', 'global', '5', 'node_modules',
+        '@openai', 'codex', 'node_modules', '@openai', 'codex-win32-x64',
+        'vendor', 'x86_64-pc-windows-msvc', 'bin', 'codex.exe')
+      await mkdir(dirname(pnpmNative), { recursive: true })
+      await writeFile(pnpmNative, 'mock pnpm executable')
+      expect(await resolveNativeCodexImageLauncher(pnpmShim, 'win32', 'x64')).toBe(pnpmNative)
+      expect(await resolveNativeCodexImageLauncher(join(root, 'unknown.cmd'), 'win32', 'x64'))
+        .toBe(join(root, 'unknown.cmd'))
+    } finally {
+      await rm(root, { recursive: true, force: true })
     }
   })
   it('recognizes the current Codex doctor JSON shape with ChatGPT auth and image generation enabled', () => {
