@@ -712,6 +712,27 @@ function reclaimInactiveBackupForCapacity(nextRuntime) {
   }
 }
 
+/**
+ * An update candidate that failed compilation must not consume a rollback
+ * slot until a future five-minute sweep. The supervised build process has
+ * already exited when this is called. Remove ONLY the candidate for the
+ * failed SHA, never the running Host or an active record from any checkout.
+ * If Windows still has file handles open, leave it alone for offline repair.
+ */
+function cleanupFailedPreparedRuntime(target) {
+  const candidate = persistentRuntime(target)
+  const key = runtimePathKey(candidate)
+  const active = readActiveRuntimeRecord()
+  if (!existsSync(candidate)
+    || key === runtimePathKey(runtimeRoot)
+    || key === runtimePathKey(root)
+    || (active?.path !== undefined && key === runtimePathKey(active.path))
+    || runtimeProtectedByOwningCheckout(candidate)) return
+  if (removeManagedWorktree(candidate, registeredWorktreePaths(), true)) {
+    console.error(`[PHOENIX UPDATE] removed failed isolated runtime before it consumed another storage slot: ${candidate}`)
+  }
+}
+
 function assertRuntimeStorageCapacity(nextRuntime) {
   if (existsSync(nextRuntime)) return
 
@@ -1588,6 +1609,10 @@ async function waitForHostEvent(host, hostExitPromise, lastObservedFingerprint) 
         clearRestartRequest()
         clearPreparedRecord()
         clearHostRestartRequest()
+        // Reclaim an unactivated, failed SHA immediately. Otherwise every
+        // failed TypeScript update can accumulate another ~GB worktree and
+        // strand the next release at the runtime storage safety limit.
+        cleanupFailedPreparedRuntime(updateTarget)
         console.error(
           `[PHOENIX UPDATE] replacement runtime prewarm failed safely; current Host remains online: ${error instanceof Error ? error.message : String(error)}`,
         )
