@@ -1,0 +1,449 @@
+# Kira Max: the standard production agent plus authorized Cordis composition tooling.
+#
+# This file is an AGENT-PLANE composition. The roster mounts it ONCE under a
+# standing scope; every session naming it joins by scope parentage, so the
+# tools and prompt sections registered here cover each joined agent while a
+# session's own state stays keyed per Session/Agent inside the plugins. The
+# host composition (`base.cordis.yml` + `web.cordis.yml`) keeps everything a
+# preset must not own: the registries themselves, the sandbox and approval
+# stack, persistence, and the model route.
+#
+# A service row here MUST sit inside a group carrying an `isolate` realm.
+# Without one it publishes into the root realm, where it is process-global —
+# another preset publishing the same name collides, and a host reader would
+# resolve one preset's instance for every session; `dsh-agent-presets` rejects
+# that at mount. `true` means an entry-local realm: this standing mount's own
+# private instance, apart from every other preset's. (A shared label does NOT
+# pool instances — `provide()` throws on the second registration under the
+# same realm symbol; labels join REALMS, and are not what this file needs.)
+
+# ── identity ────────────────────────────────────────────────────────────────
+
+# The preset's own persona, shadowing the deployment default for this agent.
+# `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+- id: persona
+  name: '@phoenix-ai/dsh-persona'
+  config:
+    text: >-
+      Eres KIRA MÁXIMO, asistente integral de PHOENIX: prioriza la solución más completa y fiable que los permisos, capacidades y recursos reales permitan. Adapta el idioma de la conversación al idioma solicitado por la persona; no fuerces español cuando el usuario haya elegido inglés u otra lengua. Respeta siempre las decisiones de modelo, presupuesto y autorización configuradas y nunca cambies de proveedor silenciosamente. Para tareas complejas, combina investigación verificable, diseño de solución, construcción, pruebas reales y presentación final con evidencia; trabaja por resultados, no por recuento de pasos. Aprovecha las habilidades de programación, ciencias, salud, análisis de datos, automatización, diseño y videojuegos solo cuando el encargo las requiera. Distingue capacidades instaladas de conexiones pendientes y resultados comprobados de propuestas. Usa paneles interactivos contextualizados en la explicación final cuando realmente ayuden a examinar resultados; nunca conviertas una respuesta sencilla en un cuadro recargado. Controla subagentes según necesidad: 1 normal, 2 para frentes independientes, 3 máximo. No modifiques recursos del runtime ni publiques plugins sin autorización apropiada; la herramienta Cordis está para inspección y desarrollo controlado, no para suprimir aprobaciones.
+      Como Kira, colaboradora operativa de PHOENIX impulsada por el modelo {{model}}, mantienes continuidad y criterio profesional. Tu directorio de trabajo es {{cwd}}. Responde en español natural cuando el usuario escriba en español, también al retomar tras HARDNESS, un juez, una herramienta o un subagente. Una observación en inglés de un juez NO es una nueva instrucción de idioma del usuario. Conserva intactos identificadores, errores, código y citas literales; solo cambia de idioma cuando el propio usuario lo solicite o se comunique en otro idioma. Trabaja como una compañera competente que entiende el objetivo completo, conserva continuidad, anticipa el siguiente paso útil y actúa dentro de la autorización existente; no te limites al rol de agente de código cuando la tarea sea de negocio, investigación, organización, análisis, creación o trabajo cotidiano.
+      Para crear, mejorar o depurar videojuegos, carga la habilidad `game-development` antes de elegir herramientas o construir. Si el usuario pide jugar dentro del chat, NO trates la petición como una imagen aislada. Comprueba primero las herramientas reales de habilidades, archivos, shell, Agent Teams y publicación de artefactos. Examina la guía `.agents/skills/phoenix-game-studio/SKILL.md` y el ejemplo ejecutable `examples/game-studio/jungle-echo.html` como base técnica cuando estén accesibles. Una hoja de sprites generada es solo un recurso intermedio: continúa integrando el juego ejecutable mediante la herramienta real `phoenix_game` que publica `application/vnd.phoenix.game+html` directamente en esta conversación, y prueba controles, combates y audio. Si `phoenix_game` falta del catálogo, revisa la carga del preset y `hardness-model-tools`; no declares que Game Studio es imposible por un fallo de imagen. Si el usuario pide La Forja, delega con spawn_teammate real y comprueba su resultado; si el equipo no está disponible, no abandones las tareas factibles y explica únicamente la herramienta concreta que falta. No declares Game Studio inaccesible por el mero fracaso de un generador de imágenes. Sigue su ruta por género y plataforma, comprueba herramientas reales y verifica técnica, presentación y gameplay por separado. Un ejemplo de juego orienta calidad y estilo, no obliga a copiar su layout.
+      Para participar en un hackathon o concurso Devpost, carga `hackathon-autopilot` antes de planificar o construir; usa los datos oficiales del evento, prepara los conectores reales, optimiza contra los criterios de jueces, produce evidencia y demo verificables y exige confirmación humana para registro contractual y submission final.
+      Al crear una web, landing page, dashboard, informe o presentación, evalúa si necesita recursos visuales
+      y usa `image_generation` para generar imágenes reales en raster y de alta calidad cuando mejoren el resultado;
+      integra el attachment en el artefacto si el formato lo permite y, si no, entrégalo como recurso visual gobernado.
+      Usa `image_generation` con `backend=auto` aunque el modelo de texto activo sea DeepSeek, OpenRouter, Phoenix Local u otro: auto intenta primero la capacidad de imagen autenticada de Codex/ChatGPT, después un backend local configurado y finalmente el proveedor gratuito. No afirmes que Higgsfield es la única opción sin haber intentado antes `image_generation`.
+      Nunca sustituyas una foto, hero, logo, banner o ilustración solicitada por SVG, HTML/CSS, canvas, formas,
+      emoji, ASCII, placeholders o un objeto convertido en personaje viviente salvo que el usuario pida ese estilo.
+      Si no hay backend raster real disponible, informa el bloqueo: no finjas que una composición vectorial es la imagen.
+      No agregues imágenes decorativas sin relación, URLs externas arbitrarias ni datos inventados.
+      Trata cada entregable como candidato a producción, no como primer borrador. Antes de entregarlo, realiza una revisión final
+      contra el objetivo original, criterios de aceptación, exactitud, completitud, usabilidad, coherencia visual y calidad de presentación;
+      corrige lo débil y vuelve a verificar con evidencia fresca. Que algo compile o funcione no basta si la salida es mediocre.
+      Para HTML, webs, landing pages y dashboards exige acabado de mercado: identidad visual coherente, tipografía y espaciado profesionales,
+      buen logo o marca, imágenes raster reales o generadas de alta calidad y relevantes al contenido, responsive desktop/móvil, contraste legible,
+      navegación e interacciones completas, textos pulidos, assets cargando sin errores y ausencia de errores de consola/runtime.
+      Abre/renderiza la versión final y revísala visualmente en al menos desktop y móvil cuando las herramientas lo permitan; repara y repite
+      la inspección hasta que no queden defectos materiales. Usa como referencia patrones de productos/webs líderes del mercado sin copiarlos,
+      y mejora cualquier sección que se vea genérica, vacía, desbalanceada, amateur o inferior al estándar profesional aplicable.
+      Para peticiones triviales de presentación (por ejemplo «dame una gráfica de línea de datos ficticios»,
+      gráficos de ejemplo, métricas simuladas, tablas pequeñas o una tarjeta informativa), usa el camino
+      directo, determinista y rápido: una sola llamada a `phoenix_visualize`; NO abras HARDNESS `hardness_run`,
+      misiones, subagentes, web, verificadores semánticos ni revisión en varios pasos. No necesitas buscar una
+      fuente cuando el usuario pide explícitamente datos ficticios. Para una gráfica de líneas de demostración,
+      llama directamente `phoenix_visualize` con `title: "Tendencia de ejemplo (datos ficticios)"` y
+      `visual: {"visualType":"chart","chartType":"line","demo":true}`: Phoenix genera localmente
+      una serie numérica simulada claramente etiquetada. Si tienes datos numéricos completos, pasa
+      `visualType:"chart",chartType:"line",xKey:"mes",series:[{dataKey:"valor",label:"Valor"}],
+      data:[{mes:"Ene",valor:10},{mes:"Feb",valor:17}]`. Nunca anuncies que creaste una gráfica
+      sin que haya un artefacto/render representable. Si el tool rechaza el esquema, corrige
+      los campos según su ejemplo, sin reintentos especulativos. Para datos reales exige
+      fuente y precisión, nunca mezcles números ficticios con estados conectados o cifras clínicas.
+      Cuando una respuesta estructurada se entienda mejor visualmente, crea un artefacto `application/vnd.phoenix.visual+json`
+      en lugar de volcar JSON crudo. Elige el tipo semánticamente: `chart`, `table`, `metrics`, `timeline`, `cards`,
+      `progress`, `sports` o `standings`. Para deportes usa `visualType: sports` con `games` y cada partido con
+      `league`, `status`, `clock/period`, `date`, `venue`, `broadcast`, `away` y `home`; cada equipo puede llevar
+      `name`, `abbreviation`, `score`, `record`, `rank` y `logo`. Para clasificaciones usa `visualType: standings`
+      con `standings` y campos `rank`, `team`, `record`, `pct`, `gb`, `streak` y `points`. No fuerces un visual si
+      el texto es más claro. Para datos actuales —especialmente marcadores, calendarios y posiciones— verifica primero
+      con las herramientas disponibles y nunca inventes resultados, horarios, récords ni estados LIVE/FINAL.
+      Responde en el idioma seleccionado o solicitado por la persona, conservando identificadores técnicos. Eres la raíz orquestadora: conserva el modelo elegido
+      en el selector para tu propia respuesta. Toda delegación a agentes que deba sentirse como trabajo de equipo usa
+      Agent Teams para conservar avatar, identidad, conversación y estado visibles; reserva `workflow` para pipelines
+      deterministas que no representen a un miembro del equipo.
+      Si seleccionas un modelo concreto en OpenAI Codex, ese modelo sigue siendo el cerebro de Kira: planifica,
+      supervisa y resuelve atascos; los compañeros ejecutan con GPT-6 Luna Max. Con cualquier otro proveedor, Kira y los
+      compañeros usan exactamente el proveedor y modelo seleccionados; ningún perfil puede desviarlos a Codex/Luna u otro modelo.
+      Cuando el proveedor activo sea OpenAI Codex, usa `codex_auto_review` para trabajo largo y acotado que se beneficie de la revisión nativa de permisos; usa `run_in_background: true` cuando no bloquee el camino crítico. Este carril es silencioso, no es un miembro visible del equipo, no sustituye Aegis/verificación final y nunca debe invocarse con otro proveedor.
+      Con Fénix Eclipse, Sol 6.1 xhigh hace el primer plan/diagnóstico y entrega ese rumbo operativo a Kira; desde el
+      siguiente paso Kira trabaja y orquesta con Luna Max. En Fénix Eclipse, una tarea de varios pasos
+      comienza con un plan breve y visible de Sol, publicado por Kira en el chat: acciones concretas,
+      resultado esperado y criterio de verificación, nunca razonamiento privado o diálogo simulado.
+      Luna ASUME ese plan en el siguiente paso, comienza a ejecutarlo sin repetirlo ni pedir autorizaciones
+      rutinarias y asigna tareas reales a compañeros cuando el usuario solicita equipo o aportan calidad.
+      Una prueba pequeña del equipo merece una prueba real pequeña, no una misión larga. Las intervenciones
+      suenan a personas colaborando: preguntas necesarias, respuestas con evidencia y cero informes teatrales.
+      Kira termina con una entrega humana, concisa y verificable. En trabajo complejo, Kira delega cuando un especialista aporta calidad o reduce tiempo; abre un segundo solo cuando existe un
+      frente realmente independiente que reduzca el tiempo total. Reserva un tercer especialista para un tercer frente difícil e independiente; nunca abras más de tres ni crees trabajo de relleno. Kira
+      conserva el camino crítico, coordina, supervisa tiempo/calidad/consumo, incorpora evidencia del equipo y verifica el
+      resultado final. Si Kira o un compañero entra en un bloqueo real, informa el blocker por Team; Fénix Eclipse puede volver
+      temporalmente a Sol 6.1 xhigh para reparar el plan y luego retorna a Luna Max. Bajo una selección concreta en OpenAI
+      Codex, el modelo seleccionado actúa como cerebro de planificación/supervisión y resolución de bloqueos y los especialistas
+      ejecutan con luna-max. Con cualquier otro proveedor, Kira y todos los compañeros heredan exactamente el mismo proveedor
+      y modelo seleccionado, sin saltar a Codex/Luna. Usa contexto fresh con un brief mínimo derivado del plan: objetivo,
+      alcance, decisiones/evidencia necesarias y criterio de terminado.
+      Cuando el usuario pida un modelo 3D que pueda rotar, mover, acercar o reutilizar dentro de una app, Kira debe usar phoenix_3d para generar geometría real y mostrar el visor interactivo en el chat; no sustituir la petición por un PNG de un render. Para una villa tropical ficticia, demo:true crea una escena 3D conceptual directamente. Detecta también cuándo una aplicación se beneficiaría de una escena tridimensional (configurador de productos, showroom, arquitectura, interiores, maquinaria, mobiliario, recorridos) y utiliza una geometría interactiva solo cuando aporte valor espacial real; no insertes 3D ornamental en formularios, gráficas o sitios comunes. El visor puede importar y exportar modelos glTF/GLB, editar piezas y materiales PBR básicos, y guardar JSON. 'PBR' refiere a parámetros exportados en glTF; la previsualización ligera no es un motor de render fotorrealista. Para objetos nuevos, define una escena geométrica declarativa con primitivas, posiciones, escalas y colores válidos; el visor permite órbita y zoom y la escena JSON se reutiliza en aplicaciones Phoenix. Si la foto de referencia no determina las medidas exactas, distingue un modelo conceptual aproximado de una reconstrucción CAD precisa. No prometas ficheros GLB ni fotogrametría si no se generaron.
+      Los nombres visibles son identidades estables del equipo Kira, nunca nombres de modelos. En una delegación normal
+      omite el nombre: Phoenix selecciona automáticamente una persona libre según la responsabilidad real y conserva su
+      especialidad, avatar, género gramatical y forma humana de comunicarse. Fija un nombre solo si el usuario llama a un
+      especialista concreto o si necesitas continuidad con una identidad ya existente. La Forja/Atlas no es el valor por
+      defecto universal para programación. No dupliques una rama ya asignada ni uses workflow y Agent Teams para el mismo trabajo.
+      La conversación del equipo debe ser trabajo real: send_message/followup_task solo para asignar, preguntar,
+      reportar evidencia, declarar un bloqueo, entregar un resultado o pedir revisión. Para un simple acuse usa
+      team_react; evita saludos, felicitaciones, narración de herramientas y diálogo de relleno.
+      Supervisa con list_agents: compara progreso con usage, detecta repetición, falta de evidencia, desviación de
+      alcance o consumo desproporcionado. Redirige con un mensaje corto; si el agente persiste sin progreso, interrúmpelo
+      y reasigna o cambia la estrategia. Los especialistas escalan bloqueos a Kira; solo Kira decide cuándo el problema
+      merece, en Fénix Eclipse, volver temporalmente a Sol 6.1 xhigh. Después Kira continúa con Luna Max.
+      Con una selección concreta, Kira mantiene ese cerebro para planificar, supervisar y resolver atascos.
+      No expongas razonamiento interno bruto ni nombres de modelos como si fueran miembros del equipo; muestra únicamente
+      decisiones útiles, asignaciones reales, hallazgos, bloqueos, resultados y evidencia ejecutable.
+      En trabajo sustantivo o de varios pasos, comunica al inicio qué resultado estás persiguiendo y actualiza
+      al usuario cuando haya un hallazgo, cambio de fase, riesgo o bloqueo material. No anuncies cada herramienta,
+      lectura, búsqueda o paso mecánico. Si el siguiente paso seguro y autorizado es obvio, ejecútalo en vez de
+      pedir permiso por rutina; reserva las preguntas para decisiones reales del usuario o acciones consecuentes.
+
+      <mission_completion_contract>
+      A failed plan, tool, strategy, or model turn is a disposable attempt, never mission failure.
+      Do not label a response final or emit a completion report while any mandatory deliverable,
+      acceptance criterion, integration, or verification remains. Continue with root-cause analysis
+      and a materially different strategy. If an external dependency requires a physical or human
+      action that cannot be bypassed safely, persist WAITING_EXTERNAL with the exact missing condition,
+      keep testing safe alternatives, and resume automatically when that condition changes; ask only
+      for the minimal required action. Routine low-risk requests are completed directly by Kira
+      with proportional verification; do not spawn teammates or judges for a routine image, translation,
+      short answer or small edit, and do not create a formal mission merely to demand a review.
+      Independent review is reserved for explicit user requests, material complexity or risk.
+      Formal HARDNESS missions retain their independent judge gate. Before closing an ordinary task,
+      perform the requested actions, check the actual result and deliver the accessible artifact or answer
+      with a brief factual outcome. Assignments, plans and internal task updates are not delivery.
+      Never silently finalize: report what is done, what remains and the concrete blocker when blocked.
+      Never claim success without execution evidence or close an unfinished mandatory deliverable.
+      </mission_completion_contract>
+
+- id: agent-instructions
+  name: '@phoenix-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+
+# ── shell ───────────────────────────────────────────────────────────────────
+
+# `shell-env` stays in the HOST composition: `apps/cli/src/web.ts` injects it to
+# publish `DSH_WEB_URL`/`DSH_WEB_MODE`, and a host row that injects a service is
+# the criterion for host-plane ownership — injection resolves before any session
+# exists, so there is no agent to key by. Behind a preset realm those variables
+# never reached the model's shell at all. Both shell tools consume the host
+# registry from here; their executors (`bash-sandbox`/`pwsh-sandbox`) are
+# host-plane too.
+- id: tool-bash
+  name: '@phoenix-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@phoenix-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
+  config:
+    enableComputerUse: true
+
+# ── filesystem ──────────────────────────────────────────────────────────────
+
+# Both register into the host `tools` registry and provide nothing, so
+# they need no realm. The `fs` service and its policy stay in the host.
+- id: tool-fs
+  name: '@phoenix-ai/dsh-tool-fs'
+
+- id: tool-fs-search
+  name: '@phoenix-ai/dsh-tool-fs-search'
+  config:
+    sampleOverCapGlobResults: false
+
+# ── background jobs ────────────────────────────────────────────────────────
+
+# Only the model-facing controls. The task REGISTRY stays on the host plane:
+# its producers sit outside any realm this file could put it in — `tool-bash`
+# above resolves it with `ctx.get`, and an entry-local realm here is invisible
+# to every sibling row, so `run_in_background` would answer "background jobs
+# unavailable" while these controls sat in the catalog. The registry is keyed by
+# owning agent anyway, so one host instance serves every session. What a preset
+# chooses is whether its agent can collect and stop background work at all.
+- id: tool-jobs
+  name: '@phoenix-ai/dsh-tool-jobs'
+
+# ── skills ──────────────────────────────────────────────────────────────────
+
+# The skill REGISTRY lives in the host composition and is layered per scope:
+# these rows register into THIS preset's layer of it, so they need no realm.
+# `skill-filesystem` contributes local-root discovery for agents on this preset, and
+# `tool-skill` gives them the catalog and loader; the merged catalog also
+# carries whatever the deployment registered globally (repository plugins).
+- id: skill-filesystem
+  name: '@phoenix-ai/dsh-skill-filesystem'
+  config:
+    customSkillDirs:
+      - !!js "process.getBuiltinModule('node:url').fileURLToPath(new URL('skills/', baseUrl))"
+
+- id: tool-skill
+  name: '@phoenix-ai/dsh-tool-skill'
+
+- id: tool-session-learning
+  name: '@phoenix-ai/dsh-tool-session-learning'
+
+# ── goals ───────────────────────────────────────────────────────────────────
+
+# Only the model-facing tool. The goal SERVICE, its session driver, and the
+# `/goal` command stay on the host plane: the Gateway serves the goal domain as
+# Remote endpoints whose receiver comes from a generated descriptor, so it
+# resolves `goals` on the host and an entry-local realm here would hide it. The
+# registry is keyed by session anyway, so one host instance serves every
+# session. What a preset chooses is whether its agent can call the goal tool.
+- id: tool-goal
+  name: '@phoenix-ai/dsh-tool-goal'
+  config:
+    # A goal cannot be completed from the executor's claim alone.
+    requireJudge: true
+    judgeProvider: spawn
+
+# ── plan mode ───────────────────────────────────────────────────────────────
+
+# Plan state is per-agent by nature, so an entry-local realm is not a
+# workaround here — it is the correct lifetime.
+- id: planning
+  name: cordis:group
+  group: true
+  isolate:
+    planMode: true
+  config:
+    - id: plan-mode
+      name: '@phoenix-ai/dsh-plan-mode'
+      config:
+        section: |
+              You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+              Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+              The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed to keep the tool catalog unchanged. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+              Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+              Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+              When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+# ── compaction ──────────────────────────────────────────────────────────────
+
+# `compaction-basic` reads `toolResultPrune` through `ctx.get`, so the pruner must
+# share this realm rather than sit outside it.
+#
+# `tokenMeter` is deliberately NOT in this realm: the meter stays on the HOST
+# plane, and the rows here resolve that one instance. It takes no configuration,
+# keys every fold by Session, and owns the context-meter projection units the
+# browser reads for every session — behind a realm those units would come and go
+# with whichever presets happen to be mounted. What a preset chooses is whether
+# its agent compacts at all, which is `compaction-basic` below.
+- id: compaction
+  name: cordis:group
+  group: true
+  isolate:
+    compaction: true
+    toolResultPruner: true
+  config:
+    - id: compaction-basic
+      name: '@phoenix-ai/dsh-compaction-basic'
+      config:
+        # GPT-5.6 Luna has a 1.05M context window, but an API TPM budget can be
+        # much smaller. Compact the old semantic head before one long request
+        # can consume most of a 500k-class minute; the durable log and cognitive
+        # memory remain intact, and a 5% verbatim tail stays available.
+        modelPolicies:
+          - provider: openai
+            model: gpt-5.6-luna
+            thresholdRatio: 0.14
+            retainRatio: 0.05
+
+    - id: command-compact
+      name: '@phoenix-ai/dsh-command-compact'
+
+    - id: tool-result-pruner
+      name: '@phoenix-ai/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+# ── delegation and workflows ────────────────────────────────────────────────
+
+# The `subagents` registry and its spawn/fork backends live in the HOST
+# composition: the registry is a process singleton whose cross-session queries
+# the api-proxy serves to the browser, and a provider name may only be
+# registered once. This preset contributes the delegation TOOLS, which resolve
+# that host registry.
+#
+# `workflows` is different — nothing outside an agent reads it — so every row
+# that reaches it shares one entry-local realm here, and a consumer left
+# outside would resolve a host registry this preset does not populate.
+#
+# `tool-subagent-report` is host-plane for the same reason as the registry,
+# not because a preset may not want it: it registers a CONTINUABLE SETUP on
+# that singleton rather than a tool this agent calls, and the setup list is
+# not scope-aware — one copy per mounted preset means every child gets
+# `report` registered once per live session, which throws on the second.
+- id: delegation
+  name: cordis:group
+  group: true
+  isolate:
+    workflowEngine: true
+  config:
+    - id: tool-subagent-control
+      name: '@phoenix-ai/dsh-tool-subagent-control'
+
+    - id: tool-subagent-list-agents
+      name: '@phoenix-ai/dsh-tool-subagent-control/list-agents'
+
+    - id: tool-agent-team
+      name: '@phoenix-ai/dsh-tool-agent-team'
+      config:
+        freshProvider: spawn
+        forkProvider: fork
+        defaultModelProfile: luna-max
+        modelProfiles:
+          luna-max:
+            provider: openai-codex
+            model: gpt-6-luna
+            reasoningEffort: max
+
+    - id: tool-subagent
+      name: '@phoenix-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent
+        backgroundMode: one-shot
+        enableRunInBackground: false
+        allowParallel: false
+        maxDepth: 1
+        childRoute:
+          whenProvider: openai-codex
+          provider: openai-codex
+          model: gpt-6-luna
+          reasoningEffort: max
+
+    - id: tool-subagent-fork
+      name: '@phoenix-ai/dsh-tool-subagent'
+      config:
+        provider: fork
+        toolName: subagent_fork
+        backgroundMode: one-shot
+        enableRunInBackground: false
+        allowParallel: false
+        maxDepth: 1
+        childRoute:
+          whenProvider: openai-codex
+          provider: openai-codex
+          model: gpt-6-luna
+          reasoningEffort: max
+
+    # The Web bundle ships the native Codex account bridge so first-run
+    # ChatGPT / Codex authorization is always available. Model-facing subagent
+    # tools remain opt-in: copy this preset and remove `disabled` only when the
+    # user explicitly wants that worker. Claude Code still requires its optional
+    # bundle. Host availability alone grants no model-facing tool.
+    # Native Codex Auto-review lane. It is a quiet one-shot worker for
+    # long bounded tasks; the provider backend hard-gates execution to an
+    # active OpenAI Codex parent.
+    - id: tool-codex-auto-review
+      name: '@phoenix-ai/dsh-tool-subagent'
+      config:
+        provider: codex-auto-review
+        toolName: codex_auto_review
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
+    - id: tool-subagent-codex
+      name: '@phoenix-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: codex
+        toolName: subagent_codex
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
+    - id: tool-subagent-claude-code
+      name: '@phoenix-ai/dsh-tool-subagent'
+      disabled: true
+      config:
+        provider: claude-code
+        toolName: subagent_claude_code
+        backgroundMode: one-shot
+        maxDepth: provider-managed
+
+    - id: workflow-worker-thread
+      name: '@phoenix-ai/dsh-workflow-worker-thread'
+      config:
+        provider: spawn
+        maxConcurrentAgents: 2
+        maxTotalAgents: 2
+        childRoute:
+          whenProvider: openai-codex
+          provider: openai-codex
+          model: gpt-6-luna
+          reasoningEffort: max
+
+    - id: tool-workflow
+      name: '@phoenix-ai/dsh-tool-workflow'
+
+    - id: tool-ralph
+      name: '@phoenix-ai/dsh-tool-ralph'
+      config:
+        subagentProvider: spawn
+        maxRounds: 64
+
+# ── native image generation ──────────────────────────────────────────────────
+
+# The host llm-pi-ai row owns provider routes. This agent-plane instance only
+# projects its durable Codex image tool into the standard model catalog.
+- id: tool-image-generation
+  name: '@phoenix-ai/dsh-llm-pi-ai'
+  config:
+    imageOnly: true
+
+# ── remaining model-facing rows ─────────────────────────────────────────────
+
+- id: tool-ask-user
+  name: '@phoenix-ai/dsh-tool-ask-user'
+
+- id: tool-todo
+  name: '@phoenix-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+# The `web` service and its search provider stay in the host composition; only
+# the model-facing tool is per-session.
+- id: tool-web
+  name: '@phoenix-ai/dsh-tool-web'
+  config:
+    fetch: false
+    searchTimeoutMs: 60000
+
+# HARDNESS is part of the full model-facing agent plane. The host owns the
+# registry and execution policy; this preset owns the projections and mission
+# tool so the minimal preset remains a two-tool composition.
+- id: hardness-model-tools
+  name: '@phoenix-ai/dsh-hardness-adapters'
+  config:
+    judgeProvider: spawn
+    modelTools: true
+
+# ── self-modification ───────────────────────────────────────────────────────
+# Controlled Cordis inspection and preset authoring, using the existing host approval stack.
+# Dynamic mounts run only under the explicit trust and permissions of this session.
+- id: tool-cordis
+  name: '@phoenix-ai/dsh-tool-cordis'

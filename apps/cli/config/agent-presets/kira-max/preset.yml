@@ -1,0 +1,4 @@
+# Shipped high-capability preset. The UI resolves translated copy using the stable id.
+name: Kira Max
+description: Full PHOENIX workspace agent with standard tools, specialized skills, team orchestration, verified delivery and authorized preset authoring.
+order: 0
