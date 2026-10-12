@@ -812,6 +812,110 @@ server.registerTool('youtube_video_inspect', {
     ? { isError: true as const } : {}) }
 })
 
+
+/**
+ * A single evidence-first sensory entry point for Kira.  The live Chromium tab
+ * is available without screen-sharing; third-party tab audio is NOT.  An
+ * authorized MediaRecorder capture is only inspected when explicitly chosen.
+ */
+server.registerTool('browser_sense', {
+  description: 'PERCEPCIÓN REAL para Kira: ve una captura JPEG y lee texto visible de la pestaña Chromium actual. En YouTube intenta escuchar solo 3-9 segundos de audio real cuando hay permiso de acciones; si se bloquea, informa por qué. source=authorized-capture analiza video y audio de la última grabación que el usuario compartió explícitamente en MiniBrowser. No atribuyas al video una captura de la página ni inventes audio, imágenes o permisos.',
+  inputSchema: {
+    source: z.enum(['tab', 'authorized-capture']).default('tab'),
+    tabId: z.string().optional(),
+    screenshot: z.boolean().default(true),
+    frames: z.number().int().min(0).max(8).default(6),
+    audioSeconds: z.number().int().min(0).max(90).default(8),
+  },
+}, async ({source, tabId, screenshot, frames, audioSeconds}) => {
+  const content: Array<
+    | {type:'text';text:string}
+    | {type:'image';data:string;mimeType:'image/jpeg'}
+  > = []
+  if (source === 'authorized-capture') {
+    try {
+      const media = await inspectVideoMedia({frames, audioSeconds})
+      content.push({type:'text',text:JSON.stringify({
+        source:media.source, durationSeconds:media.durationSeconds,
+        decodedFrames:media.frames.length, audio:media.audio,
+        note:'Solo la grabación previamente autorizada: sus fotogramas no son la pestaña Chromium actual. No inferir intervalos sin evidencia.',
+      })})
+      for (const frame of media.frames) {
+        content.push({type:'text',text:'Fotograma real de grabación autorizada: '+frame.atSeconds+'s'})
+        content.push({type:'image',data:frame.jpeg,mimeType:'image/jpeg'})
+      }
+      return {content, ...(media.frames.length === 0 && media.audio.status !== 'ok'
+        ? {isError:true as const} : {})}
+    } catch (error) {
+      return {isError:true,content:[{type:'text',text:JSON.stringify({
+        status:'authorized-capture-unavailable', reason:String(error),
+        evidence:{decodedFrames:0,heardSeconds:0},
+        nextStep:'Pide una captura explícita desde «Compartir pestaña para Kira», con audio activado. No puedes grabar otra pestaña automáticamente.',
+      })}]}
+    }
+  }
+
+  try {
+    const tab = await selectedTab(tabId)
+    let visibleText = ''
+    let textError: string | undefined
+    try {
+      const observed = await evaluate(tab, 'String(document.body?.innerText || "").slice(0,6000)')
+      if (typeof observed === 'string') visibleText = observed
+    } catch (error) { textError = String(error).slice(0,180) }
+
+    let imageStatus = 'not-requested'
+    if (screenshot) {
+      try {
+        const shot = await cdp<{data:string}>(tab, 'Page.captureScreenshot', {
+          format:'jpeg',quality:65,captureBeyondViewport:false,fromSurface:true,
+        })
+        const bytes = typeof shot.data === 'string' ? Buffer.from(shot.data,'base64') : Buffer.alloc(0)
+        if (bytes.length >= 64 && bytes.length <= 5_000_000
+          && bytes[0] === 0xff && bytes[1] === 0xd8) {
+          content.push({type:'image',data:shot.data,mimeType:'image/jpeg'})
+          imageStatus = 'page-screenshot-confirmed'
+        } else imageStatus = 'CAPTURE_FAILED'
+      } catch (error) { imageStatus = 'CAPTURE_FAILED: '+String(error).slice(0,160) }
+    }
+
+    let audio: {status:string;reason?:string;transcript?:string;language?:string;cueCount?:number} =
+      {status:'not-requested'}
+    const youtubeWatch = (() => {
+      try { youtubeWatchUrl(tab.url); return true } catch { return false }
+    })()
+    if (audioSeconds > 0) {
+      if (!youtubeWatch) audio = {status:'unavailable',reason:'TAB_AUDIO_NOT_AVAILABLE_USE_AUTHORIZED_CAPTURE'}
+      else if (!actionsAllowed()) audio = {status:'unavailable',reason:'BROWSER_ACTION_PERMISSION_REQUIRED'}
+      else if (audioSeconds < 3) audio = {status:'unavailable',reason:'MIN_AUDIO_SAMPLE_3_SECONDS'}
+      else {
+        const heard = await sampleYoutubeSpeech(tab,0,Math.min(9,audioSeconds))
+        audio = {status:heard.status,
+          ...(heard.reason === undefined ? {} : {reason:heard.reason}),
+          ...(heard.transcript === undefined ? {} : {transcript:heard.transcript}),
+          ...(heard.language === undefined ? {} : {language:heard.language}),
+          ...(heard.cueCount === undefined ? {} : {cueCount:heard.cueCount})}
+      }
+    }
+    content.unshift({type:'text',text:JSON.stringify({
+      source:'live-chromium-tab',tabId:tab.id,url:tab.url,title:tab.title,
+      visibleText,textError,visualEvidence:imageStatus,audio,
+      evidenceScope:'La captura muestra la página, no demuestra fotogramas decodificados del video. El audio solo cuenta si hay transcripción real.',
+      nextStep: audio.status === 'unavailable'
+        ? 'Si hay video bloqueado, solicita compartir la pestaña con audio en MiniBrowser y luego llama browser_sense con source=authorized-capture.'
+        : 'Interactúa con el DOM mediante inspect_page/interact/fill_form; verifica cada cambio.',
+    })})
+    return {content, ...(imageStatus !== 'page-screenshot-confirmed' && !visibleText && audio.status !== 'ok'
+      ? {isError:true as const} : {})}
+  } catch (error) {
+    return {isError:true,content:[{type:'text',text:JSON.stringify({
+      status:'browser-not-available',reason:String(error),
+      evidence:{decodedFrames:0,heardSeconds:0},
+      nextStep:'Comprueba el conector Chrome, el Host y la sesión CDP antes de afirmar que Kira vio la página.',
+    })}]}
+  }
+})
+
 server.registerTool('screenshot', {
   description: 'Vista visual REAL de Chromium (JPEG 1280x720) únicamente cuando la inspección DOM no sea suficiente. Permite reconocer canvas, menús, diseños, errores y diálogos web. Puede costar más tokens que inspect_page; evita capturas repetidas.',
   inputSchema: { tabId: z.string().optional() },
