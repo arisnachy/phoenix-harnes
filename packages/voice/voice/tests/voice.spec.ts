@@ -12,7 +12,7 @@ import VoiceRuntime, {
 } from '../src/index.ts'
 import {
   CodexRealtimeBridge, codexLiveRepairPhase, codexLiveCurrentCliVersion, codexRealtimeEnvironment, codexRealtimeLaunchCommand,
-  codexRealtimeNeedsLogin, findManagedCodexRealtimeBin, isCodexQuicksilverV2Required,
+  codexRealtimeNeedsLogin, codexRealtimeConfigOverrides, findManagedCodexRealtimeBin, isCodexQuicksilverV2Required,
   queueCodexLiveRepair, realtimeVoiceForGender,
 } from '../src/codex-realtime.ts'
 
@@ -636,7 +636,7 @@ describe('Codex realtime voice protocol compatibility', () => {
     } finally { bridge.close() }
   })
 
-  it('tries an upstream Quicksilver rejection once and cools down duplicate voice starts', async () => {
+  it('stops after one upstream Quicksilver rejection and cools down duplicate starts', async () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
       ensureStarted(): Promise<void>; stop(key: string): Promise<boolean>
@@ -670,25 +670,39 @@ describe('Codex realtime voice protocol compatibility', () => {
     try {
       await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
         .rejects.toThrow('CLI gestionado: 0.162.1')
-      expect(started).toHaveBeenCalledTimes(2)
-      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3'])
+      expect(started).toHaveBeenCalledTimes(1)
+      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3'])
       expect(requests).toHaveBeenCalledWith('thread/realtime/stop', { threadId: 'stale-cli-thread' })
       await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
         .rejects.toThrow('CLI gestionado: 0.162.1')
       // A second click inside the cooldown must not call backend again.
-      expect(started).toHaveBeenCalledTimes(2)
-      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3'])
+      expect(started).toHaveBeenCalledTimes(1)
+      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3'])
       expect(existsSync(join(home, 'codex-cli', 'live-repair-request.json'))).toBe(false)
       await expect(bridge.probe()).resolves.toMatchObject({
         available: false, authenticated: true, reason: 'experimental-unavailable',
         detail: expect.stringContaining('invalid_quicksilver_alpha_header'),
       })
-      expect(started).toHaveBeenCalledTimes(2)
+      expect(started).toHaveBeenCalledTimes(1)
     } finally {
       bridge.close()
       vi.unstubAllEnvs()
       rmSync(home, { recursive: true, force: true })
     }
+  })
+
+  it('reports only the names of configured realtime endpoint overrides, never secrets', () => {
+    const source = [
+      '# openai_base_url = "https://ignored.example"',
+      'experimental_realtime_webrtc_call_base_url = "https://proxy.example/v1"',
+      'openai_base_url = "https://another.example/v1"',
+      '[features]',
+      'experimental_realtime_ws_base_url = "https://nested.example"',
+    ].join('\n')
+    expect(codexRealtimeConfigOverrides(source)).toEqual([
+      'experimental_realtime_webrtc_call_base_url', 'openai_base_url',
+    ])
+    expect(codexRealtimeConfigOverrides('')).toEqual([])
   })
 
   it('keeps original V3 WebRTC backend errors instead of pretending v1 or auth was required', async () => {
