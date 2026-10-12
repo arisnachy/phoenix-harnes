@@ -25,6 +25,62 @@ import { hostInspectProviders } from './providers.ts'
 
 export const name = 'tool-cordis'
 export const inject = ['tools', 'systemPrompt', 'dynamicCordisRunner', 'cordisInspect']
+/** One Host registry is shared by every standing agent-preset mount.
+ * Cordis and Kira Max may coexist, but Host inspect-provider IDs must remain
+ * unique. Register their common providers once and reference-count consumers.
+ */
+interface SharedHostInspectRegistration {
+  users: number
+  dispose: () => void
+}
+
+const hostInspectRegistrations = new WeakMap<object, SharedHostInspectRegistration>()
+
+/**
+ * Share built-in inspect providers across standing presets in the same Host.
+ * Each invocation remains independently disposable; a failed initial
+ * registration unwinds its partial providers before propagating the error.
+ * @param ctx - Current Cordis tool instance and its Host inspect registry.
+ * @returns Release one user's share; last release removes providers.
+ */
+function shareHostInspectProviders(ctx: Context): () => void {
+  const registry = ctx.cordisInspect
+  const existing = hostInspectRegistrations.get(registry)
+  if (existing !== undefined) {
+    existing.users++
+    return () => {
+      existing.users--
+      if (existing.users === 0) {
+        hostInspectRegistrations.delete(registry)
+        existing.dispose()
+      }
+    }
+  }
+  const disposeProviders: Array<() => void> = []
+  try {
+    for (const provider of hostInspectProviders(ctx.root)) {
+      disposeProviders.push(registry.register(provider))
+    }
+  } catch (error) {
+    for (const dispose of disposeProviders.reverse()) dispose()
+    throw error
+  }
+  const record: SharedHostInspectRegistration = {
+    users: 1,
+    dispose: () => {
+      for (const dispose of disposeProviders.reverse()) dispose()
+    },
+  }
+  hostInspectRegistrations.set(registry, record)
+  return () => {
+    record.users--
+    if (record.users === 0) {
+      hostInspectRegistrations.delete(registry)
+      record.dispose()
+    }
+  }
+}
+
 
 function requireAgent(exec: ToolExecution): Agent {
   if (exec.agent === undefined) throw new Error('Cordis dynamic tools require an Agent-backed session')
@@ -34,9 +90,7 @@ function requireAgent(exec: ToolExecution): Agent {
 /** Register the Cordis tools and explicit `@pluginId` context injection. */
 export function apply(ctx: Context): void {
   ctx.systemPrompt.section({ name: 'tool:cordis', order: 115, text: CORDIS_SYSTEM_PROMPT })
-  for (const provider of hostInspectProviders(ctx)) {
-    ctx.effect(() => ctx.cordisInspect.register(provider), `tool-cordis: inspect ${provider.manifest.id}`)
-  }
+  ctx.effect(() => shareHostInspectProviders(ctx), 'tool-cordis: shared Host inspect providers')
 
   ctx.tools.register(defineTool({
     name: 'cordis_inspect_list',

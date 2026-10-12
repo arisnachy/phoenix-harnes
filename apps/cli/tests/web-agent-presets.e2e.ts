@@ -263,6 +263,31 @@ describe('the shipped Web composition', () => {
     }
   })
 
+  it('mounts Creator and Kira Max together without duplicate Host inspect providers', async () => {
+    const creator = await ctx.agents.create({
+      sessionId: SessionId('preset-creator-coexists'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'cordis').then(() => undefined),
+    })
+    try {
+      const maximum = await ctx.agents.create({
+        sessionId: SessionId('preset-maximum-coexists'),
+        setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'kira-max').then(() => undefined),
+      })
+      try {
+        const providers = ctx.cordisInspect.list().filter(entry => entry.platform === 'host')
+        expect(providers.map(entry => entry.id).sort())
+          .toEqual(['Builtin', 'Event', 'Service', 'Tool'])
+        expect(toolNames(ctx, creator.agent)).toContain('cordis_inspect_list')
+        expect(toolNames(ctx, maximum.agent)).toContain('cordis_inspect_list')
+        expect(toolNames(ctx, maximum.agent)).toEqual(expect.arrayContaining(FULL_AGENT_TOOLS))
+      } finally {
+        await maximum.dispose()
+      }
+    } finally {
+      await creator.dispose()
+    }
+  })
+
   it('composes the full agent from `standard`', async () => {
     const handle = await ctx.agents.create({
       sessionId: SessionId('preset-standard'),
@@ -909,6 +934,26 @@ describe('authoring a preset on the shipped composition', () => {
  * that the id the setting names is the one a session composes from.
  */
 describe('the default preset as a user setting', () => {
+  it('creates an unnamed agent successfully after selecting Kira Max as the durable default', async () => {
+    await ctx.settings.update(settingsNamespace(SETTINGS_NAMESPACE), { default: 'kira-max' })
+    try {
+      expect(ctx.agentPresets.defaultId).toBe('kira-max')
+      const handle = await ctx.agents.create({
+        sessionId: SessionId('preset-kira-selected-from-settings'),
+        setup: agentCtx => ctx.agentPresets.mount(agentCtx).then(() => undefined),
+      })
+      try {
+        expect(ctx.agentPresets.composedPreset(handle.agent.ctx)).toBe('kira-max')
+        expect(toolNames(ctx, handle.agent)).toEqual(expect.arrayContaining(FULL_AGENT_TOOLS))
+        expect(toolNames(ctx, handle.agent).some(name => name.startsWith('cordis_'))).toBe(true)
+      } finally {
+        await handle.dispose()
+      }
+    } finally {
+      await ctx.settings.replace(settingsNamespace(SETTINGS_NAMESPACE), {})
+    }
+  })
+
   it('composes an unnamed session from the stored default, not the composed one', async () => {
     expect(ctx.agentPresets.defaultId).toBe('standard')
 
