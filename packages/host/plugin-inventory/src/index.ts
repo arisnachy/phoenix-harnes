@@ -32,6 +32,7 @@ import {
   X_DOCS_MCP_SERVER_NAME,
   JEV_MCP_SERVER_NAME,
   ManagedMcpController,
+  recoverManagedMcpOverlay,
   type XMcpIdentity,
 } from './mcp-managed.ts'
 import type {
@@ -63,6 +64,8 @@ import type {
 } from './types.ts'
 
 export type * from './types.ts'
+// Launcher-owned pre-boot recovery uses the same strict Host validator.
+export { recoverManagedMcpOverlay }
 
 /** Brand an existing Loader-tree entry id at the owning boundary. */
 function pluginEntryId(value: string): PluginEntryId {
@@ -268,12 +271,20 @@ export class PluginInventoryGateway extends TypertRemoteService {
     try {
       return { runtime, managed: [...await this.managedMcp.snapshot()] }
     } catch {
-      // Do not hide healthy live MCPs because one persisted overlay is broken.
-      // Never include raw patch data, remote credentials, or provider exceptions.
-      this.ctx.logger.warn('managed MCP inventory unavailable; live connectors remain visible')
-      // Keep the wire shape identical to the validated success response: the
-      // Typert result boundary rejects extra fields on this Remote contract.
-      return { runtime, managed: [] }
+      // Repair even if corruption was written while PHOENIX was already open.
+      // The strict validator quarantines the original before preserving rows.
+      // Do not include raw patch data, URLs or credentials in UI/Host logs.
+      try {
+        const recovery = await this.managedMcp.recoverInvalidOverlay()
+        if (recovery.backupCreated) {
+          this.ctx.logger.warn(`recovered ${recovery.recovered} valid managed MCP rows; quarantined ${recovery.quarantined} invalid row(s)`)
+        }
+        return { runtime, managed: [...await this.managedMcp.snapshot()] }
+      } catch {
+        this.ctx.logger.warn('managed MCP inventory unavailable; live connectors remain visible')
+        // Keep the validated Typert response shape; never export raw overlay.
+        return { runtime, managed: [] }
+      }
     }
   }
 

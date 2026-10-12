@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { repairManagedMcpDependenciesBeforeBoot } from '../src/managed-mcp-preboot.ts'
+import { recoverManagedMcpOverlay } from '@phoenix-ai/dsh-host-plugin-inventory'
 
 const folders: string[] = []
 const inject = ['tools', 'credentials', 'authorization', 'mcpConnectors']
@@ -63,6 +64,36 @@ describe('managed MCP preboot migration', () => {
       id: 'filesystem', config: { transport: 'stdio', serverName: 'filesystem' } }] }])
     expect(await repairManagedMcpDependenciesBeforeBoot(file)).toBe(1)
     expect(JSON.parse(readFileSync(file, 'utf8'))[0].insert[0].inject).toEqual(inject)
+  })
+
+  it('prevents row 9 from blocking startup while retaining validated connectors and full backup', async () => {
+    const rows = Array.from({ length: 10 }, (_, index) => ({
+      id: 'connector-' + String(index),
+      name: '@phoenix-ai/dsh-mcp-client',
+      config: {
+        transport: 'streamable-http',
+        serverName: 'service-' + String(index),
+        url: 'https://mcp.example.org/service-' + String(index),
+        oauth: true,
+        headers: {},
+      },
+    }))
+    rows[9]!.config.url = 'http://untrusted.example.org/mcp'
+    const file = patch([{ insert: rows }])
+    const original = readFileSync(file, 'utf8')
+    const outcome = await recoverManagedMcpOverlay(file)
+    expect(outcome).toEqual({ recovered: 9, quarantined: 1, backupCreated: true })
+    expect(await repairManagedMcpDependenciesBeforeBoot(file)).toBe(9)
+    const recovered = JSON.parse(readFileSync(file, 'utf8'))[0].insert
+    expect(recovered).toHaveLength(9)
+    expect(recovered.some((row: { id: string }) => row.id === 'connector-9')).toBe(false)
+    expect(recovered.every((row: { inject: string[] }) => JSON.stringify(row.inject) === JSON.stringify(inject))).toBe(true)
+    const { readdirSync } = await import('node:fs')
+    const { dirname } = await import('node:path')
+    const backups = readdirSync(dirname(file)).filter(name => name.includes('.quarantined-'))
+    expect(backups).toHaveLength(1)
+    expect(readFileSync(join(dirname(file), backups[0]!), 'utf8')).toBe(original)
+    expect(await recoverManagedMcpOverlay(file)).toMatchObject({ backupCreated: false })
   })
 
   it('never changes a malformed managed patch', async () => {

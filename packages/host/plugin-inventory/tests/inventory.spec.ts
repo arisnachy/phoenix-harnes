@@ -190,6 +190,8 @@ describe('PluginInventoryGateway', () => {
       managedMcp: { snapshot(): Promise<unknown[]> }
     }).managedMcp
     vi.spyOn(managed, 'snapshot').mockRejectedValue(new Error('managed MCP patch row 16 is invalid'))
+    vi.spyOn(managed as unknown as { recoverInvalidOverlay(): Promise<unknown> }, 'recoverInvalidOverlay')
+      .mockResolvedValue({ recovered: 0, quarantined: 1, backupCreated: true })
     await expect(inventory.mcpConnectorHubState()).resolves.toEqual({
       runtime: [{
         serverName: 'github', transport: 'streamable-http', status: 'ready',

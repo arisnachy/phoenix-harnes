@@ -173,6 +173,15 @@ switch (invocation.mode) {
       // lacked loader inject. Repair BEFORE Cordis loads them: migrating in
       // pluginInventory's async startup effect happens after activation and
       // cannot recover providers that already missed the authorization service.
+      // A malformed persisted row would otherwise fail the entire Loader before
+      // pluginInventory's asynchronous recovery can start. Run the SAME strict
+      // Host validator here, preserving accepted connectors and quarantining
+      // the byte-exact original with owner-only permissions.
+      const { recoverManagedMcpOverlay } = await import('@phoenix-ai/dsh-host-plugin-inventory')
+      const recovery = await recoverManagedMcpOverlay(managedMcpPatch)
+      if (recovery.backupCreated) {
+        console.warn(`[PHOENIX MCP] isolated ${recovery.quarantined} invalid connector row(s) before boot; ${recovery.recovered} valid row(s) retained (private backup saved)`)
+      }
       const { repairManagedMcpDependenciesBeforeBoot } = await import('./managed-mcp-preboot.ts')
       const repaired = await repairManagedMcpDependenciesBeforeBoot(managedMcpPatch)
       if (repaired > 0) {
