@@ -15,6 +15,35 @@ import {
   type SpeechOutput,
 } from './speech-output.ts'
 
+/**
+ * Browser speech recognition may use a browser-vendor service. Never switch
+ * away from subscription-backed Codex Live without prior user approval.
+ * Remember that approval locally so future upstream failures need no extra
+ * click, and make revocation available in the composer.
+ */
+const ALTERNATIVE_VOICE_CONSENT_KEY = 'phoenix:voice:approved-browser-backup-v1'
+
+/** True only after an explicit browser-voice opt-in in this browser profile. */
+export function hasApprovedVoiceFallback(storage?: Pick<Storage, 'getItem'>): boolean {
+  try {
+    const source = storage ?? (typeof window === 'undefined' ? undefined : window.localStorage)
+    return source?.getItem(ALTERNATIVE_VOICE_CONSENT_KEY) === 'yes'
+  } catch {
+    return false
+  }
+}
+
+/** Persist or revoke explicit consent for browser recognition fallback. */
+export function setApprovedVoiceFallback(approved: boolean, storage?: Pick<Storage, 'setItem' | 'removeItem'>): void {
+  try {
+    const target = storage ?? (typeof window === 'undefined' ? undefined : window.localStorage)
+    if (approved) target?.setItem(ALTERNATIVE_VOICE_CONSENT_KEY, 'yes')
+    else target?.removeItem(ALTERNATIVE_VOICE_CONSENT_KEY)
+  } catch {
+    // Restricted storage must never break the voice button.
+  }
+}
+
 /** States exposed by the short-lived browser recognition session. */
 export type VoiceInputState = 'idle' | 'listening' | 'unsupported' | 'permission-denied' | 'error'
 

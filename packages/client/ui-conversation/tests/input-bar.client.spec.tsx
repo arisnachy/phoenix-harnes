@@ -25,7 +25,10 @@ import { zh } from '../src/client/locales.ts'
 import * as voiceAdapter from '../src/client/voice.ts'
 import type { VoiceRecognitionLike } from '../src/client/voice.ts'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  voiceAdapter.setApprovedVoiceFallback(false)
+})
 
 // jsdom implements no Range geometry at all — `Range.prototype.getBoundingClientRect`
 // is absent — and the composer measures the caret with one when it restores the
@@ -1861,7 +1864,7 @@ describe('command launcher chrome and control seats', () => {
       fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
       await act(async () => { await Promise.resolve() })
       const notice = view.container.querySelector('[data-codex-voice-fallback]')
-      expect(notice?.textContent).toContain('Codex Live: codex-login-required')
+      expect(notice?.textContent).toContain('Codex desconectado')
       expect(view.getByRole('button', { name: '开始语音助手' })
         .getAttribute('data-codex-voice-failure')).toBe('codex-login-required')
       expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
@@ -1899,6 +1902,40 @@ describe('command launcher chrome and control seats', () => {
       expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(true)
       expect(live).toHaveBeenCalledTimes(1)
       expect(view.container.querySelector('[data-codex-voice-fallback]')).toBeNull()
+    } finally {
+      voiceAdapter.setVoiceAssistantActive(false)
+      recognition.mockRestore()
+      live.mockRestore()
+      support.mockRestore()
+      available.mockRestore()
+      cleanup()
+    }
+  })
+
+  it('recovers an already approved voice backup on the same microphone click', async () => {
+    const available = vi.spyOn(voiceAdapter, 'hasVoiceRecognition').mockReturnValue(true)
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
+      .mockResolvedValue({ kind: 'failed', reason: 'invalid_quicksilver_alpha_header' })
+    const start = vi.fn()
+    const recognition = vi.spyOn(voiceAdapter, 'createVoiceRecognition')
+      .mockReturnValue({
+        lang: 'es-DO', continuous: true, interimResults: false, maxAlternatives: 1,
+        onstart: null, onend: null, onerror: null, onresult: null,
+        start, stop: vi.fn(), abort: vi.fn(),
+      })
+    voiceAdapter.setApprovedVoiceFallback(true)
+    try {
+      const { view } = bench()
+      fireEvent.click(view.getByRole('button', { name: '开始语音助手' }))
+      await act(async () => { await Promise.resolve() })
+      expect(live).toHaveBeenCalledOnce()
+      expect(start).toHaveBeenCalledOnce()
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(true)
+      expect(view.getByText('Voz alternativa activa')).toBeTruthy()
+      fireEvent.click(view.getByRole('button', { name: 'Revocar permiso' }))
+      expect(voiceAdapter.hasApprovedVoiceFallback()).toBe(false)
+      expect(voiceAdapter.getVoiceAssistantSnapshot().active).toBe(false)
     } finally {
       voiceAdapter.setVoiceAssistantActive(false)
       recognition.mockRestore()
