@@ -164,6 +164,8 @@ function sendCodexRealtimeUtterance(
   if (remote?.conversationRealtimeSpeak !== undefined) {
     session.activeUtterance = utterance
     voiceAssistantSpokenText = utterance.echoText
+    document.documentElement.dataset.phoenixVoiceSpeechStatus = 'requested'
+    delete document.documentElement.dataset.phoenixVoiceSpeechError
     // The UI authorizes only a complete harness reply. The Host side sends it
     // through Codex's official thread/realtime/appendSpeech method, rather
     // than trying to fabricate output via an unsupported V3 datachannel
@@ -174,6 +176,7 @@ function sendCodexRealtimeUtterance(
     }).then(receipt => {
       if (codexRealtimeVoiceSession !== session || session.activeUtterance !== utterance) return
       if (receipt.ok && receipt.value.accepted) {
+        document.documentElement.dataset.phoenixVoiceSpeechStatus = 'accepted'
         if (utterance.assistantMessageKey !== undefined) {
           spokenAssistantMessages.add(utterance.assistantMessageKey)
         }
@@ -182,6 +185,7 @@ function sendCodexRealtimeUtterance(
       }
       delete session.activeUtterance
       session.audio.muted = true
+      document.documentElement.dataset.phoenixVoiceSpeechStatus = 'rejected'
       document.documentElement.dataset.phoenixVoiceSpeechError = receipt.ok
         ? (receipt.value.reason ?? 'append-speech-rejected')
         : (receipt.error.code ?? 'append-speech-failed')
@@ -192,6 +196,7 @@ function sendCodexRealtimeUtterance(
       if (codexRealtimeVoiceSession !== session || session.activeUtterance !== utterance) return
       delete session.activeUtterance
       session.audio.muted = true
+      document.documentElement.dataset.phoenixVoiceSpeechStatus = 'failed'
       document.documentElement.dataset.phoenixVoiceSpeechError = 'append-speech-request-failed'
       console.warn('[PHOENIX VOICE] Codex native speech request failed.')
       publishVoiceIdle()
@@ -827,9 +832,11 @@ function updateCodexRealtimePhase(payload: string): void {
   const session = codexRealtimeVoiceSession
   if (!voiceAssistantSnapshot.active || session === undefined) return
   let type = ''
+  let assistantTurnDone = false
   try {
-    const value = JSON.parse(payload) as { type?: unknown }
+    const value = JSON.parse(payload) as { type?: unknown; turn?: { role?: unknown } }
     if (typeof value.type === 'string') type = value.type
+    assistantTurnDone = type === 'turn.done' && value.turn?.role === 'assistant'
   } catch {
     return
   }
@@ -847,7 +854,9 @@ function updateCodexRealtimePhase(payload: string): void {
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
     return
   }
-  if (type === 'response.done') {
+  if (type === 'response.done' || assistantTurnDone) {
+    // V3 can finish a spoken response as turn.done (role assistant) instead
+    // of the older response.done. A user turn.done must NEVER drain output.
     // Realtime signals the end of generation before WebRTC finishes playing
     // buffered audio. Muting here truncated Kira's voice, and short answers
     // could be completely silent. The next unsolicited response.created still
