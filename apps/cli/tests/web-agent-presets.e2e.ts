@@ -263,6 +263,31 @@ describe('the shipped Web composition', () => {
     }
   })
 
+  it('mounts Creator and Kira Max together without duplicate Host inspect providers', async () => {
+    const creator = await ctx.agents.create({
+      sessionId: SessionId('preset-creator-coexists'),
+      setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'cordis').then(() => undefined),
+    })
+    try {
+      const maximum = await ctx.agents.create({
+        sessionId: SessionId('preset-maximum-coexists'),
+        setup: agentCtx => ctx.agentPresets.mount(agentCtx, 'kira-max').then(() => undefined),
+      })
+      try {
+        const providers = ctx.cordisInspect.list().filter(entry => entry.platform === 'host')
+        expect(providers.map(entry => entry.id).sort())
+          .toEqual(['Builtin', 'Event', 'Service', 'Tool'])
+        expect(toolNames(ctx, creator.agent)).toContain('cordis_inspect_list')
+        expect(toolNames(ctx, maximum.agent)).toContain('cordis_inspect_list')
+        expect(toolNames(ctx, maximum.agent)).toEqual(expect.arrayContaining(FULL_AGENT_TOOLS))
+      } finally {
+        await maximum.dispose()
+      }
+    } finally {
+      await creator.dispose()
+    }
+  })
+
   it('composes the full agent from `standard`', async () => {
     const handle = await ctx.agents.create({
       sessionId: SessionId('preset-standard'),
