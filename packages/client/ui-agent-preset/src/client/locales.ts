@@ -8,6 +8,11 @@ export type AgentPresetSettingsKey =
   | 'presetCodeName' | 'presetCodeDescription'
   | 'presetMinimalName' | 'presetMinimalDescription'
   | 'presetCordisName' | 'presetCordisDescription'
+  | 'presetKiraMaxName' | 'presetKiraMaxDescription'
+  | 'viewerOverview' | 'viewerSource' | 'viewerIntro' | 'viewerSourceIntro' | 'viewerComponents'
+  | 'viewerIdentity' | 'viewerShell' | 'viewerFilesystem' | 'viewerJobs' | 'viewerSkills'
+  | 'viewerGoals' | 'viewerPlanning' | 'viewerCompaction' | 'viewerTeam'
+  | 'viewerImages' | 'viewerTools' | 'viewerPresentation' | 'viewerAuthoring' | 'viewerOther'
   | 'duplicate' | 'duplicateUnavailable' | 'delete' | 'presetId' | 'presetIdPlaceholder' | 'copyOf'
   | 'displayName' | 'displayNamePlaceholder'
   | 'inUse' | 'noDescription' | 'builtInGroup' | 'customGroup'
@@ -46,6 +51,27 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetCordisName: 'Creator mode',
   presetCordisDescription:
     'Built for creating custom agent presets, with all Standard mode capabilities plus runtime inspection, plugin experiments, and preset-authoring guidance.',
+  presetKiraMaxName: 'Kira Max',
+  presetKiraMaxDescription: 'Complete Phoenix agent with research, coding, team orchestration, visual creation, game development, automation, runtime inspection and preset authoring; permissions and verification stay in force.',
+  viewerOverview: 'In your language',
+  viewerSource: 'Original YAML',
+  viewerIntro: 'Explanation of the installed components. Technical identifiers remain unchanged to keep the configuration accurate.',
+  viewerSourceIntro: 'Original executable composition (read only). Comments and code retain their source language; changing identifiers or expressions would break the preset.',
+  viewerComponents: 'Components',
+  viewerIdentity: 'Identity and instructions',
+  viewerShell: 'Shell and computer',
+  viewerFilesystem: 'Files and search',
+  viewerJobs: 'Background jobs',
+  viewerSkills: 'Skills and learning',
+  viewerGoals: 'Objectives',
+  viewerPlanning: 'Planning',
+  viewerCompaction: 'Context and memory optimization',
+  viewerTeam: 'Teams and workflows',
+  viewerImages: 'Image generation',
+  viewerTools: 'Assistant tools',
+  viewerPresentation: 'Code Mode',
+  viewerAuthoring: 'Runtime inspection and authoring',
+  viewerOther: 'Other components',
   duplicate: 'Duplicate',
   duplicateUnavailable: 'This deployment has no writable preset directory',
   delete: 'Delete',
@@ -106,6 +132,27 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetMinimalDescription: '精简编码 Agent，核心提供持久 shell 与 str_replace_editor；Phoenix Living 连接工具仍保持可用，以便创建的产物持续连接。',
   presetCordisName: '创造模式',
   presetCordisDescription: '用于创建自定义 Agent preset：具备标准模式的全部能力，并提供运行时检查、插件实验和 preset 创作指导。',
+  presetKiraMaxName: 'Kira 最强模式',
+  presetKiraMaxDescription: '完整的 Phoenix 助手：研究、编程、团队协作、视觉创作、游戏开发、自动化、运行时检查及预设创作；保留权限控制和验证流程。',
+  viewerOverview: '当前语言说明',
+  viewerSource: '原始 YAML',
+  viewerIntro: '已安装组件的说明。技术标识符保持原样，以确保配置准确。',
+  viewerSourceIntro: '原始可执行配置（只读）。注释和代码保留源语言，修改标识符或表达式可能损坏预设。',
+  viewerComponents: '组件',
+  viewerIdentity: '身份和指令',
+  viewerShell: '终端和计算机',
+  viewerFilesystem: '文件与搜索',
+  viewerJobs: '后台任务',
+  viewerSkills: '技能和学习',
+  viewerGoals: '目标',
+  viewerPlanning: '规划',
+  viewerCompaction: '上下文和记忆优化',
+  viewerTeam: '团队和工作流',
+  viewerImages: '图像生成',
+  viewerTools: '助手工具',
+  viewerPresentation: '代码模式',
+  viewerAuthoring: '运行时检查与预设创作',
+  viewerOther: '其他组件',
   duplicate: '复制',
   duplicateUnavailable: '此部署未配置可写的预设目录',
   delete: '删除',
@@ -170,6 +217,27 @@ export const es: Record<AgentPresetSettingsKey, string> = {
   presetCordisName: 'Modo Creador',
   presetCordisDescription:
     'Diseñado para crear preajustes de agente personalizados, con todas las capacidades del modo estándar más inspección en tiempo de ejecución, experimentos con plugins y guía para crear preajustes.',
+  presetKiraMaxName: 'Kira Máximo',
+  presetKiraMaxDescription: 'Agente integral de Phoenix para investigar, programar, coordinar equipos, crear recursos visuales y juegos, automatizar, inspeccionar el sistema y crear preajustes; conserva permisos y verificación.',
+  viewerOverview: 'En tu idioma',
+  viewerSource: 'YAML original',
+  viewerIntro: 'Explicación de los componentes instalados. Los identificadores técnicos permanecen intactos para garantizar la exactitud de la configuración.',
+  viewerSourceIntro: 'Composición ejecutable original (solo lectura). Los comentarios y el código conservan su idioma de origen; cambiar identificadores o expresiones rompería el preajuste.',
+  viewerComponents: 'Componentes',
+  viewerIdentity: 'Identidad e instrucciones',
+  viewerShell: 'Consola y computadora',
+  viewerFilesystem: 'Archivos y búsqueda',
+  viewerJobs: 'Trabajos en segundo plano',
+  viewerSkills: 'Habilidades y aprendizaje',
+  viewerGoals: 'Objetivos',
+  viewerPlanning: 'Planificación',
+  viewerCompaction: 'Optimización de contexto y memoria',
+  viewerTeam: 'Equipos y flujos de trabajo',
+  viewerImages: 'Generación de imágenes',
+  viewerTools: 'Herramientas del asistente',
+  viewerPresentation: 'Modo de código',
+  viewerAuthoring: 'Inspección y creación de preajustes',
+  viewerOther: 'Otros componentes',
   duplicate: 'Duplicar',
   duplicateUnavailable: 'Este despliegue no tiene un directorio de preajustes con permisos de escritura',
   delete: 'Eliminar',
@@ -237,6 +305,7 @@ const BUILT_IN_PRESET_KEYS: Readonly<Partial<Record<string, PresetLocaleKeys>>> 
   code: { name: 'presetCodeName', description: 'presetCodeDescription' },
   minimal: { name: 'presetMinimalName', description: 'presetMinimalDescription' },
   cordis: { name: 'presetCordisName', description: 'presetCordisDescription' },
+  'kira-max': { name: 'presetKiraMaxName', description: 'presetKiraMaxDescription' },
 }
 
 /**
