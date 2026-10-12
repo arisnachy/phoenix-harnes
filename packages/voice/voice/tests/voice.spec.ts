@@ -577,6 +577,46 @@ describe('Codex realtime voice protocol compatibility', () => {
     expect(isCodexQuicksilverV2Required(new Error('connect ETIMEDOUT'))).toBe(false)
   })
 
+  it('requests official client-managed V3 handoffs for explicit Phoenix speech', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      negotiateRealtime(
+        threadId: string,
+        options: { offerSdp: string; assistantGender: 'feminine' },
+        version: 'v3',
+      ): Promise<string>
+      request(method: string, params: Record<string, unknown>): Promise<unknown>
+      waitForNotification(
+        method: string,
+        predicate: (params: unknown) => boolean,
+        timeoutMs: number,
+      ): { promise: Promise<unknown>; cancel: () => void }
+    }
+    const request = vi.spyOn(internal, 'request').mockResolvedValue({})
+    const cancel = vi.fn()
+    const never = new Promise<unknown>(() => {})
+    vi.spyOn(internal, 'waitForNotification').mockImplementation(method => ({
+      promise: method === 'thread/realtime/sdp'
+        ? Promise.resolve({ threadId: 'thread-client-owned', sdp: 'v=answer\\r\\n' })
+        : never,
+      cancel,
+    }))
+    try {
+      await expect(internal.negotiateRealtime(
+        'thread-client-owned', { offerSdp: 'v=offer\\r\\n', assistantGender: 'feminine' }, 'v3',
+      )).resolves.toBe('v=answer\\r\\n')
+      expect(request).toHaveBeenCalledTimes(1)
+      expect(request).toHaveBeenCalledWith('thread/realtime/start', expect.objectContaining({
+        threadId: 'thread-client-owned',
+        clientManagedHandoffs: true,
+        outputModality: 'audio',
+        version: 'v3',
+        transport: { type: 'webrtc', sdp: 'v=offer\\r\\n' },
+      }))
+      expect(cancel).toHaveBeenCalledTimes(3)
+    } finally { bridge.close() }
+  })
+
   it('negotiates V3 first on the initial microphone activation', async () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
