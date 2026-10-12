@@ -85,3 +85,39 @@
 
 .iconLabel {display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:550;max-width:100%;}
 .iconLabel svg {flex-shrink:0;}
+
+/* Contextual answer surfaces: clear hierarchy without nested dashboard chrome. */
+.canvas {
+  max-width: 100%;
+  border-radius: 16px;
+  border-color: var(--dsw-alias-border-subtle, rgba(100, 110, 125, .18));
+  box-shadow: 0 1px 3px rgba(20, 30, 40, .025);
+}
+.canvas header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--dsw-alias-border-subtle, rgba(100, 110, 125, .14));
+}
+.canvas h3 { letter-spacing: -.025em; }
+.chart {
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--dsw-alias-interactive-bg-hover, rgba(120, 120, 120, .045));
+}
+.barTrack { height: 9px; }
+.barTrack > div {
+  background: var(--phoenix-visual-series-1, #2563eb);
+  transition: width 180ms ease-out;
+}
+.tabStrip { gap: 7px; }
+.tabStrip button { border-radius: 8px 8px 0 0; }
+.tabStrip .selected {
+  background: var(--dsw-alias-interactive-bg-hover, rgba(120, 120, 120, .07));
+  border-bottom-color: var(--phoenix-visual-series-1, #2563eb);
+}
+.field input:not([type="range"]):focus-visible,
+.field select:focus-visible {
+  border-color: var(--phoenix-visual-series-1, #2563eb);
+}
+@media (prefers-reduced-motion: reduce) {
+  .barTrack > div { transition: none; }
+}
