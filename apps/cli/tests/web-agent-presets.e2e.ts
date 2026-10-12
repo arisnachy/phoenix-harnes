@@ -245,6 +245,7 @@ describe('the shipped Web composition', () => {
   it('keeps Windows Computer Use enabled in every full shipped preset', async () => {
     for (const preset of ['standard', 'code', 'cordis', 'kira-max']) {
       const composition = await readFile(join(CONFIG_DIR, 'agent-presets', preset, 'agent.cordis.yml'), 'utf8')
+      // oxlint-disable-next-line @stylistic/max-len -- Keep the Windows composition matcher as one auditable regex.
       expect(composition).toMatch(/- id: tool-pwsh\n\s+name: '@phoenix-ai\/dsh-tool-pwsh'\n\s+disabled: !!js process\.platform !== 'win32'\n\s+config:\n\s+enableComputerUse: true/u)
     }
   })
@@ -257,7 +258,17 @@ describe('the shipped Web composition', () => {
     try {
       const tools = toolNames(ctx, handle.agent)
       expect(tools).toEqual(expect.arrayContaining(FULL_AGENT_TOOLS))
+      expect(tools).toEqual(expect.arrayContaining(['hardness_workflow', 'spawn_teammate', 'followup_task', 'memory_search']))
       expect(tools.some(name => name.startsWith('cordis_'))).toBe(true)
+      const assembly = await ctx.systemPrompt.assemble({ scope: handle.agent })
+      const persona = assembly.sections.find(section => section.name === 'deployment:persona')?.text ?? ''
+      expect(persona).toContain('<kira_execution_contract>')
+      const executionContract = persona.match(/<kira_execution_contract>[\s\S]*?<\/kira_execution_contract>/u)?.[0]
+      expect(executionContract?.replace(/\s+/gu, ' ')).toMatchSnapshot('Kira Max bounded execution contract')
+      expect(persona).toContain('<mission_completion_contract>')
+      expect(assembly.sections.find(section => section.name === 'hardness:operating-protocol')?.text)
+        .toContain('<phoenix_cognitive_workflows>')
+      expect(assembly.sections.some(section => section.name === 'tool:session-learning')).toBe(true)
     } finally {
       await handle.dispose()
     }

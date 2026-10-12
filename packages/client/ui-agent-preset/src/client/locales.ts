@@ -53,7 +53,7 @@ export const en: Record<AgentPresetSettingsKey, string> = {
   presetCordisDescription:
     'Built for creating custom agent presets, with all Standard mode capabilities plus runtime inspection, plugin experiments, and preset-authoring guidance.',
   presetKiraMaxName: 'Kira Max',
-  presetKiraMaxDescription: 'Complete Phoenix agent with research, coding, team orchestration, visual creation, game development, automation, runtime inspection and preset authoring; permissions and verification stay in force.',
+  presetKiraMaxDescription: 'Kira leads focused specialists, retrieves relevant HARDNESS knowledge and integrates verified results using available Phoenix capabilities; your model selection and permissions stay in force.',
   viewerOverview: 'In your language',
   viewerSource: 'Original YAML',
   viewerIntro: 'Explanation of the installed components. Technical identifiers remain unchanged to keep the configuration accurate.',
@@ -148,7 +148,7 @@ export const zh: Record<AgentPresetSettingsKey, string> = {
   presetCordisName: '创造模式',
   presetCordisDescription: '用于创建自定义 Agent preset：具备标准模式的全部能力，并提供运行时检查、插件实验和 preset 创作指导。',
   presetKiraMaxName: 'Kira 最强模式',
-  presetKiraMaxDescription: '完整的 Phoenix 助手：研究、编程、团队协作、视觉创作、游戏开发、自动化、运行时检查及预设创作；保留权限控制和验证流程。',
+  presetKiraMaxDescription: 'Kira 领导职责明确的专家，检索相关 HARDNESS 知识，并利用可用的 Phoenix 能力整合经过验证的结果；保留你的模型选择和权限控制。',
   viewerOverview: '当前语言说明',
   viewerSource: '原始 YAML',
   viewerIntro: '已安装组件的说明。技术标识符保持原样，以确保配置准确。',
@@ -247,7 +247,7 @@ export const es: Record<AgentPresetSettingsKey, string> = {
   presetCordisDescription:
     'Diseñado para crear preajustes de agente personalizados, con todas las capacidades del modo estándar más inspección en tiempo de ejecución, experimentos con plugins y guía para crear preajustes.',
   presetKiraMaxName: 'Kira Máximo',
-  presetKiraMaxDescription: 'Agente integral de Phoenix para investigar, programar, coordinar equipos, crear recursos visuales y juegos, automatizar, inspeccionar el sistema y crear preajustes; conserva permisos y verificación.',
+  presetKiraMaxDescription: 'Kira dirige especialistas con tareas concretas, recupera conocimiento pertinente de HARDNESS e integra resultados verificados con las capacidades disponibles de Phoenix; respeta tu modelo y permisos.',
   viewerOverview: 'En tu idioma',
   viewerSource: 'YAML original',
   viewerIntro: 'Explicación de los componentes instalados. Los identificadores técnicos permanecen intactos para garantizar la exactitud de la configuración.',
