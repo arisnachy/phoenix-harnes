@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   missingVendoredIncludeWorkspaceLinks,
@@ -66,5 +67,27 @@ describe('cold isolated Windows build: vendored Cordis tsdown entries', () => {
   it('fails without replacing a missing tracked Cordis source with generated files', () => {
     expect(() => vendoredCordisBundleRepairNeeded(root, () => false))
       .toThrow('vendored Cordis source is missing')
+  })
+})
+
+describe('TS6305 client Include project-reference integrity', () => {
+  it('declares the Include project in the client aggregate rather than relying on Host emitted files', () => {
+    const client = readFileSync(resolve('tsconfig.client.json'), 'utf8')
+    const host = readFileSync(resolve('tsconfig.host.json'), 'utf8')
+    const composition = readFileSync(resolve('packages/session-query/session-log-export/tests/loader-composition.client.spec.ts'), 'utf8')
+    expect(composition).toContain("import Include from '@phoenix-ai/cordis-plugin-include'")
+    expect(client).toContain('{ "path": "./vendor/include" }')
+    expect(host).toContain('{ "path": "./vendor/include" }')
+  })
+
+  it('repairs missing generated Include entries before client TypeScript checks, even when built directly', () => {
+    const packageScripts = (JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as {
+      scripts: Record<string, string>
+    }).scripts
+    const client = packageScripts['build:lib:client'] ?? ''
+    const guard = 'node scripts/ensure-cordis-tsdown-entries.mjs'
+    expect(client).toContain(guard)
+    expect(client.indexOf(guard)).toBeLessThan(client.indexOf('tsc -b tsconfig.client.json'))
+    expect(client.indexOf('tsc -b tsconfig.client.json')).toBeLessThan(client.indexOf('tsdown --env.DSH_BUILD_FACE client'))
   })
 })
