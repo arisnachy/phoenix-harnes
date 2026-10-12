@@ -280,7 +280,9 @@ export function addBrowserCards(
     if (node.kind === 'user' || node.kind === 'steering') currentUserKey = node.key
     if (node.kind === 'tool-call' && currentUserKey !== undefined) {
       const root = (node.data as ToolChatData).root
-      const callName = isSettledTool(root) ? root.call?.name : undefined
+      const call = 'call' in root ? root.call : undefined
+      const callName = typeof call === 'object' && call !== null && 'name' in call
+        && typeof call.name === 'string' ? call.name : undefined
       if (typeof callName === 'string' && isEmbeddedNavigationTool(callName)) requests.add(currentUserKey)
     }
   }
