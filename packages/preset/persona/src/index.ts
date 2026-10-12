@@ -16,7 +16,6 @@
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { settingsNamespace } from '@phoenix-ai/dsh-settings'
-import type {} from '@phoenix-ai/dsh-settings'
 import type {} from '@phoenix-ai/dsh-system-prompt'
 
 // Imported rather than restated: the registry declares the slot this row
