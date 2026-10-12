@@ -596,6 +596,58 @@ describe('startInitialSelection', () => {
     stopEmpty()
   })
 
+  it('automatically retries a transient first admission failure without a new workspace frame', async () => {
+    const b = bench()
+    b.api.onWorkspaceList = () => Promise.resolve(ok({
+      items: [workspace('recent', [], '2026-01-02T00:00:00.000Z')] as never[],
+    }))
+    let attempts = 0
+    b.api.onCreate = () => {
+      attempts++
+      return Promise.resolve(attempts === 1
+        ? err({ code: 'internal', message: 'temporary Host refusal', details: {} })
+        : ok({ sessionId: sid('s-recovered') }))
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const stop = b.workspaces.startInitialSelection()
+    try {
+      await b.workspaces.refresh()
+      await b.sessions.refresh()
+      await vi.waitFor(() => {
+        expect(b.sessions.list.getSnapshot().current).toBe('s-recovered')
+      }, { timeout: 2_000 })
+      expect(b.api.callsOf('session.create')).toHaveLength(2)
+      expect(warn).toHaveBeenCalledWith('initial workspace selection failed:', expect.anything())
+    } finally {
+      stop()
+      warn.mockRestore()
+    }
+  })
+
+  it('cancels a scheduled startup retry when the runtime selection owner is disposed', async () => {
+    const b = bench()
+    b.api.onWorkspaceList = () => Promise.resolve(ok({
+      items: [workspace('recent', [], '2026-01-02T00:00:00.000Z')] as never[],
+    }))
+    b.api.onCreate = () => Promise.resolve(err({ code: 'internal', message: 'offline', details: {} }))
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const stop = b.workspaces.startInitialSelection()
+    try {
+      await b.workspaces.refresh()
+      await b.sessions.refresh()
+      await vi.waitFor(() => {
+        expect(b.api.callsOf('session.create')).toHaveLength(1)
+        expect(warn).toHaveBeenCalled()
+      })
+      stop()
+      await new Promise(resolve => setTimeout(resolve, 310))
+      expect(b.api.callsOf('session.create')).toHaveLength(1)
+    } finally {
+      stop()
+      warn.mockRestore()
+    }
+  })
+
   it('a failed connect returns to waiting and retries on the next list change', async () => {
     const b = bench()
     b.api.onWorkspaceList = () => Promise.resolve(ok({
