@@ -21,8 +21,9 @@ export type VideoMediaEvidence = {
 export function videoFrameTimes(duration: number, count: number): number[] {
   if (!Number.isFinite(duration) || duration <= 0 || !Number.isInteger(count) || count < 1 || count > 8) return []
   const length = Math.min(duration, 7200)
-  return Array.from({length: Math.min(count, Math.max(1, Math.floor(length * 2)))},
-    (_, index, array) => Number(Math.max(0, (index + 0.5) * length / array.length).toFixed(2)))
+  const total = Math.min(count, Math.max(1, Math.floor(length * 2)))
+  return Array.from({length: total},
+    (_, index) => Number(Math.max(0, (index + 0.5) * length / total).toFixed(2)))
 }
 
 /** Reject unapproved local paths and expired or forged capture descriptors. */
