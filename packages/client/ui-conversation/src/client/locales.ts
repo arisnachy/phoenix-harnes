@@ -462,6 +462,8 @@ export const es = {
   'placeholder.unavailable': 'Sesión no disponible',
   'placeholder.hero': 'Describe lo que quieres crear',
   'placeholder.workspace': 'Elige un espacio de trabajo para comenzar',
+  'hero.chooseWorkspace': 'Elegir espacio de trabajo',
+  'input.attachments': 'Adjuntar archivos',
   'input.commands': 'Comandos',
   'input.stop': 'Detener generación',
   'input.send': 'Enviar mensaje',
