@@ -305,7 +305,10 @@ export function codexRealtimeEnvironment(parent: NodeJS.ProcessEnv = process.env
   return env
 }
 
-/** Detect user-level Codex endpoint overrides without reading or exposing URLs/secrets. */
+/** Detect user-level Codex endpoint overrides without exposing URLs or secrets.
+ * @param source - Raw local Codex TOML configuration.
+ * @returns Names of top-level endpoint override keys only, never their values.
+ */
 export function codexRealtimeConfigOverrides(source: string): string[] {
   const keys = new Set([
     'experimental_realtime_webrtc_call_base_url',
