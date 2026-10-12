@@ -4023,7 +4023,18 @@ export function createApiProxy(ctx: Context, defaults: ApiProxyDefaults): ApiPro
         // This attempt outlives the unary HTTP request that created it. Carrier
         // cancellation must not tear down OAuth before the provider URL is
         // published; explicit authorization.cancel owns user cancellation.
-        startAuthorizationAttempt(id, request.payload.key, method)
+        // Finish the begin RPC before running provider code. Some OAuth flows
+        // perform synchronous startup work before their first await, which
+        // otherwise starves the response and triggers the browser's 12s limit.
+        setImmediate(() => {
+          if (attempt.controller.signal.aborted) {
+            attempt.status = 'cancelled'
+            authorizationAttemptByKey.delete(attempt.key)
+            trimAuthorizationAttempts()
+            return
+          }
+          startAuthorizationAttempt(id, attempt.key, method)
+        })
         return Promise.resolve(ok(request, { attemptId: id, status: 'pending' as const }))
       },
 
