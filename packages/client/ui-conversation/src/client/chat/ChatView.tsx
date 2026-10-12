@@ -139,7 +139,7 @@ export function ChatView({
   const requestCapturedMediaReview = useCallback((captureId: string): boolean => {
     if (inputPhase !== 'plain' || inputDraft.trim() !== '' || pendingSubmit !== undefined) return false
     inputActions.setDraft('Kira, analiza ahora la grabación de pestaña que acabo de autorizar ('
-      + captureId + ') usando browser_sense con source=authorized-capture. Describe solo fotogramas y audio realmente procesados; si no hay evidencia, indica el fallo exacto.')
+      + captureId + ') usando browser_sense con source=authorized-capture y captureId=' + captureId + '. Describe solo fotogramas y audio realmente procesados; si no hay evidencia, indica el fallo exacto.')
     inputActions.submit()
     return true
   }, [inputActions, inputDraft, inputPhase, pendingSubmit])
