@@ -63,6 +63,51 @@ describe('conversation generative UI', () => {
     expect(splitGenerativeUiText(malformed)).toEqual([{ kind: 'markdown', text: malformed }])
   })
 
+  it('renders an interactive final explanation after prose without leaking JSON', () => {
+    const ui = {
+      component: 'ui_canvas',
+      version: 1,
+      props: {
+        title: 'Resultado de Phoenix',
+        subtitle: 'Evidencia verificada',
+        children: [
+          { type: 'group', layout: 'grid', children: [
+            { type: 'metric', label: 'Pruebas', value: '12/12', status: 'positive' },
+            { type: 'metric', label: 'Errores', value: '0', status: 'positive' },
+          ] },
+          { type: 'tabs', tabs: [
+            { label: 'Evidencia', children: [
+              { type: 'chart', title: 'Tareas verificadas', points: [
+                { label: 'Build', value: 1 }, { label: 'Smoke', value: 1 },
+              ] },
+            ] },
+            { label: 'Acciones', children: [
+              { type: 'input', id: 'consulta', label: 'Consulta' },
+              { type: 'button', label: 'Consultar', prompt: 'Verifica {consulta}', action: 'draft' },
+            ] },
+          ] },
+        ],
+      },
+    }
+    expect(parseGenerativeUiBlock(ui)).not.toBeNull()
+    const answer = ['La compilación terminó. Las pruebas anteriores son una muestra.',
+      '\`\`\`generative-ui', JSON.stringify(ui), '\`\`\`', 'Puedes consultar más detalles.'].join('\\n')
+    const segments = splitGenerativeUiText(answer)
+    expect(segments.map(segment => segment.kind)).toEqual(['markdown', 'ui', 'markdown'])
+    expect(segments[0]).toMatchObject({ kind: 'markdown', text: expect.stringContaining('compilación') })
+    expect(segments[2]).toMatchObject({ kind: 'markdown', text: expect.stringContaining('consultar') })
+  })
+
+  it('rejects a final interactive canvas with script or unauthorized event handlers', () => {
+    expect(parseGenerativeUiBlock({
+      component: 'ui_canvas',
+      version: 1,
+      props: { title: 'Estado', children: [
+        { type: 'button', label: 'Ejecutar', prompt: 'Continúa', onclick: 'runExternalCode()' },
+      ] },
+    })).toBeNull()
+  })
+
   it('renders validated cards with a stable component marker', () => {
     const block: GenerativeUiBlock = {
       component: 'metric_card',
