@@ -654,7 +654,7 @@ server.registerTool('youtube_video_listen', {
 })
 
 server.registerTool('youtube_video_inspect', {
-  description: 'Inspecciona un VIDEO REAL de YouTube para aprender técnicas (Godot, programación, tutoriales). Lee subtítulos con marcas de tiempo si existen y ofrece hasta tres fotogramas reales del reproductor para análisis visual. Usa esta herramienta antes de decir que solo tienes título/descripción. No adivina audio, no evita bloqueos, no descarga videos ni exige API de pago. Con URL abre una pestaña del MiniBrowser y necesita permiso de navegación; sin URL analiza la pestaña actual. Devuelve evidencia y restricciones de accesibilidad.',
+  description: 'Analiza video público real de YouTube, con hasta 12 fotogramas Chromium, subtítulos temporizados y un intento de escuchar hasta 9 segundos mediante faster-whisper local cuando faltan subtítulos. Para otros fragmentos usa youtube_video_listen en la misma pestaña. No declara haber oído partes sin captura; respeta permisos, DRM y bloqueo de reproducción, sin descargas ni API de pago.',
   inputSchema: {
     url: z.url().optional(),
     tabId: z.string().optional(),
