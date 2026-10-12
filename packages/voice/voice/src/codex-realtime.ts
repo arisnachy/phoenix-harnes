@@ -318,6 +318,8 @@ export class CodexRealtimeBridge {
   private idleTimer: ReturnType<typeof setTimeout> | undefined
   private launchedManagedCodexBin: string | undefined
   private quicksilverRestartAttemptedFor: string | undefined
+  /** Brief cooldown for identical upstream protocol failures; a CLI change clears it. */
+  private lastQuicksilverRejection: { readonly runtime: string; readonly at: number; readonly detail: string } | undefined
 
   /** Start app-server and verify that its active account is ChatGPT OAuth.
    * @returns Sidecar availability, authentication and a classified failure reason.
@@ -366,46 +368,46 @@ export class CodexRealtimeBridge {
    * @returns Negotiated answer SDP and Codex thread identity.
    */
   async start(options: CodexRealtimeStartOptions): Promise<CodexRealtimeStartResult> {
+    const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+    const runtime = findManagedCodexRealtimeBin(home) ?? 'ambient'
+    const cached = this.lastQuicksilverRejection
+    // Repeating the same rejected call seconds later does not negotiate a new
+    // protocol. Do not hammer the subscription endpoint or reinstall Codex.
+    if (cached !== undefined && cached.runtime === runtime && Date.now() - cached.at < 60_000) {
+      throw new Error(cached.detail)
+    }
     try {
-      return await this.startOnce(options)
+      const result = await this.startOnce(options)
+      this.lastQuicksilverRejection = undefined
+      return result
     } catch (error) {
       if (!isCodexQuicksilverV2Required(error) || this.sessions.size > 0) throw error
-      // Quicksilver V2 is already emitted by the official Codex V3 client.
-      // Recover exactly once per binary selection from a possibly stale voice
-      // app-server. Never loop, interrupt an active call, or change login.
+      // Official Codex handles OpenAI-Alpha itself. WebRTC V3 already selects
+      // quicksilver=v2 in upstream Rust; neither Phoenix, browser JS nor a
+      // fabricated client header can repair a backend rejection.
       const selected = this.launchedManagedCodexBin ?? 'ambient'
       if (this.quicksilverRestartAttemptedFor !== selected) {
+        // Exactly one stale-sidecar recovery for this runtime, never an
+        // upgrade loop. Keep real backend failures intact for diagnosis.
         this.quicksilverRestartAttemptedFor = selected
         this.close()
         try {
-          return await this.startOnce(options)
+          const recovered = await this.startOnce(options)
+          this.lastQuicksilverRejection = undefined
+          return recovered
         } catch (again) {
           if (!isCodexQuicksilverV2Required(again)) throw again
         }
       }
-      const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
-      const currentVersion = codexLiveCurrentCliVersion(home)
-      const managedBin = findManagedCodexRealtimeBin(home)
-      // A global "codex login status" or update-state.json alone does not
-      // prove which executable this voice sidecar actually launched.
-      if (currentVersion !== undefined && (
-        managedBin === undefined || this.launchedManagedCodexBin !== managedBin
-      )) {
-        throw new Error(
-          'Codex Live está utilizando un ejecutable distinto del Codex CLI gestionado. Comprueba la selección del runtime de voz y DSH_HOME; no se confirma compatibilidad Quicksilver v2.',
-        )
-      }
-      if (currentVersion !== undefined) {
-        throw new Error(
-          `Codex Live: CLI ${currentVersion} gestionado ya está actualizado y autenticado. El servidor continúa rechazando Quicksilver v2 incluso después de reiniciar el proceso de voz. No se necesitan más instalaciones; verifica compatibilidad del servicio o cabeceras alteradas por proxy.`,
-        )
-      }
-      const repair = queueCodexLiveRepair(home)
-      throw new Error(repair === 'queued' || repair === 'recent'
-        ? 'Codex Live: Quicksilver v2 sigue rechazado tras reiniciar su proceso. Phoenix comprobará las versiones oficiales sin reinstalaciones repetidas.'
-        : repair === 'disabled'
-          ? 'Codex Live: Quicksilver v2 sigue rechazado; la actualización de Codex está desactivada.'
-          : 'Codex Live: Quicksilver v2 sigue rechazado; no fue posible solicitar la comprobación de Codex.')
+      const version = codexLiveCurrentCliVersion(home)
+      const detail = 'Codex Live: el app-server oficial rechazó la sesión WebRTC v3 '
+        + '(invalid_quicksilver_alpha_header, exige quicksilver=v2). '
+        + (version === undefined ? 'Versión gestionada no confirmada. ' : `CLI gestionado: ${version}. `)
+        + 'Phoenix ya solicita v3; Codex debe enviar la cabecera. '
+        + 'No se ha demostrado un fallo de autenticación ni una solución por reinstalación. '
+        + 'Puedes usar Kokoro mientras se verifica la compatibilidad del servicio o la red.'
+      this.lastQuicksilverRejection = { runtime, at: Date.now(), detail }
+      throw new Error(detail)
     }
   }
 
@@ -428,9 +430,9 @@ export class CodexRealtimeBridge {
         answerSdp = await this.negotiateRealtime(threadId, options, 'v3')
       } catch (error) {
         if (isCodexQuicksilverV2Required(error)) {
-          // Preserve the exact category for the bounded bridge restart above.
-          // The official V3 app-server normally supplies this alpha header.
-          throw new Error('invalid_quicksilver_alpha_header: AVAS requiere Quicksilver v2')
+          // Preserve the real upstream failure. The official app-server is
+          // responsible for OpenAI-Alpha; do not imply Phoenix omitted it.
+          throw error
         }
         if (!isRealtimeV3UnsupportedError(error)) throw error
         // Only an explicit local "V3 unsupported" error permits V1 fallback.
