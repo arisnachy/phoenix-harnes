@@ -58,7 +58,7 @@ function shareHostInspectProviders(ctx: Context): () => void {
   }
   const disposeProviders: Array<() => void> = []
   try {
-    for (const provider of hostInspectProviders(ctx)) {
+    for (const provider of hostInspectProviders(ctx.root)) {
       disposeProviders.push(registry.register(provider))
     }
   } catch (error) {
