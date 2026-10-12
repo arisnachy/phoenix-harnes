@@ -410,7 +410,38 @@
   background: var(--dsw-alias-interactive-bg-hover);
   white-space: nowrap;
 }
-.voiceAlternativeActive .voiceReconnectAction {
+.voiceAlternativeActive .voiceDetails {
+  position: relative;
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+}
+.voiceDetails > summary {
+  cursor: pointer;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.voiceDetailsBody {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: min(340px, calc(100vw - 35px));
+  max-height: 180px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  background: var(--dsw-alias-surface-primary);
+  box-shadow: 0 6px 20px rgba(0,0,0,.12);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+}
+.voiceDetailsBody p { margin: 0 0 8px; }
+.voiceDetailsBody code { font: inherit; font-size: 11px; }
+
+.voiceReconnectAction {
   flex-shrink: 0;
 }
 

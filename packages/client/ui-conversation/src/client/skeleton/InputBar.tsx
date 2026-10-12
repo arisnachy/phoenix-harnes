@@ -1133,10 +1133,10 @@ export function InputBar({
                 className={clsx(css.voiceFallback, (voiceRepairing || codexRealtimeRequiresLogin(codexVoiceFailure)) && css.voiceReconnect)}
                 data-codex-voice-fallback
                 title={voiceRepairing
-                  ? 'Phoenix está recuperando Codex CLI y reanudará esta llamada automáticamente cuando haya una versión compatible.'
+                  ? 'Codex Live: comprobando disponibilidad'
                   : codexRealtimeRequiresLogin(codexVoiceFailure)
-                  ? 'Codex perdió la autenticación. Vuelve a conectar tu cuenta de ChatGPT.'
-                  : `Codex Live no disponible: ${codexVoiceFailure.slice(0, 220)}. El respaldo del navegador requiere tu autorización.`}
+                  ? 'Codex Live: inicia sesión de nuevo'
+                  : 'Codex Live no disponible. Abre Detalles para conocer el motivo.'}
               >
                 {voiceRepairing
                   ? <>Recuperando Codex Live… · <button type="button" className={css.voiceReconnectAction} onClick={() => { void toggleVoice() }}>Cancelar</button></>
@@ -1144,6 +1144,16 @@ export function InputBar({
                   ? <>Codex desconectado · <button type="button" className={css.voiceReconnectAction} onClick={openCodexReconnection}>Reconectar</button></>
                   : <>Codex Live sin conexión</>}
               </span>
+            )}
+            {codexVoiceFailure !== null && !voiceRepairing
+              && !codexRealtimeRequiresLogin(codexVoiceFailure) && !voiceEnabled && (
+              <details className={css.voiceDetails}>
+                <summary aria-label="Mostrar diagnóstico de Codex Live">Detalles</summary>
+                <div className={css.voiceDetailsBody}>
+                  <p>Codex no pudo establecer el canal nativo de voz. Kira puede seguir trabajando con el respaldo de voz autorizado.</p>
+                  <code>{codexVoiceFailure.slice(0, 460)}</code>
+                </div>
+              </details>
             )}
             {voiceEnabled && useAlternativeVoice && (
               <span className={css.voiceAlternativeActive} role="status"
@@ -1180,7 +1190,7 @@ export function InputBar({
                 label={voiceRepairing
                   ? 'Cancelar la recuperación automática de Codex Live'
                   : codexVoiceFailure !== null
-                  ? `Codex Live no disponible: ${codexVoiceFailure} · sin voz del navegador`
+                  ? 'Codex Live no disponible. Usa la voz alternativa autorizada.'
                   : voiceEnabled ? t('input.voice.stop') : t('input.voice.start')}
                 side="top"
                 delayMs={500}

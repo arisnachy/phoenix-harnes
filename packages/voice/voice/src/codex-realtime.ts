@@ -305,6 +305,40 @@ export function codexRealtimeEnvironment(parent: NodeJS.ProcessEnv = process.env
   return env
 }
 
+/** Detect user-level Codex endpoint overrides without exposing URLs or secrets.
+ * @param source - Raw local Codex TOML configuration.
+ * @returns Names of top-level endpoint override keys only, never their values.
+ */
+export function codexRealtimeConfigOverrides(source: string): string[] {
+  const keys = new Set([
+    'experimental_realtime_webrtc_call_base_url',
+    'experimental_realtime_ws_base_url',
+    'openai_base_url',
+    'chatgpt_base_url',
+  ])
+  const active: string[] = []
+  let inRoot = true
+  for (const line of source.split(/\r?\n/u)) {
+    const trimmed = line.trim()
+    if (/^\[[^\]]+\]/u.test(trimmed)) { inRoot = false; continue }
+    if (!inRoot || trimmed.startsWith('#')) continue
+    const match = /^([a-z_]+)\s*=\s*(\S.*)$/u.exec(trimmed)
+    if (match !== null && keys.has(match[1]!) && !active.includes(match[1]!)) active.push(match[1]!)
+  }
+  return active
+}
+
+function customRealtimeEndpointWarning(): string {
+  const home = process.env.CODEX_HOME?.trim() || join(homedir(), '.codex')
+  try {
+    const overrides = codexRealtimeConfigOverrides(readFileSync(join(home, 'config.toml'), 'utf8'))
+    return overrides.length === 0 ? '' : ' Configuración de Codex personalizada detectada: '
+      + overrides.join(', ') + '. Revisa las rutas de conexión con una copia de seguridad; Phoenix no modifica tu configuración.'
+  } catch {
+    return ''
+  }
+}
+
 /** Recognize only real Codex login failures; network hiccups must not log users out. */
 export function codexRealtimeNeedsLogin(error: unknown): boolean {
   const message = errorText(error)
@@ -325,7 +359,6 @@ export class CodexRealtimeBridge {
   private nextRequestId = 1
   private idleTimer: ReturnType<typeof setTimeout> | undefined
   private launchedManagedCodexBin: string | undefined
-  private quicksilverRestartAttemptedFor: string | undefined
   /** Brief cooldown for identical upstream protocol failures; a CLI change clears it. */
   private lastQuicksilverRejection: { readonly runtime: string; readonly at: number; readonly detail: string } | undefined
 
@@ -402,20 +435,9 @@ export class CodexRealtimeBridge {
       // Official Codex handles OpenAI-Alpha itself. WebRTC V3 already selects
       // quicksilver=v2 in upstream Rust; neither Phoenix, browser JS nor a
       // fabricated client header can repair a backend rejection.
-      const selected = this.launchedManagedCodexBin ?? 'ambient'
-      if (this.quicksilverRestartAttemptedFor !== selected) {
-        // Exactly one stale-sidecar recovery for this runtime, never an
-        // upgrade loop. Keep real backend failures intact for diagnosis.
-        this.quicksilverRestartAttemptedFor = selected
-        this.close()
-        try {
-          const recovered = await this.startOnce(options)
-          this.lastQuicksilverRejection = undefined
-          return recovered
-        } catch (again) {
-          if (!isCodexQuicksilverV2Required(again)) throw again
-        }
-      }
+      // One upstream rejection is sufficient evidence. Restarting the same
+      // authenticated binary and reissuing a second WebRTC call cannot repair
+      // an OpenAI-Alpha negotiation mismatch in that build.
       const version = codexLiveCurrentCliVersion(home)
       const detail = 'Codex Live: el app-server oficial rechazó la sesión WebRTC v3 '
         + '(invalid_quicksilver_alpha_header, exige quicksilver=v2). '
@@ -423,6 +445,7 @@ export class CodexRealtimeBridge {
         + 'Phoenix ya solicita v3; Codex debe enviar la cabecera. '
         + 'No se ha demostrado un fallo de autenticación ni una solución por reinstalación. '
         + 'Puedes usar Kokoro mientras se verifica la compatibilidad del servicio o la red.'
+        + customRealtimeEndpointWarning()
       this.lastQuicksilverRejection = { runtime, at: Date.now(), detail }
       throw new Error(detail)
     }
