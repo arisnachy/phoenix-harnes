@@ -822,19 +822,20 @@ server.registerTool('browser_sense', {
   description: 'PERCEPCIÓN REAL para Kira: ve una captura JPEG y lee texto visible de la pestaña Chromium actual. En YouTube intenta escuchar solo 3-9 segundos de audio real cuando hay permiso de acciones; si se bloquea, informa por qué. source=authorized-capture analiza video y audio de la última grabación que el usuario compartió explícitamente en MiniBrowser. No atribuyas al video una captura de la página ni inventes audio, imágenes o permisos.',
   inputSchema: {
     source: z.enum(['tab', 'authorized-capture']).default('tab'),
+    captureId: z.string().regex(/^[a-f0-9-]{36}$/i).optional(),
     tabId: z.string().optional(),
     screenshot: z.boolean().default(true),
     frames: z.number().int().min(0).max(8).default(6),
     audioSeconds: z.number().int().min(0).max(90).default(8),
   },
-}, async ({source, tabId, screenshot, frames, audioSeconds}) => {
+}, async ({source, captureId, tabId, screenshot, frames, audioSeconds}) => {
   const content: Array<
     | {type:'text';text:string}
     | {type:'image';data:string;mimeType:'image/jpeg'}
   > = []
   if (source === 'authorized-capture') {
     try {
-      const media = await inspectVideoMedia({frames, audioSeconds})
+      const media = await inspectVideoMedia({frames, audioSeconds, ...(captureId === undefined ? {} : {captureId})})
       content.push({type:'text',text:JSON.stringify({
         source:media.source, durationSeconds:media.durationSeconds,
         decodedFrames:media.frames.length, audio:media.audio,
