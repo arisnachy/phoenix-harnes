@@ -15,6 +15,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { browserBatchExpression, browserInteractionExpression, type BrowserInteraction, type BrowserInteractionResult } from './browser-interactions.ts'
 import { chooseYoutubeCaptions, youtubeCaptionUrl, youtubeTranscript, youtubeWatchUrl, type YoutubeCaptionTrack } from './youtube-video.ts'
+import { parseCapturedVideoAudio, transcribeCapturedVideoAudio, videoAudioCaptureExpression } from './video-audio.ts'
 
 const DEFAULT_PORTS = [9222, 9223, 9224]
 /** User-temp discovery lets the in-chat view reuse this exact Chromium tab. */
@@ -286,14 +287,14 @@ async function selectedTab(id?: string): Promise<Tab> {
   return tab
 }
 
-async function cdp<T = unknown>(tab: Tab, method: string, params: Record<string, unknown> = {}): Promise<T> {
+async function cdp<T = unknown>(tab: Tab, method: string, params: Record<string, unknown> = {}, timeoutMs = 10_000): Promise<T> {
   const WebSocketCtor = globalThis.WebSocket
   const debuggerUrl = tab.webSocketDebuggerUrl
   if (!debuggerUrl) throw new Error('La pestaña no ofrece una conexión CDP')
   const socket = new WebSocketCtor(debuggerUrl)
   const id = Math.floor(Math.random() * 2_000_000_000)
   return await new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => { socket.close(); reject(new Error(`Tiempo agotado ejecutando ${method}`)) }, 10_000)
+    const timer = setTimeout(() => { socket.close(); reject(new Error(`Tiempo agotado ejecutando ${method}`)) }, timeoutMs)
     // Session-local metrics must precede any screenshot/mouse coordinate action
     // on this SAME CDP socket; an oversized clip on an 800px viewport produced
     // the black half in Phoenix's inline browser.
@@ -339,8 +340,8 @@ export function youtubeSearchUrl(query: string): string {
   return url.toString()
 }
 
-async function evaluate(tab: Tab, expression: string): Promise<unknown> {
-  return await cdp(tab, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true })
+async function evaluate(tab: Tab, expression: string, timeoutMs = 10_000): Promise<unknown> {
+  return await cdp(tab, 'Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true }, timeoutMs)
 }
 
 function ensureBrowserActionPermission(): void {
@@ -564,11 +565,14 @@ async function youtubeSampleFrame(tab: Tab, requestedSeconds: number): Promise<
 > {
   const expression = '(async () => { const video = document.querySelector("video"); '
     + 'if (!video || !Number.isFinite(video.duration) || video.duration <= 0) return JSON.stringify({ok:false}); '
-    + 'video.pause(); const seconds = ' + String(requestedSeconds) + '; video.currentTime = seconds; '
-    + 'await Promise.race([new Promise(resolve => video.addEventListener("seeked", resolve, {once:true})), '
+    + 'const originalMuted = video.muted; video.pause(); const seconds = ' + String(requestedSeconds) + '; '
+    + 'await Promise.race([new Promise(resolve => { video.addEventListener("seeked", resolve, {once:true}); video.currentTime = seconds; }), '
     + 'new Promise(resolve => setTimeout(resolve, 1600))]); '
-    + 'return JSON.stringify({ok: video.readyState >= 2 && Math.abs(video.currentTime - seconds) < 3, '
-    + 'atSeconds: video.currentTime}); })()'
+    + 'try { video.muted = true; await video.play(); await new Promise(resolve => setTimeout(resolve, 400)); } '
+    + 'catch { /* YouTube can deny autoplay; a decoded seek may still be captured. */ } '
+    + 'finally { video.pause(); video.muted = originalMuted; } '
+    + 'return JSON.stringify({ok: video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0 '
+    + '&& Math.abs(video.currentTime - seconds) < 3, atSeconds: video.currentTime}); })()'
   const result = JSON.parse(String(await evaluate(tab, expression))) as { ok?: boolean; atSeconds?: number }
   if (!result.ok || typeof result.atSeconds !== 'number') return
   const shot = await cdp<{ data: string }>(tab, 'Page.captureScreenshot', {
@@ -579,15 +583,86 @@ async function youtubeSampleFrame(tab: Tab, requestedSeconds: number): Promise<
   return { atSeconds: result.atSeconds, jpeg: shot.data }
 }
 
+
+/**
+ * Transcribe real decoded tab audio locally. Requires permission for playback
+ * and an accessible Chrome captureStream audio track. Returns NO audio bytes.
+ */
+async function sampleYoutubeSpeech(tab: Tab, startSeconds: number, seconds: number): Promise<{
+  status: 'ok' | 'unavailable'
+  reason?: string
+  language?: string
+  transcript?: string
+  cueCount?: number
+  sampleStartSeconds?: number
+  sampleDurationSeconds?: number
+}> {
+  try {
+    const captured = parseCapturedVideoAudio(await evaluate(
+      tab, videoAudioCaptureExpression(startSeconds, seconds), 22_000,
+    ))
+    if (!captured.ok) return { status: 'unavailable', reason: captured.reason ?? 'AUDIO_CAPTURE_UNAVAILABLE' }
+    const transcribed = await transcribeCapturedVideoAudio(captured)
+    const lines = transcribed.cues
+      .map(cue => '[' + (cue.start + (captured.startSeconds ?? startSeconds)).toFixed(2)
+        + 's] ' + cue.text).join('\n').slice(0, 16_000)
+    return {
+      status: lines.length > 0 ? 'ok' : 'unavailable',
+      ...(lines.length > 0 ? { transcript: lines } : { reason: 'NO_RECOGNIZABLE_SPEECH' }),
+      ...(transcribed.language === undefined ? {} : { language: transcribed.language }),
+      cueCount: transcribed.cues.length,
+      ...(captured.startSeconds === undefined ? {} : { sampleStartSeconds: captured.startSeconds }),
+      ...(captured.durationSeconds === undefined ? {} : { sampleDurationSeconds: captured.durationSeconds }),
+    }
+  } catch (error) {
+    return { status: 'unavailable', reason: String(error).slice(0, 180) }
+  }
+}
+
+server.registerTool('youtube_video_listen', {
+  description: 'ESCUCHA audio real del video público y transcribe localmente con faster-whisper. Procesa un segmento de 3-9 s del Chromium ya abierto; repite por tramos hasta cubrir el contenido solicitado, sin inventar lo no escuchado. Auto-instala el motor vía uv y usa CPU sin API de pago. Requiere permiso de acciones y una pista de audio capturable. No descarga videos ni intenta evadir DRM; devuelve la limitación específica cuando el navegador bloquea audio.',
+  inputSchema: {
+    url: z.url().optional(),
+    tabId: z.string().optional(),
+    startSeconds: z.number().min(0).max(86400).default(0),
+    durationSeconds: z.number().int().min(3).max(9).default(8),
+  },
+}, async ({ url, tabId, startSeconds, durationSeconds }) => {
+  ensureBrowserActionPermission()
+  const tab = url === undefined ? await selectedTab(tabId) : await newBrowserTab(youtubeWatchUrl(url))
+  const expected = youtubeWatchUrl(url ?? tab.url)
+  let verified = false
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      const info = await inspectYoutubeMetadata(tab)
+      if (youtubeWatchUrl(info.url) !== expected) throw new Error('VIDEO_URL_MISMATCH')
+      if (info.hasVideoElement) { verified = true; break }
+    } catch { /* Wait for the player to initialize. */ }
+    await new Promise(resolve => setTimeout(resolve, 450))
+  }
+  if (!verified) return { isError: true, content: [{ type: 'text', text: 'El reproductor público no ofrece un elemento de video listo para captura.' }] }
+  const speech = await sampleYoutubeSpeech(tab, startSeconds, durationSeconds)
+  return { content: [{ type: 'text', text: JSON.stringify({
+    url: expected, browserTabId: tab.id,
+    source: 'real Chrome MediaRecorder + local faster-whisper',
+    ...speech,
+    nextStartSeconds: speech.status === 'ok' ? (speech.sampleStartSeconds ?? startSeconds) + durationSeconds : undefined,
+    note: speech.status === 'ok'
+      ? 'Esta transcripción abarca solamente el fragmento indicado, no el video completo. Continúa por segmentos cuando la tarea lo requiera.'
+      : 'No fue posible escuchar este segmento de forma comprobable; no inventes contenido.',
+  }) }], ...(speech.status === 'ok' ? {} : { isError: true as const }) }
+})
+
 server.registerTool('youtube_video_inspect', {
   description: 'Inspecciona un VIDEO REAL de YouTube para aprender técnicas (Godot, programación, tutoriales). Lee subtítulos con marcas de tiempo si existen y ofrece hasta tres fotogramas reales del reproductor para análisis visual. Usa esta herramienta antes de decir que solo tienes título/descripción. No adivina audio, no evita bloqueos, no descarga videos ni exige API de pago. Con URL abre una pestaña del MiniBrowser y necesita permiso de navegación; sin URL analiza la pestaña actual. Devuelve evidencia y restricciones de accesibilidad.',
   inputSchema: {
     url: z.url().optional(),
     tabId: z.string().optional(),
     maxChars: z.number().int().min(1000).max(80000).default(45000),
-    frames: z.number().int().min(0).max(3).default(3),
+    frames: z.number().int().min(0).max(12).default(6),
+    audioSeconds: z.number().int().min(0).max(9).default(8),
   },
-}, async ({ url, tabId, maxChars, frames }) => {
+}, async ({ url, tabId, maxChars, frames, audioSeconds }) => {
   let tab: Tab
   let expectedVideoUrl: string
   if (url !== undefined) {
@@ -632,6 +707,12 @@ server.registerTool('youtube_video_inspect', {
     }
   } else captionError = 'El reproductor no ofrece pistas de subtítulos accesibles.'
 
+  // If YouTube captions are missing, attempt actual browser audio + local ASR.
+  // Never claim to have listened beyond the explicitly sampled seconds.
+  const sampledSpeech = transcript.cues === 0 && audioSeconds >= 3 && actionsAllowed()
+    && metadata.hasVideoElement
+    ? await sampleYoutubeSpeech(tab, 0, audioSeconds)
+    : undefined
   const content: Array<
     | { type: 'text'; text: string }
     | { type: 'image'; data: string; mimeType: 'image/jpeg' }
@@ -650,7 +731,9 @@ server.registerTool('youtube_video_inspect', {
       transcriptCueCount: transcript.cues,
       transcriptTruncated: transcript.truncated,
       captionLimitation: captionError,
-      videoFrameMethod: 'real Chromium video seek + screenshot; audio is not transcribed',
+      audioSample: sampledSpeech ?? (transcript.cues === 0 ? { status: 'unavailable', reason: 'BROWSER_ACTION_PERMISSION_REQUIRED_OR_AUDIO_DISABLED' } : undefined),
+      audioNextStep: 'youtube_video_listen puede transcribir otros segmentos reales desde la misma pestaña.',
+      videoFrameMethod: 'real Chromium video seek + screenshot; the audio sample is locally transcribed only if confirmed',
       browserTabId: tab.id,
     }),
   }]
@@ -671,8 +754,9 @@ server.registerTool('youtube_video_inspect', {
     + String(frames) + '. ' + (frames > 0 && !actionsAllowed()
       ? 'La inspección visual requiere permiso para controlar el navegador.'
       : realFrames === 0 && frames > 0 ? 'El reproductor no permitió extraer fotogramas verificables.' : '')
-    + ' Nunca afirmar haber escuchado el audio ni visto fotogramas no capturados.' })
-  return { content, ...(transcript.cues === 0 && realFrames === 0 ? { isError: true as const } : {}) }
+    + ' No afirmar que se escuchó el video entero; cada segmento de audio y fotograma debe tener evidencia.' })
+  return { content, ...(transcript.cues === 0 && sampledSpeech?.status !== 'ok' && realFrames === 0
+    ? { isError: true as const } : {}) }
 })
 
 server.registerTool('screenshot', {

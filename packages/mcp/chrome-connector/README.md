@@ -34,9 +34,14 @@ El conector no lee archivos del perfil, cookies ni contraseñas. CDP debe ser ha
 
 ### Análisis real de videos de YouTube (Kira / Godot)
 
-`youtube_video_inspect` acepta `url` o una `tabId` existente, junto con `maxChars` y `frames` (0–3). Lee los subtítulos públicos JSON3/XML con marcas de tiempo cuando están disponibles, devuelve su idioma y el número de segmentos, y captura fotogramas reales del reproductor Chromium solo cuando el navegador tiene autorización para controlar la reproducción. Para URL nueva aplica `PHOENIX_BROWSER_ALLOW_ACTIONS=true`; sin permiso, se puede inspeccionar la pestaña previamente abierta, pero no cambiar el instante del video. No transmite ni adivina audio, no accede a contenido privado, DRM o videos sin pistas accesibles, y no habilita una API de pago. Una captura JPEG válida no garantiza que YouTube haya renderizado un fotograma visible: Kira debe examinar cada imagen antes de describirla.
+`youtube_video_inspect` acepta una URL pública o `tabId`, subtítulos JSON3/XML, hasta 12 capturas reales (`frames`, 6 predeterminadas) y `audioSeconds` (0–9, 8 predeterminados). Cuando no hay texto en la pista, intenta un fragmento de audio real de Chromium y lo transcribe en la máquina local. `youtube_video_listen` escucha tramos posteriores de 3–9 segundos mediante `startSeconds` y `durationSeconds`, conserva marcas de tiempo y retorna el siguiente segundo que se debe escuchar. Kira debe encadenar segmentos para revisar un video largo, no afirmar haber oído lo que todavía no procesó. Los tramos de audio son efímeros, no se envían al modelo ni a una API de voz; únicamente devuelve texto reconocido con su idioma y tiempos. Un video con DRM, autoplay bloqueado o sin pista de audio capturable puede continuar inaccesible.
 
 Cuando el conector navega por petición de Kira, las tarjetas del MiniBrowser aparecen también en investigaciones y análisis indirectos (no solo con la orden «abre»). El Chromium headless funciona silenciado para impedir audio invisible; los videos de YouTube muestran una vista previa en el chat y el sonido se activa exclusivamente desde el reproductor visible mediante el botón «Reproducir con audio».
+
+
+### Motor local de voz y prueba
+
+Al analizar un video sin subtítulos, Phoenix busca `uv` en PATH, resuelve en un entorno aislado `faster-whisper` y descarga en la caché el modelo `base` de Whisper la primera vez; después reutiliza los archivos instalados. Esto puede requerir conexión a Internet la primera vez. Se puede elegir `PHOENIX_VIDEO_WHISPER_MODEL=tiny|base|small` y un intérprete Python ya preparado mediante `PHOENIX_VIDEO_PYTHON`. Kira no escribe contraseñas ni datos del perfil de Chrome en el resultado del MCP. Para autorizar navegación y captura en el navegador aislado, utiliza la política normal `PHOENIX_BROWSER_ALLOW_ACTIONS=true`. Prueba de aceptación: Kira debe presentar como mínimo un fotograma legible y un segmento transcrito con tiempo real, o reportar el código concreto del fallo de audio/imagen. No se asegura compatibilidad con videos privados o DRM.
 
 ## Model Experience
 

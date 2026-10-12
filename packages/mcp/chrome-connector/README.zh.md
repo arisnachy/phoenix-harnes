@@ -23,7 +23,12 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 
 ### YouTube 视频分析与 MiniBrowser 可见性
 
-`youtube_video_inspect` 可接收 `url` 或既有 `tabId`，以及 `maxChars` 与 `frames`（0 至 3）。它只读取可访问的 YouTube 公开视频字幕（JSON3/XML）、时间码和最多三张真实 Chromium 截图，不推测无法获取的语音。对新的 URL 进行导航需要 `PHOENIX_BROWSER_ALLOW_ACTIONS=true`。无头 Chromium 保持静音；YouTube 官方播放器会在聊天中显示预览，只有用户按下播放按钮才会发出声音。若 YouTube 不允许读取字幕或视频画面，Kira 必须明确说明限制，不得假装已经看完或听完视频。
+`youtube_video_inspect` 可处理公开视频 URL 或已有的 `tabId`、JSON3/XML 字幕、最多 12 张真实 Chromium 截图（默认 6 张），以及 0–9 秒的可选音频样本（默认 8 秒）。字幕为空时，它尝试捕获真正的 Chromium 视频音轨并在本机识别语音。`youtube_video_listen` 用 `startSeconds` 与 `durationSeconds` 继续收听每段 3–9 秒的内容，返回有时间戳的文本与下一段起点。Kira 不得声称听过尚未处理的长视频部分。音频仅在临时目录保存、随后删除，不会发送给外部付费转录 API。受保护视频、浏览器禁止自动播放或缺少可捕获音轨时仍可能无法使用。无头 Chromium 保持系统声音静音，聊天中的可见播放器仅由用户点击启动。
+
+
+### 本地语音引擎与验收
+
+没有字幕时，Phoenix 在 PATH 中调用 `uv`，按需建立包含 `faster-whisper` 的隔离 Python 环境，首次使用时缓存 Whisper `base` 模型，后续复用。首次下载需要网络。可以用 `PHOENIX_VIDEO_WHISPER_MODEL=tiny|base|small` 调整模型，或通过 `PHOENIX_VIDEO_PYTHON` 指定已经配置好的 Python。用于浏览器导航和音频捕获的授权仍是 `PHOENIX_BROWSER_ALLOW_ACTIONS=true`。验收需要真实可读的截图、带时间戳的真实转录片段，或明确的错误代码，不应猜测私有或 DRM 视频内容。
 
 ## 模型体验
 

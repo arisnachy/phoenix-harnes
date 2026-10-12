@@ -14,6 +14,13 @@ A Chromium navigation tool call now marks the active user turn as a browser turn
 
 The Chrome connector adds a scoped `youtube_video_inspect` tool. Its URL parser accepts only HTTPS YouTube video IDs; its caption reader accepts only YouTube `/api/timedtext` endpoints. The tool reads available public JSON3/XML subtitle tracks, prefers Spanish then English, and reports timestamps and truncation. With browser-action permission it can seek the real Chromium video and attach up to three verifiable screenshot JPEGs as multimodal tool results. It never invents unavailable speech, claims audio recognition, bypasses login/DRM, opens separately billed services, or substitutes generated screenshots.
 
+
+## Local audio evidence extension
+
+The initial YouTube inspector relied on timed-text and three JPEGs, leaving videos without captions unanalyzable. The Chrome connector now exposes a fixed, bounded in-page MediaRecorder capture of its own video element and streams nothing to third-party speech APIs. A local Python `faster-whisper` runtime is installed/reused on demand through `uv`; captured WebM exists only in an owner-local temporary directory and is deleted immediately after inference. The new `youtube_video_listen` tool lets Kira request timecoded 3–9-second segments on the same tab; the original inspector samples eight seconds only if subtitle text is absent and action permission is granted. The number of real still frames can now be up to twelve (six by default), while each screenshot still requires a verifiably decoded video element. Kira must never equate a short sampled segment with having listened to the full video.
+
+Browser protection, autoplay gating, copy protection, denied access to an audio track, unavailable Python/uv, or failed first-time model downloads are legitimate failure outcomes. Every failure gets a bounded reason code rather than fabricated speech. The normal PHOENIX browser-action authorization is mandatory for playback-based audio capture. The browser host stays muted, while the explicitly activated visible YouTube player handles human playback separately.
+
 ## Verification
 
 Focused browser-flow tests cover indirect MCP navigation, unrelated tool exclusion, and video-review requests. MiniBrowser component tests pin non-autoplay preview, explicit playback, and the control to return to Chromium. Browser connector tests pin muted headless Chromium. Video utility tests cover URL/host enforcement, malicious caption endpoint rejection, language priority, JSON3/XML timestamps and missing caption text. CI and an actual Windows Chrome/YouTube session must confirm bundled behavior before a live multimedia guarantee.
