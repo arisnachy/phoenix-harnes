@@ -91,7 +91,7 @@ describe('conversation generative UI', () => {
     }
     expect(parseGenerativeUiBlock(ui)).not.toBeNull()
     const answer = ['La compilación terminó. Las pruebas anteriores son una muestra.',
-      '\`\`\`generative-ui', JSON.stringify(ui), '\`\`\`', 'Puedes consultar más detalles.'].join('\\n')
+      '```generative-ui', JSON.stringify(ui), '```', 'Puedes consultar más detalles.'].join('\n')
     const segments = splitGenerativeUiText(answer)
     expect(segments.map(segment => segment.kind)).toEqual(['markdown', 'ui', 'markdown'])
     expect(segments[0]).toMatchObject({ kind: 'markdown', text: expect.stringContaining('compilación') })
