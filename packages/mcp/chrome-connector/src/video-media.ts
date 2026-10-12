@@ -36,7 +36,7 @@ export function videoFrameTimes(duration: number, count: number): number[] {
  * @param path - Explicit, allowlisted local video; omitted means latest authorized recording.
  * @returns Verified media path and source classification.
  */
-export async function videoMediaInput(path?: string): Promise<{ path: string; source: VideoMediaEvidence['source'] }> {
+export async function videoMediaInput(path?: string, captureId?: string): Promise<{ path: string; source: VideoMediaEvidence['source'] }> {
   if (path !== undefined) {
     if (!isAbsolute(path) || !MEDIA_SUFFIXES.has(extname(path).toLowerCase())) throw new Error('VIDEO_FILE_NOT_APPROVED')
     const roots = (process.env.PHOENIX_VIDEO_ALLOWED_DIRS ?? '').split(process.platform === 'win32' ? ';' : ':')
@@ -68,6 +68,9 @@ export async function videoMediaInput(path?: string): Promise<{ path: string; so
   if (typeof value.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(value.id)
     || typeof value.createdAt !== 'number' || Date.now() - value.createdAt > MAX_AGE_MS
     || value.createdAt > Date.now() + 60_000) throw new Error('VIDEO_CAPTURE_EXPIRED_OR_INVALID')
+  // Never attach a recording from another browser session when the caller
+  // supplied the ID returned by the explicit user-sharing gesture.
+  if (captureId !== undefined && value.id !== captureId) throw new Error('VIDEO_CAPTURE_ID_MISMATCH')
   const expected = resolve(CAPTURE_ROOT, 'capture-' + value.id + '.webm')
   const actual = await realpath(expected)
   if (actual !== expected) throw new Error('VIDEO_CAPTURE_PATH_INVALID')
@@ -126,8 +129,8 @@ export async function resolveVideoDecoder(): Promise<string> {
  * @param input - Approved source, frame limit and audio seconds to inspect.
  * @returns Real JPEG frames and a bounded local speech transcription.
  */
-export async function inspectVideoMedia(input: {path?: string; frames: number; audioSeconds: number}): Promise<VideoMediaEvidence> {
-  const selected = await videoMediaInput(input.path)
+export async function inspectVideoMedia(input: {path?: string; captureId?: string; frames: number; audioSeconds: number}): Promise<VideoMediaEvidence> {
+  const selected = await videoMediaInput(input.path, input.captureId)
   const decoder = await resolveVideoDecoder()
   const info = await execute(decoder, ['-hide_banner', '-i', selected.path], 15_000, 50000)
   const match = /Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/.exec(info.stderr)
