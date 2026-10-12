@@ -257,8 +257,11 @@ export function codexRealtimeLaunchCommand(
   // Match the already-working Codex account app-server launch contract.
   // Its legacy voice-only SQLite root can enter Codex's 30s migration gate
   // during initialize; pin the canonical account home for both commands.
+  // Codex -c parses TOML overrides. Pass an actual double-quoted TOML string
+  // as one argv element for managed Node Codex and direct POSIX launches.
+  const forcedChatgptLogin = `forced_login_method=${JSON.stringify('chatgpt')}`
   const codexArgs = [
-    '-c', "forced_login_method='chatgpt'",
+    '-c', forcedChatgptLogin,
     '-c', 'features.realtime_conversation=true',
     '-c', 'features.plugins=false',
     '-c', 'skills.bundled.enabled=false',
@@ -270,8 +273,13 @@ export function codexRealtimeLaunchCommand(
   ]
   if (managed !== undefined) return { command: process.execPath, args: [managed, ...codexArgs] }
   if (platform === 'win32') {
-    // cmd.exe /c receives ONE command string with arguments, as in Codex discovery.
-    return { command: comSpec || 'cmd.exe', args: ['/d', '/s', '/c', `codex ${codexArgs.join(' ')}`] }
+    // cmd.exe can strip TOML value quotes before Codex parses its -c pair.
+    // For the shell-only fallback use Codex's documented raw-string fallback
+    // (key=chatgpt) instead: it resolves to the same forced login enum, and
+    // never splits into an invalid standalone "chatgpt" override.
+    const shellArgs = codexArgs.map(arg => arg === forcedChatgptLogin
+      ? 'forced_login_method=chatgpt' : arg)
+    return { command: comSpec || 'cmd.exe', args: ['/d', '/s', '/c', `codex ${shellArgs.join(' ')}`] }
   }
   return { command: 'codex', args: codexArgs }
 }
