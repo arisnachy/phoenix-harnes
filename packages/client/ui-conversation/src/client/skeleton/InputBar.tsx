@@ -1168,7 +1168,7 @@ export function InputBar({
                 className={css.voiceReconnectAction}
                 data-phoenix-voice-alternative
                 aria-label="Usar voz alternativa de Phoenix"
-                title="Usar reconocimiento del navegador y síntesis neural de Phoenix (Kokoro si está disponible). No es Codex Live."
+                title="Autorizar el reconocimiento del navegador y síntesis de Phoenix (Kokoro si está disponible). No es Codex Live. Guarda el permiso localmente hasta revocarlo."
                 disabled={locked || machineBusy}
                 onClick={chooseAlternativeVoice}
               >
