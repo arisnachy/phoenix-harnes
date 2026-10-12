@@ -692,9 +692,17 @@ server.registerTool('video_media_inspect', {
     }
     return {content, ...(media.frames.length === 0 && media.audio.status !== 'ok' ? {isError:true as const} : {})}
   } catch (error) {
-    return {isError:true,content:[{type:'text',text:'VIDEO_MEDIA_ANALYSIS_UNAVAILABLE: '+String(error)
-      + '. Si el video funciona en Chrome normal, pulsa «Compartir pestaña para Kira», elige esa pestaña y activa «Compartir audio». '
-      + 'Alternativamente configura PHOENIX_VIDEO_ALLOWED_DIRS para permitir un archivo propio. No simular audio ni fotogramas.'}]}
+    const reason = String(error)
+    const captureRequired = /VIDEO_CAPTURE_NOT_FOUND|VIDEO_CAPTURE_EXPIRED_OR_INVALID|VIDEO_CAPTURE_PATH_INVALID/u.test(reason)
+    return {isError:true,content:[{type:'text',text:JSON.stringify({
+      status: captureRequired ? 'user_capture_required' : 'analysis_failed',
+      reason,
+      requiredAction: captureRequired
+        ? 'Desde el MiniBrowser pulsa «Compartir pestaña para Kira», elige en Chrome la pestaña donde el video realmente se reproduce, activa «Compartir audio» y deja terminar hasta 30 segundos de captura. Después vuelve a ejecutar video_media_inspect SIN path.'
+        : 'Revisa el motivo técnico o usa un archivo de medios propio dentro de PHOENIX_VIDEO_ALLOWED_DIRS.',
+      evidence: {heardSeconds:0,decodedFrames:0},
+      rule: 'No simules haber escuchado o visto el video. Si falta la grabación autorizada, solicita el paso humano y detente: no presentes una valoración del contenido no examinado.',
+    })}]}
   }
 })
 

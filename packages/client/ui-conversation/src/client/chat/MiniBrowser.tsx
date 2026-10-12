@@ -353,7 +353,7 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
             const result = await decode<{ captureId: string }>(response)
             setMediaCaptureState('ready')
             setMediaCaptureMessage('Grabación recibida (' + result.captureId.slice(0, 8)
-              + '). Pide a Kira usar video_media_inspect; solo esa herramienta confirma audio e imágenes.')
+              + '). Escribe a Kira: «Analiza la grabación compartida con video_media_inspect». Solo el análisis confirma audio e imágenes.')
           } catch (error) {
             setMediaCaptureState('idle')
             setMediaCaptureMessage('No se pudo guardar la grabación: ' + String(error))
@@ -441,24 +441,26 @@ export function MiniBrowser({ requested = false, active = true, onActivate, auto
             <button type="button" onClick={() => { void run({ type: 'start' }) }}>Conectar navegador</button>
           </div>
         )}
-        {videoId && <div className={css.mediaBar}>
-          <button type="button" onClick={() => { setVideoSurface(true); setPlayingVideo(true) }}>
-            ▶ Reproducir con audio
-          </button>
-          <button type="button" onClick={() => { setVideoSurface(false); setPlayingVideo(false) }}>
-            ◧ Ver navegador de Kira
-          </button>
-          <button type="button" onClick={() => { setVideoSurface(true); setPlayingVideo(false) }}>
-            ▣ Ver video
-          </button>
-          <button type="button"
-            disabled={mediaCaptureState === 'uploading'}
+        <div className={css.mediaBar}>
+          {videoId && <>
+            <button type="button" onClick={() => { setVideoSurface(true); setPlayingVideo(true) }}>
+              ▶ Reproducir con audio
+            </button>
+            <button type="button" onClick={() => { setVideoSurface(false); setPlayingVideo(false) }}>
+              ◧ Ver navegador de Kira
+            </button>
+            <button type="button" onClick={() => { setVideoSurface(true); setPlayingVideo(false) }}>
+              ▣ Ver video
+            </button>
+          </>}
+          <button type="button" disabled={!active || mediaCaptureState === 'uploading'}
+            aria-label={mediaCaptureState === 'recording' ? 'Detener captura de pestaña' : 'Compartir pestaña para Kira'}
             onClick={() => mediaCaptureState === 'recording'
               ? stopMediaCapture.current?.() : void startMediaCapture()}>
             {mediaCaptureState === 'recording' ? '■ Detener captura' : '◉ Compartir pestaña para Kira'}
           </button>
-          <span>Selecciona en Chrome la pestaña que reproduce el video y activa «Compartir audio». Captura máxima: 30 segundos.</span>
-        </div>}
+          <span>Si Kira no puede ver ni escuchar el video, abre el video en Chrome normal y pulsa «Compartir pestaña para Kira». Selecciona Pestaña de Chrome y marca «Compartir audio». Grabación máxima: 30 segundos.</span>
+        </div>
         {mediaCaptureMessage && <p className={css.captureStatus} role="status">{mediaCaptureMessage}</p>}
         <form className={css.typeRow} onSubmit={(event) => { event.preventDefault(); if (typed) { void run({ type: 'text', text: typed }); setTyped(''); focusRef.current?.focus() } }}>
           <input aria-label="Escribir en la página" placeholder="Escribe en el campo seleccionado…" value={typed} onChange={(event) => { setTyped(event.currentTarget.value) }} />
