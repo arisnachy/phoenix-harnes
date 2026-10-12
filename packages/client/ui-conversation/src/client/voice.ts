@@ -164,6 +164,11 @@ function sendCodexRealtimeUtterance(
   if (remote?.conversationRealtimeSpeak !== undefined) {
     session.activeUtterance = utterance
     voiceAssistantSpokenText = utterance.echoText
+    // Reserve the finalized message synchronously so a React closure/tail
+    // rerender cannot enqueue the same reply while the RPC is pending.
+    if (utterance.assistantMessageKey !== undefined) {
+      spokenAssistantMessages.add(utterance.assistantMessageKey)
+    }
     document.documentElement.dataset.phoenixVoiceSpeechStatus = 'requested'
     delete document.documentElement.dataset.phoenixVoiceSpeechError
     // The UI authorizes only a complete harness reply. The Host side sends it
@@ -1082,6 +1087,9 @@ export function streamVoiceAssistantResponse(
     if (!final) return
     const spoken = conversationalSpeechText(text)
     if (spoken === '') return
+    // A component may publish the same closed turn while the native
+    // RPC is still in flight. The existing active utterance owns that answer.
+    if (realtime.activeUtterance?.assistantMessageKey === messageKey) return
     const utterance: PendingCodexRealtimeUtterance = {
       sessionKey: realtime.key,
       key: `assistant:${messageKey}`,
