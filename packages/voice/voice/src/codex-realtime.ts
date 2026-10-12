@@ -110,7 +110,10 @@ const RPC_TIMEOUT_MS = 30_000
 // Initialize must not fail sooner than that proven account path.
 const CODEX_INITIALIZE_TIMEOUT_MS = 45_000
 const SDP_TIMEOUT_MS = 30_000
-const IDLE_CLOSE_MS = 60_000
+// Keep an authenticated, microphone-free app-server ready for repeated calls.
+const IDLE_CLOSE_MS = 10 * 60_000
+// One positive account validation serves the browser preflight and call-start RPC.
+const ACCOUNT_VALIDATION_TTL_MS = 30_000
 // Even if the browser dies without a hangup RPC, no remote voice thread may
 // retain the Codex app-server indefinitely. A call can be reopened explicitly.
 const MAX_REALTIME_CALL_MS = 60 * 60_000
@@ -347,6 +350,8 @@ export function codexRealtimeNeedsLogin(error: unknown): boolean {
 export class CodexRealtimeBridge {
   private child: ChildProcessWithoutNullStreams | undefined
   private startup: Promise<void> | undefined
+  private lastValidatedChatgptAt = 0
+  private pendingAccountValidation: Promise<unknown> | undefined
   private stdoutBuffer = ''
   private readonly pending = new Map<string, RpcPending>()
   private readonly notifications = new Map<string, Set<NotificationWaiter>>()
@@ -379,14 +384,26 @@ export class CodexRealtimeBridge {
       // its refresh token is still valid. The user explicitly requested Live,
       // so ask the official Codex app-server to verify it before acquiring the
       // browser microphone. Do not refresh credentials during passive telemetry.
-      if (this.child !== undefined && this.sessions.size === 0) {
-        const refreshed = await this.request('account/read', { refreshToken: true })
+      if (this.child !== undefined && this.sessions.size === 0
+        && (this.lastValidatedChatgptAt === 0
+          || Date.now() - this.lastValidatedChatgptAt >= ACCOUNT_VALIDATION_TTL_MS)) {
+        // Browser preflight and call-start may overlap: share their one refresh.
+        // Never persist validation across CLI process restarts or logout.
+        const check = this.pendingAccountValidation ?? this.request('account/read', { refreshToken: true })
+        this.pendingAccountValidation = check
+        let refreshed: unknown
+        try {
+          refreshed = await check
+        } finally {
+          if (this.pendingAccountValidation === check) this.pendingAccountValidation = undefined
+        }
         // A successful RPC can still report an invalidated ChatGPT grant.
         // Require an actual ChatGPT account instead of reporting Live ready.
         if (!isRecord(refreshed) || !isRecord(refreshed.account) || refreshed.account.type !== 'chatgpt') {
           this.close()
           return { available: true, authenticated: false, reason: 'codex-login-required' }
         }
+        this.lastValidatedChatgptAt = Date.now()
       }
       this.armIdleClose()
       return { available: true, authenticated: true }
@@ -650,6 +667,8 @@ export class CodexRealtimeBridge {
     for (const key of this.callTimers.keys()) this.clearCallExpiry(key)
     const child = this.child
     this.child = undefined
+    this.lastValidatedChatgptAt = 0
+    this.pendingAccountValidation = undefined
     this.startup = undefined
     this.launchedManagedCodexBin = undefined
     this.sessions.clear()
@@ -908,6 +927,8 @@ export class CodexRealtimeBridge {
 
   private failProcess(error: Error): void {
     if (this.child !== undefined) this.child = undefined
+    this.lastValidatedChatgptAt = 0
+    this.pendingAccountValidation = undefined
     this.startup = undefined
     for (const key of this.callTimers.keys()) this.clearCallExpiry(key)
     this.sessions.clear()

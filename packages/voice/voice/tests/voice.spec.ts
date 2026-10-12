@@ -303,6 +303,61 @@ describe('Codex realtime compact context', () => {
 })
 
 describe('Codex realtime app-server notifications', () => {
+  it('reuses one recent ChatGPT validation across overlapping voice probes', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      child: { killed: boolean } | undefined
+      lastValidatedChatgptAt: number
+      ensureStarted(): Promise<void>
+      request(method: string, params?: unknown): Promise<unknown>
+      armIdleClose(): void
+    }
+    // Avoid launching a real CLI: validate only the single-flight account logic.
+    internal.child = { killed: true }
+    vi.spyOn(internal, 'ensureStarted').mockResolvedValue()
+    vi.spyOn(internal, 'armIdleClose').mockImplementation(() => {})
+    const request = vi.spyOn(internal, 'request')
+      .mockResolvedValue({ account: { type: 'chatgpt' } })
+    try {
+      const results = await Promise.all([bridge.probe(), bridge.probe()])
+      expect(results).toEqual([
+        { available: true, authenticated: true },
+        { available: true, authenticated: true },
+      ])
+      expect(request).toHaveBeenCalledTimes(1)
+      expect(request).toHaveBeenCalledWith('account/read', { refreshToken: true })
+      await expect(bridge.probe()).resolves.toMatchObject({ authenticated: true })
+      expect(request).toHaveBeenCalledTimes(1)
+      internal.lastValidatedChatgptAt = Date.now() - 31_000
+      await expect(bridge.probe()).resolves.toMatchObject({ authenticated: true })
+      expect(request).toHaveBeenCalledTimes(2)
+    } finally {
+      bridge.close()
+    }
+    expect(internal.lastValidatedChatgptAt).toBe(0)
+  })
+
+  it('keeps an idle Codex sidecar warm for ten minutes, then reaps it', () => {
+    vi.useFakeTimers()
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      child: { killed: boolean } | undefined
+      armIdleClose(): void
+    }
+    const child = { killed: true }
+    internal.child = child
+    try {
+      internal.armIdleClose()
+      vi.advanceTimersByTime(9 * 60_000)
+      expect(internal.child).toBe(child)
+      vi.advanceTimersByTime(60_000)
+      expect(internal.child).toBeUndefined()
+    } finally {
+      bridge.close()
+      vi.useRealTimers()
+    }
+  })
+
   it('expires an orphaned Codex call even if Telegram/browser never sends hangup', async () => {
     vi.useFakeTimers()
     const bridge = new CodexRealtimeBridge()
