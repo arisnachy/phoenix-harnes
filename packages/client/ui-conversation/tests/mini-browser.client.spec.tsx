@@ -231,7 +231,7 @@ describe('MiniBrowser in Phoenix conversation', () => {
       start() {this.state='recording'}
       stop() {
         this.state='inactive'
-        this.ondataavailable?.({data:new Blob(['valid-recording-content'])})
+        this.ondataavailable?.({data:new Blob(['x'.repeat(256)])})
         this.onstop?.()
       }
     })
