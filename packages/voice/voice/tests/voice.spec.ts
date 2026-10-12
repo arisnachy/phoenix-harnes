@@ -1084,6 +1084,55 @@ describe('Codex Live launch regression', () => {
     }
   })
 
+  it('uses Codex official appendSpeech for the owning active realtime thread only', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internals = bridge as unknown as {
+      sessions: Map<string, string>
+      child: object | undefined
+      request: (method: string, params: unknown) => Promise<unknown>
+    }
+    const request = vi.spyOn(internals, 'request').mockResolvedValue({})
+    internals.sessions.set('session-a', 'thread-123')
+    internals.child = { killed: true }
+    try {
+      await expect(bridge.speak('not-owner', 'Hola')).resolves.toBe(false)
+      expect(request).not.toHaveBeenCalled()
+      await expect(bridge.speak('session-a', '  Ya terminé.  ')).resolves.toBe(true)
+      expect(request).toHaveBeenCalledExactlyOnceWith(
+        'thread/realtime/appendSpeech',
+        { threadId: 'thread-123', text: 'Ya terminé.' },
+      )
+    } finally {
+      internals.child = undefined
+      bridge.close()
+    }
+  })
+
+  it('rejects native Codex speech when the live call is not owned by the browser', async () => {
+    const { voice } = await mountVoice()
+    await expect(voice.conversationRealtimeSpeak({ key: 'unknown', text: 'Hola.' })).resolves.toEqual({
+      accepted: false, reason: 'no-session',
+    })
+    const internals = voice as unknown as { codexRealtime: CodexRealtimeBridge | undefined }
+    const bridge = new CodexRealtimeBridge()
+    const active = vi.spyOn(bridge, 'hasActiveSession').mockReturnValue(true)
+    const speak = vi.spyOn(bridge, 'speak').mockResolvedValue(true)
+    internals.codexRealtime = bridge
+    try {
+      await expect(voice.conversationRealtimeSpeak({ key: 'session-a', text: 'Kira ha terminado.' }))
+        .resolves.toEqual({ accepted: true })
+      expect(speak).toHaveBeenCalledExactlyOnceWith('session-a', 'Kira ha terminado.')
+      await expect(voice.conversationRealtimeSpeak({ key: 'session-a', text: '' })).resolves.toEqual({
+        accepted: false, reason: 'invalid',
+      })
+    } finally {
+      internals.codexRealtime = undefined
+      active.mockRestore()
+      speak.mockRestore()
+      bridge.close()
+    }
+  })
+
   it('preserves direct managed and non-Windows launching', () => {
     expect(codexRealtimeLaunchCommand('C:\\managed\\codex.js', 'win32').args[0])
       .toBe('C:\\managed\\codex.js')
