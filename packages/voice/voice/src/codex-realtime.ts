@@ -325,6 +325,15 @@ export class CodexRealtimeBridge {
    * @returns Sidecar availability, authentication and a classified failure reason.
    */
   async probe(): Promise<CodexRealtimeProbe> {
+    const home = process.env.DSH_HOME?.trim() || join(homedir(), '.dsh')
+    const runtime = findManagedCodexRealtimeBin(home) ?? 'ambient'
+    const cached = this.lastQuicksilverRejection
+    if (cached !== undefined && cached.runtime === runtime && Date.now() - cached.at < 60_000) {
+      // A recent authenticated voice negotiation was rejected upstream.
+      // Do not re-open microphone / spawn another app-server just to rediscover
+      // the same protocol error; expose the cause and the alternative voice.
+      return { available: false, authenticated: true, reason: 'experimental-unavailable', detail: cached.detail }
+    }
     try {
       await this.ensureStarted()
       // The account/read snapshot at initial CLI startup does not prove that
