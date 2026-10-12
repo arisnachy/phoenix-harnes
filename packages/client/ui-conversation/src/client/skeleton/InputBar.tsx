@@ -337,9 +337,15 @@ export function InputBar({
   }, [])
 
   const chooseAlternativeVoice = useCallback((): void => {
-    if (locked || machineBusy || voiceStartingRef.current || voiceRepairAbortRef.current !== null) return
-    // The alternative must be user-initiated. No silent browser-mic takeover
-    // on account, upstream, proxy, or Quicksilver failures.
+    if (locked || machineBusy || voiceStartingRef.current) return
+    // Explicitly choosing the alternative cancels any outdated Codex updater
+    // wait instead of leaving the mic button blocked on a service outage.
+    voiceRepairAbortRef.current?.abort()
+    voiceRepairAbortRef.current = null
+    setVoiceRepairing(false)
+    void stopCodexRealtimeVoice()
+    // Browser-vendor recognition is opt-in. The next service failure may
+    // reuse this approval, but the UI always labels the alternative clearly.
     const recognition = ensureHarnessVoiceRecognition()
     if (recognition === undefined) {
       setCodexVoiceFailure('La voz alternativa necesita reconocimiento de voz del navegador.')
