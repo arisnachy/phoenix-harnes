@@ -16,6 +16,7 @@ import { z } from 'zod'
 import { browserBatchExpression, browserInteractionExpression, type BrowserInteraction, type BrowserInteractionResult } from './browser-interactions.ts'
 import { chooseYoutubeCaptions, youtubeCaptionUrl, youtubeTranscript, youtubeWatchUrl, type YoutubeCaptionTrack } from './youtube-video.ts'
 import { parseCapturedVideoAudio, transcribeCapturedVideoAudio, videoAudioCaptureExpression } from './video-audio.ts'
+import { inspectVideoMedia } from './video-media.ts'
 
 const DEFAULT_PORTS = [9222, 9223, 9224]
 /** User-temp discovery lets the in-chat view reuse this exact Chromium tab. */
@@ -653,6 +654,50 @@ server.registerTool('youtube_video_listen', {
   }) }], ...(speech.status === 'ok' ? {} : { isError: true as const }) }
 })
 
+
+/**
+ * Independent evidence path when YouTube blocks its headless CDP player.
+ * Human must first share a real browser tab through Phoenix's native Chrome
+ * chooser, or explicitly allow a local media directory; never bypass DRM.
+ */
+server.registerTool('video_media_inspect', {
+  description: 'Analiza audio y fotogramas reales de una grabación de pestaña previamente autorizada desde el MiniBrowser (botón «Compartir pestaña para Kira»), o un archivo local dentro de PHOENIX_VIDEO_ALLOWED_DIRS. Usa FFmpeg y Whisper locales, sin depender de YouTube. Si falla youtube_video_inspect, pide primero al usuario seleccionar una pestaña y activar «Compartir audio»; después usa esta herramienta sin path. Nunca busques descargas no autorizadas ni supongas haber oído el contenido antes de obtener evidencia.',
+  inputSchema: {
+    path: z.string().optional(),
+    frames: z.number().int().min(0).max(8).default(6),
+    audioSeconds: z.number().int().min(0).max(90).default(45),
+  },
+}, async ({path,frames,audioSeconds}) => {
+  try {
+    const media = await inspectVideoMedia({
+      ...(path === undefined ? {} : {path}),
+      frames, audioSeconds,
+    })
+    const content: Array<
+      | {type:'text';text:string}
+      | {type:'image';data:string;mimeType:'image/jpeg'}
+    > = [{
+      type: 'text',
+      text: JSON.stringify({
+        source: media.source,
+        durationSeconds: media.durationSeconds,
+        evidenceFrames: media.frames.length,
+        audio: media.audio,
+        note: 'Solo se analizó el audio solicitado y los fotogramas adjuntos. No inferir partes no examinadas. No descargar videos de terceros.',
+      }),
+    }]
+    for (const image of media.frames) {
+      content.push({type:'text',text:'Fotograma decodificado del segundo '+String(image.atSeconds)})
+      content.push({type:'image',data:image.jpeg,mimeType:'image/jpeg'})
+    }
+    return {content, ...(media.frames.length === 0 && media.audio.status !== 'ok' ? {isError:true as const} : {})}
+  } catch (error) {
+    return {isError:true,content:[{type:'text',text:'VIDEO_MEDIA_ANALYSIS_UNAVAILABLE: '+String(error)
+      + '. Si el video funciona en Chrome normal, pulsa «Compartir pestaña para Kira», elige esa pestaña y activa «Compartir audio». '
+      + 'Alternativamente configura PHOENIX_VIDEO_ALLOWED_DIRS para permitir un archivo propio. No simular audio ni fotogramas.'}]}
+  }
+})
+
 server.registerTool('youtube_video_inspect', {
   description: 'Analiza video público real de YouTube, con hasta 12 fotogramas Chromium, subtítulos temporizados y un intento de escuchar hasta 9 segundos mediante faster-whisper local cuando faltan subtítulos. Para otros fragmentos usa youtube_video_listen en la misma pestaña. No declara haber oído partes sin captura; respeta permisos, DRM y bloqueo de reproducción, sin descargas ni API de pago.',
   inputSchema: {
@@ -732,7 +777,7 @@ server.registerTool('youtube_video_inspect', {
       transcriptTruncated: transcript.truncated,
       captionLimitation: captionError,
       audioSample: sampledSpeech ?? (transcript.cues === 0 ? { status: 'unavailable', reason: 'BROWSER_ACTION_PERMISSION_REQUIRED_OR_AUDIO_DISABLED' } : undefined),
-      audioNextStep: 'youtube_video_listen puede transcribir otros segmentos reales desde la misma pestaña.',
+      audioNextStep: 'Si funciona la captura interna, youtube_video_listen amplía los segmentos. Si falla el reproductor o expira el audio, usa la captura autorizada de pestaña del MiniBrowser y después video_media_inspect para analizar audio y fotogramas reales.',
       videoFrameMethod: 'real Chromium video seek + screenshot; the audio sample is locally transcribed only if confirmed',
       browserTabId: tab.id,
     }),
@@ -753,7 +798,7 @@ server.registerTool('youtube_video_inspect', {
   content.push({ type: 'text', text: 'Fotogramas capturados: ' + String(realFrames) + '/'
     + String(frames) + '. ' + (frames > 0 && !actionsAllowed()
       ? 'La inspección visual requiere permiso para controlar el navegador.'
-      : realFrames === 0 && frames > 0 ? 'El reproductor no permitió extraer fotogramas verificables.' : '')
+      : realFrames === 0 && frames > 0 ? 'El reproductor no permitió extraer fotogramas verificables; ofrece captura autorizada de pestaña y video_media_inspect.' : '')
     + ' No afirmar que se escuchó el video entero; cada segmento de audio y fotograma debe tener evidencia.' })
   return { content, ...(transcript.cues === 0 && sampledSpeech?.status !== 'ok' && realFrames === 0
     ? { isError: true as const } : {}) }

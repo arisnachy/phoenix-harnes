@@ -21,6 +21,16 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 
 连接器不会读取配置文件、cookies 或密码。必须由用户明确启用 CDP；普通浏览器标签不能被另一个进程自动接管。
 
+### 表单与 Web 应用（无需 Computer 桌面）
+
+- `inspect_page`：一次检查表单控件、标签、类型、下拉选项以及只读与禁用状态，不公开密码。
+- `fill_form`：一项请求内最多填写 30 个字段；可填写文字、勾选、下拉和 ISO 日期，不修改受保护字段。
+- `interact`：通过标签、名称、占位文字或 CSS 选择器针对单个控件执行点击或填写操作。
+- `submit_form`：仅在用户明确请求后提交表单；尝试提交不等于已确认成功。
+- `wait_for`：验证实际成功文本和跳转 URL，不重复提交表单。
+
+对 Selenium 官方 Web 表单，先检查字段，再一次填充，获得授权后提交，最后核查反馈。出现验证码、外部登录、跨域 iframe 或原生对话框时，应请求用户介入，不绕过权限。
+
 ### YouTube 视频分析与 MiniBrowser 可见性
 
 `youtube_video_inspect` 可处理公开视频 URL 或已有的 `tabId`、JSON3/XML 字幕、最多 12 张真实 Chromium 截图（默认 6 张），以及 0–9 秒的可选音频样本（默认 8 秒）。字幕为空时，它尝试捕获真正的 Chromium 视频音轨并在本机识别语音。`youtube_video_listen` 用 `startSeconds` 与 `durationSeconds` 继续收听每段 3–9 秒的内容，返回有时间戳的文本与下一段起点。Kira 不得声称听过尚未处理的长视频部分。音频仅在临时目录保存、随后删除，不会发送给外部付费转录 API。受保护视频、浏览器禁止自动播放或缺少可捕获音轨时仍可能无法使用。无头 Chromium 保持系统声音静音，聊天中的可见播放器仅由用户点击启动。
@@ -29,6 +39,13 @@ msedge.exe --remote-debugging-port=9223 --user-data-dir="$env:TEMP\phoenix-edge-
 ### 本地语音引擎与验收
 
 没有字幕时，Phoenix 在 PATH 中调用 `uv`，按需建立包含 `faster-whisper` 的隔离 Python 环境，首次使用时缓存 Whisper `base` 模型，后续复用。首次下载需要网络。可以用 `PHOENIX_VIDEO_WHISPER_MODEL=tiny|base|small` 调整模型，或通过 `PHOENIX_VIDEO_PYTHON` 指定已经配置好的 Python。用于浏览器导航和音频捕获的授权仍是 `PHOENIX_BROWSER_ALLOW_ACTIONS=true`。验收需要真实可读的截图、带时间戳的真实转录片段，或明确的错误代码，不应猜测私有或 DRM 视频内容。
+
+
+### Video Engine 2.0：主动共享标签页与本地文件
+
+当无头 Chromium 无法播放 YouTube、读取字幕或得到画面时，Kira 不应反复重试。用户在 MiniBrowser 点 **«Compartir pestaña para Kira»**，在 Chrome 自带的选择器中选中真正播放视频的标签，并启用 **Compartir audio**。授权后，浏览器通过 `getDisplayMedia` 和 MediaRecorder 最多录制 30 秒、24 MB 的 WebM。录制仅保存在用户本机私有临时目录，一小时后失效，旧文件在后续录制时清理。声音不会被发送至付费转录 API。随后 Kira 不传 `path` 调用 `video_media_inspect`，由 FFmpeg 抽取真实画面和音轨，Whisper 最多识别 90 秒内容。未分析片段不能推测。
+
+`video_media_inspect` 还可以分析用户本人合法持有的 MP4/WebM/MOV/MKV 文件，但必须先用 `PHOENIX_VIDEO_ALLOWED_DIRS` 明确授权包含该文件的目录（Windows 使用分号分隔多个目录），不会从非授权目录读取媒体或下载 YouTube 视频。FFmpeg 使用 `PHOENIX_VIDEO_FFMPEG`、PATH 中的现有程序或通过 `uv` / `imageio-ffmpeg` 缓存安装。Whisper/FFmpeg 首次安装可能需要联网。分享音轨必须经 Chrome 原生权限窗口确认；受到 DRM 保护的内容仍可能无法捕获。
 
 ## 模型体验
 

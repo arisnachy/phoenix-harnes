@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { captureBrowserFrameWithFallback, miniBrowserRequestAllowed, miniBrowserSingleHeader, normalizeMiniBrowserAddress } from '../src/mini-browser.ts'
+import { captureBrowserFrameWithFallback, miniBrowserRequestAllowed, miniBrowserSingleHeader, normalizeMiniBrowserAddress, isVerifiedWebmCapture } from '../src/mini-browser.ts'
 
 afterEach(() => { /* Pure contracts: no live Chrome or network is required. */ })
 
@@ -70,5 +70,19 @@ describe('MiniBrowser origin and navigation contracts', () => {
     expect(() => normalizeMiniBrowserAddress('https://user:password@example.org')).toThrow('HTTP(S)')
     expect(() => normalizeMiniBrowserAddress('')).toThrow()
     expect(() => normalizeMiniBrowserAddress('http://')).toThrow()
+  })
+})
+
+
+describe('User-authorized Chrome tab capture boundary', () => {
+  it('rejects empty, oversized and non-WebM capture bytes', () => {
+    expect(isVerifiedWebmCapture(Buffer.alloc(128))).toBe(false)
+    expect(isVerifiedWebmCapture(Buffer.alloc(24 * 1024 * 1024 + 1))).toBe(false)
+    expect(isVerifiedWebmCapture(Buffer.from('arbitrary body'))).toBe(false)
+  })
+  it('accepts a bounded verified WebM container marker', () => {
+    const bytes = Buffer.alloc(256)
+    bytes.set([0x1a, 0x45, 0xdf, 0xa3])
+    expect(isVerifiedWebmCapture(bytes)).toBe(true)
   })
 })

@@ -43,6 +43,13 @@ Cuando el conector navega por petición de Kira, las tarjetas del MiniBrowser ap
 
 Al analizar un video sin subtítulos, Phoenix busca `uv` en PATH, resuelve en un entorno aislado `faster-whisper` y descarga en la caché el modelo `base` de Whisper la primera vez; después reutiliza los archivos instalados. Esto puede requerir conexión a Internet la primera vez. Se puede elegir `PHOENIX_VIDEO_WHISPER_MODEL=tiny|base|small` y un intérprete Python ya preparado mediante `PHOENIX_VIDEO_PYTHON`. Kira no escribe contraseñas ni datos del perfil de Chrome en el resultado del MCP. Para autorizar navegación y captura en el navegador aislado, utiliza la política normal `PHOENIX_BROWSER_ALLOW_ACTIONS=true`. Prueba de aceptación: Kira debe presentar como mínimo un fotograma legible y un segmento transcrito con tiempo real, o reportar el código concreto del fallo de audio/imagen. No se asegura compatibilidad con videos privados o DRM.
 
+
+### Video Engine 2.0: pestaña autorizada y archivos propios
+
+Si YouTube bloquea subtítulos, audio y fotogramas en Chromium headless, Kira deja de repetir el intento. En el MiniBrowser pulsa **«Compartir pestaña para Kira»**; Chrome abre su selector nativo, donde eliges la pestaña que reproduce el video y marcas **Compartir audio**. Phoenix graba un máximo de 30 segundos, hasta 24 MB, exclusivamente después de esa acción, mediante `getDisplayMedia` / MediaRecorder. El archivo WebM se guarda en una carpeta temporal local con acceso privado; expira tras una hora, y las grabaciones antiguas se limpian de forma oportunista. El sonido no se envía a una API de pago. Cuando termine la grabación, pide a Kira `video_media_inspect` sin ruta; FFmpeg extrae fotogramas y audio, y Whisper transcribe como máximo 90 segundos de material autorizado. No se atribuyen imágenes ni palabras a segmentos no procesados.
+
+La misma herramienta admite `path` para MP4/WebM/MOV/MKV del usuario, **únicamente** si `PHOENIX_VIDEO_ALLOWED_DIRS` contiene una carpeta autorizada que incluya ese archivo (en Windows las rutas se separan con `;`). No importa archivos fuera de esos directorios, ni descarga videos de YouTube. El decodificador usa `PHOENIX_VIDEO_FFMPEG`, un FFmpeg instalado en PATH o una copia cacheada vía `uv` e `imageio-ffmpeg`. La instalación inicial de FFmpeg/Whisper puede necesitar Internet. Chrome debe permitir compartir pestañas, y el usuario debe confirmar el audio en el selector; en videos protegidos por DRM sigue sin garantizarse el acceso.
+
 ## Model Experience
 
 ### Browser session inspection
