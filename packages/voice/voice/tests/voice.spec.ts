@@ -1059,12 +1059,25 @@ describe('session-event voice mapping', () => {
 })
 
 describe('Codex Live launch regression', () => {
+  it('passes a single valid TOML ChatGPT string to direct Codex without a Windows shell', () => {
+    const launch = codexRealtimeLaunchCommand(undefined, 'linux')
+    expect(launch.command).toBe('codex')
+    expect(launch.args.slice(0, 2)).toEqual(['-c', 'forced_login_method="chatgpt"'])
+    expect(launch.args.filter(arg => arg.startsWith('forced_login_method='))).toHaveLength(1)
+    expect(launch.args.slice(-2)).toEqual(['app-server', '--stdio'])
+  })
+
   it('uses the working Codex account stdio initialization contract on Windows', () => {
     const launch = codexRealtimeLaunchCommand(undefined, 'win32', 'C:\\Windows\\System32\\cmd.exe')
     expect(launch.command).toBe('C:\\Windows\\System32\\cmd.exe')
     expect(launch.args.slice(0, 3)).toEqual(['/d', '/s', '/c'])
     expect(launch.args).toHaveLength(4)
     expect(launch.args[3]).toContain('codex -c')
+    // Windows cmd.exe strips nested TOML quotes; the documented unquoted
+    // Codex CLI string fallback is the safe equivalent on that path.
+    expect(launch.args[3]).toContain(' -c forced_login_method=chatgpt -c ')
+    expect(launch.args[3]).not.toContain("forced_login_method='chatgpt'")
+    expect(launch.args[3]).not.toContain(' -c chatgpt')
     expect(launch.args[3]).toContain('features.plugins=false')
     expect(launch.args[3]).toContain('app-server --stdio')
     expect(launch.args[3]).not.toContain('--listen stdio://')
@@ -1094,6 +1107,10 @@ describe('Codex Live launch regression', () => {
       const launch = codexRealtimeLaunchCommand('C:\\managed\\codex.js', 'win32', undefined, home)
       expect(launch.command).toBe(process.execPath)
       expect(launch.args[0]).toBe('C:\\managed\\codex.js')
+      const loginConfigIndex = launch.args.indexOf('forced_login_method="chatgpt"')
+      expect(loginConfigIndex).toBeGreaterThan(1)
+      expect(launch.args[loginConfigIndex - 1]).toBe('-c')
+      expect(launch.args).not.toContain("forced_login_method='chatgpt'")
       expect(launch.args).toContain(`sqlite_home=${JSON.stringify(home)}`)
       expect(launch.args.slice(-2)).toEqual(['app-server', '--stdio'])
     } finally {
@@ -1123,6 +1140,8 @@ describe('Codex Live launch regression', () => {
       "    if (request.method === 'initialize') {",
       "      const valid = process.env.CODEX_SQLITE_HOME === process.env.CODEX_HOME",
       "        && args.includes('sqlite_home=' + JSON.stringify(process.env.CODEX_HOME))",
+      "        && args.includes('forced_login_method=\"chatgpt\"')",
+      "        && args.filter(arg => arg.startsWith('forced_login_method=')).length === 1",
       "        && args.slice(-2).join(',') === 'app-server,--stdio'",
       "        && process.env.OPENAI_API_KEY === undefined",
       "        && request.params.capabilities.requestAttestation === false",
