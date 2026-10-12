@@ -1,8 +1,8 @@
 # Agent Note: MCP OAuth Host acknowledgement
 
-English | [中文](2026-10-12-connector-oauth-host-acknowledgement.zh.md)
-
 Status: implemented
+
+English | [中文](2026-10-12-connector-oauth-host-acknowledgement.zh.md)
 
 ## Problem
 
