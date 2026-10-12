@@ -203,6 +203,47 @@ describe('MiniBrowser in Phoenix conversation', () => {
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('Permission denied by user'))
   })
 
+
+  it('asks Kira to inspect only a completed explicitly authorized recording', async () => {
+    const captureId = '12345678-1234-1234-1234-123456789abc'
+    const sent = vi.fn(() => true)
+    vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+      if (input.endsWith('/capture')) return new Response(JSON.stringify({captureId}), {
+        status:200, headers:{'content-type':'application/json'},
+      })
+      if (input.endsWith('/frame')) return new Response(new Uint8Array([255,216,255,217]), {status:200})
+      return new Response(JSON.stringify(state), {status:200,headers:{'content-type':'application/json'}})
+    }))
+    Object.defineProperty(URL,'createObjectURL',{configurable:true,value:vi.fn(()=>'blob:shared-test')})
+    Object.defineProperty(URL,'revokeObjectURL',{configurable:true,value:vi.fn()})
+    const track = {stop:vi.fn(),addEventListener:vi.fn()}
+    Object.defineProperty(window.navigator,'mediaDevices',{configurable:true,value:{
+      getDisplayMedia:vi.fn(async () => ({
+        getAudioTracks:() => [track],getTracks:() => [track],
+      })),
+    }})
+    vi.stubGlobal('MediaRecorder',class {
+      static isTypeSupported(_type:string) {return true}
+      state = 'inactive'
+      ondataavailable:((event:{data:Blob})=>void) | null = null
+      onstop:(()=>void) | null = null
+      onerror:(()=>void) | null = null
+      start() {this.state='recording'}
+      stop() {
+        this.state='inactive'
+        this.ondataavailable?.({data:new Blob(['valid-recording-content'])})
+        this.onstop?.()
+      }
+    })
+    render(<MiniBrowser requested onCaptureReady={sent} />)
+    fireEvent.click(screen.getByRole('button',{name:'Compartir pestaña para Kira'}))
+    expect(sent).not.toHaveBeenCalled()
+    fireEvent.click(await screen.findByRole('button',{name:'Detener captura de pestaña'}))
+    await waitFor(() => {expect(sent).toHaveBeenCalledWith(captureId)})
+    expect(sent).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('status').textContent).toContain('Solicité a Kira')
+  })
+
   it('does not embed external websites in an iframe', async () => {
     installBrowserMock()
     const view = render(<MiniBrowser />)
