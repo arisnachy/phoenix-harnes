@@ -1009,7 +1009,7 @@ function codexRealtimeFailureDetail(value: unknown): string {
   // A backend AVAS header rejection is protocol incompatibility, never a
   // reason to dump a raw provider JSON payload in Phoenix's voice overlay.
   if (/invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\s*quicksilver=v2/iu.test(message)) {
-    return 'Codex Live: el servicio rechazó la negociación Quicksilver v2. Phoenix ya solicita WebRTC V3; actualizar Codex no garantiza resolver una restricción del servidor.'
+    return 'Codex Live: el app-server de Codex rechazó la negociación WebRTC v3 (invalid_quicksilver_alpha_header). La versión oficial v3 ya solicita quicksilver=v2. No implica que hayas perdido la autenticación; la voz alternativa sigue disponible.'
   }
   if (/\b403\b[^\r\n]{0,160}(?:voice|realtime|forbidden|access denied)|voice session access denied/iu.test(message)) {
     return 'Codex Live: el servidor rechazó la sesión de voz (HTTP 403). La sesión de ChatGPT para texto puede continuar válida.'

@@ -636,7 +636,7 @@ describe('Codex realtime voice protocol compatibility', () => {
     } finally { bridge.close() }
   })
 
-  it('recovers a stale app-server only once per runtime and diagnoses current Codex 0.162.1', async () => {
+  it('tries an upstream Quicksilver rejection once and cools down duplicate voice starts', async () => {
     const bridge = new CodexRealtimeBridge()
     const internal = bridge as unknown as {
       ensureStarted(): Promise<void>; stop(key: string): Promise<boolean>
@@ -669,19 +669,48 @@ describe('Codex realtime voice protocol compatibility', () => {
     vi.stubEnv('DSH_HOME', home)
     try {
       await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
-        .rejects.toThrow('CLI 0.162.1 gestionado ya está actualizado')
+        .rejects.toThrow('CLI gestionado: 0.162.1')
       expect(started).toHaveBeenCalledTimes(2)
       expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3'])
       expect(requests).toHaveBeenCalledWith('thread/realtime/stop', { threadId: 'stale-cli-thread' })
       await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' }))
-        .rejects.toThrow('CLI 0.162.1 gestionado ya está actualizado')
-      expect(started).toHaveBeenCalledTimes(3)
-      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3', 'v3'])
+        .rejects.toThrow('CLI gestionado: 0.162.1')
+      // A second click inside the cooldown must not call backend again.
+      expect(started).toHaveBeenCalledTimes(2)
+      expect(negotiated.mock.calls.map(call => call[2])).toEqual(['v3', 'v3'])
       expect(existsSync(join(home, 'codex-cli', 'live-repair-request.json'))).toBe(false)
+      await expect(bridge.probe()).resolves.toMatchObject({
+        available: false, authenticated: true, reason: 'experimental-unavailable',
+        detail: expect.stringContaining('invalid_quicksilver_alpha_header'),
+      })
+      expect(started).toHaveBeenCalledTimes(2)
     } finally {
       bridge.close()
       vi.unstubAllEnvs()
       rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps original V3 WebRTC backend errors instead of pretending v1 or auth was required', async () => {
+    const bridge = new CodexRealtimeBridge()
+    const internal = bridge as unknown as {
+      ensureStarted(): Promise<void>
+      stop(key: string): Promise<boolean>
+      startVoiceThread(model?: string): Promise<string>
+      negotiateRealtime(threadId: string, options: unknown, version: 'v3' | 'v1'): Promise<string>
+      request(method: string, params?: unknown): Promise<unknown>
+    }
+    vi.spyOn(internal, 'ensureStarted').mockResolvedValue(undefined)
+    vi.spyOn(internal, 'stop').mockResolvedValue(false)
+    vi.spyOn(internal, 'startVoiceThread').mockResolvedValue('upstream-thread')
+    vi.spyOn(internal, 'request').mockResolvedValue({})
+    const upstream = 'Codex realtime startup failed: HTTP 403 Voice session access denied'
+    const negotiation = vi.spyOn(internal, 'negotiateRealtime').mockRejectedValue(new Error(upstream))
+    try {
+      await expect(bridge.start({ key: 'kira', offerSdp: 'v=0' })).rejects.toThrow(upstream)
+      expect(negotiation.mock.calls.map(call => call[2])).toEqual(['v3'])
+    } finally {
+      bridge.close()
     }
   })
 
