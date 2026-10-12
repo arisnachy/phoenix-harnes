@@ -21,12 +21,12 @@ function ok<T>(value: T): RpcResponse<T> {
 const KEY = 'mcp-client/notion'
 const CONSENT_URL = 'https://mcp.notion.com/authorize?state=abc'
 
-function panelApi(statusResult: () => Promise<RpcResponse<unknown>>) {
+function panelApi(statusResult: () => Promise<RpcResponse<unknown>>, key = KEY) {
   return {
     list: vi.fn(async () => ok({
       entries: [{
-        key: KEY,
-        label: 'MCP notion',
+        key,
+        label: 'MCP connector',
         methods: [{ id: 'oauth', label: 'Authorize notion' }],
         inFlight: false,
       }],
@@ -125,6 +125,22 @@ describe('OAuth without a placeholder page', () => {
     await clickAuthorize()
     expect(await screen.findByText(/no respondió a authorization.begin en 12 segundos/)).toBeTruthy()
     expect(open).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['mcp-client/slack', 'Slack'],
+    ['mcp-client/meta-devtools', 'Meta Social Technologies'],
+    ['mcp-client/meta-whatsapp-business', 'WhatsApp Business'],
+  ])('identifies %s correctly when the Host times out before OAuth', async (key, provider) => {
+    vi.spyOn(window, 'open').mockReturnValue(null)
+    const api = panelApi(pendingForever, key)
+    api.begin = vi.fn(async () => {
+      throw new DOMException('The operation was aborted due to timeout', 'TimeoutError')
+    })
+    renderPanel(api)
+    await clickAuthorize()
+    expect(await screen.findByText(new RegExp(`para ${provider}`))).toBeTruthy()
+    expect(screen.queryByText(/todavía no se ha llegado a Notion/)).toBeNull()
   })
 
   it('keeps provider stage diagnostics and failed status inside PHOENIX', async () => {
