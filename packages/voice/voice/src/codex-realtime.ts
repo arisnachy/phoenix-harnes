@@ -507,7 +507,11 @@ export class CodexRealtimeBridge {
       await this.request('thread/realtime/start', version === 'v3'
         ? {
           threadId,
-          clientManagedHandoffs: false,
+          // Phoenix owns the harness and explicitly passes finalized
+          // speech via thread/realtime/appendSpeech. Codex must not also
+          // forward its own automatic text handoffs into Kira's speaker.
+          // This is the documented V3 setting for client-owned handoffs.
+          clientManagedHandoffs: true,
           flushTranscriptTailOnSessionEnd: true,
           backendReasoningStatus: false,
           outputModality: 'audio',
