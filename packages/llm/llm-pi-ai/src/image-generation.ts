@@ -13,7 +13,7 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, extname, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
@@ -703,6 +703,48 @@ export function codexImageInvocation(
   const commandLine = '"' + executable + '" ' + argvTail.join(' ')
   return [process.env.ComSpec?.trim() || 'cmd.exe', '/d', '/s', '/c', '"' + commandLine + '"']
 }
+/**
+ * Prefer the native executable shipped by the official @openai/codex
+ * platform package over npm/pnpm .cmd wrappers on Windows. Node starts the
+ * native binary without a shell and cannot mistake the wrapper for an exe.
+ * The package is optional: if missing, the existing cmd shim route remains.
+ * @param shim - The previously resolved Codex executable or command shim.
+ * @param platform - Injectable platform for portable tests.
+ * @param architecture - Injectable architecture for portable tests.
+ * @returns An existing native executable path, or the original resolution.
+ */
+export async function resolveNativeCodexImageLauncher(
+  shim: string,
+  platform: NodeJS.Platform = process.platform,
+  architecture: NodeJS.Architecture = process.arch,
+): Promise<string> {
+  if (platform !== 'win32' || !/\.(cmd|bat)$/i.test(shim)) return shim
+  const folder = dirname(shim)
+  const packageRoots = [
+    join(folder, 'node_modules', '@openai', 'codex'),
+    join(folder, 'global', '5', 'node_modules', '@openai', 'codex'),
+    join(folder, 'global', '6', 'node_modules', '@openai', 'codex'),
+    join(folder, '..', '@openai', 'codex'),
+    join(folder, '..', 'node_modules', '@openai', 'codex'),
+    join(folder, '..', 'global', '5', 'node_modules', '@openai', 'codex'),
+  ]
+  const arch = architecture === 'arm64' ? 'aarch64-pc-windows-msvc' : 'x86_64-pc-windows-msvc'
+  const packageName = architecture === 'arm64' ? 'codex-win32-arm64' : 'codex-win32-x64'
+  for (const root of packageRoots) {
+    const candidates = [
+      join(root, 'node_modules', '@openai', packageName, 'vendor', arch, 'bin', 'codex.exe'),
+      join(root, 'node_modules', '@openai', packageName, 'vendor', arch, 'codex.exe'),
+      join(root, 'vendor', arch, 'bin', 'codex.exe'),
+      join(root, 'vendor', arch, 'codex.exe'),
+    ]
+    for (const candidate of candidates) {
+      try {
+        if ((await stat(candidate)).isFile()) return candidate
+      } catch { /* Optional native platform package was not installed here. */ }
+    }
+  }
+  return shim
+}
 async function runCodex(
   ctx: Context,
   argvTail: readonly string[],
@@ -716,8 +758,9 @@ async function runCodex(
     CODEX_HOME: home,
     CODEX_SQLITE_HOME: sqliteHome,
   }, signal)
+  const nativeOrShim = await resolveNativeCodexImageLauncher(executable)
   const handle = subprocess.spawn({
-    argv: codexImageInvocation(executable, argvTail),
+    argv: codexImageInvocation(nativeOrShim, argvTail),
     cwd: process.cwd(),
     stdio: {
       stdin: stdin === undefined ? 'ignore' : { data: stdin },
