@@ -312,6 +312,33 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('profile artifact repair failed; refusing an automatic relaunch loop')
   })
 
+  it('does not rebuild the runtime when dump-config has already healed missing profile links', () => {
+    const start = source.indexOf('function repairMissingProfileRuntimeArtifact(')
+    const end = source.indexOf('\nfunction writeActiveRuntime(', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    let stillMissing = false
+    let rebuilds = 0
+    const context = {
+      profileFallbackHasMissingRuntimeArtifact: () => stillMissing,
+      isMissingProfileRuntimeArtifact: () => false,
+      runPnpm: () => { rebuilds += 1; stillMissing = false },
+      runtimeBootPreflight: () => ({ ok: true, detail: '' }),
+      console: { error: () => undefined },
+    }
+    const repair = runInNewContext(
+      source.slice(start, end) + '\nrepairMissingProfileRuntimeArtifact',
+      context,
+    ) as (path: string, preflight: { ok: boolean; detail: string }, fallbackMissing: boolean) => { ok: boolean }
+    expect(repair('C:/phoenix', { ok: true, detail: '' }, true).ok).toBe(true)
+    expect(rebuilds).toBe(0)
+
+    // When the link really is still absent, retain the repair-and-recheck path.
+    stillMissing = true
+    expect(repair('C:/phoenix', { ok: true, detail: '' }, true).ok).toBe(true)
+    expect(rebuilds).toBe(1)
+  })
+
   it('distinguishes Ctrl-C/termination from a model or host crash', () => {
     expect(source).toContain("process.once('SIGINT', requestShutdown)")
     expect(source).toContain("process.once('SIGTERM', requestShutdown)")
