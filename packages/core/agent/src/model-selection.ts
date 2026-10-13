@@ -240,7 +240,7 @@ const AUTO_CONTINUATION_LIMIT = 4
 const AUTO_EXECUTION_CONTINUATION =
   'Planning or describing the next action is not task completion. ' +
   'Continue the current user request now with the available tools. ' +
-  'Do not just narrate; execute the next concrete action instead of only saying what you will do, ' +
+  'Execute the next concrete action instead of only saying what you will do, ' +
   'and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
 
 const AUTO_VISIBLE_PLAN_POLICY =
@@ -1012,10 +1012,21 @@ export function installModelSelection(
     const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
       && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
       && !phoenixAutoExplicitlyClosed(latest.text)
+    // A first-step plan that returned no usable assistant text still has not
+    // executed anything. Missing content must not silently terminate real work.
+    const emptyPlannerStop = latest.step === 1 && !latestStepHasToolActivity
+      && latest.text.length === 0
+    // A teammate's real question is unresolved until Kira makes a substantive
+    // decision or acts. A bare "Done" and an unmatched tool/result event are
+    // not evidence of quality or completion.
+    const teamQuestion = phoenixAutoTeamSignalForTurn(agent, turn)?.purpose === 'question'
+    const teamStillNeedsDecision = teamQuestion
+      && !events.some(event => event.type === 'tool/call')
+      && /^(?:done|finished|completed|listo|hecho|terminado)\.?$/iu.test(latest.text)
     const announcedNextAction = !latestStepHasToolActivity
       && latest.text.length > 0
       && phoenixAutoUnfinishedAction(latest.text)
-    if (!plannerStoppedBeforeActing && !announcedNextAction) return
+    if (!plannerStoppedBeforeActing && !emptyPlannerStop && !teamStillNeedsDecision && !announcedNextAction) return
     if (phoenixAutoState.continuationCount >= AUTO_CONTINUATION_LIMIT) return
 
     phoenixAutoState.continuationCount += 1
