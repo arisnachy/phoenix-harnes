@@ -219,6 +219,7 @@ export class TeamService extends TypertRemoteService {
     const tasks = [...state.tasks.values()].filter(task => task.status !== 'deleted')
     const tasksDone = tasks.every(task => task.status === 'completed')
     const evidenceIds: string[] = []
+    let hasConfirmation = false
     let workersVerified = children.length > 0
     for (const child of children) {
       const session = this.teamContext.sessions.get(child.id)
@@ -234,11 +235,12 @@ export class TeamService extends TypertRemoteService {
         const name = toolCalls.get(callId)
         if (name !== undefined && proof.tools.some(tool => name.endsWith(tool))) {
           evidenceIds.push(`${child.id}:${callId}`)
+          hasConfirmation ||= /(?:^|__|_|-)(?:verify|check|test|typecheck|build|inspect|read|wait_for|status)(?:$|_|-)/iu.test(name)
         }
       }
     }
     return {
-      verified: workersVerified && tasksDone && evidenceIds.length >= children.length,
+      verified: workersVerified && tasksDone && hasConfirmation && evidenceIds.length >= children.length,
       evidenceIds,
     }
   }
