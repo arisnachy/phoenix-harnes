@@ -412,6 +412,33 @@ describe('dsh-tool-team', () => {
     await execute(ctx, lead, 'interrupt_agent', { target: 'luna-worker' })
   })
 
+  it('keeps Codex teammates on Luna Max despite an obsolete explicit profile', async () => {
+    const { ctx, lead } = await setup([], false, {
+      defaultModelProfile: 'old-codex',
+      modelProfiles: {
+        'old-codex': { provider: 'openai-codex', model: 'gpt-5.6-sol', reasoningEffort: 'high' },
+      },
+    })
+    ctx.llm.registerAdapter(['openai-codex'], new MockAdapter(['hang'], {
+      efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
+      defaultEffort: ReasoningEffortId('max'),
+    }))
+    lead.options.provider = 'openai-codex'
+    lead.options.model = 'gpt-6.1-sol'
+    const spawned = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'codex-worker',
+      description: 'execute bounded implementation',
+      prompt: 'work on the implementation',
+      model_profile: 'old-codex',
+    })
+    expect(spawned.isError).toBe(false)
+    const child = await waitRunning(ctx, spawnedChildId(spawned))
+    expect(child.options).toMatchObject({
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max',
+    })
+    await execute(ctx, lead, 'interrupt_agent', { target: 'codex-worker' })
+  })
+
   it('inherits the exact non-Codex Lead route even when foreign profiles are configured or requested', async () => {
     const { ctx, lead } = await setup(['hang', 'hang'], false, {
       defaultModelProfile: 'foreign',
