@@ -107,6 +107,7 @@ export class TeamService extends TypertRemoteService {
   /** Validated deployment limits used by every Team operation. */
   private readonly config: Required<Config>
 
+  private readonly teamContext: Context
   private readonly activity: TeamActivity
   private readonly lifecycle: TeamRuntimeLifecycle
   private readonly journal: TeamJournal
@@ -119,6 +120,7 @@ export class TeamService extends TypertRemoteService {
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'agentTeams')
+    this.teamContext = ctx
     this.config = {
       maxMembers: memberLimit(config.maxMembers ?? DEFAULT_MAX_MEMBERS),
       maxTasks: positiveLimit('maxTasks', config.maxTasks ?? DEFAULT_MAX_TASKS),
@@ -218,7 +220,7 @@ export class TeamService extends TypertRemoteService {
     const evidenceIds: string[] = []
     let workersVerified = children.length > 0
     for (const child of children) {
-      const session = this.ctx.sessions.get(child.id)
+      const session = this.teamContext.sessions.get(child.id)
       if (session === undefined) { workersVerified = false; continue }
       const proof = teamExecutionProof(session.events)
       if (proof.requirement === 'none' || !proof.satisfied) { workersVerified = false; continue }
