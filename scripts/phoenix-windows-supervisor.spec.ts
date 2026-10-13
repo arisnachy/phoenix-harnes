@@ -303,13 +303,40 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('const crashFallbackMissing = profileFallbackHasMissingRuntimeArtifact()')
     expect(source).toContain('repairMissingProfileRuntimeArtifact(runtimeRoot, crashPreflight, crashFallbackMissing)')
     expect(source).toContain("['exec', 'tsx', 'scripts/build.ts']")
-    expect(source).toContain('const retried = runtimeBootPreflight(path)')
+    expect(source).toContain('const retried = runtimeBootPreflight(path, { refresh: true })')
     expect(source).toContain('const fallbackStillMissing = profileFallbackHasMissingRuntimeArtifact()')
-    expect(source.indexOf('const retried = runtimeBootPreflight(path)'))
+    expect(source.indexOf('const retried = runtimeBootPreflight(path, { refresh: true })'))
       .toBeLessThan(source.indexOf('const fallbackStillMissing = profileFallbackHasMissingRuntimeArtifact()'))
     expect(source).not.toContain('] as const')
     expect(source).toContain('a linked package still lacks its declared main artifact')
     expect(source).toContain('profile artifact repair failed; refusing an automatic relaunch loop')
+  })
+
+  it('does not rebuild the runtime when dump-config has already healed missing profile links', () => {
+    const start = source.indexOf('function repairMissingProfileRuntimeArtifact(')
+    const end = source.indexOf('\nfunction writeActiveRuntime(', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+    let stillMissing = false
+    let rebuilds = 0
+    const context = {
+      profileFallbackHasMissingRuntimeArtifact: () => stillMissing,
+      isMissingProfileRuntimeArtifact: () => false,
+      runPnpm: () => { rebuilds += 1; stillMissing = false },
+      runtimeBootPreflight: () => ({ ok: true, detail: '' }),
+      console: { error: () => undefined },
+    }
+    const repair = runInNewContext(
+      source.slice(start, end) + '\nrepairMissingProfileRuntimeArtifact',
+      context,
+    ) as (path: string, preflight: { ok: boolean; detail: string }, fallbackMissing: boolean) => { ok: boolean }
+    expect(repair('C:/phoenix', { ok: true, detail: '' }, true).ok).toBe(true)
+    expect(rebuilds).toBe(0)
+
+    // When the link really is still absent, retain the repair-and-recheck path.
+    stillMissing = true
+    expect(repair('C:/phoenix', { ok: true, detail: '' }, true).ok).toBe(true)
+    expect(rebuilds).toBe(1)
   })
 
   it('distinguishes Ctrl-C/termination from a model or host crash', () => {
@@ -324,6 +351,54 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('configuration preflight failed; keeping the current PHOENIX host alive')
   })
 
+  it('reuses only a checkpoint for the same compiled runtime, Node version, and configuration', () => {
+    const start = source.indexOf('function verifiedHealthyStartupCheckpoint(path = runtimeRoot)')
+    const end = source.indexOf('\nfunction recoverConfigurationBeforeFirstBoot()', start)
+    expect(start).toBeGreaterThan(0)
+    expect(end).toBeGreaterThan(start)
+
+    const checkpoint = {
+      runtimePath: 'c:/phoenix',
+      runtimeHead: 'current-head',
+      fingerprint: 'current-config',
+      nodeVersion: 'v24',
+    }
+    const context = {
+      checkpoint,
+      runtimeRoot: 'C:/Phoenix',
+      process: { version: 'v24' },
+      readLastKnownGoodConfiguration: () => context.checkpoint,
+      runtimePathKey: () => 'c:/phoenix',
+      gitValue: () => 'current-head',
+      configurationFingerprint: () => 'current-config',
+      captureBootCriticalConfiguration: () => ({}),
+      compiledRuntimeEntrypoint: () => 'bin.js',
+      profileFallbackHasMissingRuntimeArtifact: () => false,
+    }
+    const rule = runInNewContext(
+      source.slice(start, end) + '\nverifiedHealthyStartupCheckpoint',
+      context,
+    ) as () => boolean
+    expect(rule()).toBe(true)
+    context.checkpoint = { ...checkpoint, fingerprint: 'changed-config' }
+    expect(rule()).toBe(false)
+    context.checkpoint = { ...checkpoint, runtimeHead: 'old-head' }
+    expect(rule()).toBe(false)
+    context.checkpoint = { ...checkpoint, nodeVersion: 'v22' }
+    expect(rule()).toBe(false)
+    context.checkpoint = checkpoint
+    context.profileFallbackHasMissingRuntimeArtifact = () => true
+    expect(rule()).toBe(false)
+  })
+
+  it('does not repeat successful dump-config probes or reuse them after a rebuild', () => {
+    expect(source).toContain('let lastSuccessfulBootPreflight')
+    expect(source).toContain('const key = `${runtimePathKey(path)}:${currentHead')
+    expect(source).toContain('if (!refresh && lastSuccessfulBootPreflight?.key === key)')
+    expect(source).toContain('lastSuccessfulBootPreflight = preflight.ok ? { key, result: preflight } : undefined')
+    expect(source).toContain('runtimeBootPreflight(path, { refresh: true })')
+  })
+
   it('restores last-known-good configuration after an early boot crash', () => {
     expect(source).toContain('persistLastKnownGoodConfiguration')
     expect(source).toContain('restoreLastKnownGoodConfiguration')
@@ -331,10 +406,11 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('restored last-known-good configuration')
   })
   it('boot-preflights isolated runtimes before activation or restoration', () => {
-    expect(source).toContain('function runtimeBootPreflight(path)')
+    expect(source).toContain('function runtimeBootPreflight(path, { refresh = false } = {})')
     expect(source).toContain("web', '--dump-config'")
     expect(source).toContain('const bootPreflight = runtimeBootPreflight(runtime)')
-    expect(source).toContain('const bootPreflight = runtimeBootPreflight(candidate)')
+    expect(source).toContain('const bootPreflight = verifiedHealthyStartupCheckpoint(candidate)')
+    expect(source).toContain(': runtimeBootPreflight(candidate)')
     expect(source).toContain('failed boot preflight')
     expect(source).toContain('retired isolated runtime')
   })
@@ -364,7 +440,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
 
   it('caps obsolete isolated runtimes without deleting the active runtime', () => {
     expect(source).toContain('function runtimeDirectoriesForCleanup()')
-    expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [])')
+    expect(source).toContain('function cleanupObsoleteRuntimes(extraKeep = [], { reportBusy = false } = {})')
     expect(source).toContain('const active = readActiveRuntimeRecord()')
     expect(source).toContain('keep.add(runtimePathKey(active.path))')
     expect(source).toContain('const inheritedRuntimeRoot = process.env.PHOENIX_RUNTIME_ROOT?.trim()')
@@ -473,8 +549,16 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(updateWatchSource).toContain('garbage collection is owned by the external')
   })
 
-  it('runs runtime garbage collection at startup and after safe runtime handoff paths', () => {
-    expect(source).toContain('restoreActiveRuntime()\nrepairDesktopShortcut()\ncleanupObsoleteRuntimes()')
+  it('defers expensive garbage collection until after Host startup and protects handoff paths', () => {
+    const startup = source.indexOf('const initialBootChecksStartedAt = Date.now()')
+    const spawn = source.indexOf('const host = startHost()', startup)
+    expect(startup).toBeGreaterThan(0)
+    expect(source.slice(startup, spawn)).not.toContain('cleanupObsoleteRuntimes()')
+    expect(source).toContain('healthy Host checkpoint recorded as last-known-good configuration.')
+    expect(source).toContain('repairUserGitSafeDirectory()\n      repairDesktopShortcut()')
+    expect(source).toContain("if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive())")
+    expect(source).toContain('cleanupObsoleteRuntimes()')
+    expect(source).toContain('restoreActiveRuntime()\nprepareKokoroFallback()')
     expect(source).toContain("if (hostEvent.kind === 'safe-update-handoff') cleanupObsoleteRuntimes()")
     expect(source).toContain('clearActiveRuntime()\n    cleanupObsoleteRuntimes()')
   })
