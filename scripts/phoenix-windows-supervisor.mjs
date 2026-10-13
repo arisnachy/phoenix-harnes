@@ -200,7 +200,8 @@ function gitSucceeds(cwd, args) {
   return result.status === 0
 }
 
-repairUserGitSafeDirectory()
+// Persisting safe.directory is only for the user's separate Git commands.
+// PHOENIX itself already has process-scoped Git trust and can boot without it.
 
 function preparedTargetIsDivergent(target) {
   const current = gitValue(root, ['rev-parse', 'HEAD'])
@@ -1759,7 +1760,6 @@ if (supervisorInstanceLock === null) process.exit(0)
 const initialBootChecksStartedAt = Date.now()
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
-repairDesktopShortcut()
 prepareKokoroFallback()
 // Old runtimes can be gigabytes on Windows/OneDrive. Pruning them (and
 // git worktree metadata) before the first Host spawn used to turn optional
@@ -1819,6 +1819,10 @@ while (true) {
       persistLastKnownGoodConfiguration(launchConfiguration)
       healthyCheckpointWritten = true
       console.error('[PHOENIX RECOVERY] healthy Host checkpoint recorded as last-known-good configuration.')
+      // These best-effort Windows/PowerShell tasks must never delay the first
+      // Host. Keep their diagnostics isolated from the critical launch path.
+      repairUserGitSafeDirectory()
+      repairDesktopShortcut()
       // Defer first storage sweep until after the Host has had time to start;
       // run it only when a background update isn't compiling a new runtime.
       if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
