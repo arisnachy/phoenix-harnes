@@ -9,9 +9,14 @@ export const MISSION_TEAM_CEILINGS = {
   exceptional: 5,
 } as const
 
+/** Supported mission scope tiers used by the universal team router. */
 export type MissionComplexity = keyof typeof MISSION_TEAM_CEILINGS
 
-/** Maximum simultaneous real specialists allowed by the declared mission tier. */
+/**
+ * Maximum simultaneous real specialists allowed by the declared mission tier.
+ * @param tier - validated mission classification from a real delegation request.
+ * @returns maximum worker count for the tier, at most five.
+ */
 export function teammateBudgetForMission(tier: string): number {
   if (Object.prototype.hasOwnProperty.call(MISSION_TEAM_CEILINGS, tier)) {
     return MISSION_TEAM_CEILINGS[tier as MissionComplexity]
