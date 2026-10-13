@@ -866,7 +866,7 @@ export function installModelSelection(
       : undefined
     const currentTurn = scopedAgent?.session?.events.findLast(event => event.type === 'turn/start')
     const currentTurnNumber = (currentTurn?.data as { readonly turn?: number } | undefined)?.turn
-    const currentRequest = scopedAgent !== undefined && currentTurnNumber !== undefined
+    const currentRequest = scopedAgent?.session !== undefined && currentTurnNumber !== undefined
       ? directUserTextForTurn(scopedAgent, currentTurnNumber) : ''
     // Never inject a "stop after the plan" instruction into a Luna quick-answer
     // route whose request was not classified as an operational task. Otherwise
