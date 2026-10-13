@@ -47,6 +47,9 @@ const TERMINAL = new Set<UniversalMissionPhase>(['completed', 'partial', 'failed
 const PHASES = new Set<UniversalMissionPhase>([
   'running', 'blocked', 'verifying', 'completed', 'partial', 'failed', 'cancelled',
 ])
+const ORIGINS = new Set<UniversalMissionSnapshot['origin']>([
+  'chat', 'voice', 'telegram', 'schedule', 'connector', 'api',
+])
 
 /**
  * Check whether a mission reached a terminal phase.
@@ -63,7 +66,9 @@ function validMission(value: UniversalMissionSnapshot): boolean {
     && typeof value.teamId === 'string' && value.teamId.length > 0
     && typeof value.objective === 'string' && value.objective.length > 0
     && typeof value.userMessageId === 'string' && value.userMessageId.length > 0
-    && (value.lastHumanMessageId === undefined || typeof value.lastHumanMessageId === 'string')
+    && (value.lastHumanMessageId === undefined
+      || typeof value.lastHumanMessageId === 'string' && value.lastHumanMessageId.length > 0)
+    && ORIGINS.has(value.origin)
     && PHASES.has(value.phase)
     && Number.isSafeInteger(value.revision) && value.revision > 0
     && Number.isSafeInteger(value.cancellationEpoch) && value.cancellationEpoch >= 0
@@ -71,6 +76,8 @@ function validMission(value: UniversalMissionSnapshot): boolean {
     && Array.isArray(value.evidenceIds) && value.evidenceIds.every(x => typeof x === 'string')
     && Array.isArray(value.blockers) && value.blockers.every(x => typeof x === 'string')
     && typeof value.verified === 'boolean'
+    && (value.phase !== 'completed' || value.verified && value.evidenceIds.length > 0)
+    && (!value.verified || value.phase === 'completed')
 }
 
 /**
@@ -99,7 +106,9 @@ export function replayUniversalMission(
       if (snapshot.revision !== state.revision + 1
         || snapshot.cancellationEpoch < state.cancellationEpoch
         || snapshot.userMessageId !== state.userMessageId
-        || snapshot.objective !== state.objective) continue
+        || snapshot.objective !== state.objective
+        || snapshot.origin !== state.origin
+        || snapshot.maxTeammates !== state.maxTeammates) continue
       state = snapshot
     }
     if (universalMissionTerminal(snapshot.phase)) closed.add(snapshot.id)
