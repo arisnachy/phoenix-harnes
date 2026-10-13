@@ -7,8 +7,8 @@
  */
 
 interface SessionEfficiency {
-  contextWindow?: number
-  pressureTokens?: number
+  contextWindow?: number | undefined
+  pressureTokens?: number | undefined
   toolCalls: number
   failedToolCalls: number
   retries: number
@@ -17,7 +17,7 @@ interface SessionEfficiency {
   cacheRatios: number[]
   firstChunkSlowness: boolean[]
   step?: { key: string; startedAt: number; sampled: boolean }
-  lastUsageStep?: string
+  lastUsageStep?: string | undefined
 }
 
 const MAX_ACTIVE_SESSIONS = 64
