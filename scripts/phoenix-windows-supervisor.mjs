@@ -115,6 +115,12 @@ const HOST_STABLE_MS = Math.max(5_000, Number.parseInt(process.env.PHOENIX_HOST_
 const CONFIG_SNAPSHOT_SCHEMA = 1
 const CONFIG_SNAPSHOT_FILE = 'phoenix-config-last-known-good.json'
 const CONFIG_RECOVERY_REPORT_FILE = 'phoenix-config-recovery-report.json'
+const startupStartedAt = Date.now()
+let lastSuccessfulBootPreflight
+
+function startupDuration(label, startedAt) {
+  console.error(`[PHOENIX STARTUP] ${label}: ${String(Date.now() - startedAt)}ms`)
+}
 const CRITICAL_CONFIG_PATHS = [
   'profiles/web/package.json',
   'profiles/web/cordis.patch.yml',
@@ -845,7 +851,18 @@ function healthyRuntimeForTarget(target) {
   return { target, path: candidate }
 }
 
-function runtimeBootPreflight(path) {
+function runtimeBootPreflight(path, { refresh = false } = {}) {
+  // A restored isolated runtime and the first-boot recovery path can ask for
+  // the same expensive --dump-config probe repeatedly. Reuse only success,
+  // and invalidate it on code/config changes or after repairing build outputs.
+  const fingerprint = configurationFingerprint(captureBootCriticalConfiguration())
+  const currentHead = gitValue(path, ['rev-parse', 'HEAD'])
+  const key = `${runtimePathKey(path)}:${currentHead ?? 'unknown'}:${fingerprint}`
+  if (!refresh && lastSuccessfulBootPreflight?.key === key) {
+    console.error('[PHOENIX STARTUP] reused successful boot preflight for unchanged runtime/configuration.')
+    return lastSuccessfulBootPreflight.result
+  }
+  const preflightStartedAt = Date.now()
   const result = spawnSync(process.execPath, runtimeNodeArgs(path, [
     'web', '--dump-config',
   ]), {
@@ -866,7 +883,10 @@ function runtimeBootPreflight(path) {
     .filter(value => typeof value === 'string' && value.trim().length > 0)
     .join('\n')
     .trim()
-  return { ok: result.error === undefined && result.status === 0, detail }
+  const preflight = { ok: result.error === undefined && result.status === 0, detail }
+  startupDuration(`configuration preflight (${preflight.ok ? 'passed' : 'failed'})`, preflightStartedAt)
+  lastSuccessfulBootPreflight = preflight.ok ? { key, result: preflight } : undefined
+  return preflight
 }
 
 
@@ -947,7 +967,7 @@ function repairMissingProfileRuntimeArtifact(
   // ~/.dsh/profiles/node_modules junction farm to this exact runtime. Check the
   // fallback only AFTER that re-anchor; checking it first can mistake a healthy
   // newly-built isolated runtime for the old broken source checkout.
-  const retried = runtimeBootPreflight(path)
+  const retried = runtimeBootPreflight(path, { refresh: true })
   const fallbackStillMissing = profileFallbackHasMissingRuntimeArtifact()
   if (!fallbackStillMissing && retried.ok) {
     console.error('[PHOENIX RECOVERY] missing profile runtime artifacts rebuilt successfully; boot preflight passed.')
@@ -1210,6 +1230,11 @@ function persistLastKnownGoodConfiguration(snapshot = captureBootCriticalConfigu
     ...snapshot,
     fingerprint: configurationFingerprint(snapshot),
     healthyAt: new Date().toISOString(),
+    // Only the same validated code generation may reuse this checkpoint on
+    // its next startup. An update or runtime handoff requires a real preflight.
+    runtimePath: runtimePathKey(runtimeRoot),
+    runtimeHead: gitValue(runtimeRoot, ['rev-parse', 'HEAD']),
+    nodeVersion: process.version,
   }
   mkdirSync(recoveryDirectory(), { recursive: true })
   writeFileSync(configSnapshotPath(), JSON.stringify(payload, undefined, 2) + '\n', 'utf8')
@@ -1264,7 +1289,23 @@ function preflightBootConfiguration() {
   return runtimeBootPreflight(runtimeRoot)
 }
 
+function verifiedHealthyStartupCheckpoint() {
+  const checkpoint = readLastKnownGoodConfiguration()
+  if (checkpoint?.runtimePath !== runtimePathKey(runtimeRoot)
+    || checkpoint?.nodeVersion !== process.version
+    || typeof checkpoint.runtimeHead !== 'string'
+    || checkpoint.runtimeHead !== gitValue(runtimeRoot, ['rev-parse', 'HEAD'])
+    || checkpoint.fingerprint !== configurationFingerprint(captureBootCriticalConfiguration())
+    || compiledRuntimeEntrypoint(runtimeRoot) === undefined
+    || profileFallbackHasMissingRuntimeArtifact()) return false
+  return true
+}
+
 function recoverConfigurationBeforeFirstBoot() {
+  if (verifiedHealthyStartupCheckpoint()) {
+    console.error('[PHOENIX STARTUP] unchanged healthy Host/configuration; skipped redundant cold-start preflight.')
+    return
+  }
   const preflight = preflightBootConfiguration()
   if (preflight.ok) {
     if (readLastKnownGoodConfiguration() === undefined) persistLastKnownGoodConfiguration()
@@ -1710,12 +1751,17 @@ async function acquireSupervisorInstance() {
 const supervisorInstanceLock = await acquireSupervisorInstance()
 if (supervisorInstanceLock === null) process.exit(0)
 
+const initialBootChecksStartedAt = Date.now()
 recoverStaleStagingIndexLock()
 restoreActiveRuntime()
 repairDesktopShortcut()
 prepareKokoroFallback()
-cleanupObsoleteRuntimes()
+// Old runtimes can be gigabytes on Windows/OneDrive. Pruning them (and
+// git worktree metadata) before the first Host spawn used to turn optional
+// housekeeping into visible startup latency. Capacity enforcement still runs
+// synchronously before any candidate allocation; periodic sweeps remain active.
 recoverConfigurationBeforeFirstBoot()
+startupDuration('runtime recovery and configuration checks', initialBootChecksStartedAt)
 
 const startupFallbackMissing = profileFallbackHasMissingRuntimeArtifact()
 if (startupFallbackMissing) {
@@ -1750,6 +1796,7 @@ while (true) {
   if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()
   const startedAt = Date.now()
   const host = startHost()
+  startupDuration('first Host process spawned', startupStartedAt)
   activeHost = host
   host.once('error', (error) => {
     console.error(`[PHOENIX] host launch failed: ${error.message}`)
@@ -1767,6 +1814,11 @@ while (true) {
       persistLastKnownGoodConfiguration(launchConfiguration)
       healthyCheckpointWritten = true
       console.error('[PHOENIX RECOVERY] healthy Host checkpoint recorded as last-known-good configuration.')
+      // Defer first storage sweep until after the Host has had time to start;
+      // run it only when a background update isn't compiling a new runtime.
+      if (readUpdateState()?.status !== 'preparing' || !watcherSupervisor?.isActive()) {
+        cleanupObsoleteRuntimes()
+      }
     } catch (error) {
       console.error(`[PHOENIX RECOVERY] warning: could not record healthy configuration checkpoint: ${error instanceof Error ? error.message : String(error)}`)
     }
