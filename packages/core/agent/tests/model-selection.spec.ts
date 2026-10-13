@@ -61,7 +61,7 @@ describe('installModelSelection()', () => {
     session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'Arregla el proyecto y comprueba los resultados.' }],
       source: { kind: 'user' },
-    }))
+    }), { surfaceOp: 'append' })
     const agent = { session, options: { ...selected } } as unknown as Agent
     ctx.agent = agent
     const ref: ModelSelectionRef = { current: selected, assembled: undefined }
