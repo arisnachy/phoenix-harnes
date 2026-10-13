@@ -215,8 +215,25 @@ export class TeamService extends TypertRemoteService {
     readonly evidenceIds: readonly string[]
   } {
     const state = this.journal.state(root)
-    const children = [...state.members.values()].filter(member => member.phase === 'active')
-    const tasks = [...state.tasks.values()].filter(task => task.status !== 'deleted')
+    const mission = this.missions.read(root)
+    if (mission === undefined) return { verified: false, evidenceIds: [] }
+    // A Lead Session may contain several human missions. Never use old workers,
+    // tasks or QA receipts to certify the next mission.
+    const first = root.session.events.findLast(event =>
+      event.type === 'team/mission' && event.data.snapshot.id === mission.id
+      && event.data.snapshot.revision === 1)
+    if (first === undefined) return { verified: false, evidenceIds: [] }
+    const currentEvents = root.session.events.filter(event => event.seq > first.seq)
+    const workerIds = new Set(currentEvents.flatMap(event =>
+      event.type === 'team/member' && event.data.member.phase === 'provisioning'
+        ? [event.data.member.id] : []))
+    const taskIds = new Set(currentEvents.flatMap(event =>
+      event.type === 'team/task' && event.data.task.revision === 1
+        ? [event.data.task.id] : []))
+    const children = [...state.members.values()].filter(member =>
+      member.phase === 'active' && workerIds.has(member.id))
+    const tasks = [...state.tasks.values()].filter(task =>
+      task.status !== 'deleted' && taskIds.has(task.id))
     const tasksDone = tasks.every(task => task.status === 'completed')
     const evidenceIds: string[] = []
     let hasConfirmation = false
@@ -256,7 +273,7 @@ export class TeamService extends TypertRemoteService {
       }
       return false
     }
-    hasConfirmation ||= successfulConfirmation(root.session.events)
+    hasConfirmation ||= successfulConfirmation(currentEvents)
     for (const child of children) {
       const session = this.teamContext.sessions.get(child.id)
       if (session !== undefined) hasConfirmation ||= successfulConfirmation(session.events)
