@@ -219,6 +219,38 @@ describe('client bundle activation', () => {
     expect(String(thrown)).not.toContain('pnpm run build')
   })
 
+  it('caches versioned bundles but never serves stale revision URLs as current code', async () => {
+    const id = '@fixture/cache-revision'
+    const clientPath = writePackage(id)
+    mkdirSync(dirname(clientPath), { recursive: true })
+    writeFileSync(clientPath, 'module.exports = {}\n')
+    const { service, route } = constructWithRoute([id])
+    const rev = service.graph().entries[0].rev
+
+    async function request(url: string): Promise<{ status: number; cache?: string }> {
+      let status = 0
+      let cache: string | undefined
+      const response = {
+        writeHead(code: number, headers?: Record<string, string>) {
+          status = code
+          cache = headers?.['cache-control']
+          return response
+        },
+        end() { return response },
+      } as unknown as ServerResponse
+      await route.handler({ method: 'GET', url } as IncomingMessage, response)
+      return { status, ...(cache === undefined ? {} : { cache }) }
+    }
+
+    expect(await request(`/plugins/${id}/client.js?rev=${rev}`)).toEqual({
+      status: 200, cache: 'public, max-age=31536000, immutable',
+    })
+    expect(await request(`/plugins/${id}/client.js`)).toEqual({
+      status: 200, cache: 'no-cache',
+    })
+    expect(await request(`/plugins/${id}/client.js?rev=stale`)).toEqual({ status: 404 })
+  })
+
   it('serves the source map beside a registered client bundle', async () => {
     const packageName = '@fixture/source-map'
     const clientPath = writePackage(packageName)
