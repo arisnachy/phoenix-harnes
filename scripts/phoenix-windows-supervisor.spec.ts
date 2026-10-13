@@ -325,7 +325,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('reuses only a checkpoint for the same compiled runtime, Node version, and configuration', () => {
-    const start = source.indexOf('function verifiedHealthyStartupCheckpoint()')
+    const start = source.indexOf('function verifiedHealthyStartupCheckpoint(path = runtimeRoot)')
     const end = source.indexOf('\nfunction recoverConfigurationBeforeFirstBoot()', start)
     expect(start).toBeGreaterThan(0)
     expect(end).toBeGreaterThan(start)
@@ -382,7 +382,8 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('function runtimeBootPreflight(path, { refresh = false } = {})')
     expect(source).toContain("web', '--dump-config'")
     expect(source).toContain('const bootPreflight = runtimeBootPreflight(runtime)')
-    expect(source).toContain('const bootPreflight = runtimeBootPreflight(candidate)')
+    expect(source).toContain('const bootPreflight = verifiedHealthyStartupCheckpoint(candidate)')
+    expect(source).toContain(': runtimeBootPreflight(candidate)')
     expect(source).toContain('failed boot preflight')
     expect(source).toContain('retired isolated runtime')
   })
