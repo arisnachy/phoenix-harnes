@@ -16,6 +16,8 @@ export interface UniversalMissionSnapshot {
   readonly id: string
   readonly teamId: TeamId
   readonly userMessageId: string
+  /** Most recent real human steering request, without replacing the original objective. */
+  readonly lastHumanMessageId?: string
   readonly objective: string
   readonly origin: 'chat' | 'voice' | 'telegram' | 'schedule' | 'connector' | 'api'
   readonly phase: UniversalMissionPhase
@@ -61,6 +63,7 @@ function validMission(value: UniversalMissionSnapshot): boolean {
     && typeof value.teamId === 'string' && value.teamId.length > 0
     && typeof value.objective === 'string' && value.objective.length > 0
     && typeof value.userMessageId === 'string' && value.userMessageId.length > 0
+    && (value.lastHumanMessageId === undefined || typeof value.lastHumanMessageId === 'string')
     && PHASES.has(value.phase)
     && Number.isSafeInteger(value.revision) && value.revision > 0
     && Number.isSafeInteger(value.cancellationEpoch) && value.cancellationEpoch >= 0
@@ -148,7 +151,18 @@ export class UniversalMissionLedger {
         event.type === 'user/message' && event.data.source.kind === 'user')
       const requestId = request?.type === 'user/message'
         ? String(request.data.id) : 'direct-team-assignment'
-      if (prior !== undefined && !universalMissionTerminal(prior.phase)) return prior
+      if (prior !== undefined && !universalMissionTerminal(prior.phase)) {
+        if (requestId === 'direct-team-assignment'
+          || requestId === (prior.lastHumanMessageId ?? prior.userMessageId)) return prior
+        // A human steers the EXISTING mission; no new plan, workers, or side effects are invented.
+        const steered: UniversalMissionSnapshot = {
+          ...prior, lastHumanMessageId: requestId, revision: prior.revision + 1,
+        }
+        await this.journal.appendAndFlush(root, 'team/mission', {
+          version: 1, teamId: TeamId(root.id), snapshot: steered,
+        })
+        return steered
+      }
       if (prior !== undefined && prior.userMessageId === requestId) {
         throw new TeamError('closed mission requires a new authentic user request', 'TEAM_MISSION_CLOSED')
       }
