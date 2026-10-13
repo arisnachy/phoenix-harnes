@@ -263,6 +263,15 @@ const AUTO_LUNA_EXECUTION_POLICY =
   'Never simulate coworker messages or claim a tool ran before its real result. ' +
   'Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
 
+const AUTO_EXPLICIT_TEAM_POLICY =
+  'The user explicitly requested real Kira Team collaboration in this turn. ' +
+  'On the first permitted execution step, call spawn_teammate with one bounded, useful assignment; ' +
+  'reuse a suitable active teammate through followup_task rather than spawning duplicates. ' +
+  'Do not replace this action with a claim that the team was called or simulated dialogue. ' +
+  'Check the actual roster/assignment receipt and deliver the teammate evidence in the existing chat. ' +
+  'If Team tools are missing or a spawn fails, name the real blocker and continue what can be done. ' +
+  'Keep the normal maximum of three specialists, without needless extra participants.'
+
 const AUTO_VISIBLE_PLAN_HANDOFF =
   'The visible **Plan:** from the immediately preceding Sol step is Kira\'s authoritative execution plan. ' +
   'Continue the current user request as Kira on Luna Max; execute the next concrete action now, ' +
@@ -629,10 +638,36 @@ export function isBriefTeamDemonstration(text: string): boolean {
   return !/(?:https?:\/\/|[a-z]:\\|\b(?:github|repo|codigo|script|archivo\w*|implementa|despliega|production|produccion|email|correo|compra|borra|elimina|contrato|paciente|sql|api|web|sitio|site|investigacion|research)\b)/u.test(request)
 }
 
+/**
+ * A real request to involve Kira's colleagues is an operational request even
+ * when phrased without a traditional implementation verb ("quiero a tu equipo").
+ * Questions asking WHY team use changed are diagnostic, not spawn commands.
+ * @param text - Latest direct human turn text, not a generated peer message.
+ * @returns Whether the human explicitly asks the actual Kira Team to work.
+ */
+export function isExplicitKiraTeamRequest(text: string): boolean {
+  const value = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
+  if (value.length === 0 || value.length > 2_000) return false
+  if (/^(?:por que|porque|why|como|cuando)\b/u.test(value)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Auditable direct Team identity vocabulary.
+  const people = /\b(?:equipo|agentes|companeros|especialistas|teammates|team|la forja|sol|luna|astra|nexo|lumen)\b/u
+  if (!people.test(value)) return false
+  // oxlint-disable-next-line @stylistic/max-len -- Suppress explicitly negated Team delegation.
+  if (/\b(?:no|sin|evita|deja de)\s+(?:quiero que\s+|necesito que\s+)?(?:llam\w*|convoc\w*|deleg\w*|us\w*|utiliz\w*|trabaj\w*)/u.test(value)) return false
+  // "No lo hagas con tu equipo" is not permission to use Team tools.
+  if (/^no\b.{0,75}\b(?:con|junto a|con ayuda de)\b/u.test(value)) return false
+  // "Hazlo con tu equipo" is an explicit collaboration request even though
+  // "hazlo" does not name a particular teammate or call a spawn verb.
+  if (/\b(?:con|junto a|con ayuda de)\s+(?:(?:tu|el|los|sus|tus)\s+)?(?:equipo|agentes|companeros|especialistas|team|teammates)\b/u.test(value)) return true
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the bilingual Team work request grammar auditable.
+  return /\b(?:convoc\w*|llam\w*|deleg\w*|asign\w*|involucr\w*|colabor\w*|consult\w*|trabaj\w*|us\w*|utiliz\w*|muestr\w*|mostrar|activa\w*|quiero(?: que)?|necesito(?: que)?)\b/u.test(value)
+}
+
 function phoenixAutoTaskRequest(text: string): boolean {
   const candidate = text.trim()
   return CONTEXTUAL_CONTINUATION.test(candidate)
     || isToolAcquisitionRequest(candidate)
+    || isExplicitKiraTeamRequest(candidate)
     || AUTO_TASK_ACTION.test(candidate)
 }
 
@@ -874,7 +909,9 @@ export function installModelSelection(
     const autoPolicy = autoStep === 1
       && phoenixAutoTaskRequest(currentRequest)
       && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
-      : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_EXECUTION_POLICY : undefined
+      : autoStep !== undefined && autoStep > 1
+        ? AUTO_LUNA_EXECUTION_POLICY + (isExplicitKiraTeamRequest(currentRequest) ? ' ' + AUTO_EXPLICIT_TEAM_POLICY : '')
+        : undefined
     return {
       ...assembled,
       ...autoPolicy === undefined ? {} : {

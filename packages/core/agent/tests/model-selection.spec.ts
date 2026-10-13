@@ -11,6 +11,7 @@ import {
   isContextualConversationFastPathText,
   isConversationalFastPathText,
   isBriefTeamDemonstration,
+  isExplicitKiraTeamRequest,
   jevSelectedModelId,
   PHOENIX_CODEX_AUTO_MODEL,
   type Agent,
@@ -186,6 +187,59 @@ describe('installModelSelection()', () => {
 
     dispose()
     await ctx.fiber.dispose()
+  })
+
+  it('recognizes explicit Kira Team participation as real work, not generic social chatter', () => {
+    for (const instruction of [
+      'Kira, convoca a tu equipo para analizar este sistema.',
+      'Quiero que Kira trabaje con sus agentes en una tarea.',
+      'Muéstrame a tu equipo trabajando en una prueba.',
+      'Hazlo con tu equipo, por favor.',
+      'Necesito que Sol y Luna colaboren en el diagnóstico.',
+    ]) expect(isExplicitKiraTeamRequest(instruction)).toBe(true)
+    for (const ordinary of [
+      'Hola, Kira.',
+      'Por qué Kira ya no llama a su equipo?',
+      'No llames a tu equipo para esta tarea.',
+      'No lo hagas con tu equipo.',
+      'Corrige un título corto sin delegar.',
+    ]) expect(isExplicitKiraTeamRequest(ordinary)).toBe(false)
+  })
+
+  it('preserves the real Sol-to-Luna handoff for a team request phrased without a code verb', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' }, content: [
+        { type: 'text', text: 'Quiero que Kira trabaje con su equipo.' },
+      ] } },
+    ]
+    const agent = { options: {}, session: { events } } as unknown as Agent
+    ctx.agent = agent
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection, defaultExecutionHandoff)
+    const signal = new AbortController().signal
+    try {
+      const first = await ctx.systemPrompt.assemble()
+      expect(first.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text).toContain('**Plan:**')
+      await expect(agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 1, step: 1, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
+        .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh') })
+      events.push({ type: 'step/start', data: { turn: 1, step: 1 } })
+      const second = await ctx.systemPrompt.assemble()
+      const policy = second.sections.find(item => item.name === 'phoenix:auto-visible-handoff')?.text ?? ''
+      expect(policy).toContain('call spawn_teammate')
+      expect(policy).toContain('actual roster/assignment receipt')
+      await expect(agentEvents(ctx, agent).waterfall('agent/request',
+        { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
+        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
   })
 
   it('adapts a tiny requested Team demonstration to Sol/medium without sacrificing real work quality', async () => {
