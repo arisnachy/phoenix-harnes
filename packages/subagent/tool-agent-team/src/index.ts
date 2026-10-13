@@ -379,13 +379,6 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
       async execute(args, exec) {
         const agent = callingAgent(exec.agent, 'spawn_teammate')
         const context = args.context ?? 'fresh'
-        const explicitProfile = 'model_profile' in args && typeof args.model_profile === 'string'
-          ? args.model_profile
-          : undefined
-        const configuredDefault = config.defaultModelProfile || undefined
-        const defaultProfile = configuredDefault === undefined
-          ? undefined
-          : config.modelProfiles[configuredDefault]
         // Agent.options is the creation-time route and may be stale after the
         // user changes the live model selector. The latest request/header is
         // the authoritative route actually serving this turn/tool call.
@@ -394,11 +387,13 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         const activeModel = requestConfig?.model ?? agent.options.model
         const activeReasoningEffort = requestConfig?.reasoningEffort ?? agent.options.reasoningEffort
         const activeMaxTokens = requestConfig?.maxTokens ?? agent.options.maxTokens
-        const profileName = activeProvider === 'openai-codex'
-          ? explicitProfile
-            ?? (defaultProfile?.provider === 'openai-codex' ? configuredDefault : undefined)
+        // All Kira workers under OpenAI Codex execute on GPT-6 Luna Max,
+        // regardless of an obsolete model_profile sent by the Lead. The Lead
+        // keeps the explicitly selected orchestrator model; only Eclipse
+        // rotates Sol -> Luna internally. Other providers inherit exactly.
+        const profile: TeamModelProfile | undefined = activeProvider === 'openai-codex'
+          ? { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' }
           : undefined
-        const profile = profileName === undefined ? undefined : config.modelProfiles[profileName]
         const agentOptions: AgentOptions | undefined = profile !== undefined
           ? {
             provider: profile.provider,
