@@ -1088,7 +1088,12 @@ function restoreActiveRuntime() {
       clearActiveRuntime()
       return
     }
-    const bootPreflight = runtimeBootPreflight(candidate)
+    // The candidate was validated on its last healthy boot. Avoid running
+    // another potentially minute-long dump-config probe before the Host is
+    // even spawned if its code, Node and critical configuration are unchanged.
+    const bootPreflight = verifiedHealthyStartupCheckpoint(candidate)
+      ? { ok: true, detail: '' }
+      : runtimeBootPreflight(candidate)
     if (!bootPreflight.ok) {
       clearActiveRuntime()
       console.error(
@@ -1289,14 +1294,14 @@ function preflightBootConfiguration() {
   return runtimeBootPreflight(runtimeRoot)
 }
 
-function verifiedHealthyStartupCheckpoint() {
+function verifiedHealthyStartupCheckpoint(path = runtimeRoot) {
   const checkpoint = readLastKnownGoodConfiguration()
-  if (checkpoint?.runtimePath !== runtimePathKey(runtimeRoot)
+  if (checkpoint?.runtimePath !== runtimePathKey(path)
     || checkpoint?.nodeVersion !== process.version
     || typeof checkpoint.runtimeHead !== 'string'
-    || checkpoint.runtimeHead !== gitValue(runtimeRoot, ['rev-parse', 'HEAD'])
+    || checkpoint.runtimeHead !== gitValue(path, ['rev-parse', 'HEAD'])
     || checkpoint.fingerprint !== configurationFingerprint(captureBootCriticalConfiguration())
-    || compiledRuntimeEntrypoint(runtimeRoot) === undefined
+    || compiledRuntimeEntrypoint(path) === undefined
     || profileFallbackHasMissingRuntimeArtifact()) return false
   return true
 }
