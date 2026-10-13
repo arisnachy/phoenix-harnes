@@ -37,7 +37,7 @@ export const Config: z<Config> = z.object({
 const HTML_MIME = 'text/html; charset=utf-8'
 // Vite emits a digest in production filenames. Those assets are immutable:
 // users reloading Phoenix should reuse them without 200 requests or disk reads.
-const HASHED_ASSET_NAME = /-[a-z0-9_-]{8,}\.(?:js|css|woff2?|ttf|svg|png|webp|jpe?g)$/iu
+const HASHED_ASSET_NAME = /-[a-z0-9_-]{8,}\.(?:js|css|woff2?|ttf)$/iu
 
 const MIME: Record<string, string> = {
   '.html': HTML_MIME,
@@ -103,7 +103,8 @@ export async function serveStatic(
       pragma: 'no-cache',
       expires: '0',
     } : {
-      'cache-control': HASHED_ASSET_NAME.test(target) ? 'public, max-age=31536000, immutable' : 'no-cache',
+      'cache-control': target.startsWith(join(distRoot, 'assets') + sep) && HASHED_ASSET_NAME.test(target)
+        ? 'public, max-age=31536000, immutable' : 'no-cache',
     }),
   })
   res.end(body)
