@@ -54,12 +54,15 @@ if (
   )
   if (existsSync(durableSupervisor)) {
     const runtimeSourceRoot = resolve(durableSupervisor, '..', '..')
+    const freshnessStartedAt = Date.now()
     try {
       preparePhoenixWebRuntime(runtimeSourceRoot)
     } catch (error) {
       console.error(`[PHOENIX] runtime freshness check failed: ${error instanceof Error ? error.message : String(error)}`)
       process.exit(1)
     }
+
+    console.error(`[PHOENIX STARTUP] source runtime/build freshness checks: ${String(Date.now() - freshnessStartedAt)}ms`)
 
     const supervisorSourceRoot = phoenixSupervisorSourceRoot(runtimeSourceRoot)
     const supervisor = resolve(supervisorSourceRoot, 'scripts', 'phoenix-windows-supervisor.mjs')
