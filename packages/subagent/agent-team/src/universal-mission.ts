@@ -92,7 +92,8 @@ export function replayUniversalMission(
     if (!validMission(snapshot) || snapshot.teamId !== teamId || closed.has(snapshot.id)) continue
     if (state === undefined || state.id !== snapshot.id) {
       if (state !== undefined && !universalMissionTerminal(state.phase)) continue
-      if (snapshot.revision !== 1 || (state?.userMessageId === snapshot.userMessageId)) continue
+      if (snapshot.revision !== 1 || state?.userMessageId === snapshot.userMessageId
+        || state?.lastHumanMessageId === snapshot.userMessageId) continue
       state = snapshot
     } else {
       if (snapshot.revision !== state.revision + 1
@@ -163,7 +164,8 @@ export class UniversalMissionLedger {
         })
         return steered
       }
-      if (prior !== undefined && prior.userMessageId === requestId) {
+      if (prior !== undefined && (prior.userMessageId === requestId
+        || prior.lastHumanMessageId === requestId)) {
         throw new TeamError('closed mission requires a new authentic user request', 'TEAM_MISSION_CLOSED')
       }
       const userText = request?.type === 'user/message'

@@ -102,7 +102,7 @@ function spawn(
   ctx: Context,
   lead: Agent,
   name: string,
-  options: { context?: 'fresh' | 'fork'; provider?: string } = {},
+  options: { context?: 'fresh' | 'fork'; provider?: string; missionComplexity?: 'simple' | 'medium' | 'difficult' | 'exceptional' } = {},
 ) {
   const context = options.context ?? 'fresh'
   return ctx.agentTeams.spawnTeammate(lead, {
@@ -111,6 +111,7 @@ function spawn(
     prompt: content(`${name} initial`),
     context,
     provider: options.provider ?? (context === 'fork' ? 'fork' : 'spawn'),
+    ...options.missionComplexity === undefined ? {} : { missionComplexity: options.missionComplexity },
     signal: SIGNAL,
   })
 }
@@ -224,6 +225,32 @@ describe('Team identity and provisioning', () => {
     await waitNoAgent(ctx, first.member.id)
     await waitNoAgent(ctx, second.member.id)
     await waitNoAgent(ctx, third.member.id)
+  })
+
+  it('atomically enforces mission tiers during actual roster admission, even with concurrent requests', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang', 'hang', 'hang'], { maxMembers: 5 })
+    const first = await spawn(ctx, lead, 'tier-one', { missionComplexity: 'simple' })
+    await waitRunning(ctx, first.member.id)
+    await expect(spawn(ctx, lead, 'tier-extra', { missionComplexity: 'simple' }))
+      .rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    const second = await spawn(ctx, lead, 'tier-two', { missionComplexity: 'medium' })
+    await waitRunning(ctx, second.member.id)
+    await expect(spawn(ctx, lead, 'tier-three-denied', { missionComplexity: 'medium' }))
+      .rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    const third = await spawn(ctx, lead, 'tier-three', { missionComplexity: 'difficult' })
+    await waitRunning(ctx, third.member.id)
+    await expect(spawn(ctx, lead, 'tier-four-denied', { missionComplexity: 'difficult' }))
+      .rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    const attempts = await Promise.allSettled([
+      spawn(ctx, lead, 'tier-four', { missionComplexity: 'exceptional' }),
+      spawn(ctx, lead, 'tier-five', { missionComplexity: 'exceptional' }),
+      spawn(ctx, lead, 'tier-six', { missionComplexity: 'exceptional' }),
+    ])
+    expect(attempts.filter(item => item.status === 'fulfilled')).toHaveLength(2)
+    expect(attempts.filter(item => item.status === 'rejected')).toHaveLength(1)
+    for (const member of ctx.agentTeams.listMembers(lead)) {
+      if (member.role === 'teammate' && member.status === 'running') ctx.agentTeams.interrupt(lead, member.name)
+    }
   })
 
   it('admits five independent workers when explicitly configured and rejects a sixth', async () => {
