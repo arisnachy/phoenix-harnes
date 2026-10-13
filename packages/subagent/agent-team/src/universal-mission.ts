@@ -60,24 +60,27 @@ export function universalMissionTerminal(phase: UniversalMissionPhase): boolean 
   return TERMINAL.has(phase)
 }
 
-function validMission(value: UniversalMissionSnapshot): boolean {
-  return value !== null && typeof value === 'object'
-    && typeof value.id === 'string' && value.id.length > 0
-    && typeof value.teamId === 'string' && value.teamId.length > 0
-    && typeof value.objective === 'string' && value.objective.length > 0
-    && typeof value.userMessageId === 'string' && value.userMessageId.length > 0
-    && (value.lastHumanMessageId === undefined
-      || typeof value.lastHumanMessageId === 'string' && value.lastHumanMessageId.length > 0)
-    && ORIGINS.has(value.origin)
-    && PHASES.has(value.phase)
-    && Number.isSafeInteger(value.revision) && value.revision > 0
-    && Number.isSafeInteger(value.cancellationEpoch) && value.cancellationEpoch >= 0
-    && Number.isSafeInteger(value.maxTeammates) && value.maxTeammates >= 1 && value.maxTeammates <= 5
-    && Array.isArray(value.evidenceIds) && value.evidenceIds.every(x => typeof x === 'string')
-    && Array.isArray(value.blockers) && value.blockers.every(x => typeof x === 'string')
-    && typeof value.verified === 'boolean'
-    && (value.phase !== 'completed' || value.verified && value.evidenceIds.length > 0)
-    && (!value.verified || value.phase === 'completed')
+function validMission(value: unknown): value is UniversalMissionSnapshot {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
+  const item = value as Record<string, unknown>
+  return typeof item.id === 'string' && item.id.length > 0
+    && typeof item.teamId === 'string' && item.teamId.length > 0
+    && typeof item.objective === 'string' && item.objective.length > 0
+    && typeof item.userMessageId === 'string' && item.userMessageId.length > 0
+    && (item.lastHumanMessageId === undefined
+      || typeof item.lastHumanMessageId === 'string' && item.lastHumanMessageId.length > 0)
+    && typeof item.origin === 'string' && ORIGINS.has(item.origin as UniversalMissionSnapshot['origin'])
+    && typeof item.phase === 'string' && PHASES.has(item.phase as UniversalMissionPhase)
+    && typeof item.revision === 'number' && Number.isSafeInteger(item.revision) && item.revision > 0
+    && typeof item.cancellationEpoch === 'number'
+    && Number.isSafeInteger(item.cancellationEpoch) && item.cancellationEpoch >= 0
+    && typeof item.maxTeammates === 'number'
+    && Number.isSafeInteger(item.maxTeammates) && item.maxTeammates >= 1 && item.maxTeammates <= 5
+    && Array.isArray(item.evidenceIds) && item.evidenceIds.every((x: unknown) => typeof x === 'string')
+    && Array.isArray(item.blockers) && item.blockers.every((x: unknown) => typeof x === 'string')
+    && typeof item.verified === 'boolean'
+    && (item.phase !== 'completed' || item.verified && item.evidenceIds.length > 0)
+    && (!item.verified || item.phase === 'completed')
 }
 
 /**
@@ -99,8 +102,9 @@ export function replayUniversalMission(
     if (!validMission(snapshot) || snapshot.teamId !== teamId || closed.has(snapshot.id)) continue
     if (state === undefined || state.id !== snapshot.id) {
       if (state !== undefined && !universalMissionTerminal(state.phase)) continue
-      if (snapshot.revision !== 1 || state?.userMessageId === snapshot.userMessageId
-        || state?.lastHumanMessageId === snapshot.userMessageId) continue
+      const reusedRequest = state !== undefined
+        && [state.userMessageId, state.lastHumanMessageId].includes(snapshot.userMessageId)
+      if (snapshot.revision !== 1 || reusedRequest) continue
       state = snapshot
     } else {
       if (snapshot.revision !== state.revision + 1
@@ -137,7 +141,7 @@ export class UniversalMissionLedger {
   /** @param journal - single-writer Team Session journal. */
   constructor(private readonly journal: TeamJournal) {}
 
-  /** 
+  /**
    * Return the latest persisted mission without allocating workers.
    * @param root - exact owning Team Lead.
    * @returns validated mission, if any.
