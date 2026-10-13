@@ -3,6 +3,8 @@ import { resolve } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   CORDIS_TSDOWN_ENTRY_NAMES,
+  ensureCliTsdownEntries,
+  missingCliTsdownEntries,
   ensureCordisTsdownEntries,
   ensureIncludeTsdownEntries,
   missingCordisTsdownEntries,
@@ -65,6 +67,70 @@ describe('isolated Windows Include plugin tsdown entry recovery', () => {
   it('refuses to synthesize missing tracked Include source', () => {
     expect(() => missingIncludeTsdownEntries(root, () => false))
       .toThrow('tracked vendor/include/src/index.ts is missing')
+  })
+})
+
+
+describe('isolated Windows CLI bin entry recovery', () => {
+  const cli = resolve(root, 'apps', 'cli')
+  const binSource = resolve(cli, 'src', 'bin.ts')
+  const binJs = resolve(cli, 'lib', 'types', 'bin.js')
+  const binTypes = resolve(cli, 'lib', 'types', 'bin.d.ts')
+
+  it('detects a deleted bin.js despite a retained declaration and incremental metadata', () => {
+    const files = new Set([binSource, binTypes, resolve(cli, 'tsconfig.tsbuildinfo')])
+    expect(missingCliTsdownEntries(root, path => files.has(path)))
+      .toEqual(['lib/types/bin.js'])
+  })
+
+  it('re-emits only the CLI project with isolated build metadata and no dependency graph force', () => {
+    const files = new Set([binSource, binTypes, tsc])
+    const spawn = vi.fn((_node: string, _args: string[], _options: object) => {
+      files.add(binJs)
+      return { status: 0 }
+    })
+    const log = vi.fn()
+    expect(ensureCliTsdownEntries(root, {
+      exists: path => files.has(path), spawn: spawn as never,
+      node: 'node.exe', log,
+    })).toEqual({ repaired: true, missing: ['lib/types/bin.js'] })
+    expect(spawn).toHaveBeenCalledWith(
+      'node.exe',
+      [tsc, '-p', 'apps/cli/tsconfig.json', '--tsBuildInfoFile',
+        expect.stringContaining('tsconfig.phoenix-cli-repair-')],
+      expect.objectContaining({ cwd: root, stdio: 'inherit', windowsHide: true }),
+    )
+    expect(log).toHaveBeenCalledTimes(2)
+  })
+
+  it('skips recompilation when CLI JS and declarations are present', () => {
+    const files = new Set([binSource, binJs, binTypes])
+    const spawn = vi.fn()
+    expect(ensureCliTsdownEntries(root, {
+      exists: path => files.has(path), spawn: spawn as never,
+    })).toEqual({ repaired: false, missing: [] })
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  it('fails closed if the CLI TypeScript pass does not restore its entry', () => {
+    const files = new Set([binSource, binTypes, tsc])
+    expect(() => ensureCliTsdownEntries(root, {
+      exists: path => files.has(path),
+      spawn: (() => ({ status: 0 })) as never,
+      log: () => {},
+    })).toThrow('CLI entry repair did not emit: lib/types/bin.js')
+  })
+
+  it('rejects absent tracked CLI source rather than synthesizing a fake executable', () => {
+    expect(() => missingCliTsdownEntries(root, () => false))
+      .toThrow('tracked apps/cli/src/bin.ts is missing')
+  })
+
+  it('is called by the existing Host pre-tsdown guard', () => {
+    const entryGuard = readFileSync(resolve('scripts/ensure-cordis-tsdown-entries.mjs'), 'utf8')
+    const pkg = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as { scripts: Record<string, string> }
+    expect(entryGuard).toContain('ensureCliTsdownEntries(root)')
+    expect(pkg.scripts['build:lib:host']).toContain('node scripts/ensure-cordis-tsdown-entries.mjs')
   })
 })
 

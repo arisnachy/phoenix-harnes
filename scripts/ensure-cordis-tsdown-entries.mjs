@@ -11,7 +11,7 @@
  * It touches only the current checkout (an isolated updater stage, if staged).
  */
 import { spawnSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, rmSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -94,8 +94,68 @@ export function ensureIncludeTsdownEntries(root, options = {}) {
   return ensureVendorTsdownEntries(root, 'include', options)
 }
 
+
+/**
+ * The CLI has a package-local tsdown entry (lib/types/bin.js), not the shared
+ * index/invariant/startup glob. In persistent Windows updater worktrees, tsc -b
+ * may trust a retained .tsbuildinfo even though ignored JS output was removed.
+ * Repair only the CLI project using fresh temporary incremental metadata.
+ */
+export function missingCliTsdownEntries(root, exists = existsSync) {
+  const directory = resolve(root, 'apps', 'cli')
+  if (!exists(resolve(directory, 'src', 'bin.ts'))) {
+    throw new Error('build: tracked apps/cli/src/bin.ts is missing; refusing generated-file recovery')
+  }
+  return ['bin.js', 'bin.d.ts']
+    .filter(name => !exists(resolve(directory, 'lib', 'types', name)))
+    .map(name => 'lib/types/' + name)
+}
+
+export function ensureCliTsdownEntries(root, {
+  exists = existsSync,
+  spawn = spawnSync,
+  node = process.execPath,
+  environment = process.env,
+  log = message => console.error(message),
+} = {}) {
+  const missing = missingCliTsdownEntries(root, exists)
+  if (missing.length === 0) return { repaired: false, missing: [] }
+
+  const tsc = resolve(root, 'node_modules', 'typescript', 'bin', 'tsc')
+  if (!exists(tsc)) {
+    throw new Error('build: cannot restore CLI entries: workspace TypeScript executable is missing at ' + tsc)
+  }
+  // A distinct build-info file forces emit only for apps/cli, not the entire
+  // TypeScript project graph. Never remove the normal tsconfig.tsbuildinfo.
+  const repairInfo = resolve(root, 'apps', 'cli', 'tsconfig.phoenix-cli-repair-' + String(process.pid) + '.tsbuildinfo')
+  log('[PHOENIX BUILD] restoring CLI generated entry (' + missing.join(', ') + ') before tsdown...')
+  let result
+  try {
+    result = spawn(node, [tsc, '-p', 'apps/cli/tsconfig.json', '--tsBuildInfoFile', repairInfo], {
+      cwd: root,
+      env: environment,
+      stdio: 'inherit',
+      windowsHide: true,
+    })
+  } finally {
+    rmSync(repairInfo, { force: true })
+  }
+  if (result.error) throw result.error
+  if (result.status !== 0) {
+    throw new Error('build: CLI TypeScript entry repair exited with ' + String(result.status ?? result.signal))
+  }
+  const remaining = missingCliTsdownEntries(root, exists)
+  if (remaining.length > 0) {
+    throw new Error('build: CLI entry repair did not emit: ' + remaining.join(', ')
+      + '; refusing to activate incomplete isolated runtime')
+  }
+  log('[PHOENIX BUILD] CLI TypeScript entry repair completed; resuming Host bundling.')
+  return { repaired: true, missing }
+}
+
 if (import.meta.main) {
   const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
   ensureCordisTsdownEntries(root)
   ensureIncludeTsdownEntries(root)
+  ensureCliTsdownEntries(root)
 }
