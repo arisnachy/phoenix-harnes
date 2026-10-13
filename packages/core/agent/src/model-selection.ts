@@ -240,7 +240,7 @@ const AUTO_CONTINUATION_LIMIT = 4
 const AUTO_EXECUTION_CONTINUATION =
   'Planning or describing the next action is not task completion. ' +
   'Continue the current user request now with the available tools. ' +
-  'Execute the next concrete action instead of only saying what you will do, ' +
+  'Do not just narrate; execute the next concrete action instead of only saying what you will do, ' +
   'and keep working until the requested task is actually complete or a concrete external blocker requires user action.'
 
 const AUTO_VISIBLE_PLAN_POLICY =
