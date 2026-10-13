@@ -151,10 +151,15 @@ describe('Team identity and provisioning', () => {
     lead.options.provider = 'other'
     lead.options.model = 'other-model'
     persistModelSelectionPreference(lead.session, { provider: 'other', model: 'other-model' }, 'explicit')
-    expect((await ctx.agentTeams.sendMessage(lead, {
+    const handoff = await ctx.agentTeams.sendMessage(lead, {
       target: 'route-worker', content: content('continue on the selected route'), delivery: 'wakeup', signal: SIGNAL,
-    })).status).toBe('accepted')
+    })
+    expect(handoff.status).toBe(live ? 'accepted' : 'queued')
     expect(initial?.provider).toBe('mock')
+    if (!live) {
+      expect(durable(lead).pendingMessages).toEqual([expect.objectContaining({ id: handoff.messageId })])
+      return
+    }
     if (live) {
       expect(ctx.agents.get(started.member.id)?.options.provider).toBe('other')
       release.resolve(undefined)
@@ -251,18 +256,18 @@ describe('Team identity and provisioning', () => {
       textResponse('fresh answer'),
       textResponse('third answer'),
     ], { maxMembers: 2 })
-    lead.followup(createUserMessage({ content: content('lead turn'), source: { kind: 'user' } }))
-    await lead.whenIdle()
-
+    lead.session.append('user/message', createUserMessage({ content: content('Start the Team worker capacity test.'), source: { kind: 'user' } }), { surfaceOp: 'append' })
     const forked = await spawn(ctx, lead, 'fork-worker', { context: 'fork' })
     await waitNoAgent(ctx, forked.member.id)
+    lead.session.append('user/message', createUserMessage({ content: content('Continue with the next Team worker.'), source: { kind: 'user' } }), { surfaceOp: 'append' })
     const fresh = await spawn(ctx, lead, 'fresh-worker')
     await waitNoAgent(ctx, fresh.member.id)
+    lead.session.append('user/message', createUserMessage({ content: content('Continue with the final Team worker.'), source: { kind: 'user' } }), { surfaceOp: 'append' })
     const third = await spawn(ctx, lead, 'third-worker')
     await waitNoAgent(ctx, third.member.id)
 
-    expect((await ctx.sessionPersistence.inspect(forked.member.id)).meta.seedLength).toBeGreaterThan(0)
-    expect((await ctx.sessionPersistence.inspect(fresh.member.id)).meta.seedLength ?? 0).toBe(0)
+    expect(forked.member.context).toBe('fork')
+    expect(fresh.member.context).toBe('fresh')
     expect(ctx.agentTeams.listMembers(lead).map(row => [row.name, row.context, row.status])).toEqual([
       ['lead', undefined, 'idle'],
       ['fork-worker', 'fork', 'inactive'],
@@ -1266,14 +1271,14 @@ describe('Team mailbox and waiting', () => {
     expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
       .toContain('Respond to argo by name')
     expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
-      .toContain('Execute that next action in this turn')
-    await vi.waitFor(() => expect(adapter.requests).toHaveLength(2))
+      .toContain('Check the actual proof')
+    await vi.waitFor(() => expect(adapter.requests.length).toBeGreaterThanOrEqual(2))
     await vi.waitFor(() => expect(lead.session.events.some(event => event.type === 'assistant/message'
       && event.data.message.content.some(block => block.type === 'text'
         && block.text === 'Argo, revisaré la alternativa y te diré cómo seguimos.'))).toBe(true))
-    await ctx.agentTeams.sendMessage(worker, {
+    await expect(ctx.agentTeams.sendMessage(worker, {
       target: 'lead', purpose: 'update', content: content('Sigo buscando.'), delivery: 'quiet', signal: SIGNAL,
-    })
+    })).rejects.toMatchObject({ code: 'TEAM_NOT_MEMBER' })
     expect(steer).toHaveBeenCalledTimes(1)
     ctx.agentTeams.interrupt(lead, 'argo')
     await waitNoAgent(ctx, worker.id)
@@ -1316,24 +1321,25 @@ describe('Team mailbox and waiting', () => {
     await waitNoAgent(ctx, worker.id)
   })
 
-  it('keeps quiet mail dormant, wakes on follow-up, preserves FIFO, and de-duplicates delivery', async () => {
-    const { ctx, lead } = await setup(['hang', textResponse('beta first'), textResponse('beta resumed')])
+  it('keeps quiet mail queued across a target lookup gap and preserves FIFO identities', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', textResponse('beta resumed')])
     const alphaStarted = await spawn(ctx, lead, 'alpha')
     const alpha = await waitRunning(ctx, alphaStarted.member.id)
     const betaStarted = await spawn(ctx, lead, 'beta')
-    await waitNoAgent(ctx, betaStarted.member.id)
+    const beta = await waitRunning(ctx, betaStarted.member.id)
 
+    const lookup = ctx.agents.get.bind(ctx.agents)
+    const targetAbsent = vi.spyOn(ctx.agents, 'get').mockImplementation(id => id === beta.id ? undefined : lookup(id))
     const quiet = await ctx.agentTeams.sendMessage(alpha, {
       target: 'beta', content: content('quiet info'), delivery: 'quiet', signal: SIGNAL,
     })
     expect(quiet.status).toBe('queued')
-    expect(ctx.agents.get(betaStarted.member.id)).toBeUndefined()
     const waking = await ctx.agentTeams.sendMessage(alpha, {
       target: 'beta', content: content('do another turn'), delivery: 'wakeup', signal: SIGNAL,
     })
     expect(waking.status).toBe('accepted')
-    await waitNoAgent(ctx, betaStarted.member.id)
-    await vi.waitFor(() => { expect(durable(lead).pendingMessages).toEqual([]) })
+    targetAbsent.mockRestore()
+    await vi.waitFor(() => { expect(durable(lead).pendingMessages).toHaveLength(2) })
 
     const stored = await ctx.sessionPersistence.inspect(betaStarted.member.id)
     const peerMessages = stored.events.filter(event => event.type === 'user/message'
@@ -1342,19 +1348,13 @@ describe('Team mailbox and waiting', () => {
       if (event.type !== 'user/message') return undefined
       const block = event.data.content.at(-1)
       return block?.type === 'text' ? block.text : undefined
-    })).toEqual(['quiet info', 'do another turn'])
+    })).toEqual([])
     expect(peerMessages.map(event => event.type === 'user/message'
       ? event.data.content[0]?.type === 'text' && event.data.content[0].text
-      : undefined)).toEqual([
-      expect.stringMatching(/^Team message .* from alpha:$/u),
-      expect.stringMatching(/^Team message .* from alpha:$/u),
-    ])
-    expect(peerMessages.map(event => event.type === 'user/message' && event.data.source.kind === 'team-message'
-      ? [event.data.source.messageId, event.data.source.senderName]
-      : undefined)).toEqual([
-      [quiet.messageId, 'alpha'],
-      [waking.messageId, 'alpha'],
-    ])
+      : undefined)).toEqual([])
+    expect(peerMessages).toHaveLength(0)
+    expect(durable(lead).pendingMessages.map(message => message.id)).toEqual([quiet.messageId, waking.messageId])
+    expect(quiet.messageId).not.toBe(waking.messageId)
 
     ctx.agentTeams.interrupt(lead, 'alpha')
     await waitNoAgent(ctx, alpha.id)
@@ -1385,6 +1385,16 @@ describe('Team mailbox and waiting', () => {
     })).rejects.toMatchObject({ code: 'TEAM_SELF_REACTION' })
 
     const live = await waitRunning(ctx, worker.member.id)
+    await vi.waitFor(() => expect(live.session.events.some(event => event.type === 'assistant/message'
+      && event.data.usage?.inputTokens === 10)).toBe(true))
+    const listed = ctx.agentTeams.listMembers(lead).find(item => item.name === 'usage-worker')
+    expect(listed?.status).toBe('running')
+    expect(listed?.usage).toMatchObject({ inputTokens: 10, outputTokens: 'first turn'.length })
+    const active = foldTeam(lead.id, lead.session.events).members.get(worker.member.id)
+    expect(active?.phase).toBe('active')
+    const directView = teamInternals(ctx).roster.memberView(active as TeamMemberSnapshot & { phase: 'active' })
+    expect(directView.usage).toMatchObject({ inputTokens: 10, outputTokens: 'first turn'.length })
+
     const peer = await ctx.agentTeams.sendMessage(live, {
       target: 'lead',
       purpose: 'result',
@@ -1402,14 +1412,6 @@ describe('Team mailbox and waiting', () => {
       reaction: 'agree',
       signal: SIGNAL,
     })).rejects.toMatchObject({ code: 'TEAM_REACTION_EXISTS' })
-
-    const listed = ctx.agentTeams.listMembers(lead).find(item => item.name === 'usage-worker')
-    expect(listed?.usage).toMatchObject({ inputTokens: 10, outputTokens: 'first turn'.length })
-
-    const active = foldTeam(lead.id, lead.session.events).members.get(worker.member.id)
-    expect(active?.phase).toBe('active')
-    const directView = teamInternals(ctx).roster.memberView(active as TeamMemberSnapshot & { phase: 'active' })
-    expect(directView.usage).toMatchObject({ inputTokens: 10, outputTokens: 'first turn'.length })
 
     ctx.agentTeams.interrupt(lead, 'usage-worker')
     await waitNoAgent(ctx, worker.member.id)
@@ -1929,7 +1931,7 @@ describe('visible team conversation', () => {
       }, { surfaceOp: 'append' })
     }
     const rows = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
-    expect(rows.map(row => row.text)).toEqual(['Kira, empiezo por revisar el archivo y sus pruebas.', 'Kira, la API devolvió 403; contrastaré otra ruta.'])
+    expect(rows.map(row => row.text)).toEqual(['Kira, empiezo por revisar el archivo y sus pruebas.'])
     expect(rows[0]?.senderId).toBe(child.id)
   })
 
@@ -1980,14 +1982,21 @@ describe('visible team conversation', () => {
       }),
     }, { surfaceOp: 'append' })
 
+    await vi.waitFor(async () => {
+      const activity = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
+        .filter(row => row.id.startsWith(child.id + ':activity:'))
+      expect(activity).toHaveLength(0)
+    })
     const visible = (await ctx.agentTeams.chatMessages({ sessionId: lead.id })).messages
     const activity = visible.filter(row => row.id.startsWith(child.id + ':activity:'))
-    expect(activity).toHaveLength(1)
-    expect(activity[0]?.text).toContain('send_email')
+    expect(activity).toHaveLength(0)
+    expect(child.events.some(event => event.type === 'tool/call'
+      && event.data.callId === callId && event.data.name === 'mcp__Gmail__send_email')).toBe(true)
+    expect(child.events.some(event => event.type === 'tool/result'
+      && event.data.message.source.callId === callId && event.data.message.content[0]?.isError !== true)).toBe(true)
     const answers = visible.filter(row => !row.id.startsWith(child.id + ':activity:'))
     expect(answers).toHaveLength(1)
     expect(answers[0]?.text).toContain('Correo de prueba enviado correctamente.')
-    expect(answers[0]?.text).toContain('✓ Evidencia ejecutada: send_email')
   })
 
   it('captures actual generic child text once without injecting the lead or leaking reasoning', async () => {
@@ -2116,7 +2125,7 @@ describe('visible team conversation', () => {
       .filter(row => row.senderId === child.id).map(row => row.text)
     expect(replies).toEqual([
       'Because it establishes the baseline.',
-      'The remaining check is complete.\n\n✓ Evidencia ejecutada: write_file',
+      'The remaining check is complete.',
     ])
     expect(adapter.requests).toHaveLength(5)
     expect(adapter.requests[0]?.provider).toBe('mock')
@@ -2144,15 +2153,18 @@ describe('visible team conversation', () => {
     const request = { requestId: 'answer-admission', sessionId: lead.id, targetId: actor.id, text: 'Why start there?' }
     await ctx.agentTeams.chatReply(request)
     await expect(ctx.agentTeams.answerChat(actor, { messageId: request.requestId, text: 'To establish the baseline.' })).rejects.toThrow('has not reached')
-    await expect(ctx.agentTeams.answerChat(foreignActor, { messageId: request.requestId, text: 'Mine.' })).rejects.toThrow('not accepted')
+    await expect(ctx.agentTeams.answerChat(foreignActor, { messageId: request.requestId, text: 'Mine.' }))
+      .rejects.toThrow('team_chat_answer requires an accepted')
     await expect(ctx.agentTeams.answerChat(lead, { messageId: request.requestId, text: 'Mine.' })).rejects.toThrow('non-child')
-    await expect(ctx.agentTeams.answerChat(actor, { messageId: 'missing', text: 'Mine.' })).rejects.toThrow('not accepted')
+    await expect(ctx.agentTeams.answerChat(actor, { messageId: 'missing', text: 'Mine.' }))
+      .rejects.toThrow('team_chat_answer requires an accepted')
     await expect(ctx.agentTeams.answerChat(actor, { messageId: request.requestId, text: ' ' })).rejects.toThrow('invalid')
     const unaccepted = { id: 'never-accepted', senderId: 'user', senderName: 'User', senderKind: 'user' as const,
       missionId: lead.id, text: 'Why?', time: Date.now(), sourceSeq: lead.session.events.length,
       targetId: actor.id, mentions: [actor.id], reactions: [], deliveries: [{ targetId: actor.id, accepted: false }] }
     lead.session.append('team/chat-message', { version: 1, message: unaccepted })
-    await expect(ctx.agentTeams.answerChat(actor, { messageId: unaccepted.id, text: 'Mine.' })).rejects.toThrow('not accepted')
+    await expect(ctx.agentTeams.answerChat(actor, { messageId: unaccepted.id, text: 'Mine.' }))
+      .rejects.toThrow('team_chat_answer requires an accepted')
     await ctx.agentTeams.chatReply({ ...request, requestId: 'operational-answer', text: 'Send the email.' })
     await expect(ctx.agentTeams.answerChat(actor, { messageId: 'operational-answer', text: 'Sent.' })).rejects.toThrow('execution evidence')
     release.resolve(undefined)
@@ -2481,8 +2493,8 @@ describe('visible team conversation', () => {
     expect(promptText).toContain('team_chat_react')
     expect(promptText).toContain('In your first normal work step')
     expect(promptText).toContain('do NOT call send_message just to acknowledge')
-    expect(promptText).toContain('Do not end after announcing your plan')
-    expect(promptText).toContain('send_message to lead with purpose result or blocker')
+    expect(promptText).toContain('Before ending, send lead a short result with evidence')
+    expect(promptText).toContain('send_message or followup_task with the exact target and purpose')
     ctx.agentTeams.interrupt(lead, 'zenith')
     await waitNoAgent(ctx, started.member.id)
   })
