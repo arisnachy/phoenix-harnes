@@ -438,7 +438,7 @@ export function ModelSelect(
                   placeholder={t('search.placeholder')}
                   autoComplete="off"
                   value={modelQuery}
-                  onChange={event => { setModelQuery(event.currentTarget.value) }}
+                  onChange={(event) => { setModelQuery(event.currentTarget.value) }}
                 />
               </div>
               {state.status === 'loading' && (
