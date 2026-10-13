@@ -12,7 +12,7 @@ Status: implemented
 
 `packages/subagent/agent-team/src/index.ts` 允许 Kira 作为负责人同时拥有一至三名专家，默认并发上限为三。上限不是配额：简单请求无需团队；独立委派通常用一名专家；两个真正独立的工作面可用两名；仅当存在三个独立范围时才用三名。
 
-`packages/subagent/tool-agent-team/src/index.ts` 使用真实、定向、带证据的团队消息。Fénix Eclipse 用 Sol 规划和处理真实阻碍，由 Luna Max 执行；用户明确选择的其他 Codex 模型继续承担 Kira 的规划与升级，专家使用 Luna Max；Codex 之外，专家严格继承当前供应商与模型。现有路由逻辑拥有最终决定权，不可编造消息、切换供应商或虚构救援调用。
+`packages/subagent/tool-agent-team/src/index.ts` 使用真实、定向、带证据的团队消息。Fénix Eclipse 用 Sol 规划和处理真实阻碍，由 Luna Max 执行；用户明确选择的其他 Codex 模型继续承担 Kira 的规划与升级，专家使用 Luna Max；Codex 之外，专家严格继承当前供应商与模型。`packages/core/agent/src/model-selection.ts` 中的 Phoenix Auto 路由在 Sol xhigh 首轮规划后，仍让 Kira 使用当前配置的 Sol high 负责协调；只有遇到真实阻碍才暂时提升为 Sol xhigh。Luna Max 专用于独立队友执行。闲聊继续使用原有的低延迟 Luna 路径。不可编造消息、切换供应商或虚构救援调用。
 
 `packages/client/ui-model-selection/src/client/ModelSelect.tsx` 在供应商分组之上新增本地搜索。它匹配供应商名称、模型名称、标识符与显示名称；输入时自动显示匹配分组，清空后恢复原有折叠行为。搜索不请求模型，也不更改当前选择。
 
