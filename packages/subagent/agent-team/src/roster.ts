@@ -23,6 +23,7 @@ import { requiredText, boundedTranscriptText } from './validation.ts'
 import { TEAM_PERSONAS } from './personas.ts'
 import { teamLanguageInstruction } from './language.ts'
 import { teamMissionClosed } from './mission-closure.ts'
+import { teammateBudgetForMission } from './mission-sizing.ts'
 
 const MEMBER_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u
 
@@ -314,8 +315,13 @@ export class TeamRoster {
       const occupied = [...state.members.values()].filter(member =>
         member.phase === 'provisioning'
         || (member.phase === 'active' && this.ctx.agents.get(member.id) !== undefined))
-      if (occupied.length >= this.maxMembers) {
-        throw new TeamError(`Concurrent Team member limit ${this.maxMembers} reached`, 'TEAM_MEMBER_LIMIT')
+      // Enforce scope-specific limits INSIDE the serialized durable roster admission;
+      // model-side list_agents counts can race when several tool calls run in parallel.
+      const permitted = request.missionComplexity === undefined
+        ? this.maxMembers
+        : Math.min(this.maxMembers, teammateBudgetForMission(request.missionComplexity))
+      if (occupied.length >= permitted) {
+        throw new TeamError(`Concurrent Team member limit ${permitted} reached`, 'TEAM_MEMBER_LIMIT')
       }
       await this.journal.appendAndFlush(root, 'team/member', { version: 1, teamId: TeamId(root.id), member })
     })

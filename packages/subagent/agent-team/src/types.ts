@@ -4,6 +4,7 @@ import type { Branded } from '@phoenix-ai/dsh-brand'
 import type { ContentBlock } from '@phoenix-ai/dsh-llm'
 import type { SessionId } from '@phoenix-ai/dsh-session'
 import type { AgentOptions } from '@phoenix-ai/dsh-agent'
+import type { MissionComplexity } from './mission-sizing.ts'
 
 /** Identifies the implicit team rooted at one top-level Session. */
 export type TeamId = Branded<'TeamId'>
@@ -178,6 +179,8 @@ export interface SpawnTeammateRequest {
   readonly provider: string
   /** Optional provider-neutral LLM route selected by the Team tool policy. */
   readonly agentOptions?: AgentOptions
+  /** Atomic admission ceiling for this delegated scope; defaults to deployment cap for API compatibility. */
+  readonly missionComplexity?: MissionComplexity
   readonly signal: AbortSignal
 }
 

@@ -439,6 +439,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           prompt: [{ type: 'text', text: args.prompt }],
           context,
           provider: context === 'fork' ? config.forkProvider : config.freshProvider,
+          ...args.mission_complexity === undefined ? {} : { missionComplexity: args.mission_complexity },
           ...agentOptions === undefined ? {} : { agentOptions },
           signal: exec.signal,
         })
