@@ -225,7 +225,9 @@ describe('client bundle activation', () => {
     mkdirSync(dirname(clientPath), { recursive: true })
     writeFileSync(clientPath, 'module.exports = {}\n')
     const { service, route } = constructWithRoute([id])
-    const rev = service.graph().entries[0].rev
+    const entry = service.graph().entries.find(row => row.id === id)
+    if (entry === undefined) throw new Error(`missing boot entry for ${id}`)
+    const rev = entry.rev
 
     async function request(url: string): Promise<{ status: number; cache?: string }> {
       let status = 0
