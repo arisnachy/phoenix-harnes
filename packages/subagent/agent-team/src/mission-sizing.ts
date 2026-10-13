@@ -12,6 +12,9 @@ export const MISSION_TEAM_CEILINGS = {
 export type MissionComplexity = keyof typeof MISSION_TEAM_CEILINGS
 
 /** Maximum simultaneous real specialists allowed by the declared mission tier. */
-export function teammateBudgetForMission(tier: MissionComplexity): number {
-  return MISSION_TEAM_CEILINGS[tier]
+export function teammateBudgetForMission(tier: string): number {
+  if (Object.prototype.hasOwnProperty.call(MISSION_TEAM_CEILINGS, tier)) {
+    return MISSION_TEAM_CEILINGS[tier as MissionComplexity]
+  }
+  throw new RangeError(`Invalid mission complexity: ${tier}`)
 }
