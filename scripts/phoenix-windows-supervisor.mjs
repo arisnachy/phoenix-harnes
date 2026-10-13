@@ -946,8 +946,15 @@ function repairMissingProfileRuntimeArtifact(
   initialPreflight,
   fallbackMissing = profileFallbackHasMissingRuntimeArtifact(),
 ) {
-  if (!fallbackMissing
+  // dump-config runs prepareProfile() and can heal the shared junction farm.
+  // A missing-link snapshot taken before that preflight is stale: rebuilding
+  // the entire workspace after a successful self-heal wastes many seconds.
+  const stillMissing = fallbackMissing && profileFallbackHasMissingRuntimeArtifact()
+  if (!stillMissing
     && (initialPreflight.ok || !isMissingProfileRuntimeArtifact(initialPreflight.detail))) {
+    if (fallbackMissing) {
+      console.error('[PHOENIX STARTUP] profile links healed during preflight; full rebuild avoided.')
+    }
     return initialPreflight
   }
 
