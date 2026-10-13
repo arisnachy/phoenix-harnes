@@ -387,3 +387,42 @@
   .headline { font-size: clamp(27px, 6vw, 36px); }
   .subtitle { font-size: 16px; }
 }
+
+/* Welcome emblem only: a larger polished gold-and-silver focal point.
+   The shared logo asset and sidebar/accessory marks remain untouched. */
+.fishHitbox {
+  position: relative;
+  isolation: isolate;
+  width: 172px;
+  height: 172px;
+  margin-bottom: 18px;
+}
+.fishHitbox::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 8%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(253, 220, 155, 0.34) 0%, rgba(234, 152, 64, 0.10) 48%, transparent 74%);
+  filter: blur(16px);
+  pointer-events: none;
+}
+.fish {
+  width: 156px;
+  height: 156px;
+  filter: saturate(1.18) contrast(1.08)
+    drop-shadow(0 2px 1px rgba(255, 244, 216, 0.48))
+    drop-shadow(0 8px 14px rgba(128, 77, 30, 0.20));
+}
+@media (max-height: 650px) {
+  .fishHitbox { width: 104px; height: 104px; margin-bottom: 8px; }
+  .fish { width: 94px; height: 94px; }
+}
+@media (max-width: 720px) {
+  .fishHitbox { width: 116px; height: 116px; margin-bottom: 12px; }
+  .fish { width: 106px; height: 106px; }
+}
+@media (max-width: 720px) and (max-height: 650px) {
+  .fishHitbox { width: 88px; height: 88px; margin-bottom: 8px; }
+  .fish { width: 80px; height: 80px; }
+}
