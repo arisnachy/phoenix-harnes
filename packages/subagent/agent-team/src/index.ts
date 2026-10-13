@@ -58,7 +58,9 @@ declare module '@phoenix-ai/cordis' {
   }
 }
 
-const MAX_TEAMMATES = 3
+// Kira is the supervising Lead; at most two concurrently active workers
+// keep the entire visible mission within three real agents, never four.
+const MAX_TEAMMATES = 2
 const DEFAULT_MAX_MEMBERS = MAX_TEAMMATES
 const DEFAULT_MAX_TASKS = 256
 const DEFAULT_MAX_PENDING_MESSAGES = 64
