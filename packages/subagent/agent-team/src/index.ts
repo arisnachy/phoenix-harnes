@@ -61,6 +61,10 @@ declare module '@phoenix-ai/cordis' {
 // Kira is the supervising Lead; at most two concurrently active workers
 // keep the entire visible mission within three real agents, never four.
 const MAX_TEAMMATES = 2
+// Profiles written before the two-worker policy still declare maxMembers: 3.
+// Accept that historical setting during config validation, then enforce the
+// strict two-worker runtime ceiling. Reject unknown larger values as before.
+const MAX_LEGACY_CONFIGURED_TEAMMATES = 3
 const DEFAULT_MAX_MEMBERS = MAX_TEAMMATES
 const DEFAULT_MAX_TASKS = 256
 const DEFAULT_MAX_PENDING_MESSAGES = 64
@@ -75,13 +79,13 @@ function positiveLimit(name: string, value: number): number {
   return value
 }
 
-/** Keep the product Team budget aligned with Phoenix's 1 -> 2 -> 3 escalation ladder. */
+/** Normalize legacy three-worker profiles to the current two-worker runtime ceiling. */
 function memberLimit(value: number): number {
   const limit = positiveLimit('maxMembers', value)
-  if (limit > MAX_TEAMMATES) {
-    throw new TeamError(`maxMembers must not exceed ${MAX_TEAMMATES}`, 'TEAM_INVALID_CONFIG')
+  if (limit > MAX_LEGACY_CONFIGURED_TEAMMATES) {
+    throw new TeamError(`maxMembers must not exceed ${MAX_LEGACY_CONFIGURED_TEAMMATES}`, 'TEAM_INVALID_CONFIG')
   }
-  return limit
+  return Math.min(limit, MAX_TEAMMATES)
 }
 
 /** Agent Teams service backed by the exact live Lead Session log. */
@@ -89,7 +93,7 @@ export class TeamService extends TypertRemoteService {
   static inject = ['agents', 'sessions', 'sessionPersistence', 'subagents']
 
   static Config: z<Config> = z.object({
-    maxMembers: z.number().step(1).min(1).max(MAX_TEAMMATES).default(DEFAULT_MAX_MEMBERS),
+    maxMembers: z.number().step(1).min(1).max(MAX_LEGACY_CONFIGURED_TEAMMATES).default(DEFAULT_MAX_MEMBERS),
     maxTasks: z.number().step(1).min(1).default(DEFAULT_MAX_TASKS),
     maxPendingMessagesPerMember: z.number().step(1).min(1).default(DEFAULT_MAX_PENDING_MESSAGES),
     maxMessageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_MESSAGE_BYTES),
