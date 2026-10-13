@@ -80,6 +80,58 @@ describe('bootstrap failure rendering', () => {
 })
 
 describe('plugin activation', () => {
+  it('loads other plugins while priority prefetch is still waiting on HTTP', async () => {
+    const container = document.createElement('div')
+    document.body.append(container)
+    const target = installFacade()
+    win.__DSH_BOOT__ = { rev: 'graph', entries: [
+      { id: MODULES_ID, url: '/modules.js', rev: '1' },
+      { id: 'priority', url: '/priority.js', rev: '1', immediately: true },
+      { id: 'renderer', url: '/renderer.js', rev: '1' },
+    ] }
+    let releasePriority: () => void = () => {}
+    const priorityGate = new Promise<void>(resolve => { releasePriority = () => { resolve() } })
+    const started: string[] = []
+    const registrations = new Map<string, ClientBundleRegistration>([
+      ['/priority.js', { id: 'priority', factory: () => ({ apply: () => {} }) }],
+      ['/renderer.js', {
+        id: 'renderer',
+        factory: () => ({
+          apply: (ctx: Context) => {
+            ctx.reflect.provide('uiRenderer', {
+              mount: (element: HTMLElement) => {
+                element.textContent = 'mounted'
+                return () => {}
+              },
+            })
+          },
+        }),
+      }],
+    ])
+    const entry = new AppWebEntry(container, {
+      loadBundle: async (url) => {
+        started.push(url)
+        if (url === '/priority.js') await priorityGate
+        const registration = registrations.get(url)
+        if (registration === undefined) throw new Error(`missing fixture registration ${url}`)
+        target.load(registration)
+      },
+    })
+    const boot = entry.run()
+    try {
+      // Previously the awaited prefetch gate blocked the renderer's request.
+      for (let i = 0; i < 20 && !started.includes('/renderer.js'); i += 1) {
+        await new Promise(resolve => { setTimeout(resolve, 10) })
+      }
+      expect(started).toContain('/priority.js')
+      expect(started).toContain('/renderer.js')
+    } finally {
+      releasePriority()
+      await boot
+      await entry.dispose()
+    }
+  })
+
   it('allows a modules-dependent row to be created before the modules row', async () => {
     const events: string[] = []
     const container = document.createElement('div')

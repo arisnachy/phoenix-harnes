@@ -44,6 +44,7 @@ export class AppWebEntry {
    * @returns Resolves after application mount or failure rendering.
    */
   async run(): Promise<void> {
+    const startedAt = performance.now()
     try {
       const win = globalThis as DshWindow
       const moduleLoader = win.__ModuleLoader__
@@ -70,7 +71,14 @@ export class AppWebEntry {
       const ctx = new Context()
       this.ctx = ctx
       await this.runPluginBoot(ctx, prefetching)
+      const pluginsReadyAt = performance.now()
       await this.mountApp(ctx)
+      console.info(
+        `[PHOENIX WEB] plugins: ${String(Math.round(pluginsReadyAt - startedAt))}ms; `
+        + `UI mount: ${String(Math.round(performance.now() - pluginsReadyAt))}ms; `
+        + `total browser boot: ${String(Math.round(performance.now() - startedAt))}ms; `
+        + `entries: ${String(this.manifest.plugins.length)}`,
+      )
     } catch (reason) {
       console.error(reason)
       this.page.fail(reason instanceof Error ? reason.message : String(reason))
@@ -123,12 +131,15 @@ export class AppWebEntry {
 
     const rows = this.manifest.plugins.map(row => row.id)
     this.page.setTotal(rows.length)
-    await prefetching
-    await Promise.all(rows.map(async (name) => {
+    // Begin entry activation while HTTP stage-one prefetch is still in flight.
+    // The module system deduplicates each bundle arrival, so awaiting prefetch
+    // first only serializes two independent phases and delays first paint.
+    const creating = Promise.all(rows.map(async (name) => {
       this.page.setState(name, 'loading')
       const id = await loader.create({ name })
       if (loader.resolve(id).fiber === undefined) this.page.setState(name, 'failed')
     }))
+    await Promise.all([prefetching, creating])
 
     await loader.await()
     this.assertEntriesActive(ctx)
