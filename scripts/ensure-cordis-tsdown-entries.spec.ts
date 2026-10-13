@@ -77,6 +77,16 @@ describe('isolated Windows CLI bin entry recovery', () => {
   const binJs = resolve(cli, 'lib', 'types', 'bin.js')
   const binTypes = resolve(cli, 'lib', 'types', 'bin.d.ts')
 
+
+  it('keeps declared CLI entry exports synchronized with the ESM build guard', () => {
+    const declarations = readFileSync(resolve('scripts/ensure-cordis-tsdown-entries.d.mts'), 'utf8')
+    const implementation = readFileSync(resolve('scripts/ensure-cordis-tsdown-entries.mjs'), 'utf8')
+    for (const exported of ['missingCliTsdownEntries', 'ensureCliTsdownEntries']) {
+      expect(declarations).toContain('export declare function ' + exported + '(')
+      expect(implementation).toContain('export function ' + exported + '(')
+    }
+  })
+
   it('detects a deleted bin.js despite a retained declaration and incremental metadata', () => {
     const files = new Set([binSource, binTypes, resolve(cli, 'tsconfig.tsbuildinfo')])
     expect(missingCliTsdownEntries(root, path => files.has(path)))
