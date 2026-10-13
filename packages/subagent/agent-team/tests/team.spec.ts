@@ -184,6 +184,30 @@ describe('Team identity and provisioning', () => {
     }
   })
 
+  it('persists one genuine universal mission and fences worker activity at Lead completion', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    lead.session.append('user/message', createUserMessage({
+      source: { kind: 'user' }, content: [{ type: 'text', text: 'Build a verified web dashboard' }],
+    }))
+    const child = await spawn(ctx, lead, 'dashboard-worker')
+    await waitRunning(ctx, child.member.id)
+    const live = ctx.agentTeams.missionSnapshot(lead)
+    expect(live).toMatchObject({
+      phase: 'running', revision: 1, cancellationEpoch: 0,
+      objective: 'Build a verified web dashboard',
+    })
+    await ctx.sessions.flush(lead.session)
+    lead.session.append('turn/start', { turn: 1 })
+    lead.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    await vi.waitFor(() => {
+      expect(ctx.agentTeams.missionSnapshot(lead)).toMatchObject({
+        phase: 'partial', revision: 2, cancellationEpoch: 1,
+      })
+    }, { timeout: 5_000 })
+    await expect(spawn(ctx, lead, 'late-worker')).rejects.toMatchObject({ code: 'TEAM_MISSION_CLOSED' })
+    await waitNoAgent(ctx, child.member.id)
+  })
+
   it('admits up to three concurrent specialist teammates and rejects a fourth', async () => {
     const { ctx, lead } = await setup(['hang', 'hang', 'hang'], { maxMembers: 3 })
     const first = await spawn(ctx, lead, 'first-worker')
