@@ -243,14 +243,14 @@ describe('installModelSelection()', () => {
         .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('medium') })
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+        .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
     }
   })
 
-  it('exposes the first-step Sol plan policy, then switches to a single Luna execution brief', async () => {
+  it('exposes the first-step Sol plan policy, then provides a Sol-led execution brief', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const events: { type: string; data: unknown }[] = [
@@ -297,7 +297,7 @@ describe('installModelSelection()', () => {
     }
   })
 
-  it('hands off Sol\'s actual visible plan to Luna exactly once before requiring real Team work', async () => {
+  it('hands off Sol\'s actual visible plan to Kira on Sol exactly once before requiring real Team work', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -329,14 +329,14 @@ describe('installModelSelection()', () => {
       expect(JSON.stringify(steered[0])).not.toContain('Phoenix Auto team admission')
       await expect(agentEvents(ctx, agent).waterfall('agent/request',
         { turn: 1, step: 2, signal }, () => Promise.resolve({ provider: 'seed', model: 'seed' })))
-        .resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+        .resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high') })
     } finally {
       dispose()
       await ctx.fiber.dispose()
     }
   })
 
-  it('routes Phoenix Auto from Sol planning to Luna Max execution', async () => {
+  it('routes Phoenix Auto from Sol planning to Sol-led orchestration', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -373,8 +373,8 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('high'),
     })
 
     dispose()
@@ -425,7 +425,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('routes real Kira Team work to Luna Max and escalates a blocker to Sol xhigh once', async () => {
+  it('routes real Kira Team work to Sol coordination and escalates a blocker to Sol xhigh once', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -456,8 +456,8 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 1, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('high'),
     })
 
     events.push(
@@ -482,14 +482,13 @@ describe('installModelSelection()', () => {
       model: 'gpt-6.1-sol',
       reasoningEffort: ReasoningEffortId('xhigh'),
     })
-    // The same blocker must not hold Sol for the rest of the turn; Kira returns
-    // immediately to Luna Max after the one strategic intervention.
+    // One blocker elevates Sol to xhigh once; then Kira continues with Sol/high.
     await expect(agentEvents(ctx, agent).waterfall(
       'agent/request', { turn: 2, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('high'),
     })
 
     dispose()
@@ -553,15 +552,15 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 2, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('high'),
     })
 
     dispose()
     await ctx.fiber.dispose()
   })
 
-  it('recovers when Luna later announces another action and stops instead of doing it', async () => {
+  it('recovers when Sol later announces another action and stops instead of doing it', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     ctx.systemPrompt.tools(() => ({
@@ -629,7 +628,7 @@ describe('installModelSelection()', () => {
           turn: 1,
           step: 3,
           message: {
-            source: { provider: 'openai-codex', model: 'gpt-6-luna' },
+            source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
             content: [{
               type: 'text',
               text: 'Para ir más rápido, usaré la vía directa para cada tarea y haré pruebas focalizadas.',
@@ -1181,7 +1180,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('rescues repeated Phoenix Auto tool failures with Sol, then returns to Luna Max', async () => {
+  it('rescues repeated Phoenix Auto tool failures with Sol, then resumes Sol/high coordination', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -1233,8 +1232,8 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 5, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6-luna',
-      reasoningEffort: ReasoningEffortId('max'),
+      model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('high'),
     })
 
     dispose()
