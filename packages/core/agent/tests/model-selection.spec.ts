@@ -876,7 +876,7 @@ describe('installModelSelection()', () => {
     } })
     await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 2, signal })
     expect(steered).toHaveLength(1)
-    expect(JSON.stringify(steered[0])).toContain('execute the next concrete action')
+    expect(JSON.stringify(steered[0])).toContain('Execute the next concrete action')
 
     dispose()
     await ctx.fiber.dispose()
