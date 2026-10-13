@@ -189,7 +189,7 @@ describe('Team identity and provisioning', () => {
     const { ctx, lead } = await setup(['hang'])
     lead.session.append('user/message', createUserMessage({
       source: { kind: 'user' }, content: [{ type: 'text', text: 'Build a verified web dashboard' }],
-    }))
+    }), { surfaceOp: 'append' })
     const child = await spawn(ctx, lead, 'dashboard-worker')
     await waitRunning(ctx, child.member.id)
     const live = ctx.agentTeams.missionSnapshot(lead)
