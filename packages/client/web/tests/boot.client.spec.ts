@@ -90,7 +90,7 @@ describe('plugin activation', () => {
       { id: 'renderer', url: '/renderer.js', rev: '1' },
     ] }
     let releasePriority: () => void = () => {}
-    const priorityGate = new Promise<void>(resolve => { releasePriority = resolve })
+    const priorityGate = new Promise<void>(resolve => { releasePriority = () => { resolve() } })
     const started: string[] = []
     const registrations = new Map<string, ClientBundleRegistration>([
       ['/priority.js', { id: 'priority', factory: () => ({ apply: () => {} }) }],
