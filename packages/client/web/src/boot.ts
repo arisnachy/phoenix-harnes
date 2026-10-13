@@ -44,6 +44,7 @@ export class AppWebEntry {
    * @returns Resolves after application mount or failure rendering.
    */
   async run(): Promise<void> {
+    const startedAt = performance.now()
     try {
       const win = globalThis as DshWindow
       const moduleLoader = win.__ModuleLoader__
@@ -70,7 +71,14 @@ export class AppWebEntry {
       const ctx = new Context()
       this.ctx = ctx
       await this.runPluginBoot(ctx, prefetching)
+      const pluginsReadyAt = performance.now()
       await this.mountApp(ctx)
+      console.info(
+        `[PHOENIX WEB] plugins: ${String(Math.round(pluginsReadyAt - startedAt))}ms; `
+        + `UI mount: ${String(Math.round(performance.now() - pluginsReadyAt))}ms; `
+        + `total browser boot: ${String(Math.round(performance.now() - startedAt))}ms; `
+        + `entries: ${String(this.manifest.plugins.length)}`,
+      )
     } catch (reason) {
       console.error(reason)
       this.page.fail(reason instanceof Error ? reason.message : String(reason))
