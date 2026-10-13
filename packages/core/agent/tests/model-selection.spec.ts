@@ -51,6 +51,35 @@ describe('installModelSelection()', () => {
     }
   })
 
+  it('keeps an explicitly selected Codex model in charge of every Lead step, even with legacy handoff', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    const session = Session.create(SessionId('selected-kira-orchestrator'))
+    const selected = { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh') }
+    persistModelSelectionPreference(session, selected, 'explicit')
+    session.append('turn/start', { turn: 1 })
+    session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Arregla el proyecto y comprueba los resultados.' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const agent = { session, options: { ...selected } } as unknown as Agent
+    ctx.agent = agent
+    const ref: ModelSelectionRef = { current: selected, assembled: undefined }
+    const dispose = installModelSelection(ctx, ref, defaultExecutionHandoff)
+    try {
+      await ctx.systemPrompt.assemble()
+      for (const step of [1, 2, 3]) {
+        await expect(agentEvents(ctx, agent).waterfall(
+          'agent/request', { turn: 1, step, signal: new AbortController().signal },
+          () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+        )).resolves.toEqual(selected)
+      }
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('restores explicit planner preference independently of the serving Luna request header', () => {
     const session = Session.create(SessionId('explicit-preference'))
     const selected = { provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh') }
@@ -847,7 +876,7 @@ describe('installModelSelection()', () => {
     } })
     await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 2, signal })
     expect(steered).toHaveLength(1)
-    expect(JSON.stringify(steered[0])).toContain('execute the next concrete action')
+    expect(JSON.stringify(steered[0])).toContain('Execute the next concrete action')
 
     dispose()
     await ctx.fiber.dispose()

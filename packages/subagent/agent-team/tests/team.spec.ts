@@ -184,6 +184,10 @@ describe('Team identity and provisioning', () => {
     }
   })
 
+  it('caps Team composition at two workers plus the Kira Lead', async () => {
+    await expect(setup([], { maxMembers: 3 })).rejects.toThrow('maxMembers')
+  })
+
   it('supports direct-constructor defaults and recovers roots that already exist', async () => {
     const ctx = new Context()
     await mountAgentLoopTestDependencies(ctx)

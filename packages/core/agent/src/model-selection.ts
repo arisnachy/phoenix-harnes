@@ -864,9 +864,9 @@ export function installModelSelection(
     const autoStep = isPhoenixCodexAutoSelection(selected) && scopedAgent !== undefined
       ? nextPhoenixAutoAssemblyStep(scopedAgent)
       : undefined
-    const currentTurn = scopedAgent?.session.events.findLast(event => event.type === 'turn/start')
+    const currentTurn = scopedAgent?.session?.events.findLast(event => event.type === 'turn/start')
     const currentTurnNumber = (currentTurn?.data as { readonly turn?: number } | undefined)?.turn
-    const currentRequest = scopedAgent !== undefined && currentTurnNumber !== undefined
+    const currentRequest = scopedAgent?.session !== undefined && currentTurnNumber !== undefined
       ? directUserTextForTurn(scopedAgent, currentTurnNumber) : ''
     // Never inject a "stop after the plan" instruction into a Luna quick-answer
     // route whose request was not classified as an operational task. Otherwise
@@ -898,10 +898,13 @@ export function installModelSelection(
       if (scopedAgent !== undefined && latestModelSelectionPreference(scopedAgent.session) === undefined) {
         persistModelSelectionPreference(scopedAgent.session, selected, 'default')
       }
-      // A concrete picker choice with no adaptive handoff is authoritative.
-      // Resolve this before reading turn text so an exact route is also the
-      // lowest-latency path; only Phoenix Auto needs to inspect the request.
-      if (!isPhoenixCodexAutoSelection(selected) && handoff === undefined) {
+      // Explicit user model choices are the Lead's orchestration brain, even
+      // when an older composition still installs a generic Codex handoff.
+      // Only the virtual Fénix Eclipse/Phoenix Auto row may switch Sol -> Luna
+      // internally. Worker model selection is handled by Agent Teams instead.
+      const exactUserChoice = scopedAgent === undefined ? false
+        : latestModelSelectionPreference(scopedAgent.session)?.source === 'explicit'
+      if (!isPhoenixCodexAutoSelection(selected) && (handoff === undefined || exactUserChoice)) {
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
@@ -1009,10 +1012,21 @@ export function installModelSelection(
     const plannerStoppedBeforeActing = latest.step === 1 && !latestStepHasToolActivity
       && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
       && !phoenixAutoExplicitlyClosed(latest.text)
+    // A first-step plan that returned no usable assistant text still has not
+    // executed anything. Missing content must not silently terminate real work.
+    const emptyPlannerStop = latest.step === 1 && !latestStepHasToolActivity
+      && latest.text.length === 0
+    // A teammate's real question is unresolved until Kira makes a substantive
+    // decision or acts. A bare "Done" and an unmatched tool/result event are
+    // not evidence of quality or completion.
+    const teamQuestion = phoenixAutoTeamSignalForTurn(agent, turn)?.purpose === 'question'
+    const teamStillNeedsDecision = teamQuestion
+      && !events.some(event => event.type === 'tool/call')
+      && /^(?:done|finished|completed|listo|hecho|terminado)\.?$/iu.test(latest.text)
     const announcedNextAction = !latestStepHasToolActivity
       && latest.text.length > 0
       && phoenixAutoUnfinishedAction(latest.text)
-    if (!plannerStoppedBeforeActing && !announcedNextAction) return
+    if (!plannerStoppedBeforeActing && !emptyPlannerStop && !teamStillNeedsDecision && !announcedNextAction) return
     if (phoenixAutoState.continuationCount >= AUTO_CONTINUATION_LIMIT) return
 
     phoenixAutoState.continuationCount += 1
