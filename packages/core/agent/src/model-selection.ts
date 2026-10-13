@@ -864,7 +864,7 @@ export function installModelSelection(
     const autoStep = isPhoenixCodexAutoSelection(selected) && scopedAgent !== undefined
       ? nextPhoenixAutoAssemblyStep(scopedAgent)
       : undefined
-    const currentTurn = scopedAgent?.session.events.findLast(event => event.type === 'turn/start')
+    const currentTurn = scopedAgent?.session?.events.findLast(event => event.type === 'turn/start')
     const currentTurnNumber = (currentTurn?.data as { readonly turn?: number } | undefined)?.turn
     const currentRequest = scopedAgent !== undefined && currentTurnNumber !== undefined
       ? directUserTextForTurn(scopedAgent, currentTurnNumber) : ''
