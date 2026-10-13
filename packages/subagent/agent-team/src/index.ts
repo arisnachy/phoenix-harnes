@@ -16,6 +16,9 @@ import { TeamMailbox } from './mailbox.ts'
 import { TeamRoster } from './roster.ts'
 import type { TeamMembership } from './roster.ts'
 import { TeamTaskBoard } from './task-board.ts'
+import { teamMissionClosed } from './mission-closure.ts'
+import { UniversalMissionLedger } from './universal-mission.ts'
+import type { UniversalMissionSnapshot } from './universal-mission.ts'
 import { TeamId, TeamTaskId } from './types.ts'
 import type {
   Config,
@@ -36,6 +39,8 @@ export type * from './types.ts'
 export type { TeamMembership } from './roster.ts'
 export { TeamId, TeamMessageId, TeamTaskId } from './types.ts'
 export { TeamError } from './error.ts'
+export { replayUniversalMission, universalMissionAcceptsEvent, universalMissionTerminal } from './universal-mission.ts'
+export type { UniversalMissionPhase, UniversalMissionSnapshot } from './universal-mission.ts'
 export { teammateBudgetForMission } from './mission-sizing.ts'
 export type { MissionComplexity } from './mission-sizing.ts'
 export { teamExecutionProof, teamExecutionRequirement } from './execution-evidence.ts'
@@ -107,6 +112,7 @@ export class TeamService extends TypertRemoteService {
   private readonly roster: TeamRoster
   private readonly mailbox: TeamMailbox
   private readonly tasks: TeamTaskBoard
+  private readonly missions: UniversalMissionLedger
   private readonly chat: TeamChat
   private readonly pendingChat = new Set<Promise<unknown>>()
 
@@ -129,6 +135,7 @@ export class TeamService extends TypertRemoteService {
     this.activity = new TeamActivity()
     this.lifecycle = new TeamRuntimeLifecycle(this.config.disposalTimeoutMs)
     this.journal = new TeamJournal(ctx, (root) => { this.activity.notify(TeamId(root.id)) })
+    this.missions = new UniversalMissionLedger(this.journal)
     this.roster = new TeamRoster(ctx, this.journal, this.lifecycle, this.config.maxMembers, this.config.maxMessageBytes)
     this.mailbox = new TeamMailbox(
       ctx,
@@ -155,6 +162,9 @@ export class TeamService extends TypertRemoteService {
           || (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user'))) {
         const lead = ctx.agents.get(session.id)
         if (lead?.session === session) {
+          void this.missions.close(lead, event.data.reason.kind === 'aborted').catch((error: unknown) => {
+            ctx.logger.warn(`Universal mission closure failed: ${errorMessage(error)}`)
+          })
           for (const childId of this.roster.liveChildrenByRoot().get(lead) ?? []) {
             if (ctx.agents.get(childId)?.status !== 'running') continue
             try {
@@ -259,7 +269,24 @@ export class TeamService extends TypertRemoteService {
    * @returns the active roster row.
    */
   async spawnTeammate(caller: Agent, request: SpawnTeammateRequest): Promise<SpawnTeammateResult> {
+    const membership = this.roster.membership(caller)
+    if (membership.role !== 'lead') throw new TeamError('only the Team Lead can create teammates', 'TEAM_LEAD_REQUIRED')
+    if (teamMissionClosed(caller.session.events)) {
+      throw new TeamError('the last mission is closed; a new user turn is required', 'TEAM_MISSION_CLOSED')
+    }
+    request.signal.throwIfAborted()
+    await this.missions.ensure(membership.root, request.description, this.config.maxMembers)
+    request.signal.throwIfAborted()
     return await this.roster.spawn(caller, request)
+  }
+
+  /**
+   * Read the authoritative root-owned mission checkpoint without waking workers.
+   * @param caller - any live teammate or Lead in the mission.
+   * @returns durable state, or undefined before delegation.
+   */
+  missionSnapshot(caller: Agent): UniversalMissionSnapshot | undefined {
+    return this.missions.read(this.roster.membership(caller).root)
   }
 
   /**

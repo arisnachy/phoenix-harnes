@@ -56,7 +56,8 @@ export function universalMissionTerminal(phase: UniversalMissionPhase): boolean 
 }
 
 function validMission(value: UniversalMissionSnapshot): boolean {
-  return typeof value.id === 'string' && value.id.length > 0
+  return value !== null && typeof value === 'object'
+    && typeof value.id === 'string' && value.id.length > 0
     && typeof value.teamId === 'string' && value.teamId.length > 0
     && typeof value.objective === 'string' && value.objective.length > 0
     && typeof value.userMessageId === 'string' && value.userMessageId.length > 0
