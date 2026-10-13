@@ -173,7 +173,8 @@ export class TeamService extends TypertRemoteService {
             ctx.logger.warn(`Universal mission closure failed: ${errorMessage(error)}`)
           })
           for (const childId of this.roster.liveChildrenByRoot().get(lead) ?? []) {
-            if (ctx.agents.get(childId)?.status !== 'running') continue
+            // An idle continuable child can still receive queued wakeups; cut it off too.
+            if (ctx.agents.get(childId) === undefined) continue
             try {
               ctx.subagents.interrupt(childId, { kind: 'ancestor', agent: lead })
             } catch (error: unknown) {
