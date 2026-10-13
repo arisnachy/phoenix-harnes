@@ -10,6 +10,7 @@ import { TeamChat } from './chat.ts'
 import type { TeamChatReadResult, TeamChatReadRequest, TeamChatReactRequest, TeamChatReplyRequest } from './chat-types.ts'
 import { TeamActivity } from './activity.ts'
 import { errorMessage, TeamError } from './error.ts'
+import { teamExecutionProof } from './execution-evidence.ts'
 import { TeamJournal } from './journal.ts'
 import { TeamRuntimeLifecycle } from './lifecycle.ts'
 import { TeamMailbox } from './mailbox.ts'
@@ -162,7 +163,11 @@ export class TeamService extends TypertRemoteService {
           || (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user'))) {
         const lead = ctx.agents.get(session.id)
         if (lead?.session === session) {
-          void this.missions.close(lead, event.data.reason.kind === 'aborted').catch((error: unknown) => {
+          void this.missions.close(
+            lead,
+            event.data.reason.kind === 'aborted',
+            this.missionCompletionProof(lead),
+          ).catch((error: unknown) => {
             ctx.logger.warn(`Universal mission closure failed: ${errorMessage(error)}`)
           })
           for (const childId of this.roster.liveChildrenByRoot().get(lead) ?? []) {
@@ -194,6 +199,45 @@ export class TeamService extends TypertRemoteService {
     })
     ctx.effect(() => () => this.disposeRuntime(), 'agentTeams.runtimeLifecycle()')
     for (const agent of ctx.agents.list()) this.scheduleRecovery(agent)
+  }
+
+  /**
+   * Read durable execution and verification receipts, not model-written claims.
+   * This conservative gate closes unverifiable work as partial, never as success.
+   * @param root - real Lead whose Team sessions contain tool receipts.
+   * @returns verifiable evidence IDs and whether all assigned work was checked.
+   */
+  private missionCompletionProof(root: Agent): {
+    readonly verified: boolean
+    readonly evidenceIds: readonly string[]
+  } {
+    const state = this.journal.state(root)
+    const children = [...state.members.values()].filter(member => member.phase === 'active')
+    const tasks = [...state.tasks.values()].filter(task => task.status !== 'deleted')
+    const tasksDone = tasks.every(task => task.status === 'completed')
+    const evidenceIds: string[] = []
+    let workersVerified = children.length > 0
+    for (const child of children) {
+      const session = this.ctx.sessions.get(child.id)
+      if (session === undefined) { workersVerified = false; continue }
+      const proof = teamExecutionProof(session.events)
+      if (proof.requirement === 'none' || !proof.satisfied) { workersVerified = false; continue }
+      const toolCalls = new Map<string, string>()
+      for (const event of session.events) {
+        if (event.type === 'tool/call') toolCalls.set(String(event.data.callId), event.data.name)
+        if (event.type !== 'tool/result' || event.data.error !== undefined
+          || event.data.message.content.some(block => block.isError === true)) continue
+        const callId = String(event.data.message.source.callId)
+        const name = toolCalls.get(callId)
+        if (name !== undefined && proof.tools.some(tool => name.endsWith(tool))) {
+          evidenceIds.push(`${child.id}:${callId}`)
+        }
+      }
+    }
+    return {
+      verified: workersVerified && tasksDone && evidenceIds.length >= children.length,
+      evidenceIds,
+    }
   }
 
   /** Read actual team outputs without starting agents.
