@@ -248,9 +248,10 @@ describe('Team identity and provisioning', () => {
     ])
     expect(attempts.filter(item => item.status === 'fulfilled')).toHaveLength(2)
     expect(attempts.filter(item => item.status === 'rejected')).toHaveLength(1)
-    for (const member of ctx.agentTeams.listMembers(lead)) {
-      if (member.role === 'teammate' && member.status === 'running') ctx.agentTeams.interrupt(lead, member.name)
-    }
+    const active = ctx.agentTeams.listMembers(lead).filter(member =>
+      member.role === 'teammate' && member.status === 'running')
+    for (const member of active) ctx.agentTeams.interrupt(lead, member.name)
+    for (const member of active) await waitNoAgent(ctx, member.id)
   })
 
   it('admits five independent workers when explicitly configured and rejects a sixth', async () => {
