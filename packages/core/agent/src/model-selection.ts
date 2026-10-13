@@ -898,10 +898,13 @@ export function installModelSelection(
       if (scopedAgent !== undefined && latestModelSelectionPreference(scopedAgent.session) === undefined) {
         persistModelSelectionPreference(scopedAgent.session, selected, 'default')
       }
-      // A concrete picker choice with no adaptive handoff is authoritative.
-      // Resolve this before reading turn text so an exact route is also the
-      // lowest-latency path; only Phoenix Auto needs to inspect the request.
-      if (!isPhoenixCodexAutoSelection(selected) && handoff === undefined) {
+      // Explicit user model choices are the Lead's orchestration brain, even
+      // when an older composition still installs a generic Codex handoff.
+      // Only the virtual Fénix Eclipse/Phoenix Auto row may switch Sol -> Luna
+      // internally. Worker model selection is handled by Agent Teams instead.
+      const exactUserChoice = scopedAgent === undefined ? false
+        : latestModelSelectionPreference(scopedAgent.session)?.source === 'explicit'
+      if (!isPhoenixCodexAutoSelection(selected) && (handoff === undefined || exactUserChoice)) {
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
