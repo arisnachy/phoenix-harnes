@@ -36,6 +36,8 @@ export type * from './types.ts'
 export type { TeamMembership } from './roster.ts'
 export { TeamId, TeamMessageId, TeamTaskId } from './types.ts'
 export { TeamError } from './error.ts'
+export { teammateBudgetForMission } from './mission-sizing.ts'
+export type { MissionComplexity } from './mission-sizing.ts'
 export { teamExecutionProof, teamExecutionRequirement } from './execution-evidence.ts'
 export type { TeamExecutionProof, TeamExecutionRequirement } from './execution-evidence.ts'
 export { foldTeam } from './fold.ts'
@@ -58,9 +60,9 @@ declare module '@phoenix-ai/cordis' {
   }
 }
 
-// Kira remains the Lead while up to three specialist teammates work in parallel.
-// Simpler missions still use fewer workers; this is a concurrency ceiling.
-const MAX_TEAMMATES = 3
+// Kira remains the Lead; five is a HARD ceiling, not a target.
+// Mission sizing selects 1/2/3 specialists first and expands to 4-5 only for real independent fronts.
+const MAX_TEAMMATES = 5
 const DEFAULT_MAX_MEMBERS = MAX_TEAMMATES
 const DEFAULT_MAX_TASKS = 256
 const DEFAULT_MAX_PENDING_MESSAGES = 64
@@ -75,7 +77,7 @@ function positiveLimit(name: string, value: number): number {
   return value
 }
 
-/** Reject Team concurrency settings outside the supported one-to-three range. */
+/** Reject Team concurrency settings beyond the universal one-to-five ceiling. */
 function memberLimit(value: number): number {
   const limit = positiveLimit('maxMembers', value)
   if (limit > MAX_TEAMMATES) {

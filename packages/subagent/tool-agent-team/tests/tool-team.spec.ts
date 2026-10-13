@@ -141,9 +141,9 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('Do not reconstruct pre-event facts from later results')
     expect(leadPrompt).toContain('Fénix Eclipse is explicitly authorized to use this Team path')
     expect(leadPrompt).toContain('prefer spawn_teammate over legacy subagent delegation')
-    expect(leadPrompt).toContain('one teammate is normal')
-    expect(leadPrompt).toContain('a third is reserved for exceptional complexity')
-    expect(leadPrompt).toContain('never exceed three')
+    expect(leadPrompt).toContain('one real teammate is the default for a simple delegated mission')
+    expect(leadPrompt).toContain('three for difficult work')
+    expect(leadPrompt).toContain('Five simultaneous teammates is the hard limit')
     expect(leadPrompt).toContain('outside OpenAI Codex every teammate MUST inherit exactly the currently selected provider and model')
     expect(leadPrompt).toContain('Never claim a teammate is running from intent alone')
     expect(leadPrompt).toContain('compare expected quality gain and time saved against added model consumption')
@@ -208,6 +208,31 @@ describe('dsh-tool-team', () => {
     expect(text(denied)).toContain('only the Team Lead')
     await execute(ctx, lead, 'interrupt_agent', { target: 'tool-worker' })
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
+  })
+
+  it('enforces mission complexity on real teammate creation without spawning theatrical extras', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'])
+    const create = (name: string, mission_complexity: 'simple' | 'medium' | 'difficult') =>
+      execute(ctx, lead, 'spawn_teammate', { name, description: 'independent deliverable', prompt: 'perform actual work', mission_complexity })
+    const first = await create('worker-one', 'simple')
+    expect(first.isError).toBe(false)
+    await waitRunning(ctx, spawnedChildId(first))
+    const simpleDenied = await create('worker-two', 'simple')
+    expect(simpleDenied.isError).toBe(true)
+    expect(text(simpleDenied)).toContain('Mission scale simple permits 1')
+    const second = await create('worker-two', 'medium')
+    expect(second.isError).toBe(false)
+    await waitRunning(ctx, spawnedChildId(second))
+    const mediumDenied = await create('worker-three', 'medium')
+    expect(mediumDenied.isError).toBe(true)
+    expect(text(mediumDenied)).toContain('Mission scale medium permits 2')
+    const third = await create('worker-three', 'difficult')
+    expect(third.isError).toBe(false)
+    await waitRunning(ctx, spawnedChildId(third))
+    for (const name of ['worker-one', 'worker-two', 'worker-three']) ctx.agentTeams.interrupt(lead, name)
+    for (const row of [first, second, third]) {
+      await vi.waitFor(() => { expect(ctx.agents.get(spawnedChildId(row))).toBeUndefined() }, { timeout: 5_000 })
+    }
   })
 
   it('keeps every live Team actor in the real user language and updates on language change', async () => {
