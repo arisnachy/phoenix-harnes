@@ -239,6 +239,28 @@ export class TeamService extends TypertRemoteService {
         }
       }
     }
+    // Kira owns verification: a real successful check by the Lead also counts.
+    // Check direct tool results, not only the child proof subset, because a GitHub
+    // or design specialist's assignment matcher may exclude independent QA tools.
+    const successfulConfirmation = (events: readonly import('@phoenix-ai/dsh-session').SessionEvent[]): boolean => {
+      const calls = new Map<string, string>()
+      for (const event of events) {
+        if (event.type === 'tool/call') calls.set(String(event.data.callId), event.data.name)
+        if (event.type !== 'tool/result' || event.data.error !== undefined
+          || event.data.message.content.some(block => block.isError === true)) continue
+        const tool = calls.get(String(event.data.message.source.callId))
+        if (tool !== undefined
+          && /(?:^|__|_|-)(?:verify|check|test|typecheck|build|inspect|read|wait_for|status)(?:$|_|-)/iu.test(tool)) {
+          return true
+        }
+      }
+      return false
+    }
+    hasConfirmation ||= successfulConfirmation(root.session.events)
+    for (const child of children) {
+      const session = this.teamContext.sessions.get(child.id)
+      if (session !== undefined) hasConfirmation ||= successfulConfirmation(session.events)
+    }
     return {
       verified: workersVerified && tasksDone && hasConfirmation && evidenceIds.length >= children.length,
       evidenceIds,
