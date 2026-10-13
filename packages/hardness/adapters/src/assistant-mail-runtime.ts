@@ -192,31 +192,80 @@ export function installAssistantMail(ctx: Context,
     if (credentials === undefined) throw new Error('mail setup requires the credential service')
     await credentials.set(ref, key)
   } })
-  let enrolling: Promise<void> | undefined
+  type EnrollmentRequest = { explicitOwnerEmail?: string; requireOwner: boolean }
+  type EnrollmentBarrier = {
+    request: EnrollmentRequest
+    epoch: number
+    promise: Promise<void>
+    providerAction?: Promise<unknown>
+  }
+  let enrollmentEpoch = 0
+  let resetBarrier: Promise<void> | undefined
+  let enrolling: EnrollmentBarrier | undefined
   const ensureEnrollment = (explicitOwnerEmail?: string, requireOwner = false): Promise<void> => {
-    if (enrolling !== undefined) return enrolling
-    enrolling = (async () => {
-      const account = await onboarding.status()
-      if (account.state === 'pending-verification' && requireOwner) {
-        await onboarding.recover()
-        return
+    if (isDisposed()) return Promise.reject(new Error('assistant mail runtime is disposed'))
+    const pendingReset = resetBarrier
+    if (pendingReset !== undefined) {
+      return pendingReset.then(() => ensureEnrollment(explicitOwnerEmail, requireOwner))
+    }
+    const active = enrolling
+    if (active !== undefined && active.epoch === enrollmentEpoch) {
+      // Startup calls enrollment opportunistically. If an explicit control call
+      // arrives while that work is pending, upgrade the shared request instead
+      // of returning the weaker, owner-less operation unchanged.
+      if (requireOwner) active.request.requireOwner = true
+      if (active.request.explicitOwnerEmail === undefined && explicitOwnerEmail !== undefined) {
+        active.request.explicitOwnerEmail = explicitOwnerEmail
       }
-      if (account.state !== 'not-configured') return
-      // Never create the provider account until Phoenix can durably retain the returned key.
-      if (ctx.get('credentials') === undefined) throw new Error('secure credential storage is unavailable')
-      const resolvedOwner = explicitOwnerEmail?.trim() || await config.resolveOwnerEmail?.()
-      if (resolvedOwner === undefined || resolvedOwner.length === 0) {
-        if (requireOwner) throw new Error('owner email required for one-time mailbox verification')
-        return
+      return active.promise
+    }
+    const request: EnrollmentRequest = {
+      requireOwner,
+      ...(explicitOwnerEmail === undefined ? {} : { explicitOwnerEmail }),
+    }
+    let settle!: (value?: void | PromiseLike<void>) => void
+    let fail!: (reason?: unknown) => void
+    const promise = new Promise<void>((resolve, reject) => { settle = resolve; fail = reject })
+    const barrier: EnrollmentBarrier = { request, epoch: enrollmentEpoch, promise }
+    enrolling = barrier
+    void (async () => {
+      try {
+        const account = await onboarding.status()
+        if (barrier.epoch !== enrollmentEpoch || isDisposed()) { settle(); return }
+        if (account.state === 'pending-verification' && request.requireOwner) {
+          const recovery = onboarding.recover()
+          barrier.providerAction = recovery
+          await recovery
+        } else if (account.state === 'not-configured') {
+          // Never create the provider account until Phoenix can durably retain the returned key.
+          if (ctx.get('credentials') === undefined) throw new Error('secure credential storage is unavailable')
+          const automaticOwner = request.explicitOwnerEmail?.trim()
+            ? undefined : await config.resolveOwnerEmail?.()
+          // Read the mutable explicit request after the automatic lookup settles.
+          // A control call may have supplied a stronger owner while startup waited.
+          const resolvedOwner = request.explicitOwnerEmail?.trim() || automaticOwner
+          if (barrier.epoch !== enrollmentEpoch || isDisposed()) { settle(); return }
+          if (resolvedOwner === undefined || resolvedOwner.length === 0) {
+            if (request.requireOwner) throw new Error('owner email required for one-time mailbox verification')
+          } else {
+            const owner = mailAddress(resolvedOwner)
+            // AgentMail creates the mailbox without a pre-existing API key. The signup
+            // response returns the new key, which Phoenix stores immediately in credentials.
+            // signup persists signup-ambiguous before provider IO, so a timeout is never
+            // silently retried and cannot rotate/lose the first account key.
+            const signup = onboarding.signup(owner, `kira-${randomUUID().slice(0, 8)}`)
+            barrier.providerAction = signup
+            await signup
+          }
+        }
+        settle()
+      } catch (error) {
+        fail(error)
+      } finally {
+        if (enrolling === barrier) enrolling = undefined
       }
-      const owner = mailAddress(resolvedOwner)
-      // AgentMail creates the mailbox without a pre-existing API key. The signup
-      // response returns the new key, which Phoenix stores immediately in credentials.
-      // signup persists signup-ambiguous before provider IO, so a timeout is never
-      // silently retried and cannot rotate/lose the first account key.
-      await onboarding.signup(owner, `kira-${randomUUID().slice(0, 8)}`)
-    })().finally(() => { enrolling = undefined })
-    return enrolling
+    })()
+    return promise
   }
   const journal = new MailJournal(join(config.directory, 'jobs.json'))
   const executor = createMailExecutor(ctx, journal, () => onboarding.status(), workConfig, config.workTimeoutMs)
@@ -337,7 +386,6 @@ export function installAssistantMail(ctx: Context,
       }
     }
   }
-  let resetting = false
   let disposed = false
   const controller = new AbortController()
   const sends = new Set<Promise<unknown>>()
@@ -498,35 +546,50 @@ export function installAssistantMail(ctx: Context,
     return delivery(key)
   })
   const recover = async (): Promise<void> => {
-    if (resetting) return
+    if (resetBarrier !== undefined) return
+    const epoch = enrollmentEpoch
     await ensureEnrollment()
+    if (epoch !== enrollmentEpoch || resetBarrier !== undefined) return
     const account = await onboarding.status()
-    if (isDisposed() || account.state !== 'ready' || account.inboxId === undefined) return
+    if (isDisposed() || epoch !== enrollmentEpoch || resetBarrier !== undefined
+      || account.state !== 'ready' || account.inboxId === undefined) return
     status = 'connecting'
     const root = ctx.get('agents')?.roots()[0]
     if (account.sessionId === undefined && root !== undefined) await onboarding.bindSessionIfUnset(root.id)
+    if (isDisposed() || epoch !== enrollmentEpoch || resetBarrier !== undefined) return
 
     // Bring the incoming/realtime channel up before flushing a pending owner send.
     // A missing message_send permission must not make a readable mailbox look disconnected.
     if (receiver === undefined || transportInbox !== account.inboxId || socketDispose === undefined) {
       socketDispose?.()
       await receiver?.stop()
+      if (isDisposed() || epoch !== enrollmentEpoch || resetBarrier !== undefined) return
       const transport = new AgentMailTransport(resolveKey, account.inboxId, config.timeoutMs, fetch, controller.signal)
-      receiver = new MailReceiver(transport, journal, outbox, () => onboarding.status(), job => executor.run(job))
+      const nextReceiver = new MailReceiver(transport, journal, outbox, () => onboarding.status(), job => executor.run(job))
+      await nextReceiver.reconcile()
+      if (isDisposed() || epoch !== enrollmentEpoch || resetBarrier !== undefined) {
+        await nextReceiver.stop()
+        return
+      }
+      receiver = nextReceiver
       transportInbox = account.inboxId
-      await receiver.reconcile()
-      if (isDisposed()) return
       try {
-        socketDispose = await transport.subscribe(() => { void pump() }, () => {
+        const nextSocketDispose = await transport.subscribe(() => { void pump() }, () => {
           if (isDisposed()) return
           socketDispose?.(); socketDispose = undefined
           status = 'connected-polling'
           scheduleSocketRecovery()
         })
+        if (isDisposed() || epoch !== enrollmentEpoch || resetBarrier !== undefined) {
+          nextSocketDispose()
+          return
+        }
+        socketDispose = nextSocketDispose
         status = 'connected'
         socketRecoveryAttempt = 0
         clearSocketRecovery()
       } catch {
+        if (isDisposed() || epoch !== enrollmentEpoch || resetBarrier !== undefined) return
         // REST reconciliation already proved that the mailbox and credential work.
         // Realtime is an acceleration path, not a reason to disable a valid mailbox.
         socketDispose = undefined
@@ -535,13 +598,16 @@ export function installAssistantMail(ctx: Context,
       }
     } else {
       await receiver.reconcile()
+      if (isDisposed() || epoch !== enrollmentEpoch || resetBarrier !== undefined) return
       if (status === 'connecting') status = 'connected'
     }
     automaticCredentialRecoveryAttempted = false
 
     try {
       await ownerOutbox.flush()
+      if (isDisposed() || epoch !== enrollmentEpoch || resetBarrier !== undefined) return
       const ownerPending = (await ownerOutbox.list()).some(row => row.state === 'pending')
+      if (isDisposed() || epoch !== enrollmentEpoch || resetBarrier !== undefined) return
       if ((status === 'connected' || status === 'connected-polling') && !ownerPending) providerIssue = undefined
     } catch (error) {
       if (error instanceof AgentMailHttpError
@@ -605,12 +671,20 @@ export function installAssistantMail(ctx: Context,
     if (account.state === 'ready') void pump()
     return identity()
   }
-  const discardEnrollment = async (): Promise<AssistantMailIdentity> => {
+  const discardEnrollment = (): Promise<AssistantMailIdentity> => {
     const credentials = ctx.get('credentials')
     if (credentials === undefined) throw new Error('secure credential storage is unavailable')
-    if (resetting) throw new Error('mail reset is already in progress')
-    resetting = true
-    try {
+    if (resetBarrier !== undefined) return Promise.reject(new Error('mail reset is already in progress'))
+    const epoch = ++enrollmentEpoch
+    const active = enrolling
+    const operation = (async (): Promise<AssistantMailIdentity> => {
+      // A provider enrollment that already crossed the epoch check owns the
+      // onboarding operation. Wait for it before clearing local state; an
+      // enrollment still resolving owner metadata will observe the stale epoch
+      // and never enter provider IO.
+      if (active?.epoch !== epoch && active?.providerAction !== undefined) {
+        try { await active.providerAction } catch { /* discard still owns cleanup */ }
+      }
       socketDispose?.()
       socketDispose = undefined
       await receiver?.stop()
@@ -623,10 +697,13 @@ export function installAssistantMail(ctx: Context,
       socketRecoveryAttempt = 0
       automaticCredentialRecoveryAttempted = false
       repumpRequested = false
-      return await identity()
-    } finally {
-      resetting = false
-    }
+      return identity()
+    })()
+    const lifecycle: Promise<void> = operation.then(() => undefined, () => undefined).finally(() => {
+      if (resetBarrier === lifecycle) resetBarrier = undefined
+    })
+    resetBarrier = lifecycle
+    return operation
   }
   const replaceEnrollment = async (explicitOwnerEmail?: string): Promise<AssistantMailIdentity> => {
     const previous = await onboarding.status()
@@ -881,6 +958,10 @@ export function installAssistantMail(ctx: Context,
   const dispose = (): Promise<void> => {
     if (disposing !== undefined) return disposing
     disposed = true
+    // A provider action already admitted can return a one-time credential.
+    // Drain its durable commit; deferred actions are stopped by isDisposed.
+    const enrollmentAction = enrolling?.providerAction
+    const resetting = resetBarrier
     controller.abort()
     clearInterval(timer)
     clearSocketRecovery()
@@ -894,6 +975,7 @@ export function installAssistantMail(ctx: Context,
       await executor.stop()
       await receiverStopped
       await pumping
+      await Promise.allSettled([enrollmentAction, resetting])
       await Promise.allSettled([...sends])
       await outboxStopped
       await rpcDispose?.()

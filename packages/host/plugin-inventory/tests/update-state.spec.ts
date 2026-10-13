@@ -1,8 +1,16 @@
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+
+const { spawnSyncMock } = vi.hoisted(() => ({ spawnSyncMock: vi.fn() }))
+
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  spawnSyncMock.mockImplementation(actual.spawnSync)
+  return { ...actual, spawnSync: spawnSyncMock }
+})
 import {
   parsePhoenixUpdateSnapshot,
   readPhoenixUpdateSnapshot,
@@ -39,6 +47,7 @@ function statePath(root: string): string {
 }
 
 afterEach(() => {
+  spawnSyncMock.mockClear()
   if (previousRuntimeRoot === undefined) delete process.env.PHOENIX_RUNTIME_ROOT
   else process.env.PHOENIX_RUNTIME_ROOT = previousRuntimeRoot
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
@@ -123,6 +132,21 @@ describe('PHOENIX updater state bridge', () => {
     })
   })
 
+  it('caches Git path resolution while reading changed JSON on every call', () => {
+    const repo = repository()
+    const sha = git(repo, 'rev-parse', 'HEAD')
+    writeFileSync(statePath(repo), JSON.stringify({ status: 'preparing', phase: 'build', target: sha }))
+    const initialSpawns = spawnSyncMock.mock.calls.length
+
+    expect(readPhoenixUpdateSnapshot(repo)).toEqual({ status: 'preparing', phase: 'build', target: sha })
+    const firstReadSpawns = spawnSyncMock.mock.calls.length
+    expect(firstReadSpawns).toBeGreaterThan(initialSpawns)
+
+    writeFileSync(statePath(repo), JSON.stringify({ status: 'current', current: sha }))
+    expect(readPhoenixUpdateSnapshot(repo)).toEqual({ status: 'current', current: sha })
+    expect(spawnSyncMock).toHaveBeenCalledTimes(firstReadSpawns)
+  })
+
   it('uses the launcher runtime root when no explicit root is passed', () => {
     const repo = repository()
     process.env.PHOENIX_RUNTIME_ROOT = repo
@@ -194,9 +218,74 @@ describe('PHOENIX updater state bridge', () => {
     expect(readPhoenixUpdateSnapshot(linked)).toMatchObject({ status: 'ready', target })
 
     expect(requestPhoenixUpdateRefresh(linked)).toEqual({ accepted: true })
+    expect(requestPhoenixUpdateRestart(linked)).toEqual({ accepted: true, status: 'restarting' })
     expect(JSON.parse(readFileSync(join(repo, '.git', 'phoenix-update-refresh-request.json'), 'utf8'))).toMatchObject({
       schema: 1,
     })
+    expect(JSON.parse(readFileSync(join(repo, '.git', 'phoenix-update-restart-request.json'), 'utf8'))).toMatchObject({
+      schema: 1,
+      target,
+    })
+  })
+
+  it('invalidates a linked worktree cache when its Git marker disappears and returns', () => {
+    const repo = repository()
+    const target = git(repo, 'rev-parse', 'HEAD')
+    const linked = tempRoot()
+    rmSync(linked, { recursive: true, force: true })
+    git(repo, 'worktree', 'add', '--detach', linked, target)
+
+    writeFileSync(statePath(repo), JSON.stringify({
+      schema: 1,
+      status: 'ready',
+      phase: 'ready',
+      current: target,
+      target,
+    }))
+    const markerPath = join(linked, '.git')
+    const marker = readFileSync(markerPath, 'utf8')
+    expect(readPhoenixUpdateSnapshot(linked)).toMatchObject({ status: 'ready', target })
+
+    rmSync(markerPath)
+    expect(readPhoenixUpdateSnapshot(linked)).toEqual({ status: 'idle' })
+
+    writeFileSync(markerPath, marker)
+    expect(readPhoenixUpdateSnapshot(linked)).toMatchObject({ status: 'ready', target })
+    expect(requestPhoenixUpdateRefresh(linked)).toEqual({ accepted: true })
+  })
+
+  it('invalidates an in-place linked worktree pointer rewrite and follows the new common directory', () => {
+    const firstRepo = repository()
+    const secondRepo = repository()
+    const firstTarget = git(firstRepo, 'rev-parse', 'HEAD')
+    const secondTarget = git(secondRepo, 'rev-parse', 'HEAD')
+    const linked = tempRoot()
+    const firstCommon = join(firstRepo, '.git')
+    const secondCommon = join(secondRepo, '.git')
+    writeFileSync(join(firstCommon, 'phoenix-update-state.json'), JSON.stringify({ status: 'ready', target: firstTarget }))
+    writeFileSync(join(secondCommon, 'phoenix-update-state.json'), JSON.stringify({ status: 'current', current: secondTarget }))
+    const markerPath = join(linked, '.git')
+    const firstMarker = `gitdir: ${join(firstCommon, 'worktrees', 'linked')}\n`
+    const secondMarker = `gitdir: ${join(secondCommon, 'worktrees', 'linked')}\n`
+    writeFileSync(markerPath, firstMarker)
+    const markerBefore = lstatSync(markerPath)
+    let commonDirectory = firstCommon
+    const actualSpawnSync = spawnSyncMock.getMockImplementation()
+    spawnSyncMock.mockImplementation((_command, args, options) => {
+      if (args[0] !== 'rev-parse' || options.cwd !== linked) throw new Error('unexpected Git lookup in pointer-cache test')
+      return { status: 0, stdout: `${commonDirectory}\n` }
+    })
+
+    try {
+      expect(readPhoenixUpdateSnapshot(linked)).toMatchObject({ status: 'ready', target: firstTarget })
+
+      writeFileSync(markerPath, secondMarker)
+      expect(lstatSync(markerPath).ino).toBe(markerBefore.ino)
+      commonDirectory = secondCommon
+      expect(readPhoenixUpdateSnapshot(linked)).toEqual({ status: 'current', current: secondTarget })
+    } finally {
+      if (actualSpawnSync !== undefined) spawnSyncMock.mockImplementation(actualSpawnSync)
+    }
   })
 
   it('queues an immediate updater refresh without changing the durable update state', () => {

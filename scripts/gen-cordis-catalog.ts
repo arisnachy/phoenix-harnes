@@ -606,6 +606,8 @@ export const TYPE_LINK_EXEMPTIONS: Readonly<Record<string, string>> = {
   VoiceConversationRealtimeStatus: 'conversation realtime status is owned by packages/voice/voice/src/types.ts',
   VoiceConversationRealtimeStartRequest: 'conversation realtime start request is owned by packages/voice/voice/src/types.ts',
   VoiceConversationRealtimeStartReceipt: 'conversation realtime start receipt is owned by packages/voice/voice/src/types.ts',
+  VoiceConversationRealtimeSpeakRequest: 'authorized native speech request is owned by packages/voice/voice/src/types.ts',
+  VoiceConversationRealtimeSpeakReceipt: 'authorized native speech admission receipt is owned by packages/voice/voice/src/types.ts',
   VoiceConversationRealtimeStopRequest: 'conversation realtime stop request is owned by packages/voice/voice/src/types.ts',
   VoiceConversationRealtimeStopReceipt: 'conversation realtime stop receipt is owned by packages/voice/voice/src/types.ts',
   VoiceConversationSpeakReceipt: 'conversation voice speak receipt is owned by packages/voice/voice/src/types.ts',

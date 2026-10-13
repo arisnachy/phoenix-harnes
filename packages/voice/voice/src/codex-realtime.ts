@@ -339,7 +339,10 @@ function customRealtimeEndpointWarning(): string {
   }
 }
 
-/** Recognize only real Codex login failures; network hiccups must not log users out. */
+/** Recognize only real Codex login failures; network hiccups must not log users out.
+ * @param error - Failure returned by the Codex sidecar.
+ * @returns Whether reauthentication is required.
+ */
 export function codexRealtimeNeedsLogin(error: unknown): boolean {
   const message = errorText(error)
   // oxlint-disable-next-line @stylistic/max-len -- Keep the login failure matcher auditable as one literal.
@@ -628,8 +631,11 @@ export class CodexRealtimeBridge {
   /**
    * Send speakable text through the official authenticated app-server V3
    * protocol. Unlike a browser response.create instruction, appendSpeech
-   * feeds the selected final answer into Codex's speakable sideband channel.
+   * feeds Phoenix-authorized text into Codex's speakable sideband channel.
    * No API keys or guessed Quicksilver HTTP headers are involved.
+   * @param key - Browser-owned active call key.
+   * @param text - Completed result or stable conversational sentence authorized by Phoenix.
+   * @returns Whether the active call accepted the speech request.
    */
   async speak(key: string, text: string): Promise<boolean> {
     const threadId = this.sessions.get(key)
@@ -993,7 +999,9 @@ function realtimeIdentityInstructions(
     'Speak naturally, warmly, and concisely in the user\'s language. This is a continuation of the compact Phoenix conversation history; do not repeat that history.',
     'PHOENIX\'s normal harness is the only planner and executor. This realtime thread is voice transport: transcribe the human faithfully and do not claim tool use, file changes, plans, or completed actions on its own.',
     'Never generate your own spoken answers or progress acknowledgements in response to user audio. Input audio is transcription only.',
-    'Only an explicit thread/realtime/appendSpeech message from PHOENIX authorizes speech. Read the already-completed harness answer faithfully, without adding claims, waiting updates, tool status or speculation.',
+    'Only an explicit thread/realtime/appendSpeech message from PHOENIX authorizes speech. '
+      + 'Read exactly its authorized text: a completed task result or a stable conversational sentence. '
+      + 'Never add claims, waiting updates, tool status or speculation.',
   ].join(' ')
 }
 
@@ -1009,7 +1017,10 @@ function isThreadModelCompatibilityError(value: unknown): boolean {
   return /(?:model|deployment).*(?:not found|unknown|unsupported|unavailable|invalid)|(?:not found|unknown|unsupported|unavailable|invalid).*(?:model|deployment)/iu.test(message)
 }
 
-/** A specific server-side AVAS protocol rejection, not a credential failure. */
+/** A specific server-side AVAS protocol rejection, not a credential failure.
+ * @param value - Failure returned by the realtime endpoint.
+ * @returns Whether the endpoint explicitly requires the Quicksilver V2 header.
+ */
 export function isCodexQuicksilverV2Required(value: unknown): boolean {
   const message = errorText(value)
   return /invalid_quicksilver_alpha_header|AVAS requires OpenAI-Alpha:\s*quicksilver=v2/iu.test(message)

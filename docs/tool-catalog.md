@@ -2895,7 +2895,7 @@ Send a durable follow-up task to another Team member and start a turn when neede
     },
     "message": {
       "type": "string",
-      "description": "Self-contained message for the target."
+      "description": "Self-contained message for the target in the current user conversational language; preserve exact code and error strings."
     }
   },
   "required": [
@@ -2969,7 +2969,7 @@ Send durable information to another Team member without starting an idle member.
     },
     "message": {
       "type": "string",
-      "description": "Self-contained message for the target."
+      "description": "Self-contained message for the target in the current user conversational language; preserve exact code and error strings."
     }
   },
   "required": [
@@ -3022,7 +3022,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
 
 ### `team_chat_answer`
 
-Answer a conversational user request addressed to you using its delivered Team-user message id, then continue your existing mission. Does not complete a task or replace operational execution evidence.
+Only answer a genuine delivered user-authored directed conversational question using its Team-user message id. Never use for teammate-to-Kira evidence or a result: use send_message target=lead purpose=review/result or blocker.
 
 ```json
 {
@@ -3292,7 +3292,7 @@ Source: [`packages/subagent/tool-agent-team/src/index.ts`](../packages/subagent/
 
 ### `wait_agent`
 
-Wait for the next teammate status, mailbox, or shared-task change after this call starts. This never wakes inactive members and returns noProgress immediately when no other member is running or provisioning. Re-list after wakeup or timeout instead of polling.
+Wait once for new Team activity; never poll indefinitely. Actual waiting is capped at 20000ms. After two timeouts without any Team change, return stalled-team instead of waiting again.
 
 ```json
 {
@@ -3300,7 +3300,7 @@ Wait for the next teammate status, mailbox, or shared-task change after this cal
   "properties": {
     "timeout_ms": {
       "type": "integer",
-      "description": "Wait duration in milliseconds, from 10000 through 3600000. Defaults to 30000."
+      "description": "Requested wait duration 10000 through 3600000ms, capped internally at 20000ms. Defaults to 10000ms."
     }
   }
 }

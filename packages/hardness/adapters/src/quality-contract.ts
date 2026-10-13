@@ -174,6 +174,7 @@ export function qualityRequirementsForNeed(need: unknown): readonly string[] {
     requirements.push(...UI_REQUIREMENTS)
   }
   if (matches(text, /\b(?:research|report|document|paper|literature|evidence|review|study|citation|source)\b/u)
+    // oxlint-disable-next-line @stylistic/max-len -- Keep the Spanish research classifier auditable as one literal.
     || matches(text, /(?:^|[^\p{L}])(?:investigaci[oó]n|investigaciones|investiga(?:r)?|estudios?|evidencias?|fuentes?|citas?|art[ií]culos?|informes?|contrastar)(?=$|[^\p{L}])/u)) {
     requirements.push(...RESEARCH_REQUIREMENTS)
   }
@@ -186,7 +187,7 @@ export function qualityRequirementsForNeed(need: unknown): readonly string[] {
   if (isGameDevelopmentNeed(need)) {
     if (isAbstractGameNeed(need)) {
       requirements.push(...ABSTRACT_GAME_REQUIREMENTS)
-      if (requestsGameAssets(need)) requirements.push(GAME_REQUIREMENTS[2], GAME_REQUIREMENTS[3])
+      if (requestsGameAssets(need)) requirements.push(GAME_REQUIREMENTS[2], GAME_REQUIREMENTS[3], GAME_REQUIREMENTS[4])
     } else requirements.push(...GAME_REQUIREMENTS)
   }
 

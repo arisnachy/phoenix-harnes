@@ -22,8 +22,10 @@ describe('PHOENIX proactivity protocol', () => {
   })
 
   it('requires useful, bounded, non-duplicative initiative', () => {
-    expect(PROACTIVITY_PROTOCOL).toContain('one concrete future obligation')
-    expect(PROACTIVITY_PROTOCOL).toContain('do not invent a task just to appear proactive')
+    expect(PROACTIVITY_PROTOCOL).toContain('evaluate whether a specific next step is worth scheduling')
+    expect(PROACTIVITY_PROTOCOL).toContain('schedule it automatically only inside existing user goals and authorization, otherwise stay quiet')
+    expect(PROACTIVITY_PROTOCOL).toContain('Do not create noisy, duplicative, or speculative tasks')
+    expect(PROACTIVITY_PROTOCOL).toContain('create at most one useful new task per completed mission')
     expect(PROACTIVITY_PROTOCOL).toContain('clear trigger/time and expected user benefit')
     expect(PROACTIVITY_PROTOCOL).toContain('Prefer one high-value follow-up')
     expect(PROACTIVITY_PROTOCOL).toContain('never create a duplicate')

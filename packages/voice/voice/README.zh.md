@@ -27,6 +27,8 @@ PHOENIX 的 provider 中立异步语音服务。只有经确认的任务完成�
 
 原生 Codex Realtime WebRTC 在两个协议版本中都使用 `juniper` 表示女性、`cove` 表示男性、`breeze` 表示中性；这些标识符受到托管 Codex app-server 支持。
 
+原生语音线程只朗读 Phoenix 通过 `appendSpeech` 明确接纳的文字：已完成的任务结果或严格会话快速路径中的稳定句子。它不生成自主回答或进度陈述。句子接纳和取消由会话客户端负责。
+
 ## Model Experience
 
 ### 语音旁路

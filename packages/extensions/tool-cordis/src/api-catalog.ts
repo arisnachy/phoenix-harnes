@@ -1055,7 +1055,7 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       },
       {
         signature: 'async disconnect(): Promise<{ revoked: boolean }>',
-        description: 'Clear the process grant and secret-free marker even when provider revocation fails.',
+        description: 'Clear the in-memory and durable grant even when provider revocation fails.',
         parameters: [],
         returns: 'whether Google acknowledged token revocation.',
       },
@@ -2695,6 +2695,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Negotiate browser WebRTC directly with Codex Realtime through the locally authenticated app-server. No API key is accepted by this path.',
         parameters: [{ name: 'request', description: 'Browser-owned call identity, model selection and SDP offer.' }],
         returns: 'Accepted negotiation with answer SDP, or a classified rejection.',
+      },
+      {
+        signature: '@Remote(\'conversationRealtimeSpeak\') async conversationRealtimeSpeak( request: VoiceConversationRealtimeSpeakRequest, ): Promise<VoiceConversationRealtimeSpeakReceipt>',
+        description: 'Hand Phoenix-authorized answer text to Codex native V3 speech. This only accepts an already-active browser-owned call; it does not create a new thread, spawn a model, or switch to another voice provider.',
+        parameters: [{ name: 'request', description: 'Active browser call key and completed result or stable conversational sentence.' }],
+        returns: 'Whether the active native call accepted the authorized text.',
       },
       {
         signature: '@Remote(\'conversationRealtimeStop\') async conversationRealtimeStop( request: VoiceConversationRealtimeStopRequest, ): Promise<VoiceConversationRealtimeStopReceipt>',
@@ -4519,7 +4525,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpConnectorReasonCode',
-    declaration: 'export type McpConnectorReasonCode = \'connection-failed\' | \'connection-lost\' | \'authorization-required\' | \'retry-exhausted\';',
+    declaration: 'export type McpConnectorReasonCode = \'connection-failed\' | \'endpoint-not-found\' | \'connection-lost\' | \'authorization-required\' | \'retry-exhausted\';',
   },
   {
     name: 'McpConnectorRegistration',
@@ -6014,6 +6020,14 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface VoiceConversationCancelRequest {\n    readonly key: string;\n}',
   },
   {
+    name: 'VoiceConversationRealtimeSpeakReceipt',
+    declaration: 'export interface VoiceConversationRealtimeSpeakReceipt {\n    readonly accepted: boolean;\n    readonly reason?: \'disabled\' | \'invalid\' | \'no-session\' | \'codex-unavailable\';\n}',
+  },
+  {
+    name: 'VoiceConversationRealtimeSpeakRequest',
+    declaration: 'export interface VoiceConversationRealtimeSpeakRequest {\n    readonly key: string;\n    readonly text: string;\n}',
+  },
+  {
     name: 'VoiceConversationRealtimeStartReceipt',
     declaration: 'export interface VoiceConversationRealtimeStartReceipt {\n    readonly accepted: boolean;\n    readonly threadId?: string;\n    readonly answerSdp?: string;\n    readonly reason?: \'disabled\' | \'invalid\' | \'codex-unavailable\' | \'codex-login-required\' | \'experimental-unavailable\' | \'negotiation-failed\';\n    readonly detail?: string;\n}',
   },
@@ -6023,7 +6037,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'VoiceConversationRealtimeStatus',
-    declaration: 'export interface VoiceConversationRealtimeStatus {\n    readonly enabled: boolean;\n    readonly available: boolean;\n    readonly authenticated: boolean;\n    readonly provider: \'openai-codex\';\n    readonly reason?: \'disabled\' | \'codex-unavailable\' | \'codex-login-required\' | \'experimental-unavailable\';\n}',
+    declaration: 'export interface VoiceConversationRealtimeStatus {\n    readonly enabled: boolean;\n    readonly available: boolean;\n    readonly authenticated: boolean;\n    readonly provider: \'openai-codex\';\n    readonly reason?: \'disabled\' | \'codex-unavailable\' | \'codex-login-required\' | \'experimental-unavailable\';\n    readonly detail?: string;\n    readonly repair?: \'checking\' | \'updating\' | \'waiting-upstream\' | \'ready\' | \'blocked\' | \'disabled\';\n}',
   },
   {
     name: 'VoiceConversationRealtimeStopReceipt',
@@ -6063,7 +6077,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'VoiceSynthesisRequest',
-    declaration: 'export interface VoiceSynthesisRequest {\n    readonly text: string;\n    readonly language: string;\n    readonly signal?: AbortSignal;\n}',
+    declaration: 'export interface VoiceSynthesisRequest {\n    readonly text: string;\n    readonly language: string;\n    readonly gender?: \'masculine\' | \'feminine\' | \'neutral\';\n    readonly signal?: AbortSignal;\n}',
   },
   {
     name: 'VoiceTextToSpeechProvider',

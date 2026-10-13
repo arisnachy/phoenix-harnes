@@ -963,7 +963,7 @@ it('migrates a ready stale agent-signup inbox to an existing Console Kira inbox 
     expect(saved).toBe('am_console_key')
     expect(requests.some(value => value.includes('/agent/sign-up'))).toBe(false)
     expect(requests.some(value => value.includes('/agent/human'))).toBe(false)
-    expect(requests.some(value => value === 'https://api.agentmail.to/v0/inboxes')).toBe(false)
+    expect(requests.some(value => value === 'https://api.agentmail.to/v0/inboxes')).toBe(true)
   } finally { await rm(directory, { recursive: true, force: true }) }
 })
 
@@ -1059,7 +1059,8 @@ it('creates the first Kira inbox from a corroborated Console key and explicit Ph
       },
     })
 
-    await expect(account.adoptConsoleKey('am_us_console_key', 'owner@example.com')).resolves.toMatchObject({
+    const result = await account.adoptConsoleKey('am_us_console_key', 'owner@example.com')
+    expect(result).toMatchObject({
       state: 'ready',
       inboxId: createdInbox,
       ownerEmail: 'owner@example.com',

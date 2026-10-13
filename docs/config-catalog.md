@@ -789,7 +789,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/hardness/adapters/src/index.ts:171`](../packages/hardness/adapters/src/index.ts)
+Source: [`packages/hardness/adapters/src/index.ts:177`](../packages/hardness/adapters/src/index.ts)
 
 <a id="phoenix-aidsh-headless"></a>
 
@@ -1392,7 +1392,7 @@ export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFo
 
 Depends on: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`)
 
-Source: [`packages/llm/llm-pi-ai/src/config.ts:260`](../packages/llm/llm-pi-ai/src/config.ts)
+Source: [`packages/llm/llm-pi-ai/src/config.ts:263`](../packages/llm/llm-pi-ai/src/config.ts)
 
 <a id="phoenix-aidsh-llm-replay"></a>
 
@@ -2500,7 +2500,7 @@ export type CodexPermissionMode =
   | 'dangerously-bypass-approvals-and-sandbox'
 ```
 
-Source: [`packages/subagent/subagent-codex/src/index.ts:40`](../packages/subagent/subagent-codex/src/index.ts)
+Source: [`packages/subagent/subagent-codex/src/index.ts:41`](../packages/subagent/subagent-codex/src/index.ts)
 
 <a id="phoenix-aidsh-subagent-dsh-sdk"></a>
 
@@ -2632,7 +2632,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/core/system-prompt/src/index.ts:203`](../packages/core/system-prompt/src/index.ts)
+Source: [`packages/core/system-prompt/src/index.ts:204`](../packages/core/system-prompt/src/index.ts)
 
 <a id="phoenix-aidsh-terminal-bash"></a>
 
@@ -2761,7 +2761,7 @@ export interface TeamModelProfile {
 }
 ```
 
-Source: [`packages/subagent/tool-agent-team/src/index.ts:38`](../packages/subagent/tool-agent-team/src/index.ts)
+Source: [`packages/subagent/tool-agent-team/src/index.ts:39`](../packages/subagent/tool-agent-team/src/index.ts)
 
 <a id="phoenix-aidsh-tool-bash"></a>
 
@@ -3058,7 +3058,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/session-learning/tool-session-learning/src/index.ts:27`](../packages/session-learning/tool-session-learning/src/index.ts)
+Source: [`packages/session-learning/tool-session-learning/src/index.ts:28`](../packages/session-learning/tool-session-learning/src/index.ts)
 
 <a id="phoenix-aidsh-tool-session-query"></a>
 
@@ -3431,7 +3431,7 @@ export interface VoiceRuntimeConfig {
 }
 ```
 
-Source: [`packages/voice/voice/src/index.ts:138`](../packages/voice/voice/src/index.ts)
+Source: [`packages/voice/voice/src/index.ts:143`](../packages/voice/voice/src/index.ts)
 
 <a id="phoenix-aidsh-voice-local"></a>
 
@@ -3456,7 +3456,9 @@ export interface Config {
   readonly naturalRequestTimeoutMs?: number
   /** Maximum characters per semantic neural synthesis chunk. */
   readonly naturalMaxChunkChars?: number
-  /** Optional local Kokoro command; absence leaves Kokoro unavailable. */
+  /** Warm Kokoro in the background when an installed local model is detected. */
+  readonly kokoroPrewarm?: boolean
+  /** Optional local Kokoro command; absence auto-detects a completed PHOENIX install. */
   readonly kokoroCommand?: string
   /** Arguments for the Kokoro command. */
   readonly kokoroArgs?: string[]
@@ -3464,12 +3466,12 @@ export interface Config {
   readonly sttCommand?: string
   /** Arguments for the STT command. */
   readonly sttArgs?: string[]
-  /** Whether to register the platform fallback after neural TTS and Kokoro. */
+  /** Register legacy platform TTS for alerts; off by default on Windows to avoid robotic speech. */
   readonly systemTts?: boolean
 }
 ```
 
-Source: [`packages/voice/voice-local/src/index.ts:151`](../packages/voice/voice-local/src/index.ts)
+Source: [`packages/voice/voice-local/src/index.ts:157`](../packages/voice/voice-local/src/index.ts)
 
 <a id="phoenix-aidsh-web"></a>
 
@@ -3519,7 +3521,7 @@ export interface Config {
 }
 ```
 
-Source: [`packages/bundle/web-app/src/index.ts:42`](../packages/bundle/web-app/src/index.ts)
+Source: [`packages/bundle/web-app/src/index.ts:43`](../packages/bundle/web-app/src/index.ts)
 
 <a id="phoenix-aidsh-web-fetch-http"></a>
 

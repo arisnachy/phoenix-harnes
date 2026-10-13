@@ -56,6 +56,8 @@ flowchart LR
   cfg --> plugin_dsh_base_tool_google_workspace
   plugin_dsh_base_llm_pi_ai["llm-pi-ai<br/>@phoenix-ai/dsh-llm-pi-ai"]
   cfg --> plugin_dsh_base_llm_pi_ai
+  plugin_dsh_base_host_image_generation["host-image-generation<br/>@phoenix-ai/dsh-llm-pi-ai"]
+  cfg --> plugin_dsh_base_host_image_generation
   plugin_dsh_base_session_persistence_jsonl["session-persistence-jsonl<br/>@phoenix-ai/dsh-session-persistence-jsonl"]
   cfg --> plugin_dsh_base_session_persistence_jsonl
   plugin_dsh_base_session_learning["session-learning<br/>@phoenix-ai/dsh-session-learning"]
@@ -188,6 +190,8 @@ flowchart LR
   cfg --> plugin_dsh_base_web_search_openrouter
   plugin_dsh_base_web_search_free["web-search-free<br/>@phoenix-ai/dsh-web-search-free"]
   cfg --> plugin_dsh_base_web_search_free
+  plugin_dsh_base_web_fetch_http["web-fetch-http<br/>@phoenix-ai/dsh-web-fetch-http"]
+  cfg --> plugin_dsh_base_web_fetch_http
   plugin_dsh_base_tool_web["tool-web<br/>@phoenix-ai/dsh-tool-web"]
   cfg --> plugin_dsh_base_tool_web
   plugin_dsh_base_mcp_connector_registry["mcp-connector-registry<br/>@phoenix-ai/dsh-mcp-connector-registry"]
@@ -246,6 +250,7 @@ flowchart LR
 | `authorization-google` | `@phoenix-ai/dsh-authorization/google` |
 | `tool-google-workspace` | `@phoenix-ai/dsh-tool-google-workspace` |
 | `llm-pi-ai` | `@phoenix-ai/dsh-llm-pi-ai` |
+| `host-image-generation` | `@phoenix-ai/dsh-llm-pi-ai` |
 | `session-persistence-jsonl` | `@phoenix-ai/dsh-session-persistence-jsonl` |
 | `session-learning` | `@phoenix-ai/dsh-session-learning` |
 | `cognitive-runtime` | `@phoenix-ai/dsh-cognitive-runtime` |
@@ -312,6 +317,7 @@ flowchart LR
 | `web` | `@phoenix-ai/dsh-web` |
 | `web-search-openrouter` | `@phoenix-ai/dsh-web-search-openrouter` |
 | `web-search-free` | `@phoenix-ai/dsh-web-search-free` |
+| `web-fetch-http` | `@phoenix-ai/dsh-web-fetch-http` |
 | `tool-web` | `@phoenix-ai/dsh-tool-web` |
 | `mcp-connector-registry` | `@phoenix-ai/dsh-mcp-connector-registry` |
 | `mcp-blender-game-dev` | `@phoenix-ai/dsh-mcp-client` |

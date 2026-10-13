@@ -117,7 +117,7 @@ export class AppWebEntry {
       })))
   }
 
-  /** Mount the Loader, create all graph entries, await quiescence, and audit activation. */
+  /** Mount the Loader, overlap graph creation with prefetch, await quiescence, and audit activation. */
   private async runPluginBoot(ctx: Context, prefetching: Promise<void>): Promise<void> {
     await ctx.plugin(Loader)
     const loader = ctx.loader

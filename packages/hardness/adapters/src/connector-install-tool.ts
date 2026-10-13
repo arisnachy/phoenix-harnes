@@ -6,6 +6,13 @@ import {
   type ToolDefinition,
 } from '@phoenix-ai/dsh-tools'
 
+const CURATED_CONNECTOR_LABELS = {
+  devpost: 'Devpost Hackathons', canva: 'Canva', supabase: 'Supabase',
+  heygen: 'HeyGen', figma: 'Figma', notion: 'Notion', linear: 'Linear',
+  cloudflare: 'Cloudflare', slack: 'Slack', 'brave-search': 'Brave Search',
+  filesystem: 'Filesystem', memory: 'Memory', fetch: 'Fetch',
+} as const
+
 /** Host-owned install seam for registry-listed and Phoenix-curated Streamable HTTP MCPs. */
 export interface McpRegistryInstallerService {
   installMcpRegistryServer(request: { name: string; version?: string }): Promise<{
@@ -110,13 +117,13 @@ export function createConnectorInstallTool(
         throw new Error('connector_install requires an exact registry server name')
       }
       if (exec.agent === undefined) throw new Error('connector_install requires an active agent session')
-      const label = connectorId ?? name
+      const label = connectorId === undefined ? name : CURATED_CONNECTOR_LABELS[connectorId]
       const outcome = await approval.request({
         agent: exec.agent,
         toolName: 'connector_install',
         callId: exec.callId,
         reason: connectorId !== undefined
-          ? `Activate the Phoenix-curated ${connectorId} MCP`
+          ? `Activate the Phoenix-curated ${connectorId === 'devpost' ? 'official ' : ''}${label} MCP`
           : `Install registry-listed MCP ${name}${args.version === undefined ? '' : ` @ ${args.version}`} into PHOENIX`,
         risk: 'medium',
         reversible: true,
@@ -131,7 +138,7 @@ export function createConnectorInstallTool(
       let receipt: Awaited<ReturnType<McpRegistryInstallerService['installMcpRegistryServer']>>
       if (connectorId !== undefined) {
         if (installer.installCuratedMcpConnector === undefined) {
-          throw new Error('curated MCP installation is unavailable in this Phoenix runtime')
+          throw new Error(`curated ${connectorId === 'devpost' ? 'Devpost ' : `${label} `}MCP installation is unavailable in this Phoenix runtime`)
         }
         receipt = await installer.installCuratedMcpConnector({ connectorId })
       } else {
@@ -150,7 +157,7 @@ export function createConnectorInstallTool(
       }
     },
     presentCall(args) {
-      const label = args.connectorId ?? args.name
+      const label = args.connectorId === undefined ? args.name : CURATED_CONNECTOR_LABELS[args.connectorId]
       return {
         card: 'generic',
         title: `Install MCP: ${label}`,

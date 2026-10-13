@@ -58,7 +58,7 @@ export function preparePhoenixGameSubmission(html: string, manifestJson?: string
   }
   // Salvage the common case where the author provided the correct JSON script
   // content but forgot the exact id attribute. Never select unrelated metadata.
-  const candidates = scripts.filter(match => {
+  const candidates = scripts.filter((match) => {
     const attrs = match[1] ?? ''
     if (!/\btype\s*=\s*["']application\/json["']/iu.test(attrs) || /\bid\s*=/iu.test(attrs)) return false
     try {
@@ -129,7 +129,7 @@ function validateRecordedAudio(html: string, manifest: Record<string, unknown>):
   const runtime = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/giu)]
     .filter(match => !/\btype\s*=\s*["']application\/json["']/iu.test(match[1] ?? ''))
     .map(match => match[2] ?? '').join('\n')
-  if (!/\b(?:playSoundSample|playSound|\.play)\s*\(/u.test(runtime)) {
+  if (!/(?:\b(?:playSoundSample|playSound)|\.play)\s*\(/u.test(runtime)) {
     throw new ToolArgsError(['Game Studio: el audio de producción se incrustó pero no tiene reproducción desde los eventos del juego.'])
   }
 }
@@ -221,7 +221,7 @@ function validateBrawlerContract(manifest: Record<string, unknown>): void {
     throw new ToolArgsError(['Game Studio beat-em-up: producción exige al menos 3 enemigos originales diferentes.'])
   }
   const bosses = Array.isArray(manifest.bosses) ? manifest.bosses as unknown[] : []
-  if (!bosses.length || bosses.some((boss) =>
+  if (!bosses.length || bosses.some(boss =>
     !validObject(boss) || !Array.isArray(boss.phases) || boss.phases.length < 2
       || !Array.isArray(boss.attacks) || boss.attacks.length < 2 || boss.attacks.some((attack: unknown) =>
       !validObject(attack) || typeof attack.id !== 'string'

@@ -69,10 +69,11 @@ export interface VoiceConversationRealtimeStartReceipt {
 export interface VoiceConversationRealtimeSpeakRequest {
   /** Browser-owned call key; never the raw Codex thread id. */
   readonly key: string
-  /** Final plain-language answer chosen by Phoenix, not Codex-generated tool claims. */
+  /** Completed result or stable conversational sentence authorized by Phoenix. */
   readonly text: string
 }
 
+/** Admission result for authorized native speech; acceptance does not prove audible playback. */
 export interface VoiceConversationRealtimeSpeakReceipt {
   readonly accepted: boolean
   readonly reason?: 'disabled' | 'invalid' | 'no-session' | 'codex-unavailable'

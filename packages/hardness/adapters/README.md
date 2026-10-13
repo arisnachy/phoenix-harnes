@@ -57,6 +57,8 @@ Game quality follows the requested genre and art direction. Game-development det
 
 ## Runtime validation
 
+Abstract games that request character or background assets also require an asset manifest and provenance. Sampled production audio accepts ordinary chained HTML media `.play()` calls while retaining embedded-file validation. Curated connector approval, results and call cards use human-readable names; stable connector IDs still address the Host installer.
+
 Paper candle reads clamp both the provider request and returned rows to 1–1000. Shell mutation classification reads the command argument. Runtime-service telemetry performs an immediate first probe and then reuses observations until their TTL expires.
 
 ## Model Experience

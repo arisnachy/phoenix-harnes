@@ -8,6 +8,7 @@ import type { AssistantMailControl } from '../src/assistant-mail-runtime.ts'
 import { JsonProactivityStore, ProactivityEngine } from '../src/proactivity-engine.ts'
 import type { MailOutgoingOwnership } from '../src/assistant-mail-types.ts'
 import { mailRecord } from '../src/assistant-mail-store.ts'
+import { MailOnboarding } from '../src/assistant-mail-onboarding.ts'
 
 const input = { taskId: 'mail-task', scheduledFor: '2026-09-28T02:53:29.000Z', to: 'owner@example.com', subject: 'Report', text: 'Done', idempotencyKey: 'mail-task:deliver:2026-09-28T02:53:29.000Z' }
 async function fixture(ready = true, existingDirectory?: string, authorizeOutgoing = async (_ownership: MailOutgoingOwnership) => true) {
@@ -37,6 +38,16 @@ it('explicit ensure resumes owner attachment for a pending mailbox', async () =>
     contacts: [],
   }))
   const ctx = new Context()
+  let releaseStartup!: () => void
+  let startupEntered!: () => void
+  const startupWaiting = new Promise<void>((resolve) => { startupEntered = resolve })
+  const startupGate = new Promise<void>((resolve) => { releaseStartup = resolve })
+  const readStatus = MailOnboarding.prototype.status
+  const statusSpy = vi.spyOn(MailOnboarding.prototype, 'status').mockImplementationOnce(async function (this: MailOnboarding) {
+    startupEntered()
+    await startupGate
+    return readStatus.call(this)
+  })
   let credential = 'am_pending'
   ctx.reflect.provide('credentials', {
     resolve: async () => ({ value: credential }),
@@ -60,14 +71,195 @@ it('explicit ensure resumes owner attachment for a pending mailbox', async () =>
   try {
     const service = ctx.get('assistantMail') as AssistantMailControl | undefined
     expect(service).toBeDefined()
-    await expect(service!.ensure('owner@example.com')).resolves.toMatchObject({
+    await startupWaiting
+    // Force startup enrollment to be in flight before explicit recovery joins
+    // it. The old promise-only coalescing loses requireOwner in this schedule.
+    const recovery = service!.ensure('owner@example.com')
+    expect(fetch).not.toHaveBeenCalled()
+    releaseStartup()
+    await expect(recovery).resolves.toMatchObject({
       state: 'pending-verification',
       inboxId: 'kira@agentmail.to',
     })
     expect(fetch).toHaveBeenCalledOnce()
+    // Provider rejection must reject the owned operation without producing a
+    // second, unobserved rejection from a derived provider-action promise.
+    fetch.mockRejectedValueOnce(new Error('fixture recovery failure'))
+    await expect(service!.ensure('owner@example.com')).rejects.toThrow('fixture recovery failure')
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+    let providerEntered!: () => void
+    let releaseProvider!: () => void
+    const entered = new Promise<void>((resolve) => { providerEntered = resolve })
+    const providerGate = new Promise<void>((resolve) => { releaseProvider = resolve })
+    const order: string[] = []
+    fetch.mockImplementationOnce(async () => {
+      providerEntered()
+      await providerGate
+      order.push('provider-returned')
+      return Response.json({ human_email: 'owner@example.com', instructions: 'Enter the OTP.' })
+    })
+    const recovering = service!.ensure('owner@example.com')
+    await entered
+    const disposal = runtime.dispose().then(() => { order.push('disposed') })
+    await new Promise<void>(resolve => setImmediate(resolve))
+    releaseProvider()
+    await Promise.all([recovering, disposal])
+    expect(order).toEqual(['provider-returned', 'disposed'])
+    expect(mailRecord(JSON.parse(await readFile(join(directory, 'account.json'), 'utf8'))).ownerLink).toBe('attached')
   } finally {
+    releaseStartup()
+    await runtime.dispose()
+    statusSpy.mockRestore()
+    vi.unstubAllGlobals()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+it('re-reads an explicit owner that arrives while startup resolves the automatic owner', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-explicit-owner-race-'))
+  await writeFile(join(directory, 'account.json'), JSON.stringify({ state: 'not-configured', contacts: [] }))
+  const ctx = new Context()
+  let credential = 'am_startup'
+  ctx.reflect.provide('credentials', {
+    resolve: async () => ({ value: credential }),
+    set: async (_ref: unknown, value: string) => { credential = value },
+    unset: async () => { credential = '' },
+  })
+  let releaseOwner!: () => void
+  let ownerEntered!: () => void
+  const ownerWaiting = new Promise<void>((resolve) => { ownerEntered = resolve })
+  const ownerGate = new Promise<void>((resolve) => { releaseOwner = resolve })
+  const signups = vi.fn()
+  vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
+    if (!url.endsWith('/agent/sign-up')) throw new Error(`unexpected AgentMail request: ${url}`)
+    signups()
+    const payload = mailRecord(JSON.parse(String(init?.body)))
+    expect(payload.human_email).toBe('explicit@example.com')
+    return Response.json({ api_key: 'am_new', inbox_id: 'kira-race@agentmail.to' })
+  })
+  const runtime = installAssistantMail(ctx, {
+    directory,
+    authorizeOutgoing: async () => true,
+    credentialRef: 'MAIL_KEY',
+    pollMs: 60_000,
+    timeoutMs: 1000,
+    workTimeoutMs: 1000,
+    resolveOwnerEmail: async () => {
+      ownerEntered()
+      await ownerGate
+      return 'automatic@example.com'
+    },
+  }, { pollMs: 60_000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000 })
+  try {
+    await ownerWaiting
+    const service = ctx.get('assistantMail') as AssistantMailControl
+    const explicit = service.ensure('explicit@example.com')
+    releaseOwner()
+    await expect(explicit).resolves.toMatchObject({
+      state: 'pending-verification',
+      ownerEmail: 'explicit@example.com',
+      inboxId: 'kira-race@agentmail.to',
+    })
+    expect(signups).toHaveBeenCalledOnce()
+  } finally {
+    releaseOwner()
     await runtime.dispose()
     vi.unstubAllGlobals()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+it.each(['discard', 'dispose'] as const)('does not let deferred startup enrollment create a mailbox after %s', async (stop) => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-discard-race-'))
+  await writeFile(join(directory, 'account.json'), JSON.stringify({ state: 'not-configured', contacts: [] }))
+  const ctx = new Context()
+  let credential = 'am_startup'
+  ctx.reflect.provide('credentials', {
+    resolve: async () => ({ value: credential }),
+    set: async (_ref: unknown, value: string) => { credential = value },
+    unset: async () => { credential = '' },
+  })
+  let releaseOwner!: () => void
+  let ownerEntered!: () => void
+  const ownerWaiting = new Promise<void>((resolve) => { ownerEntered = resolve })
+  const ownerGate = new Promise<void>((resolve) => { releaseOwner = resolve })
+  let ownerLookups = 0
+  const signup = vi.fn()
+  vi.stubGlobal('fetch', async (url: string) => {
+    if (url.endsWith('/agent/sign-up')) signup()
+    return Response.json({ api_key: 'am_unexpected', inbox_id: 'kira-unexpected@agentmail.to' })
+  })
+  const runtime = installAssistantMail(ctx, {
+    directory,
+    authorizeOutgoing: async () => true,
+    credentialRef: 'MAIL_KEY',
+    pollMs: 60_000,
+    timeoutMs: 1000,
+    workTimeoutMs: 1000,
+    resolveOwnerEmail: async () => {
+      ownerLookups++
+      ownerEntered()
+      await ownerGate
+      return 'automatic@example.com'
+    },
+  }, { pollMs: 60_000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000 })
+  try {
+    await ownerWaiting
+    const service = ctx.get('assistantMail') as AssistantMailControl
+    const disposal = stop === 'dispose' ? runtime.dispose() : undefined
+    if (stop === 'discard') await expect(service.discard()).resolves.toMatchObject({ state: 'not-configured' })
+    releaseOwner()
+    await disposal
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+    expect(signup).not.toHaveBeenCalled()
+    expect(mailRecord(JSON.parse(await readFile(join(directory, 'account.json'), 'utf8'))).state).toBe('not-configured')
+    const lookupsAfterDiscard = ownerLookups
+    if (stop === 'discard') {
+      await expect(service.ensure('explicit@example.com')).resolves.toMatchObject({
+        state: 'pending-verification', ownerEmail: 'explicit@example.com',
+      })
+      expect(signup).toHaveBeenCalledOnce()
+    } else {
+      await expect(service.ensure('explicit@example.com')).rejects.toThrow('disposed')
+      expect(signup).not.toHaveBeenCalled()
+    }
+    expect(ownerLookups).toBe(lookupsAfterDiscard)
+  } finally {
+    releaseOwner()
+    await runtime.dispose()
+    vi.unstubAllGlobals()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+it.each(['onboarding', 'credentials'] as const)('recovers the reset lifecycle after a caught %s cleanup failure', async (failure) => {
+  const directory = await mkdtemp(join(tmpdir(), 'phoenix-mail-reset-failure-'))
+  await writeFile(join(directory, 'account.json'), JSON.stringify({ state: 'not-configured', contacts: [] }))
+  const ctx = new Context()
+  const credentials = {
+    resolve: async () => undefined,
+    set: vi.fn(async () => {}),
+    unset: vi.fn(async () => {}),
+  }
+  ctx.reflect.provide('credentials', credentials)
+  const discard = vi.spyOn(MailOnboarding.prototype, 'discard')
+  if (failure === 'onboarding') discard.mockRejectedValueOnce(new Error('fixture reset failed'))
+  else credentials.unset.mockRejectedValueOnce(new Error('fixture reset failed'))
+  const runtime = installAssistantMail(ctx, {
+    directory, authorizeOutgoing: async () => true, credentialRef: 'MAIL_KEY',
+    pollMs: 60_000, timeoutMs: 1000, workTimeoutMs: 1000,
+  }, { pollMs: 60_000, privateWorkProvider: 'spawn', privateWorkResultChars: 1000 })
+  try {
+    const service = ctx.get('assistantMail') as AssistantMailControl
+    await expect(service.discard()).rejects.toThrow('fixture reset failed')
+    // Vitest also catches any orphaned rejection. The internal reset barrier
+    // must settle successfully while the original caller observes the error.
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+    await expect(service.discard()).resolves.toMatchObject({ state: 'not-configured' })
+    expect(discard).toHaveBeenCalledTimes(2)
+  } finally {
+    await runtime.dispose()
+    discard.mockRestore()
     await rm(directory, { recursive: true, force: true })
   }
 })
@@ -361,7 +553,7 @@ it('keeps the inbound AgentMail channel connected when message_send is missing a
       expect((await service!.status()).connection).toBe('connected')
     })
     await expect(service!.sendToOwner('Phoenix test', 'Confirm AgentMail send access', 'agentmail-permission-test'))
-      .rejects.toThrow('pending')
+      .rejects.toThrow('message_send')
     const identity = await service!.status()
     expect(identity.connection).toBe('connected')
     expect(identity.providerIssue).toMatchObject({

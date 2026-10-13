@@ -27,6 +27,8 @@ Providers implement `VoiceTextToSpeechProvider` or `VoiceSpeechToTextProvider` a
 
 Native Codex Realtime WebRTC uses `juniper` for feminine presentation, `cove` for masculine presentation, and `breeze` for neutral presentation for both protocol versions. These identifiers are accepted by the managed Codex app-server.
 
+The native speech thread reads only text explicitly admitted by Phoenix through `appendSpeech`: completed task results or stable sentences from the strict conversational fast path. It does not generate autonomous answers or progress claims. The conversation client owns sentence admission and cancellation.
+
 ## Model Experience
 
 ### Voice side channel

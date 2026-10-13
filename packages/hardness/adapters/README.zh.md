@@ -56,6 +56,8 @@ Email 有两个独立 identity reference。`userMailIdentity` 表示获授权的
 
 ## 运行时验证
 
+请求角色或背景资源的抽象游戏也必须提供资源清单和来源记录。成品采样音频允许普通 HTML 媒体的链式 `.play()` 调用，同时保留嵌入文件验证。精选连接器的批准、结果和调用卡片使用可读名称；稳定连接器 ID 仍用于调用 Host 安装器。
+
 模拟蜡烛图读取将 provider 请求和返回行数都限制为 1–1000。Shell 修改分类读取 command 参数。运行时服务遥测立即执行首次探测，随后在 TTL 过期前复用观察结果。
 
 ## Model Experience

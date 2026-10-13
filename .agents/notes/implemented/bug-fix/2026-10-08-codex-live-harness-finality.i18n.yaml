@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/bug-fix/2026-10-08-codex-live-harness-finality.md
-2026-10-08-codex-live-harness-finality.md: 8623e93c160546d9b9e2ce163980526f147005d8
-2026-10-08-codex-live-harness-finality.zh.md: 6d54c95e3487bdab6deb4a3cdce4bc88774301db
+2026-10-08-codex-live-harness-finality.md: 594c1f8aa98d9783723c1da4a3b4ce4dd231ac8b
+2026-10-08-codex-live-harness-finality.zh.md: 635884397a45116aee163ff684666e13f3418c3a

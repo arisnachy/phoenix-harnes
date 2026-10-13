@@ -10,6 +10,8 @@ Status: implemented
 
 ## Decision
 
+任务执行仍遵守此处的最终 Turn 授权。后续的[严格会话语音决策](../feature/2026-10-12-native-conversation-speech-streaming.zh.md)允许现有无工具会话快速路径在 Turn 结束前朗读稳定句子；它不授权中间任务陈述或 Realtime 自主回答。
+
 Realtime 只负责麦克风转录与语音传输，普通 Phoenix Agent 及其工具才掌握任务真实状态。浏览器后备语音可流式朗读助手步骤；原生 Codex Live 则只朗读已经完成的 Turn 尾部，并且仅当结束状态为 `completed` 且没有后续工具结果使最后一条助手消息过时时。中间步骤、被打断的 Turn、工具执行前的旧总结都不得作为 Codex Live 的完成陈述。
 
 每次最多允许一个明确授权的 `response.create` 进行中。其他语音（包括批准通知）排队等候 `response.done`。没有客户端请求时出现的 `response.created` 会被取消，避免某些忽略 `create_response:false` 的 VAD 自主播报。重连时仍保留已排队的最终回答。每次 WebRTC 会话在七秒短窗口内对各种事件格式的最终文本去重，排除扬声器回声后再传到普通输入栏。普通任务正在运行时的新语音插话使用 `steer` 而不是不断进入延后队列；键盘消息的 Queue/Steer 选择和子代理行为不变。收到的 Realtime 音频默认静音，只有明确授权的 harness 回答发出并收到 `response.created` 才解除静音；完成或中断后再次静音，以阻止未经授权的自主播报在取消之前发声。

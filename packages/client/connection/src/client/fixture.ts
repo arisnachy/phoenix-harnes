@@ -1450,6 +1450,17 @@ export interface FixtureOptions {
   dropSessionCreateResponse?: boolean
   /** Order of the two successful create frames. */
   createFrameOrder?: 'session-first' | 'workspace-first'
+  /** Opt-in assembled voice lane: expose a deterministic native voice RPC trace. */
+  voiceStreaming?: boolean
+}
+
+/** Captured native voice calls from the opt-in assembled browser lane. */
+export interface FixtureVoiceTrace {
+  statusCalls: number
+  realtimeStatusCalls: number
+  starts: Array<{ key: string; offerSdp: string }>
+  speaks: Array<{ key: string; text: string }>
+  stops: string[]
 }
 
 /** Inbox pump shared by both stream generators (FrameQueue pattern: ONE abort listener hung
@@ -1523,6 +1534,12 @@ export function createFixtureFaces(options: FixtureOptions = {}): FixtureWorld {
 
 /** Build the fixture's legacy API and Remote RPC faces over one state graph. */
 function createFixtureWorld(options: FixtureOptions): FixtureWorld {
+  const voiceTrace: FixtureVoiceTrace | undefined = options.voiceStreaming
+    ? { statusCalls: 0, realtimeStatusCalls: 0, starts: [], speaks: [], stops: [] }
+    : undefined
+  if (voiceTrace !== undefined) {
+    ;(globalThis as Record<string, unknown>).__fxVoiceTrace = voiceTrace
+  }
   // The resident fixture sessions all carry history, so none of them is blank.
   const sessions: SessionSummary[] = options.empty ? [] : [
     { sessionId: sid('fx-alpha'), updatedAt: Date.now(), running: true, blank: false, cwd: '/tmp/fixture' },
@@ -1618,9 +1635,9 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
   const pendingApprovalRpcId = mint()
   const pendingApprovalId = 'fx-approval-1' as Extract<MuxFrame, { type: 'approval/requested' }>['approvalId']
   /** Cleared once answered through respond; replay stops and approval/resolved is broadcast. */
-  let approvalPending = true
+  let approvalPending = options.voiceStreaming !== true
   const pendingQuestionRpcId = mint()
-  let questionPending = true
+  let questionPending = options.voiceStreaming !== true
   const fixtureQuestions: Extract<MuxFrame, { type: 'question/requested' }>['questions'] = [
     {
       id: 'harness-profile',
@@ -2029,6 +2046,8 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
   const streamBreakers = new Set<() => void>()
   /** Retry scenarios opened by timing hooks and completed in a later browser assertion phase. */
   const retryScenarios = new Map<SessionId, { turn: number; stepStarted: boolean }>()
+  /** Open conversational-tail streams used only by the assembled native voice lane. */
+  const voiceTailScenarios = new Map<SessionId, { turn: number; step: number; text: string }>()
   /** The single opt-in browser stress producer; normal fixture journeys never start it. */
   let activeReasoningChunkStorm: ReasoningChunkStormState | null = null
 
@@ -2047,6 +2066,55 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
     /** Log append + mux emit (the normal live path). */
     appendUser(id: string, msg: string): void {
       append(sid(id), { type: 'user/message', surfaceOp: 'append', data: userMessage(text(msg)) })
+    },
+    /** Open a durable, tool-free conversational tail without closing its turn. */
+    startConversationalTail(id: string): number {
+      if (voiceTrace === undefined) throw new Error('fixture: voice streaming lane is disabled')
+      const sessionId = sid(id)
+      if (voiceTailScenarios.has(sessionId)) throw new Error(`fixture: voice tail already open for ${id}`)
+      const turn = nextTurn.get(sessionId) ?? 0
+      nextTurn.set(sessionId, turn + 1)
+      setRunning(sessionId, true)
+      voiceTailScenarios.set(sessionId, { turn, step: 0, text: 'Primera oración.' })
+      append(sessionId, { type: 'turn/start', data: { turn, trigger: { kind: 'message', source: { kind: 'user' } } } })
+      append(sessionId, {
+        type: 'step/start',
+        data: {
+          turn, step: 0,
+          historyProjection: { kind: 'conversational-tail', maxMessages: 4, maxChars: 4_000 },
+        },
+      })
+      append(sessionId, { type: 'assistant/chunk', data: { turn, step: 0, chunk: { type: 'block-start', index: 0, blockType: 'text' } } })
+      append(sessionId, { type: 'assistant/chunk', data: { turn, step: 0, chunk: { type: 'text-delta', index: 0, text: 'Primera oración.' } } })
+      return turn
+    },
+    /** Append one later sentence while the conversational tail remains open. */
+    appendConversationalTailText(id: string, value: string): void {
+      if (voiceTrace === undefined) throw new Error('fixture: voice streaming lane is disabled')
+      const sessionId = sid(id)
+      const state = voiceTailScenarios.get(sessionId)
+      if (state === undefined) throw new Error(`fixture: voice tail is not open for ${id}`)
+      state.text += value
+      append(sessionId, { type: 'assistant/chunk', data: { turn: state.turn, step: state.step, chunk: { type: 'text-delta', index: 0, text: value } } })
+    },
+    /** Close the same durable tail after the browser has observed pre-close speech. */
+    finishConversationalTail(id: string): void {
+      if (voiceTrace === undefined) throw new Error('fixture: voice streaming lane is disabled')
+      const sessionId = sid(id)
+      const state = voiceTailScenarios.get(sessionId)
+      if (state === undefined) throw new Error(`fixture: voice tail is not open for ${id}`)
+      voiceTailScenarios.delete(sessionId)
+      append(sessionId, { type: 'assistant/chunk', data: { turn: state.turn, step: state.step, chunk: { type: 'block-end', index: 0, block: { type: 'text', text: state.text } } } })
+      append(sessionId, {
+        type: 'assistant/message', surfaceOp: 'append',
+        data: {
+          turn: state.turn, step: state.step, message: assistantMessage(text(state.text)),
+          usage: fixtureUsage(state.turn, state.step),
+        },
+      })
+      append(sessionId, { type: 'step/end', data: { turn: state.turn, step: state.step } })
+      append(sessionId, { type: 'turn/end', data: { turn: state.turn, reason: { kind: 'completed' } } })
+      setRunning(sessionId, false)
     },
     /** Append a later durable title revision through the normal raw-event + control-frame path. */
     appendTitle(id: string, title: string): void {
@@ -3129,6 +3197,54 @@ function createFixtureWorld(options: FixtureOptions): FixtureWorld {
       if (channel !== '/api') {
         return Promise.reject(new Error(`fixture connection RPC channel ${JSON.stringify(channel)} is unavailable`))
       }
+      // The assembled voice lane uses the same Remote surface as production,
+      // but captures calls in memory so the test can prove when native speech
+      // was requested. Keep this branch opt-in: ordinary fixture journeys do
+      // not advertise a voice service or mutate the trace global.
+      if (voiceTrace !== undefined && endpoint.startsWith('voice/')) {
+        const wireArgs = ((payload as { args?: Record<string, unknown> }).args ?? {})
+        // Typert encodes each voice request object under its parameter wire
+        // name (`request`). Keep the fixture aligned with that real wire shape.
+        const nestedRequest = wireArgs.request
+        const rpcArgs = nestedRequest !== null && typeof nestedRequest === 'object'
+          && !Array.isArray(nestedRequest)
+          ? nestedRequest as Record<string, unknown>
+          : {}
+        const voiceKey = typeof rpcArgs.key === 'string' ? rpcArgs.key : ''
+        switch (endpoint) {
+          case 'voice/conversationStatus':
+            voiceTrace.statusCalls += 1
+            return Promise.resolve({ ok: true, value: { enabled: true, natural: false, provider: 'openai-codex' } })
+          case 'voice/conversationRealtimeStatus':
+            voiceTrace.realtimeStatusCalls += 1
+            return Promise.resolve({ ok: true, value: {
+              enabled: true, available: true, authenticated: true, provider: 'openai-codex',
+            } })
+          case 'voice/conversationRealtimeStart':
+            voiceTrace.starts.push({
+              key: voiceKey,
+              offerSdp: typeof rpcArgs.offerSdp === 'string' ? rpcArgs.offerSdp : '',
+            })
+            return Promise.resolve({ ok: true, value: {
+              accepted: true, threadId: 'fixture-voice-thread', answerSdp: 'v=0\\r\\n',
+            } })
+          case 'voice/conversationRealtimeSpeak':
+            voiceTrace.speaks.push({
+              key: voiceKey,
+              text: typeof rpcArgs.text === 'string' ? rpcArgs.text : '',
+            })
+            return Promise.resolve({ ok: true, value: { accepted: true } })
+          case 'voice/conversationRealtimeStop':
+            voiceTrace.stops.push(voiceKey)
+            return Promise.resolve({ ok: true, value: { stopped: true } })
+          case 'voice/conversationCancel':
+            return Promise.resolve({ ok: true, value: { cancelled: 0 } })
+          case 'voice/conversationSpeak':
+            return Promise.resolve({ ok: true, value: { accepted: false, reason: 'disabled' } })
+          default:
+            return Promise.reject(new Error(`fixture connection RPC endpoint ${JSON.stringify(endpoint)} is unavailable`))
+        }
+      }
       const args = (payload as {
         args: {
           agentId: SessionId
@@ -3329,5 +3445,6 @@ function fixtureOptionsFromLocation(): FixtureOptions {
     failWorkspaceAttach: query.get('fixtureAttach') === 'fail',
     dropSessionCreateResponse: query.get('fixtureSessionCreate') === 'drop-response',
     createFrameOrder: query.get('fixtureFrames') === 'workspace-first' ? 'workspace-first' : 'session-first',
+    voiceStreaming: query.get('fixtureVoice') === 'stream',
   }
 }

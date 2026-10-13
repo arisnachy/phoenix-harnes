@@ -21,6 +21,7 @@ import {
   setVoiceAssistantListening,
   speakVoiceAssistantAttention,
   speakVoiceAssistantResponse,
+  cancelVoiceAssistantSentenceStream,
   streamVoiceAssistantResponse,
   stopCodexRealtimeVoice,
   tryStartCodexRealtimeVoice,
@@ -277,10 +278,26 @@ describe('browser voice adapter', () => {
         answerSdp: 'v=0\r\n',
       },
     }))
-    const realtimeSpeak = vi.fn(async (_request: { readonly key: string; readonly text: string }) => ({
-      ok: true as const,
-      value: { accepted: true },
-    }))
+    let rejectNativeSpeech = false
+    type NativeReceipt = { ok: true; value: { accepted: boolean; reason?: 'disabled' } }
+    let delayedNativeSpeech: Promise<NativeReceipt> | undefined
+    const realtimeSpeak = vi.fn(async (_request: { readonly key: string; readonly text: string }) => {
+      if (delayedNativeSpeech !== undefined) {
+        const pending = delayedNativeSpeech
+        delayedNativeSpeech = undefined
+        return pending
+      }
+      if (rejectNativeSpeech) {
+        return {
+          ok: true as const,
+          value: { accepted: false as const, reason: 'disabled' as const },
+        }
+      }
+      return {
+        ok: true as const,
+        value: { accepted: true as const },
+      }
+    })
     const disposeRemote = configureVoiceAssistantRemote({
       conversationStatus: async () => ({
         ok: true,
@@ -366,10 +383,73 @@ describe('browser voice adapter', () => {
       expect(isCodexRealtimeVoiceActive()).toBe(true)
       expect(getVoiceAssistantSnapshot().active).toBe(true)
 
+      const activatedAt = getVoiceAssistantSnapshot().activatedAt
+
+      if (channel !== undefined) channel.readyState = 'open'
+      if (peer !== undefined) {
+        peer.connectionState = 'connected'
+        peer.onconnectionstatechange?.()
+      }
+      await Promise.resolve()
+      // A durable conversational-tail answer speaks its first sentence while
+      // the remaining text is still arriving. Each later sentence waits for
+      // the preceding native response.done; the final full tail adds no copy.
+      const streamed = 'Primera frase. Segunda frase.'
+      streamVoiceAssistantResponse(
+        'assistant:harness:stream', streamed, activatedAt, false, false, true,
+      )
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({
+        key: 'session-harness', text: 'Primera frase.',
+      })
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({
+        key: 'session-harness', text: 'Segunda frase.',
+      })
+      streamVoiceAssistantResponse(
+        'assistant:harness:stream', streamed, activatedAt, true, false, true,
+      )
+      expect(realtimeSpeak).toHaveBeenCalledTimes(2)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(2)
+
+      // A rewrite cancels the in-flight native response but waits for its
+      // terminal event before reusing the channel. This prevents the old
+      // response.done from advancing the corrected sentence cursor.
+      streamVoiceAssistantResponse(
+        'assistant:harness:rewrite', 'Borrador inicial. Segunda parte.', activatedAt, false, false, true,
+      )
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(3)
+      streamVoiceAssistantResponse(
+        'assistant:harness:rewrite', 'Versión corregida.', activatedAt, false, false, true,
+      )
+      expect(JSON.parse(String(channel?.send.mock.calls.at(-1)?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(realtimeSpeak).toHaveBeenCalledTimes(3)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({
+        key: 'session-harness', text: 'Versión corregida.',
+      })
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+
+      // A permanently rejected native append restores the cursor and reports
+      // the error, but must not spin an unbounded microtask retry loop.
+      rejectNativeSpeech = true
+      streamVoiceAssistantResponse(
+        'assistant:harness:rejected', 'La voz fue rechazada.', activatedAt, false, false, true,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(5)
+      rejectNativeSpeech = false
+
       // If the data channel is temporarily unwritable when Hardness returns,
       // keep the answer queued for Codex instead of falling back to system TTS.
       if (channel !== undefined) channel.readyState = 'connecting'
-      const activatedAt = getVoiceAssistantSnapshot().activatedAt
       // A settled step can precede a browser tool; Live must wait for
       // the actual completed Turn, never narrate premature progress.
       streamVoiceAssistantResponse(
@@ -383,7 +463,7 @@ describe('browser voice adapter', () => {
         'La tarea terminó correctamente.',
         activatedAt,
       )
-      expect(channel?.send).toHaveBeenCalledTimes(1)
+      expect(channel?.send).toHaveBeenCalledTimes(2)
 
       if (channel !== undefined) channel.readyState = 'open'
       if (peer !== undefined) {
@@ -398,7 +478,7 @@ describe('browser voice adapter', () => {
         key: 'session-harness', text: 'La tarea terminó correctamente.',
       })
       expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('accepted')
-      expect(channel?.send).toHaveBeenCalledTimes(1)
+      expect(channel?.send).toHaveBeenCalledTimes(2)
       expect(audio?.muted).toBe(false)
       // V3 may surface first audio frames before the response.created event.
       // A harness-approved utterance must never stay accidentally muted.
@@ -413,30 +493,136 @@ describe('browser voice adapter', () => {
         'Aprobación 550e8400-e29b-41d4-a716-446655440000',
         'Revisa la acción antes de continuar; referencia 123456789 needs attention.',
       )).toBe(true)
-      expect(realtimeSpeak).toHaveBeenCalledTimes(1)
+      expect(realtimeSpeak).toHaveBeenCalledTimes(6)
       // User turn markers must not complete the assistant's speech.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'user' } }) })
-      expect(realtimeSpeak).toHaveBeenCalledTimes(1)
+      expect(realtimeSpeak).toHaveBeenCalledTimes(6)
       // V3 completes spoken output using assistant turn.done.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.done', turn: { role: 'assistant' } }) })
       // Generation is finished, but the WebRTC speaker may still be draining
       // previously buffered audio. Keep Kira audible until an explicit cancel.
       expect(audio?.muted).toBe(false)
       await Promise.resolve()
-      expect(realtimeSpeak).toHaveBeenCalledTimes(2)
-      const attention = realtimeSpeak.mock.calls[1]?.[0]
+      expect(realtimeSpeak).toHaveBeenCalledTimes(7)
+      const attention = realtimeSpeak.mock.calls
+        .map(call => call[0])
+        .find(request => request.text.includes('Revisa la acción'))
+      expect(attention).toBeDefined()
       expect(attention?.text).not.toContain('550e8400-e29b-41d4-a716-446655440000')
       expect(attention?.text).not.toContain('123456789 needs attention')
       expect(attention?.text).toContain('Revisa la acción')
 
       expect(interruptVoiceAssistantSpeech()).toBe(true)
-      expect(JSON.parse(String(channel?.send.mock.calls[1]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(JSON.parse(String(channel?.send.mock.calls[2]?.[0]))).toEqual({ type: 'response.cancel' })
 
       // The Realtime model must not autonomously claim a tool is running:
       // no harness-final request is active, so abort unsolicited responses.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
-      expect(JSON.parse(String(channel?.send.mock.calls[2]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(JSON.parse(String(channel?.send.mock.calls[3]?.[0]))).toEqual({ type: 'response.cancel' })
       expect(audio?.muted).toBe(true)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(7)
+
+      // A stale renderer from another UI session may share turn/step numbers,
+      // but it cannot append speech to this session's native Codex call.
+      const beforeForeignSession = realtimeSpeak.mock.calls.length
+      streamVoiceAssistantResponse(
+        'session-b:assistant:turn-1:step-1',
+        'No debe salir por la sesión anterior.',
+        activatedAt,
+        false,
+        false,
+        true,
+        'session-b',
+      )
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(beforeForeignSession)
+
+      // A short tail can finish its only stable sentence before the harness
+      // emits the final message projection. The final projection must mark
+      // that accepted cursor as spoken instead of recreating it at zero.
+      const beforeStableTail = realtimeSpeak.mock.calls.length
+      streamVoiceAssistantResponse(
+        'assistant:harness:stable-tail',
+        'Una sola frase estable.',
+        activatedAt,
+        false,
+        false,
+        true,
+      )
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({
+        key: 'session-harness', text: 'Una sola frase estable.',
+      })
+      const afterStableSentence = realtimeSpeak.mock.calls.length
+      expect(afterStableSentence).toBe(beforeStableTail + 1)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenCalledTimes(afterStableSentence)
+      streamVoiceAssistantResponse(
+        'assistant:harness:stable-tail',
+        'Una sola frase estable.',
+        activatedAt,
+        true,
+        false,
+        true,
+      )
+      // A duplicate final projection has the same result: one accepted native
+      // request, no replay after the stream cursor is finalized.
+      streamVoiceAssistantResponse(
+        'assistant:harness:stable-tail',
+        'Una sola frase estable.',
+        activatedAt,
+        true,
+        false,
+        true,
+      )
+      expect(realtimeSpeak).toHaveBeenCalledTimes(afterStableSentence)
+
+      // The separately rendered completed turn uses the same canonical key.
+      speakVoiceAssistantResponse('assistant:harness:stable-tail', 'Una sola frase estable.', activatedAt)
+      expect(realtimeSpeak).toHaveBeenCalledTimes(afterStableSentence)
+      // View unmount/remount preserves completed admission; an explicit
+      // rewrite revokes it even after the cursor has drained.
+      cancelVoiceAssistantSentenceStream('assistant:harness:stable-tail', true)
+      streamVoiceAssistantResponse('assistant:harness:stable-tail', 'Una sola frase estable.', activatedAt, true, true, true)
+      expect(realtimeSpeak).toHaveBeenCalledTimes(afterStableSentence)
+      cancelVoiceAssistantSentenceStream('assistant:harness:stable-tail')
+      streamVoiceAssistantResponse('assistant:harness:stable-tail', 'Respuesta corregida.', activatedAt, true, true, true)
+      await Promise.resolve()
+      expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Respuesta corregida.' })
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+      await Promise.resolve()
+
+      // Native completion may arrive before the Host RPC result. Retain one
+      // in-flight operation until explicit admission; rejection is never a
+      // delivered final token, and a later render may retry once.
+      for (const outcome of ['accepted', 'rejected', 'failed'] as const) {
+        let resolveAdmission!: (receipt: NativeReceipt) => void
+        let rejectAdmission!: (error: Error) => void
+        delayedNativeSpeech = new Promise((resolve, reject) => {
+          resolveAdmission = resolve
+          rejectAdmission = reject
+        })
+        const messageKey = `assistant:harness:terminal-before-${outcome}`
+        const beforeAdmission = realtimeSpeak.mock.calls.length
+        streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
+        channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+        streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
+        expect(realtimeSpeak).toHaveBeenCalledTimes(beforeAdmission + 1)
+        if (outcome === 'failed') rejectAdmission(new Error('fixture admission failed'))
+        else resolveAdmission({ ok: true, value: { accepted: outcome === 'accepted', ...(outcome === 'rejected' ? { reason: 'disabled' } : {}) } })
+        await vi.waitFor(() => expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe(outcome))
+        streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
+        expect(realtimeSpeak).toHaveBeenCalledTimes(beforeAdmission + (outcome === 'accepted' ? 1 : 2))
+        await Promise.resolve()
+        channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
+        await Promise.resolve()
+      }
+      const beforeForeignTail = realtimeSpeak.mock.calls.length
+      speakVoiceAssistantResponse('session-b:assistant:turn-1:step-1', 'Otra sesión.', activatedAt, 'session-b')
+      expect(realtimeSpeak).toHaveBeenCalledTimes(beforeForeignTail)
 
       // Telegram/browser disconnection must never leave voice stuck: grant a
       // short reconnection window, then release the mic and return to text.

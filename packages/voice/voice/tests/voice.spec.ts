@@ -690,6 +690,8 @@ describe('Codex realtime voice protocol compatibility', () => {
         version: 'v3',
         transport: { type: 'webrtc', sdp: 'v=offer\r\n' },
       }))
+      expect(request.mock.calls[0]?.[1]?.realtimeStartInstructions)
+        .toMatchSnapshot('Phoenix-authorized native speech instructions')
       expect(cancel).toHaveBeenCalledTimes(3)
     } finally { bridge.close() }
   })

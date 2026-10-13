@@ -253,7 +253,7 @@ async inspect(): Promise<AuthorizationTelemetry | undefined>
 async request(request: GoogleApiRequest): Promise<GoogleApiResponse>
 
 /**
- * Clear the process grant and secret-free marker even when provider revocation fails.
+ * Clear the in-memory and durable grant even when provider revocation fails.
  * @returns whether Google acknowledged token revocation.
  */
 async disconnect(): Promise<{ revoked: boolean }>

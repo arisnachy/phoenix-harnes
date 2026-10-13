@@ -23,7 +23,11 @@ import {
  */
 const ALTERNATIVE_VOICE_CONSENT_KEY = 'phoenix:voice:approved-browser-backup-v1'
 
-/** True only after an explicit browser-voice opt-in in this browser profile. */
+/**
+ * Check whether this browser profile explicitly authorized the local voice fallback.
+ * @param storage - Optional storage double used by deterministic callers.
+ * @returns Whether the persisted consent marker is present.
+ */
 export function hasApprovedVoiceFallback(storage?: Pick<Storage, 'getItem'>): boolean {
   try {
     const source = storage ?? (typeof window === 'undefined' ? undefined : window.localStorage)
@@ -33,7 +37,11 @@ export function hasApprovedVoiceFallback(storage?: Pick<Storage, 'getItem'>): bo
   }
 }
 
-/** Persist or revoke explicit consent for browser recognition fallback. */
+/**
+ * Persist or revoke explicit consent for browser recognition fallback.
+ * @param approved - Whether browser recognition may be used after native failure.
+ * @param storage - Optional storage double used by deterministic callers.
+ */
 export function setApprovedVoiceFallback(approved: boolean, storage?: Pick<Storage, 'setItem' | 'removeItem'>): void {
   try {
     const target = storage ?? (typeof window === 'undefined' ? undefined : window.localStorage)
@@ -99,6 +107,8 @@ const INACTIVE_VOICE_ASSISTANT: VoiceAssistantSnapshot = Object.freeze({
 let voiceAssistantSnapshot: VoiceAssistantSnapshot = INACTIVE_VOICE_ASSISTANT
 const voiceAssistantListeners = new Set<() => void>()
 const spokenAssistantMessages = new Set<string>()
+/** Prevent duplicate in-flight final calls without treating a rejection as spoken. */
+const pendingNativeAssistantMessages = new Set<string>()
 let voiceAssistantSpeech: SpeechOutput | undefined
 let voiceAssistantSpeechKey: string | undefined
 let voiceAssistantMicListening = false
@@ -125,6 +135,10 @@ interface CodexRealtimeVoiceSession {
   readonly audio: HTMLAudioElement
   /** Single authorized harness-owned speech request currently in flight. */
   activeUtterance?: PendingCodexRealtimeUtterance
+  /** A native response.cancel was sent; wait for its terminal event before reusing the channel. */
+  nativeCancelRequested?: boolean
+  /** Bound the wait when a peer never returns the cancelled response terminal event. */
+  nativeCancelTimer?: number
   /** Recent distinct human transcripts for this WebRTC call, not per render. */
   readonly recentTranscripts: Map<string, number>
   /** Drop an unrecovered network disconnect instead of leaving voice stuck. */
@@ -136,11 +150,28 @@ interface CodexRealtimeVoiceSession {
 }
 
 interface PendingCodexRealtimeUtterance {
+  /** RPC admission and native completion belong to the same in-flight operation. */
+  admission?: 'pending' | 'accepted'
+  terminal?: boolean
   readonly sessionKey: string
   readonly key: string
   readonly instructions: string
   readonly echoText: string
   readonly assistantMessageKey?: string
+  /** Strict conversational-tail stream identity; one segment is in flight at a time. */
+  readonly streamMessageKey?: string
+  /** Cursor range used to recover a segment if its native request is rejected. */
+  readonly streamThroughBefore?: number
+  readonly streamThroughAfter?: number
+}
+
+interface NativeSentenceStreamState {
+  readonly sessionKey: string
+  readonly messageKey: string
+  transcript: string
+  through: number
+  sequence: number
+  final: boolean
 }
 
 let voiceModelRouteResolver: VoiceModelRouteResolver | undefined
@@ -151,13 +182,28 @@ let codexRealtimeVoiceStarting = false
 const CODEX_VOICE_DISCONNECT_GRACE_MS = 30_000
 const CODEX_VOICE_INACTIVITY_MS = 5 * 60_000
 const pendingCodexRealtimeUtterances: PendingCodexRealtimeUtterance[] = []
+/** One bounded sentence cursor; never preloads an unbounded answer queue. */
+let nativeSentenceStream: NativeSentenceStreamState | undefined
+/** Final tails deduplicate across React rerenders without claiming unsent audio completed. */
+const nativeSentenceFinalMessages = new Map<string, string>()
+
+function nativeSentenceMessageToken(sessionKey: string, messageKey: string): string {
+  return `${sessionKey}\u0000${messageKey}`
+}
+
+/** A completed message is scoped to the native call that authorized it. */
+function spokenMessageToken(sessionKey: string, messageKey: string): string {
+  return nativeSentenceMessageToken(sessionKey, messageKey)
+}
 
 /** A voice call owns bounded resources; it never owns the harness task. */
 function clearCodexRealtimeTimers(session: CodexRealtimeVoiceSession): void {
   if (session.disconnectTimer !== undefined) window.clearTimeout(session.disconnectTimer)
   if (session.inactivityTimer !== undefined) window.clearTimeout(session.inactivityTimer)
+  if (session.nativeCancelTimer !== undefined) window.clearTimeout(session.nativeCancelTimer)
   delete session.disconnectTimer
   delete session.inactivityTimer
+  delete session.nativeCancelTimer
 }
 
 function refreshCodexRealtimeActivity(session: CodexRealtimeVoiceSession): void {
@@ -191,34 +237,59 @@ function sendCodexRealtimeUtterance(
     || session.activeUtterance !== undefined) return false
   const remote = voiceAssistantRemote
   if (remote?.conversationRealtimeSpeak !== undefined) {
+    utterance.admission = 'pending'
+    utterance.terminal = false
     session.activeUtterance = utterance
     voiceAssistantSpokenText = utterance.echoText
     // Reserve the finalized message synchronously so a React closure/tail
     // rerender cannot enqueue the same reply while the RPC is pending.
-    if (utterance.assistantMessageKey !== undefined) {
-      spokenAssistantMessages.add(utterance.assistantMessageKey)
+    if (utterance.assistantMessageKey !== undefined && utterance.streamMessageKey === undefined) {
+      pendingNativeAssistantMessages.add(spokenMessageToken(session.key, utterance.assistantMessageKey))
     }
     document.documentElement.dataset.phoenixVoiceSpeechStatus = 'requested'
     delete document.documentElement.dataset.phoenixVoiceSpeechError
-    // The UI authorizes only a complete harness reply. The Host side sends it
+    // The UI authorizes only a harness-owned reply or sentence segment. The Host side sends it
     // through Codex's official thread/realtime/appendSpeech method, rather
     // than trying to fabricate output via an unsupported V3 datachannel
     // response.create payload containing ad hoc instructions.
     void remote.conversationRealtimeSpeak({
       key: session.key,
       text: utterance.echoText,
-    }).then(receipt => {
+    }).then((receipt) => {
       if (codexRealtimeVoiceSession !== session || session.activeUtterance !== utterance) return
       if (receipt.ok && receipt.value.accepted) {
+        utterance.admission = 'accepted'
         document.documentElement.dataset.phoenixVoiceSpeechStatus = 'accepted'
-        if (utterance.assistantMessageKey !== undefined) {
-          spokenAssistantMessages.add(utterance.assistantMessageKey)
+        if (utterance.assistantMessageKey !== undefined && utterance.streamMessageKey === undefined) {
+          const token = spokenMessageToken(session.key, utterance.assistantMessageKey)
+          pendingNativeAssistantMessages.delete(token)
+          spokenAssistantMessages.add(token)
+        }
+        if (utterance.streamMessageKey !== undefined) {
+          const stream = nativeSentenceStream
+          if (stream !== undefined && stream.sessionKey === session.key
+            && stream.messageKey === utterance.streamMessageKey
+            && stream.final && stream.through >= stream.transcript.length) {
+            nativeSentenceFinalMessages.set(spokenMessageToken(session.key, utterance.streamMessageKey), stream.transcript)
+          }
+        }
+        if (session.nativeCancelRequested) {
+          session.audio.muted = true
+          finishNativeUtterance(session, utterance)
+          return
         }
         allowAuthorizedCodexAudio(session)
+        finishNativeUtterance(session, utterance)
         return
       }
       delete session.activeUtterance
+      if (utterance.assistantMessageKey !== undefined && utterance.streamMessageKey === undefined) {
+        pendingNativeAssistantMessages.delete(spokenMessageToken(session.key, utterance.assistantMessageKey))
+      }
+      clearNativeCancelWait(session)
       session.audio.muted = true
+      restoreRejectedNativeSentence(utterance)
+      resetNativeSentenceStream(session.key)
       document.documentElement.dataset.phoenixVoiceSpeechStatus = 'rejected'
       document.documentElement.dataset.phoenixVoiceSpeechError = receipt.ok
         ? (receipt.value.reason ?? 'append-speech-rejected')
@@ -229,7 +300,13 @@ function sendCodexRealtimeUtterance(
     }, () => {
       if (codexRealtimeVoiceSession !== session || session.activeUtterance !== utterance) return
       delete session.activeUtterance
+      if (utterance.assistantMessageKey !== undefined && utterance.streamMessageKey === undefined) {
+        pendingNativeAssistantMessages.delete(spokenMessageToken(session.key, utterance.assistantMessageKey))
+      }
+      clearNativeCancelWait(session)
       session.audio.muted = true
+      restoreRejectedNativeSentence(utterance)
+      resetNativeSentenceStream(session.key)
       document.documentElement.dataset.phoenixVoiceSpeechStatus = 'failed'
       document.documentElement.dataset.phoenixVoiceSpeechError = 'append-speech-request-failed'
       console.warn('[PHOENIX VOICE] Codex native speech request failed.')
@@ -251,9 +328,11 @@ function sendCodexRealtimeUtterance(
     return false
   }
   session.activeUtterance = utterance
+  utterance.admission = 'accepted'
+  utterance.terminal = false
   voiceAssistantSpokenText = utterance.echoText
-  if (utterance.assistantMessageKey !== undefined) {
-    spokenAssistantMessages.add(utterance.assistantMessageKey)
+  if (utterance.assistantMessageKey !== undefined && utterance.streamMessageKey === undefined) {
+    spokenAssistantMessages.add(spokenMessageToken(session.key, utterance.assistantMessageKey))
   }
   publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
   return true
@@ -285,6 +364,13 @@ function allowAuthorizedCodexAudio(session: CodexRealtimeVoiceSession): void {
   if (session.audio.srcObject) playCodexRealtimeAudio(session.audio)
 }
 
+function restoreRejectedNativeSentence(utterance: PendingCodexRealtimeUtterance): void {
+  const stream = nativeSentenceStream
+  if (utterance.streamMessageKey === undefined || stream === undefined
+    || stream.messageKey !== utterance.streamMessageKey) return
+  stream.through = utterance.streamThroughBefore ?? stream.through
+}
+
 function queueCodexRealtimeUtterance(utterance: PendingCodexRealtimeUtterance): void {
   const existing = pendingCodexRealtimeUtterances.findIndex(candidate =>
     candidate.sessionKey === utterance.sessionKey && candidate.key === utterance.key)
@@ -311,6 +397,141 @@ function discardCodexRealtimeUtterances(sessionKey: string): void {
       pendingCodexRealtimeUtterances.splice(index, 1)
     }
   }
+}
+
+/**
+ * Cancel only the native Codex response currently carrying speech. A native
+ * response is transport-owned; conversationCancel belongs to the older Host
+ * TTS route and would cancel the harness conversation itself.
+ */
+function cancelNativeCodexResponse(session: CodexRealtimeVoiceSession): void {
+  if (session.activeUtterance !== undefined) {
+    if (session.nativeCancelRequested) {
+      session.audio.muted = true
+      return
+    }
+    if (session.events.readyState === 'open') {
+      try { session.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* peer cleanup owns closure */ }
+      // Keep the active marker until response.done arrives. Releasing it here
+      // lets a late terminal event from the cancelled response steal the next
+      // sentence's active marker and advance the cursor out of order.
+      session.nativeCancelRequested = true
+      if (session.nativeCancelTimer === undefined) {
+        session.nativeCancelTimer = window.setTimeout(() => {
+          if (codexRealtimeVoiceSession !== session || !session.nativeCancelRequested) return
+          // Without a response id, reusing this data channel after a missing
+          // cancel acknowledgement could let a late old response.done consume
+          // the next sentence. End the native call instead of guessing which
+          // response owns the terminal event.
+          document.documentElement.dataset.phoenixVoiceSpeechStatus = 'failed'
+          document.documentElement.dataset.phoenixVoiceSpeechError = 'native-cancel-timeout'
+          void stopCodexRealtimeVoice()
+        }, 3_000)
+      }
+    } else {
+      delete session.activeUtterance
+      clearNativeCancelWait(session)
+    }
+  }
+  session.audio.muted = true
+}
+
+function clearNativeCancelWait(session: CodexRealtimeVoiceSession): void {
+  if (session.nativeCancelTimer !== undefined) window.clearTimeout(session.nativeCancelTimer)
+  delete session.nativeCancelTimer
+  delete session.nativeCancelRequested
+}
+
+function resetNativeSentenceStream(sessionKey?: string): void {
+  if (sessionKey === undefined || nativeSentenceStream?.sessionKey === sessionKey) {
+    nativeSentenceStream = undefined
+  }
+}
+
+/** Release speech only after both RPC admission and native generation completion. */
+function finishNativeUtterance(session: CodexRealtimeVoiceSession, utterance: PendingCodexRealtimeUtterance): void {
+  if (session.activeUtterance !== utterance || utterance.admission !== 'accepted' || !utterance.terminal) return
+  delete session.activeUtterance
+  clearNativeCancelWait(session)
+  if (!flushNativeSentenceStream(session)) {
+    publishVoiceIdle()
+    flushCodexRealtimeUtterances(session)
+  }
+}
+
+/**
+ * Send at most one next sentence. The cursor stays in memory until the native
+ * response finishes, so long answers cannot overflow or silently drop a queue.
+ */
+function flushNativeSentenceStream(session: CodexRealtimeVoiceSession): boolean {
+  const stream = nativeSentenceStream
+  if (stream === undefined || stream.sessionKey !== session.key || session.activeUtterance !== undefined) {
+    return false
+  }
+  const planned = nextStreamingSpeechSegment(stream.transcript, stream.through, stream.final)
+  if (planned === undefined) {
+    // A complete sentence may have been accepted while the durable tail was
+    // still open. When the same transcript is later marked final, there is no
+    // new segment to send; finalize the cursor here so the next React render
+    // cannot recreate it and speak the already-accepted sentence again.
+    if (stream.final && stream.through >= stream.transcript.length) {
+      nativeSentenceFinalMessages.set(nativeSentenceMessageToken(session.key, stream.messageKey), stream.transcript)
+      resetNativeSentenceStream(session.key)
+      publishVoiceIdle()
+    }
+    return false
+  }
+  // Native Codex receives complete sentences while a fast turn is open. The
+  // shared browser adapter may use bounded clauses for local TTS, but sending
+  // a hard-cut prefix here would make a realtime voice guess the missing tail.
+  if (!stream.final && !/[.!?…][”"'»)]?$/u.test(planned.text)) return false
+  const sequence = stream.sequence++
+  const utterance: PendingCodexRealtimeUtterance = {
+    sessionKey: session.key,
+    key: `assistant:${stream.messageKey}:sentence:${sequence}`,
+    echoText: planned.text,
+    instructions: `Read only this finalized PHOENIX harness response segment in the user's current language and with the same voice/persona. Do not independently assess task progress, say "still working", claim tool use, or add any words.\n\n${planned.text}`,
+    streamMessageKey: stream.messageKey,
+    streamThroughBefore: stream.through,
+    streamThroughAfter: planned.end,
+  }
+  stream.through = planned.end
+  const sent = sendCodexRealtimeUtterance(session, utterance)
+  if (!sent) stream.through = utterance.streamThroughBefore ?? stream.through
+  return sent
+}
+
+function streamNativeSentence(
+  session: CodexRealtimeVoiceSession,
+  messageKey: string,
+  text: string,
+  final: boolean,
+): void {
+  const transcript = conversationalSpeechText(text)
+  if (transcript === '') {
+    // A rewrite can temporarily project only metadata/formatting. Do not
+    // leave the previous sentence audible while its replacement is empty.
+    if (nativeSentenceStream?.sessionKey === session.key) {
+      cancelNativeCodexResponse(session)
+      resetNativeSentenceStream(session.key)
+    }
+    return
+  }
+  let stream = nativeSentenceStream
+  if (stream === undefined || stream.sessionKey !== session.key || stream.messageKey !== messageKey) {
+    if (stream !== undefined && stream.sessionKey === session.key) cancelNativeCodexResponse(session)
+    stream = { sessionKey: session.key, messageKey, transcript: '', through: 0, sequence: 0, final: false }
+    nativeSentenceStream = stream
+  } else if (!transcript.startsWith(stream.transcript)) {
+    // A retry/rewrite invalidates every unsent segment and the active native
+    // response. The corrected transcript starts at cursor zero.
+    cancelNativeCodexResponse(session)
+    stream = { sessionKey: session.key, messageKey, transcript: '', through: 0, sequence: 0, final: false }
+    nativeSentenceStream = stream
+  }
+  stream.transcript = transcript
+  stream.final = final
+  flushNativeSentenceStream(session)
 }
 
 function resetRemoteSpeech(cancel = false): void {
@@ -490,9 +711,14 @@ export function codexRealtimeStatusFailureReason(
   return detail || status.reason || 'codex-realtime-unavailable'
 }
 
-/** Only Codex's explicit expired/revoked credentials call for a new login. */
+/**
+ * Identify the native voice failures that require the official login flow.
+ * @param reason - Sanitized failure reason from the native voice endpoint.
+ * @returns Whether the user must reconnect the Codex account.
+ */
 export function codexRealtimeRequiresLogin(reason: string): boolean {
   return reason === 'codex-login-required'
+    // oxlint-disable-next-line @stylistic/max-len -- Keep the native login matcher auditable as one literal.
     || /(?:refresh[\s_-]*token[^\r\n]{0,120}expired|access token could not be refreshed|chatgpt login required|not authenticated|please log out and sign in again)/iu.test(reason)
 }
 
@@ -507,11 +733,20 @@ export function openCodexReconnection(): void {
 /** A successful update is the only condition that may restart the user's Live call. */
 export type CodexLiveRepairState = 'checking' | 'updating' | 'waiting-upstream' | 'ready' | 'blocked' | 'disabled'
 
+/**
+ * Check whether native voice is waiting for the single-owner updater.
+ * @param reason - Classified startup failure from the native voice probe.
+ * @returns Whether the updater must finish before retrying voice.
+ */
 export function isCodexLiveRepairPending(reason: string): boolean {
   return reason === 'codex-live-repair-pending'
 }
 
-/** Consume optional Host updater progress without relying on newly generated Remote types. */
+/**
+ * Consume optional Host updater progress without relying on newly generated Remote types.
+ * @param status - Untrusted status payload returned by a rolling Host build.
+ * @returns A recognized repair state, or undefined for older payloads.
+ */
 export function codexLiveRepairFromStatus(status: unknown): CodexLiveRepairState | undefined {
   if (status === null || typeof status !== 'object' || !('repair' in status)) return undefined
   const repair = status.repair
@@ -524,6 +759,9 @@ export function codexLiveRepairFromStatus(status: unknown): CodexLiveRepairState
  * Poll only the existing single-owner updater after an explicit microphone click.
  * Do not start fresh WebRTC negotiations while a binary is downloading and
  * never wait forever for a provider version that has not been released.
+ * @param signal - Cancellation signal from the user's voice action.
+ * @param options - Optional bounded polling and timeout values.
+ * @returns The repair outcome observed by the client.
  */
 export async function waitForCodexLiveRepair(
   signal: AbortSignal,
@@ -552,7 +790,7 @@ export async function waitForCodexLiveRepair(
     } catch {
       // A Host handoff can briefly disconnect the remote. Retry after delay.
     }
-    await new Promise<void>(resolve => {
+    await new Promise<void>((resolve) => {
       if (signal.aborted) { resolve(); return }
       const timer = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve() },
         Math.min(pollMs, Math.max(0, expires - Date.now())))
@@ -693,7 +931,7 @@ export async function tryStartCodexRealtimeVoice(
       }
       const liveSession = codexRealtimeVoiceSession
       if (liveSession !== undefined && liveSession.key === sessionKey && liveSession.events === events) {
-        flushCodexRealtimeUtterances(liveSession)
+        if (!flushNativeSentenceStream(liveSession)) flushCodexRealtimeUtterances(liveSession)
       }
     }
 
@@ -742,7 +980,7 @@ export async function tryStartCodexRealtimeVoice(
           delete liveSession.disconnectTimer
         }
         refreshCodexRealtimeActivity(liveSession)
-        flushCodexRealtimeUtterances(liveSession)
+        if (!flushNativeSentenceStream(liveSession)) flushCodexRealtimeUtterances(liveSession)
         return
       }
       if (peer?.connectionState === 'disconnected') {
@@ -800,6 +1038,9 @@ export async function stopCodexRealtimeVoice(): Promise<boolean> {
   window.removeEventListener('pagehide', session.onPageHide)
   setVoiceAssistantListening(false)
   discardCodexRealtimeUtterances(session.key)
+  resetNativeSentenceStream(session.key)
+  nativeSentenceFinalMessages.clear()
+  pendingNativeAssistantMessages.clear()
   session.events.close()
   session.peer.close()
   for (const track of session.microphone.getTracks()) track.stop()
@@ -884,6 +1125,16 @@ function updateCodexRealtimePhase(payload: string): void {
     return
   }
   if (type === 'response.created' && session.activeUtterance !== undefined) {
+    if (session.nativeCancelRequested) {
+      session.audio.muted = true
+      // The cancelled response can still emit a late created event. Keep the
+      // channel quiet until its terminal event instead of treating it as the
+      // next authorized sentence.
+      if (session.events.readyState === 'open') {
+        try { session.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* closing peer */ }
+      }
+      return
+    }
     allowAuthorizedCodexAudio(session)
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
     return
@@ -895,10 +1146,11 @@ function updateCodexRealtimePhase(payload: string): void {
     // buffered audio. Muting here truncated Kira's voice, and short answers
     // could be completely silent. The next unsolicited response.created still
     // mutes immediately; interruption/stop also mute or dispose the stream.
-    delete session.activeUtterance
-    publishVoiceIdle()
-    // Serialize speech until the preceding response finishes generating.
-    flushCodexRealtimeUtterances(session)
+    const utterance = session.activeUtterance
+    if (utterance !== undefined) {
+      utterance.terminal = true
+      finishNativeUtterance(session, utterance)
+    }
     return
   }
   if (type.includes('speech_started')) {
@@ -1014,11 +1266,15 @@ export function setVoiceAssistantActive(active: boolean): void {
     voiceAssistantMicListening = false
     voiceAssistantSpokenText = ''
     spokenAssistantMessages.clear()
+    pendingNativeAssistantMessages.clear()
+    nativeSentenceFinalMessages.clear()
+    resetNativeSentenceStream()
     if (voiceAssistantSnapshot.active) publishVoiceAssistant(INACTIVE_VOICE_ASSISTANT)
     return
   }
   if (voiceAssistantSnapshot.active) return
   spokenAssistantMessages.clear()
+  pendingNativeAssistantMessages.clear()
   publishVoiceAssistant({ active: true, phase: 'paused', activatedAt: Date.now() })
 }
 
@@ -1050,11 +1306,11 @@ export function interruptVoiceAssistantSpeech(): boolean {
     && (voiceAssistantSnapshot.phase === 'speaking' || hadPendingRealtimeSpeech
       || realtime.activeUtterance !== undefined)
   if (hadRealtimeSpeech && realtime.events.readyState === 'open') {
-    try { realtime.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* peer cleanup owns closure */ }
+    cancelNativeCodexResponse(realtime)
   }
   if (realtime !== undefined) {
     realtime.audio.muted = true
-    delete realtime.activeUtterance
+    resetNativeSentenceStream(realtime.key)
     if (hadPendingRealtimeSpeech) discardCodexRealtimeUtterances(realtime.key)
   }
   voiceAssistantSpeech?.dispose()
@@ -1084,6 +1340,20 @@ export function isLikelyVoiceAssistantEcho(text: string): boolean {
 }
 
 /**
+ * Stop a pre-close native sentence stream when its step is rewritten or revoked.
+ * @param messageKey - Stable assistant message identity whose cursor is invalid.
+ * @param preserveCompleted - Preserve admitted final text when a view merely unmounts.
+ */
+export function cancelVoiceAssistantSentenceStream(messageKey: string, preserveCompleted = false): void {
+  const session = codexRealtimeVoiceSession
+  if (session === undefined) return
+  if (!preserveCompleted) nativeSentenceFinalMessages.delete(nativeSentenceMessageToken(session.key, messageKey))
+  if (nativeSentenceStream?.messageKey !== messageKey) return
+  cancelNativeCodexResponse(session)
+  resetNativeSentenceStream(session.key)
+}
+
+/**
  * Speak one newly completed assistant message while hands-free mode is active.
  * Old history is ignored by the activation-time fence and each rendered message
  * key is spoken once, even when the transcript projection re-renders.
@@ -1092,6 +1362,9 @@ export function isLikelyVoiceAssistantEcho(text: string): boolean {
  * @param messageTime - durable event time in Unix milliseconds.
  * @param final - Whether this is the final transcript update for the message.
  * @param fromCompletedHarnessTurn - Whether a completed harness Turn authorized this speech.
+ * @param allowRealtimeStreaming - Whether durable conversational-tail evidence
+ * authorizes sentence speech before the owning Turn closes.
+ * @param expectedSessionKey - Optional UI session authority for the active native call.
  */
 export function streamVoiceAssistantResponse(
   messageKey: string,
@@ -1099,20 +1372,45 @@ export function streamVoiceAssistantResponse(
   messageTime: number,
   final = false,
   fromCompletedHarnessTurn = false,
+  allowRealtimeStreaming = false,
+  expectedSessionKey?: string,
 ): void {
   if (!voiceAssistantSnapshot.active
     || text.trim() === '' || messageTime < voiceAssistantSnapshot.activatedAt - 1_000) return
-  if (spokenAssistantMessages.has(messageKey)) return
   const realtime = codexRealtimeVoiceSession
+  // The voice call is owned by the session whose InputBar opened it. A stale
+  // or hidden session renderer must never append its transcript to that call.
+  if (realtime !== undefined && expectedSessionKey !== undefined
+    && realtime.key !== expectedSessionKey) return
   // Step-local assistant messages can precede more tool work. Codex Live
   // must not voice them as if a real browser action had already settled.
-  if (realtime !== undefined && !fromCompletedHarnessTurn) return
+  if (realtime !== undefined && !fromCompletedHarnessTurn && !allowRealtimeStreaming) {
+    if (nativeSentenceStream?.sessionKey === realtime.key && nativeSentenceStream.messageKey === messageKey) {
+      cancelNativeCodexResponse(realtime)
+      resetNativeSentenceStream(realtime.key)
+    }
+    return
+  }
+  const nativeFinalToken = realtime === undefined
+    ? undefined
+    : nativeSentenceMessageToken(realtime.key, messageKey)
+  if ((realtime === undefined && spokenAssistantMessages.has(messageKey))
+    || (nativeFinalToken !== undefined && nativeSentenceFinalMessages.get(nativeFinalToken) === conversationalSpeechText(text))
+    || (realtime !== undefined && spokenAssistantMessages.has(spokenMessageToken(realtime.key, messageKey)))
+    || (realtime !== undefined && pendingNativeAssistantMessages.has(spokenMessageToken(realtime.key, messageKey)))) return
   voiceAssistantSpokenText = text
   if (realtime !== undefined) {
     // Native Codex is sticky for the whole hands-free session. A temporary
     // data-channel/WebRTC pause must never substitute another TTS voice after
     // Hardness returns control. Queue the finalized harness answer until the
     // same Codex channel is writable again.
+    if (allowRealtimeStreaming || (fromCompletedHarnessTurn
+      && nativeSentenceStream?.sessionKey === realtime.key && nativeSentenceStream.messageKey === messageKey)) {
+      streamNativeSentence(realtime, messageKey, text, final)
+      // The final marker is added only after the native appendSpeech receipt is
+      // accepted and the cursor has reached the end of the final transcript.
+      return
+    }
     if (!final) return
     const spoken = conversationalSpeechText(text)
     if (spoken === '') return
@@ -1147,9 +1445,10 @@ export function streamVoiceAssistantResponse(
  * @param messageKey - Stable conversation identity of the assistant message.
  * @param text - Final assistant prose.
  * @param messageTime - Durable event time in Unix milliseconds.
+ * @param expectedSessionKey - Optional UI session identity authorizing the active native call.
  */
-export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number): void {
-  streamVoiceAssistantResponse(messageKey, text, messageTime, true, true)
+export function speakVoiceAssistantResponse(messageKey: string, text: string, messageTime: number, expectedSessionKey?: string): void {
+  streamVoiceAssistantResponse(messageKey, text, messageTime, true, true, false, expectedSessionKey)
 }
 
 /**

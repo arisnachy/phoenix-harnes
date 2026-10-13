@@ -2,7 +2,7 @@
 
 import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
-import { existsSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import type {
   PhoenixUpdateRestartReceipt,
@@ -19,11 +19,19 @@ const STATE_READ_ATTEMPTS = 3
 const STATE_READ_RETRY_MS = 12
 const STATE_WRITE_ATTEMPTS = 4
 const STATE_WRITE_RETRY_MS = 20
+const GIT_FILE_MARKER_MAX_BYTES = 4096
 const STATUSES: ReadonlySet<PhoenixUpdateStatus> = new Set([
   'idle', 'checking', 'current', 'available', 'preparing', 'ready', 'restarting',
   'applying', 'rolling-back', 'updated', 'rolled-back', 'paused', 'error',
   'rollback-failed', 'off',
 ])
+
+type ControlDirectoryCacheEntry = {
+  marker: string
+  controlDir: string | undefined
+}
+
+const controlDirectoryCache = new Map<string, ControlDirectoryCacheEntry>()
 
 /** Default checkout root selected by the PHOENIX launcher. */
 function runtimeRoot(): string {
@@ -59,9 +67,31 @@ function gitCommonDirectory(root: string): string | undefined {
   return isAbsolute(value) ? value : resolve(root, value)
 }
 
+/** Return a cheap signature for the checkout's Git marker used to invalidate path resolution. */
+function gitMarker(root: string): string {
+  const markerPath = join(root, '.git')
+  try {
+    const stat = lstatSync(markerPath)
+    const kind = stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'
+    if (!stat.isFile()) return [kind, stat.dev, stat.ino].join(':')
+    const content = stat.size <= GIT_FILE_MARKER_MAX_BYTES ? readFileSync(markerPath, 'utf8') : undefined
+    return [kind, stat.dev, stat.ino, stat.size, stat.mtimeMs, content].join(':')
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    return code === 'ENOENT' || code === 'ENOTDIR' ? 'missing' : `error:${code ?? 'unknown'}`
+  }
+}
+
 /** Match the updater's control-file location even when Host runs in an isolated worktree. */
 function controlDirectory(root: string): string | undefined {
-  return gitCommonDirectory(root) ?? gitDirectory(root)
+  const key = resolve(root)
+  const marker = gitMarker(key)
+  const cached = controlDirectoryCache.get(key)
+  if (cached?.marker === marker) return cached.controlDir
+
+  const controlDir = gitCommonDirectory(key) ?? gitDirectory(key)
+  controlDirectoryCache.set(key, { marker, controlDir })
+  return controlDir
 }
 
 /** Return one optional bounded string field from an updater state object. */

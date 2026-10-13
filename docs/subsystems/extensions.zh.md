@@ -352,6 +352,15 @@ Provider registry and non-blocking important-event announcement queue.
  */
 @Remote('conversationRealtimeStart') async conversationRealtimeStart( request: VoiceConversationRealtimeStartRequest, ): Promise<VoiceConversationRealtimeStartReceipt>
 
+/**
+ * Hand Phoenix-authorized answer text to Codex native V3 speech. This
+ * only accepts an already-active browser-owned call; it does not create
+ * a new thread, spawn a model, or switch to another voice provider.
+ * @param request - Active browser call key and completed result or stable conversational sentence.
+ * @returns Whether the active native call accepted the authorized text.
+ */
+@Remote('conversationRealtimeSpeak') async conversationRealtimeSpeak( request: VoiceConversationRealtimeSpeakRequest, ): Promise<VoiceConversationRealtimeSpeakReceipt>
+
 /** Stop one browser-owned Codex realtime call.
  * @param request Browser-owned call identity to stop.
  * @returns Whether an active call was stopped; invalid or unknown identities return false.

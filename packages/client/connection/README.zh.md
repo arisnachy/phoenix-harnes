@@ -12,6 +12,10 @@ node 半侧在桥接或 upgrade 前守卫 `/api` 下的每个入口（`src/api-r
 
 `/api/events.mux` 与 `/api/events.host` 各接受一条 WebSocket upgrade，并只向浏览器发送对应的 `ServerRequest` 文本消息；客户端不会在这些 socket 上发送业务数据。任一 socket 结束都会使当前 connection generation 失败并重建两条流，连接就绪仍要求两条 socket 均已打开且 `host.describe` HTTP 调用成功。Host teardown 会终止两条 socket、中止各自的 source，并等待 source 清理完成后再返回。普通网络 GET 这些路径会返回 426，不保留 SSE（Server-Sent Events）回退；`toFetchHandler` 的 SSE 编解码只服务进程内同构载体。
 
+## Fixture 语音验证
+
+无密钥 fixture 的显式 `?fixture&fixtureVoice=stream` 通道只替换外部语音 RPC，记录实际 Typert `args.request` 输入，并通过正常事件流发出持久会话尾部事件。普通 fixture 运行不声明原生语音能力。此通道证明组装后的语音接收顺序和最终尾部去重，不连接语音提供者，也不证明可听播放。
+
 ## 模型体验
 
 无。协议消费层只在浏览器与主机之间搬运已经组合好的消息；这里没有任何内容进入模型请求。

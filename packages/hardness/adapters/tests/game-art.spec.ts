@@ -81,7 +81,8 @@ describe('Phoenix Game Studio visual asset binding', () => {
   })
 
   it('accepts a real manifest-based renderer for every atlas and world family, but blocks unused boss art', () => {
-    const images = [...worldHtml.matchAll(/<img\\b[^>]*>/gu)].map(match => match[0]).join('')
+    const images = [...worldHtml.matchAll(/<img\b[^>]*>/gu)].map(match => match[0]).join('')
+    expect(images).toContain('hero-art')
     const gameplay = [
       'const gameArt=window.gameManifest.art;',
       'const g=document.querySelector("canvas").getContext("2d");',

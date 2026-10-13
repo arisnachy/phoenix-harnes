@@ -12,7 +12,7 @@ type TurnTailNodeViewProps = ChatNodeViewProps<'turn-tail'>
 
 /** Turn-local actions and feature tail over the Location index, independent of Assistant placement. */
 export const TurnTailNodeView = memo(function TurnTailNodeView({
-  node, openFile, forkAt, renderSlot, renderSlotChain, t, useSession,
+  node, openFile, forkAt, renderSlot, renderSlotChain, t, useSession, sessionId,
 }: TurnTailNodeViewProps) {
   const data = node.data
   const hasLaterChatNode = useSession(snapshot =>
@@ -27,8 +27,9 @@ export const TurnTailNodeView = memo(function TurnTailNodeView({
     // stale intermediate prose when a tool result arrived after that message.
     if (closing === null || responseText === ''
       || data.reason.kind !== 'completed' || data.branchUnavailable) return
-    speakVoiceAssistantResponse(`assistant:${closing.turn}:${closing.step}`, responseText, closing.time)
-  }, [closing, data.branchUnavailable, data.reason.kind, node.key, responseText])
+    speakVoiceAssistantResponse(`${String(sessionId)}:assistant:${closing.turn}:${closing.step}`,
+      responseText, closing.time, String(sessionId))
+  }, [closing, data.branchUnavailable, data.reason.kind, node.key, responseText, sessionId])
   if (turn === undefined) return null
   const owner: TurnTailOwnerProps = { turn, seq: closing?.finalNode.seq ?? data.seq, openFile }
   const key = turnStopNotice(data.reason, closing !== null)
