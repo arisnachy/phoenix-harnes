@@ -184,22 +184,25 @@ describe('Team identity and provisioning', () => {
     }
   })
 
-  it('boots legacy maxMembers: 3 profiles without admitting a third concurrent worker', async () => {
-    // Old persisted profiles remain valid during hot runtime handoff.
-    const { ctx, lead } = await setup(['hang', 'hang'], { maxMembers: 3 })
-    const first = await spawn(ctx, lead, 'first-legacy-worker')
-    const second = await spawn(ctx, lead, 'second-legacy-worker')
+  it('admits up to three concurrent specialist teammates and rejects a fourth', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'], { maxMembers: 3 })
+    const first = await spawn(ctx, lead, 'first-worker')
+    const second = await spawn(ctx, lead, 'second-worker')
+    const third = await spawn(ctx, lead, 'third-worker')
     await waitRunning(ctx, first.member.id)
     await waitRunning(ctx, second.member.id)
-    await expect(spawn(ctx, lead, 'third-legacy-worker'))
+    await waitRunning(ctx, third.member.id)
+    await expect(spawn(ctx, lead, 'fourth-worker'))
       .rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
-    ctx.agentTeams.interrupt(lead, 'first-legacy-worker')
-    ctx.agentTeams.interrupt(lead, 'second-legacy-worker')
+    ctx.agentTeams.interrupt(lead, 'first-worker')
+    ctx.agentTeams.interrupt(lead, 'second-worker')
+    ctx.agentTeams.interrupt(lead, 'third-worker')
     await waitNoAgent(ctx, first.member.id)
     await waitNoAgent(ctx, second.member.id)
+    await waitNoAgent(ctx, third.member.id)
   })
 
-  it('rejects unsupported Team concurrency values greater than the legacy maximum', async () => {
+  it('rejects unsupported Team concurrency values greater than three', async () => {
     await expect(setup([], { maxMembers: 4 })).rejects.toThrow()
   })
 

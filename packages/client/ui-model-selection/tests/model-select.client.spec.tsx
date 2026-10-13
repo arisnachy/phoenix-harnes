@@ -522,6 +522,64 @@ describe('ModelSelect provider accordion', () => {
   })
 })
 
+describe('ModelSelect searchable provider catalog', () => {
+  const groups = [
+    { id: 'alpha', name: 'Alpha', models: [{ id: 'a1', name: 'Alpha One' }] },
+    { id: 'beta', name: 'Beta', models: [
+      { id: 'b1', name: 'Beta One' },
+      { id: 'b2', name: 'Beta Two' },
+    ] },
+  ]
+
+  it('searches models in collapsed providers and selects the exact routed model', async () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups,
+      current: { provider: 'alpha', model: 'a1' },
+    }))
+    const select = vi.fn(async () => true)
+    render(<ModelSelect locked={false} available directory={directory} load={vi.fn()} select={select} t={t} />)
+    fireEvent.click(screen.getByRole('button', { name: /Alpha One/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    expect(screen.queryByRole('menuitemradio', { name: 'Beta Two' })).toBeNull()
+
+    fireEvent.change(screen.getByRole('searchbox', { name: '搜索模型' }), {
+      target: { value: 'b2' },
+    })
+    expect(screen.getByRole('menuitem', { name: 'Beta' })).toBeTruthy()
+    expect(screen.getByRole('menuitemradio', { name: 'Beta Two' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Alpha' })).toBeNull()
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Beta Two' }))
+    await waitFor(() => {
+      expect(select).toHaveBeenCalledWith({ provider: 'beta', model: 'b2' })
+    })
+  })
+
+  it('supports provider names, clearing a query, and a clear empty state', () => {
+    const directory = createSnapshotStore<ModelDirectoryState>(state({
+      groups,
+      current: { provider: 'beta', model: 'b1' },
+    }))
+    render(<ModelSelect
+      locked={false}
+      available
+      directory={directory}
+      load={vi.fn()}
+      select={vi.fn().mockResolvedValue(true)}
+      t={t}
+    />)
+    fireEvent.click(screen.getByRole('button', { name: /Beta One/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /模型/ }))
+    const search = screen.getByRole('searchbox', { name: '搜索模型' })
+    fireEvent.change(search, { target: { value: 'ALPHA' } })
+    expect(screen.getByRole('menuitemradio', { name: 'Alpha One' })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: 'Beta' })).toBeNull()
+    fireEvent.change(search, { target: { value: 'no-such-model' } })
+    expect(screen.getByText('没有匹配的模型。')).toBeTruthy()
+    fireEvent.change(search, { target: { value: '' } })
+    expect(screen.getByRole('menuitemradio', { name: 'Beta One' })).toBeTruthy()
+  })
+})
+
 describe('Fénix Eclipse is the visible name of Phoenix automatic routing', () => {
   it('keeps the same Fénix Eclipse display name across Spanish, English and Chinese', () => {
     expect(es['trigger.auto']).toBe('Fénix Eclipse')
