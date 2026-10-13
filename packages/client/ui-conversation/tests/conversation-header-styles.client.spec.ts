@@ -128,6 +128,40 @@ describe('ConversationRoot UI-2 composer', () => {
   })
 })
 
+describe('Metallic welcome and aligned Session log controls', () => {
+  it('keeps the approved Phoenix mark central, polished, and responsive without replacing the shared emblem', () => {
+    expect(heroCss).toContain('/* Welcome emblem only: a larger polished gold-and-silver focal point.')
+    expect(heroCss).toContain('width: 172px;')
+    expect(heroCss).toContain('width: 156px;')
+    expect(heroCss).toContain('saturate(1.18) contrast(1.08)')
+    expect(heroCss).toContain('.fishHitbox::before')
+    expect(heroCss).toContain('@media (max-width: 720px) and (max-height: 650px)')
+    const mark = readFileSync(
+      fileURLToPath(new URL('../src/client/skeleton/EmptyHero.tsx', import.meta.url)), 'utf8',
+    )
+    expect(mark).toContain("renderSlot('conversation.hero.brand.mark'")
+  })
+
+  it('aligns the Session log export and global actions only in the expanded session header', () => {
+    const expanded = ".root:not([data-header-compact='true']):not([data-phase='hero']) .unifiedHeader .headerGlobal"
+    expect(css).toContain(expanded)
+    expect(declarations(expanded)?.get('align-self')).toBe('start')
+    expect(declarations(expanded)?.get('height')).toBe('34px')
+    expect(css).toContain('column-gap: 10px;')
+    const exportButton = readFileSync(
+      fileURLToPath(new URL('../../../session-query/session-log-export/src/client/HeaderAction.tsx', import.meta.url)), 'utf8',
+    )
+    expect(exportButton).toContain('aria-label="Session log"')
+    expect(exportButton).toContain('request(sessionId)')
+    const exportCss = readFileSync(
+      fileURLToPath(new URL('../../../session-query/session-log-export/src/client/HeaderAction.module.css', import.meta.url)), 'utf8',
+    )
+    expect(exportCss).toContain('height: 34px;')
+    expect(exportCss).toContain('@media (max-width: 720px)')
+    expect(conversationRoot).toContain('className={css.headerGlobal}')
+  })
+})
+
 describe('Centered new-session identity', () => {
   it('keeps the hero column symmetric even with the browser scroll rail visible', () => {
     expect(css).toContain('scrollbar-gutter: stable both-edges;')

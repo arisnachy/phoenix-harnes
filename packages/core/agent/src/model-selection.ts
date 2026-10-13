@@ -254,8 +254,8 @@ const AUTO_VISIBLE_PLAN_POLICY =
   'Kira will continue on the very next step and execute this exact plan without asking for routine approval. ' +
   'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
 
-const AUTO_LUNA_EXECUTION_POLICY =
-  'You are Kira executing on Luna. If a user-visible **Plan:** was written earlier in THIS turn, ' +
+const AUTO_SOL_COORDINATION_POLICY =
+  'You are Kira coordinating and executing with the selected latest Sol. If a user-visible **Plan:** was written earlier in THIS turn, ' +
   'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
   'Start the first permitted real action promptly, supervise the critical path and choose a genuine teammate ' +
   'only when requested or materially helpful. Address teammates naturally by name, accept their real evidence, ' +
@@ -265,7 +265,7 @@ const AUTO_LUNA_EXECUTION_POLICY =
 
 const AUTO_VISIBLE_PLAN_HANDOFF =
   'The visible **Plan:** from the immediately preceding Sol step is Kira\'s authoritative execution plan. ' +
-  'Continue the current user request as Kira on Luna Max; execute the next concrete action now, ' +
+  'Continue the current user request as Kira on Sol; execute the next concrete action now, ' +
   'without re-planning, re-reading the same brief or asking permission for already authorized safe work. ' +
   'If this is a requested team demonstration, call spawn_teammate once with a small verifiable assignment, ' +
   'wait for genuine evidence and complete the demonstration. The actual Team conversation must be real, ' +
@@ -726,8 +726,8 @@ function phoenixAutoRoute(
     if (teamSignal !== undefined) {
       return {
         provider: 'openai-codex',
-        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-        reasoningEffort: ReasoningEffortId('max'),
+        model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+        reasoningEffort: ReasoningEffortId('high'),
       }
     }
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
@@ -791,8 +791,8 @@ function phoenixAutoRoute(
 
   return {
     provider: 'openai-codex',
-    model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
-    reasoningEffort: ReasoningEffortId('max'),
+    model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
+    reasoningEffort: ReasoningEffortId('high'),
   }
 }
 
@@ -874,7 +874,7 @@ export function installModelSelection(
     const autoPolicy = autoStep === 1
       && phoenixAutoTaskRequest(currentRequest)
       && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
-      : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_EXECUTION_POLICY : undefined
+      : autoStep !== undefined && autoStep > 1 ? AUTO_SOL_COORDINATION_POLICY : undefined
     return {
       ...assembled,
       ...autoPolicy === undefined ? {} : {

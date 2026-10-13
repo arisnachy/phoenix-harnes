@@ -748,3 +748,40 @@
   height: 38px;
   flex-basis: 38px;
 }
+
+/* Expanded session header: align the Session log capsule in the title row
+   with the icon rail in the right column. Keep the session-scoped export
+   mounted in its original slot (download/dialog lifecycle must not change).
+   Compact home/chat toolbars preserve their existing geometry. */
+.root:not([data-header-compact='true']):not([data-phase='hero']) .unifiedHeader {
+  column-gap: 10px;
+}
+.root:not([data-header-compact='true']):not([data-phase='hero']) .unifiedHeader .headerGlobal {
+  align-self: start;
+  min-height: 34px;
+  height: 34px;
+  gap: 7px;
+}
+.root:not([data-header-compact='true']):not([data-phase='hero']) .unifiedHeader .headerToggle,
+.root:not([data-header-compact='true']):not([data-phase='hero']) .unifiedHeader .heroTopIcon {
+  width: 34px;
+  height: 34px;
+}
+.root:not([data-header-compact='true']):not([data-phase='hero']) .unifiedHeader .heroTopProfile {
+  width: 36px;
+  height: 36px;
+  flex-basis: 36px;
+}
+.root:not([data-header-compact='true']):not([data-phase='hero']) .unifiedHeader .headerUtilities {
+  min-height: 34px;
+  align-self: center;
+}
+@media (max-width: 720px) {
+  .root:not([data-header-compact='true']):not([data-phase='hero']) .unifiedHeader .headerGlobal {
+    align-self: center;
+    justify-self: end;
+  }
+  .root:not([data-header-compact='true']):not([data-phase='hero']) .unifiedHeader .headerUtilities {
+    max-width: min(100%, 160px);
+  }
+}
