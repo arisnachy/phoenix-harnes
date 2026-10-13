@@ -35,7 +35,8 @@ async function loadComposition(): Promise<Context> {
   const distIndex = join(dist, 'index.html')
   await writeFile(distIndex, '<head></head><body>shell</body>')
   await writeFile(join(dist, 'app.js'), 'export {}')
-  await writeFile(join(dist, 'bundle-abc123DEF.js'), 'export const cached = true')
+  await mkdir(join(dist, 'assets'))
+  await writeFile(join(dist, 'assets', 'bundle-abc123DEF.js'), 'export const cached = true')
   await writeFile(join(dist, 'blob.bin'), 'BLOB')
   await writeFile(join(dist, 'manifest.webmanifest'), '{}')
   await mkdir(join(dist, 'empty'))
@@ -112,7 +113,7 @@ describe('real Loader composition', () => {
 
     // Production content hashes permit safe browser reuse; mutable files must
     // revalidate and the injected HTML never uses browser cache.
-    const hashed = await fetch(`http://127.0.0.1:${String(port)}/bundle-abc123DEF.js`)
+    const hashed = await fetch(`http://127.0.0.1:${String(port)}/assets/bundle-abc123DEF.js`)
     expect(hashed.status).toBe(200)
     expect(hashed.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
     await hashed.arrayBuffer()
