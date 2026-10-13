@@ -202,8 +202,20 @@ describe('Team identity and provisioning', () => {
     await waitNoAgent(ctx, third.member.id)
   })
 
-  it('rejects unsupported Team concurrency values greater than three', async () => {
-    await expect(setup([], { maxMembers: 4 })).rejects.toThrow()
+  it('admits five independent workers when explicitly configured and rejects a sixth', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang', 'hang', 'hang'], { maxMembers: 5 })
+    const workers = []
+    for (let index = 0; index < 5; index++) {
+      workers.push(await spawn(ctx, lead, `worker-${index}`))
+    }
+    for (const worker of workers) await waitRunning(ctx, worker.member.id)
+    await expect(spawn(ctx, lead, 'worker-six')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    for (let index = 0; index < 5; index++) ctx.agentTeams.interrupt(lead, `worker-${index}`)
+    for (const worker of workers) await waitNoAgent(ctx, worker.member.id)
+  })
+
+  it('rejects unsupported Team concurrency values greater than five', async () => {
+    await expect(setup([], { maxMembers: 6 })).rejects.toThrow()
   })
 
   it('supports direct-constructor defaults and recovers roots that already exist', async () => {
