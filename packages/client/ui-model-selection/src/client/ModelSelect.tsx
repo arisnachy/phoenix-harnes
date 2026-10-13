@@ -83,6 +83,7 @@ export function ModelSelect(
   )
   const [open, setOpen] = useState(false)
   const [pane, setPane] = useState<Pane>('root')
+  const [modelQuery, setModelQuery] = useState('')
   const [effortDraftKey, setEffortDraftKey] = useState<string | null>(null)
   // Provider accordion: manual toggles win; otherwise only the group holding
   // the current model stays expanded, falling back to the first group when
@@ -119,6 +120,23 @@ export function ModelSelect(
           : { reasoningEffort: model.reasoning.defaultEffort },
       } satisfies ModelSelection,
     }))), [state.groups])
+  const normalizedQuery = modelQuery.trim().toLocaleLowerCase()
+  const visibleGroups = useMemo(() => state.groups.map((group) => {
+    const providerMatches = group.name.toLocaleLowerCase().includes(normalizedQuery)
+      || group.id.toLocaleLowerCase().includes(normalizedQuery)
+    return {
+      ...group,
+      models: normalizedQuery === '' || providerMatches
+        ? group.models
+        : group.models.filter((model) => {
+          const displayName = isPhoenixAutoRouting(model.id, model.name)
+            ? t('trigger.auto')
+            : presentModel(model.name, model.description).displayName
+          return [model.id, model.name, displayName]
+            .some(value => value.toLocaleLowerCase().includes(normalizedQuery))
+        }),
+    }
+  }).filter(group => group.models.length > 0), [state.groups, normalizedQuery, t])
   const selectedIndex = state.current === null
     ? -1
     : choices.findIndex(c => c.selection.provider === state.current?.provider && c.selection.model === state.current.model)
@@ -209,11 +227,12 @@ export function ModelSelect(
     if (!open || pane !== 'model') return
     const groups = groupsRef.current
     if (groups !== null) groups.scrollTop = 0
-  }, [open, pane, state.groups])
+  }, [open, pane, state.groups, modelQuery])
 
   if (!available) return null
 
   const show = (): void => {
+    setModelQuery('')
     setPane('root')
     setOpen(true)
     reload()
@@ -243,7 +262,7 @@ export function ModelSelect(
       return
     }
     if (!open) return
-    if (event.target instanceof HTMLInputElement && event.target.type === 'range') return
+    if (event.target instanceof HTMLInputElement) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault()
       moveFocus(event.key === 'ArrowDown' ? 1 : -1)
@@ -337,6 +356,7 @@ export function ModelSelect(
   }
 
   const groupExpanded = (groupId: string): boolean => {
+    if (normalizedQuery !== '') return true
     const manual = groupToggles.get(groupId)
     return manual ?? groupId === defaultExpandedGroupId()
   }
@@ -410,6 +430,17 @@ export function ModelSelect(
 
           {pane === 'model' && (
             <>
+              <div className={css.modelSearch}>
+                <input
+                  type="search"
+                  className={css.modelSearchInput}
+                  aria-label={t('search.aria')}
+                  placeholder={t('search.placeholder')}
+                  autoComplete="off"
+                  value={modelQuery}
+                  onChange={event => { setModelQuery(event.currentTarget.value) }}
+                />
+              </div>
               {state.status === 'loading' && (
                 <div className={css.status}>{t('status.loading')}</div>
               )}
@@ -426,7 +457,10 @@ export function ModelSelect(
                 </div>
               ))}
               <div ref={groupsRef} className={clsx(css.groups, 'scrollable')}>
-                {state.groups.map((group) => {
+                {visibleGroups.length === 0 && state.status !== 'loading' && (
+                  <div className={css.empty}>{normalizedQuery === '' ? t('empty.models') : t('search.noMatches')}</div>
+                )}
+                {visibleGroups.map((group) => {
                   const headingId = `${id}-${group.id}`
                   const expanded = groupExpanded(group.id)
                   return (
