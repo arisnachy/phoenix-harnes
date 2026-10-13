@@ -183,13 +183,21 @@ export class UniversalMissionLedger {
    * @param cancelled - whether the human explicitly aborted the turn.
    * @returns terminal checkpoint when one existed.
    */
-  async close(root: Agent, cancelled: boolean): Promise<UniversalMissionSnapshot | undefined> {
+  async close(
+    root: Agent,
+    cancelled: boolean,
+    completion: { readonly verified: boolean; readonly evidenceIds: readonly string[] } = {
+      verified: false, evidenceIds: [],
+    },
+  ): Promise<UniversalMissionSnapshot | undefined> {
     return await this.journal.transact(root.id, async () => {
       const prior = this.read(root)
       if (prior === undefined || universalMissionTerminal(prior.phase)) return prior
       const snapshot: UniversalMissionSnapshot = {
         ...prior,
-        phase: cancelled ? 'cancelled' : prior.verified ? 'completed' : 'partial',
+        phase: cancelled ? 'cancelled' : completion.verified ? 'completed' : 'partial',
+        verified: !cancelled && completion.verified,
+        evidenceIds: cancelled ? prior.evidenceIds : [...new Set(completion.evidenceIds)].slice(0, 100),
         revision: prior.revision + 1,
         cancellationEpoch: prior.cancellationEpoch + 1,
       }
