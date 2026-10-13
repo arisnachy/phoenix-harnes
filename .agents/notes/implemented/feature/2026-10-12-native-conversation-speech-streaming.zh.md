@@ -16,6 +16,8 @@ Status: implemented
 
 原生生成完成时不静音媒体元素：WebRTC 可能仍在播放缓冲音频，包括整个短回答。助手的 `turn.done` 与 `response.done` 释放句子游标；用户的 `turn.done` 不能结束助手播报。只有显式中断、停止或抑制未授权输出才静音通话。按会话限定的接收防止另一个会话的渲染器将文本发送到现有通话。
 
+原生 Codex V3 会话配置由官方 app-server 管理，其 [Frameless 协议](https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/endpoint/realtime_websocket/methods_frameless_bidi.rs) 与公共 Realtime API 不同。隔离的已认证探针重现了旧版 `session.turn_detection`、公共 `session.type` 和 `session.audio.input` 导致的 `unknown_parameter`。因此原生客户端不发送 VAD 会话更新；只有旧版浏览器回复路径保留该配置。删除被拒绝的更新恢复了无协议错误的事件，但本身未证明音频 RTP 已送达。
+
 此变更部分扩展了 [Harness 最终结果决策](../bug-fix/2026-10-08-codex-live-harness-finality.zh.md)。其任务结果权限、中断、回声过滤与自主回复抑制仍然必要；仅严格会话回复可以提前获得朗读授权。
 
 ## Alternatives considered
@@ -33,3 +35,5 @@ Status: implemented
 ## Verification
 
 回归覆盖必须从持久事件派生会话资格，观察 Turn 结束前的原生朗读，拒绝提前朗读带工具的内容，并覆盖最终尾部去重和中断。脚本化传输测试证明接纳顺序，不能证明真实麦克风到扬声器延迟或提供者质量。
+
+隔离的已认证 Chromium 探针使用合成音调并静音远端扬声器，协商了 `sendrecv`，接纳授权朗读，收到 296 个音频 RTP 包，并观察到媒体时钟推进。完全静音的源没有产生入站或出站媒体，因此不能作为有效音频送达验证。修正后的探针验证原生媒体传输，不能证明人的听感、语音质量或用户麦克风延迟。V3 助手 `turn.created` 事件使用与旧版 `response.created` 相同的接纳和抑制门禁。

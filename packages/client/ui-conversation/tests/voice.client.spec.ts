@@ -339,12 +339,9 @@ describe('browser voice adapter', () => {
       const audio = document.querySelector<HTMLAudioElement>('[data-phoenix-codex-voice]')
       expect(audio?.muted).toBe(true)
       channel?.onopen?.()
-      const sessionUpdate = JSON.parse(String(channel?.send.mock.calls[0]?.[0])) as {
-        type: string
-        session: { turn_detection: { create_response: boolean } }
-      }
-      expect(sessionUpdate.type).toBe('session.update')
-      expect(sessionUpdate.session.turn_detection.create_response).toBe(false)
+      // AVAS V3 session configuration belongs to the official app-server.
+      // Sending public Realtime VAD fields here causes unknown_parameter.
+      expect(channel?.send).not.toHaveBeenCalled()
 
       // The same Live data channel is the canonical microphone/transcript
       // source. V3 and V1 final-user events both feed the composer handler.
@@ -463,7 +460,7 @@ describe('browser voice adapter', () => {
         'La tarea terminó correctamente.',
         activatedAt,
       )
-      expect(channel?.send).toHaveBeenCalledTimes(2)
+      expect(channel?.send).toHaveBeenCalledTimes(1)
 
       if (channel !== undefined) channel.readyState = 'open'
       if (peer !== undefined) {
@@ -478,13 +475,14 @@ describe('browser voice adapter', () => {
         key: 'session-harness', text: 'La tarea terminó correctamente.',
       })
       expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('accepted')
-      expect(channel?.send).toHaveBeenCalledTimes(2)
+      expect(channel?.send).toHaveBeenCalledTimes(1)
       expect(audio?.muted).toBe(false)
       // V3 may surface first audio frames before the response.created event.
       // A harness-approved utterance must never stay accidentally muted.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.output_audio.delta' }) })
       expect(audio?.muted).toBe(false)
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
       expect(audio?.muted).toBe(false)
 
       // A second spoken event queues until the real completion of the
@@ -513,12 +511,15 @@ describe('browser voice adapter', () => {
       expect(attention?.text).toContain('Revisa la acción')
 
       expect(interruptVoiceAssistantSpeech()).toBe(true)
-      expect(JSON.parse(String(channel?.send.mock.calls[2]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(JSON.parse(String(channel?.send.mock.calls[1]?.[0]))).toEqual({ type: 'response.cancel' })
 
       // The Realtime model must not autonomously claim a tool is running:
       // no harness-final request is active, so abort unsolicited responses.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
-      expect(JSON.parse(String(channel?.send.mock.calls[3]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(JSON.parse(String(channel?.send.mock.calls[2]?.[0]))).toEqual({ type: 'response.cancel' })
+      expect(audio?.muted).toBe(true)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
+      expect(JSON.parse(String(channel?.send.mock.calls.at(-1)?.[0]))).toEqual({ type: 'response.cancel' })
       expect(audio?.muted).toBe(true)
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
       await Promise.resolve()
@@ -594,6 +595,12 @@ describe('browser voice adapter', () => {
       expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Respuesta corregida.' })
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
       await Promise.resolve()
+      expect(audio?.muted).toBe(false)
+      // Buffered authorized audio remains audible after completion, but the
+      // next unsolicited V3 assistant turn must close that permission again.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
+      expect(audio?.muted).toBe(true)
+      expect(JSON.parse(String(channel?.send.mock.calls.at(-1)?.[0]))).toEqual({ type: 'response.cancel' })
 
       // Native completion may arrive before the Host RPC result. Retain one
       // in-flight operation until explicit admission; rejection is never a
@@ -608,12 +615,17 @@ describe('browser voice adapter', () => {
         const messageKey = `assistant:harness:terminal-before-${outcome}`
         const beforeAdmission = realtimeSpeak.mock.calls.length
         streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
+        channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
+        expect(audio?.muted).toBe(true)
+        channel?.onmessage?.({ data: JSON.stringify({ type: 'output_audio.delta', audio: 'fixture' }) })
+        expect(audio?.muted).toBe(true)
         channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
         streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
         expect(realtimeSpeak).toHaveBeenCalledTimes(beforeAdmission + 1)
         if (outcome === 'failed') rejectAdmission(new Error('fixture admission failed'))
         else resolveAdmission({ ok: true, value: { accepted: outcome === 'accepted', ...(outcome === 'rejected' ? { reason: 'disabled' } : {}) } })
         await vi.waitFor(() => expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe(outcome))
+        expect(audio?.muted).toBe(outcome !== 'accepted')
         streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
         expect(realtimeSpeak).toHaveBeenCalledTimes(beforeAdmission + (outcome === 'accepted' ? 1 : 2))
         await Promise.resolve()

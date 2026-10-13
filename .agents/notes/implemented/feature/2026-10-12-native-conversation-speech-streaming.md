@@ -16,6 +16,8 @@ Stable sentences enter the native speech queue incrementally. Per-message progre
 
 Native generation completion does not mute the media element: WebRTC may still be playing buffered audio, including an entire short answer. Assistant `turn.done` and `response.done` release the sentence cursor; a user `turn.done` cannot complete assistant speech. Only explicit interruption, stopping or suppression of unauthorized output mutes the call. Session-qualified admission prevents another session renderer from sending its text into an existing call.
 
+Native Codex V3 session configuration stays with the official app-server, whose [Frameless protocol](https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/endpoint/realtime_websocket/methods_frameless_bidi.rs) differs from the public Realtime API. Isolated authenticated probes reproduced `unknown_parameter` for legacy `session.turn_detection`, public `session.type` and `session.audio.input`. The native client therefore sends no VAD session update; only the legacy browser response route retains that configuration. Removing the rejected update restored error-free protocol events but did not itself establish audio RTP delivery.
+
 This partially extends the [harness finality decision](../bug-fix/2026-10-08-codex-live-harness-finality.md). Its task-result authority, interruption, echo filtering and autonomous-response suppression remain necessary; only strict conversational replies receive early speech authorization.
 
 ## Alternatives considered
@@ -33,3 +35,5 @@ Strict conversational replies may begin speaking before the remaining text is ge
 ## Verification
 
 Regression coverage must derive conversational eligibility from durable events, observe native speech before turn closure, reject early tool-bearing speech, and exercise final-tail deduplication and interruption. Scripted transport coverage proves admission ordering, not actual microphone-to-speaker latency or provider quality.
+
+An isolated authenticated Chromium probe with a synthetic tone and a muted remote speaker negotiated `sendrecv`, accepted the authorized speech, received 296 audio RTP packets and observed the media clock advancing. A completely silent source produced no outbound or inbound media and was not a valid audio-delivery check. The corrected probe verifies native media transport, not human audibility, speech quality or the user's microphone latency. V3 assistant `turn.created` events use the same admission and suppression gates as legacy `response.created` events.

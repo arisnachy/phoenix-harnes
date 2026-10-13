@@ -911,23 +911,24 @@ export async function tryStartCodexRealtimeVoice(
     }
     events.onopen = () => {
       if (codexRealtimeVoiceGeneration !== generation || events === undefined) return
-      // The realtime model supplies low-latency audio and transcription only.
-      // Phoenix's live Agent must own the actual turn so every spoken request
-      // uses the same harness, tools, policies, persistence, and verification
-      // as a typed message. Disable VAD-created autonomous model responses.
-      try {
-        events.send(JSON.stringify({
-          type: 'session.update',
-          session: {
-            turn_detection: {
-              type: 'server_vad',
-              create_response: false,
-              interrupt_response: true,
+      // Native Codex V3 owns its session configuration through app-server.
+      // Its AVAS protocol rejects both legacy and public Realtime VAD fields.
+      // Keep the old update only for the legacy browser response.create route.
+      if (remote.conversationRealtimeSpeak === undefined) {
+        try {
+          events.send(JSON.stringify({
+            type: 'session.update',
+            session: {
+              turn_detection: {
+                type: 'server_vad',
+                create_response: false,
+                interrupt_response: true,
+              },
             },
-          },
-        }))
-      } catch {
-        // A concurrently closing channel is handled by the peer-state cleanup.
+          }))
+        } catch {
+          // A concurrently closing channel is handled by the peer-state cleanup.
+        }
       }
       const liveSession = codexRealtimeVoiceSession
       if (liveSession !== undefined && liveSession.key === sessionKey && liveSession.events === events) {
@@ -1108,14 +1109,17 @@ function updateCodexRealtimePhase(payload: string): void {
   if (!voiceAssistantSnapshot.active || session === undefined) return
   let type = ''
   let assistantTurnDone = false
+  let assistantTurnCreated = false
   try {
     const value = JSON.parse(payload) as { type?: unknown; turn?: { role?: unknown } }
     if (typeof value.type === 'string') type = value.type
     assistantTurnDone = type === 'turn.done' && value.turn?.role === 'assistant'
+    assistantTurnCreated = type === 'turn.created' && value.turn?.role === 'assistant'
   } catch {
     return
   }
-  if (type === 'response.created' && session.activeUtterance === undefined) {
+  const assistantStarted = type === 'response.created' || assistantTurnCreated
+  if (assistantStarted && session.activeUtterance === undefined) {
     session.audio.muted = true
     // Some realtime transports can start autonomous VAD replies even with
     // create_response:false. Suppress unverified "sigo en ello" narration.
@@ -1124,7 +1128,7 @@ function updateCodexRealtimePhase(payload: string): void {
     }
     return
   }
-  if (type === 'response.created' && session.activeUtterance !== undefined) {
+  if (assistantStarted && session.activeUtterance !== undefined) {
     if (session.nativeCancelRequested) {
       session.audio.muted = true
       // The cancelled response can still emit a late created event. Keep the
@@ -1133,6 +1137,12 @@ function updateCodexRealtimePhase(payload: string): void {
       if (session.events.readyState === 'open') {
         try { session.events.send(JSON.stringify({ type: 'response.cancel' })) } catch { /* closing peer */ }
       }
+      return
+    }
+    if (session.activeUtterance.admission === 'pending') {
+      // Keep a native generation quiet until the Host confirms admission.
+      // Do not cancel the valid in-flight request merely because its reply is late.
+      session.audio.muted = true
       return
     }
     allowAuthorizedCodexAudio(session)
@@ -1161,6 +1171,10 @@ function updateCodexRealtimePhase(payload: string): void {
   // event. Only an already-authorized harness utterance may unmute them.
   if ((type.includes('output_audio') || type.startsWith('response.audio.'))
     && session.activeUtterance !== undefined) {
+    if (session.activeUtterance.admission === 'pending') {
+      session.audio.muted = true
+      return
+    }
     allowAuthorizedCodexAudio(session)
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
     return
