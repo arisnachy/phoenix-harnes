@@ -11,6 +11,7 @@ import type {} from '@phoenix-ai/dsh-session-learning'
 import type { CognitiveMemoryLayer } from '@phoenix-ai/dsh-session-learning'
 import { filterAdaptiveSearchHits, installAdaptiveLearning } from './adaptive.ts'
 import { ExperienceLearningEngine, experienceMemoryInput } from './experience.ts'
+import { LiveEfficiencyMonitor } from './live-efficiency.ts'
 import { isHumanTaskMessage, learningOwnerSessionId } from './team-learning-context.ts'
 import { assessHabitExperience, formatHabitGuidance } from './habit.ts'
 import { AutonomousMemoryCurator } from './autonomous-curator.ts'
@@ -55,6 +56,7 @@ export function apply(ctx: Context, config: Config): void {
     },
   })
   const experience = new ExperienceLearningEngine()
+  const efficiency = new LiveEfficiencyMonitor()
   void ctx.learningMemory.ready()
     .then(() => { experience.restore(ctx.learningMemory.allCognitiveRecords()) })
     .catch((error: unknown) => {
@@ -79,6 +81,7 @@ export function apply(ctx: Context, config: Config): void {
         occurredAt,
         ...projectId === undefined ? {} : { projectId },
       })
+      efficiency.startTask(sessionId)
       experience.beginTask({
         sessionId,
         text,
@@ -96,6 +99,10 @@ export function apply(ctx: Context, config: Config): void {
       })
       return
     }
+
+    // Cheap in-memory telemetry: no prompts, tool arguments, or user files retained.
+    // Measurements are scoped to the human task and never authorize new actions.
+    efficiency.observe(sessionId, eventType, data, occurredAt)
 
     if (eventType === 'assistant/message') {
       const usage = assistantUsage(data)
@@ -122,11 +129,13 @@ export function apply(ctx: Context, config: Config): void {
     if (eventType === 'goal/change' && session.header.origin === 'subagent') return
     if (eventType === 'goal/change' && isRecord(data) && data.operation === 'clear') {
       experience.clear(sessionId)
+      efficiency.clear(sessionId)
       return
     }
 
     if (eventType === 'goal/change' && isRecord(data) && data.operation === 'complete') {
       tasks.complete(sessionId, occurredAt)
+      efficiency.clear(sessionId)
       const learned = experience.completeVerified(sessionId, occurredAt)
       if (learned !== undefined) {
         void ctx.learningMemory.rememberCognitive(experienceMemoryInput(learned, {
@@ -227,6 +236,18 @@ export function apply(ctx: Context, config: Config): void {
       const projectId = ctx.learningMemory.currentProjectId()
       const matched = experience.matchTask(taskContext, projectId)
       return matched === undefined ? '' : formatHabitGuidance(assessHabitExperience(matched))
+    },
+    interpolateVariables: false,
+  })
+  // No visual controls: guidance is an ordinary silent runtime-context section.
+  // AssembleContext.agent is supplied by the agent driver so concurrent
+  // sessions cannot read one another's measurements.
+  ctx.systemPrompt.context({
+    name: 'context:live-efficiency',
+    order: 122,
+    text: (assembly) => {
+      const agent = (assembly as { agent?: { id: unknown } }).agent
+      return agent === undefined ? '' : efficiency.guidance(String(agent.id))
     },
     interpolateVariables: false,
   })
