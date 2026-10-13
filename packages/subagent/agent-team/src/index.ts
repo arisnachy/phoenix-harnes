@@ -342,6 +342,9 @@ export class TeamService extends TypertRemoteService {
    * @returns durable message identity and immediate-delivery observation.
    */
   async sendMessage(caller: Agent, request: SendTeamMessageRequest): Promise<SendTeamMessageResult> {
+    if (teamMissionClosed(this.roster.membership(caller).root.session.events)) {
+      throw new TeamError('the Team mission is closed; peer messages cannot reopen it', 'TEAM_MISSION_CLOSED')
+    }
     return await this.mailbox.send(caller, request)
   }
 
@@ -399,7 +402,11 @@ export class TeamService extends TypertRemoteService {
    * @returns the revision-one task view.
    */
   async createTask(caller: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskView> {
-    return await this.tasks.create(this.roster.membership(caller), request)
+    const membership = this.roster.membership(caller)
+    if (teamMissionClosed(membership.root.session.events)) {
+      throw new TeamError('closed Team mission cannot create tasks', 'TEAM_MISSION_CLOSED')
+    }
+    return await this.tasks.create(membership, request)
   }
 
   /**
@@ -428,7 +435,11 @@ export class TeamService extends TypertRemoteService {
    * @returns the committed next task revision.
    */
   async updateTask(caller: Agent, request: UpdateTeamTaskRequest): Promise<TeamTaskView> {
-    return await this.tasks.update(caller, this.roster.membership(caller), request)
+    const membership = this.roster.membership(caller)
+    if (teamMissionClosed(membership.root.session.events)) {
+      throw new TeamError('closed Team mission cannot mutate tasks', 'TEAM_MISSION_CLOSED')
+    }
+    return await this.tasks.update(caller, membership, request)
   }
 
   /**
