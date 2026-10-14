@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { writeClientBuildRecord } from '../../../scripts/client-build-environment.ts'
 import {
   clientArtifactsAreFresh,
   missingHostRuntimeArtifacts,
@@ -51,9 +52,7 @@ function writeFreshClientArtifacts(root: string, head: string): void {
   mkdirSync(join(root, '.dsh-build'), { recursive: true })
   mkdirSync(join(root, 'apps', 'web', 'dist'), { recursive: true })
   writeFileSync(join(root, 'apps', 'web', 'dist', 'index.html'), '<!doctype html>\n', 'utf8')
-  writeFileSync(join(root, '.dsh-build', 'client-build-environment.json'), JSON.stringify({
-    environment: { DSH_CLIENT_COMMIT_HASH: head.slice(0, 7) },
-  }), 'utf8')
+  writeClientBuildRecord(root, { DSH_CLIENT_COMMIT_HASH: head.slice(0, 7) })
 }
 
 afterEach(() => {
@@ -84,6 +83,12 @@ describe('PHOENIX runtime freshness', () => {
     const head = git(root, ['rev-parse', 'HEAD'])
     writeFreshClientArtifacts(root, head)
 
+    expect(clientArtifactsAreFresh(root, head)).toBe(true)
+
+    // A recorded commit alone must not allow damaged/old browser assets.
+    writeFileSync(join(root, 'apps', 'web', 'dist', 'index.html'), '<!doctype html>old blue UI</html>', 'utf8')
+    expect(clientArtifactsAreFresh(root, head)).toBe(false)
+    writeFreshClientArtifacts(root, head)
     expect(clientArtifactsAreFresh(root, head)).toBe(true)
 
     writeFileSync(join(root, '.dsh-build', 'client-build-environment.json'), JSON.stringify({
