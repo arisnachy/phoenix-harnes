@@ -55,6 +55,26 @@
   pointer-events: none;
 }
 
+.engineBadge {
+  position: absolute;
+  z-index: 4;
+  top: -2px;
+  right: -4px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--avatar-accent) 35%, #fff);
+  border-radius: 50%;
+  background: var(--avatar-surface);
+  box-shadow: 0 1px 4px rgb(52 37 19 / 16%);
+  color: #a56b21;
+  font-size: 12px;
+  line-height: 1;
+  pointer-events: auto;
+}
+.engineBadge[data-engine-mark='☾'] { color: #627da3; }
+
 /* Keep Kira unmistakable, but without the extra animated halo or K badge. */
 .avatar[data-avatar='kira'] { --avatar-accent: #c9954d; }
 .avatar[data-avatar='aurora'],
