@@ -20,12 +20,29 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('const portArgIndex = hostArgs.indexOf(\'--port\')')
     expect(source).toContain('web-port:')
     expect(source).toContain("if (error?.code === 'EADDRINUSE')")
-    expect(source).toContain('const supervisorInstanceLock = await acquireSupervisorInstance()')
-    expect(source).toContain('if (supervisorInstanceLock === null) process.exit(0)')
-    expect(source.indexOf('const supervisorInstanceLock = await acquireSupervisorInstance()')).toBeLessThan(
+    expect(source).toContain('let supervisorInstanceLock = await acquireSupervisorInstance()')
+    expect(source).toContain('if (supervisorInstanceLock === null) {')
+    expect(source).toContain('retireVerifiedOlderPhoenixHost(port)')
+    expect(source).toContain('waitForHostPortRelease(port)')
+    expect(source).toContain("const script = join(supervisorSourceRoot, 'scripts', 'phoenix-windows-stale-host-takeover.ps1')")
+    expect(source).toContain('PHOENIX_STALE_HOST_RETIRED')
+    expect(source.indexOf('let supervisorInstanceLock = await acquireSupervisorInstance()')).toBeLessThan(
       source.indexOf('recoverStaleStagingIndexLock()\nrestoreActiveRuntime()'),
     )
     expect(source).toContain('supervisorInstanceLock?.close()')
+  })
+
+  it('retires only a proven older Windows Phoenix checkout, never an arbitrary port owner', () => {
+    const script = readFileSync(resolve('scripts/phoenix-windows-stale-host-takeover.ps1'), 'utf8')
+    expect(script).toContain('Get-NetTCPConnection -State Listen -LocalPort $Port')
+    expect(script).toContain('Test-OfficialCheckout $Root')
+    expect(script).toContain('Test-OfficialCheckout $oldRoot')
+    expect(script).toContain("merge-base --is-ancestor $oldHead $newHead")
+    expect(script).toContain('GetOwner')
+    expect(script).toContain('Stop-Process -Id $supervisorPid -Force')
+    expect(script).toContain('Stop-Process -Id $listenerPid -Force')
+    expect(script).toContain('PHOENIX_STALE_HOST_RETIRED')
+    expect(source).toContain('if (!migrated)')
   })
 
   it('retries failed updater watchers with capped backoff instead of a one-second hot loop', () => {
