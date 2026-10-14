@@ -30,7 +30,7 @@ export function goalBlockedByClosedUniversalMission(
     }
     // Team types are an extension of the shared SessionEventMap; the Goal
     // package intentionally does not import Teams or load its Host runtime.
-    if ((event as SessionEvent).type !== 'team/mission') continue
+    if ((event.type as string) !== 'team/mission') continue
     const data: unknown = event.data
     if (!isRecord(data) || data.version !== 1 || data.teamId !== session.id) continue
     const snapshot = data.snapshot
