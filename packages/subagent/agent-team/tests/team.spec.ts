@@ -102,7 +102,7 @@ function spawn(
   ctx: Context,
   lead: Agent,
   name: string,
-  options: { context?: 'fresh' | 'fork'; provider?: string } = {},
+  options: { context?: 'fresh' | 'fork'; provider?: string; missionComplexity?: 'simple' | 'medium' | 'difficult' | 'exceptional' } = {},
 ) {
   const context = options.context ?? 'fresh'
   return ctx.agentTeams.spawnTeammate(lead, {
@@ -111,6 +111,7 @@ function spawn(
     prompt: content(`${name} initial`),
     context,
     provider: options.provider ?? (context === 'fork' ? 'fork' : 'spawn'),
+    ...options.missionComplexity === undefined ? {} : { missionComplexity: options.missionComplexity },
     signal: SIGNAL,
   })
 }
@@ -184,6 +185,30 @@ describe('Team identity and provisioning', () => {
     }
   })
 
+  it('persists one genuine universal mission and fences worker activity at Lead completion', async () => {
+    const { ctx, lead } = await setup(['hang'])
+    lead.session.append('user/message', createUserMessage({
+      source: { kind: 'user' }, content: [{ type: 'text', text: 'Build a verified web dashboard' }],
+    }), { surfaceOp: 'append' })
+    const child = await spawn(ctx, lead, 'dashboard-worker')
+    await waitRunning(ctx, child.member.id)
+    const live = ctx.agentTeams.missionSnapshot(lead)
+    expect(live).toMatchObject({
+      phase: 'running', revision: 1, cancellationEpoch: 0,
+      objective: 'Build a verified web dashboard',
+    })
+    await ctx.sessions.flush(lead.session)
+    lead.session.append('turn/start', { turn: 1 })
+    lead.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    await vi.waitFor(() => {
+      expect(ctx.agentTeams.missionSnapshot(lead)).toMatchObject({
+        phase: 'partial', revision: 2, cancellationEpoch: 1,
+      })
+    }, { timeout: 5_000 })
+    await expect(spawn(ctx, lead, 'late-worker')).rejects.toMatchObject({ code: 'TEAM_MISSION_CLOSED' })
+    await waitNoAgent(ctx, child.member.id)
+  })
+
   it('admits up to three concurrent specialist teammates and rejects a fourth', async () => {
     const { ctx, lead } = await setup(['hang', 'hang', 'hang'], { maxMembers: 3 })
     const first = await spawn(ctx, lead, 'first-worker')
@@ -200,6 +225,33 @@ describe('Team identity and provisioning', () => {
     await waitNoAgent(ctx, first.member.id)
     await waitNoAgent(ctx, second.member.id)
     await waitNoAgent(ctx, third.member.id)
+  })
+
+  it('atomically enforces mission tiers during actual roster admission, even with concurrent requests', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang', 'hang', 'hang'], { maxMembers: 5 })
+    const first = await spawn(ctx, lead, 'tier-one', { missionComplexity: 'simple' })
+    await waitRunning(ctx, first.member.id)
+    await expect(spawn(ctx, lead, 'tier-extra', { missionComplexity: 'simple' }))
+      .rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    const second = await spawn(ctx, lead, 'tier-two', { missionComplexity: 'medium' })
+    await waitRunning(ctx, second.member.id)
+    await expect(spawn(ctx, lead, 'tier-three-denied', { missionComplexity: 'medium' }))
+      .rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    const third = await spawn(ctx, lead, 'tier-three', { missionComplexity: 'difficult' })
+    await waitRunning(ctx, third.member.id)
+    await expect(spawn(ctx, lead, 'tier-four-denied', { missionComplexity: 'difficult' }))
+      .rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    const attempts = await Promise.allSettled([
+      spawn(ctx, lead, 'tier-four', { missionComplexity: 'exceptional' }),
+      spawn(ctx, lead, 'tier-five', { missionComplexity: 'exceptional' }),
+      spawn(ctx, lead, 'tier-six', { missionComplexity: 'exceptional' }),
+    ])
+    expect(attempts.filter(item => item.status === 'fulfilled')).toHaveLength(2)
+    expect(attempts.filter(item => item.status === 'rejected')).toHaveLength(1)
+    const active = ctx.agentTeams.listMembers(lead).filter(member =>
+      member.role === 'teammate' && member.status === 'running')
+    for (const member of active) ctx.agentTeams.interrupt(lead, member.name)
+    for (const member of active) await waitNoAgent(ctx, member.id)
   })
 
   it('admits five independent workers when explicitly configured and rejects a sixth', async () => {
@@ -1273,16 +1325,18 @@ describe('Team mailbox and waiting', () => {
       delivery: 'quiet', signal: SIGNAL,
     })
     expect(sent.status).toBe('accepted')
-    await vi.waitFor(() => expect(steer).toHaveBeenCalledTimes(1))
+    await vi.waitFor(() => { expect(steer).toHaveBeenCalledTimes(1) })
     const input = steer.mock.calls[0]![0]
     expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
       .toContain('Respond to argo by name')
     expect(input.content.filter(block => block.type === 'text').map(block => block.text).join('\n'))
       .toContain('Execute that next action in this turn')
-    await vi.waitFor(() => expect(adapter.requests).toHaveLength(2))
-    await vi.waitFor(() => expect(lead.session.events.some(event => event.type === 'assistant/message'
-      && event.data.message.content.some(block => block.type === 'text'
-        && block.text === 'Argo, revisaré la alternativa y te diré cómo seguimos.'))).toBe(true))
+    await vi.waitFor(() => { expect(adapter.requests).toHaveLength(2) })
+    await vi.waitFor(() => {
+      expect(lead.session.events.some(event => event.type === 'assistant/message'
+        && event.data.message.content.some(block => block.type === 'text'
+          && block.text === 'Argo, revisaré la alternativa y te diré cómo seguimos.'))).toBe(true)
+    })
     await ctx.agentTeams.sendMessage(worker, {
       target: 'lead', purpose: 'update', content: content('Sigo buscando.'), delivery: 'quiet', signal: SIGNAL,
     })

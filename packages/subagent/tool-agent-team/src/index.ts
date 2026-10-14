@@ -2,6 +2,7 @@
 
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
+import { PHOENIX_CODEX_AUTO_WORKER_MODEL } from '@phoenix-ai/dsh-agent'
 import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
 import {
   selectTeamPersonaName,
@@ -409,7 +410,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
         // keeps the explicitly selected orchestrator model; only Eclipse
         // rotates Sol -> Luna internally. Other providers inherit exactly.
         const profile: TeamModelProfile | undefined = activeProvider === 'openai-codex'
-          ? { provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' }
+          ? { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_WORKER_MODEL, reasoningEffort: 'max' }
           : undefined
         const agentOptions: AgentOptions | undefined = profile !== undefined
           ? {
@@ -438,6 +439,7 @@ function install(agent: Agent, ctx: Context, config: Required<Config>): () => vo
           prompt: [{ type: 'text', text: args.prompt }],
           context,
           provider: context === 'fork' ? config.forkProvider : config.freshProvider,
+          ...args.mission_complexity === undefined ? {} : { missionComplexity: args.mission_complexity },
           ...agentOptions === undefined ? {} : { agentOptions },
           signal: exec.signal,
         })

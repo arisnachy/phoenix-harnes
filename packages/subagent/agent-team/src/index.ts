@@ -10,12 +10,16 @@ import { TeamChat } from './chat.ts'
 import type { TeamChatReadResult, TeamChatReadRequest, TeamChatReactRequest, TeamChatReplyRequest } from './chat-types.ts'
 import { TeamActivity } from './activity.ts'
 import { errorMessage, TeamError } from './error.ts'
+import { teamExecutionProof } from './execution-evidence.ts'
 import { TeamJournal } from './journal.ts'
 import { TeamRuntimeLifecycle } from './lifecycle.ts'
 import { TeamMailbox } from './mailbox.ts'
 import { TeamRoster } from './roster.ts'
 import type { TeamMembership } from './roster.ts'
 import { TeamTaskBoard } from './task-board.ts'
+import { teamMissionClosed } from './mission-closure.ts'
+import { UniversalMissionLedger } from './universal-mission.ts'
+import type { UniversalMissionSnapshot } from './universal-mission.ts'
 import { TeamId, TeamTaskId } from './types.ts'
 import type {
   Config,
@@ -36,6 +40,8 @@ export type * from './types.ts'
 export type { TeamMembership } from './roster.ts'
 export { TeamId, TeamMessageId, TeamTaskId } from './types.ts'
 export { TeamError } from './error.ts'
+export { replayUniversalMission, universalMissionAcceptsEvent, universalMissionTerminal } from './universal-mission.ts'
+export type { UniversalMissionPhase, UniversalMissionSnapshot } from './universal-mission.ts'
 export { teammateBudgetForMission } from './mission-sizing.ts'
 export type { MissionComplexity } from './mission-sizing.ts'
 export { teamExecutionProof, teamExecutionRequirement } from './execution-evidence.ts'
@@ -101,17 +107,20 @@ export class TeamService extends TypertRemoteService {
   /** Validated deployment limits used by every Team operation. */
   private readonly config: Required<Config>
 
+  private readonly teamContext: Context
   private readonly activity: TeamActivity
   private readonly lifecycle: TeamRuntimeLifecycle
   private readonly journal: TeamJournal
   private readonly roster: TeamRoster
   private readonly mailbox: TeamMailbox
   private readonly tasks: TeamTaskBoard
+  private readonly missions: UniversalMissionLedger
   private readonly chat: TeamChat
   private readonly pendingChat = new Set<Promise<unknown>>()
 
   constructor(ctx: Context, config: Config = {}) {
     super(ctx, 'agentTeams')
+    this.teamContext = ctx
     this.config = {
       maxMembers: memberLimit(config.maxMembers ?? DEFAULT_MAX_MEMBERS),
       maxTasks: positiveLimit('maxTasks', config.maxTasks ?? DEFAULT_MAX_TASKS),
@@ -129,6 +138,7 @@ export class TeamService extends TypertRemoteService {
     this.activity = new TeamActivity()
     this.lifecycle = new TeamRuntimeLifecycle(this.config.disposalTimeoutMs)
     this.journal = new TeamJournal(ctx, (root) => { this.activity.notify(TeamId(root.id)) })
+    this.missions = new UniversalMissionLedger(this.journal)
     this.roster = new TeamRoster(ctx, this.journal, this.lifecycle, this.config.maxMembers, this.config.maxMessageBytes)
     this.mailbox = new TeamMailbox(
       ctx,
@@ -155,8 +165,20 @@ export class TeamService extends TypertRemoteService {
           || (event.data.reason.kind === 'aborted' && event.data.reason.reason.kind === 'user'))) {
         const lead = ctx.agents.get(session.id)
         if (lead?.session === session) {
+          // Capture the identity now: an awaited journal mutation may otherwise
+          // run after a user has started the next mission on this same Lead.
+          const closingMissionId = this.missions.read(lead)?.id
+          void this.missions.close(
+            lead,
+            event.data.reason.kind === 'aborted',
+            this.missionCompletionProof(lead),
+            closingMissionId,
+          ).catch((error: unknown) => {
+            ctx.logger.warn(`Universal mission closure failed: ${errorMessage(error)}`)
+          })
           for (const childId of this.roster.liveChildrenByRoot().get(lead) ?? []) {
-            if (ctx.agents.get(childId)?.status !== 'running') continue
+            // An idle continuable child can still receive queued wakeups; cut it off too.
+            if (ctx.agents.get(childId) === undefined) continue
             try {
               ctx.subagents.interrupt(childId, { kind: 'ancestor', agent: lead })
             } catch (error: unknown) {
@@ -184,6 +206,88 @@ export class TeamService extends TypertRemoteService {
     })
     ctx.effect(() => () => this.disposeRuntime(), 'agentTeams.runtimeLifecycle()')
     for (const agent of ctx.agents.list()) this.scheduleRecovery(agent)
+  }
+
+  /**
+   * Read durable execution and verification receipts, not model-written claims.
+   * This conservative gate closes unverifiable work as partial, never as success.
+   * @param root - real Lead whose Team sessions contain tool receipts.
+   * @returns verifiable evidence IDs and whether all assigned work was checked.
+   */
+  private missionCompletionProof(root: Agent): {
+    readonly verified: boolean
+    readonly evidenceIds: readonly string[]
+  } {
+    const state = this.journal.state(root)
+    const mission = this.missions.read(root)
+    if (mission === undefined) return { verified: false, evidenceIds: [] }
+    // A Lead Session may contain several human missions. Never use old workers,
+    // tasks or QA receipts to certify the next mission.
+    const first = root.session.events.findLast(event =>
+      event.type === 'team/mission' && event.data.snapshot.id === mission.id
+      && event.data.snapshot.revision === 1)
+    if (first === undefined) return { verified: false, evidenceIds: [] }
+    const currentEvents = root.session.events.filter(event => event.seq > first.seq)
+    const workerIds = new Set(currentEvents.flatMap(event =>
+      event.type === 'team/member' && event.data.member.phase === 'provisioning'
+        ? [event.data.member.id] : []))
+    const taskIds = new Set(currentEvents.flatMap(event =>
+      event.type === 'team/task' && event.data.task.revision === 1
+        ? [event.data.task.id] : []))
+    const children = [...state.members.values()].filter(member => workerIds.has(member.id))
+    const tasks = [...state.tasks.values()].filter(task =>
+      task.status !== 'deleted' && taskIds.has(task.id))
+    const tasksDone = tasks.every(task => task.status === 'completed')
+    const evidenceIds: string[] = []
+    let hasConfirmation = false
+    // A failed or never-started specialist cannot disappear from QA just because
+    // other workers succeeded. Count every provisioned worker of this mission.
+    let workersVerified = children.length > 0 && children.every(member => member.phase === 'active')
+    for (const child of children) {
+      if (child.phase !== 'active') continue
+      const session = this.teamContext.sessions.get(child.id)
+      if (session === undefined) { workersVerified = false; continue }
+      const proof = teamExecutionProof(session.events)
+      if (proof.requirement === 'none' || !proof.satisfied) { workersVerified = false; continue }
+      const toolCalls = new Map<string, string>()
+      for (const event of session.events) {
+        if (event.type === 'tool/call') toolCalls.set(String(event.data.callId), event.data.name)
+        if (event.type !== 'tool/result' || event.data.error !== undefined
+          || event.data.message.content.some(block => block.isError === true)) continue
+        const callId = String(event.data.message.source.callId)
+        const name = toolCalls.get(callId)
+        if (name !== undefined && proof.tools.some(tool => name.endsWith(tool))) {
+          evidenceIds.push(`${child.id}:${callId}`)
+          hasConfirmation ||= /(?:^|__|_|-)(?:verify|check|test|typecheck|build|inspect|read|wait_for|status)(?:$|_|-)/iu.test(name)
+        }
+      }
+    }
+    // Kira owns verification: a real successful check by the Lead also counts.
+    // Check direct tool results, not only the child proof subset, because a GitHub
+    // or design specialist's assignment matcher may exclude independent QA tools.
+    const successfulConfirmation = (events: readonly import('@phoenix-ai/dsh-session').SessionEvent[]): boolean => {
+      const calls = new Map<string, string>()
+      for (const event of events) {
+        if (event.type === 'tool/call') calls.set(String(event.data.callId), event.data.name)
+        if (event.type !== 'tool/result' || event.data.error !== undefined
+          || event.data.message.content.some(block => block.isError === true)) continue
+        const tool = calls.get(String(event.data.message.source.callId))
+        if (tool !== undefined
+          && /(?:^|__|_|-)(?:verify|check|test|typecheck|build|inspect|read|wait_for|status)(?:$|_|-)/iu.test(tool)) {
+          return true
+        }
+      }
+      return false
+    }
+    hasConfirmation ||= successfulConfirmation(currentEvents)
+    for (const child of children) {
+      const session = this.teamContext.sessions.get(child.id)
+      if (session !== undefined) hasConfirmation ||= successfulConfirmation(session.events)
+    }
+    return {
+      verified: workersVerified && tasksDone && hasConfirmation && evidenceIds.length >= children.length,
+      evidenceIds,
+    }
   }
 
   /** Read actual team outputs without starting agents.
@@ -259,7 +363,24 @@ export class TeamService extends TypertRemoteService {
    * @returns the active roster row.
    */
   async spawnTeammate(caller: Agent, request: SpawnTeammateRequest): Promise<SpawnTeammateResult> {
+    const membership = this.roster.membership(caller)
+    if (membership.role !== 'lead') throw new TeamError('only the Team Lead can create teammates', 'TEAM_LEAD_REQUIRED')
+    if (teamMissionClosed(caller.session.events)) {
+      throw new TeamError('the last mission is closed; a new user turn is required', 'TEAM_MISSION_CLOSED')
+    }
+    request.signal.throwIfAborted()
+    await this.missions.ensure(membership.root, request.description, this.config.maxMembers)
+    request.signal.throwIfAborted()
     return await this.roster.spawn(caller, request)
+  }
+
+  /**
+   * Read the authoritative root-owned mission checkpoint without waking workers.
+   * @param caller - any live teammate or Lead in the mission.
+   * @returns durable state, or undefined before delegation.
+   */
+  missionSnapshot(caller: Agent): UniversalMissionSnapshot | undefined {
+    return this.missions.read(this.roster.membership(caller).root)
   }
 
   /**
@@ -269,6 +390,9 @@ export class TeamService extends TypertRemoteService {
    * @returns durable message identity and immediate-delivery observation.
    */
   async sendMessage(caller: Agent, request: SendTeamMessageRequest): Promise<SendTeamMessageResult> {
+    if (teamMissionClosed(this.roster.membership(caller).root.session.events)) {
+      throw new TeamError('the Team mission is closed; peer messages cannot reopen it', 'TEAM_MISSION_CLOSED')
+    }
     return await this.mailbox.send(caller, request)
   }
 
@@ -326,7 +450,11 @@ export class TeamService extends TypertRemoteService {
    * @returns the revision-one task view.
    */
   async createTask(caller: Agent, request: CreateTeamTaskRequest): Promise<TeamTaskView> {
-    return await this.tasks.create(this.roster.membership(caller), request)
+    const membership = this.roster.membership(caller)
+    if (teamMissionClosed(membership.root.session.events)) {
+      throw new TeamError('closed Team mission cannot create tasks', 'TEAM_MISSION_CLOSED')
+    }
+    return await this.tasks.create(membership, request)
   }
 
   /**
@@ -355,7 +483,11 @@ export class TeamService extends TypertRemoteService {
    * @returns the committed next task revision.
    */
   async updateTask(caller: Agent, request: UpdateTeamTaskRequest): Promise<TeamTaskView> {
-    return await this.tasks.update(caller, this.roster.membership(caller), request)
+    const membership = this.roster.membership(caller)
+    if (teamMissionClosed(membership.root.session.events)) {
+      throw new TeamError('closed Team mission cannot mutate tasks', 'TEAM_MISSION_CLOSED')
+    }
+    return await this.tasks.update(caller, membership, request)
   }
 
   /**
