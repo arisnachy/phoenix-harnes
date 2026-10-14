@@ -108,6 +108,16 @@ it('requests the first native sentence while the assembled turn remains open', a
   await waitForAssembledBoot()
   await openFixtureSession()
 
+  // The shipped composer publishes its first glyph before the header expands.
+  const composer = document.querySelector<HTMLTextAreaElement>('[data-input-scroll] textarea')
+  const conversation = composer?.closest('[data-conversation-scroll]')?.parentElement
+  if (composer === null || conversation === null || conversation === undefined) throw new Error('assembled composer missing')
+  fireEvent.change(composer, { target: { value: 'p' } })
+  expect(composer.value).toBe('p')
+  expect(conversation.getAttribute('data-header-compact')).toBe('true')
+  await waitFor(() => expect(document.querySelector('[data-input-backdrop]')?.textContent).toContain('p'))
+  fireEvent.change(composer, { target: { value: '' } })
+
   const fixtureWindow = window as VoiceFixtureWindow
   const trace = fixtureWindow.__fxVoiceTrace
   const timing = fixtureWindow.__fxTiming

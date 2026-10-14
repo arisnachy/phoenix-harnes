@@ -144,11 +144,13 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('one real teammate is the default for a simple delegated mission')
     expect(leadPrompt).toContain('three for difficult work')
     expect(leadPrompt).toContain('Five simultaneous teammates is the hard limit')
-    expect(leadPrompt).toContain('outside OpenAI Codex every teammate MUST inherit exactly the currently selected provider and model')
+    expect(leadPrompt).toContain('With a provider other than OpenAI Codex')
+    expect(leadPrompt).toContain('the exact currently selected provider/model')
+    expect(leadPrompt).toContain('never switch those workers to Codex or Luna Max')
     expect(leadPrompt).toContain('Never claim a teammate is running from intent alone')
     expect(leadPrompt).toContain('compare expected quality gain and time saved against added model consumption')
     expect(leadPrompt).toContain('stop a redundant worker when its outcome is no longer needed')
-    expect(leadPrompt).toContain("Aegis is Phoenix's reserved silent reviewer identity")
+    expect(leadPrompt).toContain('Aegis is a reserved, silent reviewer identity ONLY when')
     expect(leadPrompt).toContain('Keep Aegis quiet by default')
     expect(leadPrompt).toContain('purpose review, blocker, or result')
     expect(leadPrompt).toContain('unused KIRA codename')
@@ -679,13 +681,23 @@ describe('dsh-tool-team', () => {
   })
 
   it('adapts roster, mailbox, wait, and task CAS operations to canonical JSON', async () => {
-    const { ctx, lead } = await setup(['hang', textResponse('lead received wakeup')])
+    const { ctx, lead } = await setup(['hang', 'hang'])
     const spawned = await execute(ctx, lead, 'spawn_teammate', {
-      name: 'json-worker', description: 'json worker', prompt: 'wait', context: 'fresh',
+      name: 'json-worker', description: 'update the GitHub README', prompt: 'Update the GitHub README and report the result.', context: 'fresh',
     })
     const childId = spawnedChildId(spawned)
     const child = await waitRunning(ctx, childId)
-
+    const callId = CallId('json-worker-read')
+    child.session.append('tool/call', {
+      turn: 1, step: 1, callId, name: 'mcp__GitHub__update_file',
+      arguments: '{"path":"README.md"}',
+    })
+    child.session.append('tool/result', {
+      turn: 1, step: 1,
+      message: createToolResultMessage({
+        callId, content: [{ type: 'text', text: 'README loaded' }], isError: false,
+      }),
+    }, { surfaceOp: 'append' })
     const roster = await execute(ctx, child, 'list_agents', {})
     expect(JSON.parse(text(roster))).toMatchObject([
       { name: 'lead', role: 'lead' },
@@ -700,6 +712,10 @@ describe('dsh-tool-team', () => {
     expect(peer.isError).toBe(false)
     expect(JSON.parse(text(peer))).toMatchObject({ status: 'accepted' })
     const peerReceipt = JSON.parse(text(peer)) as { messageId: string }
+    expect(lead.session.events.some(event => event.type === 'team/message/queued'
+      && event.data.message.id === peerReceipt.messageId
+      && event.data.message.content.some(block => block.type === 'text'
+        && block.text.includes('✓ Evidencia ejecutada: update_file')))).toBe(true)
     const reacted = await execute(ctx, lead, 'team_react', {
       message_id: peerReceipt.messageId,
       reaction: 'ack',
@@ -716,13 +732,6 @@ describe('dsh-tool-team', () => {
     })
     expect(duplicateReaction.isError).toBe(true)
     expect(text(duplicateReaction)).toContain('only once')
-    const waking = await execute(ctx, child, 'followup_task', {
-      target: 'lead', purpose: 'review', message: 'review the report',
-    })
-    expect(waking.isError).toBe(false)
-    expect(JSON.parse(text(waking))).toMatchObject({ status: 'accepted' })
-    await lead.whenIdle()
-
     const created = await execute(ctx, lead, 'team_task_create', {
       subject: 'tool task',
       description: 'created through tool',
@@ -761,10 +770,22 @@ describe('dsh-tool-team', () => {
     await expect(wait).resolves.toMatchObject({ isError: false })
     expect((await completedCall).isError).toBe(false)
 
+    lead.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Kira, revisa ahora el informe del worker.' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    const waking = await execute(ctx, child, 'followup_task', {
+      target: 'lead', purpose: 'review', message: 'review the report',
+    })
+    expect(waking.isError).toBe(false)
+    expect(JSON.parse(text(waking))).toMatchObject({ status: 'accepted' })
+
     const childInterrupt = await execute(ctx, child, 'interrupt_agent', { target: 'json-worker' })
     expect(childInterrupt.isError).toBe(true)
     await execute(ctx, lead, 'interrupt_agent', { target: 'json-worker' })
     await vi.waitFor(() => { expect(ctx.agents.get(childId)).toBeUndefined() }, { timeout: 5_000 })
+    lead.cancel({ kind: 'user' })
+    await lead.whenIdle()
   })
 
   it('adapts optional task filters, mutations, pagination, and default waiting', async () => {

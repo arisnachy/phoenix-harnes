@@ -122,10 +122,10 @@ describe('chat durable ownership and delivery', () => {
   it('rejects answers outside the accepted human request ownership', async () => {
     for (const overrides of [{ senderKind: 'agent' as const }, { missionId: 'elsewhere' }, { deliveries: [] }]) {
       const f = await fixture(); f.row(overrides)
-      await expect(f.chat.answer(f.worker, { messageId: 'question', text: 'Because.' })).rejects.toThrow('not accepted')
+      await expect(f.chat.answer(f.worker, { messageId: 'question', text: 'Because.' })).rejects.toThrow('team_chat_answer requires an accepted')
     }
     const f = await fixture()
-    await expect(f.chat.answer(f.worker, { messageId: 'missing', text: 'Because.' })).rejects.toThrow('not accepted')
+    await expect(f.chat.answer(f.worker, { messageId: 'missing', text: 'Because.' })).rejects.toThrow('team_chat_answer requires an accepted')
     f.row({ text: 'Send the email.' })
     await expect(f.chat.answer(f.worker, { messageId: 'question', text: 'Because.' })).rejects.toThrow('operational requests')
   })
@@ -214,7 +214,7 @@ describe('chat durable ownership and delivery', () => {
   it('rejects accepted missionless user messages as conversational answer owners', async () => {
     const f = await fixture()
     f.row({ missionId: undefined })
-    await expect(f.chat.answer(f.worker, { messageId: 'question', text: 'Because.' })).rejects.toThrow('not accepted')
+    await expect(f.chat.answer(f.worker, { messageId: 'question', text: 'Because.' })).rejects.toThrow('team_chat_answer requires an accepted')
   })
 
   it('delivers to a cold persisted child and returns bounded exact-byte reads', async () => {
@@ -243,7 +243,7 @@ describe('chat durable ownership and delivery', () => {
     f.root.append('user/message', createUserMessage({ content: content('   '), source: { kind: 'user' } }), { surfaceOp: 'append' })
     expect(f.chat.messages(f.root)).toEqual([])
     f.row({ deliveries: undefined })
-    await expect(f.chat.answer(f.worker, { messageId: 'question', text: 'Because.' })).rejects.toThrow('not accepted')
+    await expect(f.chat.answer(f.worker, { messageId: 'question', text: 'Because.' })).rejects.toThrow('team_chat_answer requires an accepted')
     await f.chat.reply({ sessionId: f.root.id, targetId: f.child.id, requestId: 'question', text: 'Why this approach?' })
     expect(f.followup).not.toHaveBeenCalled()
     expect(f.chat.messages(f.root)[0]?.supervised).toBe(true)

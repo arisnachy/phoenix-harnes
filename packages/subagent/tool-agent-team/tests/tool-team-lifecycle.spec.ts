@@ -12,26 +12,42 @@ describe('Team tool routing and installation lifecycle', () => {
     const { ctx, lead } = await setup(['hang'], false, {
       defaultModelProfile: 'foreign', modelProfiles: { foreign: { provider: 'mock', model: 'foreign' } },
     })
-    ctx.llm.registerAdapter(['openai-codex'], new MockAdapter(['hang']))
+    ctx.llm.registerAdapter(['openai-codex'], new MockAdapter(['hang'], {
+      efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
+      defaultEffort: ReasoningEffortId('max'),
+    }))
     lead.options.provider = 'openai-codex'
     lead.options.model = 'selected'
+    lead.session.append('turn/start', { turn: 1 })
+    lead.session.append('request/header', {
+      reason: 'initial',
+      header: { config: { provider: 'openai-codex', model: 'selected' } },
+    })
     const result = await execute(ctx, lead, 'spawn_teammate', { name: 'inherit', description: 'inherit', prompt: 'wait' })
     expect(result.isError).toBe(false)
     const child = await waitRunning(ctx, spawnedChildId(result))
-    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'selected' })
+    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' })
     await execute(ctx, lead, 'interrupt_agent', { target: 'inherit' })
     await waitNoAgent(ctx, child.id)
   })
 
-  it('uses optional token limits from a chosen Codex profile without inventing reasoning effort', async () => {
+  it('routes Codex teammates to Luna Max despite a configured foreign worker profile', async () => {
     const { ctx, lead } = await setup([], false, { modelProfiles: { bounded: { provider: 'openai-codex', model: 'worker', maxTokens: 512 } } })
-    ctx.llm.registerAdapter(['openai-codex'], new MockAdapter(['hang']))
+    ctx.llm.registerAdapter(['openai-codex'], new MockAdapter(['hang'], {
+      efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
+      defaultEffort: ReasoningEffortId('max'),
+    }))
     lead.options.provider = 'openai-codex'
     lead.options.model = 'planner'
+    lead.session.append('turn/start', { turn: 1 })
+    lead.session.append('request/header', {
+      reason: 'initial',
+      header: { config: { provider: 'openai-codex', model: 'planner' } },
+    })
     const result = await execute(ctx, lead, 'spawn_teammate', { name: 'bounded', description: 'bounded', prompt: 'wait', model_profile: 'bounded' })
     const child = await waitRunning(ctx, spawnedChildId(result))
-    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'worker', maxTokens: 512 })
-    expect(child.options.reasoningEffort).toBeUndefined()
+    expect(child.options).toMatchObject({ provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max' })
+    expect(child.options.model).not.toBe('worker')
     await execute(ctx, lead, 'interrupt_agent', { target: 'bounded' })
     await waitNoAgent(ctx, child.id)
   })

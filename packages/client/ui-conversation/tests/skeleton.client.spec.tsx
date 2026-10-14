@@ -694,7 +694,8 @@ describe('Contextual focus chrome', () => {
     try {
       const b = mount(conversationSnapshot())
       const root = b.view.container.querySelector('[data-phase="active"]')
-      const textarea = b.view.getByRole<HTMLTextAreaElement>('textbox')
+      const textarea = b.view.getByRole('textbox')
+      if (!(textarea instanceof HTMLTextAreaElement)) throw new Error('composer textarea is required')
       if (root === null) throw new Error('conversation shell is required')
       fireEvent.change(textarea, { target: { value: 'p' } })
       expect(textarea.value).toBe('p')

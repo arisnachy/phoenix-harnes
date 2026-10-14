@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { createUserMessage } from '@phoenix-ai/dsh-llm'
 import { textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import { setup, waitNoAgent, SIGNAL } from '../../tool-agent-team/tests/team-lifecycle-fixture.ts'
 
@@ -9,6 +10,10 @@ describe('Team mailbox worker-route inheritance', () => {
     await waitNoAgent(ctx, worker.member.id)
     delete lead.options.provider
     delete lead.options.model
+    lead.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: 'Kira, continúa el trabajo del Team worker.' }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
     const followup = vi.spyOn(ctx.subagents, 'followup')
     const result = await ctx.agentTeams.sendMessage(lead, { target: 'persisted', purpose: 'assignment', content: [{ type: 'text', text: 'continue' }], delivery: 'wakeup', signal: SIGNAL })
     expect(result.status).toBe('accepted')

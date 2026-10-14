@@ -9,7 +9,7 @@ import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
 import { defineTool } from '@phoenix-ai/dsh-tools'
 import { CallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
-import { SessionId, type Session } from '@phoenix-ai/dsh-session'
+import { KNOWN_SESSION_EVENT_TYPES, SessionId, type Session } from '@phoenix-ai/dsh-session'
 import SessionProjections from '@phoenix-ai/dsh-session-projection'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
 import SubagentService from '@phoenix-ai/dsh-subagent'
@@ -24,10 +24,13 @@ import type { TeamMemberSnapshot, TeamMessageSnapshot, TeamTaskSnapshot } from '
 
 const SIGNAL = new AbortController().signal
 const roots: string[] = []
+const knownEventTypes = KNOWN_SESSION_EVENT_TYPES as Set<string>
+const hadTeamMissionEventType = knownEventTypes.has('team/mission')
 
 afterEach(() => {
   vi.useRealTimers()
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+  if (!hadTeamMissionEventType) knownEventTypes.delete('team/mission')
 })
 
 /** Detached durable Team read: the service exposes views, so assertions fold the Lead log. */
@@ -51,6 +54,9 @@ async function setup(
 ) {
   const ctx = new Context()
   await mountAgentLoopTestDependencies(ctx)
+  // Universal Team mission snapshots are a domain SessionEventMap extension;
+  // register the extension before JSONL can read a cold child during recovery.
+  knownEventTypes.add('team/mission')
   const storageRoot = mkdtempSync(join(tmpdir(), 'dsh-team-'))
   roots.push(storageRoot)
   await ctx.plugin(JsonlSessionPersistence, { root: storageRoot })
@@ -152,15 +158,20 @@ describe('Team identity and provisioning', () => {
     lead.options.provider = 'other'
     lead.options.model = 'other-model'
     persistModelSelectionPreference(lead.session, { provider: 'other', model: 'other-model' }, 'explicit')
+    if (!live) {
+      // The worker finished the previous mission. A real new human turn is
+      // the supported admission boundary for a later peer assignment.
+      lead.session.append('user/message', createUserMessage({
+        content: content('Kira, continúa el trabajo del Team worker.'), source: { kind: 'user' },
+      }), { surfaceOp: 'append' })
+    }
     const handoff = await ctx.agentTeams.sendMessage(lead, {
       target: 'route-worker', content: content('continue on the selected route'), delivery: 'wakeup', signal: SIGNAL,
     })
-    expect(handoff.status).toBe(live ? 'accepted' : 'queued')
+    // Both paths have a genuine user turn now: an inactive worker may be
+    // cold-resumed and should receive the same selected route as a live one.
+    expect(handoff.status).toBe('accepted')
     expect(initial?.provider).toBe('mock')
-    if (!live) {
-      expect(durable(lead).pendingMessages).toEqual([expect.objectContaining({ id: handoff.messageId })])
-      return
-    }
     if (live) {
       expect(ctx.agents.get(started.member.id)?.options.provider).toBe('other')
       release.resolve(undefined)
@@ -1557,24 +1568,24 @@ describe('Team mailbox and waiting', () => {
 
     const stored = await ctx.sessionPersistence.inspect(started.member.id)
     const inboxReceipts = stored.events.flatMap(event => event.type === 'agent/inbox/spliced'
-      ? event.data.inserted.filter(message => message.source.kind === 'team-message'
-        && (message.source.messageId === quiet.messageId || message.source.messageId === waking.messageId))
-        .map(message => message.source.messageId)
+      ? event.data.inserted.flatMap(message => message.source.kind === 'team-message'
+        && (message.source.messageId === quiet.messageId || message.source.messageId === waking.messageId)
+        ? [message.source.messageId] : [])
       : [])
     expect(inboxReceipts).toEqual([quiet.messageId, waking.messageId])
     const delivered = lead.session.events
-      .filter(event => event.type === 'team/message/delivered'
-        && (event.data.messageId === quiet.messageId || event.data.messageId === waking.messageId))
-      .map(event => event.data.messageId)
+      .flatMap(event => event.type === 'team/message/delivered'
+        && (event.data.messageId === quiet.messageId || event.data.messageId === waking.messageId)
+        ? [event.data.messageId] : [])
     expect(delivered).toEqual([quiet.messageId, waking.messageId])
 
     // Recovery is idempotent after the cold resume: a second pass emits no duplicate receipt.
     expect(ctx.agents.get(resumed.id)).toBe(resumed)
     await teamInternals(ctx).recoverFor(resumed)
     expect((await ctx.sessionPersistence.inspect(started.member.id)).events.flatMap(event => event.type === 'agent/inbox/spliced'
-      ? event.data.inserted.filter(message => message.source.kind === 'team-message'
-        && (message.source.messageId === quiet.messageId || message.source.messageId === waking.messageId))
-        .map(message => message.source.messageId)
+      ? event.data.inserted.flatMap(message => message.source.kind === 'team-message'
+        && (message.source.messageId === quiet.messageId || message.source.messageId === waking.messageId)
+        ? [message.source.messageId] : [])
       : [])).toEqual([quiet.messageId, waking.messageId])
     expect(lead.session.events.filter(event => event.type === 'team/message/delivered'
       && (event.data.messageId === quiet.messageId || event.data.messageId === waking.messageId))).toHaveLength(2)

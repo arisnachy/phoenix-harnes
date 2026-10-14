@@ -9,7 +9,7 @@ import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
 import SessionProjections from '@phoenix-ai/dsh-session-projection'
 import { createAssistantMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
-import { SessionId } from '@phoenix-ai/dsh-session'
+import { KNOWN_SESSION_EVENT_TYPES, SessionId } from '@phoenix-ai/dsh-session'
 import JsonlSessionPersistence from '@phoenix-ai/dsh-session-persistence-jsonl'
 import SqliteSessionPersistence from '@phoenix-ai/dsh-session-persistence-sqlite'
 import SubagentService, { seedDescriptorTurn, snapshotSubagentDescriptor } from '@phoenix-ai/dsh-subagent'
@@ -22,6 +22,8 @@ const SIGNAL = new AbortController().signal
 const PERSISTENCE_TEST_TIMEOUT_MS = 15_000
 const roots: string[] = []
 const contexts = new Set<Context>()
+const knownEventTypes = KNOWN_SESSION_EVENT_TYPES as Set<string>
+const hadTeamMissionEventType = knownEventTypes.has('team/mission')
 
 /** Detached durable Team read: the service exposes views, so assertions fold the Lead log. */
 function durable(agent: Agent): {
@@ -61,6 +63,7 @@ afterEach(async () => {
       failures.push(error)
     }
   }
+  if (!hadTeamMissionEventType) knownEventTypes.delete('team/mission')
   if (failures.length > 0) throw new AggregateError(failures, 'Agent Teams persistence test cleanup failed')
 })
 
@@ -95,6 +98,10 @@ async function stack(
   const ctx = new Context()
   contexts.add(ctx)
   await mountAgentLoopTestDependencies(ctx)
+  // TeamService contributes this SessionEventMap extension. Register it in
+  // the persistence harness before any Team journal can be flushed so restart
+  // validates the real mission snapshot rather than treating it as foreign.
+  knownEventTypes.add('team/mission')
   await backend.mount(ctx, root)
   await ctx.plugin(AgentLoop, { agents: [] })
   if (projections) await ctx.plugin(SessionProjections)
