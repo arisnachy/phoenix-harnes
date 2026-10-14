@@ -14,6 +14,25 @@ describe('Team lead worker route', () => {
     expect(teamWorkerSelection({ session, options: { provider: 'mock', model: 'mock' } } as Agent)).toEqual({ provider: 'mock', model: 'mock' })
   })
 
+  it('always routes Codex Sol planners and other Codex selections to Luna Max at delivery', () => {
+    const session = Session.create(SessionId('sol-planner'))
+    const lead = { session, options: { provider: 'openai-codex', model: 'gpt-6.1-sol',
+      reasoningEffort: ReasoningEffortId('low') } } as Agent
+    expect(teamWorkerSelection(lead)).toEqual({
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
+    })
+    persistModelSelectionPreference(session, {
+      provider: 'openai-codex', model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('high'),
+    }, 'explicit')
+    expect(teamWorkerSelection(lead)?.model).toBe('gpt-6-luna')
+    persistModelSelectionPreference(session, {
+      provider: 'openai-codex', model: 'gpt-6-astra',
+    }, 'explicit')
+    expect(teamWorkerSelection(lead)).toEqual({
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max'),
+    })
+  })
+
   it('keeps non-Codex lead effort and restores explicit preference before options on restart', () => {
     const session = Session.create(SessionId('selected-lead'))
     const options = { provider: 'other', model: 'worker', reasoningEffort: ReasoningEffortId('high') }
