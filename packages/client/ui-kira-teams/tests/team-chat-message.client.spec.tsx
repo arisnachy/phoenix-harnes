@@ -59,6 +59,18 @@ describe('KIRA Team chat message', () => {
     expect(resumed).toEqual(first)
   })
 
+  it('shows the actual teammate Luna badge next to the portrait, not the Lead Sol route', () => {
+    const view = render(<View node={node({ senderId: 'worker-a', senderName: 'atlas',
+      senderKind: 'agent' })} useProjection={() => ({
+      'worker-a': { id: 'worker-a', name: 'Atlas', role: 'skill.engineering',
+        avatar: 'atlas', status: 'working', modelProvider: 'openai-codex', model: 'gpt-6-luna' },
+    })} />)
+    const badge = view.container.querySelector('[data-engine-model="gpt-6-luna"]')
+    expect(badge?.textContent).toBe('☾')
+    expect(view.getByText('Atlas')).toBeTruthy()
+    expect(view.container.querySelector('[data-engine-model="gpt-6.1-sol"]')).toBeNull()
+  })
+
   it('shows Kira with her avatar when a real teammate delegation enters chat', () => {
     const view = render(<View node={node({
       senderId: 'root',
