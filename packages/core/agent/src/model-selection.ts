@@ -131,7 +131,7 @@ export function isKiraCodexAutoLead(
   return isPhoenixCodexAutoSelection(selection)
     || (selection?.provider === 'openai-codex'
       && selection.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
-      && agent?.session?.header?.agentPreset === 'kira-max')
+      && agent?.session.header?.agentPreset === 'kira-max')
 }
 
 function codexPlannerGeneration(model: string): string | undefined {
@@ -652,7 +652,7 @@ function phoenixAutoTurnWasUserStopped(
   agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
   turn: number,
 ): boolean {
-  return turnEvents(agent, turn).some(event => {
+  return turnEvents(agent, turn).some((event) => {
     if (event.type !== 'turn/end') return false
     const data = event.data as {
       readonly reason?: { readonly kind?: string; readonly reason?: { readonly kind?: string } }
@@ -908,7 +908,7 @@ export function installModelSelection(
     const autoStep = isKiraCodexAutoLead(selected, scopedAgent) && scopedAgent !== undefined
       ? nextPhoenixAutoAssemblyStep(scopedAgent)
       : undefined
-    const currentTurn = scopedAgent?.session?.events.findLast(event => event.type === 'turn/start')
+    const currentTurn = scopedAgent?.session.events.findLast(event => event.type === 'turn/start')
     const currentTurnNumber = (currentTurn?.data as { readonly turn?: number } | undefined)?.turn
     const currentRequest = scopedAgent?.session !== undefined && currentTurnNumber !== undefined
       ? directUserTextForTurn(scopedAgent, currentTurnNumber) : ''
