@@ -6,6 +6,7 @@ import styles from './HardnessArtifactNodeView.module.css'
 import { PhoenixVisualizer, supportsPhoenixVisual } from './PhoenixVisualizer.tsx'
 import { Scene3DView } from './Scene3DView.tsx'
 import { auditGameHtml, readGameManifest } from './game-studio-quality.ts'
+import { hasExternalImageReferences, inlineBundledImages } from './html-preview-assets.ts'
 import {
   libraryGameId, listLibraryGames, openGameInWindow, removeLibraryGame, saveLibraryGame,
   type LibraryGame,
@@ -219,13 +220,13 @@ function DeclarativeUi({ record }: { readonly record: JsonRecord }) {
   )
 }
 
-function sandboxDocument(html: string, executable: boolean, gameDiagnostics = false): string {
+function sandboxDocument(html: string, executable: boolean, gameDiagnostics = false, allowExternalImages = false): string {
   // Static HTML previews cannot execute script, so allowing image fetches gives
   // them the same visual fidelity as opening the document directly without
   // granting the document any parent/app authority. Executable mini-apps keep
   // outbound image requests blocked because script-created <img> requests could
   // otherwise become a network exfiltration channel around connect-src 'none'.
-  const imageSources = executable
+  const imageSources = executable && !allowExternalImages
     ? 'img-src data: blob:'
     : 'img-src data: blob: https: http:'
   const csp = [
@@ -322,9 +323,12 @@ interface MiniAppProps {
 }
 
 function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagnostics = false }: MiniAppProps) {
+  const [allowExternalImages, setAllowExternalImages] = useState(false)
+  const externalImagesAvailable = executable && hasExternalImageReferences(html)
   const [frameHeight, setFrameHeight] = useState(1)
   const frameRef = useRef<HTMLIFrameElement>(null)
-  const srcDoc = useMemo(() => sandboxDocument(html, executable, gameDiagnostics), [html, executable, gameDiagnostics])
+  const srcDoc = useMemo(() => sandboxDocument(html, executable, gameDiagnostics, allowExternalImages),
+    [html, executable, gameDiagnostics, allowExternalImages])
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<unknown>): void => {
@@ -402,6 +406,12 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
   }
 
   return (
+    <div className={styles.miniAppWrap}>
+      {externalImagesAvailable && <button type="button" className={styles.remoteImageToggle}
+        aria-pressed={allowExternalImages}
+        onClick={() => { setAllowExternalImages(value => !value) }}>
+        {allowExternalImages ? 'Bloquear imágenes externas' : 'Cargar imágenes externas'}
+      </button>}
     <iframe
       ref={frameRef}
       className={styles.frame}
@@ -412,6 +422,7 @@ function MiniApp({ html, title, executable = false, minimumHeight = 1, gameDiagn
       style={{ height: Math.max(frameHeight, minimumHeight) }}
       onLoad={() => { measureStaticDocument(); syncTheme() }}
     />
+    </div>
   )
 }
 
@@ -488,7 +499,7 @@ function renderBlock(block: JsonRecord, index: number, expanded: boolean): React
     const html = typeof entryFile === 'string' ? entryFile : text(block.html)
     return html === undefined
       ? <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
-      : <MiniApp key={index} html={html} title="HARDNESS mini-app" executable />
+      : <MiniApp key={index} html={files === undefined || entry === undefined ? html : inlineBundledImages(entry, html, files)} title="HARDNESS mini-app" executable />
   }
   return <pre className={styles.code} key={index}>{JSON.stringify(block, null, 2)}</pre>
 }
@@ -661,7 +672,7 @@ function RecordPreview({ record, mime, expanded, title, renderMessageImages }: {
     || visual !== undefined) return <PhoenixVisualizer spec={visual ?? record} />
   if (typeof record.entry === 'string' && isRecord(record.files)) {
     const html = typeof record.files[record.entry] === 'string' ? record.files[record.entry] as string : undefined
-    if (html !== undefined) return <MiniApp html={html} title={title} executable />
+    if (html !== undefined) return <MiniApp html={inlineBundledImages(record.entry, html, record.files)} title={title} executable />
   }
   return <pre className={styles.code}>{JSON.stringify(record, null, 2)}</pre>
 }
