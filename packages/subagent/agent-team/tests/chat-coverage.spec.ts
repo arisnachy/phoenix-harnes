@@ -47,6 +47,7 @@ describe('human teamwork without progress spam', () => {
     expect(shouldPublishTeammateSpeech('Vega: comparte el atlas PNG 48x48 para integrar al héroe.', true, false)).toBe(true)
     expect(shouldPublishTeammateSpeech('Kira, sigo revisando lo mismo.', true, false)).toBe(false)
     expect(shouldPublishTeammateSpeech('Kira, voy a usar otra herramienta.', true, false)).toBe(false)
+    expect(shouldPublishTeammateSpeech('Atlas, voy a usar otra herramienta.', true, false)).toBe(false)
     expect(shouldPublishTeammateSpeech('Otro estado sin cambio significativo.', true, false)).toBe(false)
     expect(shouldPublishTeammateSpeech('', false, false)).toBe(false)
   })
