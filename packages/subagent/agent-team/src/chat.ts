@@ -57,8 +57,8 @@ function answerNeedsEvidence(text: string): boolean {
 }
 
 /**
- * Keep one genuine opening action, then only a new tool-backed milestone or
- * actionable question/blocker. Redundant status narration is still in child
+ * Keep one genuine opening action, then milestones, questions, blockers or
+ * concrete peer dependency handoffs (even without a non-Team tool receipt). Redundant status narration is still in child
  * Session history but does not clutter the human Team conversation.
  * @param message - Actual teammate assistant text.
  * @param alreadySpoke - Whether that teammate spoke visibly in this turn.
@@ -71,10 +71,15 @@ export function shouldPublishTeammateSpeech(message: string, alreadySpoke: boole
   if (!alreadySpoke) return true
   const needsHelp = /[?]|bloquead[oa]|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|approval/iu
   if (needsHelp.test(text)) return true
-  if (!newReceipt) return false
   const heading = /^(?:@?Kira[,!:]?\s*)?(?:ahora |luego |despu[eé]s |next |now )*/iu
   const plan = /^(?:voy a|proceder[eé] a|har[eé]|buscar[eé]|comprobar[eé]|verificar[eé]|revisar[eé]|abrir[eé]|i'll|i will|i am going to|i'm going to)\b/iu
-  return !plan.test(text.replace(heading, ''))
+  if (plan.test(text.replace(heading, ''))) return false
+  if (newReceipt) return true
+  // A real peer dependency can change without a non-Team tool receipt.
+  // Preserve consequential directed handoffs, never repetitive narration.
+  const addressedPeer = /(?:^|\n)\s*@?[\p{L}][\p{L}\p{N}_-]{1,30}[,:]\s+/u
+  const dependency = /\b(?:necesit[oa]|necesitas|espera|depende|integra|integrar|pasame|p[aá]same|entrego|comparto|ajusta|ajustar|usa|usar|recibe|recibir|requiere|requiero|handoff|depends|requires|need|share|integrate|adjust|use this)\b/iu
+  return addressedPeer.test(text) && dependency.test(text)
 }
 
 /** Owns actual output publication and authorized reaction mutations. */
