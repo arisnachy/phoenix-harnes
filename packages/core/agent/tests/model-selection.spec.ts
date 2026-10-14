@@ -303,7 +303,7 @@ describe('installModelSelection()', () => {
     }
   })
 
-  it('exposes the first-step Sol plan policy, then provides a Sol-led execution brief', async () => {
+  it('exposes the first-step Sol plan policy, then provides a Luna Max execution brief', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const events: { type: string; data: unknown }[] = [
@@ -478,7 +478,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('routes real Team handoffs to Luna Max and a blocker to Sol xhigh once and escalates a blocker to Sol xhigh once', async () => {
+  it('routes real Team handoffs to Luna Max and one blocker rescue to Sol xhigh', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -1233,7 +1233,7 @@ describe('installModelSelection()', () => {
     await ctx.fiber.dispose()
   })
 
-  it('rescues repeated Phoenix Auto tool failures with Sol, then resumes Sol/high coordination', async () => {
+  it('rescues repeated Phoenix Auto failures with Sol, then resumes Luna Max coordination', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     const selection: ModelSelectionRef = {
@@ -1285,8 +1285,8 @@ describe('installModelSelection()', () => {
       'agent/request', { turn: 1, step: 5, signal }, () => Promise.resolve(seed),
     )).resolves.toEqual({
       provider: 'openai-codex',
-      model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('high'),
+      model: 'gpt-6-luna',
+      reasoningEffort: ReasoningEffortId('max'),
     })
 
     dispose()
