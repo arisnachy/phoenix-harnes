@@ -6,6 +6,7 @@ import {
   type ToolRunContext,
 } from '@phoenix-ai/dsh-tools'
 import type { ProactivityEngine, ProactivityRecurrence, ProactivityTask } from './proactivity-engine.ts'
+import { activeScheduledMissionScope } from './mission-scope.ts'
 
 /** Optional integrations used by the model-facing proactivity tools. */
 export interface ProactivityToolOptions {
@@ -200,6 +201,11 @@ export function createProactivityCreateTool(
         ...(args.attentionPriority === undefined ? {} : { attentionPriority: args.attentionPriority }),
         ...(args.attentionText === undefined ? {} : { attentionText: args.attentionText }),
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
+        // Explicit human schedules survive the current conversation; model-
+        // initiated followups are fenced to the active UME mission instead.
+        ...(args.requestedByUser === true || exec.agent === undefined ? {} : {
+          missionScope: activeScheduledMissionScope(exec.agent.session),
+        }),
       })
       return taskView(task)
     },
@@ -248,6 +254,11 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
         delivery: 'chat',
         attentionMode: 'off',
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
+        // Explicit human schedules survive the current conversation; model-
+        // initiated followups are fenced to the active UME mission instead.
+        ...(args.requestedByUser === true || exec.agent === undefined ? {} : {
+          missionScope: activeScheduledMissionScope(exec.agent.session),
+        }),
       })
       return taskView(task)
     },
