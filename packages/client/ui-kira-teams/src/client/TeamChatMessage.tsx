@@ -147,6 +147,10 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
     ? undefined
     : identityFor(data.targetName, data.targetId)
   const senderStatus = participants[data.senderId]?.status
+  // This is the actual child request/answer provenance, not the Team persona
+  // or the Lead's Sol planning model. Old sessions without it show no symbol.
+  const servingModel = data.senderKind === 'agent' ? participants[data.senderId]?.model : undefined
+  const servingProvider = participants[data.senderId]?.modelProvider
   const targetStatus = data.purpose === 'assignment'
     ? participants[data.targetId]?.status
     : undefined
@@ -183,6 +187,14 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
         <div className={data.senderKind === 'user' ? undefined : css.card}>
         <div className={css.meta}>
           <strong>{sender.name}</strong>
+          {servingModel !== undefined && <span className={css.modelBadge}
+            data-team-actual-model={servingModel}
+            title={`${servingProvider ?? 'Proveedor no registrado'} · ${servingModel}`}
+            aria-label={`Modelo real: ${servingModel}`}>
+            {/sol(?:$|[-_])/iu.test(servingModel) ? '☀'
+              : /luna(?:$|[-_])/iu.test(servingModel) ? '☾'
+                : /astra(?:$|[-_])/iu.test(servingModel) ? '★' : 'ϟ'}
+          </span>}
           <span>{(data.role ?? participants[data.senderId]?.role) === undefined ? sender.role
             : t?.((data.role ?? participants[data.senderId]?.role) as import('./locales.ts').KiraTeamsKey) ?? sender.role}</span>
           {data.purpose !== undefined && !['update', 'assignment', 'result'].includes(data.purpose) && (
