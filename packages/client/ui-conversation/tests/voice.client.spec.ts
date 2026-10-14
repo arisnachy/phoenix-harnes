@@ -395,6 +395,10 @@ describe('browser voice adapter', () => {
       streamVoiceAssistantResponse(
         'assistant:harness:stream', streamed, activatedAt, false, false, true,
       )
+      // The authorized first sentence becomes audible synchronously: an RPC
+      // acknowledgement can arrive after Codex has already streamed its audio.
+      expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
+      expect(audio?.muted).toBe(false)
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenLastCalledWith({
         key: 'session-harness', text: 'Primera frase.',
@@ -615,10 +619,14 @@ describe('browser voice adapter', () => {
         const messageKey = `assistant:harness:terminal-before-${outcome}`
         const beforeAdmission = realtimeSpeak.mock.calls.length
         streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
+        // Phoenix itself has authorized this speech before invoking the RPC.
+        // Native output arriving before acceptance must remain audible.
+        expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
+        expect(audio?.muted).toBe(false)
         channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
-        expect(audio?.muted).toBe(true)
+        expect(audio?.muted).toBe(false)
         channel?.onmessage?.({ data: JSON.stringify({ type: 'output_audio.delta', audio: 'fixture' }) })
-        expect(audio?.muted).toBe(true)
+        expect(audio?.muted).toBe(false)
         channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
         streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
         expect(realtimeSpeak).toHaveBeenCalledTimes(beforeAdmission + 1)
