@@ -1727,6 +1727,13 @@ process.once('SIGTERM', requestShutdown)
  */
 function retireVerifiedOlderPhoenixHost(port) {
   if (process.platform !== 'win32' || !officialPhoenixRemote()) return false
+  // Never retire a working older installation to replace it with a build
+  // that cannot even load its own Web profile/configuration.
+  const preflight = runtimeBootPreflight(runtimeRoot)
+  if (!preflight.ok) {
+    console.error('[PHOENIX] El nuevo runtime no superó su preflight; se conserva la instalación anterior.')
+    return false
+  }
   const script = join(supervisorSourceRoot, 'scripts', 'phoenix-windows-stale-host-takeover.ps1')
   if (!existsSync(script)) return false
   const result = spawnSync('powershell.exe', [
