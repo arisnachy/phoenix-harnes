@@ -113,6 +113,25 @@ export function isPhoenixCodexAutoSelection(selection: ModelSelection | undefine
   return selection?.provider === 'openai-codex' && selection.model === PHOENIX_CODEX_AUTO_MODEL
 }
 
+/**
+ * Kira Max with the default Codex Luna seat follows the REAL Sol-to-Luna
+ * workflow. Explicitly selected other Codex models and other providers stay
+ * on the user's exact model; Team children never reopen a planning phase.
+ * @param selection - the selected provider/model.
+ * @param agent - session owner, when one is available.
+ * @returns whether the Lead uses Sol planning and Luna Max coordination.
+ */
+export function isKiraCodexAutoLead(
+  selection: ModelSelection | undefined,
+  agent: { readonly session: { readonly header?: { readonly agentPreset?: string; readonly origin?: string } } } | undefined,
+): boolean {
+  return isPhoenixCodexAutoSelection(selection)
+    || (selection?.provider === 'openai-codex'
+      && selection.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
+      && agent?.session?.header?.agentPreset === 'kira-max'
+      && agent.session.header.origin !== 'subagent')
+}
+
 function codexPlannerGeneration(model: string): string | undefined {
   return CODEX_PLANNER_MODEL.exec(model)?.[1]
 }
@@ -254,8 +273,8 @@ const AUTO_VISIBLE_PLAN_POLICY =
   'Kira will continue on the very next step and execute this exact plan without asking for routine approval. ' +
   'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
 
-const AUTO_SOL_COORDINATION_POLICY =
-  'You are Kira coordinating and executing with the selected latest Sol. If a user-visible **Plan:** was written earlier in THIS turn, ' +
+const AUTO_LUNA_COORDINATION_POLICY =
+  'You are Kira coordinating and executing with Luna Max AFTER the actual Sol planning step. If a user-visible **Plan:** was written earlier in THIS turn, ' +
   'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
   'Start the first permitted real action promptly, supervise the critical path and choose a genuine teammate ' +
   'only when requested or materially helpful. Address teammates naturally by name, accept their real evidence, ' +
@@ -265,7 +284,7 @@ const AUTO_SOL_COORDINATION_POLICY =
 
 const AUTO_VISIBLE_PLAN_HANDOFF =
   'The visible **Plan:** from the immediately preceding Sol step is Kira\'s authoritative execution plan. ' +
-  'Continue the current user request as Kira on Sol; execute the next concrete action now, ' +
+  'Continue the current user request as Kira on Luna Max; execute the next concrete action now, ' +
   'without re-planning, re-reading the same brief or asking permission for already authorized safe work. ' +
   'If this is a requested team demonstration, call spawn_teammate once with a small verifiable assignment, ' +
   'wait for genuine evidence and complete the demonstration. The actual Team conversation must be real, ' +
@@ -726,8 +745,8 @@ function phoenixAutoRoute(
     if (teamSignal !== undefined) {
       return {
         provider: 'openai-codex',
-        model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId('high'),
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
       }
     }
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
@@ -791,8 +810,8 @@ function phoenixAutoRoute(
 
   return {
     provider: 'openai-codex',
-    model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-    reasoningEffort: ReasoningEffortId('high'),
+    model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+    reasoningEffort: ReasoningEffortId('max'),
   }
 }
 
@@ -838,7 +857,7 @@ export function installModelSelection(
       // Phoenix Auto is a virtual picker row rather than an executable model.
       // Its request router resolves Sol/Luna per step, so keep the existing
       // concrete model/effort while synchronizing only the provider identity.
-      if (!isPhoenixCodexAutoSelection(selected)) {
+      if (!isKiraCodexAutoLead(selected, scopedAgent)) {
         scopedAgent.options.model = selected.model
         if (selected.reasoningEffort === undefined) delete scopedAgent.options.reasoningEffort
         else scopedAgent.options.reasoningEffort = selected.reasoningEffort
@@ -861,7 +880,7 @@ export function installModelSelection(
       : providerTools
     selection.assembledToolCount = tools.length
     if (selected === undefined) return assembled
-    const autoStep = isPhoenixCodexAutoSelection(selected) && scopedAgent !== undefined
+    const autoStep = isKiraCodexAutoLead(selected, scopedAgent) && scopedAgent !== undefined
       ? nextPhoenixAutoAssemblyStep(scopedAgent)
       : undefined
     const currentTurn = scopedAgent?.session?.events.findLast(event => event.type === 'turn/start')
@@ -874,13 +893,16 @@ export function installModelSelection(
     const autoPolicy = autoStep === 1
       && phoenixAutoTaskRequest(currentRequest)
       && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
-      : autoStep !== undefined && autoStep > 1 ? AUTO_SOL_COORDINATION_POLICY : undefined
+      : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
     return {
       ...assembled,
       ...autoPolicy === undefined ? {} : {
         sections: [...assembled.sections, { name: 'phoenix:auto-visible-handoff', text: autoPolicy }],
       },
-      tools,
+      // The initial Sol plan cannot execute tools. Luna Max receives the
+      // regular tools on the next step, and the continuation gate still knows
+      // that real tools are available after the plan.
+      tools: autoPolicy === AUTO_VISIBLE_PLAN_POLICY ? [] : tools,
       variables: {
         ...assembled.variables,
         provider: selected.provider,
@@ -904,7 +926,7 @@ export function installModelSelection(
       // internally. Worker model selection is handled by Agent Teams instead.
       const exactUserChoice = scopedAgent === undefined ? false
         : latestModelSelectionPreference(scopedAgent.session)?.source === 'explicit'
-      if (!isPhoenixCodexAutoSelection(selected) && (handoff === undefined || exactUserChoice)) {
+      if (!isKiraCodexAutoLead(selected, scopedAgent) && (handoff === undefined || exactUserChoice)) {
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
@@ -916,7 +938,7 @@ export function installModelSelection(
         }
       }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
-      if (isPhoenixCodexAutoSelection(selected)) {
+      if (isKiraCodexAutoLead(selected, scopedAgent)) {
         const routed = phoenixAutoRoute(
           _payload.agent,
           _payload.turn,
@@ -966,7 +988,7 @@ export function installModelSelection(
   )
   const disposeAutoContinuation = agentCtx.on('agent/turn-stopping', ({ agent, turn, signal }) => {
     signal.throwIfAborted()
-    if (!isPhoenixCodexAutoSelection(selection.current)) return
+    if (!isKiraCodexAutoLead(selection.current, agent)) return
     if ((selection.assembledToolCount ?? 0) === 0) return
 
     const directText = directUserTextForTurn(agent, turn)
