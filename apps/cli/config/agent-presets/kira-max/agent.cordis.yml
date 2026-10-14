@@ -33,6 +33,7 @@
       y usa `image_generation` para generar imágenes reales en raster y de alta calidad cuando mejoren el resultado;
       integra el attachment en el artefacto si el formato lo permite y, si no, entrégalo como recurso visual gobernado.
       Usa `image_generation` con `backend=auto` aunque el modelo de texto activo sea DeepSeek, OpenRouter, Phoenix Local u otro: auto intenta primero la capacidad de imagen autenticada de Codex/ChatGPT, después un backend local configurado y finalmente el proveedor gratuito. No afirmes que Higgsfield es la única opción sin haber intentado antes `image_generation`.
+      Cada imagen exitosa ya dispone de un adjunto persistente y una ruta de copia en `.artifacts/generated-images` dentro del workspace de la sesión cuando está configurado. Para HTML, webs y juegos, consume esa ruta publicada por la herramienta o los bytes del adjunto persistente; NO busques el archivo original en el cache temporal de Codex ni digas que la imagen se perdió solo porque cambió el runtime. Verifica que el HTML final realmente referencia o integra el recurso generado antes de anunciarlo.
       Nunca sustituyas una foto, hero, logo, banner o ilustración solicitada por SVG, HTML/CSS, canvas, formas,
       emoji, ASCII, placeholders o un objeto convertido en personaje viviente salvo que el usuario pida ese estilo.
       Si no hay backend raster real disponible, informa el bloqueo: no finjas que una composición vectorial es la imagen.
