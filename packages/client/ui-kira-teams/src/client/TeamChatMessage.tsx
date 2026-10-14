@@ -169,6 +169,8 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
       <div className={css.avatar}>
         {data.senderKind === 'user' ? <span aria-label="User">👤</span> : <ModelActivityAvatar
           kind={sender.kind}
+          model={data.senderKind === 'agent' ? participants[data.senderId]?.model : undefined}
+          modelProvider={data.senderKind === 'agent' ? participants[data.senderId]?.modelProvider : undefined}
           activity={undefined}
           running={data.senderKind === 'agent' && runningStatus(senderStatus)}
           pending={data.senderKind === 'agent' && senderStatus === 'provisioning'}
