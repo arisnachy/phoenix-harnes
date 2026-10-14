@@ -185,6 +185,38 @@ describe('Team identity and provisioning', () => {
     }
   })
 
+  it('governs a genuine human mission without creating a pretend teammate', async () => {
+    const { ctx, lead } = await setup([])
+    const first = createUserMessage({
+      source: { kind: 'user' }, content: content('Explica el riesgo del sesgo en una muestra'),
+    })
+    lead.session.append('user/message', first, { surfaceOp: 'append' })
+    await vi.waitFor(() => {
+      expect(ctx.agentTeams.missionSnapshot(lead)).toMatchObject({
+        objective: 'Explica el riesgo del sesgo en una muestra', phase: 'running', revision: 1,
+      })
+    }, { timeout: 5_000 })
+    expect(ctx.agentTeams.listMembers(lead).filter(member => member.role === 'teammate')).toHaveLength(0)
+    lead.session.append('turn/start', { turn: 1 })
+    lead.session.append('turn/end', { turn: 1, reason: { kind: 'completed' } })
+    await vi.waitFor(() => {
+      expect(ctx.agentTeams.missionSnapshot(lead)).toMatchObject({
+        phase: 'partial', cancellationEpoch: 1,
+      })
+    }, { timeout: 5_000 })
+    const oldId = ctx.agentTeams.missionSnapshot(lead)?.id
+    const second = createUserMessage({
+      source: { kind: 'user' }, content: content('Ahora prepara un ejemplo diferente'),
+    })
+    lead.session.append('user/message', second, { surfaceOp: 'append' })
+    await vi.waitFor(() => {
+      expect(ctx.agentTeams.missionSnapshot(lead)).toMatchObject({
+        objective: 'Ahora prepara un ejemplo diferente', phase: 'running', revision: 1,
+      })
+    }, { timeout: 5_000 })
+    expect(ctx.agentTeams.missionSnapshot(lead)?.id).not.toBe(oldId)
+  })
+
   it('persists one genuine universal mission and fences worker activity at Lead completion', async () => {
     const { ctx, lead } = await setup(['hang'])
     lead.session.append('user/message', createUserMessage({
