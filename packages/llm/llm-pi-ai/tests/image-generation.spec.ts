@@ -234,6 +234,9 @@ describe('Codex image generation bridge', () => {
               name: 'fresh.png',
             }
           },
+          async readImage(ref: unknown) {
+            return { ref, data: Buffer.from([1, 2, 3]) }
+          },
         },
       } as unknown as Context
       installCodexImageGeneration(context)
@@ -246,13 +249,21 @@ describe('Codex image generation bridge', () => {
           size: '1024x1024',
           quality: 'high',
         },
-        { signal: new AbortController().signal },
+        {
+          signal: new AbortController().signal,
+          agent: { options: { provider: 'openai-codex' }, session: { header: { cwd: root } } },
+        },
       )
+      const exportedPath = join(root, '.artifacts', 'generated-images')
       expect(result).toMatchObject({
         provider: 'codex',
-        path: join(root, 'generated_images', 'fresh.png'),
         attachment: { attachmentId: 'image-1' },
       })
+      const actualPath = (result as { path: string }).path
+      expect(actualPath).toContain(exportedPath)
+      expect(await readFile(actualPath)).toEqual(Buffer.from([1, 2, 3]))
+      await rm(join(root, 'generated_images', 'fresh.png'), { force: true })
+      expect(await readFile(actualPath)).toEqual(Buffer.from([1, 2, 3]))
       expect(spawns).toBe(2)
     } finally {
       if (previousHome === undefined) delete process.env.CODEX_HOME
