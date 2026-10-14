@@ -45,6 +45,25 @@ function node(data: Partial<KiraTeamMessageChatData> = {}): ChatNode<'kira-team-
 }
 
 describe('KIRA Team chat message', () => {
+  it('renders a true Luna/Sol symbol beside the agent and omits unknown model labels', () => {
+    const peer = node({ senderKind: 'agent' })
+    const luna = render(<View node={peer} useProjection={() => ({
+      'worker-a': { id: 'worker-a', name: 'Orión', role: 'skill.testing',
+        status: 'working', model: 'gpt-6-luna', modelProvider: 'openai-codex', reasoningEffort: 'max' },
+    })} />)
+    expect(luna.container.querySelector('[data-team-actual-model="gpt-6-luna"]')?.textContent).toBe('☾')
+    expect(luna.getByLabelText('Modelo real: gpt-6-luna · max')).toBeTruthy()
+    luna.unmount()
+    const sol = render(<View node={peer} useProjection={() => ({
+      'worker-a': { id: 'worker-a', name: 'Orión', role: 'skill.testing',
+        status: 'working', model: 'gpt-6.1-sol', modelProvider: 'openai-codex' },
+    })} />)
+    expect(sol.container.querySelector('[data-team-actual-model="gpt-6.1-sol"]')?.textContent).toBe('☀')
+    sol.unmount()
+    const unknown = render(<View node={peer} />)
+    expect(unknown.container.querySelector('[data-team-actual-model]')).toBeNull()
+  })
+
   it('resolves stable personas without exposing model ids', () => {
     expect(teamIdentityOf('lead', 'root')).toMatchObject({ name: 'Kira', role: 'Coordinación', kind: 'kira' })
     expect(teamIdentityOf('KÍRA', 'root')).toMatchObject({ name: 'Kira' })
