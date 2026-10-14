@@ -1727,25 +1727,30 @@ process.once('SIGTERM', requestShutdown)
  */
 function retireVerifiedOlderPhoenixHost(port) {
   if (process.platform !== 'win32' || !officialPhoenixRemote()) return false
-  // Never retire a working older installation to replace it with a build
-  // that cannot even load its own Web profile/configuration.
-  const preflight = runtimeBootPreflight(runtimeRoot)
-  if (!preflight.ok) {
-    console.error('[PHOENIX] El nuevo runtime no superó su preflight; se conserva la instalación anterior.')
-    return false
-  }
   const script = join(supervisorSourceRoot, 'scripts', 'phoenix-windows-stale-host-takeover.ps1')
   if (!existsSync(script)) return false
-  const result = spawnSync('powershell.exe', [
+  const args = [
     '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
     '-File', script, '-Root', root, '-Port', String(port),
-  ], {
-    cwd: root,
-    windowsHide: true,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    timeout: 15_000,
+  ]
+  const invoke = (extraArgs = []) => spawnSync('powershell.exe', [...args, ...extraArgs], {
+    cwd: root, windowsHide: true, encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'], timeout: 15_000,
   })
+  // Inspect the actual process owner before any slow preflight. Duplicate
+  // launches of an already-current Phoenix must remain cheap and harmless.
+  const inspected = invoke(['-InspectOnly'])
+  if (inspected.error !== undefined || inspected.status !== 0
+    || !inspected.stdout?.includes('PHOENIX_STALE_HOST_ELIGIBLE')) return false
+  // Never retire a working older installation for an unbootable candidate.
+  const preflight = runtimeBootPreflight(runtimeRoot)
+  if (!preflight.ok) {
+    console.error('[PHOENIX] La nueva versión no superó el preflight; se conserva el Host anterior.')
+    return false
+  }
+  // The migration revalidates process identity and Git ancestry to close
+  // the inspect-to-kill race. It may decline even after a successful inspect.
+  const result = invoke()
   if (result.error !== undefined || result.status !== 0
     || !result.stdout?.includes('PHOENIX_STALE_HOST_RETIRED')) return false
   console.error('[PHOENIX UPDATE] verified older Phoenix Host retired; transferring the port to the newer checkout.')
