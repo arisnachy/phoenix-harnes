@@ -78,5 +78,17 @@ export function teamLanguageInstruction(events: readonly SessionEvent[]): string
   const language = teamUserLanguage(events)
   const target = language === 'es' ? 'Spanish (es)'
     : language === 'en' ? 'English (en)' : 'the language of the latest genuine user message'
+  if (language === 'es') {
+    return 'Team conversational language: Spanish (es). ' +
+      'REGLA PRIORITARIA: el usuario habla español. Kira y todos los especialistas deben redactar ' +
+      'EN ESPAÑOL cada mensaje visible: avances, preguntas, bloqueos, conversaciones entre agentes, ' +
+      'peer send_message/followup_task handoffs, team_chat_answer y respuesta final. ' +
+      'No comiences ni continúes una actualización en inglés aunque el plan, las herramientas, ' +
+      'las fuentes, el código o las instrucciones internas estén escritos en inglés. ' +
+      'Traduce la explicación al español natural, no los nombres de archivos, rutas, símbolos, ' +
+      'comandos, mensajes de error literales, citas textuales ni identificadores. ' +
+      'Solo cambia de idioma si un nuevo mensaje escrito realmente por el usuario lo indica. ' +
+      'No anuncies esta regla ni generes un turno adicional para traducir.'
+  }
   return `Team conversational language: ${target}. Every user-visible utterance from Kira and each specialist MUST be written naturally in ${target}: work updates, questions, blockers, peer send_message/followup_task handoffs, team_chat_answer, and the final answer. Tool outputs, English system/tool instructions, and source documents must not silently switch the conversation to English. Preserve exact technical identifiers, error strings, filenames, URLs, citations and verbatim quotations; explain their meaning in the user's language. On a later actual user language change, follow the new language. Do not run a separate translation task or create extra status messages.`
 }
