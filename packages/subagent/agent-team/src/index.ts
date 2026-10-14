@@ -234,15 +234,17 @@ export class TeamService extends TypertRemoteService {
     const taskIds = new Set(currentEvents.flatMap(event =>
       event.type === 'team/task' && event.data.task.revision === 1
         ? [event.data.task.id] : []))
-    const children = [...state.members.values()].filter(member =>
-      member.phase === 'active' && workerIds.has(member.id))
+    const children = [...state.members.values()].filter(member => workerIds.has(member.id))
     const tasks = [...state.tasks.values()].filter(task =>
       task.status !== 'deleted' && taskIds.has(task.id))
     const tasksDone = tasks.every(task => task.status === 'completed')
     const evidenceIds: string[] = []
     let hasConfirmation = false
-    let workersVerified = children.length > 0
+    // A failed or never-started specialist cannot disappear from QA just because
+    // other workers succeeded. Count every provisioned worker of this mission.
+    let workersVerified = children.length > 0 && children.every(member => member.phase === 'active')
     for (const child of children) {
+      if (child.phase !== 'active') continue
       const session = this.teamContext.sessions.get(child.id)
       if (session === undefined) { workersVerified = false; continue }
       const proof = teamExecutionProof(session.events)
