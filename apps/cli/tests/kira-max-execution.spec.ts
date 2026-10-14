@@ -162,6 +162,28 @@ describe('Kira Max execution contract', () => {
     await waitGoneWithBudget(ctx, second.id)
   }, 30_000)
 
+  it('does not send a Codex Sol planner into specialist execution', async () => {
+    const preset = await readPreset()
+    const reasoning = { efforts: [{ id: ReasoningEffortId('max'), name: 'Max' }],
+      defaultEffort: ReasoningEffortId('max') }
+    const { ctx, lead } = await setup(['hang'], false, preset.team.config, reasoning)
+    ctx.llm.registerAdapter(['openai-codex'], new MockAdapter(['hang'], reasoning))
+    lead.options.provider = 'openai-codex'
+    lead.options.model = 'gpt-6.1-sol'
+    const result = await execute(ctx, lead, 'spawn_teammate', {
+      name: 'atlas', description: 'independent coding work',
+      prompt: 'Implement a concrete independent coding subtask.', context: 'fresh',
+    })
+    expect(result.isError).toBe(false)
+    const worker = await waitRunningWithBudget(ctx, spawnedChildId(result))
+    expect(lead.options.model).toBe('gpt-6.1-sol')
+    expect(worker.options).toMatchObject({
+      provider: 'openai-codex', model: 'gpt-6-luna', reasoningEffort: 'max',
+    })
+    await interruptChild(ctx, lead, 'atlas')
+    await waitGoneWithBudget(ctx, worker.id)
+  }, 30_000)
+
   it('keeps an explicitly selected non-Codex provider and model on fresh workers', async () => {
     const preset = await readPreset()
     const { ctx, lead } = await setup(['hang'], false, preset.team.config)
