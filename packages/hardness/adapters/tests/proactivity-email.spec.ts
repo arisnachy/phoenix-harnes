@@ -37,6 +37,44 @@ function execution(overrides: Partial<ProactivityTask> = {}): ProactivityExecuti
   }
 }
 
+describe('UME-scoped proactive work', () => {
+  it('skips a closed mission without enqueueing messages or delivering email', async () => {
+    const followup = vi.fn()
+    const sendMail = vi.fn(async () => undefined)
+    const session = {
+      id: 'agent-a',
+      events: [{ seq: 1, type: 'team/mission', data: {
+        version: 1, teamId: 'agent-a', snapshot: {
+          id: 'agent-a:mission:original', teamId: 'agent-a', phase: 'cancelled',
+          cancellationEpoch: 1,
+        },
+      } }],
+    }
+    const parent = { id: 'agent-a', session, followup, whenIdle: vi.fn(async () => undefined) }
+    const executor = createProactivityExecutor(
+      { get: () => parent, roots: () => [parent], list: () => [parent] } as never,
+      undefined,
+      {
+        pollMs: 15_000,
+        privateWorkProvider: 'spawn',
+        privateWorkResultChars: 12_000,
+        sendMail,
+        resolveDefaultMailRecipient: async () => 'owner@example.com',
+      },
+    )
+    const scope = { sessionId: 'agent-a', missionId: 'agent-a:mission:original', epoch: 0 }
+    const result = await executor.execute(execution({
+      missionScope: scope, delivery: 'chat', senderIdentity: 'auto',
+    }))
+    expect(result).toMatchObject({ terminal: true })
+    expect(followup).not.toHaveBeenCalled()
+    expect(sendMail).not.toHaveBeenCalled()
+    const emailResult = await executor.execute(execution({ missionScope: scope }))
+    expect(emailResult).toMatchObject({ terminal: true })
+    expect(sendMail).not.toHaveBeenCalled()
+  })
+})
+
 describe('scheduled email execution', () => {
   it('resumes the persisted target session when scheduled work fires with no live agent', async () => {
     const dispose = vi.fn(async () => {})
