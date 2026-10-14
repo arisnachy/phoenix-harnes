@@ -4,7 +4,8 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)][string]$Root,
-  [Parameter(Mandatory = $true)][ValidateRange(1, 65535)][int]$Port
+  [Parameter(Mandatory = $true)][ValidateRange(1, 65535)][int]$Port,
+  [switch]$InspectOnly
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -88,6 +89,10 @@ try {
       $liveHost.ParentProcessId -ne $supervisorPid -or
       (Get-PhoenixSupervisorScript ([string]$liveSupervisor.CommandLine)) -ne $oldScript) { exit 3 }
 
+  if ($InspectOnly) {
+    Write-Output 'PHOENIX_STALE_HOST_ELIGIBLE'
+    exit 0
+  }
   Write-Error -Message 'PHOENIX verified legacy Host shutdown is starting.' -ErrorAction Continue
   # Stop supervisor first; otherwise it immediately respawns the older Host.
   Stop-Process -Id $supervisorPid -Force -ErrorAction Stop
