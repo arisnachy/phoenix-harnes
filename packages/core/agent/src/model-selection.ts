@@ -281,6 +281,12 @@ const AUTO_VISIBLE_PLAN_POLICY =
   'Kira will continue on the very next step and execute this exact plan without asking for routine approval. ' +
   'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
 
+const AUTO_SOL_STRATEGY_POLICY =
+  'You are Sol 6.1 consulted by Kira for one REAL focused strategy pass. ' +
+  'Examine the latest evidence and unresolved obstacle, propose one materially different feasible strategy ' +
+  'within the current mission and permissions. Do not delegate, run tools or declare work completed. ' +
+  'Stop after a concise actionable strategy; Kira with Luna Max resumes execution immediately.'
+
 const AUTO_LUNA_COORDINATION_POLICY =
   'You are Kira coordinating and executing with Luna Max AFTER the actual Sol planning step. If a user-visible **Plan:** was written earlier in THIS turn, ' +
   'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
@@ -288,6 +294,8 @@ const AUTO_LUNA_COORDINATION_POLICY =
   'only when requested or materially helpful. Address teammates naturally by name, accept their real evidence, ' +
   'and speak to the user in concise, warm Spanish when that is their language. ' +
   'Never simulate coworker messages or claim a tool ran before its real result. ' +
+  'If you genuinely need a new strategy, state "Necesito consultar a Sol" and end that step: ' +
+  'the router makes one REAL bounded Sol consultation and returns to Luna Max. ' +
   'Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
 
 const AUTO_SOL_RESCUE_HANDOFF =
@@ -905,10 +913,24 @@ export function installModelSelection(
     // Never inject a "stop after the plan" instruction into a Luna quick-answer
     // route whose request was not classified as an operational task. Otherwise
     // the model can emit a plan that the turn-stopping gate never resumes.
-    const autoPolicy = autoStep === 1
-      && phoenixAutoTaskRequest(currentRequest)
-      && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
-      : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
+    // Assembly happens before model routing, so it must pick the same Sol
+    // strategy-only phase when a real blocker, stall or voluntary consult is next.
+    if (currentTurnNumber !== undefined) resetPhoenixAutoTurnState(phoenixAutoState, currentTurnNumber)
+    const teamSignal = scopedAgent !== undefined && currentTurnNumber !== undefined
+      ? phoenixAutoTeamSignalForTurn(scopedAgent, currentTurnNumber) : undefined
+    const needsTeamRescue = teamSignal?.purpose === 'blocker'
+      && teamSignal.messageId !== phoenixAutoState.lastTeamEscalationMessageId
+    const needsStallRescue = scopedAgent !== undefined && currentTurnNumber !== undefined
+      && isPhoenixCodexAutoStalled(scopedAgent, currentTurnNumber)
+      && (phoenixAutoState.lastRescueStep === 0
+        || (autoStep ?? 0) - phoenixAutoState.lastRescueStep >= 2)
+    const solRescueStep = autoStep !== undefined && phoenixAutoState.rescueCount < 2
+      && (needsTeamRescue || (autoStep > 1 && (phoenixAutoState.forcePlannerNext || needsStallRescue)))
+    const autoPolicy = solRescueStep ? AUTO_SOL_STRATEGY_POLICY
+      : autoStep === 1
+        && phoenixAutoTaskRequest(currentRequest)
+        && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
+        : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
     return {
       ...assembled,
       ...autoPolicy === undefined ? {} : {
@@ -917,7 +939,7 @@ export function installModelSelection(
       // The initial Sol plan cannot execute tools. Luna Max receives the
       // regular tools on the next step, and the continuation gate still knows
       // that real tools are available after the plan.
-      tools: autoPolicy === AUTO_VISIBLE_PLAN_POLICY ? [] : tools,
+      tools: autoPolicy === AUTO_VISIBLE_PLAN_POLICY || autoPolicy === AUTO_SOL_STRATEGY_POLICY ? [] : tools,
       variables: {
         ...assembled.variables,
         provider: selected.provider,
@@ -1044,8 +1066,8 @@ export function installModelSelection(
 
     if (phoenixAutoState.lastContinuationStep === latest.step) return
     // Sol's strategic rescue is not a completed mission. Hand control to Luna.
-    if (latest.step > 1 && latest.step === phoenixAutoState.lastRescueStep
-      && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
+    if (latest.step >= 1 && latest.step === phoenixAutoState.lastRescueStep
+      && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL || latest.sourceModel === undefined)
       && !phoenixAutoExplicitlyClosed(latest.text)
       && phoenixAutoState.continuationCount < AUTO_CONTINUATION_LIMIT) {
       phoenixAutoState.lastContinuationStep = latest.step
