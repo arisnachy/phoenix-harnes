@@ -412,6 +412,8 @@ describe('browser voice adapter', () => {
       expect(transcript).toHaveBeenCalledTimes(2)
       expect(microphoneTrack.enabled).toBe(false)
       expect(audio?.muted).toBe(false)
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'input_audio_buffer.speech_started' }) })
+      expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenLastCalledWith({
         key: 'session-harness', text: 'Primera frase.',
@@ -627,6 +629,8 @@ describe('browser voice adapter', () => {
       const sendsBeforeLateTurn = channel?.send.mock.calls.length
       channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
       expect(audio?.muted).toBe(false)
+      expect(getVoiceAssistantSnapshot().phase).toBe('speaking')
+      expect(microphoneTrack.enabled).toBe(false)
       expect(channel?.send).toHaveBeenCalledTimes(sendsBeforeLateTurn ?? 0)
       // The permission eventually closes automatically, without the developer
       // console manually toggling HTMLAudioElement.muted.
@@ -635,6 +639,7 @@ describe('browser voice adapter', () => {
       expect(microphoneTrack.enabled).toBe(true)
       expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('listening')
       expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('authorized-audio-drained')
+      expect(getVoiceAssistantSnapshot().phase).toBe('listening')
       // Genuine new user speech becomes available again after playback.
       channel?.onmessage?.({ data: JSON.stringify({
         type: 'turn.done', turn: { role: 'user', transcript: 'una nueva orden del usuario' },
