@@ -12,9 +12,9 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@phoenix-ai/cordis'
 import z from '@phoenix-ai/schemastery'
 import { defineTool } from '@phoenix-ai/dsh-tools'
-import type { Agent, AgentOptions } from '@phoenix-ai/dsh-agent'
+import { latestModelSelectionPreference, type Agent, type AgentOptions } from '@phoenix-ai/dsh-agent'
 import { ReasoningEffortId, type ContentBlock } from '@phoenix-ai/dsh-llm'
-import { SessionId, type JsonValue } from '@phoenix-ai/dsh-session'
+import { foldRequestHeader, SessionId, type JsonValue } from '@phoenix-ai/dsh-session'
 import { assertSubagentMaxDepth, settleRun } from '@phoenix-ai/dsh-subagent'
 import type { SubagentProvider, SubagentResult, SubagentRun } from '@phoenix-ai/dsh-subagent'
 import type { JobOutcome } from '@phoenix-ai/dsh-jobs'
@@ -512,9 +512,16 @@ export function apply(ctx: Context, config: Config): void {
         }
 
         const maxDepth = typeof config.maxDepth === 'number' ? config.maxDepth : undefined
-        const childRoute = config.childRoute !== undefined && parent.options.provider === config.childRoute.whenProvider
-          ? config.childRoute
-          : undefined
+        // Creation-time Agent.options can still point to Sol or a previous provider
+        // after the user changes the live selector. Resolve routing from the
+        // current request, then the durable preference, then legacy options.
+        const parentEvents = parent.session?.events ?? []
+        const activeProvider = foldRequestHeader(parentEvents)?.config.provider
+          ?? latestModelSelectionPreference({ events: parentEvents })?.selection.provider
+          ?? parent.options?.provider
+        const childRoute = config.childRoute !== undefined
+          && activeProvider === config.childRoute.whenProvider
+          ? config.childRoute : undefined
         const configuredAgentOptions = childRoute === undefined
           ? config.agentOptions
           : {
