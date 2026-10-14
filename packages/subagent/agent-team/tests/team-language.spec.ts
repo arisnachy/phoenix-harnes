@@ -23,7 +23,7 @@ describe('root-owned conversation language', () => {
     const instruction = teamLanguageInstruction([{
       type: 'user/message',
       data: { source: { kind: 'user' }, content: [{ type: 'text', text: user }] },
-    }] as Parameters<typeof teamLanguageInstruction>[0])
+    }] as unknown as Parameters<typeof teamLanguageInstruction>[0])
     expect(instruction).toContain('REGLA PRIORITARIA')
     expect(instruction).toContain('EN ESPAÑOL')
     expect(instruction).toContain('las herramientas')
