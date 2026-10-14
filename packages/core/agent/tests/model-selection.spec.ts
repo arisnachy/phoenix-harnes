@@ -20,6 +20,48 @@ import {
 import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 describe('installModelSelection()', () => {
+  it('resumes Kira on Luna after Sol handles a Team blocker without a human turn', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'read', description: 'verify repair', parameters: { type: 'object' } },
+    ] }))
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL }, assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: {
+        source: { kind: 'team-message', purpose: 'blocker', messageId: 'peer-blocker-one' },
+        content: [{ type: 'text', text: 'Orión no encuentra solución; necesita estrategia.' }],
+      } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, steer: (value: unknown) => { steered.push(value) } } as unknown as Agent
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      await expect(agentEvents(ctx, agent).waterfall(
+        'agent/request', { turn: 1, step: 1, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+      )).resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('low') })
+      events.push({ type: 'assistant/message', data: { turn: 1, step: 1,
+        message: { source: { model: 'gpt-6.1-sol' },
+          content: [{ type: 'text', text: 'Estrategia alternativa: inspeccionar la causa y corregirla.' }] },
+      } })
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+      expect(steered).toHaveLength(1)
+      expect(JSON.stringify(steered[0])).toContain('Resume the SAME unfinished mission')
+      await expect(agentEvents(ctx, agent).waterfall(
+        'agent/request', { turn: 1, step: 2, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+      )).resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
   it('never restarts Sol planning inside a Team child or other explicit model', () => {
     const root = { session: { header: { agentPreset: 'kira-max' } } }
     const child = { session: { header: { agentPreset: 'kira-max', origin: 'subagent' } } }
