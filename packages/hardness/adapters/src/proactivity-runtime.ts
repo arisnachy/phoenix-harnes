@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { AttentionStore, parseAttentionReceipt } from './proactivity-attention-store.ts'
+import { scheduledMissionScopeActive } from './mission-scope.ts'
 import type { Context } from '@phoenix-ai/cordis'
 import type { Agent, AgentRegistry } from '@phoenix-ai/dsh-agent'
 import { boundContextSummary, createUserMessage, type ContentBlock } from '@phoenix-ai/dsh-llm'
@@ -341,8 +342,16 @@ export function createProactivityExecutor(
     async execute(input): Promise<ProactivityExecutionResult> {
       const lease = await acquireExecutionAgent(agents, input.task.targetAgentId, config)
       const parent = lease.agent
+      const missionStillActive = (): boolean => input.task.missionScope === undefined
+        || scheduledMissionScopeActive(parent.session, input.task.missionScope)
+      const skipped = (): ProactivityExecutionResult => ({
+        summary: 'Automatic followup suppressed: its originating mission is closed or superseded.',
+        terminal: true,
+      })
       try {
+        if (!missionStillActive()) return skipped()
         const resolvedRecipient = await deliveryRecipient(input, config)
+        if (!missionStillActive()) return skipped()
         if (input.task.delivery === 'email' && resolvedRecipient === undefined) {
           throw new ProactivityDeferredError(
             'scheduled email has no recipient and the connected account email is unavailable',
@@ -357,8 +366,10 @@ export function createProactivityExecutor(
         if (input.phase === 'deliver' && input.task.condition !== undefined) {
           const decision = await evaluateConditionWatch(input, parent, subagents, config.privateWorkProvider)
           if (!decision.met) return { summary: `condition not met: ${decision.evidence}` }
+          if (!missionStillActive()) return skipped()
           conditionEvidence = decision.evidence
           if (input.task.delivery !== 'email') {
+            if (!missionStillActive()) return skipped()
             parent.followup(createUserMessage({
               content: [{ type: 'text', text: proactivePrompt(input, config, decision.evidence, resolvedRecipient) }],
               source: {
@@ -378,6 +389,7 @@ export function createProactivityExecutor(
 
         const privateWork = input.phase === 'prepare' || input.task.delivery === 'email' || input.task.delivery === 'work'
         if (!privateWork) {
+          if (!missionStillActive()) return skipped()
           parent.followup(createUserMessage({
             content: [{ type: 'text', text: proactivePrompt(input, config, conditionEvidence, resolvedRecipient) }],
             source: {
@@ -394,6 +406,7 @@ export function createProactivityExecutor(
         if (subagents === undefined || subagents.getProvider(config.privateWorkProvider) === undefined) {
           throw new ProactivityDeferredError(`private-work provider is not available: ${config.privateWorkProvider}`)
         }
+        if (!missionStillActive()) return skipped()
         const controller = new AbortController()
         const run = await subagents.start(config.privateWorkProvider, {
           label: input.phase === 'prepare' ? `Prepare: ${input.task.title}` : `Scheduled: ${input.task.title}`,
@@ -407,6 +420,7 @@ export function createProactivityExecutor(
             throw new Error(result.diagnostic ?? `private proactive work ended with ${result.stopReason}`)
           }
           const summary = plainOutput(result.output, config.privateWorkResultChars)
+          if (!missionStillActive()) return skipped()
           if (input.phase === 'deliver' && input.task.delivery === 'email' && input.task.senderIdentity !== 'user' && config.sendMail !== undefined) {
             if (summary.length === 0) throw new Error('scheduled email produced no message body')
             if (resolvedRecipient === undefined) throw new ProactivityDeferredError('scheduled email has no recipient')

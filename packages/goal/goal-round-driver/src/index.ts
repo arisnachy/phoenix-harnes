@@ -12,10 +12,12 @@ import { createUserMessage, isHarnessError, QUOTA_EXCEEDED_CODE } from '@phoenix
 import type { ContentBlock, MessageId, MessageSource } from '@phoenix-ai/dsh-llm'
 import type { Session, SessionEvent, TurnEndCancelCause, UserMessage } from '@phoenix-ai/dsh-session'
 import { renderGoalRoundPrompt } from './prompt.ts'
+import { goalBlockedByClosedUniversalMission } from './mission-fence.ts'
 import { recordGoalSupervisor, replayGoalSupervisor, type GoalSupervisorState } from './supervisor.ts'
 import { measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
 
 export { renderGoalRoundPrompt } from './prompt.ts'
+export { goalBlockedByClosedUniversalMission } from './mission-fence.ts'
 export { recordGoalSupervisor, replayGoalSupervisor } from './supervisor.ts'
 export type { GoalSupervisorState } from './supervisor.ts'
 export { GOAL_STRATEGIES, measureGoalVerificationProgress, recordGoalStrategy, replayGoalStrategy, selectNextStrategy } from './strategy.ts'
@@ -188,6 +190,7 @@ export function apply(ctx: Context): void {
     return ctx.fiber.state === FiberState.ACTIVE
       && !state.stopping
       && ctx.agents.get(state.agent.id) === state.agent
+      && !goalBlockedByClosedUniversalMission(state.agent.session)
       && state.agent.status === 'idle'
       && !state.competingQueued
   }
@@ -388,9 +391,12 @@ export function apply(ctx: Context): void {
       // A durable ACTIVE goal survives a process restart. Re-arm only the
       // process-local continuation authority; blocked goals remain waiting for
       // their external condition or an explicit human resume.
-      if (currentGoal(state)?.phase === 'active') {
+      if (currentGoal(state)?.phase === 'active'
+        && !goalBlockedByClosedUniversalMission(agent.session)) {
         ctx.goals.activate(agent)
         requestDrive(state)
+      } else if (goalBlockedByClosedUniversalMission(agent.session)) {
+        disarm(state)
       }
     })
     ctx.on('agent/status', ({ agent, status }) => {
@@ -469,6 +475,15 @@ export function apply(ctx: Context): void {
       const agent = ctx.agents.get(session.id)
       if (agent === undefined || agent.session !== session) return
       const state = stateFor(agent)
+      if ((event.type as string) === 'team/mission'
+        && goalBlockedByClosedUniversalMission(session)) {
+        // Durable terminal Team state wins over Goal recovery, including
+        // queued rounds and callbacks replayed after a Host restart.
+        state.attempt = undefined
+        state.requested = false
+        disarm(state)
+        return
+      }
       switch (event.type) {
         case 'user/message':
           if (state.attempt !== undefined && event.data.id === state.attempt.messageId) {
@@ -531,7 +546,8 @@ export function apply(ctx: Context): void {
       const attempt = state.attempt
       const goal = currentGoal(state)
       return ctx.fiber.state === FiberState.ACTIVE
-        && !state.stopping && attempt !== undefined && attempt.phase === 'claimed'
+        && !state.stopping && !goalBlockedByClosedUniversalMission(state.agent.session)
+        && attempt !== undefined && attempt.phase === 'claimed'
       && !attempt.stale && sameQueued(content, source, attempt)
       && goal !== undefined && goal.id === source.goalId && goal.revision === source.revision
       && goal.phase === 'active' && goal.activation === 'armed'
