@@ -209,7 +209,7 @@ describe('Kira Max execution contract', () => {
     expect(preset.persona.config.text).toContain('hardness_workflow')
     expect(preset.persona.config.text).toContain('hardness_run')
     expect(preset.persona.config.text).toContain('Después de dos esperas sin novedades')
-    expect(preset.persona.config.text).toContain('Sol 6.1 medium hace el primer plan/diagnóstico')
+    expect(preset.persona.config.text).toContain('Sol 6.1 low hace el primer plan/diagnóstico')
     expect(preset.persona.config.text).toContain('supervisando y orquestando con GPT-6 Luna Max')
     expect(preset.persona.config.text).toContain('Kira con Luna Max ASUME ese plan')
     expect(preset.persona.config.text).toContain('Sol medium se reserva exclusivamente para bloqueos comprobados')
