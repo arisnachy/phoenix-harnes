@@ -359,8 +359,22 @@ describe('Team identity and provisioning', () => {
     for (const worker of workers) await waitNoAgent(ctx, worker.member.id)
   })
 
-  it('rejects unsupported Team concurrency values greater than three', async () => {
-    await expect(setup([], { maxMembers: 4 })).rejects.toThrow()
+  it('migrates legacy five-member configurations to a strict three-worker runtime cap', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'], { maxMembers: 5 })
+    const one = await spawn(ctx, lead, 'legacy-one')
+    const two = await spawn(ctx, lead, 'legacy-two')
+    const three = await spawn(ctx, lead, 'legacy-three')
+    await waitRunning(ctx, one.member.id)
+    await waitRunning(ctx, two.member.id)
+    await waitRunning(ctx, three.member.id)
+    await expect(spawn(ctx, lead, 'legacy-four'))
+      .rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    for (const name of ['legacy-one', 'legacy-two', 'legacy-three']) ctx.agentTeams.interrupt(lead, name)
+    for (const member of [one, two, three]) await waitNoAgent(ctx, member.member.id)
+  })
+
+  it('rejects unsupported Team concurrency configuration greater than the historical limit', async () => {
+    await expect(setup([], { maxMembers: 6 })).rejects.toThrow()
   })
 
   it('supports direct-constructor defaults and recovers roots that already exist', async () => {

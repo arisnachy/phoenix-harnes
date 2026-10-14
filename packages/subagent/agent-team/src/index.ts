@@ -70,6 +70,8 @@ declare module '@phoenix-ai/cordis' {
 // Mission sizing selects 1/2/3 specialists according to genuinely independent work.
 const MAX_TEAMMATES = 3
 const DEFAULT_MAX_MEMBERS = MAX_TEAMMATES
+// Accept persisted pre-UME configurations up to five and clamp them safely to three.
+const LEGACY_MAX_MEMBERS = 5
 const DEFAULT_MAX_TASKS = 256
 const DEFAULT_MAX_PENDING_MESSAGES = 64
 const DEFAULT_MAX_MESSAGE_BYTES = 65_536
@@ -86,10 +88,7 @@ function positiveLimit(name: string, value: number): number {
 /** Reject Team concurrency settings beyond the universal one-to-five ceiling. */
 function memberLimit(value: number): number {
   const limit = positiveLimit('maxMembers', value)
-  if (limit > MAX_TEAMMATES) {
-    throw new TeamError(`maxMembers must not exceed ${MAX_TEAMMATES}`, 'TEAM_INVALID_CONFIG')
-  }
-  return limit
+  return Math.min(limit, MAX_TEAMMATES)
 }
 
 /** Agent Teams service backed by the exact live Lead Session log. */
@@ -97,7 +96,7 @@ export class TeamService extends TypertRemoteService {
   static inject = ['agents', 'sessions', 'sessionPersistence', 'subagents']
 
   static Config: z<Config> = z.object({
-    maxMembers: z.number().step(1).min(1).max(MAX_TEAMMATES).default(DEFAULT_MAX_MEMBERS),
+    maxMembers: z.number().step(1).min(1).max(LEGACY_MAX_MEMBERS).default(DEFAULT_MAX_MEMBERS),
     maxTasks: z.number().step(1).min(1).default(DEFAULT_MAX_TASKS),
     maxPendingMessagesPerMember: z.number().step(1).min(1).default(DEFAULT_MAX_PENDING_MESSAGES),
     maxMessageBytes: z.number().step(1).min(1).default(DEFAULT_MAX_MESSAGE_BYTES),
