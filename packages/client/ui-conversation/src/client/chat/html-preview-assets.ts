@@ -74,7 +74,7 @@ export function inlineBundledImages(entry: string, html: string, files: AssetMap
     const uri = resolve(raw)
     return uri === undefined ? original : attribute + '=' + quote + uri + quote
   })
-  output = output.replace(/\b(srcset)\s*=\s*(["'])(.*?)\2/giu, (original, attribute: string, quote: string, raw: string) => {
+  output = output.replace(/\b(srcset)\s*=\s*(["'])(.*?)\2/giu, (_original: string, attribute: string, quote: string, raw: string) => {
     const candidates = raw.split(',').map(candidate => {
       const matched = /^(\s*)(\S+)(\s+.*)?$/u.exec(candidate)
       if (matched === null) return candidate
