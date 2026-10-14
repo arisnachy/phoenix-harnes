@@ -280,7 +280,7 @@ function sendCodexRealtimeUtterance(
           }
         }
         if (session.nativeCancelRequested) {
-          session.audio.muted = true
+          muteCodexRealtimeAudio(session, 'native-cancel-requested')
           finishNativeUtterance(session, utterance)
           return
         }
@@ -293,7 +293,7 @@ function sendCodexRealtimeUtterance(
         pendingNativeAssistantMessages.delete(spokenMessageToken(session.key, utterance.assistantMessageKey))
       }
       clearNativeCancelWait(session)
-      session.audio.muted = true
+      muteCodexRealtimeAudio(session, 'append-speech-rejected')
       restoreRejectedNativeSentence(utterance)
       resetNativeSentenceStream(session.key)
       document.documentElement.dataset.phoenixVoiceSpeechStatus = 'rejected'
@@ -310,7 +310,7 @@ function sendCodexRealtimeUtterance(
         pendingNativeAssistantMessages.delete(spokenMessageToken(session.key, utterance.assistantMessageKey))
       }
       clearNativeCancelWait(session)
-      session.audio.muted = true
+      muteCodexRealtimeAudio(session, 'append-speech-failed')
       restoreRejectedNativeSentence(utterance)
       resetNativeSentenceStream(session.key)
       document.documentElement.dataset.phoenixVoiceSpeechStatus = 'failed'
@@ -364,8 +364,14 @@ function playCodexRealtimeAudio(audio: HTMLAudioElement): void {
   }
 }
 
+function muteCodexRealtimeAudio(session: CodexRealtimeVoiceSession, reason: string): void {
+  session.audio.muted = true
+  document.documentElement.dataset.phoenixVoiceAudioMuteReason = reason
+}
+
 function allowAuthorizedCodexAudio(session: CodexRealtimeVoiceSession): void {
   session.audio.muted = false
+  document.documentElement.dataset.phoenixVoiceAudioMuteReason = 'none'
   session.audio.volume = 1
   if (session.audio.srcObject) playCodexRealtimeAudio(session.audio)
 }
@@ -413,7 +419,7 @@ function discardCodexRealtimeUtterances(sessionKey: string): void {
 function cancelNativeCodexResponse(session: CodexRealtimeVoiceSession): void {
   if (session.activeUtterance !== undefined) {
     if (session.nativeCancelRequested) {
-      session.audio.muted = true
+      muteCodexRealtimeAudio(session, 'native-cancel-pending')
       return
     }
     if (session.events.readyState === 'open') {
@@ -439,7 +445,7 @@ function cancelNativeCodexResponse(session: CodexRealtimeVoiceSession): void {
       clearNativeCancelWait(session)
     }
   }
-  session.audio.muted = true
+  muteCodexRealtimeAudio(session, 'explicit-interruption')
 }
 
 function clearNativeCancelWait(session: CodexRealtimeVoiceSession): void {
@@ -897,6 +903,7 @@ export async function tryStartCodexRealtimeVoice(
     audio.autoplay = true
     // Realtime's VAD can emit speech without a harness request. Do not play it.
     audio.muted = true
+    document.documentElement.dataset.phoenixVoiceAudioMuteReason = 'awaiting-harness-speech'
     audio.dataset.phoenixCodexVoice = 'true'
     audio.style.display = 'none'
     document.body.append(audio)
@@ -1126,7 +1133,7 @@ function updateCodexRealtimePhase(payload: string): void {
   }
   const assistantStarted = type === 'response.created' || assistantTurnCreated
   if (assistantStarted && session.activeUtterance === undefined) {
-    session.audio.muted = true
+    muteCodexRealtimeAudio(session, 'unsolicited-response')
     // Some realtime transports can start autonomous VAD replies even with
     // create_response:false. Suppress unverified "sigo en ello" narration.
     if (session.events.readyState === 'open') {
@@ -1136,7 +1143,7 @@ function updateCodexRealtimePhase(payload: string): void {
   }
   if (assistantStarted && session.activeUtterance !== undefined) {
     if (session.nativeCancelRequested) {
-      session.audio.muted = true
+      muteCodexRealtimeAudio(session, 'native-cancelled-response')
       // The cancelled response can still emit a late created event. Keep the
       // channel quiet until its terminal event instead of treating it as the
       // next authorized sentence.
@@ -1324,7 +1331,7 @@ export function interruptVoiceAssistantSpeech(): boolean {
     cancelNativeCodexResponse(realtime)
   }
   if (realtime !== undefined) {
-    realtime.audio.muted = true
+    muteCodexRealtimeAudio(realtime, 'user-interruption')
     resetNativeSentenceStream(realtime.key)
     if (hadPendingRealtimeSpeech) discardCodexRealtimeUtterances(realtime.key)
   }
