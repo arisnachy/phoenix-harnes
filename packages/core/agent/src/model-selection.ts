@@ -1086,7 +1086,7 @@ export function installModelSelection(
       return
     }
     // Luna can ask for a strategy when stuck without repeating a doomed tool.
-    if (latest.step > 1 && !latestStepHasToolActivity
+    if (latest.step > 1
       && !phoenixAutoExplicitlyClosed(latest.text) && kiraNeedsSolStrategy(latest.text)
       && phoenixAutoState.rescueCount < 2
       && phoenixAutoState.continuationCount < AUTO_CONTINUATION_LIMIT) {
