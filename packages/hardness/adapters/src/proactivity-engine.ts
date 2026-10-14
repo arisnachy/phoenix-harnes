@@ -588,6 +588,10 @@ export class ProactivityEngine {
       if ((input.prepareLeadMs === undefined) !== (input.preparationInstruction === undefined)) {
         throw new Error('preparationInstruction and prepareLeadMs must be supplied together')
       }
+      if (input.missionScope !== undefined
+        && (!Number.isSafeInteger(input.missionScope.epoch) || input.missionScope.epoch < 0)) {
+        throw new Error('invalid missionScope.epoch')
+      }
       const normalizedRecurrence: ProactivityRecurrence = recurrence.kind === 'yearly'
         ? {
           kind: 'yearly',
@@ -630,8 +634,7 @@ export class ProactivityEngine {
           missionScope: {
             sessionId: nonEmpty(input.missionScope.sessionId, 'missionScope.sessionId'),
             missionId: nonEmpty(input.missionScope.missionId, 'missionScope.missionId'),
-            epoch: Number.isSafeInteger(input.missionScope.epoch) && input.missionScope.epoch >= 0
-              ? input.missionScope.epoch : (() => { throw new Error('invalid missionScope.epoch') })(),
+            epoch: input.missionScope.epoch,
           },
         }),
         ...(input.attentionMode === undefined ? {} : { attentionMode: input.attentionMode }),
