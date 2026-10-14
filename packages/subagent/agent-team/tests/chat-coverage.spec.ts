@@ -75,14 +75,14 @@ describe('human teamwork without progress spam', () => {
     const f = await fixture()
     f.child.append('turn/start', { turn: 1 })
     await f.chat.capture(f.root, f.child.header, f.child.events)
-    expect(f.chat.participants(f.root).get(f.child.id)?.model).toBeUndefined()
+    expect((await f.chat.read(f.root.id)).participants.find(row => row.id === f.child.id)?.model).toBeUndefined()
     f.child.append('assistant/message', {
       turn: 1, step: 1,
       message: createAssistantMessage({ source: { provider: 'openai-codex', model: 'gpt-6-luna' },
         content: content('Kira, este es el contrato real de integración.') }),
     }, { surfaceOp: 'append' })
     await f.chat.capture(f.root, f.child.header, f.child.events)
-    expect(f.chat.participants(f.root).get(f.child.id)).toMatchObject({
+    expect((await f.chat.read(f.root.id)).participants.find(row => row.id === f.child.id)).toMatchObject({
       modelProvider: 'openai-codex', model: 'gpt-6-luna',
     })
     // A subsequent model response updates provenance even without a status transition.
@@ -92,7 +92,7 @@ describe('human teamwork without progress spam', () => {
         content: content('Kira, ¿necesitas una revisión del esquema?') }),
     }, { surfaceOp: 'append' })
     await f.chat.capture(f.root, f.child.header, f.child.events)
-    expect(f.chat.participants(f.root).get(f.child.id)?.model).toBe('gpt-6.1-sol')
+    expect((await f.chat.read(f.root.id)).participants.find(row => row.id === f.child.id)?.model).toBe('gpt-6.1-sol')
   })
 
   it('shares one opening and one tool-backed finding with Kira, not a stream of plans', async () => {
