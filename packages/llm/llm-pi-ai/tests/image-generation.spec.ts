@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -13,6 +13,7 @@ import {
   imageGenerationBackendOrder,
   freeImageProviderOrder,
   installCodexImageGeneration,
+  materializeGeneratedImageInWorkspace,
   selectFreshGeneratedImage,
   selectImageGenerationBackend,
 } from '../src/image-generation.ts'
@@ -257,6 +258,79 @@ describe('Codex image generation bridge', () => {
       if (previousHome === undefined) delete process.env.CODEX_HOME
       else process.env.CODEX_HOME = previousHome
       await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('materializes an image from the durable attachment after its provider temp path disappears', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'phoenix-image-workspace-'))
+    try {
+      const data = Buffer.from([137, 80, 78, 71, 11, 22, 33])
+      const attachment = {
+        attachmentId: 'image-from-durable-store' as never,
+        mediaType: 'image/png' as const,
+        bytes: data.length,
+        width: 1,
+        height: 1,
+      }
+      const image = {
+        provider: 'codex' as const,
+        model: 'codex-integrated-image-generation',
+        path: join(workspace, 'deleted-codex-temp.png'),
+        attachment,
+      }
+      const store = {
+        async readImage(ref: typeof attachment) {
+          expect(ref.attachmentId).toBe(attachment.attachmentId)
+          return { ref: attachment, data }
+        },
+      }
+      const exported = await materializeGeneratedImageInWorkspace(store as never, image, workspace)
+      expect(exported.path).toContain(join(workspace, '.artifacts', 'generated-images'))
+      expect(exported.path).toMatch(/\\.png$/u)
+      expect(exported.attachment).toBe(attachment)
+      expect(await readFile(exported.path)).toEqual(data)
+      // Original Codex temp raster is absent; the exported asset survives.
+      await expect(readFile(image.path)).rejects.toMatchObject({ code: 'ENOENT' })
+      expect(await readFile(exported.path)).toEqual(data)
+      expect(await materializeGeneratedImageInWorkspace(store as never, image, undefined)).toEqual(image)
+    } finally {
+      await rm(workspace, { force: true, recursive: true })
+    }
+  })
+
+  it('refuses to export through a symlinked workspace asset folder', async () => {
+    // Windows symlink creation is unavailable without Developer Mode on some CI hosts.
+    if (process.platform === 'win32') return
+    const workspace = await mkdtemp(join(tmpdir(), 'phoenix-image-stage-'))
+    const other = await mkdtemp(join(tmpdir(), 'phoenix-image-other-'))
+    try {
+      await symlink(other, join(workspace, '.artifacts'), 'dir')
+      const attachment = {
+        attachmentId: 'image-one' as never,
+        mediaType: 'image/png' as const,
+        bytes: 4,
+        width: 1,
+        height: 1,
+      }
+      const image = {
+        provider: 'codex' as const,
+        model: 'test',
+        path: 'unavailable.png',
+        attachment,
+      }
+      let imageReads = 0
+      const store = {
+        async readImage() {
+          imageReads += 1
+          return { ref: attachment, data: Buffer.from([1, 2, 3, 4]) }
+        },
+      }
+      await expect(materializeGeneratedImageInWorkspace(store as never, image, workspace))
+        .rejects.toThrow('must not be a symlink')
+      expect(imageReads).toBe(0)
+    } finally {
+      await rm(workspace, { force: true, recursive: true })
+      await rm(other, { force: true, recursive: true })
     }
   })
 
