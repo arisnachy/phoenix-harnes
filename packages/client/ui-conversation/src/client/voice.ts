@@ -259,6 +259,7 @@ function sendCodexRealtimeUtterance(
     }
     document.documentElement.dataset.phoenixVoiceSpeechStatus = 'requested'
     delete document.documentElement.dataset.phoenixVoiceSpeechError
+    delete document.documentElement.dataset.phoenixVoiceLastInterruption
     // The harness has already authorized this exact message. Codex may stream
     // the first WebRTC audio frames BEFORE the appendSpeech RPC receipt arrives.
     // Keeping the audio muted until admission resolves drops short spoken
@@ -479,6 +480,7 @@ function cancelNativeCodexResponse(session: CodexRealtimeVoiceSession): void {
       clearNativeCancelWait(session)
     }
   }
+  document.documentElement.dataset.phoenixVoiceLastInterruption = 'native-response-cancelled'
   muteCodexRealtimeAudio(session, 'explicit-interruption')
 }
 
@@ -954,6 +956,7 @@ export async function tryStartCodexRealtimeVoice(
     // Realtime's VAD can emit speech without a harness request. Do not play it.
     audio.muted = true
     document.documentElement.dataset.phoenixVoiceAudioMuteReason = 'awaiting-harness-speech'
+    document.documentElement.dataset.phoenixVoiceMicrophone = 'listening'
     audio.dataset.phoenixCodexVoice = 'true'
     audio.style.display = 'none'
     document.body.append(audio)
@@ -1176,6 +1179,10 @@ function updateCodexRealtimePhase(payload: string): void {
   try {
     const value = JSON.parse(payload) as { type?: unknown; turn?: { role?: unknown } }
     if (typeof value.type === 'string') type = value.type
+    // Safe browser diagnostic: event names only, no transcripts or SDP data.
+    if (type !== '' && !type.includes('audio.delta') && !type.includes('audio_delta')) {
+      document.documentElement.dataset.phoenixVoiceLastRealtimeEvent = type.slice(0, 96)
+    }
     assistantTurnDone = type === 'turn.done' && value.turn?.role === 'assistant'
     assistantTurnCreated = type === 'turn.created' && value.turn?.role === 'assistant'
   } catch {
