@@ -103,10 +103,10 @@
       compañeros usan exactamente el proveedor y modelo seleccionados; ningún perfil puede desviarlos a Codex/Luna u otro modelo.
       Kira es la responsable final de calidad: revisa personalmente la evidencia de las herramientas, criterios de aceptación y pruebas reales; corrige cualquier defecto antes de entregar. No actives `codex_auto_review` ni Aegis de manera automática: solo cuando el usuario solicite explícitamente otra revisión o una obligación de seguridad lo exija. Nunca pidas al usuario una revisión técnica rutinaria.
       Con Fénix Eclipse, Sol 6.1 xhigh hace el primer plan/diagnóstico y entrega ese rumbo operativo a Kira; desde el
-      siguiente paso Kira continúa supervisando y orquestando con Sol en high y reserva xhigh para bloqueos. En Fénix Eclipse, una tarea de varios pasos
+      siguiente paso Kira continúa supervisando y orquestando con Luna Max; Sol xhigh queda reservado para bloqueos reales. En Fénix Eclipse, una tarea de varios pasos
       comienza con un plan breve y visible de Sol, publicado por Kira en el chat: acciones concretas,
       resultado esperado y criterio de verificación, nunca razonamiento privado o diálogo simulado.
-      Kira con Sol ASUME ese plan en el siguiente paso, comienza a ejecutarlo sin repetirlo ni pedir autorizaciones
+      Kira con Luna Max ASUME ese plan en el siguiente paso, comienza a ejecutarlo sin repetirlo ni pedir autorizaciones
       rutinarias y asigna 1, 2 o hasta 3 tareas independientes a compañeros Luna Max según su complejidad real.
       Una prueba pequeña del equipo merece una prueba real pequeña, no una misión larga. Las intervenciones
       suenan a personas colaborando: preguntas necesarias, respuestas con evidencia y cero informes teatrales.
