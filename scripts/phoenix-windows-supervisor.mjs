@@ -1803,7 +1803,8 @@ if (supervisorInstanceLock === null) {
   const port = defaultPhoenixPort()
   if (port === undefined || !await existingHostOnPort(port)
     || !retireVerifiedOlderPhoenixHost(port) || !await waitForHostPortRelease(port)) {
-    console.error('[PHOENIX] La instancia existente se conserva: no es un Phoenix antiguo verificable. Ciérrala normalmente si deseas cambiar de instalación.')
+    console.error('[PHOENIX] La instancia existente se conserva: no es un Phoenix antiguo verificable.')
+    console.error('[PHOENIX] Diagnóstico seguro: powershell -NoProfile -File .\\scripts\\phoenix-windows-port-repair.ps1')
     process.exit(0)
   }
   // The old TCP socket may release before its named-pipe lock on Windows.
@@ -1857,7 +1858,8 @@ while (true) {
     const migrated = retireVerifiedOlderPhoenixHost(port)
       && await waitForHostPortRelease(port)
     if (!migrated) {
-      console.error(`[PHOENIX] 127.0.0.1:${String(port)} está ocupado y el propietario no es un Phoenix anterior verificado. No se cerrará el proceso; termina la instalación anterior normalmente.`)
+      console.error(`[PHOENIX] 127.0.0.1:${String(port)} está ocupado; no se cerrará un proceso no verificado.`)
+      console.error(`[PHOENIX] Diagnóstico seguro: powershell -NoProfile -File .\\scripts\\phoenix-windows-port-repair.ps1 -Port ${String(port)}`)
       finalCode = 1
       break
     }
