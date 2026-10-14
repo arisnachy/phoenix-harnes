@@ -34,6 +34,16 @@ describe('UME terminal fence for automatic Goal rounds', () => {
       human(1), terminal(2), human(3), human(4, 'goal'),
     ]))).toBe(false)
   })
+  it('allows the next versioned mission after the previous one closed', () => {
+    const reopened = { seq: 4, type: 'team/mission', data: {
+      version: 1, teamId: 'lead', snapshot: {
+        teamId: 'lead', id: 'lead:mission:next', phase: 'running',
+      },
+    } } as unknown as SessionEvent
+    expect(goalBlockedByClosedUniversalMission(session([
+      human(1), terminal(2), human(3), reopened,
+    ]))).toBe(false)
+  })
   it('ignores forked Team events and unsupported versions', () => {
     expect(goalBlockedByClosedUniversalMission(session([
       human(1), terminal(2, 'completed', 'other'),
