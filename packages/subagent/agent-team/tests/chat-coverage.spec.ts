@@ -43,6 +43,11 @@ describe('human teamwork without progress spam', () => {
     expect(shouldPublishTeammateSpeech('Kira, voy a verificar otra noticia.', true, true)).toBe(false)
     expect(shouldPublishTeammateSpeech('Kira, confirmé el titular y la URL.', true, true)).toBe(true)
     expect(shouldPublishTeammateSpeech('Kira, ¿necesitas otra fuente?', true, false)).toBe(true)
+    expect(shouldPublishTeammateSpeech('Atlas, necesito el esquema del motor para preparar las animaciones.', true, false)).toBe(true)
+    expect(shouldPublishTeammateSpeech('Vega: comparte el atlas PNG 48x48 para integrar al héroe.', true, false)).toBe(true)
+    expect(shouldPublishTeammateSpeech('Kira, sigo revisando lo mismo.', true, false)).toBe(false)
+    expect(shouldPublishTeammateSpeech('Kira, voy a usar otra herramienta.', true, false)).toBe(false)
+    expect(shouldPublishTeammateSpeech('Otro estado sin cambio significativo.', true, false)).toBe(false)
     expect(shouldPublishTeammateSpeech('', false, false)).toBe(false)
   })
   it('shares one opening and one tool-backed finding with Kira, not a stream of plans', async () => {
