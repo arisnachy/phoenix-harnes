@@ -21,24 +21,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function goalBlockedByClosedUniversalMission(
   session: Pick<Session, 'id' | 'events'>,
 ): boolean {
-  let lastHumanSeq = -1
-  let lastMissionSeq = -1
-  let lastMissionTerminal = false
-  for (const event of session.events) {
-    if (event.type === 'user/message' && event.data.source.kind === 'user') {
-      lastHumanSeq = event.seq
-      continue
-    }
-    // Team types are an extension of the shared SessionEventMap; the Goal
-    // package intentionally does not import Teams or load its Host runtime.
-    if ((event.type as string) !== 'team/mission') continue
-    const data: unknown = event.data
-    if (!isRecord(data) || data.version !== 1 || data.teamId !== session.id) continue
-    const snapshot = data.snapshot
-    if (!isRecord(snapshot) || snapshot.teamId !== session.id
-      || typeof snapshot.phase !== 'string') continue
-    lastMissionSeq = event.seq
-    lastMissionTerminal = TERMINAL.has(snapshot.phase)
+  // The latest matching checkpoint owns the fence. A NEW mission's active
+  // checkpoint supersedes a previous terminal one without reviving old Goals.
+  const validPhase = (data: unknown): string | undefined => {
+    if (!isRecord(data) || data.version !== 1 || data.teamId !== session.id
+      || !isRecord(data.snapshot) || data.snapshot.teamId !== session.id) return undefined
+    return typeof data.snapshot.phase === 'string' ? data.snapshot.phase : undefined
   }
-  return lastMissionTerminal && lastMissionSeq > lastHumanSeq
+  const latest = session.events.findLast(event =>
+    (event.type as string) === 'team/mission' && validPhase(event.data) !== undefined)
+  if (latest === undefined) return false
+  const lastHuman = session.events.findLast(event =>
+    event.type === 'user/message' && event.data.source.kind === 'user')
+  return TERMINAL.has(validPhase(latest.data) ?? '') && latest.seq > (lastHuman?.seq ?? -1)
 }
