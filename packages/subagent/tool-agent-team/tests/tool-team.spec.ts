@@ -147,6 +147,8 @@ describe('dsh-tool-team', () => {
     expect(leadPrompt).toContain('spawn at least one genuine bounded Luna Max execution teammate')
     expect(leadPrompt).toContain('immediately switches to Luna Max')
     expect(leadPrompt).toContain('Sol never stays active after the plan')
+    expect(leadPrompt).toContain('Sol 6.1 at medium reasoning creates the initial concrete plan')
+    expect(leadPrompt).toContain('returns at medium reasoning only for a measured blocker')
     expect(leadPrompt).toContain('With a provider other than OpenAI Codex')
     expect(leadPrompt).toContain('the exact currently selected provider/model')
     expect(leadPrompt).toContain('never switch those workers to Codex or Luna Max')
