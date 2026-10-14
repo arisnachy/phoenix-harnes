@@ -182,6 +182,8 @@ export function createProactivityCreateTool(
         throw new ToolArgsError(['preparationInstruction and prepareLeadMinutes must be supplied together'])
       }
       const agentId = targetAgent(exec)
+      const automaticScope = args.requestedByUser === true || exec.agent === undefined
+        ? undefined : activeScheduledMissionScope(exec.agent.session)
       const recipient = await emailRecipient(args.delivery, args.recipient, options)
       const task = await engine.create({
         title: args.title,
@@ -203,9 +205,7 @@ export function createProactivityCreateTool(
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
         // Explicit human schedules survive the current conversation; model-
         // initiated followups are fenced to the active UME mission instead.
-        ...(args.requestedByUser === true || exec.agent === undefined ? {} : {
-          missionScope: activeScheduledMissionScope(exec.agent.session),
-        }),
+        ...(automaticScope === undefined ? {} : { missionScope: automaticScope }),
       })
       return taskView(task)
     },
@@ -243,6 +243,8 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
         throw new ToolArgsError(['everyMinutes must be at least 60 for condition watches'])
       }
       const agentId = targetAgent(exec)
+      const automaticScope = args.requestedByUser === true || exec.agent === undefined
+        ? undefined : activeScheduledMissionScope(exec.agent.session)
       const task = await engine.create({
         title: args.title,
         condition: args.condition,
@@ -256,9 +258,7 @@ export function createProactivityWatchTool(engine: ProactivityEngine): ToolDefin
         ...(agentId === undefined ? {} : { targetAgentId: agentId }),
         // Explicit human schedules survive the current conversation; model-
         // initiated followups are fenced to the active UME mission instead.
-        ...(args.requestedByUser === true || exec.agent === undefined ? {} : {
-          missionScope: activeScheduledMissionScope(exec.agent.session),
-        }),
+        ...(automaticScope === undefined ? {} : { missionScope: automaticScope }),
       })
       return taskView(task)
     },
