@@ -382,14 +382,28 @@ function clearCodexRealtimeAudioDrain(session: CodexRealtimeVoiceSession): void 
   delete session.lateAssistantTurnIgnored
 }
 
+/**
+ * V3 manages VAD upstream, outside Phoenix's public controls. Sending Kira's
+ * own loudspeaker back through the still-open RTC microphone can trigger an
+ * upstream interruption, cutting speech even when the audio element is
+ * unmuted. Pause the RTC input while an authorized response plays; resume
+ * after the WebRTC jitter buffer drains or an explicit interruption.
+ */
+function setCodexRealtimeMicOpen(session: CodexRealtimeVoiceSession, open: boolean): void {
+  for (const track of session.microphone.getAudioTracks()) track.enabled = open
+  document.documentElement.dataset.phoenixVoiceMicrophone = open ? 'listening' : 'paused-for-output'
+}
+
 function muteCodexRealtimeAudio(session: CodexRealtimeVoiceSession, reason: string): void {
   clearCodexRealtimeAudioDrain(session)
   session.audio.muted = true
+  setCodexRealtimeMicOpen(session, true)
   document.documentElement.dataset.phoenixVoiceAudioMuteReason = reason
 }
 
 function allowAuthorizedCodexAudio(session: CodexRealtimeVoiceSession): void {
   clearCodexRealtimeAudioDrain(session)
+  setCodexRealtimeMicOpen(session, false)
   session.audio.muted = false
   document.documentElement.dataset.phoenixVoiceAudioMuteReason = 'none'
   session.audio.volume = 1
@@ -524,7 +538,8 @@ function flushNativeSentenceStream(session: CodexRealtimeVoiceSession): boolean 
     if (stream.final && stream.through >= stream.transcript.length) {
       nativeSentenceFinalMessages.set(nativeSentenceMessageToken(session.key, stream.messageKey), stream.transcript)
       resetNativeSentenceStream(session.key)
-      publishVoiceIdle()
+      // The owning completion handler keeps Kira speaking until RTC audio
+      // has drained; do not switch to listening at generation completion.
     }
     return false
   }
