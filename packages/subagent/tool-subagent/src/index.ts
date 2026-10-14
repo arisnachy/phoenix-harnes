@@ -516,14 +516,21 @@ export function apply(ctx: Context, config: Config): void {
         // after the user changes the live selector. Resolve routing from the
         // current request, then the durable preference, then legacy options.
         const parentEvents = parent.session?.events ?? []
-        const activeProvider = foldRequestHeader(parentEvents)?.config.provider
-          ?? latestModelSelectionPreference({ events: parentEvents })?.selection.provider
-          ?? parent.options?.provider
+        const requestRoute = foldRequestHeader(parentEvents)?.config
+        const durableRoute = latestModelSelectionPreference({ events: parentEvents })?.selection
+        const activeProvider = requestRoute?.provider ?? durableRoute?.provider ?? parent.options?.provider
+        const activeModel = requestRoute?.model ?? durableRoute?.model
+        const activeEffort = requestRoute?.reasoningEffort ?? durableRoute?.reasoningEffort
+        const selectedRoute: ConfiguredAgentOptions | undefined =
+          activeProvider === undefined || activeModel === undefined ? undefined : {
+            provider: activeProvider, model: activeModel,
+            ...activeEffort === undefined ? {} : { reasoningEffort: activeEffort },
+          }
         const childRoute = config.childRoute !== undefined
           && activeProvider === config.childRoute.whenProvider
           ? config.childRoute : undefined
         const configuredAgentOptions = childRoute === undefined
-          ? config.agentOptions
+          ? selectedRoute === undefined ? config.agentOptions : { ...selectedRoute, ...config.agentOptions }
           : {
             ...config.agentOptions,
             provider: childRoute.provider,
