@@ -49,10 +49,10 @@ describe('KIRA Team chat message', () => {
     const peer = node({ senderKind: 'agent' })
     const luna = render(<View node={peer} useProjection={() => ({
       'worker-a': { id: 'worker-a', name: 'Orión', role: 'skill.testing',
-        status: 'working', model: 'gpt-6-luna', modelProvider: 'openai-codex' },
+        status: 'working', model: 'gpt-6-luna', modelProvider: 'openai-codex', reasoningEffort: 'max' },
     })} />)
     expect(luna.container.querySelector('[data-team-actual-model="gpt-6-luna"]')?.textContent).toBe('☾')
-    expect(luna.getByLabelText('Modelo real: gpt-6-luna')).toBeTruthy()
+    expect(luna.getByLabelText('Modelo real: gpt-6-luna · max')).toBeTruthy()
     luna.unmount()
     const sol = render(<View node={peer} useProjection={() => ({
       'worker-a': { id: 'worker-a', name: 'Orión', role: 'skill.testing',
