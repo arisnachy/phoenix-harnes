@@ -296,6 +296,30 @@
   opacity: .52;
 }
 
+.miniAppWrap {
+  width: 100%;
+  min-width: 0;
+}
+
+.remoteImageToggle {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 8px;
+  padding: 5px 10px;
+  border: 1px solid var(--dsw-alias-border-l2, #dfd6ce);
+  border-radius: 999px;
+  background: var(--dsw-alias-surface-primary, #fff);
+  color: var(--dsw-alias-label-secondary, #746961);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.remoteImageToggle:hover,
+.remoteImageToggle:focus-visible {
+  border-color: var(--dsw-alias-state-info-primary, #ea5b22);
+}
+
 .frame {
   display: block;
   width: 100%;
