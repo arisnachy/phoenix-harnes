@@ -72,7 +72,7 @@ describe('installModelSelection()', () => {
       await expect(agentEvents(ctx, agent).waterfall(
         'agent/request', { turn: 1, step: 3, signal },
         () => Promise.resolve({ provider: 'seed', model: 'seed' }),
-      )).resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh') })
+      )).resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('low') })
       events.push({ type: 'assistant/message', data: { turn: 1, step: 3,
         message: { source: { model: 'gpt-6.1-sol' },
           content: [{ type: 'text', text: 'Estrategia: aislar el error y corregir su origen.' }] } } })
@@ -608,7 +608,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('low'),
     })
     // One blocker elevates Sol to xhigh once; then Kira returns to Luna Max.
     await expect(agentEvents(ctx, agent).waterfall(
@@ -773,7 +773,7 @@ describe('installModelSelection()', () => {
     )).resolves.toEqual({
       provider: 'openai-codex',
       model: 'gpt-6.1-sol',
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('low'),
     })
 
     dispose()
