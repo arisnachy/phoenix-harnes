@@ -102,7 +102,11 @@ async function emailRecipient(
 }
 
 function recurrence(args: {
-  everyMinutes?: number; everyWeeks?: number; everyMonths?: number; everyYears?: number; timezone?: string
+  everyMinutes?: number
+  everyWeeks?: number
+  everyMonths?: number
+  everyYears?: number
+  timezone?: string
 }): ProactivityRecurrence | undefined {
   const everyMs = minutesToMs(args.everyMinutes, 'everyMinutes')
   const everyWeeks = positiveInteger(args.everyWeeks, 'everyWeeks')
