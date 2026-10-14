@@ -399,6 +399,7 @@ describe('browser voice adapter', () => {
       // acknowledgement can arrive after Codex has already streamed its audio.
       expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe('requested')
       expect(audio?.muted).toBe(false)
+      expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('none')
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenLastCalledWith({
         key: 'session-harness', text: 'Primera frase.',
@@ -525,6 +526,7 @@ describe('browser voice adapter', () => {
       channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
       expect(JSON.parse(String(channel?.send.mock.calls.at(-1)?.[0]))).toEqual({ type: 'response.cancel' })
       expect(audio?.muted).toBe(true)
+      expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('unsolicited-response')
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenCalledTimes(7)
@@ -634,6 +636,9 @@ describe('browser voice adapter', () => {
         else resolveAdmission({ ok: true, value: { accepted: outcome === 'accepted', ...(outcome === 'rejected' ? { reason: 'disabled' } : {}) } })
         await vi.waitFor(() => expect(document.documentElement.dataset.phoenixVoiceSpeechStatus).toBe(outcome))
         expect(audio?.muted).toBe(outcome !== 'accepted')
+        expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe(
+          outcome === 'accepted' ? 'none' : outcome === 'rejected' ? 'append-speech-rejected' : 'append-speech-failed',
+        )
         streamVoiceAssistantResponse(messageKey, 'Una respuesta autorizada.', activatedAt, true, false, true)
         expect(realtimeSpeak).toHaveBeenCalledTimes(beforeAdmission + (outcome === 'accepted' ? 1 : 2))
         await Promise.resolve()
