@@ -254,6 +254,14 @@ function phoenixAutoUnfinishedAction(text: string): boolean {
     || AUTO_FUTURE_ACTION.test(text)
 }
 
+/** Kira can request an actual Sol strategy pass when her current approach is unclear. */
+// oxlint-disable-next-line @stylistic/max-len -- Narrow bilingual consultation trigger.
+const AUTO_SOL_REQUEST = /\b(?:necesito|debo|voy\s+a|conviene|quiero)\s+(?:(?:volver\s+a|primero)\s+)?(?:consultar|preguntar|pedir(?:le)?\s+(?:ayuda|una\s+estrategia))\s+(?:(?:a|con)\s+)?sol\b|\b(?:no\s+(?:encuentro|logro|consigo)\s+(?:c[oó]mo|una\s+forma\s+de)|no\s+s[eé]\s+c[oó]mo\s+resolver)\b|\b(?:need\s+to|should|will)\s+(?:consult|ask)\s+sol\b/iu
+
+function kiraNeedsSolStrategy(text: string): boolean {
+  return AUTO_SOL_REQUEST.test(text)
+}
+
 /** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
 const AUTO_CONTINUATION_LIMIT = 4
 const AUTO_EXECUTION_CONTINUATION =
@@ -281,6 +289,11 @@ const AUTO_LUNA_COORDINATION_POLICY =
   'and speak to the user in concise, warm Spanish when that is their language. ' +
   'Never simulate coworker messages or claim a tool ran before its real result. ' +
   'Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
+
+const AUTO_SOL_RESCUE_HANDOFF =
+  'Sol provided focused advice to Kira. Resume the SAME unfinished mission on Luna Max, ' +
+  'apply the correction only if it respects the original user request and permissions, ' +
+  'execute the next tool action and stop when verified. Do not reopen completed work.'
 
 const AUTO_VISIBLE_PLAN_HANDOFF =
   'The visible **Plan:** from the immediately preceding Sol step is Kira\'s authoritative execution plan. ' +
@@ -707,7 +720,8 @@ function directCodexPlannerRescue(
   if (selection.provider !== 'openai-codex' || step <= 1) return undefined
   resetPhoenixAutoTurnState(state, turn)
   const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
-  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
+  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId
+    && state.rescueCount < 2) {
     state.lastTeamEscalationMessageId = teamSignal.messageId
     state.lastRescueStep = step
     return selection
@@ -729,7 +743,8 @@ function phoenixAutoRoute(
 ): ModelSelection & { reasoningEffort: ReasoningEffortId } {
   resetPhoenixAutoTurnState(state, turn)
   const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
-  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
+  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId
+    && state.rescueCount < 2) {
     state.lastTeamEscalationMessageId = teamSignal.messageId
     state.lastRescueStep = step
     state.rescueCount += 1
@@ -767,14 +782,14 @@ function phoenixAutoRoute(
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId('medium'),
+        reasoningEffort: ReasoningEffortId('low'),
       }
     }
     if (phoenixAutoTaskRequest(directText)) {
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId('xhigh'),
+        reasoningEffort: ReasoningEffortId('low'),
       }
     }
     return {
@@ -784,7 +799,7 @@ function phoenixAutoRoute(
     }
   }
 
-  if (state.forcePlannerNext) {
+  if (state.forcePlannerNext && state.rescueCount < 2) {
     state.forcePlannerNext = false
     state.lastRescueStep = step
     state.rescueCount += 1
@@ -796,7 +811,7 @@ function phoenixAutoRoute(
   }
 
   const repeatedStall = isPhoenixCodexAutoStalled(agent, turn)
-  const canRescue = repeatedStall
+  const canRescue = repeatedStall && state.rescueCount < 2
     && (state.lastRescueStep === 0 || step - state.lastRescueStep >= 2)
   if (canRescue) {
     state.lastRescueStep = step
@@ -1028,6 +1043,37 @@ export function installModelSelection(
     }
 
     if (phoenixAutoState.lastContinuationStep === latest.step) return
+    // Sol's strategic rescue is not a completed mission. Hand control to Luna.
+    if (latest.step > 1 && latest.step === phoenixAutoState.lastRescueStep
+      && latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL
+      && !phoenixAutoExplicitlyClosed(latest.text)
+      && phoenixAutoState.continuationCount < AUTO_CONTINUATION_LIMIT) {
+      phoenixAutoState.lastContinuationStep = latest.step
+      phoenixAutoState.continuationCount += 1
+      agent.steer(createUserMessage({
+        content: [{ type: 'text', text: AUTO_SOL_RESCUE_HANDOFF }],
+        source: { kind: 'plugin', plugin: 'model-selection', form: 'notice',
+          summary: 'Kira resumes Luna Max after Sol strategy rescue' },
+      }))
+      return
+    }
+    // Luna can ask for a strategy when stuck without repeating a doomed tool.
+    if (latest.step > 1 && !latestStepHasToolActivity
+      && !phoenixAutoExplicitlyClosed(latest.text) && kiraNeedsSolStrategy(latest.text)
+      && phoenixAutoState.rescueCount < 2
+      && phoenixAutoState.continuationCount < AUTO_CONTINUATION_LIMIT) {
+      phoenixAutoState.lastContinuationStep = latest.step
+      phoenixAutoState.continuationCount += 1
+      phoenixAutoState.forcePlannerNext = true
+      agent.steer(createUserMessage({
+        content: [{ type: 'text', text:
+          'Consult Sol for ONE focused strategy on the current unresolved issue, ' +
+          'then return to Luna Max to execute and verify it.' }],
+        source: { kind: 'plugin', plugin: 'model-selection', form: 'notice',
+          summary: 'Kira requests Sol strategic consultation' },
+      }))
+      return
+    }
     // Kira's normal final answer is terminal. Team availability is never
     // evidence of unfinished work. Only a visible, unexecuted action or the
     // explicitly visible Sol planning handoff can request another step.
