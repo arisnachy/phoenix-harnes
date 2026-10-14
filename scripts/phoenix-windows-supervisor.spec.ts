@@ -318,6 +318,19 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('relaunching PHOENIX from the verified runtime')
   })
 
+  it('never downgrades a newer durable checkout to an older prepared stable during crash recovery', () => {
+    const activateStart = source.indexOf('function activatePreparedRuntime(target)')
+    const activeStart = source.indexOf('function activeRuntimeIsSupersededByLiveCheckout(target)')
+    expect(activateStart).toBeGreaterThan(0)
+    expect(activeStart).toBeGreaterThan(activateStart)
+    const activate = source.slice(activateStart, activeStart)
+    expect(activate).toContain('if (activeRuntimeIsSupersededByLiveCheckout(target))')
+    expect(activate).toContain('refusing an automatic downgrade during Host recovery')
+    expect(activate.indexOf('if (activeRuntimeIsSupersededByLiveCheckout(target))')).toBeLessThan(
+      activate.indexOf('const alreadyActive = healthyRuntimeForTarget(target)'),
+    )
+  })
+
   it('waits for port release after a crash before activating a recovered stable Host', () => {
     const start = source.indexOf('// A crashed Host can leave its HTTP socket')
     const recovery = source.indexOf('if (crashPreparedUpdate !== undefined)')
