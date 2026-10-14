@@ -248,14 +248,21 @@ describe('dsh-tool-team', () => {
       source: { kind: 'user' },
       content: [{ type: 'text', text: 'Kira, revisa los conectores y responde en español. Quiero el diagnóstico aquí.' }],
     }), { surfaceOp: 'append' })
-    expect(renderPrompt(await assembly(ctx, lead))).toContain('Team conversational language: Spanish (es)')
+    const leadAssembly = await assembly(ctx, lead)
+    expect(renderPrompt(leadAssembly)).toContain('Team conversational language: Spanish (es)')
+    expect(leadAssembly.sections.at(-1)).toMatchObject({
+      name: 'team:language-lock',
+    })
+    expect(leadAssembly.sections.at(-1)?.text).toContain('EN ESPAÑOL')
     const created = await execute(ctx, lead, 'spawn_teammate', {
       name: 'nexo', description: 'Diagnosticar un fallo de OAuth',
       prompt: 'Inspect OAuth errors and report the evidence to Kira.',
     })
     expect(created.isError).toBe(false)
     const child = await waitRunning(ctx, spawnedChildId(created))
-    expect(renderPrompt(await assembly(ctx, child))).toContain('Team conversational language: Spanish (es)')
+    const childAssembly = await assembly(ctx, child)
+    expect(renderPrompt(childAssembly)).toContain('Team conversational language: Spanish (es)')
+    expect(childAssembly.sections.at(-1)?.text).toContain('EN ESPAÑOL')
     const firstUserInstruction = child.session.events
       .filter(event => event.type === 'user/message')
       .flatMap(event => event.data.content)
@@ -275,8 +282,12 @@ describe('dsh-tool-team', () => {
       source: { kind: 'user' },
       content: [{ type: 'text', text: 'Please review the connector and explain the outcome in English.' }],
     }), { surfaceOp: 'append' })
-    expect(renderPrompt(await assembly(ctx, lead))).toContain('Team conversational language: English (en)')
-    expect(renderPrompt(await assembly(ctx, child))).toContain('Team conversational language: English (en)')
+    const englishLead = await assembly(ctx, lead)
+    const englishChild = await assembly(ctx, child)
+    expect(renderPrompt(englishLead)).toContain('Team conversational language: English (en)')
+    expect(renderPrompt(englishChild)).toContain('Team conversational language: English (en)')
+    expect(englishLead.sections.at(-1)?.text).not.toContain('REGLA PRIORITARIA')
+    expect(englishChild.sections.at(-1)?.text).not.toContain('REGLA PRIORITARIA')
     await execute(ctx, lead, 'interrupt_agent', { target: 'nexo' })
     await waitNoAgent(ctx, child.id)
   })
