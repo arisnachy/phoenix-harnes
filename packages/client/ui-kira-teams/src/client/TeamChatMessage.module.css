@@ -11,8 +11,8 @@
 
 .avatar {
   flex: none;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
 }
@@ -20,6 +20,13 @@
 .avatar > span {
   width: 100%;
   height: 100%;
+}
+
+/* The Lead and specialists share the same portrait / engine badge frame. */
+.meta > .avatar {
+  width: 44px;
+  height: 44px;
+  margin-right: 4px;
 }
 
 .column {
@@ -415,20 +422,6 @@
   .reactionAvatar { transition: none !important; }
 }
 
-.modelBadge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 18px;
-  height: 18px;
-  margin-left: -8px;
-  border-radius: 50%;
-  background: var(--dsh-color-surface, #fff);
-  color: var(--dsh-color-text-secondary, #536079);
-  font-size: 12px;
-  line-height: 1;
-}
 
 /* Agent messages use a quiet two-tier card; the conversation canvas and
    navigation keep their existing colors and layout. */

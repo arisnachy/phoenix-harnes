@@ -73,14 +73,26 @@ export function modelAvatarKind(model: string | undefined): ModelAvatarKind {
   return 'generic'
 }
 
-/** Sun/moon indicates the model family observed, never the teammate's persona.
- * Unknown routes have no badge instead of pretending the Lead's route is theirs.
- */
-export function modelEngineMark(model: string | undefined): '☀' | '☾' | undefined {
-  if (model === undefined) return undefined
-  if (/^gpt-\d+(?:\.\d+)?-sol(?:$|[-_])/iu.test(model)) return '☀'
-  if (/^gpt-\d+(?:\.\d+)?-luna(?:$|[-_])/iu.test(model)) return '☾'
-  return undefined
+/** The badge class is observed model provenance, never the specialist's persona. */
+export type ModelEngineFamily = 'sol' | 'luna' | 'astra' | 'other'
+
+/** Recognize the actual engine route; an absent model must never produce a badge. */
+export function modelEngineFamily(model: string | undefined, provider?: string): ModelEngineFamily | undefined {
+  if (model === undefined || model.trim() === '') return undefined
+  if (provider !== undefined && provider !== 'openai-codex') return 'other'
+  if (/^gpt-\d+(?:\.\d+)?-sol(?:$|[-_])/iu.test(model)) return 'sol'
+  if (/^gpt-\d+(?:\.\d+)?-luna(?:$|[-_])/iu.test(model)) return 'luna'
+  if (/^gpt-\d+(?:\.\d+)?-astra(?:$|[-_])/iu.test(model)) return 'astra'
+  return provider === undefined ? undefined : 'other'
+}
+
+/** A small, consistent icon across the Lead and all real Team workers. */
+export function modelEngineMark(model: string | undefined, provider?: string): '☀' | '☾' | '★' | 'ϟ' | undefined {
+  const family = modelEngineFamily(model, provider)
+  if (family === 'sol') return '☀'
+  if (family === 'luna') return '☾'
+  if (family === 'astra') return '★'
+  return family === 'other' ? 'ϟ' : undefined
 }
 
 /** Resolve one KIRA identity to its standalone public portrait asset. */
@@ -130,7 +142,8 @@ export function ModelActivityAvatar({
   const resolvedKind = kind
     ?? (agentId === undefined ? modelAvatarKind(activity?.model) : agentAvatarKind(agentId))
   const observedModel = model ?? activity?.model
-  const engine = modelEngineMark(observedModel)
+  const engine = modelEngineMark(observedModel, modelProvider)
+  const engineFamily = modelEngineFamily(observedModel, modelProvider)
   const provenance = observedModel === undefined ? undefined
     : `${modelProvider ?? 'modelo observado'} · ${observedModel}`
   const phase = running ? (activity?.phase ?? 'preparing') : 'idle'
@@ -160,7 +173,8 @@ export function ModelActivityAvatar({
       />
       <span className={css.badge} />
       {engine === undefined ? null : <span className={css.engineBadge}
-        title={provenance} data-engine-model={observedModel} data-engine-mark={engine}>{engine}</span>}
+        title={provenance} data-engine-model={observedModel} data-engine-mark={engine}
+        data-engine-family={engineFamily}>{engine}</span>}
     </span>
   )
 }
