@@ -1,0 +1,48 @@
+import { describe, expect, it } from 'vitest'
+import { hasExternalImageReferences, inlineBundledImages } from '../src/client/chat/html-preview-assets.ts'
+
+describe('HARDNESS packaged HTML image assets', () => {
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4//8/AwAI/AL+e6I6JwAAAABJRU5ErkJggg=='
+
+  it('shows attached PNGs under nested relative image paths, CSS url and srcset', () => {
+    const source = '<img src="./images/hero.png" srcset="./images/hero.png 1x, ./images/alt.png 2x"><div style="background-image:url(./images/hero.png)"></div>'
+    const html = inlineBundledImages('site/index.html', source, {
+      'site/index.html': source,
+      'site/images/hero.png': png,
+      'site/images/alt.png': { base64: png, mime: 'image/png' },
+    })
+    expect(html).toContain('src="data:image/png;base64,')
+    expect(html).toContain('srcset="data:image/png;base64,')
+    expect(html).toContain('background-image:url("data:image/png;base64,')
+    expect(html).not.toContain('./images/hero.png')
+  })
+
+  it('preserves remote and unknown images without reading host files or escaping its bundle', () => {
+    const html = inlineBundledImages('site/index.html',
+      '<img src="https://images.example.test/hero.jpg"><img src="../../secret.png"><img src="./missing.jpg"><img src="javascript:alert(1)">',
+      { 'site/assets/hero.png': png, '../secret.png': png })
+    expect(html).toContain('https://images.example.test/hero.jpg')
+    expect(html).toContain('../../secret.png')
+    expect(html).toContain('./missing.jpg')
+    expect(html).toContain('javascript:alert(1)')
+    expect(html).not.toContain('data:image/png')
+  })
+
+  it('accepts preformatted image data URLs and refuses ambiguous MIME or malformed base64', () => {
+    const html = inlineBundledImages('index.html',
+      '<img src="a.webp"><img src="b.jpg"><img src="c.png">',
+      { 'a.webp': 'data:image/webp;base64,QUJDRA==',
+        'b.jpg': { mime: 'application/javascript', base64: png },
+        'c.png': 'not valid base64?' })
+    expect(html).toContain('data:image/webp;base64,QUJDRA==')
+    expect(html).toContain('src="b.jpg"')
+    expect(html).toContain('src="c.png"')
+  })
+
+  it('recognizes remote imagery and does not treat links or internal images as external', () => {
+    expect(hasExternalImageReferences('<img src="https://images.example.com/cat.webp">')).toBe(true)
+    expect(hasExternalImageReferences('<style>.hero{background-image:url(https://images.example.com/hero)}</style>')).toBe(true)
+    expect(hasExternalImageReferences('<a href="https://example.com">Visitar</a>')).toBe(false)
+    expect(hasExternalImageReferences('<img src="data:image/png;base64,QUJDRA==">')).toBe(false)
+  })
+})
