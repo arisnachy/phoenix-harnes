@@ -211,6 +211,7 @@ export class UniversalMissionLedger {
    * @param root - exact owning Lead.
    * @param cancelled - whether the human explicitly aborted the turn.
    * @param completion - evidence-grounded completion decision for the exact mission.
+   * @param expectedMissionId - optional captured identity to reject late prior-turn closures.
    * @returns terminal checkpoint when one existed.
    */
   async close(
@@ -219,10 +220,12 @@ export class UniversalMissionLedger {
     completion: { readonly verified: boolean; readonly evidenceIds: readonly string[] } = {
       verified: false, evidenceIds: [],
     },
+    expectedMissionId?: string,
   ): Promise<UniversalMissionSnapshot | undefined> {
     return await this.journal.transact(root.id, async () => {
       const prior = this.read(root)
       if (prior === undefined || universalMissionTerminal(prior.phase)) return prior
+      if (expectedMissionId !== undefined && expectedMissionId !== prior.id) return prior
       const snapshot: UniversalMissionSnapshot = {
         ...prior,
         phase: cancelled ? 'cancelled' : completion.verified ? 'completed' : 'partial',
