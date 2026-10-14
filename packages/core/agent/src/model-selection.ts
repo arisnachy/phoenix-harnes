@@ -622,7 +622,7 @@ function phoenixAutoTurnWasUserStopped(
   })
 }
 
-/** A tiny requested Team showcase still gets a real Sol plan, but never pays xhigh effort. */
+/** A tiny requested Team showcase uses the same Sol/medium planning effort as other operational missions. */
 export function isBriefTeamDemonstration(text: string): boolean {
   const request = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
   if (request.length < 8 || request.length > 240 || request.includes('\n')) return false
@@ -720,12 +720,12 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('medium'),
     }
   }
   if (step <= 1) {
     // Peer result/question wakeups are execution, not a brand-new planning
-    // request. A real blocker was already escalated to Sol/xhigh above.
+    // request. A real blocker was already escalated to Sol/medium above.
     if (teamSignal !== undefined) {
       return {
         provider: 'openai-codex',
@@ -758,7 +758,7 @@ function phoenixAutoRoute(
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId('xhigh'),
+        reasoningEffort: ReasoningEffortId('medium'),
       }
     }
     return {
@@ -775,7 +775,7 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('medium'),
     }
   }
 
@@ -788,7 +788,7 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('medium'),
     }
   }
 
