@@ -97,7 +97,7 @@ export function replayUniversalMission(
   let state: UniversalMissionSnapshot | undefined
   const closed = new Set<string>()
   for (const event of events) {
-    if (event.type !== 'team/mission' || event.data.version !== 1 || event.data.teamId !== teamId) continue
+    if (event.type !== 'team/mission' || event.data.teamId !== teamId) continue
     const snapshot = event.data.snapshot
     if (!validMission(snapshot) || snapshot.teamId !== teamId || closed.has(snapshot.id)) continue
     if (state === undefined || state.id !== snapshot.id) {
@@ -210,6 +210,7 @@ export class UniversalMissionLedger {
    * turn end is not proof that all requirements were verified.
    * @param root - exact owning Lead.
    * @param cancelled - whether the human explicitly aborted the turn.
+   * @param completion - evidence-grounded completion decision for the exact mission.
    * @returns terminal checkpoint when one existed.
    */
   async close(
