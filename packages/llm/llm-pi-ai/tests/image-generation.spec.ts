@@ -303,7 +303,7 @@ describe('Codex image generation bridge', () => {
       }
       const exported = await materializeGeneratedImageInWorkspace(store as never, image, workspace)
       expect(exported.path).toContain(join(workspace, '.artifacts', 'generated-images'))
-      expect(exported.path).toMatch(/\\.png$/u)
+      expect(exported.path).toMatch(/\.png$/u)
       expect(exported.attachment).toBe(attachment)
       expect(await readFile(exported.path)).toEqual(data)
       // Original Codex temp raster is absent; the exported asset survives.
