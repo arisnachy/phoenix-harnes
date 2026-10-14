@@ -11,9 +11,9 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, extname, join, resolve } from 'node:path'
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
@@ -72,6 +72,11 @@ interface ImageExecutionContext {
     readonly options: {
       readonly provider?: string
     }
+    readonly session?: {
+      readonly header: {
+        readonly cwd?: string
+      }
+    }
   }
 }
 
@@ -123,6 +128,58 @@ interface ImageGenerationValue {
 }
 
 /**
+ * Materialize a generated raster where this session's ordinary shell and file
+ * tools can open it. The source directory may be outside their sandbox (Codex
+ * ephemeral images) or disappear after the worker exits. The content-addressed
+ * attachment is the authority: NEVER re-read the provider's temporary path.
+ *
+ * Keep the copy under the session workspace's ignored .artifacts directory,
+ * not a disposable runtime/staging checkout. Reject symlinked staging
+ * directories so host-side image persistence cannot redirect writes outside
+ * the selected workspace. A failed export is never treated as a provider
+ * failure and must not initiate another charged generation.
+ *
+ * @param attachments - persistent store that already committed the image.
+ * @param result - image and its durable attachment reference.
+ * @param cwd - exact current session workspace root (never a model argument).
+ * @param signal - cancellation for attachment reads.
+ * @returns same result with a stable path usable in subsequent session steps.
+ */
+export async function materializeGeneratedImageInWorkspace(
+  attachments: Pick<AttachmentStore, 'readImage'>,
+  result: ImageGenerationValue,
+  cwd: string | undefined,
+  signal?: AbortSignal,
+): Promise<ImageGenerationValue> {
+  if (cwd === undefined) return result
+  if (!isAbsolute(cwd)) throw new Error('image_generation: session workspace must be an absolute path')
+  signal?.throwIfAborted()
+  const workspace = await stat(cwd)
+  if (!workspace.isDirectory()) throw new Error('image_generation: session workspace is not a directory')
+  const artifactRoot = join(cwd, '.artifacts')
+  const generatedRoot = join(artifactRoot, 'generated-images')
+  await mkdir(artifactRoot, { recursive: true })
+  const parentInfo = await lstat(artifactRoot)
+  if (!parentInfo.isDirectory() || parentInfo.isSymbolicLink()) {
+    throw new Error('image_generation: workspace asset directory must not be a symlink')
+  }
+  await mkdir(generatedRoot, { recursive: true })
+  const assetInfo = await lstat(generatedRoot)
+  if (!assetInfo.isDirectory() || assetInfo.isSymbolicLink()) {
+    throw new Error('image_generation: generated image directory must not be a symlink')
+  }
+  signal?.throwIfAborted()
+  // Reading by attachment id survives Codex cache cleanup and avoids assuming
+  // any OS-level read permission on the original worker's temporary folder.
+  const stored = await attachments.readImage(result.attachment, signal)
+  signal?.throwIfAborted()
+  const suffix = imageExtension(stored.ref.mediaType)
+  const path = join(generatedRoot, `image-${Date.now()}-${randomUUID()}${suffix}`)
+  await writeFile(path, stored.data, { flag: 'wx' })
+  return { ...result, path }
+}
+
+/**
  * Model-facing policy. Keeping the routing rule in the schema description makes
  * the capability visible to every model that sees the normal tool catalog.
  */
@@ -135,7 +192,7 @@ export const imageGenerationToolDescription =
   + 'If a real raster backend is unavailable, fail loudly instead of fabricating a vector/HTML substitute. '
   + 'For a webpage, landing page, dashboard, report, or similar visual deliverable, generate type-appropriate imagery when it materially improves the requested result and wire the generated attachment into the final artifact when the format permits it; keep data charts and tables on structured visualization surfaces rather than inventing them as image content. '
   + 'For ordinary real-world subjects, prefer natural, professional, coherent imagery and do not turn objects into living characters or mascots unless the user asks for that. '
-  + 'The successful result includes both a durable attachment and an absolute local path; reuse that path with read_image when the image must be inspected or embedded later. '
+  + 'The successful result includes a durable attachment and, when the session has a workspace, an exported image under <workspace>/.artifacts/generated-images/; use that stable path in subsequent read_image, shell, webpage and game-building steps rather than the Codex temporary cache path. '
   + 'Pass the complete visual request in prompt. Governed HARDNESS recovery may supply the same request as brief or objective. Generate one distinct final visual per call.'
 
 /**
@@ -1060,15 +1117,22 @@ export function installCodexImageGeneration(ctx: Context): void {
       const requestedBackend = args.backend ?? 'auto'
       const failures: string[] = []
       for (const backend of imageGenerationBackendOrder(requestedBackend, exec.agent?.options.provider)) {
+        let image: ImageGenerationValue
         try {
-          if (backend === 'codex') return await generateWithCodexProvider(ctx, args, prompt, exec.signal)
-          if (backend === 'local') return await generateWithLocalProvider(ctx, args, prompt, exec.signal)
-          return await generateWithFreeProvider(ctx, args, prompt, exec.signal)
+          if (backend === 'codex') image = await generateWithCodexProvider(ctx, args, prompt, exec.signal)
+          else if (backend === 'local') image = await generateWithLocalProvider(ctx, args, prompt, exec.signal)
+          else image = await generateWithFreeProvider(ctx, args, prompt, exec.signal)
         } catch (error) {
           exec.signal.throwIfAborted()
           if (requestedBackend !== 'auto') throw error
           failures.push(`${backend}: ${error instanceof Error ? error.message : String(error)}`)
+          continue
         }
+        // Only provider-generation failures qualify for an alternative backend.
+        // A persistence failure MUST NOT create additional images/charges.
+        return await materializeGeneratedImageInWorkspace(
+          servicesOf(ctx).attachments, image, exec.agent?.session?.header.cwd, exec.signal,
+        )
       }
       throw new Error(
         `image_generation: no real raster backend succeeded. ${failures.join(' | ')}`,
