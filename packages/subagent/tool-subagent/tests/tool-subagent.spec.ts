@@ -7,7 +7,7 @@ import Loader from '@phoenix-ai/cordis-plugin-loader'
 import { CallId } from '@phoenix-ai/dsh-llm'
 import SystemPrompt from '@phoenix-ai/dsh-system-prompt'
 import ToolRuntime, { TOOL_ABORTED_BEFORE_DISPATCH } from '@phoenix-ai/dsh-tools'
-import { assembleContextFor, type Agent } from '@phoenix-ai/dsh-agent'
+import { assembleContextFor, persistModelSelectionPreference, type Agent } from '@phoenix-ai/dsh-agent'
 import AgentRegistry from '@phoenix-ai/dsh-agent'
 import AgentLoop from '@phoenix-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@phoenix-ai/dsh-agent-loop-testkit'
@@ -20,7 +20,7 @@ import * as ToolTasks from '@phoenix-ai/dsh-tool-jobs'
 import { MockAdapter, textResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 import * as mock from './scripted-provider.ts'
 import * as tool from '../src/index.ts'
-import { SessionId } from '@phoenix-ai/dsh-session'
+import { Session, SessionId } from '@phoenix-ai/dsh-session'
 
 const testToolSignal = new AbortController().signal
 
@@ -453,6 +453,29 @@ describe('dsh-tool-subagent', () => {
 
       const otherParent = { ...fakeAgent('other-parent'), options: { provider: 'openrouter', model: 'ox-alpha' } } as Agent
       await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: otherParent })
+      expect(seen?.agentOptions).toBeUndefined()
+
+      // The visible selector can change after the Lead was created. Codex now
+      // gets Luna even if its stale Agent.options still says OpenRouter.
+      const switchedSession = Session.create(SessionId('switched-selector'))
+      persistModelSelectionPreference(switchedSession, {
+        provider: 'openai-codex', model: 'gpt-6.1-sol',
+      }, 'explicit')
+      const switchedParent = { ...fakeAgent('switched-parent'), session: switchedSession,
+        options: { provider: 'openrouter', model: 'old-provider' } } as Agent
+      await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: switchedParent })
+      expect(seen?.agentOptions).toEqual({
+        provider: 'openai-codex', model: 'gpt-5.6-luna', reasoningEffort: 'high',
+      })
+
+      // Conversely, switching away from Codex must not force Codex workers.
+      const awaySession = Session.create(SessionId('switched-away'))
+      persistModelSelectionPreference(awaySession, {
+        provider: 'openrouter', model: 'new-external-model',
+      }, 'explicit')
+      const awayParent = { ...fakeAgent('switched-away'), session: awaySession,
+        options: { provider: 'openai-codex', model: 'gpt-6.1-sol' } } as Agent
+      await callSubagent(ctx, { description: 'd', prompt: 'p' }, { agent: awayParent })
       expect(seen?.agentOptions).toBeUndefined()
     },
   )
