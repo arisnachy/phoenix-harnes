@@ -57,6 +57,7 @@ export const chatParticipantSchema = z.object({
   role: z.string(), status: z.string(), avatar: z.string().optional(), task: z.string().optional(),
   missionId: z.string().optional(),
   model: z.string().optional(), modelProvider: z.string().optional(),
+  reasoningEffort: z.string().optional(),
 }).strict()
 const participantsSchema = z.record(z.string(), chatParticipantSchema)
 declare module '@phoenix-ai/dsh-session-projection/types' {

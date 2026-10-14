@@ -44,6 +44,7 @@ export interface TeamChatParticipant {
   /** Last model proven by the child Session's request header or authored response. */
   readonly model?: string | undefined
   readonly modelProvider?: string | undefined
+  readonly reasoningEffort?: string | undefined
 }
 /** Detached public transcript and real participant identities; reading never wakes agents. */
 export interface TeamChatReadResult { readonly messages: TeamChatMessage[]

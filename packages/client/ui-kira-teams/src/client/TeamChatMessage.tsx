@@ -151,6 +151,7 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
   // or the Lead's Sol planning model. Old sessions without it show no symbol.
   const servingModel = data.senderKind === 'agent' ? participants[data.senderId]?.model : undefined
   const servingProvider = participants[data.senderId]?.modelProvider
+  const servingEffort = participants[data.senderId]?.reasoningEffort
   const targetStatus = data.purpose === 'assignment'
     ? participants[data.targetId]?.status
     : undefined
@@ -189,8 +190,8 @@ export const KiraTeamMessageView = memo(function KiraTeamMessageView({
           <strong>{sender.name}</strong>
           {servingModel !== undefined && <span className={css.modelBadge}
             data-team-actual-model={servingModel}
-            title={`${servingProvider ?? 'Proveedor no registrado'} · ${servingModel}`}
-            aria-label={`Modelo real: ${servingModel}`}>
+            title={`${servingProvider ?? 'Proveedor no registrado'} · ${servingModel}${servingEffort === undefined ? '' : ` · ${servingEffort}`}`}
+            aria-label={`Modelo real: ${servingModel}${servingEffort === undefined ? '' : ` · ${servingEffort}`}`}>
             {/sol(?:$|[-_])/iu.test(servingModel) ? '☀'
               : /luna(?:$|[-_])/iu.test(servingModel) ? '☾'
                 : /astra(?:$|[-_])/iu.test(servingModel) ? '★' : 'ϟ'}

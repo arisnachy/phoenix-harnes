@@ -78,14 +78,22 @@ export function shouldPublishTeammateSpeech(message: string, alreadySpoke: boole
 }
 
 /** Read only real request/assistant provenance; never infer a provider from a persona. */
-function actualTeamModel(events: readonly SessionEvent[]): { model: string; modelProvider?: string } | undefined {
+function actualTeamModel(events: readonly SessionEvent[]): {
+  model: string
+  modelProvider?: string
+  reasoningEffort?: string
+} | undefined {
   const request = foldRequestHeader(events)?.config
   const completed = events.findLast(event => event.type === 'assistant/message')
   const source = completed?.type === 'assistant/message' ? completed.data.message.source : undefined
   const model = typeof source?.model === 'string' ? source.model : request?.model
   const provider = typeof source?.provider === 'string' ? source.provider : request?.provider
   if (typeof model !== 'string' || model.length === 0) return undefined
-  return { model, ...(typeof provider === 'string' ? { modelProvider: provider } : {}) }
+  const effort = request?.reasoningEffort
+  return { model,
+    ...(typeof provider === 'string' ? { modelProvider: provider } : {}),
+    ...(typeof effort === 'string' ? { reasoningEffort: effort } : {}),
+  }
 }
 
 /** Owns actual output publication and authorized reaction mutations. */
@@ -185,7 +193,8 @@ export class TeamChat {
     const actual = actualTeamModel(events)
     if (existing !== undefined) {
       if (existing.status === status && (actual === undefined
-        || (existing.model === actual.model && existing.modelProvider === actual.modelProvider))) return existing
+        || (existing.model === actual.model && existing.modelProvider === actual.modelProvider
+          && existing.reasoningEffort === actual.reasoningEffort))) return existing
       const next: TeamChatParticipant = { ...existing, status,
         ...(actual === undefined ? {} : actual) }
       root.append('team/chat-participant', { version: 1, participant: next })
