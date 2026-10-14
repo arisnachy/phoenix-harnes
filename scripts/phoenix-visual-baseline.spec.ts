@@ -14,7 +14,7 @@ function fixture() {
     'packages/client/ui-sidebar/src/client/SidebarRoot.module.css':
       '.root.collapsed {} .collapsed .primaryNavigation {} .collapsed .navLink {} --phoenix-side-ember: #e76020;',
     'packages/client/ui-layout/src/client/columns.ts':
-      'export const SIDEBAR_COLLAPSED = 104',
+      'export const SIDEBAR_COLLAPSED = 72',
     'packages/client/ui-conversation/src/client/chat/ChatView.module.css':
       '.turnStatusBrand { color: #ea5b22; } .phoenixActivity::before {}',
     'packages/client/ui-theme/src/theme-settings.ts':
