@@ -45,6 +45,18 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('if (!migrated)')
   })
 
+  it('requires explicit approval and rechecks PID identity when repairing a stranded local Host', () => {
+    const repair = readFileSync(resolve('scripts/phoenix-windows-port-repair.ps1'), 'utf8')
+    expect(repair).toContain('[switch]$Apply')
+    expect(repair).toContain('if (-not $Apply)')
+    expect(repair).toContain('Get-NetTCPConnection -State Listen -LocalPort $ListenPort')
+    expect(repair).toContain('Get-OwnerIsCurrentUser $hostProcess')
+    expect(repair).toContain('$liveHost.CreationDate -ne $hostProcess.CreationDate')
+    expect(repair).toContain('Stop-Process -Id ([int]$supervisor.ProcessId) -Force')
+    expect(repair).toContain('Stop-Process -Id $hostPid -Force')
+    expect(repair).toContain('El listener no es un Host Phoenix propio verificable')
+  })
+
   it('retries failed updater watchers with capped backoff instead of a one-second hot loop', () => {
     expect(source).toContain('function superviseWatcher()')
     expect(source).toContain('WATCHER_MAX_RESTART_DELAY_MS')
@@ -204,8 +216,8 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain('if (port !== undefined && await existingHostOnPort(port))')
     expect(source).toContain('const migrated = retireVerifiedOlderPhoenixHost(port)')
     expect(source).toContain('if (!migrated) {')
-    expect(source).toContain('el propietario no es un Phoenix anterior verificado')
-    expect(source).toContain('No se cerrará el proceso')
+    expect(source).toContain('está ocupado; no se cerrará un proceso no verificado')
+    expect(source).toContain('phoenix-windows-port-repair.ps1')
   })
 
   it('checks actual TCP bind availability and waits after a Windows Host handoff', () => {
