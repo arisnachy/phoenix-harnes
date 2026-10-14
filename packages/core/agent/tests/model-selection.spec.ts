@@ -19,6 +19,55 @@ import {
 import { ReasoningEffortId, createUserMessage, type LlmCallConfig } from '@phoenix-ai/dsh-llm'
 
 describe('installModelSelection()', () => {
+  it('lets Luna Max consult Sol when stuck, then automatically resumes Luna Max', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SystemPrompt)
+    ctx.systemPrompt.tools(() => ({ schemas: [
+      { name: 'read', description: 'inspect error', parameters: { type: 'object' } },
+    ] }))
+    const events: { type: string; data: unknown }[] = [
+      { type: 'turn/start', data: { turn: 1 } },
+      { type: 'user/message', data: { source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Repara la integración del proyecto y comprueba el error' }] } },
+      { type: 'assistant/message', data: { turn: 1, step: 2,
+        message: { source: { model: 'gpt-6-luna' },
+          content: [{ type: 'text', text: 'No encuentro cómo resolver este bloqueo; necesito consultar a Sol.' }] } } },
+    ]
+    const steered: unknown[] = []
+    const agent = { session: { events }, options: {},
+      steer: (value: unknown) => { steered.push(value) } } as unknown as Agent
+    ctx.agent = agent
+    const selection: ModelSelectionRef = {
+      current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
+      assembled: undefined,
+    }
+    const dispose = installModelSelection(ctx, selection)
+    const signal = new AbortController().signal
+    try {
+      await ctx.systemPrompt.assemble()
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+      expect(steered).toHaveLength(1)
+      expect(JSON.stringify(steered[0])).toContain('Consult Sol')
+      await expect(agentEvents(ctx, agent).waterfall(
+        'agent/request', { turn: 1, step: 3, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+      )).resolves.toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: ReasoningEffortId('xhigh') })
+      events.push({ type: 'assistant/message', data: { turn: 1, step: 3,
+        message: { source: { model: 'gpt-6.1-sol' },
+          content: [{ type: 'text', text: 'Estrategia: aislar el error y corregir su origen.' }] } } })
+      await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 1, signal })
+      expect(steered).toHaveLength(2)
+      expect(JSON.stringify(steered[1])).toContain('Resume the SAME unfinished mission')
+      await expect(agentEvents(ctx, agent).waterfall(
+        'agent/request', { turn: 1, step: 4, signal },
+        () => Promise.resolve({ provider: 'seed', model: 'seed' }),
+      )).resolves.toMatchObject({ model: 'gpt-6-luna', reasoningEffort: ReasoningEffortId('max') })
+    } finally {
+      dispose()
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('captures the selected default on first dispatch while blank sessions observe changes', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
