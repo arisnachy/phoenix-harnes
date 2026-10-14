@@ -13,7 +13,7 @@
 import { randomUUID } from 'node:crypto'
 import { lstat, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { basename, dirname, extname, isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { Context } from '@phoenix-ai/cordis'
 import type { AttachmentStore, ImageAttachmentRef, ImageMediaType } from '@phoenix-ai/dsh-attachment'
 import { credentialRef } from '@phoenix-ai/dsh-credentials'
@@ -152,11 +152,13 @@ export async function materializeGeneratedImageInWorkspace(
   signal?: AbortSignal,
 ): Promise<ImageGenerationValue> {
   if (cwd === undefined) return result
-  if (!isAbsolute(cwd)) throw new Error('image_generation: session workspace must be an absolute path')
   signal?.throwIfAborted()
-  const workspace = await stat(cwd)
+  // Match the regular filesystem tool's cwd resolution, including deployments
+  // whose session header still holds a relative workspace path.
+  const workspacePath = resolve(cwd)
+  const workspace = await stat(workspacePath)
   if (!workspace.isDirectory()) throw new Error('image_generation: session workspace is not a directory')
-  const artifactRoot = join(cwd, '.artifacts')
+  const artifactRoot = join(workspacePath, '.artifacts')
   const generatedRoot = join(artifactRoot, 'generated-images')
   await mkdir(artifactRoot, { recursive: true })
   const parentInfo = await lstat(artifactRoot)
