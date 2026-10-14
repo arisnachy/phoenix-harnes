@@ -254,22 +254,24 @@ const AUTO_VISIBLE_PLAN_POLICY =
   'Kira will continue on the very next step and execute this exact plan without asking for routine approval. ' +
   'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
 
-const AUTO_SOL_COORDINATION_POLICY =
-  'You are Kira coordinating and executing with the selected latest Sol. If a user-visible **Plan:** was written earlier in THIS turn, ' +
-  'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
-  'Start the first permitted real action promptly, supervise the critical path and choose a genuine teammate ' +
-  'only when requested or materially helpful. Address teammates naturally by name, accept their real evidence, ' +
-  'and speak to the user in concise, warm Spanish when that is their language. ' +
-  'Never simulate coworker messages or claim a tool ran before its real result. ' +
-  'Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
+const AUTO_LUNA_COORDINATION_POLICY =
+  'You are Kira coordinating and executing on GPT-6 Luna Max AFTER Sol has completed the first-step plan. ' +
+  'Use the already-visible **Plan:** as the authoritative execution brief; do not replan or call Sol again for routine execution. ' +
+  'Act promptly with available tools. For independent actionable workstreams, delegate to real Luna Max teammates using spawn_teammate: ' +
+  'one for simple delegated work, two for medium, three for difficult, four or five ONLY when four or five genuinely independent tasks exist. ' +
+  'Choose the smallest sufficient team, reuse workers, and keep Kira as the accountable lead, supervisor and final verifier. ' +
+  'Sol is reserved exclusively for the initial plan or an evidence-based blocker/repeated failure; after a Sol rescue, resume Luna Max. ' +
+  'Address real teammates naturally by name, use their actual tool evidence and respond in the user\'s language. ' +
+  'Never invent coworkers, tool outcomes, verification, or completion; stop immediately on user cancellation.'
 
 const AUTO_VISIBLE_PLAN_HANDOFF =
-  'The visible **Plan:** from the immediately preceding Sol step is Kira\'s authoritative execution plan. ' +
-  'Continue the current user request as Kira on Sol; execute the next concrete action now, ' +
-  'without re-planning, re-reading the same brief or asking permission for already authorized safe work. ' +
-  'If this is a requested team demonstration, call spawn_teammate once with a small verifiable assignment, ' +
-  'wait for genuine evidence and complete the demonstration. The actual Team conversation must be real, ' +
-  'natural, concise and useful, not a scripted imitation.'
+  'The visible **Plan:** from the immediately preceding Sol planning step is Kira\'s authoritative execution plan. ' +
+  'Now hand off to Kira on Luna Max; execute the next concrete action instead of asking Sol to coordinate execution. ' +
+  'Do not replan or ask permission for already authorized safe work. ' +
+  'For a requested team demonstration, call spawn_teammate once with a small verifiable assignment on Luna Max, ' +
+  'wait for real evidence and complete the demonstration. Spawn more teammates only for genuinely independent workstreams, ' +
+  'up to five for exceptional missions. Sol returns only for a proven blocker, then Kira resumes Luna Max. ' +
+  'Team conversations must be real, natural, concise and useful, not a scripted imitation.'
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
@@ -721,13 +723,13 @@ function phoenixAutoRoute(
     }
   }
   if (step <= 1) {
-    // A real Team wakeup belongs to Kira's operational loop. Never route peer
-    // results/questions through the low-effort social fast path.
+    // Peer result/question wakeups are execution, not a brand-new planning
+    // request. A real blocker was already escalated to Sol/xhigh above.
     if (teamSignal !== undefined) {
       return {
         provider: 'openai-codex',
-        model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId('high'),
+        model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+        reasoningEffort: ReasoningEffortId('max'),
       }
     }
     if (isConversationalFastPathText(directText) || isContextualConversationFastPathText(directText)) {
@@ -789,10 +791,13 @@ function phoenixAutoRoute(
     }
   }
 
+  // After the ONE Sol planning step (or a proven, bounded rescue), Kira is
+  // always the Luna Max execution lead. Returning Sol/high here kept every
+  // subsequent turn on the planner and silently defeated the intended handoff.
   return {
     provider: 'openai-codex',
-    model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-    reasoningEffort: ReasoningEffortId('high'),
+    model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
+    reasoningEffort: ReasoningEffortId('max'),
   }
 }
 
@@ -874,7 +879,7 @@ export function installModelSelection(
     const autoPolicy = autoStep === 1
       && phoenixAutoTaskRequest(currentRequest)
       && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
-      : autoStep !== undefined && autoStep > 1 ? AUTO_SOL_COORDINATION_POLICY : undefined
+      : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
     return {
       ...assembled,
       ...autoPolicy === undefined ? {} : {
