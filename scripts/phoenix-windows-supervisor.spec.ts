@@ -37,7 +37,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(script).toContain('Get-NetTCPConnection -State Listen -LocalPort $Port')
     expect(script).toContain('Test-OfficialCheckout $Root')
     expect(script).toContain('Test-OfficialCheckout $oldRoot')
-    expect(script).toContain("merge-base --is-ancestor $oldHead $newHead")
+    expect(script).toContain('merge-base --is-ancestor $oldHead $newHead')
     expect(script).toContain('GetOwner')
     expect(script).toContain('Stop-Process -Id $supervisorPid -Force')
     expect(script).toContain('Stop-Process -Id $listenerPid -Force')
@@ -96,7 +96,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('injects a process-scoped Git safe.directory for the persistent Windows checkout', () => {
-    expect(source).toContain("import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'")
+    expect(source).toContain("import { gitSafeDirectoryEnvironment, persistGitSafeDirectory } from './phoenix-git-safe-directory.mjs'")
     expect(source).toContain('Object.assign(process.env, gitSafeDirectoryEnvironment(process.env, [root]))')
     expect(autoUpdateSource).toContain("import { gitSafeDirectoryEnvironment } from './phoenix-git-safe-directory.mjs'")
     expect(autoUpdateSource).toContain("const env = bin === 'git'")
@@ -163,7 +163,7 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
   })
 
   it('reconciles stale runtime and client artifacts before the Windows supervisor starts', () => {
-    expect(cliSource).toContain("phoenixSupervisorSourceRoot, preparePhoenixWebRuntime")
+    expect(cliSource).toContain('phoenixSupervisorSourceRoot, preparePhoenixWebRuntime')
     expect(cliSource).toContain('preparePhoenixWebRuntime(runtimeSourceRoot)')
     expect(cliSource).toContain("const runtimeSourceRoot = resolve(durableSupervisor, '..', '..')")
     expect(cliSource).toContain('const supervisorSourceRoot = phoenixSupervisorSourceRoot(runtimeSourceRoot)')
@@ -202,7 +202,10 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
     expect(source).toContain("?? '3080'")
     expect(source).toContain('Number.isInteger(port) && port > 0 && port <= 65535')
     expect(source).toContain('if (port !== undefined && await existingHostOnPort(port))')
-    expect(source).toContain('No se iniciará un segundo Host')
+    expect(source).toContain('const migrated = retireVerifiedOlderPhoenixHost(port)')
+    expect(source).toContain('if (!migrated) {')
+    expect(source).toContain('el propietario no es un Phoenix anterior verificado')
+    expect(source).toContain('No se cerrará el proceso')
   })
 
   it('checks actual TCP bind availability and waits after a Windows Host handoff', () => {
@@ -489,8 +492,8 @@ describe('PHOENIX Windows updater supervisor resilience', () => {
 
   it('distinguishes registered worktrees from orphaned runtime directories during cleanup', () => {
     expect(source).toContain("spawnSync('git', ['worktree', 'list', '--porcelain']")
-    expect(source).toContain('function removeOrphanedManagedDirectory(path)')
-    expect(source).toContain("rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })")
+    expect(source).toContain('function removeOrphanedManagedDirectory(path, reportBusy = false)')
+    expect(source).toContain('rmSync(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 250 })')
     expect(source).toContain("spawnSync('git', ['-c', 'core.longpaths=true', 'worktree', 'remove', '--force', path]")
     expect(source).toContain('const refreshedWorktrees = registeredWorktreePaths()')
     expect(source).toContain('const becameOrphaned = /(?:is )?not a working tree/iu.test(detail)')
