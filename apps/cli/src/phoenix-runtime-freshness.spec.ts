@@ -83,12 +83,20 @@ describe('PHOENIX runtime freshness', () => {
     expect(sourceCheckoutSupersedesRuntime(root, target, head)).toBe(true)
   })
 
-  it('keeps the isolated runtime while the source checkout contains local work', () => {
+  it('prefers a newer checkout despite local work without deleting those edits', () => {
     const root = repository()
     const { target, head } = advance(root)
-    writeFileSync(join(root, 'local.txt'), 'protected user work\n', 'utf8')
+    const local = join(root, 'local.txt')
+    writeFileSync(local, 'protected user work\n', 'utf8')
 
-    expect(sourceCheckoutSupersedesRuntime(root, target, head)).toBe(false)
+    expect(sourceCheckoutSupersedesRuntime(root, target, head)).toBe(true)
+    writeFreshClientArtifacts(root, head)
+    const marker = resolve(root, git(root, ['rev-parse', '--git-dir']), 'phoenix-active-runtime.json')
+    writeFileSync(marker, JSON.stringify({ schema: 1, target, path: join(root, 'old-runtime') }), 'utf8')
+
+    preparePhoenixWebRuntime(root)
+    expect(existsSync(marker)).toBe(false)
+    expect(readFileSync(local, 'utf8')).toBe('protected user work\n')
   })
 
   it('recognizes client artifacts only when both the build record and web bundle match the source commit', () => {
