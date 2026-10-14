@@ -71,7 +71,7 @@ export function shouldPublishTeammateSpeech(message: string, alreadySpoke: boole
   if (!alreadySpoke) return true
   const needsHelp = /[?]|bloquead[oa]|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|approval/iu
   if (needsHelp.test(text)) return true
-  const heading = /^(?:@?Kira[,!:]?\s*)?(?:ahora |luego |despu[eé]s |next |now )*/iu
+  const heading = /^(?:@?[\p{L}][\p{L}\p{N}_-]{1,30}[,:]\s*)?(?:ahora |luego |despu[eé]s |next |now )*/iu
   const plan = /^(?:voy a|proceder[eé] a|har[eé]|buscar[eé]|comprobar[eé]|verificar[eé]|revisar[eé]|abrir[eé]|i'll|i will|i am going to|i'm going to)\b/iu
   if (plan.test(text.replace(heading, ''))) return false
   if (newReceipt) return true
