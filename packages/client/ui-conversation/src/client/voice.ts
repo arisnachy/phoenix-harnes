@@ -248,6 +248,12 @@ function sendCodexRealtimeUtterance(
     }
     document.documentElement.dataset.phoenixVoiceSpeechStatus = 'requested'
     delete document.documentElement.dataset.phoenixVoiceSpeechError
+    // The harness has already authorized this exact message. Codex may stream
+    // the first WebRTC audio frames BEFORE the appendSpeech RPC receipt arrives.
+    // Keeping the audio muted until admission resolves drops short spoken
+    // replies completely. Unmute now, and immediately re-mute if the RPC is
+    // rejected, interrupted, or the owning voice session is closed.
+    allowAuthorizedCodexAudio(session)
     // The UI authorizes only a harness-owned reply or sentence segment. The Host side sends it
     // through Codex's official thread/realtime/appendSpeech method, rather
     // than trying to fabricate output via an unsupported V3 datachannel
@@ -1139,12 +1145,9 @@ function updateCodexRealtimePhase(payload: string): void {
       }
       return
     }
-    if (session.activeUtterance.admission === 'pending') {
-      // Keep a native generation quiet until the Host confirms admission.
-      // Do not cancel the valid in-flight request merely because its reply is late.
-      session.audio.muted = true
-      return
-    }
+    // This message has already passed Phoenix's explicit speaker-authority
+    // gate. Waiting for the RPC receipt here loses valid early WebRTC frames.
+    // A rejected request or explicit interruption still mutes immediately.
     allowAuthorizedCodexAudio(session)
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
     return
@@ -1171,10 +1174,8 @@ function updateCodexRealtimePhase(payload: string): void {
   // event. Only an already-authorized harness utterance may unmute them.
   if ((type.includes('output_audio') || type.startsWith('response.audio.'))
     && session.activeUtterance !== undefined) {
-    if (session.activeUtterance.admission === 'pending') {
-      session.audio.muted = true
-      return
-    }
+    // Audio deltas can precede appendSpeech's RPC acknowledgement. The
+    // authorized utterance owns this audio even during pending admission.
     allowAuthorizedCodexAudio(session)
     publishVoiceAssistant({ ...voiceAssistantSnapshot, phase: 'speaking' })
     return
