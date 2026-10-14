@@ -761,7 +761,7 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('low'),
     }
   }
   if (step <= 1) {
@@ -816,7 +816,7 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('low'),
     }
   }
 
@@ -829,7 +829,7 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('xhigh'),
+      reasoningEffort: ReasoningEffortId('low'),
     }
   }
 
