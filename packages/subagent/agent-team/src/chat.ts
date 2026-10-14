@@ -89,7 +89,8 @@ function actualTeamModel(events: readonly SessionEvent[]): {
   const model = typeof source?.model === 'string' ? source.model : request?.model
   const provider = typeof source?.provider === 'string' ? source.provider : request?.provider
   if (typeof model !== 'string' || model.length === 0) return undefined
-  const effort = request?.reasoningEffort
+  // Never attach the previous route's Max effort to a new Sol answer.
+  const effort = request?.model === model ? request.reasoningEffort : undefined
   return { model,
     ...(typeof provider === 'string' ? { modelProvider: provider } : {}),
     ...(typeof effort === 'string' ? { reasoningEffort: effort } : {}),
