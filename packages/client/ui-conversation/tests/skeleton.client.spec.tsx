@@ -54,6 +54,8 @@ afterEach(() => {
 beforeEach(() => {
   localStorage.clear()
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => window.setTimeout(() => { callback(0) }, 16))
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id))
 })
 
 // Mirrors the real lookup chain (conversation namespace, then common).
@@ -245,6 +247,7 @@ function mount(
             // The bar's own seats: recorded so a case can assert what share
             // each tool-row control received.
             seatOwners.push({ key, owner: seatOwner })
+            slotCalls.push(key)
             return null
           }) as InputBarProps['renderSlot']}
           {...bar}
@@ -319,7 +322,7 @@ describe('Approved welcome chrome', () => {
     expect(b.view.getByRole('button', { name: 'Abrir perfil' })).toBeTruthy()
     expect(b.slotCalls).not.toContain('conversation.hero.model')
     expect(b.slotCalls).toContain('conversation.input.model')
-    const unified = b.view.container.querySelector('[aria-label="Barra superior de Phoenix"]')
+    const unified = b.view.container.querySelector('[aria-label="Barra superior de la conversación"]')
     expect(unified?.contains(b.view.getByRole('button', { name: 'Buscar sesiones' }))).toBe(true)
     const sections: string[] = []
     const onSettings = (event: Event) => { sections.push((event as CustomEvent<string>).detail) }
@@ -451,7 +454,7 @@ describe('ConversationRoot resident composer', () => {
     expect(b.slotCalls).toContain('conversation.session.header.lineage')
     expect(b.slotCalls).toContain('conversation.session.header.actions')
     expect(b.slotCalls).toContain('conversation.session.header.utilities')
-    const unified = b.view.container.querySelector('[aria-label="Barra superior de Phoenix"]')
+    const unified = b.view.container.querySelector('[aria-label="Barra superior de la conversación"]')
     expect(unified?.contains(header)).toBe(true)
     expect(unified?.contains(b.view.getByRole('button', { name: 'Buscar sesiones' }))).toBe(true)
     expect(b.view.getByRole('tab', { name: 'Chat' })).toBeTruthy()
@@ -637,7 +640,7 @@ describe('Contextual focus chrome', () => {
   })
 
   it.each(['enter', 'button'] as const)(
-    'waits for first-user-bubble paint after %s before collapsing the sidebar', async method => {
+    'waits for first-user-bubble paint after %s before collapsing the sidebar', async (method) => {
       vi.useFakeTimers()
       vi.stubGlobal('requestAnimationFrame',
         (callback: FrameRequestCallback) => window.setTimeout(() => { callback(0) }, 16))
@@ -677,12 +680,43 @@ describe('Contextual focus chrome', () => {
         await act(async () => { await vi.advanceTimersByTimeAsync(1) })
         expect(b.focusSidebar).toHaveBeenLastCalledWith(true)
       } finally {
+        cleanup()
         vi.useRealTimers()
       }
     },
   )
 
-  it('starts with a right-side compact header; hover does not cause a width jump, typing expands it', () => {
+  it('paints the first draft before expanding chrome and cancels stale expansion on clear', async () => {
+    let nextFrame: FrameRequestCallback | undefined
+    vi.useFakeTimers()
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { nextFrame = callback; return 1 })
+    vi.stubGlobal('cancelAnimationFrame', vi.fn())
+    try {
+      const b = mount(conversationSnapshot())
+      const root = b.view.container.querySelector('[data-phase="active"]')
+      const textarea = b.view.getByRole<HTMLTextAreaElement>('textbox')
+      if (root === null) throw new Error('conversation shell is required')
+      fireEvent.change(textarea, { target: { value: 'p' } })
+      expect(textarea.value).toBe('p')
+      expect(b.view.container.querySelector('[data-input-backdrop]')?.textContent).toContain('p')
+      expect(root.getAttribute('data-header-compact')).toBe('true')
+      act(() => { nextFrame?.(0) })
+      expect(root.getAttribute('data-header-compact')).toBe('true')
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(root.hasAttribute('data-header-compact')).toBe(false)
+      fireEvent.change(textarea, { target: { value: '' } })
+      fireEvent.change(textarea, { target: { value: 'q' } })
+      act(() => { nextFrame?.(0) })
+      fireEvent.change(textarea, { target: { value: '' } })
+      await act(async () => { await vi.advanceTimersByTimeAsync(0) })
+      expect(root.getAttribute('data-header-compact')).toBe('true')
+      expect(textarea.value).toBe('')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('starts with a right-side compact header; hover does not cause a width jump, typing expands it', async () => {
     const b = mount(conversationSnapshot())
     const root = b.view.container.querySelector('[data-phase="active"]')
     const header = b.view.container.querySelector('[aria-label="Barra superior de la conversación"]')
@@ -696,7 +730,8 @@ describe('Contextual focus chrome', () => {
     expect(root.getAttribute('data-header-compact')).toBe('true')
     const textarea = b.view.getByRole('textbox')
     fireEvent.change(textarea, { target: { value: 'Quiero crear un juego' } })
-    expect(root.hasAttribute('data-header-compact')).toBe(false)
+    expect(root.getAttribute('data-header-compact')).toBe('true')
+    await waitFor(() => { expect(root.hasAttribute('data-header-compact')).toBe(false) })
     fireEvent.change(textarea, { target: { value: '' } })
     expect(root.getAttribute('data-header-compact')).toBe('true')
   })
@@ -713,7 +748,7 @@ describe('Contextual focus chrome', () => {
     expect(b.view.getByRole('button', { name: 'Expandir barra superior' })).toBeTruthy()
     const textarea = b.view.getByRole('textbox')
     fireEvent.change(textarea, { target: { value: 'Juego con animaciones y sonido' } })
-    expect(root.hasAttribute('data-header-compact')).toBe(false)
+    await waitFor(() => { expect(root.hasAttribute('data-header-compact')).toBe(false) })
     const game = document.createElement('div')
     game.setAttribute('data-universal-artifact', 'game')
     act(() => { scroll.append(game) })
@@ -726,6 +761,7 @@ describe('Contextual focus chrome', () => {
 
   it('keeps a manually pinned header expanded after visual focus ends', async () => {
     const b = mount(conversationSnapshot())
+    act(() => { b.wiring.actions.setDraft('') })
     const root = b.view.container.querySelector('[data-phase="active"]')
     const scroll = b.view.container.querySelector('[data-conversation-scroll]')
     if (root === null || scroll === null) throw new Error('conversation shell is required')
@@ -746,6 +782,7 @@ describe('Contextual focus chrome', () => {
 
   it('keeps browser focus without locking the header expanded', async () => {
     const b = mount(conversationSnapshot())
+    act(() => { b.wiring.actions.setDraft('') })
     const root = b.view.container.querySelector('[data-phase="active"]')
     const scroll = b.view.container.querySelector('[data-conversation-scroll]')
     if (root === null || scroll === null) throw new Error('conversation shell is required')

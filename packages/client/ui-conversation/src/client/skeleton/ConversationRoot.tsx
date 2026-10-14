@@ -313,6 +313,24 @@ export function ConversationRoot({
   // The first send waits for the painted user bubble so the header doesn't
   // jump during admission, then any real content/visualizer collapses it again.
   const hasDraft = (inputState?.draft ?? '').trim().length > 0
+  const [headerDraftReady, setHeaderDraftReady] = useState<{ sessionId: SessionId | undefined }>()
+  useEffect(() => {
+    if (!hasDraft) {
+      setHeaderDraftReady(undefined)
+      return
+    }
+    let timer: number | undefined
+    // Expanding hidden session chrome changes the entire column's geometry.
+    // Let the first draft glyph paint before admitting that layout work.
+    const frame = window.requestAnimationFrame(() => {
+      timer = window.setTimeout(() => { setHeaderDraftReady({ sessionId }) }, 0)
+    })
+    return () => {
+      window.cancelAnimationFrame(frame)
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [hasDraft, sessionId])
+  const headerHasDraft = hasDraft && headerDraftReady !== undefined && headerDraftReady.sessionId === sessionId
   const firstSendPending = firstSendGuard.current.armed && firstBubbleSettledFor !== sessionId
   const headerAutoCompact = hero
     ? !firstSendPending
@@ -320,7 +338,7 @@ export function ConversationRoot({
       || (!firstSendPending && (summaryBlank === false || !firstSendGuard.current.wasBlank))
   // Browser, game and visual surfaces take priority over typing; the manual
   // pin remains available for users who need the whole navigation bar.
-  const headerCompact = !headerPinnedOpen && (visualActive || (!hasDraft && headerAutoCompact))
+  const headerCompact = !headerPinnedOpen && (visualActive || (!headerHasDraft && headerAutoCompact))
   const composer = renderSlotChain(
     'conversation.composer',
     { interactions: pending, session },

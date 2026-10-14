@@ -1771,6 +1771,8 @@ describe('command launcher chrome and control seats', () => {
   })
 
   it('steers a new Codex Live instruction into a running harness turn instead of piling up the queue', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
+    const active = vi.spyOn(voiceAdapter, 'isCodexRealtimeVoiceActive').mockReturnValue(true)
     let transcriptHandler: ((text: string) => void) | undefined
     const transcript = vi.spyOn(voiceAdapter, 'configureCodexRealtimeUserTranscriptHandler')
       .mockImplementation((handler) => {
@@ -1793,6 +1795,8 @@ describe('command launcher chrome and control seats', () => {
       )
     } finally {
       voiceAdapter.setVoiceAssistantActive(false)
+      support.mockRestore()
+      active.mockRestore()
       live.mockRestore()
       transcript.mockRestore()
       cleanup()
@@ -1830,9 +1834,9 @@ describe('command launcher chrome and control seats', () => {
       .mockResolvedValue({ kind: 'failed', reason: 'codex-live-repair-pending' })
     let watchSignal: AbortSignal | undefined
     const wait = vi.spyOn(voiceAdapter, 'waitForCodexLiveRepair')
-      .mockImplementation(signal => {
+      .mockImplementation((signal) => {
         watchSignal = signal
-        return new Promise(resolve => {
+        return new Promise((resolve) => {
           signal.addEventListener('abort', () => { resolve('cancelled') }, { once: true })
         })
       })
@@ -1877,6 +1881,7 @@ describe('command launcher chrome and control seats', () => {
   })
 
   it('keeps the upstream Quicksilver error available without displaying an oversized tooltip', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
     const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
       .mockResolvedValue({ kind: 'failed', reason: 'invalid_quicksilver_alpha_header: AVAS requires OpenAI-Alpha quicksilver=v2' })
     try {
@@ -1892,6 +1897,7 @@ describe('command launcher chrome and control seats', () => {
       expect(view.getByText('Detalles').closest('details')?.textContent)
         .toContain('invalid_quicksilver_alpha_header')
     } finally {
+      support.mockRestore()
       live.mockRestore()
       cleanup()
     }
@@ -1968,6 +1974,7 @@ describe('command launcher chrome and control seats', () => {
   })
 
   it('never opens browser speech recognition when Codex CLI Live fails', async () => {
+    const support = vi.spyOn(voiceAdapter, 'hasCodexRealtimeVoiceSupport').mockReturnValue(true)
     const browser = vi.spyOn(voiceAdapter, 'createVoiceRecognition')
       .mockImplementation(() => { throw new Error('browser microphone must stay off') })
     const live = vi.spyOn(voiceAdapter, 'tryStartCodexRealtimeVoice')
@@ -1987,6 +1994,7 @@ describe('command launcher chrome and control seats', () => {
       expect(view.getByRole('button', { name: '开始语音助手' })
         .getAttribute('data-codex-voice-failure')).toBe('codex-login-required')
     } finally {
+      support.mockRestore()
       window.removeEventListener('phoenix:open-feature', reconnect)
       browser.mockRestore()
       live.mockRestore()

@@ -174,6 +174,51 @@ describe('Team identity and provisioning', () => {
     })
   })
 
+  it('cold-wakes an inactive Team worker with the Lead route selected for the new user turn', async () => {
+    const { ctx, lead, adapter } = await setup([
+      textResponse('initial worker receipt'),
+      options => options.sessionId === 'lead'
+        ? textResponse('lead turn remains open')
+        : textResponse('cold wake worker receipt'),
+      options => options.sessionId === 'lead'
+        ? textResponse('lead turn remains open')
+        : textResponse('cold wake worker receipt'),
+      options => options.sessionId === 'lead'
+        ? textResponse('lead turn remains open')
+        : textResponse('cold wake worker receipt'),
+    ])
+    ctx.llm.registerAdapter(['other'], adapter)
+    const started = await spawn(ctx, lead, 'cold-route-worker')
+    await waitNoAgent(ctx, started.member.id)
+
+    lead.options.provider = 'other'
+    lead.options.model = 'other-model'
+    persistModelSelectionPreference(lead.session, { provider: 'other', model: 'other-model' }, 'explicit')
+    expect(latestModelSelectionPreference(lead.session)).toEqual({
+      selection: { provider: 'other', model: 'other-model' }, source: 'explicit',
+    })
+    lead.session.append('user/message', createUserMessage({
+      content: content('Kira, continúa el trabajo del Team worker.'), source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+
+    const waking = await ctx.agentTeams.sendMessage(lead, {
+      target: 'cold-route-worker', content: content('continúa con la siguiente comprobación'),
+      delivery: 'wakeup', signal: SIGNAL,
+    })
+    expect(waking.status).toBe('accepted')
+    await waitNoAgent(ctx, started.member.id)
+
+    const workerRequests = adapter.requests.filter(request => request.sessionId === started.member.id)
+    expect(workerRequests.length).toBeGreaterThanOrEqual(2)
+    expect(workerRequests.at(-1)).toMatchObject({ provider: 'other', model: 'other-model' })
+    await vi.waitFor(async () => {
+      const saved = await ctx.sessionPersistence.inspect(started.member.id)
+      expect(saved.events.some(event => event.type === 'assistant/message'
+        && event.data.message.content.some(block => block.type === 'text'
+          && block.text === 'cold wake worker receipt'))).toBe(true)
+    })
+  })
+
   it('rejects deployment limits that are not positive safe integers', async () => {
     const fields = [
       'maxMembers',
@@ -1321,8 +1366,8 @@ describe('Team mailbox and waiting', () => {
     await waitNoAgent(ctx, worker.id)
   })
 
-  it('keeps quiet mail queued across a target lookup gap and preserves FIFO identities', async () => {
-    const { ctx, lead } = await setup(['hang', 'hang', textResponse('beta resumed')])
+  it('keeps quiet mail durably queued across a transient target lookup gap', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang'])
     const alphaStarted = await spawn(ctx, lead, 'alpha')
     const alpha = await waitRunning(ctx, alphaStarted.member.id)
     const betaStarted = await spawn(ctx, lead, 'beta')
@@ -1339,25 +1384,109 @@ describe('Team mailbox and waiting', () => {
     })
     expect(waking.status).toBe('accepted')
     targetAbsent.mockRestore()
-    await vi.waitFor(() => { expect(durable(lead).pendingMessages).toHaveLength(2) })
 
-    const stored = await ctx.sessionPersistence.inspect(betaStarted.member.id)
-    const peerMessages = stored.events.filter(event => event.type === 'user/message'
-      && event.data.source.kind === 'team-message')
-    expect(peerMessages.map((event) => {
-      if (event.type !== 'user/message') return undefined
-      const block = event.data.content.at(-1)
-      return block?.type === 'text' ? block.text : undefined
-    })).toEqual([])
-    expect(peerMessages.map(event => event.type === 'user/message'
-      ? event.data.content[0]?.type === 'text' && event.data.content[0].text
-      : undefined)).toEqual([])
-    expect(peerMessages).toHaveLength(0)
-    expect(durable(lead).pendingMessages.map(message => message.id)).toEqual([quiet.messageId, waking.messageId])
+    await vi.waitFor(() => {
+      expect(durable(lead).pendingMessages.map(message => String(message.id)))
+        .toEqual([String(quiet.messageId), String(waking.messageId)])
+    })
     expect(quiet.messageId).not.toBe(waking.messageId)
+    expect((await ctx.sessionPersistence.inspect(beta.id)).events.filter(event => event.type === 'user/message'
+      && event.data.source.kind === 'team-message')).toHaveLength(0)
 
     ctx.agentTeams.interrupt(lead, 'alpha')
+    ctx.agentTeams.interrupt(lead, 'beta')
     await waitNoAgent(ctx, alpha.id)
+  })
+
+  it('recovers exact FIFO quiet and wakeup mail across an inactive target cold resume', async () => {
+    const entered = Promise.withResolvers<undefined>()
+    const release = Promise.withResolvers<undefined>()
+    const workerEntered = Promise.withResolvers<undefined>()
+    const workerRelease = Promise.withResolvers<undefined>()
+    const { ctx, lead } = await setup([
+      textResponse('beta initial receipt'),
+      toolCallResponse('lead-hold', 'hold_lead_turn', {}),
+      options => options.sessionId === 'lead'
+        ? textResponse('lead mission remains open')
+        : toolCallResponse('worker-recovery-hold', 'hold_worker_recovery', {}),
+      options => options.sessionId === 'lead'
+        ? textResponse('lead mission remains open')
+        : textResponse('beta recovered receipt'),
+      options => options.sessionId === 'lead'
+        ? textResponse('lead mission remains open')
+        : textResponse('beta recovered receipt'),
+    ])
+    ctx.tools.register(defineTool({ name: 'hold_lead_turn', description: 'Hold the Lead mission open', parameters: {},
+      output: { schema: { type: 'object', additionalProperties: false, properties: {} }, render: () => [] },
+      async execute(_args, execution) {
+        entered.resolve(undefined)
+        await release.promise
+        execution.signal.throwIfAborted()
+        return {}
+      },
+    }))
+    ctx.tools.register(defineTool({ name: 'hold_worker_recovery', description: 'Keep recovery membership live', parameters: {},
+      output: { schema: { type: 'object', additionalProperties: false, properties: {} }, render: () => [] },
+      async execute(_args, execution) {
+        workerEntered.resolve(undefined)
+        await workerRelease.promise
+        execution.signal.throwIfAborted()
+        return {}
+      },
+    }))
+
+    const started = await spawn(ctx, lead, 'beta')
+    await waitNoAgent(ctx, started.member.id)
+
+    // A real user follow-up keeps the Lead mission open while the target is inactive.
+    lead.followup(createUserMessage({ content: content('Keep the Team mission open for recovery.'), source: { kind: 'user' } }))
+    await entered.promise
+    await waitRunning(ctx, lead.id)
+
+    const quiet = await ctx.agentTeams.sendMessage(lead, {
+      target: 'beta', content: content('quiet info'), delivery: 'quiet', signal: SIGNAL,
+    })
+    expect(quiet.status).toBe('queued')
+    const waking = await ctx.agentTeams.sendMessage(lead, {
+      target: 'beta', content: content('do another turn'), delivery: 'wakeup', signal: SIGNAL,
+    })
+    expect(waking.status).toBe('accepted')
+    expect(waking.messageId).not.toBe(quiet.messageId)
+
+    const resumed = await waitRunning(ctx, started.member.id)
+    await workerEntered.promise
+    await teamInternals(ctx).recoverFor(resumed)
+    await vi.waitFor(() => { expect(durable(lead).pendingMessages).toHaveLength(0) })
+    await ctx.sessions.flush(resumed.session)
+
+    const stored = await ctx.sessionPersistence.inspect(started.member.id)
+    const inboxReceipts = stored.events.flatMap(event => event.type === 'agent/inbox/spliced'
+      ? event.data.inserted.filter(message => message.source.kind === 'team-message'
+        && (message.source.messageId === quiet.messageId || message.source.messageId === waking.messageId))
+        .map(message => message.source.messageId)
+      : [])
+    expect(inboxReceipts).toEqual([quiet.messageId, waking.messageId])
+    const delivered = lead.session.events
+      .filter(event => event.type === 'team/message/delivered'
+        && (event.data.messageId === quiet.messageId || event.data.messageId === waking.messageId))
+      .map(event => event.data.messageId)
+    expect(delivered).toEqual([quiet.messageId, waking.messageId])
+
+    // Recovery is idempotent after the cold resume: a second pass emits no duplicate receipt.
+    expect(ctx.agents.get(resumed.id)).toBe(resumed)
+    await teamInternals(ctx).recoverFor(resumed)
+    expect((await ctx.sessionPersistence.inspect(started.member.id)).events.flatMap(event => event.type === 'agent/inbox/spliced'
+      ? event.data.inserted.filter(message => message.source.kind === 'team-message'
+        && (message.source.messageId === quiet.messageId || message.source.messageId === waking.messageId))
+        .map(message => message.source.messageId)
+      : [])).toEqual([quiet.messageId, waking.messageId])
+    expect(lead.session.events.filter(event => event.type === 'team/message/delivered'
+      && (event.data.messageId === quiet.messageId || event.data.messageId === waking.messageId))).toHaveLength(2)
+
+    workerRelease.resolve(undefined)
+    await waitNoAgent(ctx, started.member.id)
+    release.resolve(undefined)
+    await lead.whenIdle()
   })
 
   it('rejects invalid reactions and exposes live usage so the Lead can supervise cost', async () => {

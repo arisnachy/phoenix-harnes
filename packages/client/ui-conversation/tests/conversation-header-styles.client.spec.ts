@@ -66,7 +66,7 @@ describe('ConversationRoot premium header', () => {
     expect(css).toContain('@media (prefers-reduced-motion: reduce)')
     expect(conversationRoot).toContain('aria-pressed={headerPinnedOpen}')
     expect(conversationRoot).toContain("const hasDraft = (inputState?.draft ?? '').trim().length > 0")
-    expect(conversationRoot).toContain('visualActive || (!hasDraft && headerAutoCompact)')
+    expect(conversationRoot).toContain('visualActive || (!headerHasDraft && headerAutoCompact)')
     expect(conversationRoot).not.toContain('headerHovered')
     expect(conversationRoot).not.toContain('headerFocused')
     expect(conversationRoot).toContain('[data-universal-artifact], [data-phoenix-scene3d], [data-phoenix-visual-kind]')
@@ -81,7 +81,7 @@ describe('ConversationRoot premium header', () => {
     expect(css).toContain('max-width: calc(100% - 24px);')
     expect(css).toContain(".root[data-header-compact='true'] .unifiedHeader .sessionChrome")
     expect(css).toContain('display: none;')
-    expect(conversationRoot).toContain("const headerCompact = !headerPinnedOpen")
+    expect(conversationRoot).toContain('const headerCompact = !headerPinnedOpen')
     expect(conversationRoot).toContain('headerAutoCompact = hero')
     expect(conversationRoot).toContain('const firstSendPending =')
   })
@@ -167,7 +167,7 @@ describe('Centered new-session identity', () => {
     expect(css).toContain('scrollbar-gutter: stable both-edges;')
     expect(css).toContain('align-items: center;')
     expect(css).toContain('margin-inline: auto;')
-    expect(css).toContain("min-height: 100%;")
+    expect(css).toContain('min-height: 100%;')
   })
 
   it('centers the mark, title and subtitle on the same width as the real composer', () => {
