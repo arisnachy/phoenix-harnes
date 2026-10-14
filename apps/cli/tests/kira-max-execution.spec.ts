@@ -209,6 +209,13 @@ describe('Kira Max execution contract', () => {
     expect(preset.persona.config.text).toContain('hardness_workflow')
     expect(preset.persona.config.text).toContain('hardness_run')
     expect(preset.persona.config.text).toContain('Después de dos esperas sin novedades')
+    expect(preset.persona.config.text).toContain('Sol 6.1 xhigh hace el primer plan/diagnóstico')
+    expect(preset.persona.config.text).toContain('supervisando y orquestando con GPT-6 Luna Max')
+    expect(preset.persona.config.text).toContain('Kira con Luna Max ASUME ese plan')
+    expect(preset.persona.config.text).toContain('de 1 a 5 tareas independientes')
+    expect(preset.persona.config.text).toContain('vuelve inmediatamente a Kira con Luna Max')
+    expect(preset.persona.config.text).not.toContain('Kira con Sol ASUME ese plan')
+    expect(preset.persona.config.text).not.toContain('continúa coordinando con Sol high')
     expect(preset.hardness).toMatchObject({ name: '@phoenix-ai/dsh-hardness-adapters' })
     expect(preset.hardness.config).toMatchObject({
       judgeProvider: 'spawn',
