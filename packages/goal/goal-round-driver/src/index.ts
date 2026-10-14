@@ -47,6 +47,7 @@ interface RoundAttempt extends RoundIdentity {
 interface DriverState {
   readonly agent: Agent
   attempt: RoundAttempt | undefined
+  pendingWakeMessageId: MessageId | undefined
   competingQueued: boolean
   needsCheckpoint: boolean
   requested: boolean
@@ -118,6 +119,7 @@ export function apply(ctx: Context): void {
     const state: DriverState = {
       agent,
       attempt: undefined,
+      pendingWakeMessageId: undefined,
       competingQueued: false,
       needsCheckpoint: false,
       requested: false,
@@ -212,13 +214,61 @@ export function apply(ctx: Context): void {
 
   /** Preserve claimed step context when this driver drops only its own round. */
   function restoreOtherClaimed(agent: Agent, messages: UserMessage[], messageId: MessageId): void {
-    const retained = messages.filter(message => message.id !== messageId
-      && !(message.source.kind === 'goal' && message.source.round === 0))
+    const retained = retainOtherClaimed(messages, messageId)
     for (const message of retained.toReversed()) {
       if (agent.inbox.nextStep.some(candidate => candidate.id === message.id)
         || agent.inbox.nextTurn.some(candidate => candidate.id === message.id)) continue
       agent.inbox.prepend('next-step', message)
     }
+  }
+
+  /** Drop only the stale automatic prompt while keeping claimed context live. */
+  function retainOtherClaimed(messages: UserMessage[], messageId: MessageId): UserMessage[] {
+    return messages.filter(message => message.id !== messageId
+      && !(message.source.kind === 'goal' && message.source.round === 0))
+  }
+
+  /** Consume pending copies of context intentionally returned by a hook. */
+  function takeRetained(agent: Agent, messages: UserMessage[], messageId: MessageId): UserMessage[] {
+    const retained = retainOtherClaimed(messages, messageId)
+    for (const message of retained) agent.inbox.remove(message.id)
+    return retained
+  }
+
+  /** Re-arm one competing message that arrived while the stale turn was running. */
+  function wakePendingAfterStale(state: DriverState): void {
+    const { agent } = state
+    if (state.pendingWakeMessageId !== undefined) return
+    const canWake = (message: UserMessage): boolean => message.source.kind === 'user'
+      || !goalBlockedByClosedUniversalMission(agent.session)
+    const pendingTurn = agent.inbox.nextTurn.find(message => message.source.kind !== 'goal' && canWake(message))
+    const pending = pendingTurn ?? agent.inbox.nextStep.find(message => message.source.kind !== 'goal' && canWake(message))
+    if (pending === undefined) return
+    const target = pendingTurn === undefined ? 'next-step' : 'next-turn'
+    state.pendingWakeMessageId = pending.id
+    void agent.whenIdle().then(() => {
+      if (state.pendingWakeMessageId !== pending.id) return
+      state.pendingWakeMessageId = undefined
+      if (state.stopping || ctx.agents.get(agent.id) !== agent || agent.status !== 'idle'
+        || (pending.source.kind !== 'user' && goalBlockedByClosedUniversalMission(agent.session))) return
+      if (!agent.inbox.remove(pending.id)) return
+      try {
+        agent.followup(pending)
+      } catch (error: unknown) {
+        if (!agent.inbox.nextTurn.some(candidate => candidate.id === pending.id)
+          && !agent.inbox.nextStep.some(candidate => candidate.id === pending.id)) {
+          try {
+            agent.inbox.prepend(target, pending)
+          } catch (restoreError: unknown) {
+            ctx.logger.warn(`goal-round-driver: could not restore pending work for agent "${agent.id}": ${renderThrown(restoreError)}`)
+          }
+        }
+        ctx.logger.warn(`goal-round-driver: could not wake pending work for agent "${agent.id}": ${renderThrown(error)}`)
+      }
+    }, (error: unknown) => {
+      state.pendingWakeMessageId = undefined
+      ctx.logger.warn(`goal-round-driver: pending wake failed for agent "${agent.id}": ${renderThrown(error)}`)
+    })
   }
 
   /** Process admitted work at quiescence, then reserve at most one next round. */
@@ -325,6 +375,12 @@ export function apply(ctx: Context): void {
             ctx.logger.warn(`goal-round-driver: driver failed for agent "${state.agent.id}": ${renderThrown(error)}`)
             disarm(state)
           }
+          // A synchronous provider failure can request the next bounded
+          // recovery round before this turn yields. Let cancellation and
+          // teardown timers run before processing that request.
+          if (state.requested && !state.stopping) {
+            await new Promise<void>((resolve) => { setTimeout(resolve, 0) })
+          }
         }
       })
     } catch (error: unknown) {
@@ -385,6 +441,7 @@ export function apply(ctx: Context): void {
     ctx.on('agent/session-start', ({ agent }) => {
       const state = stateFor(agent)
       state.attempt = undefined
+      state.pendingWakeMessageId = undefined
       state.competingQueued = false
       state.needsCheckpoint = false
       state.supervisor = replayGoalSupervisor(agent.session.events, currentGoal(state)?.id ?? '')
@@ -574,6 +631,7 @@ export function apply(ctx: Context): void {
           state.attempt = undefined
         }
         restoreOtherClaimed(agent, messages, submitted.id)
+        wakePendingAfterStale(state)
         requestDrive(state)
         return { kind: 'reject' }
       }
@@ -614,7 +672,12 @@ export function apply(ctx: Context): void {
       }
       if (!valid) {
         state.attempt = undefined
+        if (decision.kind === 'enter') {
+          const retained = takeRetained(agent, decision.messages, submitted.id)
+          if (retained.length > 0) return { kind: 'enter', messages: retained }
+        }
         restoreOtherClaimed(agent, decision.messages, submitted.id)
+        wakePendingAfterStale(state)
         requestDrive(state)
         return { kind: 'reject' }
       }

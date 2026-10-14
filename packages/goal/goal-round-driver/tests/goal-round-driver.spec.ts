@@ -175,7 +175,7 @@ describe('goal-round outcome policy', () => {
     expect(block.text).toMatch(
       /<goal_round>\nObjective: "Ship verified support"\nRound: 3\/9[\s\S]*current workspace[\s\S]*verify[\s\S]*mark it complete/,
     )
-    expect(block.text).toContain('If this is not the first round, use a materially different strategy')
+    expect(block.text).toContain('If independent verification has stalled, use a materially different strategy')
   })
 
   it('keeps execution rounds out of plan mode and recovers tool failures without new approval', () => {
@@ -472,6 +472,37 @@ describe('same-session goal driving', () => {
     expect(requestText(test.adapter.requests[0]!)).toContain('human joined the pending batch')
     expect(requestText(test.adapter.requests[0]!)).not.toContain('<goal_round>')
     expect(requestText(test.adapter.requests[1]!)).toContain('<goal_round>')
+  })
+
+  it('restores pending work when the stale wake delivery fails', async () => {
+    const test = await harness([])
+    const realFollowup = test.agent.followup.bind(test.agent)
+    let rejectWake = false
+    let wakeAttempts = 0
+    vi.spyOn(test.agent, 'followup').mockImplementation((input) => {
+      if (input.source.kind === 'user' && rejectWake) {
+        wakeAttempts += 1
+        throw new Error('wake rejected')
+      }
+      realFollowup(input)
+    })
+    let queued = false
+    onInboxMessage(test.ctx, test.agent, (message) => {
+      if (message.source.kind !== 'goal' || queued) return
+      queued = true
+      realFollowup(createUserMessage({
+        content: [{ type: 'text', text: 'human survives a failed wake' }],
+        source: { kind: 'user' },
+      }))
+      rejectWake = true
+    })
+    test.ctx.goals.create(test.agent, { objective: 'preserve pending work', maxGoalRounds: 1 })
+
+    await vi.waitFor(() => { expect(wakeAttempts).toBe(1) })
+
+    expect(test.agent.inbox.nextTurn.some(message => message.source.kind === 'user'
+      && message.content.some(block => block.type === 'text' && block.text.includes('human survives a failed wake')))).toBe(true)
+    expect(test.adapter.requests).toHaveLength(0)
   })
 
   it('blocks a queued reservation made stale by a goal edit and continues the new revision', async () => {
@@ -832,6 +863,26 @@ describe('same-session goal driving', () => {
     expect(test.adapter.requests).toHaveLength(0)
   })
 
+  it('yields between rapid provider failures so teardown can run', async () => {
+    const test = await harness([new Error('rapid provider failure')])
+    let disposed = false
+    const teardown = new Promise<void>((resolve, reject) => {
+      setTimeout(() => {
+        void test.driver.dispose().then(() => {
+          disposed = true
+          resolve()
+        }, reject)
+      }, 0)
+    })
+    test.ctx.goals.create(test.agent, { objective: 'stop repeated provider failures', maxGoalRounds: 1 })
+
+    await teardown
+
+    expect(disposed).toBe(true)
+    expect(test.agent.status).toBe('idle')
+    expect(test.adapter.requests.length).toBeGreaterThan(0)
+  })
+
   it('fails an initial pre-step read closed even when the first disarm attempt throws', async () => {
     const test = await harness([textResponse('retry after containment')])
     const continued = stopAfterContinuation(test.ctx, test.agent)
@@ -925,7 +976,7 @@ describe('same-session goal driving', () => {
 
   it('falls back to disarming when a cancelled reservation cannot be paused', async () => {
     const test = await harness([])
-    const cancel = onInboxMessage(test.ctx, test.agent, (message) => {
+    const cancel = onClaimedMessage(test.ctx, test.agent, (message) => {
       if (message.source.kind !== 'goal' || message.source.round <= 0) return
       cancel()
       vi.spyOn(test.ctx.goals, 'pause').mockImplementationOnce(() => {
