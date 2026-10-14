@@ -404,6 +404,11 @@ describe('browser voice adapter', () => {
       expect(realtimeSpeak).toHaveBeenLastCalledWith({
         key: 'session-harness', text: 'Primera frase.',
       })
+      // React view remounts must never interrupt an already-authorized voice.
+      const cancelBeforeRemount = channel?.send.mock.calls.length
+      cancelVoiceAssistantSentenceStream('assistant:harness:stream', true)
+      expect(channel?.send).toHaveBeenCalledTimes(cancelBeforeRemount ?? 0)
+      expect(audio?.muted).toBe(false)
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenLastCalledWith({
@@ -599,12 +604,25 @@ describe('browser voice adapter', () => {
       streamVoiceAssistantResponse('assistant:harness:stable-tail', 'Respuesta corregida.', activatedAt, true, true, true)
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenLastCalledWith({ key: 'session-harness', text: 'Respuesta corregida.' })
+      vi.useFakeTimers()
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.done' }) })
       await Promise.resolve()
       expect(audio?.muted).toBe(false)
-      // Buffered authorized audio remains audible after completion, but the
-      // next unsolicited V3 assistant turn must close that permission again.
+      // Codex V3 can deliver a trailing assistant turn.created after its
+      // completion marker. It is not a new unauthorized response and must not
+      // cut already-buffered audio.
+      const sendsBeforeLateTurn = channel?.send.mock.calls.length
       channel?.onmessage?.({ data: JSON.stringify({ type: 'turn.created', turn: { role: 'assistant' } }) })
+      expect(audio?.muted).toBe(false)
+      expect(channel?.send).toHaveBeenCalledTimes(sendsBeforeLateTurn ?? 0)
+      // The permission eventually closes automatically, without the developer
+      // console manually toggling HTMLAudioElement.muted.
+      await vi.advanceTimersByTimeAsync(6_100)
+      expect(audio?.muted).toBe(true)
+      expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('authorized-audio-drained')
+      vi.useRealTimers()
+      // A genuinely new V3 response after the grace must still be cancelled.
+      channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
       expect(audio?.muted).toBe(true)
       expect(JSON.parse(String(channel?.send.mock.calls.at(-1)?.[0]))).toEqual({ type: 'response.cancel' })
 
