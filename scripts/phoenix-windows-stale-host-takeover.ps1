@@ -96,7 +96,16 @@ try {
   Write-Error -Message 'PHOENIX verified legacy Host shutdown is starting.' -ErrorAction Continue
   # Stop supervisor first; otherwise it immediately respawns the older Host.
   Stop-Process -Id $supervisorPid -Force -ErrorAction Stop
-  Stop-Process -Id $listenerPid -Force -ErrorAction Stop
+  # Recheck the listener AFTER stopping its supervisor: a recycled PID or a
+  # new unrelated listener must never be terminated during the handoff.
+  $stillListening = @(Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue |
+    Where-Object { $_.LocalAddress -eq '127.0.0.1' })
+  if ($stillListening.Count -gt 0) {
+    if ($stillListening.Count -ne 1 -or [int]$stillListening[0].OwningProcess -ne $listenerPid) { exit 3 }
+    $stillHost = Get-ProcessById $listenerPid
+    if ($null -eq $stillHost -or $stillHost.CreationDate -ne $hostProcess.CreationDate) { exit 3 }
+    Stop-Process -Id $listenerPid -Force -ErrorAction Stop
+  }
   Write-Output 'PHOENIX_STALE_HOST_RETIRED'
   exit 0
 }
