@@ -1720,6 +1720,31 @@ process.once('SIGTERM', requestShutdown)
 // On Windows, named-pipe listeners are exclusive and disappear with their
 // owning process. Unlike a PID file, this remains safe after a hard crash and
 // prevents two launchers from passing the TCP port probe concurrently.
+/**
+ * Transfer an occupied port only when Windows proves that the owner is a
+ * strictly older official Phoenix Host from the same Git history.
+ * No application is ever terminated based on its TCP port alone.
+ */
+function retireVerifiedOlderPhoenixHost(port) {
+  if (process.platform !== 'win32' || !officialPhoenixRemote()) return false
+  const script = join(supervisorSourceRoot, 'scripts', 'phoenix-windows-stale-host-takeover.ps1')
+  if (!existsSync(script)) return false
+  const result = spawnSync('powershell.exe', [
+    '-NoLogo', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
+    '-File', script, '-Root', root, '-Port', String(port),
+  ], {
+    cwd: root,
+    windowsHide: true,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 15_000,
+  })
+  if (result.error !== undefined || result.status !== 0
+    || !result.stdout?.includes('PHOENIX_STALE_HOST_RETIRED')) return false
+  console.error('[PHOENIX UPDATE] verified older Phoenix Host retired; transferring the port to the newer checkout.')
+  return true
+}
+
 function supervisorPipeName() {
   // A staging checkout and the durable checkout can have different roots but
   // still contend for the same Web Host port. Use the port as the lock identity.
@@ -1737,13 +1762,13 @@ function supervisorPipeName() {
   return `\\\\.\\pipe\\phoenix-supervisor-${instanceId}`
 }
 
-async function acquireSupervisorInstance() {
+async function acquireSupervisorInstance({ quiet = false } = {}) {
   if (process.platform !== 'win32') return undefined
   return new Promise((resolveLock, rejectLock) => {
     const server = createServer(socket => socket.end())
     const handleInitialError = (error) => {
       if (error?.code === 'EADDRINUSE') {
-        console.error('[PHOENIX] Ya hay un supervisor para esta instalación. Se utilizará la instancia existente; no se iniciará otro Host.')
+        if (!quiet) console.error('[PHOENIX] Ya existe un supervisor en este puerto; comprobando si pertenece a una versión antigua.')
         resolveLock(null)
       } else {
         rejectLock(error)
@@ -1761,8 +1786,24 @@ async function acquireSupervisorInstance() {
   })
 }
 
-const supervisorInstanceLock = await acquireSupervisorInstance()
-if (supervisorInstanceLock === null) process.exit(0)
+let supervisorInstanceLock = await acquireSupervisorInstance()
+if (supervisorInstanceLock === null) {
+  const port = defaultPhoenixPort()
+  if (port === undefined || !await existingHostOnPort(port)
+    || !retireVerifiedOlderPhoenixHost(port) || !await waitForHostPortRelease(port)) {
+    console.error('[PHOENIX] La instancia existente se conserva: no es un Phoenix antiguo verificable. Ciérrala normalmente si deseas cambiar de instalación.')
+    process.exit(0)
+  }
+  // The old TCP socket may release before its named-pipe lock on Windows.
+  for (let attempt = 0; attempt < 15 && supervisorInstanceLock === null; attempt++) {
+    await sleep(200)
+    supervisorInstanceLock = await acquireSupervisorInstance({ quiet: true })
+  }
+  if (supervisorInstanceLock === null) {
+    console.error('[PHOENIX] El Host antiguo terminó pero el bloqueo del supervisor persiste; arranque seguro cancelado.')
+    process.exit(1)
+  }
+}
 
 const initialBootChecksStartedAt = Date.now()
 recoverStaleStagingIndexLock()
@@ -1801,9 +1842,13 @@ while (true) {
   let lastObservedFingerprint = configurationFingerprint(launchConfiguration)
   const port = defaultPhoenixPort()
   if (port !== undefined && await existingHostOnPort(port)) {
-    console.error(`[PHOENIX] 127.0.0.1:${String(port)} ya está ocupado. No se iniciará un segundo Host ni se cerrará el proceso activo; usa la ventana o la instancia de Phoenix existente.`)
-    finalCode = 0
-    break
+    const migrated = retireVerifiedOlderPhoenixHost(port)
+      && await waitForHostPortRelease(port)
+    if (!migrated) {
+      console.error(`[PHOENIX] 127.0.0.1:${String(port)} está ocupado y el propietario no es un Phoenix anterior verificado. No se cerrará el proceso; termina la instalación anterior normalmente.`)
+      finalCode = 1
+      break
+    }
   }
   if (watcherSupervisor === undefined) watcherSupervisor = superviseWatcher()
   const startedAt = Date.now()
