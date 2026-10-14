@@ -72,12 +72,14 @@ export function shouldPublishTeammateSpeech(message: string, alreadySpoke: boole
   const needsHelp = /[?]|bloquead[oa]|obst[aá]culo|necesito que|no puedo|error|failed|blocked|need your|approval/iu
   if (needsHelp.test(text)) return true
   const heading = /^(?:@?[\p{L}][\p{L}\p{N}_-]{1,30}[,:]\s*)?(?:ahora |luego |despu[eé]s |next |now )*/iu
+  // oxlint-disable-next-line @stylistic/max-len -- Keep the bounded bilingual future-action matcher auditable.
   const plan = /^(?:voy a|proceder[eé] a|har[eé]|buscar[eé]|comprobar[eé]|verificar[eé]|revisar[eé]|abrir[eé]|i'll|i will|i am going to|i'm going to)\b/iu
   if (plan.test(text.replace(heading, ''))) return false
   if (newReceipt) return true
   // A real peer dependency can change without a non-Team tool receipt.
   // Preserve consequential directed handoffs, never repetitive narration.
   const addressedPeer = /(?:^|\n)\s*@?[\p{L}][\p{L}\p{N}_-]{1,30}[,:]\s+/u
+  // oxlint-disable-next-line @stylistic/max-len -- Preserve the conservative dependency vocabulary as one pattern.
   const dependency = /\b(?:necesit[oa]|necesitas|espera|depende|integra|integrar|pasame|p[aá]same|entrego|comparto|ajusta|ajustar|usa|usar|recibe|recibir|requiere|requiero|handoff|depends|requires|need|share|integrate|adjust|use this)\b/iu
   return addressedPeer.test(text) && dependency.test(text)
 }
