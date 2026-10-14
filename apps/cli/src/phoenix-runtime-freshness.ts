@@ -35,16 +35,6 @@ function gitSucceeds(root: string, args: readonly string[]): boolean {
   return result.status === 0
 }
 
-function cleanCheckout(root: string): boolean {
-  const result = spawnSync('git', ['status', '--porcelain=v1', '--untracked-files=all'], {
-    cwd: root,
-    encoding: 'utf8',
-    windowsHide: true,
-    stdio: ['ignore', 'pipe', 'ignore'],
-  })
-  return result.status === 0 && typeof result.stdout === 'string' && result.stdout.trim().length === 0
-}
-
 function activeRuntimePath(root: string): string | undefined {
   const gitDir = gitValue(root, ['rev-parse', '--git-dir'])
   if (gitDir === undefined) return undefined
@@ -95,10 +85,16 @@ export function phoenixSupervisorSourceRoot(root: string): string {
   return candidate
 }
 
-/** Whether a clean source checkout is a newer descendant of a saved isolated runtime. */
+/**
+ * Prefer a provably newer durable checkout even when it contains user edits.
+ * Dirty work must be preserved, not used as permission to run an older runtime
+ * indefinitely. Reconciliation only removes the Git-private runtime selector;
+ * it never resets or cleans the checkout. The normal freshness preflight will
+ * rebuild disposable artifacts and refuse to launch an incomplete Host.
+ */
 export function sourceCheckoutSupersedesRuntime(root: string, target: string, sourceHead?: string): boolean {
   const head = sourceHead ?? gitValue(root, ['rev-parse', 'HEAD'])
-  if (head === undefined || head === target || !cleanCheckout(root)) return false
+  if (head === undefined || head === target) return false
   return gitSucceeds(root, ['merge-base', '--is-ancestor', target, head])
 }
 
@@ -286,9 +282,9 @@ export function preparePhoenixWebRuntime(root: string): void {
   const sourceHead = gitValue(root, ['rev-parse', 'HEAD'])
   if (sourceHead === undefined) return
 
-  // A dirty checkout intentionally keeps the verified isolated runtime. Do not
-  // rebuild the source tree behind its back; the supervisor will keep serving
-  // the protected runtime until user work is clean again.
+  // The selector is retired if this source HEAD is newer, regardless of
+  // unrelated local edits. Only ignored build outputs may be refreshed, and
+  // tracked user files are never reset or cleaned.
   if (reconcileActiveRuntime(root, sourceHead) === 'isolated') return
 
   const missingHost = missingHostRuntimeArtifacts(root)
