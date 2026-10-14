@@ -438,6 +438,8 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
       </header>
       <div className={directoryCss.profile} data-team-profile={selectedPersona}>
         <ModelActivityAvatar kind={selectedPersona}
+          model={actual === undefined ? undefined : root?.projectionValues?.teamChatParticipants?.[actual.id]?.model}
+          modelProvider={actual === undefined ? undefined : root?.projectionValues?.teamChatParticipants?.[actual.id]?.modelProvider}
           activity={actual === undefined ? undefined : activityOf(actual)}
           running={actual?.running ?? false} pending={actual?.pendingInteraction !== undefined}
           ready={actual === undefined} variant="card" />
@@ -472,6 +474,8 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
               data-selected={selectedPersona === person.kind}
               onClick={() => { setSelectedPersona(person.kind) }} aria-label={person.name + ': ' + person.tagline}>
               <ModelActivityAvatar kind={person.kind}
+                model={summary === undefined ? undefined : root?.projectionValues?.teamChatParticipants?.[summary.id]?.model}
+                modelProvider={summary === undefined ? undefined : root?.projectionValues?.teamChatParticipants?.[summary.id]?.modelProvider}
                 activity={summary === undefined ? undefined : activityOf(summary)}
                 running={summary?.running ?? false} pending={summary?.pendingInteraction !== undefined}
                 ready={summary === undefined} />
@@ -527,6 +531,8 @@ export function KiraTeamsDock({ useList, openChild, t, layout }: KiraTeamsDockPr
               >
                 <ModelActivityAvatar
                   kind={card.kind}
+                  model={root?.projectionValues?.teamChatParticipants?.[summary.id]?.model}
+                  modelProvider={root?.projectionValues?.teamChatParticipants?.[summary.id]?.modelProvider}
                   activity={activityOf(summary)}
                   running={summary.running}
                   pending={summary.pendingInteraction !== undefined}
