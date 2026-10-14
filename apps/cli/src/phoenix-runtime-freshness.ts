@@ -136,7 +136,7 @@ function verifiedClientBuildCommit(root: string): string | undefined {
     const expectedSha = record.artifacts?.sha256
     if (record.formatVersion !== 1 || typeof commit !== 'string'
       || !/^[0-9a-f]{7}$/iu.test(commit)
-      || !Number.isSafeInteger(expectedCount) || Number(expectedCount) < 1
+      || typeof expectedCount !== 'number' || !Number.isSafeInteger(expectedCount) || expectedCount < 1
       || typeof expectedSha !== 'string' || !/^[0-9a-f]{64}$/iu.test(expectedSha)) return undefined
 
     // Keep this exact artifact set and digest framing aligned with
