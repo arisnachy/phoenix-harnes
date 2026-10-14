@@ -44,8 +44,8 @@ export function activeScheduledMissionScope(
   const { snapshot, missionSeq, lastHumanSeq } = lastMission(session)
   if (snapshot === undefined || missionSeq < lastHumanSeq
     || snapshot.phase !== 'running' && snapshot.phase !== 'blocked' && snapshot.phase !== 'verifying'
-    || typeof snapshot.id !== 'string' || !Number.isSafeInteger(snapshot.cancellationEpoch)
-    || typeof snapshot.cancellationEpoch !== 'number' || snapshot.cancellationEpoch < 0) return undefined
+    || typeof snapshot.id !== 'string' || typeof snapshot.cancellationEpoch !== 'number'
+    || !Number.isSafeInteger(snapshot.cancellationEpoch) || snapshot.cancellationEpoch < 0) return undefined
   return {
     sessionId: session.id,
     missionId: snapshot.id,
