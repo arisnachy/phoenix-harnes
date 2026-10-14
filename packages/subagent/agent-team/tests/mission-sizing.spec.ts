@@ -8,7 +8,7 @@ describe('adaptive mission specialist budget', () => {
     expect(teammateBudgetForMission('difficult')).toBe(3)
   })
 
-  it('allows a maximum of five only for exceptional missions', () => {
-    expect(teammateBudgetForMission('exceptional')).toBe(5)
+  it('caps exceptional missions at three specialists', () => {
+    expect(teammateBudgetForMission('exceptional')).toBe(3)
   })
 })

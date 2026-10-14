@@ -66,9 +66,9 @@ declare module '@phoenix-ai/cordis' {
   }
 }
 
-// Kira remains the Lead; five is a HARD ceiling, not a target.
-// Mission sizing selects 1/2/3 specialists first and expands to 4-5 only for real independent fronts.
-const MAX_TEAMMATES = 5
+// Kira remains the Lead; three specialists is the HARD concurrent ceiling.
+// Mission sizing selects 1/2/3 specialists according to genuinely independent work.
+const MAX_TEAMMATES = 3
 const DEFAULT_MAX_MEMBERS = MAX_TEAMMATES
 const DEFAULT_MAX_TASKS = 256
 const DEFAULT_MAX_PENDING_MESSAGES = 64
