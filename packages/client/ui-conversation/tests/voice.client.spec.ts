@@ -404,6 +404,14 @@ describe('browser voice adapter', () => {
       expect(microphoneTrack.enabled).toBe(false)
       expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('paused-for-output')
       expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('none')
+      // A delayed AVAS transcript while the RTC microphone is disabled must
+      // not cancel Kira's authorized speech or steer the harness.
+      channel?.onmessage?.({ data: JSON.stringify({
+        type: 'turn.done', turn: { role: 'user', transcript: 'falso eco de la bocina' },
+      }) })
+      expect(transcript).toHaveBeenCalledTimes(2)
+      expect(microphoneTrack.enabled).toBe(false)
+      expect(audio?.muted).toBe(false)
       await Promise.resolve()
       expect(realtimeSpeak).toHaveBeenLastCalledWith({
         key: 'session-harness', text: 'Primera frase.',
@@ -627,6 +635,11 @@ describe('browser voice adapter', () => {
       expect(microphoneTrack.enabled).toBe(true)
       expect(document.documentElement.dataset.phoenixVoiceMicrophone).toBe('listening')
       expect(document.documentElement.dataset.phoenixVoiceAudioMuteReason).toBe('authorized-audio-drained')
+      // Genuine new user speech becomes available again after playback.
+      channel?.onmessage?.({ data: JSON.stringify({
+        type: 'turn.done', turn: { role: 'user', transcript: 'una nueva orden del usuario' },
+      }) })
+      expect(transcript).toHaveBeenLastCalledWith('una nueva orden del usuario')
       vi.useRealTimers()
       // A genuinely new V3 response after the grace must still be cancelled.
       channel?.onmessage?.({ data: JSON.stringify({ type: 'response.created' }) })
