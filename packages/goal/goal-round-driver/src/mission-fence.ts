@@ -3,7 +3,7 @@
  * Agent Teams owns UME writes. This projection consumes only public Session
  * events, so Goals does not acquire a circular runtime dependency on Teams.
  */
-import type { Session, SessionEvent } from '@phoenix-ai/dsh-session'
+import type { Session } from '@phoenix-ai/dsh-session'
 
 const TERMINAL = new Set(['completed', 'partial', 'failed', 'cancelled'])
 
