@@ -34,8 +34,10 @@ describe('installModelSelection()', () => {
           content: [{ type: 'text', text: 'No encuentro cómo resolver este bloqueo; necesito consultar a Sol.' }] } } },
     ]
     const steered: unknown[] = []
-    const agent = { session: { events }, options: {},
-      steer: (value: unknown) => { steered.push(value) } } as unknown as Agent
+    const agent = { session: {
+      events, append: (type: string, data: unknown) => { events.push({ type, data }) },
+    }, options: {},
+    steer: (value: unknown) => { steered.push(value) } } as unknown as Agent
     ctx.agent = agent
     const selection: ModelSelectionRef = {
       current: { provider: 'openai-codex', model: PHOENIX_CODEX_AUTO_MODEL },
