@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync, unlinkSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { existsSync, globSync, readFileSync, readdirSync, statSync, unlinkSync } from 'node:fs'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import process from 'node:process'
 
@@ -117,16 +118,50 @@ function reconcileActiveRuntime(root: string, sourceHead: string): 'source' | 'i
   return 'source'
 }
 
-function clientBuildCommit(root: string): string | undefined {
+/** A build record is not proof of freshness unless the exact compiled files
+ * still match its SHA-256 digest. A copied or partially replaced runtime can
+ * retain both a valid commit marker and index.html while serving the old UI.
+ */
+function verifiedClientBuildCommit(root: string): string | undefined {
   const path = resolve(root, CLIENT_BUILD_RECORD)
   if (!existsSync(path)) return undefined
   try {
-    const value = JSON.parse(readFileSync(path, 'utf8')) as {
+    const record = JSON.parse(readFileSync(path, 'utf8')) as {
+      formatVersion?: unknown
       environment?: { DSH_CLIENT_COMMIT_HASH?: unknown }
+      artifacts?: { fileCount?: unknown; sha256?: unknown }
     }
-    const commit = value.environment?.DSH_CLIENT_COMMIT_HASH
-    return typeof commit === 'string' && /^[0-9a-f]{7}$/iu.test(commit) ? commit.toLowerCase() : undefined
+    const commit = record.environment?.DSH_CLIENT_COMMIT_HASH
+    const expectedCount = record.artifacts?.fileCount
+    const expectedSha = record.artifacts?.sha256
+    if (record.formatVersion !== 1 || typeof commit !== 'string'
+      || !/^[0-9a-f]{7}$/iu.test(commit)
+      || !Number.isSafeInteger(expectedCount) || Number(expectedCount) < 1
+      || typeof expectedSha !== 'string' || !/^[0-9a-f]{64}$/iu.test(expectedSha)) return undefined
+
+    // Keep this exact artifact set and digest framing aligned with
+    // scripts/client-build-environment.ts (which records the build).
+    const files = globSync([
+      'apps/web/dist/**/*',
+      'packages/*/*/lib/client.js',
+      'packages/*/*/lib/client.js.map',
+    ], { cwd: root })
+      .map(file => file.replaceAll('\\', '/'))
+      .filter(file => statSync(resolve(root, file)).isFile())
+      .sort()
+    if (files.length !== expectedCount) return undefined
+    const digest = createHash('sha256')
+    for (const file of files) {
+      const contents = readFileSync(resolve(root, file))
+      digest.update(`${Buffer.byteLength(file)}:`)
+      digest.update(file)
+      digest.update(`${contents.byteLength}:`)
+      digest.update(contents)
+    }
+    return digest.digest('hex') === expectedSha ? commit.toLowerCase() : undefined
   } catch {
+    // Missing, malformed, or concurrently changing output must never be
+    // treated as a clean modern frontend. The launch path rebuilds it.
     return undefined
   }
 }
@@ -215,7 +250,7 @@ export function missingHostRuntimeArtifacts(root: string): string[] {
 
 /** Whether the browser bundle recorded for this checkout belongs to the current source commit. */
 export function clientArtifactsAreFresh(root: string, sourceHead: string): boolean {
-  return clientBuildCommit(root) === sourceHead.slice(0, 7).toLowerCase()
+  return verifiedClientBuildCommit(root) === sourceHead.slice(0, 7).toLowerCase()
     && existsSync(resolve(root, 'apps', 'web', 'dist', 'index.html'))
 }
 
