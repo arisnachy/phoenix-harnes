@@ -100,6 +100,25 @@
   transform-origin: center;
 }
 
+.railAgent > .railModel {
+  position: absolute;
+  z-index: 2;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  width: 17px;
+  height: 17px;
+  place-items: center;
+  transform: none;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 50%;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font-size: 11px;
+  line-height: 1;
+  pointer-events: none;
+}
+
 .railAgentSelected::before {
   position: absolute;
   top: 10px;
