@@ -125,11 +125,13 @@ export function isKiraCodexAutoLead(
   selection: ModelSelection | undefined,
   agent: { readonly session: { readonly header?: { readonly agentPreset?: string; readonly origin?: string } } } | undefined,
 ): boolean {
+  // Child specialists execute their assigned Luna route; they must never
+  // trigger the Lead-only Sol planning stage even on a replayed auto selector.
+  if (agent?.session.header?.origin === 'subagent') return false
   return isPhoenixCodexAutoSelection(selection)
     || (selection?.provider === 'openai-codex'
       && selection.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
-      && agent?.session?.header?.agentPreset === 'kira-max'
-      && agent.session.header?.origin !== 'subagent')
+      && agent?.session?.header?.agentPreset === 'kira-max')
 }
 
 function codexPlannerGeneration(model: string): string | undefined {
