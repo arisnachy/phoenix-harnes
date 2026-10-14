@@ -70,7 +70,7 @@ describe('continuation admission from replayed routing evidence', () => {
     'Confirma qué herramientas funcionan en Phoenix',
     'Consulta el estado de las funciones de Kira',
     'Check whether Phoenix Game Studio is available',
-  ])('hands a plan-only availability check to Sol coordination exactly once: %s', async (request) => {
+  ])('hands a real Sol plan to Luna Max coordination exactly once: %s', async (request) => {
     const r = await router()
     try {
       r.events.push(user(request), answer(1,
@@ -84,7 +84,7 @@ describe('continuation admission from replayed routing evidence', () => {
       await r.stop()
       expect(r.messages).toHaveLength(1)
       expect(JSON.stringify(r.messages[0])).toContain('visible **Plan:**')
-      expect(await r.request(2)).toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: 'high' })
+      expect(await r.request(2)).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: 'max' })
 
       r.events.push(
         { type: 'tool/call', data: { step: 2, name: 'read', arguments: '{"path":"status"}' } },
@@ -104,7 +104,7 @@ describe('continuation admission from replayed routing evidence', () => {
       await r.stop()
       expect(r.messages).toHaveLength(1)
       expect(JSON.stringify(r.messages[0])).toContain('Execute the next concrete action')
-      expect(await r.request(2)).toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: 'high' })
+      expect(await r.request(2)).toMatchObject({ model: 'gpt-6-luna', reasoningEffort: 'max' })
     } finally { await r.close() }
   })
 
