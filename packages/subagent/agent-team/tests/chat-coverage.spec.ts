@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@phoenix-ai/cordis'
 import SessionStore, { SessionId, type Session } from '@phoenix-ai/dsh-session'
 import type { Agent } from '@phoenix-ai/dsh-agent'
-import { CallId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
+import { CallId, ReasoningEffortId, createAssistantMessage, createToolResultMessage, createUserMessage } from '@phoenix-ai/dsh-llm'
 import { TeamChat, shouldPublishTeammateSpeech } from '../src/chat.ts'
 import { TEAM_PERSONAS } from '../src/personas.ts'
 import { TeamId } from '../src/types.ts'
@@ -71,6 +71,34 @@ describe('human teamwork without progress spam', () => {
     ])
   })
 
+  it('publishes only the model proven by the real child answer, never a presumed Sol route', async () => {
+    const f = await fixture()
+    f.child.append('request/header', { reason: 'initial',
+      header: { config: { provider: 'openai-codex', model: 'gpt-6-luna',
+        reasoningEffort: ReasoningEffortId('max') } } })
+    f.child.append('turn/start', { turn: 1 })
+    f.child.append('assistant/message', {
+      turn: 1, step: 1,
+      message: createAssistantMessage({
+        source: { provider: 'openai-codex', model: 'gpt-6-luna' },
+        content: content('Kira, comprobaré el archivo.'),
+      }),
+    }, { surfaceOp: 'append' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    let person = (await f.chat.read(f.root.id)).participants.find(row => row.id === f.child.id)
+    expect(person).toMatchObject({ model: 'gpt-6-luna', modelProvider: 'openai-codex', reasoningEffort: 'max' })
+    f.child.append('assistant/message', {
+      turn: 1, step: 2,
+      message: createAssistantMessage({
+        source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+        content: content('Kira, necesito reformular el plan.'),
+      }),
+    }, { surfaceOp: 'append' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    person = (await f.chat.read(f.root.id)).participants.find(row => row.id === f.child.id)
+    expect(person).toMatchObject({ model: 'gpt-6.1-sol', modelProvider: 'openai-codex' })
+    expect(person?.reasoningEffort).toBeUndefined()
+  })
   it('shares one opening and one tool-backed finding with Kira, not a stream of plans', async () => {
     const f = await fixture()
     f.child.append('turn/start', { turn: 1 })
