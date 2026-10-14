@@ -289,6 +289,9 @@ interface TeamChatParticipant {
   readonly avatar?: string | undefined
   readonly task?: string | undefined
   readonly missionId?: string | undefined
+  readonly model?: string | undefined
+  readonly modelProvider?: string | undefined
+  readonly reasoningEffort?: string | undefined
 }
 ```
 
