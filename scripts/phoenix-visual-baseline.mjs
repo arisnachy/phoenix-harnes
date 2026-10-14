@@ -24,6 +24,19 @@ export function verifyPhoenixVisualBaseline(root) {
     ['packages/client/ui-theme/src/client/styles.ts',
       ['installThemeStyles', 'const leases = new Map', 'lease.owners += 1']],
     ['packages/client/ui-theme/src/styles/base.css', [':root']],
+    // Phoenix Modern Orange is the product default independently of the
+    // user's light/dark/system choice. Reject blue/white theme regressions.
+    ['packages/client/ui-theme/src/styles/design-platform.css', [
+      '--dsw-static-phoenix-orange-500: rgb(226, 95, 37);',
+      '--dsw-alias-bg-base: rgb(248, 247, 244);',
+      '--dsw-alias-label-primary-bluish: var(--dsw-static-phoenix-orange-600);',
+      '--dsw-specific-phoenix-accent: var(--dsw-static-phoenix-orange-500);',
+    ]],
+    ['packages/client/ui-theme/src/client/styles.ts', [
+      "import designPlatform from '../styles/design-platform.css?inline'",
+      "['design-platform.css', designPlatform]",
+    ]],
+    ['apps/web/index.html', ['name="phoenix-ui" content="modern-orange"']],
   ]
   const missing = []
   for (const [path, fragments] of required) {
