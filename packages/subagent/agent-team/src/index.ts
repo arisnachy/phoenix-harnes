@@ -157,6 +157,24 @@ export class TeamService extends TypertRemoteService {
 
     ctx.on('session/event', (session, event) => {
       if (this.lifecycle.disposed) return
+      // Every genuine human root request belongs to one durable mission, even
+      // when Kira does not need a specialist. Queue its journal transaction
+      // synchronously so a same-tick turn/end cannot overtake mission creation.
+      // Synthetic goal rounds, connector notices and teammate messages are NOT
+      // permitted to create fresh human authority.
+      if (session.header.origin !== 'subagent' && event.type === 'user/message'
+        && event.data.source.kind === 'user') {
+        const lead = ctx.agents.get(session.id)
+        if (lead?.session === session) {
+          const objective = event.data.content.flatMap(block =>
+            block.type === 'text' ? [block.text] : []).join(' ').trim()
+          if (objective.length > 0) {
+            void this.missions.ensure(lead, objective, this.config.maxMembers).catch((error: unknown) => {
+              ctx.logger.warn(`Universal mission opening failed: ${errorMessage(error)}`)
+            })
+          }
+        }
+      }
       // Kira finishing a turn is terminal for its current Team mission as well.
       // Late Aegis reviews and handoffs must not keep children working after DONE.
       // The same teardown applies to explicit user cancellation.
