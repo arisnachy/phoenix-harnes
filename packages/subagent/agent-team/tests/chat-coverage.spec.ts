@@ -45,6 +45,30 @@ describe('human teamwork without progress spam', () => {
     expect(shouldPublishTeammateSpeech('Kira, ¿necesitas otra fuente?', true, false)).toBe(true)
     expect(shouldPublishTeammateSpeech('', false, false)).toBe(false)
   })
+  it('publishes only the model proven by the real child answer, never a presumed Sol route', async () => {
+    const f = await fixture()
+    f.child.append('turn/start', { turn: 1 })
+    f.child.append('assistant/message', {
+      turn: 1, step: 1,
+      message: createAssistantMessage({
+        source: { provider: 'openai-codex', model: 'gpt-6-luna' },
+        content: content('Kira, comprobaré el archivo.'),
+      }),
+    }, { surfaceOp: 'append' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    let person = (await f.chat.read(f.root.id)).participants.find(row => row.id === f.child.id)
+    expect(person).toMatchObject({ model: 'gpt-6-luna', modelProvider: 'openai-codex' })
+    f.child.append('assistant/message', {
+      turn: 1, step: 2,
+      message: createAssistantMessage({
+        source: { provider: 'openai-codex', model: 'gpt-6.1-sol' },
+        content: content('Kira, necesito reformular el plan.'),
+      }),
+    }, { surfaceOp: 'append' })
+    await f.chat.capture(f.root, f.child.header, f.child.events)
+    person = (await f.chat.read(f.root.id)).participants.find(row => row.id === f.child.id)
+    expect(person).toMatchObject({ model: 'gpt-6.1-sol', modelProvider: 'openai-codex' })
+  })
   it('shares one opening and one tool-backed finding with Kira, not a stream of plans', async () => {
     const f = await fixture()
     f.child.append('turn/start', { turn: 1 })
