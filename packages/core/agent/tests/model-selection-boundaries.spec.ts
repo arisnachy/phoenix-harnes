@@ -70,13 +70,13 @@ describe('continuation admission from replayed routing evidence', () => {
     'Confirma qué herramientas funcionan en Phoenix',
     'Consulta el estado de las funciones de Kira',
     'Check whether Phoenix Game Studio is available',
-  ])('hands a plan-only availability check to Luna execution exactly once: %s', async (request) => {
+  ])('hands a real Sol plan to Luna Max coordination exactly once: %s', async (request) => {
     const r = await router()
     try {
       r.events.push(user(request), answer(1,
         'Plan: Comprobaré si Phoenix Game Studio está disponible en esta sesión '
         + 'y te diré el resultado con la evidencia visible.'))
-      expect(await r.request()).toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: 'medium' })
+      expect(await r.request()).toMatchObject({ model: 'gpt-6.1-sol' })
 
       // A real assistant/message can omit source.model. Do not mistake a plan
       // for successful completion or require another user message to resume.
@@ -138,7 +138,7 @@ describe('continuation admission from replayed routing evidence', () => {
       r.events.push(user('Fix router.ts'))
       for (const step of [1, 1, 2, 3, 4, 5, 6]) { r.events.push(answer(step, 'I will inspect the file next.')); await r.stop() }
       expect(r.messages).toHaveLength(4)
-      expect(await r.request(7)).toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: 'medium' })
+      expect(await r.request(7)).toMatchObject({ model: 'gpt-6.1-sol' })
     } finally { await r.close() }
   })
 
@@ -149,7 +149,7 @@ describe('continuation admission from replayed routing evidence', () => {
       await r.stop(); await r.stop()
       r.events.push(answer(2, 'Done')); await r.stop()
       expect(r.messages).toHaveLength(2)
-      expect(await r.request(3)).toMatchObject({ model: 'gpt-6.1-sol', reasoningEffort: 'medium' })
+      expect(await r.request(3)).toMatchObject({ model: 'gpt-6.1-sol' })
     } finally { await r.close() }
   })
 

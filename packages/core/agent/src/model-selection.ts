@@ -113,6 +113,27 @@ export function isPhoenixCodexAutoSelection(selection: ModelSelection | undefine
   return selection?.provider === 'openai-codex' && selection.model === PHOENIX_CODEX_AUTO_MODEL
 }
 
+/**
+ * Kira Max with the default Codex Luna seat follows the REAL Sol-to-Luna
+ * workflow. Explicitly selected other Codex models and other providers stay
+ * on the user's exact model; Team children never reopen a planning phase.
+ * @param selection - the selected provider/model.
+ * @param agent - session owner, when one is available.
+ * @returns whether the Lead uses Sol planning and Luna Max coordination.
+ */
+export function isKiraCodexAutoLead(
+  selection: ModelSelection | undefined,
+  agent: { readonly session: { readonly header?: { readonly agentPreset?: string; readonly origin?: string } } } | undefined,
+): boolean {
+  // Child specialists execute their assigned Luna route; they must never
+  // trigger the Lead-only Sol planning stage even on a replayed auto selector.
+  if (agent?.session?.header?.origin === 'subagent') return false
+  return isPhoenixCodexAutoSelection(selection)
+    || (selection?.provider === 'openai-codex'
+      && selection.model === PHOENIX_CODEX_AUTO_WORKER_MODEL
+      && agent?.session?.header?.agentPreset === 'kira-max')
+}
+
 function codexPlannerGeneration(model: string): string | undefined {
   return CODEX_PLANNER_MODEL.exec(model)?.[1]
 }
@@ -235,6 +256,14 @@ function phoenixAutoUnfinishedAction(text: string): boolean {
     || AUTO_FUTURE_ACTION.test(text)
 }
 
+/** Kira can request an actual Sol strategy pass when her current approach is unclear. */
+// oxlint-disable-next-line @stylistic/max-len -- Narrow bilingual consultation trigger.
+const AUTO_SOL_REQUEST = /\b(?:necesito|debo|voy\s+a|conviene|quiero)\s+(?:(?:volver\s+a|primero)\s+)?(?:consultar|preguntar|pedir(?:le)?\s+(?:ayuda|una\s+estrategia))\s+(?:(?:a|con)\s+)?sol\b|\b(?:no\s+(?:encuentro|logro|consigo)\s+(?:c[oó]mo|una\s+forma\s+de)|no\s+s[eé]\s+c[oó]mo\s+resolver)\b|\b(?:need\s+to|should|will)\s+(?:consult|ask)\s+sol\b/iu
+
+function kiraNeedsSolStrategy(text: string): boolean {
+  return AUTO_SOL_REQUEST.test(text)
+}
+
 /** Bound self-healing continuation so a pathological provider cannot create an endless promise loop. */
 const AUTO_CONTINUATION_LIMIT = 4
 const AUTO_EXECUTION_CONTINUATION =
@@ -254,25 +283,35 @@ const AUTO_VISIBLE_PLAN_POLICY =
   'Kira will continue on the very next step and execute this exact plan without asking for routine approval. ' +
   'If the user only wants a greeting, explanation, answer or standalone preview, respond normally with no planning stage.'
 
+const AUTO_SOL_STRATEGY_POLICY =
+  'You are Sol 6.1 consulted by Kira for one REAL focused strategy pass. ' +
+  'Examine the latest evidence and unresolved obstacle, propose one materially different feasible strategy ' +
+  'within the current mission and permissions. Do not delegate, run tools or declare work completed. ' +
+  'Stop after a concise actionable strategy; Kira with Luna Max resumes execution immediately.'
+
 const AUTO_LUNA_COORDINATION_POLICY =
-  'You are Kira coordinating and executing on GPT-6 Luna Max AFTER Sol has completed the first-step plan. ' +
-  'Use the already-visible **Plan:** as the authoritative execution brief; do not replan or call Sol again for routine execution. ' +
-  'Act promptly with available tools. When an actionable multi-step mission has entered the Sol planning stage, ' +
-  'delegate at least one real bounded execution scope to a Luna Max teammate with spawn_teammate: one simple, ' +
-  'two for medium independent fronts, three for difficult, four or five ONLY when four or five independent tasks exist. ' +
-  'Choose the smallest sufficient team, reuse workers, and keep Kira as the accountable lead, supervisor and final verifier. ' +
-  'Sol is reserved exclusively for the initial plan or an evidence-based blocker/repeated failure; after a Sol rescue, resume Luna Max. ' +
-  'Address real teammates naturally by name, use their actual tool evidence and respond in the user\'s language. ' +
-  'Never invent coworkers, tool outcomes, verification, or completion; stop immediately on user cancellation.'
+  'You are Kira coordinating and executing with Luna Max AFTER the actual Sol planning step. If a user-visible **Plan:** was written earlier in THIS turn, ' +
+  'treat that text as the already-approved execution brief; do not rewrite, replan, recite or re-announce it. ' +
+  'Start the first permitted real action promptly, supervise the critical path and choose a genuine teammate ' +
+  'for actionable multi-step missions after Sol planning, delegate at least one real bounded Luna Max scope with spawn_teammate; otherwise delegate only when materially helpful. Address teammates naturally by name, accept their real evidence, ' +
+  'and speak to the user in concise, warm Spanish when that is their language. ' +
+  'Never simulate coworker messages or claim a tool ran before its real result. ' +
+  'If you genuinely need a new strategy, state "Necesito consultar a Sol" and end that step: ' +
+  'the router makes one REAL bounded Sol consultation and returns to Luna Max. ' +
+  'Respect the hard limit of three simultaneous specialists; reuse existing agents and rotate assignments instead of creating more. Report meaningful changes and final verified output; skip filler and repetitive stage narration.'
+
+const AUTO_SOL_RESCUE_HANDOFF =
+  'Sol provided focused advice to Kira. Resume the SAME unfinished mission on Luna Max, ' +
+  'apply the correction only if it respects the original user request and permissions, ' +
+  'execute the next tool action and stop when verified. Do not reopen completed work.'
 
 const AUTO_VISIBLE_PLAN_HANDOFF =
-  'The visible **Plan:** from the immediately preceding Sol planning step is Kira\'s authoritative execution plan. ' +
-  'Now hand off to Kira on Luna Max; execute the next concrete action instead of asking Sol to coordinate execution. ' +
-  'Do not replan or ask permission for already authorized safe work. ' +
-  'For a requested team demonstration, call spawn_teammate once with a small verifiable assignment on Luna Max, ' +
-  'wait for real evidence and complete the demonstration. Spawn more teammates only for genuinely independent workstreams, ' +
-  'up to five for exceptional missions. Sol returns only for a proven blocker, then Kira resumes Luna Max. ' +
-  'Team conversations must be real, natural, concise and useful, not a scripted imitation.'
+  'The visible **Plan:** from the immediately preceding Sol step is Kira\'s authoritative execution plan. ' +
+  'Continue the current user request as Kira on Luna Max; execute the next concrete action now, ' +
+  'without re-planning, re-reading the same brief or asking permission for already authorized safe work. ' +
+  'If this is a requested team demonstration, call spawn_teammate once with a small verifiable assignment, ' +
+  'wait for genuine evidence and complete the demonstration. The actual Team conversation must be real, ' +
+  'natural, concise and useful, not a scripted imitation.'
 
 const FAST_SOCIAL_ATOM = String.raw`(?:hola|hello|hi|hey|buenas|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|qu[eé]\s+tal|c[oó]mo\s+est[aá]s|c[oó]mo\s+te\s+va|c[oó]mo\s+va\s+todo|qu[eé]\s+cuentas|qu[eé]\s+se\s+cuenta|how\s+are\s+you|how(?:'|’)s\s+it\s+going|what(?:'|’)s\s+up|gracias|thanks|thank\s+you)`
 const FAST_SOCIAL_SEQUENCE = new RegExp(`^${FAST_SOCIAL_ATOM}(?:\\s+(?:y\\s+)?${FAST_SOCIAL_ATOM})*$`, 'iu')
@@ -613,7 +652,7 @@ function phoenixAutoTurnWasUserStopped(
   agent: { readonly session: { readonly events: readonly PhoenixAutoEvent[] } },
   turn: number,
 ): boolean {
-  return turnEvents(agent, turn).some(event => {
+  return turnEvents(agent, turn).some((event) => {
     if (event.type !== 'turn/end') return false
     const data = event.data as {
       readonly reason?: { readonly kind?: string; readonly reason?: { readonly kind?: string } }
@@ -622,7 +661,7 @@ function phoenixAutoTurnWasUserStopped(
   })
 }
 
-/** A tiny requested Team showcase uses the same Sol/medium planning effort as other operational missions. */
+/** A tiny requested Team showcase gets a real Sol plan at low effort. */
 export function isBriefTeamDemonstration(text: string): boolean {
   const request = text.normalize('NFKD').replace(/[\u0300-\u036f]/gu, '').toLowerCase().trim()
   if (request.length < 8 || request.length > 240 || request.includes('\n')) return false
@@ -691,7 +730,8 @@ function directCodexPlannerRescue(
   if (selection.provider !== 'openai-codex' || step <= 1) return undefined
   resetPhoenixAutoTurnState(state, turn)
   const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
-  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
+  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId
+    && state.rescueCount < 2) {
     state.lastTeamEscalationMessageId = teamSignal.messageId
     state.lastRescueStep = step
     return selection
@@ -713,19 +753,20 @@ function phoenixAutoRoute(
 ): ModelSelection & { reasoningEffort: ReasoningEffortId } {
   resetPhoenixAutoTurnState(state, turn)
   const teamSignal = phoenixAutoTeamSignalForTurn(agent, turn)
-  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId) {
+  if (teamSignal?.purpose === 'blocker' && teamSignal.messageId !== state.lastTeamEscalationMessageId
+    && state.rescueCount < 2) {
     state.lastTeamEscalationMessageId = teamSignal.messageId
     state.lastRescueStep = step
     state.rescueCount += 1
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('medium'),
+      reasoningEffort: ReasoningEffortId('low'),
     }
   }
   if (step <= 1) {
-    // Peer result/question wakeups are execution, not a brand-new planning
-    // request. A real blocker was already escalated to Sol/medium above.
+    // A real Team wakeup belongs to Kira's operational loop. Never route peer
+    // results/questions through the low-effort social fast path.
     if (teamSignal !== undefined) {
       return {
         provider: 'openai-codex',
@@ -751,14 +792,14 @@ function phoenixAutoRoute(
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId('medium'),
+        reasoningEffort: ReasoningEffortId('low'),
       }
     }
     if (phoenixAutoTaskRequest(directText)) {
       return {
         provider: 'openai-codex',
         model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-        reasoningEffort: ReasoningEffortId('medium'),
+        reasoningEffort: ReasoningEffortId('low'),
       }
     }
     return {
@@ -768,19 +809,19 @@ function phoenixAutoRoute(
     }
   }
 
-  if (state.forcePlannerNext) {
+  if (state.forcePlannerNext && state.rescueCount < 2) {
     state.forcePlannerNext = false
     state.lastRescueStep = step
     state.rescueCount += 1
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('medium'),
+      reasoningEffort: ReasoningEffortId('low'),
     }
   }
 
   const repeatedStall = isPhoenixCodexAutoStalled(agent, turn)
-  const canRescue = repeatedStall
+  const canRescue = repeatedStall && state.rescueCount < 2
     && (state.lastRescueStep === 0 || step - state.lastRescueStep >= 2)
   if (canRescue) {
     state.lastRescueStep = step
@@ -788,13 +829,10 @@ function phoenixAutoRoute(
     return {
       provider: 'openai-codex',
       model: PHOENIX_CODEX_AUTO_PLANNER_MODEL,
-      reasoningEffort: ReasoningEffortId('medium'),
+      reasoningEffort: ReasoningEffortId('low'),
     }
   }
 
-  // After the ONE Sol planning step (or a proven, bounded rescue), Kira is
-  // always the Luna Max execution lead. Returning Sol/high here kept every
-  // subsequent turn on the planner and silently defeated the intended handoff.
   return {
     provider: 'openai-codex',
     model: PHOENIX_CODEX_AUTO_WORKER_MODEL,
@@ -841,10 +879,10 @@ export function installModelSelection(
       // Provider identity is always safe to synchronize and is also the hard
       // capability gate used by provider-specific tools such as Codex Auto-review.
       scopedAgent.options.provider = selected.provider
-      // Phoenix Auto is a virtual picker row rather than an executable model.
-      // Its request router resolves Sol/Luna per step, so keep the existing
+      // Phoenix Auto and Kira Max's Codex Luna seat use the Sol/Luna step router.
+      // Keep the existing
       // concrete model/effort while synchronizing only the provider identity.
-      if (!isPhoenixCodexAutoSelection(selected)) {
+      if (!isKiraCodexAutoLead(selected, scopedAgent)) {
         scopedAgent.options.model = selected.model
         if (selected.reasoningEffort === undefined) delete scopedAgent.options.reasoningEffort
         else scopedAgent.options.reasoningEffort = selected.reasoningEffort
@@ -867,7 +905,7 @@ export function installModelSelection(
       : providerTools
     selection.assembledToolCount = tools.length
     if (selected === undefined) return assembled
-    const autoStep = isPhoenixCodexAutoSelection(selected) && scopedAgent !== undefined
+    const autoStep = isKiraCodexAutoLead(selected, scopedAgent) && scopedAgent !== undefined
       ? nextPhoenixAutoAssemblyStep(scopedAgent)
       : undefined
     const currentTurn = scopedAgent?.session?.events.findLast(event => event.type === 'turn/start')
@@ -877,16 +915,33 @@ export function installModelSelection(
     // Never inject a "stop after the plan" instruction into a Luna quick-answer
     // route whose request was not classified as an operational task. Otherwise
     // the model can emit a plan that the turn-stopping gate never resumes.
-    const autoPolicy = autoStep === 1
-      && phoenixAutoTaskRequest(currentRequest)
-      && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
-      : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
+    // Assembly happens before model routing, so it must pick the same Sol
+    // strategy-only phase when a real blocker, stall or voluntary consult is next.
+    if (currentTurnNumber !== undefined) resetPhoenixAutoTurnState(phoenixAutoState, currentTurnNumber)
+    const teamSignal = scopedAgent !== undefined && currentTurnNumber !== undefined
+      ? phoenixAutoTeamSignalForTurn(scopedAgent, currentTurnNumber) : undefined
+    const needsTeamRescue = teamSignal?.purpose === 'blocker'
+      && teamSignal.messageId !== phoenixAutoState.lastTeamEscalationMessageId
+    const needsStallRescue = scopedAgent !== undefined && currentTurnNumber !== undefined
+      && isPhoenixCodexAutoStalled(scopedAgent, currentTurnNumber)
+      && (phoenixAutoState.lastRescueStep === 0
+        || (autoStep ?? 0) - phoenixAutoState.lastRescueStep >= 2)
+    const solRescueStep = autoStep !== undefined && phoenixAutoState.rescueCount < 2
+      && (needsTeamRescue || (autoStep > 1 && (phoenixAutoState.forcePlannerNext || needsStallRescue)))
+    const autoPolicy = solRescueStep ? AUTO_SOL_STRATEGY_POLICY
+      : autoStep === 1
+        && phoenixAutoTaskRequest(currentRequest)
+        && !isStandaloneVisualPreviewRequest(currentRequest) ? AUTO_VISIBLE_PLAN_POLICY
+        : autoStep !== undefined && autoStep > 1 ? AUTO_LUNA_COORDINATION_POLICY : undefined
     return {
       ...assembled,
       ...autoPolicy === undefined ? {} : {
         sections: [...assembled.sections, { name: 'phoenix:auto-visible-handoff', text: autoPolicy }],
       },
-      tools,
+      // The initial Sol plan cannot execute tools. Luna Max receives the
+      // regular tools on the next step, and the continuation gate still knows
+      // that real tools are available after the plan.
+      tools: autoPolicy === AUTO_VISIBLE_PLAN_POLICY || autoPolicy === AUTO_SOL_STRATEGY_POLICY ? [] : tools,
       variables: {
         ...assembled.variables,
         provider: selected.provider,
@@ -906,11 +961,11 @@ export function installModelSelection(
       }
       // Explicit user model choices are the Lead's orchestration brain, even
       // when an older composition still installs a generic Codex handoff.
-      // Only the virtual Fénix Eclipse/Phoenix Auto row may switch Sol -> Luna
-      // internally. Worker model selection is handled by Agent Teams instead.
+      // Phoenix Auto and Kira Max's default Codex Luna seat switch Sol -> Luna
+      // for real planning/execution. Other explicit model choices stay exact.
       const exactUserChoice = scopedAgent === undefined ? false
         : latestModelSelectionPreference(scopedAgent.session)?.source === 'explicit'
-      if (!isPhoenixCodexAutoSelection(selected) && (handoff === undefined || exactUserChoice)) {
+      if (!isKiraCodexAutoLead(selected, scopedAgent) && (handoff === undefined || exactUserChoice)) {
         const { reasoningEffort: _inheritedEffort, ...withoutInheritedEffort } = resolved
         return {
           ...withoutInheritedEffort,
@@ -922,7 +977,7 @@ export function installModelSelection(
         }
       }
       const directText = directUserTextForTurn(_payload.agent, _payload.turn)
-      if (isPhoenixCodexAutoSelection(selected)) {
+      if (isKiraCodexAutoLead(selected, scopedAgent)) {
         const routed = phoenixAutoRoute(
           _payload.agent,
           _payload.turn,
@@ -972,11 +1027,15 @@ export function installModelSelection(
   )
   const disposeAutoContinuation = agentCtx.on('agent/turn-stopping', ({ agent, turn, signal }) => {
     signal.throwIfAborted()
-    if (!isPhoenixCodexAutoSelection(selection.current)) return
+    if (!isKiraCodexAutoLead(selection.current, agent)) return
     if ((selection.assembledToolCount ?? 0) === 0) return
 
     const directText = directUserTextForTurn(agent, turn)
-    if (!phoenixAutoTaskRequest(directText) || phoenixAutoTurnWasUserStopped(agent, turn)) return
+    // Team blockers have their own authorized continuation; they need not
+    // coincide with a fresh human message in the same turn.
+    const realTeamBlocker = phoenixAutoTeamSignalForTurn(agent, turn)?.purpose === 'blocker'
+    if ((!phoenixAutoTaskRequest(directText) && !realTeamBlocker)
+      || phoenixAutoTurnWasUserStopped(agent, turn)) return
     // A tool-verified one-shot visual meets the original request. Do not
     // resurrect it with a mandatory team-admission notice.
     if (isStandaloneVisualPreviewRequest(directText)
@@ -1012,6 +1071,37 @@ export function installModelSelection(
     }
 
     if (phoenixAutoState.lastContinuationStep === latest.step) return
+    // Sol's strategic rescue is not a completed mission. Hand control to Luna.
+    if (latest.step >= 1 && latest.step === phoenixAutoState.lastRescueStep
+      && (latest.sourceModel === PHOENIX_CODEX_AUTO_PLANNER_MODEL || latest.sourceModel === undefined)
+      && !phoenixAutoExplicitlyClosed(latest.text)
+      && phoenixAutoState.continuationCount < AUTO_CONTINUATION_LIMIT) {
+      phoenixAutoState.lastContinuationStep = latest.step
+      phoenixAutoState.continuationCount += 1
+      agent.steer(createUserMessage({
+        content: [{ type: 'text', text: AUTO_SOL_RESCUE_HANDOFF }],
+        source: { kind: 'plugin', plugin: 'model-selection', form: 'notice',
+          summary: 'Kira resumes Luna Max after Sol strategy rescue' },
+      }))
+      return
+    }
+    // Luna can ask for a strategy when stuck without repeating a doomed tool.
+    if (latest.step > 1
+      && !phoenixAutoExplicitlyClosed(latest.text) && kiraNeedsSolStrategy(latest.text)
+      && phoenixAutoState.rescueCount < 2
+      && phoenixAutoState.continuationCount < AUTO_CONTINUATION_LIMIT) {
+      phoenixAutoState.lastContinuationStep = latest.step
+      phoenixAutoState.continuationCount += 1
+      phoenixAutoState.forcePlannerNext = true
+      agent.steer(createUserMessage({
+        content: [{ type: 'text', text:
+          'Consult Sol for ONE focused strategy on the current unresolved issue, ' +
+          'then return to Luna Max to execute and verify it.' }],
+        source: { kind: 'plugin', plugin: 'model-selection', form: 'notice',
+          summary: 'Kira requests Sol strategic consultation' },
+      }))
+      return
+    }
     // Kira's normal final answer is terminal. Team availability is never
     // evidence of unfinished work. Only a visible, unexecuted action or the
     // explicitly visible Sol planning handoff can request another step.

@@ -321,7 +321,7 @@ describe('Team identity and provisioning', () => {
   })
 
   it('atomically enforces mission tiers during actual roster admission, even with concurrent requests', async () => {
-    const { ctx, lead } = await setup(['hang', 'hang', 'hang', 'hang', 'hang'], { maxMembers: 5 })
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'], { maxMembers: 3 })
     const first = await spawn(ctx, lead, 'tier-one', { missionComplexity: 'simple' })
     await waitRunning(ctx, first.member.id)
     await expect(spawn(ctx, lead, 'tier-extra', { missionComplexity: 'simple' }))
@@ -339,27 +339,41 @@ describe('Team identity and provisioning', () => {
       spawn(ctx, lead, 'tier-five', { missionComplexity: 'exceptional' }),
       spawn(ctx, lead, 'tier-six', { missionComplexity: 'exceptional' }),
     ])
-    expect(attempts.filter(item => item.status === 'fulfilled')).toHaveLength(2)
-    expect(attempts.filter(item => item.status === 'rejected')).toHaveLength(1)
+    expect(attempts.filter(item => item.status === 'fulfilled')).toHaveLength(0)
+    expect(attempts.filter(item => item.status === 'rejected')).toHaveLength(3)
     const active = ctx.agentTeams.listMembers(lead).filter(member =>
       member.role === 'teammate' && member.status === 'running')
     for (const member of active) ctx.agentTeams.interrupt(lead, member.name)
     for (const member of active) await waitNoAgent(ctx, member.id)
   })
 
-  it('admits five independent workers when explicitly configured and rejects a sixth', async () => {
-    const { ctx, lead } = await setup(['hang', 'hang', 'hang', 'hang', 'hang'], { maxMembers: 5 })
+  it('admits three independent workers when explicitly configured and rejects a fourth', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'], { maxMembers: 3 })
     const workers = []
-    for (let index = 0; index < 5; index++) {
+    for (let index = 0; index < 3; index++) {
       workers.push(await spawn(ctx, lead, `worker-${index}`))
     }
     for (const worker of workers) await waitRunning(ctx, worker.member.id)
-    await expect(spawn(ctx, lead, 'worker-six')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
-    for (let index = 0; index < 5; index++) ctx.agentTeams.interrupt(lead, `worker-${index}`)
+    await expect(spawn(ctx, lead, 'worker-four')).rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    for (let index = 0; index < 3; index++) ctx.agentTeams.interrupt(lead, `worker-${index}`)
     for (const worker of workers) await waitNoAgent(ctx, worker.member.id)
   })
 
-  it('rejects unsupported Team concurrency values greater than five', async () => {
+  it('migrates legacy five-member configurations to a strict three-worker runtime cap', async () => {
+    const { ctx, lead } = await setup(['hang', 'hang', 'hang'], { maxMembers: 5 })
+    const one = await spawn(ctx, lead, 'legacy-one')
+    const two = await spawn(ctx, lead, 'legacy-two')
+    const three = await spawn(ctx, lead, 'legacy-three')
+    await waitRunning(ctx, one.member.id)
+    await waitRunning(ctx, two.member.id)
+    await waitRunning(ctx, three.member.id)
+    await expect(spawn(ctx, lead, 'legacy-four'))
+      .rejects.toMatchObject({ code: 'TEAM_MEMBER_LIMIT' })
+    for (const name of ['legacy-one', 'legacy-two', 'legacy-three']) ctx.agentTeams.interrupt(lead, name)
+    for (const member of [one, two, three]) await waitNoAgent(ctx, member.member.id)
+  })
+
+  it('rejects unsupported Team concurrency configuration greater than the historical limit', async () => {
     await expect(setup([], { maxMembers: 6 })).rejects.toThrow()
   })
 
